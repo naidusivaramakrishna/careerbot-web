@@ -48,13 +48,18 @@ body {
 }
 
 @layer utilities {
+
   /* Hide scrollbar */
   .scrollbar-hide {
-    -ms-overflow-style: none; /* IE & Edge */
-    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;
+    /* IE & Edge */
+    scrollbar-width: none;
+    /* Firefox */
   }
+
   .scrollbar-hide::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Edge */
+    display: none;
+    /* Chrome, Safari, Edge */
   }
 
   /* Scrollbar only visible on hover */
@@ -62,26 +67,35 @@ body {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
   .scrollbar-hover::-webkit-scrollbar {
     display: none;
   }
+
   .scrollbar-hover:hover {
-    scrollbar-width: thin; /* Firefox */
+    scrollbar-width: thin;
+    /* Firefox */
   }
+
   .scrollbar-hover:hover::-webkit-scrollbar {
     display: block;
     width: 8px;
     height: 8px;
   }
+
   .scrollbar-hover::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .scrollbar-hover::-webkit-scrollbar-thumb {
-    background: #a3a3a3; /* gray-400 */
+    background: #a3a3a3;
+    /* gray-400 */
     border-radius: 6px;
   }
+
   .scrollbar-hover:hover::-webkit-scrollbar-thumb {
-    background: #525252; /* gray-600 */
+    background: #525252;
+    /* gray-600 */
   }
 }
 
@@ -89,4 +103,14 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease forwards;
 }

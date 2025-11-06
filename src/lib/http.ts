@@ -1,12 +1,30 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import Cookies from 'js-cookie';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
 
 const getToken = (): string | null => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('access_token');
+    return Cookies.get('access_token') || localStorage.getItem('access_token');
   }
   return null;
+};
+
+const getRefreshToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return Cookies.get('refresh_token') || localStorage.getItem('refresh_token');
+  }
+  return null;
+};
+
+const clearAllTokens = () => {
+  if (typeof window !== 'undefined') {
+    localStorage.clear(); // Clear everything
+    Cookies.remove('access_token');
+    Cookies.remove('refresh_token');
+    // Clear any cached data
+    sessionStorage.clear();
+  }
 };
 
 const client: AxiosInstance = axios.create({
@@ -16,13 +34,44 @@ const client: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (value?: any) => void;
+  reject: (reason?: any) => void;
+}> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+// Request interceptor - CRITICAL: Add cache busting for GET requests
 client.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig) => {
     const token = getToken();
-    if (token) {
+    if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // CACHE BUSTING: Add timestamp to GET requests to prevent caching
+    if (config.method?.toLowerCase() === 'get') {
+      const separator = config.url?.includes('?') ? '&' : '?';
+      config.url = `${config.url}${separator}_t=${Date.now()}`;
+    }
+
+    // Disable axios cache
+    if (config.headers) {
+      config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+      config.headers['Pragma'] = 'no-cache';
+      config.headers['Expires'] = '0';
+    }
+
     return config;
   },
   (error) => {
@@ -30,21 +79,91 @@ client.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor
 client.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized access - could redirect to login
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('access_token');
-        // window.location.href = '/auth/login';
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (originalRequest.url?.includes('/auth/refresh') || originalRequest.url?.includes('/auth/signin')) {
+        clearAllTokens();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth/login';
+        }
+        return Promise.reject(error);
+      }
+
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => {
+            originalRequest._retry = true;
+            return client(originalRequest);
+          })
+          .catch(err => {
+            return Promise.reject(err);
+          });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = getRefreshToken();
+
+      if (!refreshToken) {
+        clearAllTokens();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth/login';
+        }
+        return Promise.reject(error);
+      }
+
+      try {
+        const response = await axios.post(`${BASE_URL}/auth/refresh`, {
+          refresh_token: refreshToken
+        });
+
+        const { access_token, refresh_token: new_refresh_token } = response.data;
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('access_token', access_token);
+          localStorage.setItem('refresh_token', new_refresh_token);
+
+          Cookies.set('access_token', access_token, {
+            expires: 7,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict'
+          });
+          Cookies.set('refresh_token', new_refresh_token, {
+            expires: 30,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict'
+          });
+
+          window.dispatchEvent(new Event('tokenUpdated'));
+        }
+
+        processQueue(null, access_token);
+        isRefreshing = false;
+
+        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        return client(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        isRefreshing = false;
+        clearAllTokens();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth/login';
+        }
+        return Promise.reject(refreshError);
       }
     }
+
     return Promise.reject(error);
   }
 );
-
 
 export const httpClient = {
   get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
