@@ -1,8 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Palette, Pencil, Trash2 } from "lucide-react";
-import { ProfileData } from "../../_types/ProfileData";
-
+import { ProfileData } from "../_types/ProfileData";
 interface HobbiesSectionProps {
   tempProfile: ProfileData;
   setTempProfile: React.Dispatch<React.SetStateAction<ProfileData>>;
@@ -17,22 +16,22 @@ const HobbiesSection = ({ tempProfile, setTempProfile }: HobbiesSectionProps) =>
       {showForm || editingIndex !== null ? (
         <div className="mb-4 border border-neutral-200 rounded-lg p-4 flex flex-col gap-2">
           <div className="flex flex-col">
-            <label className="text-base font-medium">Hobby</label>
+            <label className="text-sm font-medium">Hobby</label>
             <input
               type="text"
               name="name"
               value={form.name || ""}
               onChange={(e) => setForm({ ...form, [e.target.name]: e.target.value })}
-              className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+              className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-base font-medium">Description</label>
+            <label className="text-sm font-medium">Description</label>
             <textarea
               name="description"
               value={form.description || ""}
               onChange={(e) => setForm({ ...form, [e.target.name]: e.target.value })}
-              className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+              className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
             />
           </div>
           <div className="col-span-2 flex gap-2 justify-end">

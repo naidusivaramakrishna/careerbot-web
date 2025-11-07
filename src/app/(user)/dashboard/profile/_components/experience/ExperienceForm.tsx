@@ -43,38 +43,38 @@ export default function ExperienceForm({
         <div className="mb-4 border border-neutral-200 rounded-lg p-4 flex flex-col gap-2">
             <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">Position</label>
+                    <label className="text-sm font-medium">Position</label>
                     <input
                         type="text"
                         name="job_title"
                         value={experienceForm.job_title || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     />
                     {getFieldError("job_title") && (
                         <p className="text-red-500 text-sm mt-1">{getFieldError("job_title")}</p>
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">Company</label>
+                    <label className="text-sm font-medium">Company</label>
                     <input
                         type="text"
                         name="company"
                         value={experienceForm.company || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     />
                     {getFieldError("company") && (
                         <p className="text-red-500 text-sm mt-1">{getFieldError("company")}</p>
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">Job Type</label>
+                    <label className="text-sm font-medium">Job Type</label>
                     <select
                         name="job_type"
                         value={experienceForm.job_type || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     >
                         <option value="">Select Job Type</option>
                         {jobTypes.map((type) => (
@@ -88,39 +88,39 @@ export default function ExperienceForm({
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">Location</label>
+                    <label className="text-sm font-medium">Location</label>
                     <input
                         type="text"
                         name="location"
                         value={experienceForm.location || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     />
                     {getFieldError("location") && (
                         <p className="text-red-500 text-sm mt-1">{getFieldError("location")}</p>
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">Start Date</label>
+                    <label className="text-sm font-medium">Start Date</label>
                     <input
                         type="date"
                         name="start_date"
                         value={experienceForm.start_date || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     />
                     {getFieldError("start_date") && (
                         <p className="text-red-500 text-sm mt-1">{getFieldError("start_date")}</p>
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">End Date</label>
+                    <label className="text-sm font-medium">End Date</label>
                     <input
                         type="date"
                         name="end_date"
                         value={experienceForm.end_date || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     />
                     {getFieldError("end_date") && (
                         <p className="text-red-500 text-sm mt-1">{getFieldError("end_date")}</p>
@@ -130,16 +130,16 @@ export default function ExperienceForm({
 
             <div className="w-full my-2">
                 <div className="flex justify-between py-2">
-                    <label className="text-base font-medium">Description</label>
+                    <label className="text-sm font-medium">Description</label>
                     <div className="flex items-center gap-2">
                         <Image
                             src="/assets/icons/magic-pencil.svg"
-                            className="w-6 h-6"
+                            className="w-4 h-4"
                             width={12}
                             height={12}
                             alt="magic-pencil"
                         />
-                        <div>Let AI help you write the description...</div>
+                        <div className="text-sm">Let AI help you write the description...</div>
                     </div>
                 </div>
                 <div className="relative w-full">
@@ -149,29 +149,28 @@ export default function ExperienceForm({
                         placeholder="Description"
                         value={experienceForm.description || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
                     />
-                    <Sparkles className="absolute right-4 top-4 text-[#1F00EC] w-6 h-6 cursor-pointer" />
+                    <Sparkles className="absolute right-4 top-4 text-[#1F00EC] w-4 h-4 cursor-pointer" />
                 </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="col-span-2 flex gap-2 justify-self-end mt-2">
-                <button
-                    type="button"
-                    onClick={onSave}
-                    disabled={loading}
-                    className="bg-[#155DFC] text-white px-4 py-1.5 cursor-pointer rounded"
-                >
-                    {loading ? "Saving..." : "Save"}
-                </button>
-                <button
-                    type="button"
-                    onClick={onCancel}
-                    className="bg-gray-400 text-white px-3 py-1 rounded"
-                >
-                    Cancel
-                </button>
+                {/* Buttons */}
+                <div className="col-span-2 flex gap-2 justify-self-end mt-2">
+                    <button
+                        type="button"
+                        onClick={onSave}
+                        disabled={loading}
+                        className="bg-[#155DFC] text-white px-4 py-1.5 cursor-pointer rounded"
+                    >
+                        {loading ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="bg-gray-400 text-white px-3 py-1 rounded"
+                    >
+                        Cancel
+                    </button>
+                </div>
             </div>
         </div>
     );

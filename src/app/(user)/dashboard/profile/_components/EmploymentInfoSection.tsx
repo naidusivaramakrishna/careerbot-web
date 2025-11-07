@@ -161,11 +161,11 @@ export default function EmploymentInfoSection({
                     onChange={(val) => updateForm({ work_mode: val as typeof form["work_mode"] })}
                 />
                 <div className="flex flex-col gap-1">
-                    <label className="text-base font-medium">Gender</label>
+                    <label className="text-sm font-medium">Gender</label>
                     <select
                         value={form.gender ?? "male"}
                         onChange={(e) => updateForm({ gender: e.target.value as typeof form["gender"] })}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     >
                         <option value="male">Male</option>
                         <option value="female">Female</option>
@@ -174,12 +174,12 @@ export default function EmploymentInfoSection({
                     </select>
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-base font-medium">Job-type</label>
+                    <label className="text-sm font-medium">Job-type</label>
                     <select
                         name="job_type"
                         value={form.preferred_job_type || ""}
                         onChange={(e) => updateForm({ preferred_job_type: e.target.value as typeof form["preferred_job_type"] })}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200  p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     >
                         <option value="">Select Job Type</option>
                         {jobTypes.map((type) => (
@@ -190,13 +190,13 @@ export default function EmploymentInfoSection({
                     </select>
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-base font-medium">Employment Status</label>
+                    <label className="text-sm font-medium">Employment Status</label>
                     <select
                         value={form.employment_status ?? "student"}
                         onChange={(e) =>
                             updateForm({ employment_status: e.target.value as typeof form["employment_status"] })
                         }
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     >
                         <option value="student">Student</option>
                         <option value="employed">Employed</option>
@@ -205,13 +205,13 @@ export default function EmploymentInfoSection({
                     </select>
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-base font-medium">Notice Period</label>
+                    <label className="text-sm font-medium">Notice Period</label>
                     <select
                         value={form.notice_period_days ?? "Immediate"}
                         onChange={(e) =>
                             updateForm({ notice_period_days: e.target.value as typeof form["notice_period_days"] })
                         }
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200  p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     >
                         <option value="">Select Notice Period</option>
                         {notice_period.map((days) => (
@@ -249,7 +249,7 @@ export default function EmploymentInfoSection({
                     <button
                         onClick={handleSave}
                         disabled={loading}
-                        className="bg-[#155DFC] text-white px-6 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="bg-[#155DFC] text-white px-6 py-2 text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? "Saving..." : "Save Changes"}
                     </button>

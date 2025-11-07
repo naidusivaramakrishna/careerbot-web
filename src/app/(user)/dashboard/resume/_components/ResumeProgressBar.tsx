@@ -6,7 +6,7 @@ const ResumeProgressBar = ({ count, total = 5 }: { count: number; total?: number
                 resumes saved out of{" "}
                 <span className="font-semibold text-black">{total}</span> available slots
             </p>
-            <span className='font-semibold text-[#2200ff]'>{count}/{total}</span>
+            <span className='font-semibold text-[#2200ff] text-sm'>{count}/{total}</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
             <div

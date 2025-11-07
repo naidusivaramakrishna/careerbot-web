@@ -129,33 +129,33 @@ const RightSection = () => {
                     <h3 className='my-4 text-sm'>Auto fill your profile within seconds.</h3>
                     <div className='flex flex-col gap-2 mt-2'>
                         <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-orange-200 rounded-lg'>
-                            <Upload className='w-5 h-5' />
-                            <span className='text-lg'>Upload Resume</span>
+                            <Upload className='w-4 h-4' />
+                            <span className='text-sm'>Upload Resume</span>
                         </div>
                     </div>
                     <div className='flex flex-col gap-2 mt-2'>
                         <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-orange-200 rounded-lg'>
-                            <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-5 h-5' width={20} height={20} />
-                            <span className='text-lg'>Import from Linkedin</span>
+                            <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20} />
+                            <span className='text-sm'>Import from Linkedin</span>
                         </div>
                     </div>
                     <div className='flex flex-col gap-2 mt-2'>
                         <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-orange-200 rounded-lg'>
-                            <Sparkles className='w-5 h-5' />
-                            <span className='text-lg'>Improve with AI</span>
+                            <Sparkles className='w-4 h-4' />
+                            <span className='text-sm'>Improve with AI</span>
                         </div>
                     </div>
                     <div className='flex flex-col gap-2 mt-2'>
                         <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-orange-200 rounded-lg'>
-                            <Settings className='w-5 h-5' />
-                            <span className='text-lg'>Manage Settings</span>
+                            <Settings className='w-4 h-4' />
+                            <span className='text-sm'>Manage Settings</span>
                         </div>
                     </div>
                 </div>
                 <div className="bg-[#F9F9FA] p-4 rounded-xl my-4 shadow-sm">
                     <div className='flex items-center justify-between'>
-                        <h1 className='my-4 font-semibold text-xl'>Profile Completion</h1>
-                        <div className='rounded-full border border-neutral-200 px-3 py-0.5'>
+                        <h1 className='my-4 font-semibold text-lg'>Profile Completion</h1>
+                        <div className='rounded-full border border-neutral-200 px-3 py-0.5 text-sm'>
                             {completionPercentage}%
                         </div>
                     </div>
@@ -167,21 +167,21 @@ const RightSection = () => {
                     </div>
                 </div>
                 <div className="flex flex-col items-center p-4 rounded-xl border border-[#2200FF33]/20 my-4 shadow bg-[#DAD5F9]">
-                    <div className='w-16 h-16 text-white rounded-full flex items-center justify-center bg-gradient-to-r from-[#2200FF] to-[#1800B3]'>
-                        <Crown className='w-10 h-10' />
+                    <div className='w-14 h-14 text-white rounded-full flex items-center justify-center bg-gradient-to-r from-[#2200FF] to-[#1800B3]'>
+                        <Crown className='w-8 h-8' />
                     </div>
-                    <h3 className='my-4 font-semibold text-xl'>Upgrade to CareerBot Pro</h3>
-                    <p className='text-center text-[#818798]'>Get unlimited job applications, AI resume optimization, and priority support.</p>
-                    <button className='rounded-lg my-4 text-white border border-neutral-200 gap-2 cursor-pointer bg-gradient-to-r from-[#2200FF] to-[#1800B3] w-full px-4 py-3'>
+                    <h3 className='my-4 font-semibold text-lg'>Upgrade to CareerBot Pro</h3>
+                    <p className='text-center text-[#818798] text-sm'>Get unlimited job applications, AI resume optimization, and priority support.</p>
+                    <button className='rounded-lg my-4 text-sm text-white border border-neutral-200 gap-2 cursor-pointer bg-gradient-to-r from-[#2200FF] to-[#1800B3] w-full px-4 py-2.5'>
                         <span>Upgrade Now</span>
                     </button>
                     <p className='text-sm text-[#818798]'>30 day money back guarantee</p>
                 </div>
                 <div className="flex flex-col items-center p-4 rounded-xl my-4 shadow bg-white">
-                    <MessageSquare className='w-10 h-10 text-[#7B899D]' />
+                    <MessageSquare className='w-8 h-8 text-[#7B899D]' />
                     <h3 className='my-4 font-semibold text-[#344256] text-lg'>Need Help?</h3>
-                    <p className='text-[#7B899D]'>Get expert advice on optimizing your profile.</p>
-                    <button className='rounded-lg my-4 font-semibold text-black border border-[#DDE2E9] gap-2 cursor-pointer bg-[#F9F9FA] w-full px-4 py-3'>
+                    <p className='text-[#7B899D] text-sm'>Get expert advice on optimizing your profile.</p>
+                    <button className='rounded-lg text-sm my-4 font-semibold text-black border border-[#DDE2E9] gap-2 cursor-pointer bg-[#F9F9FA] w-full px-4 py-2.5'>
                         <span className='text-[#344256]'>Contact Support</span>
                     </button>
                 </div>

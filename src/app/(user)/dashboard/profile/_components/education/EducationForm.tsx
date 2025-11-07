@@ -35,13 +35,13 @@ export default function EducationForm({
       <div className="grid grid-cols-2 gap-3">
         {/* Institution */}
         <div className="flex flex-col">
-          <label className="text-base font-medium">School/College</label>
+          <label className="text-sm font-medium">School/College</label>
           <input
             type="text"
             name="institution"
             value={educationForm.institution || ""}
             onChange={handleChange}
-            className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+            className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
           />
           {getFieldError("institution") && (
             <p className="text-red-500 text-sm mt-1">{getFieldError("institution")}</p>
@@ -50,12 +50,12 @@ export default function EducationForm({
 
         {/* Degree */}
         <div className="flex flex-col">
-          <label className="text-base font-medium">Degree</label>
+          <label className="text-sm font-medium">Degree</label>
           <select
             name="degree"
             value={educationForm.degree || ""}
             onChange={handleChange}
-            className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+            className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
           >
             <option value="">Select Degree</option>
             {degrees.map((deg) => (
@@ -71,12 +71,12 @@ export default function EducationForm({
 
         {/* Stream */}
         <div className="flex flex-col">
-          <label className="text-base font-medium">Stream</label>
+          <label className="text-sm font-medium">Stream</label>
           <select
             name="stream"
             value={educationForm.stream || ""}
             onChange={handleChange}
-            className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+            className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
           >
             <option value="">Select Stream</option>
             {streams.map((stream) => (
@@ -89,20 +89,20 @@ export default function EducationForm({
 
         {/* GPA */}
         <div className="flex flex-col">
-          <label className="text-base font-medium">GPA/Percentage</label>
+          <label className="text-sm font-medium">GPA/Percentage</label>
           <input
             type="text"
             name="cgpa"
             value={educationForm.cgpa || ""}
             onChange={handleChange}
-            className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+            className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
           />
         </div>
 
         {/* Dates */}
         {["start_date", "end_date"].map((field) => (
           <div key={field} className="flex flex-col">
-            <label className="text-base font-medium">
+            <label className="text-sm font-medium">
               {field === "start_date" ? "Start Date" : "End Date"}
             </label>
             <input
@@ -110,7 +110,7 @@ export default function EducationForm({
               name={field}
               value={(educationForm as any)[field] || ""}
               onChange={handleChange}
-              className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+              className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
             />
             {getFieldError(field) && (
               <p className="text-red-500 text-sm mt-1">{getFieldError(field)}</p>

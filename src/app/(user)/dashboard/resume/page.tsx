@@ -177,7 +177,7 @@ const ResumePage = () => {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">RESUME</h1>
+      <h1 className="text-2xl font-bold">RESUME</h1>
       <div className="min-h-screen bg-gray-200 px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
         <main className="flex-1 p-8">
           <div className="rounded-2xl my-4 relative">
@@ -193,9 +193,9 @@ const ResumePage = () => {
                   <button
                     ref={buttonRef}
                     onClick={() => setIsModalOpen(!isModalOpen)}
-                    className="rounded-lg flex items-center gap-2 cursor-pointer bg-[#2200ff]/70 text-white px-4 py-3 hover:bg-[#2200ff]/90"
+                    className="rounded-lg flex items-center gap-2 cursor-pointer bg-[#2200ff]/70 text-white px-4 py-2.5 hover:bg-[#2200ff]/90 text-sm"
                   >
-                    <Plus className="h-5 w-5" />
+                    <Plus className="h-4 w-4" />
                     <span>Add Resume</span>
                   </button>
 
@@ -214,7 +214,7 @@ const ResumePage = () => {
             {resumes.length > 0 && loading ? (
               <div className="bg-white w-full rounded-2xl border border-gray-200 p-8 text-center">
                 <div className="flex items-center justify-center gap-2">
-                  <div className="w-6 h-6 border-4 border-[#2200ff] border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-4 border-[#2200ff] border-t-transparent rounded-full animate-spin"></div>
                   <span className="text-gray-600">Loading resumes...</span>
                 </div>
               </div>

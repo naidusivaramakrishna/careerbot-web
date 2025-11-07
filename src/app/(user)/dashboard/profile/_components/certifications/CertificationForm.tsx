@@ -33,39 +33,39 @@ export default function CertificationForm({
         <div className="mb-4 border border-neutral-200 rounded-lg p-4 flex flex-col gap-2">
             <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">Certification</label>
+                    <label className="text-sm font-medium">Certification</label>
                     <input
                         type="text"
                         name="certification_name"
                         value={certificationForm.certification_name || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     />
                     {getFieldError("certification_name") && (
                         <p className="text-red-500 text-sm mt-1">{getFieldError("certification_name")}</p>
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">Issuer</label>
+                    <label className="text-sm font-medium">Issuer</label>
                     <input
                         type="text"
                         name="issuer"
                         value={certificationForm.issuer || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                     />
                     {getFieldError("issuer") && (
                         <p className="text-red-500 text-sm mt-1">{getFieldError("issuer")}</p>
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-base font-medium">Issue Date</label>
+                    <label className="text-sm font-medium">Issue Date</label>
                     <input
                         type="date"
                         name="start_date"
                         value={certificationForm.start_date || ""}
                         onChange={handleChange}
-                        className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                     />
                     {getFieldError("start_date") && (
                         <p className="text-red-500 text-sm mt-1">{getFieldError("start_date")}</p>

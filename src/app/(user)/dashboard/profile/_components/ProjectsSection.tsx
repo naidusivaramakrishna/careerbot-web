@@ -20,27 +20,27 @@ const ProjectsSection = ({ tempProfile, setTempProfile }: ProjectsSectionProps) 
                 <div className="mb-4 border border-neutral-200 rounded-lg p-4 flex flex-col gap-2">
                     <div className="grid grid-cols-3 gap-3">
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">Project Name</label>
+                            <label className="text-sm font-medium">Project Name</label>
                             <input
                                 type="text"
                                 name="projectName"
                                 value={projectsForm.projectName || ""}
                                 onChange={(e) => setProjectsForm({ ...projectsForm, [e.target.name]: e.target.value })}
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">Role</label>
+                            <label className="text-sm font-medium">Role</label>
                             <input
                                 type="text"
                                 name="role"
                                 value={projectsForm.role || ""}
                                 onChange={(e) => setProjectsForm({ ...projectsForm, [e.target.name]: e.target.value })}
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">Technologies</label>
+                            <label className="text-sm font-medium">Technologies</label>
                             <input
                                 type="text"
                                 name="technologies"
@@ -49,11 +49,11 @@ const ProjectsSection = ({ tempProfile, setTempProfile }: ProjectsSectionProps) 
                                 onChange={(e) =>
                                     setProjectsForm({ ...projectsForm, technologies: e.target.value.split(",") })
                                 }
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">Start Date</label>
+                            <label className="text-sm font-medium">Start Date</label>
                             <input
                                 type="date"
                                 name="startDate"
@@ -61,11 +61,11 @@ const ProjectsSection = ({ tempProfile, setTempProfile }: ProjectsSectionProps) 
                                 onChange={(e) =>
                                     setProjectsForm({ ...projectsForm, [e.target.name]: e.target.value })
                                 }
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">End Date</label>
+                            <label className="text-sm font-medium">End Date</label>
                             <input
                                 type="date"
                                 name="endDate"
@@ -73,26 +73,26 @@ const ProjectsSection = ({ tempProfile, setTempProfile }: ProjectsSectionProps) 
                                 onChange={(e) =>
                                     setProjectsForm({ ...projectsForm, [e.target.name]: e.target.value })
                                 }
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">Project Link</label>
+                            <label className="text-sm font-medium">Project Link</label>
                             <input
                                 type="text"
                                 name="link"
                                 value={projectsForm.link || ""}
                                 onChange={(e) => setProjectsForm({ ...projectsForm, [e.target.name]: e.target.value })}
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                     </div>
                     <div className="w-full my-2">
                         <div className='flex justify-between py-2'>
-                            <label className="text-base font-medium">Description</label>
+                            <label className="text-sm font-medium">Description</label>
                             <div className='flex items-center gap-2'>
-                                <Image src="/assets/icons/magic-pencil.svg" className='w-6 h-6' width={12} height={12} alt='magic-pencil' />
-                                <div>Let AI help you write this summary....</div>
+                                <Image src="/assets/icons/magic-pencil.svg" className='w-4 h-4' width={12} height={12} alt='magic-pencil' />
+                                <div className="text-sm">Let AI help you write this summary....</div>
                             </div>
                         </div>
                         <div className="relative w-full">
@@ -102,9 +102,9 @@ const ProjectsSection = ({ tempProfile, setTempProfile }: ProjectsSectionProps) 
                                 placeholder="Description"
                                 value={projectsForm.description || ""}
                                 onChange={(e) => setProjectsForm({ ...projectsForm, [e.target.name]: e.target.value })}
-                                className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="w-full border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
-                            <Sparkles className="absolute right-4 top-4 text-[#1F00EC] w-6 h-6 cursor-pointer" />
+                            <Sparkles className="absolute right-4 top-4 text-[#1F00EC] w-4 h-4 cursor-pointer" />
                         </div>
                     </div>
                     <div className="col-span-2 flex gap-2 justify-end">

@@ -38,7 +38,7 @@ export default function MultiSelectAutocomplete({
 
     return (
         <div className="flex flex-col gap-2 mt-2 relative">
-            <label className="text-base font-medium">{label}</label>
+            <label className="text-sm font-medium">{label}</label>
             <div className="flex flex-wrap gap-2">
                 {values.map((val) => (
                     <span
@@ -70,11 +70,11 @@ export default function MultiSelectAutocomplete({
                     }
                 }}
                 placeholder="Type to search..."
-                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                className="border border-neutral-200  p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
             />
 
             {filteredOptions.length > 0 && (
-                <div className="absolute border border-neutral-200 rounded mt-1 max-h-32 overflow-y-auto bg-white shadow-md w-full z-10">
+                <div className="absolute border border-neutral-200 rounded mt-1 max-h-32 overflow-y-auto bg-white shadow-md w-full z-10 text-sm">
                     {filteredOptions.map((opt) => (
                         <div
                             key={opt}
