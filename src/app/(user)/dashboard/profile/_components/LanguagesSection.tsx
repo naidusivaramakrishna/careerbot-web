@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Languages, Pencil, Trash2 } from "lucide-react";
 import { languages } from "@/utils/languages";
-import { ProfileData } from "../../_types/ProfileData";
+import { ProfileData } from "../_types/ProfileData";
 
 const proficiencyLevels = ["Beginner", "Intermediate", "Advanced", "Fluent", "Native"];
 
@@ -21,12 +21,12 @@ const LanguagesSection = ({ tempProfile, setTempProfile }: LanguagesSectionProps
         <div className="mb-4 border border-neutral-200 rounded-lg p-4 flex flex-col gap-2">
           <div className="grid grid-cols-4 gap-3">
             <div className="flex flex-col">
-              <label className="text-base font-medium">Language</label>
+              <label className="text-sm font-medium">Language</label>
               <select
                 name="language"
                 value={form.language || ""}
                 onChange={(e) => setForm({ ...form, [e.target.name]: e.target.value })}
-                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
               >
                 <option value="">Select a language</option>
                 {languages.map((lang, index) => (
@@ -37,12 +37,12 @@ const LanguagesSection = ({ tempProfile, setTempProfile }: LanguagesSectionProps
               </select>
             </div>
             <div className="flex flex-col">
-              <label className="text-base font-medium">Proficiency</label>
+              <label className="text-sm font-medium">Proficiency</label>
               <select
                 name="proficiency"
                 value={form.proficiency || ""}
                 onChange={(e) => setForm({ ...form, [e.target.name]: e.target.value })}
-                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
               >
                 <option value="">Select Proficiency</option>
                 {proficiencyLevels.map((level) => (

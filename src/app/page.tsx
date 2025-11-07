@@ -8,7 +8,7 @@ export default function Home() {
     <div>
       <button
         onClick={() => setOpen(true)}
-        className="flex justify-self-end  gap-2 border border-neutral-200 cursor-pointer bg-black text-white font-semibold rounded-lg px-6 py-3 m-4">
+        className="flex justify-self-end text-sm  gap-2 border border-neutral-200 cursor-pointer bg-black text-white font-semibold rounded-lg px-6 py-2 m-4">
         SignUp
       </button>
       <AuthModal

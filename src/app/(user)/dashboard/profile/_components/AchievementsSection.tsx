@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Medal, Pencil, Trash2 } from "lucide-react";
-import { ProfileData } from "../../_types/ProfileData";
+import { ProfileData } from "../_types/ProfileData";
 
 interface AchievementsSectionProps {
     tempProfile: ProfileData;
@@ -17,44 +17,44 @@ const AchievementsSection = ({ tempProfile, setTempProfile }: AchievementsSectio
                 <div className="mb-4 border border-neutral-200 rounded-lg p-4 flex flex-col gap-2">
                     <div className="grid grid-cols-3 gap-3">
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">Achievment</label>
+                            <label className="text-sm font-medium">Achievment</label>
                             <input
                                 type="text"
                                 name="title"
                                 value={form.title || ""}
                                 onChange={(e) => setForm({ ...form, [e.target.name]: e.target.value })}
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">Issuer/Organization</label>
+                            <label className="text-sm font-medium">Issuer/Organization</label>
                             <input
                                 type="text"
                                 name="issuer"
                                 value={form.issuer || ""}
                                 onChange={(e) => setForm({ ...form, [e.target.name]: e.target.value })}
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                         <div className="flex flex-col">
-                            <label className="text-base font-medium">Date</label>
+                            <label className="text-sm font-medium">Date</label>
                             <input
                                 type="date"
                                 name="date"
                                 value={form.date || ""}
                                 onChange={(e) => setForm({ ...form, [e.target.name]: e.target.value })}
-                                className="border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                                className="border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                             />
                         </div>
                     </div>
                     <div className="flex flex-col">
-                        <label className="text-base font-medium">Description</label>
+                        <label className="text-sm font-medium">Description</label>
                         <textarea
                             rows={4}
                             name="description"
                             value={form.description || ""}
                             onChange={(e) => setForm({ ...form, [e.target.name]: e.target.value })}
-                            className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                            className="w-full border border-neutral-200 p-2.5 text-sm  rounded-lg bg-white outline-neutral-500"
                         />
                     </div>
                     <div className="col-span-2 flex gap-2 justify-end">

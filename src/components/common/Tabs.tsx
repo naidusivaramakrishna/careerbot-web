@@ -34,7 +34,7 @@ export default function Tabs({ tabs, active, onChange }: TabsProps) {
                 {tabs.map((tab) => (
                     <button
                         key={tab.label}
-                        className={`flex items-center gap-2 px-3 py-4 cursor-pointer text-sm font-medium  transition ${active === tab.label
+                        className={`flex items-center gap-2 px-3 py-4 cursor-pointer text-xs font-medium  transition ${active === tab.label
                                 ? "bg-[#DAD5F9] text-[#2200FF] font-semibold border-b-2 border-[#1800B3]"
                                 : "text-gray-600 hover:text-black"
                             }`}
@@ -54,7 +54,7 @@ export default function Tabs({ tabs, active, onChange }: TabsProps) {
                 {dynamicSections.map((sec) => (
                     <button
                         key={sec.id}
-                        className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm font-medium  transition ${active === sec.id
+                        className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-xs font-medium  transition ${active === sec.id
                                 ? "bg-[#DAD5F9] text-[#2200FF] font-semibold border-b-2 border-[#1800B3]"
                                 : "text-gray-600 hover:text-black"
                             }`}
@@ -86,7 +86,7 @@ export default function Tabs({ tabs, active, onChange }: TabsProps) {
                                 setSidebarActiveTab(sec.id);
                             }
                         }}
-                        className="border w-fit border-neutral-400 px-3 py-2 rounded-lg bg-neutral-100 outline-neutral-500"
+                        className="border text-sm w-fit border-neutral-400 px-3 py-2 rounded-lg bg-neutral-100 outline-neutral-500"
                     >
                         <option value="">New section</option>
                         {availableSections.map((sec) => (

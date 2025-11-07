@@ -141,10 +141,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="grid grid-cols-2 py-12">
+            <div className="grid grid-cols-2 min-w-4xl">
                 <div className="bg-cyan-100 flex flex-col justify-between rounded-tl-2xl rounded-bl-2xl p-12">
                     <div className="w-[90%]">
-                        <p className="text-4xl">
+                        <p className="text-3xl">
                             <span className="font-bold leading-16">
                                 Simple, Easy to<br /> Create Resumes  <br />
                             </span>{" "}
@@ -161,17 +161,17 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
                         </div>
 
                         {/* Current item */}
-                        <div className="text-3xl font-semibold text-gray-800 animate-fadeIn transition-opacity duration-500">
+                        <div className="text-2xl font-semibold text-gray-800 animate-fadeIn transition-opacity duration-500">
                             {items[currentItem]}
                         </div>
                     </div>
                 </div>
-                <div className="bg-white w-[600px] p-8 relative rounded-tr-2xl rounded-br-2xl">
+                <div className="bg-white  p-8 relative rounded-tr-2xl rounded-br-2xl">
                     <button onClick={onClose} className="absolute top-4 right-4 cursor-pointer rounded-full p-2 hover:bg-black hover:text-white">
-                        <X className="h-6 w-6" />
+                        <X className="h-4 w-4" />
                     </button>
 
-                    <h1 className="text-[32px] font-semibold mb-8 text-center">
+                    <h1 className="text-xl font-semibold mb-8 text-center">
                         {formType === "signup" ? "Welcome to " : "Welcome back to "}
                         <span className="">CareerBot</span>
                     </h1>
@@ -193,7 +193,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
                             placeholder="Email"
                             value={formType === "signup" ? signUpForm.email : loginForm.email}
                             onChange={handleChange}
-                            className="w-full bg-gray-100 rounded-lg px-3 py-3  outline-none"
+                            className="w-full bg-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none"
                         />
                         {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
 
@@ -206,7 +206,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
                                     placeholder="Username"
                                     value={signUpForm.username}
                                     onChange={handleChange}
-                                    className="w-full bg-gray-100 rounded-lg px-3 py-3  outline-none"
+                                    className="w-full bg-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none"
                                 />
                                 {errors.username && <p className="text-red-500 text-sm mt-1">{errors.username}</p>}
                             </>
@@ -220,52 +220,52 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
                                 placeholder="Password"
                                 value={formType === "signup" ? signUpForm.password : loginForm.password}
                                 onChange={handleChange}
-                                className="w-full bg-gray-100 rounded-lg px-3 py-3  outline-none"
+                                className="w-full bg-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none"
                             />
                             <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute inset-y-0 right-3 flex items-center text-gray-600">
-                                {showPassword ? <Eye size={20} /> : <EyeClosed size={20} />}
+                                {showPassword ? <Eye size={20}/> : <EyeClosed size={20} />}
                             </button>
                         </div>
                         {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
                         {errors.login && formType === "login" && <p className="text-red-500 text-sm mt-1">{errors.login}</p>}
                     </div>
 
-                    {formType === "login" && <p className="text-sm font-semibold cursor-pointer flex justify-end my-2">Forgot Password?</p>}
+                    {formType === "login" && <p className="text-xs font-semibold cursor-pointer flex justify-end my-2">Forgot Password?</p>}
                     <div className="flex flex-col my-4">
                         <button
                             onClick={formType === "signup" ? handleSignUp : handleLogin}
                             disabled={formType === "signup" ? loading.signUp : loading.login}
-                            className="bg-black text-white cursor-pointer font-semibold text-xl rounded-lg w-full px-6 py-3  disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="bg-black text-white cursor-pointer font-semibold rounded-lg w-full px-6 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {formType === "signup" ? (loading.signUp ? "Signing up..." : "SIGN UP") : (loading.login ? "Signing in..." : "SIGN IN")}
                         </button>
 
                         <div className="flex items-center my-4">
                             <div className="flex-grow h-px bg-gray-300"></div>
-                            <p className="text-neutral-400 text-center px-4">Or {formType ==="login" ? "login with" :"signup with"}</p>
+                            <p className="text-neutral-400 text-center px-4 text-sm">Or {formType ==="login" ? "login with" :"signup with"}</p>
                             <div className="flex-grow h-px bg-gray-300"></div>
                         </div>
                         <SocialLoginButtons variant={formType} />
                         {formType === "login" &&
-                            <div className="flex flex-col items-center">
-                                <div className="flex items-center gap-2">
+                            <div className="flex flex-col items-center mb-4">
+                                <div className="flex items-center gap-2 text-xs">
                                     <Lock className="w-4 h-4 " />
                                     <span>Your login is secure & encrypted</span>
                                 </div>
-                                <div className="flex gap-6 my-4 items-center">
+                                {/* <div className="flex gap-6 my-4 items-center text-xs">
                                     <span>Privacy Policy</span>
                                     <li>
                                         <span className="list-disc mx-2">Terms of Service</span>
                                     </li>
-                                </div>
+                                </div> */}
                             </div>
                         }
                         <button
                             onClick={() => setFormType(formType === "signup" ? "login" : "signup")}
-                            className=" border border-gray-200  cursor-pointer hover:bg-gray-100 text-xl rounded-lg w-full px-6 py-3 flex gap-2 justify-center items-center"
+                            className=" border border-gray-200  cursor-pointer hover:bg-gray-100 rounded-lg w-full px-6 py-2.5 flex gap-2 justify-center items-center"
                         >
                             {formType === "signup" ? "Already a member? Sign in now" : "New to CareerBot? Sign up free"}
-                            {formType === "login" && <MoveRight />}
+                            {formType === "login" && <MoveRight className="w-4 h-4"/>}
                         </button>
                     </div>
 

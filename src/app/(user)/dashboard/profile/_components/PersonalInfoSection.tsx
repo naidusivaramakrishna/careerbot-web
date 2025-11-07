@@ -102,111 +102,111 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
             {/* Form fields */}
             <div className="grid grid-cols-3 gap-4 my-4">
                 <div>
-                    <label className="text-base font-medium">Full Name</label>
+                    <label className="text-sm font-medium">Full Name</label>
                     <input
                         type="text"
                         name="fullName"
                         value={tempProfile.personalInformation?.fullName || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
                         placeholder="John Doe"
                     />
                 </div>
                 <div>
-                    <label className="text-base font-medium">Headline</label>
+                    <label className="text-sm font-medium">Headline</label>
                     <input
                         type="text"
                         name="headline"
                         value={tempProfile.personalInformation?.headline || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
                         placeholder="Software Engineer"
                     />
                 </div>
                 <div>
-                    <label className="text-base font-medium">Location</label>
+                    <label className="text-sm font-medium">Location</label>
                     <input
                         type="text"
                         name="location"
                         value={tempProfile.personalInformation?.location || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
                         placeholder="New York, USA"
                     />
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="text-base font-medium">Email</label>
+                    <label className="text-sm font-medium">Email</label>
                     <input
                         type="email"
                         name="email"
                         value={tempProfile.personalInformation?.email || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
                         placeholder="john@example.com"
                     />
                 </div>
                 <div>
-                    <label className="text-base font-medium">Phone</label>
+                    <label className="text-sm font-medium">Phone</label>
                     <input
                         type="text"
                         name="phone"
                         value={tempProfile.personalInformation?.phone || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
                         placeholder="+91 9876543210"
                     />
                 </div>
                 <div>
-                    <label className="text-base font-medium">LinkedIn</label>
+                    <label className="text-sm font-medium">LinkedIn</label>
                     <input
                         ref={linkedinRef}
                         type="text"
                         name="linkedin"
                         value={tempProfile.personalInformation?.linkedin || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
                         placeholder="https://linkedin.com/in/johndoe"
                     />
                 </div>
                 <div>
-                    <label className="text-base font-medium">GitHub</label>
+                    <label className="text-sm font-medium">GitHub</label>
                     <input
                         ref={githubRef}
                         type="text"
                         name="github"
                         value={tempProfile.personalInformation?.github || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 p-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
                         placeholder="https://github.com/johndoe"
                     />
                 </div>
             </div>
             <div className='mt-4'>
-                <label className="text-base font-medium">Professional Summary</label>
+                <label className="text-sm font-medium">Professional Summary</label>
                 <div className="relative w-full">
                     <textarea
                         rows={5}
                         value={tempProfile.personalInformation?.summary || ""}
                         onChange={handleChange}
-                        className="w-full border border-neutral-200 px-10 py-3 rounded-lg bg-white outline-neutral-500"
+                        className="w-full text-sm border border-neutral-200 px-10 py-3 rounded-lg bg-white outline-neutral-500"
                         name="summary"
                         id="summary"
                         placeholder="Short bio, career goals, highlights..."
                     ></textarea>
-                    <Sparkles className="absolute right-4 top-4 text-[#1F00EC] w-6 h-6 cursor-pointer" />
+                    <Sparkles className="absolute right-4 top-4 text-[#1F00EC] w-4 h-4 cursor-pointer" />
                 </div>
             </div>
             <div className='flex justify-between'>
                 <div className='flex items-center gap-2'>
-                    <Image src="/assets/icons/magic-pencil.svg" className='w-6 h-6' width={12} height={12} alt='magic-pencil' />
-                    <div>Let AI help you write this summary....</div>
+                    <Image src="/assets/icons/magic-pencil.svg" className='w-4 h-4' width={12} height={12} alt='magic-pencil' />
+                    <div className='text-sm'>Let AI help you write this summary....</div>
                 </div>
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="bg-[#155DFC] text-white flex gap-2 cursor-pointer items-center justify-self-end my-4 px-4 py-2 rounded-lg hover:bg-[#0d4acc] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-[#155DFC] text-white flex gap-2 cursor-pointer items-center justify-self-end my-4 px-4 py-2 text-sm rounded-lg hover:bg-[#0d4acc] transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {saving ? (
                         <>

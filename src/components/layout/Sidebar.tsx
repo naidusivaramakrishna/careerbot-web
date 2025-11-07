@@ -155,7 +155,7 @@ const Sidebar = () => {
                                 className={`group flex flex-col items-center gap-3 px-3 py-2 rounded-lg text-base transition
                   ${active ? "bg-[#e8eff9] text-[#2557a7]" : " text-gray-600 hover:text-[#2557a7]"}`}
                             >
-                                <Icon className="w-6 h-6 shrink-0" />
+                                <Icon className="w-4 h-4 shrink-0" />
                                 <span className="text-xs">{item.label}</span>
                             </Link>
                         );
@@ -170,7 +170,7 @@ const Sidebar = () => {
                     disabled={isLoggingOut || !isLoggedIn}
                     className="flex flex-col items-center gap-3 px-3 py-2 rounded-lg cursor-pointer text-base hover:bg-red-100 hover:text-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <LogOut className="w-6 h-6" />
+                    <LogOut className="w-4 h-4" />
                     <span className="text-xs">{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
                 </button>
 
@@ -181,7 +181,7 @@ const Sidebar = () => {
                         {isLoadingProfile ? (
                             <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         ) : (
-                            <span className="text-white font-bold text-lg">
+                            <span className="text-white font-bold text-sm">
                                 {userProfile?.full_name?.[0]?.toUpperCase() ||
                                     userProfile?.username?.[0]?.toUpperCase() ||
                                     userProfile?.email?.[0]?.toUpperCase() ||

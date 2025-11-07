@@ -16,13 +16,13 @@ export default function InfoToggleGroup<T extends string | boolean>({
 }: InfoToggleGroupProps<T>) {
   return (
     <div className="flex flex-col gap-2 ">
-      <span className="text-base">{label}</span>
+      <span className="text-sm">{label}</span>
       <div className="flex gap-2">
         {options.map((option) => (
           <button
             key={String(option.value)}
             type="button"
-            className={`rounded-lg px-3 py-2 border cursor-pointer ${
+            className={`rounded-lg px-3 py-2 text-sm border cursor-pointer ${
               value === option.value
                 ? "bg-black text-white border-black"
                 : "bg-white text-black border-neutral-200 hover:bg-gray-100"

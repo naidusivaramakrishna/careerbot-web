@@ -118,11 +118,11 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   }
 
   return (
-    <div className="w-4/5 max-w-[1300px]  overflow-hidden bg-[#F5F5F5] rounded-2xl my-4 shadow-md p-4 flex flex-col">
+    <div className="w-4/5 max-w-[1200px]  overflow-hidden bg-[#F5F5F5] rounded-2xl my-4 shadow-md p-4 flex flex-col">
       {!hasProfileData && (
         <div className="flex items-center gap-6 bg-[#F9FAFB] p-6">
           {/* Profile Image */}
-          <div className="relative w-28 h-28">
+          <div className="relative w-24 h-24">
             <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#1099C6] overflow-hidden">
               {selectedImage ? (
                 <Image
@@ -135,8 +135,8 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 <Image
                   src="/assets/icons/user_icon.svg"
                   alt="user-icon"
-                  width={50}
-                  height={50}
+                  width={40}
+                  height={40}
                 />
               )}
             </div>
@@ -144,9 +144,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
             {/* Camera icon */}
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="bg-[#1099C6] flex items-center justify-center absolute bottom-0 right-0 w-8 h-8 rounded-full cursor-pointer hover:scale-105 transition"
+              className="bg-[#1099C6] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
             >
-              <Camera className="w-5 h-5 text-white" />
+              <Camera className="w-4 h-4 text-white" />
             </div>
 
             <input
@@ -165,7 +165,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 "User"} */}
                 {username?username : "User"}
             </h1>
-            <p className="text-gray-600 text-lg">
+            <p className="text-gray-600 text-base">
               Let&apos;s create your profile and connect you to your dream role.
             </p>
           </div>
@@ -177,7 +177,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           {/* Profile Info */}
           <div className="flex-1">
             <div className='flex items-center gap-4'>
-              <div className="relative w-32 h-32">
+              <div className="relative w-24 h-24">
                 <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#1099C6] overflow-hidden">
                   {selectedImage ? (
                     <Image
@@ -190,16 +190,16 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                     <Image
                       src="/assets/icons/user_icon.svg"
                       alt="user-icon"
-                      width={50}
-                      height={50}
+                      width={40}
+                      height={40}
                     />
                   )}
                 </div>
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="bg-[#1099C6] flex items-center justify-center absolute bottom-0 right-0 w-8 h-8 rounded-full cursor-pointer hover:scale-105 transition"
+                  className="bg-[#1099C6] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
                 >
-                  <Camera className="w-5 h-5 text-white" />
+                  <Camera className="w-4 h-4 text-white" />
                 </div>
 
                 <input
@@ -211,32 +211,32 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 />
               </div>
               <div className='text-gray-600'>
-                <h1 className="uppercase text-black text-2xl font-semibold">{profileData?.personalInformation?.fullName}</h1>
-                <span className='text-neutral-600 text-md'>{profileData?.personalInformation?.headline || ""}</span>
+                <h1 className="uppercase text-black text-xl font-semibold">{profileData?.personalInformation?.fullName}</h1>
+                <span className='text-neutral-600 text-sm'>{profileData?.personalInformation?.headline || ""}</span>
                 <div className='flex justify-between gap-6 mt-1'>
                   {profileData?.personalInformation?.location && (
                     <div className="flex items-center gap-1">
-                      <MapPin className="h-5 w-5" />
-                      <span className='text-md'>{profileData?.personalInformation?.location}</span>
+                      <MapPin className="h-4 w-4" />
+                      <span className='text-sm'>{profileData?.personalInformation?.location}</span>
                     </div>
                   )}
                   {profileData?.personalInformation?.email && (
                     <div className="flex items-center gap-1">
-                      <Mail className="h-5 w-5" />
-                      <span className='text-md'>{profileData?.personalInformation?.email}</span>
+                      <Mail className="h-4 w-4" />
+                      <span className='text-sm'>{profileData?.personalInformation?.email}</span>
                     </div>
                   )}
                   {profileData?.personalInformation?.phone && (
                     <div className="flex items-center gap-1">
-                      <Phone className="h-5 w-5" />
-                      <span className='text-md'>{profileData?.personalInformation?.phone}</span>
+                      <Phone className="h-4 w-4" />
+                      <span className='text-sm'>{profileData?.personalInformation?.phone}</span>
                     </div>
                   )}
                 </div>
               </div>
             </div>
           </div>
-          <span className='text-neutral-600 text-md my-4'>{profileData?.personalInformation?.summary || ""}</span>
+          <span className='text-neutral-600 text-sm my-4'>{profileData?.personalInformation?.summary || ""}</span>
 
           {/* Action Buttons */}
           <div className='flex gap-3'>
@@ -248,9 +248,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                   : `${profileData.personalInformation.linkedin}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className='flex gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-50 transition text-[#0A66C2]'
+                className='flex text-sm gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition text-[#0A66C2]'
               >
-                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-5 h-5' width={20} height={20}/>
+                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20}/>
                 <span className='font-semibold'>LinkedIn</span>
               </a>
             ) : (
@@ -261,10 +261,10 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                     personalInfoRef.current?.focusLinkedin();
                   }, 100);
                 }}
-                className='flex gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-50 transition'
+                className='flex gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition'
               >
                 {/* <Linkedin className='w-5 h-5' /> */}
-                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-5 h-5' width={20} height={20}/>
+                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20}/>
                 <span className='font-semibold'>Update</span>
               </button>
             )}
@@ -277,7 +277,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                   : `${profileData.personalInformation.github}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className='flex gap-2 text-md items-center border  shadow-sm bg-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-50 transition text-black'
+                className='flex gap-2 text-sm items-center border  shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition text-black'
               >
                 <Github className='w-5 h-5' />
                 <span className='font-semibold'>GitHub</span>
@@ -290,16 +290,16 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                     personalInfoRef.current?.focusGithub();
                   }, 100);
                 }}
-                className='flex gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-50 transition'
+                className='flex gap-2 text-sm items-center border shadow-sm bg-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-50 transition'
               >
-                <Github className='w-5 h-5' />
+                <Github className='w-4 h-4' />
                 <span className='font-semibold'>Connect</span>
               </button>
             )}
 
             {/* Improve with AI */}
-            <button className='flex gap-2 text-md items-center bg-black text-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-800 transition'>
-              <Sparkles className='w-5 h-5' />
+            <button className='flex text-sm gap-2 items-center bg-black text-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-800 transition'>
+              <Sparkles className='w-4 h-4' />
               <span>Improve With AI</span>
             </button>
           </div>
