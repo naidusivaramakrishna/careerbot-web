@@ -108,7 +108,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   // Show loading state
   if (loading) {
     return (
-      <div className="w-3/4 max-w-[1200px] overflow-hidden bg-[#F5F5F5] rounded-2xl my-4 shadow-md p-4 flex items-center justify-center min-h-[400px]">
+      <div className="w-4/5 max-w-[1200px] overflow-hidden bg-[#F5F5F5] rounded-2xl my-4 shadow-md p-4 flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-[#2200ff] border-t-transparent rounded-full animate-spin"></div>
           <span className="text-gray-600">Loading your profile...</span>

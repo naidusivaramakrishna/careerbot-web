@@ -81,6 +81,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
             localStorage.setItem("access_token", loginData.access_token)
             localStorage.setItem("refresh_token", loginData.refresh_token)
             localStorage.setItem("username", signUpForm.username)
+            localStorage.setItem("user_email", signUpForm.email)
 
             router.push("/dashboard/profile")
             onClose()
@@ -99,7 +100,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
             const data = await signIn(loginForm)
             localStorage.setItem("access_token", data.access_token)
             localStorage.setItem("refresh_token", data.refresh_token)
-            localStorage.setItem("username", loginForm.email.split('@')[0])
+            // localStorage.setItem("username", loginForm.email.split('@')[0])
+            localStorage.setItem("user_email", loginForm.email)
             toast.success("Login successful")
             setLoginForm({ email: "", password: "" })
             window.location.href = "/dashboard/profile"

@@ -88,7 +88,7 @@ export interface ApiResponse<T> {
 
 export const getProfile = async (): Promise<UserProfile> => {
     try {
-        const response = await httpClient.get<any>('/profile/'); // Use any temporarily
+        const response = await httpClient.get<any>('/profile'); // Use any temporarily
 
         let profileData: UserProfile;
 
@@ -118,7 +118,7 @@ export const getProfile = async (): Promise<UserProfile> => {
 export const updateProfile = async (profileData: Partial<UserProfile>): Promise<UserProfile> => {
     try {
         const response = await httpClient.put<ApiResponse<UserProfile>>(
-            '/profile/update',
+            'builder/profile/profile/update',
             profileData
         );
         return response.data.data || response.data as unknown as UserProfile;
