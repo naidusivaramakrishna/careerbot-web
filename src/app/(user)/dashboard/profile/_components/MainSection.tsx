@@ -1,7 +1,7 @@
 "use client";
-import { Camera, Github, Mail, MapPin, Phone, Sparkles } from 'lucide-react';
+import { Camera, Github, Mail, MapPin, Phone } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
-import ProjectsSection from './ProjectsSection';
+import ProjectsSection from './projects/ProjectsSection';
 import CareerInsightsSection from './CareerInsightsSection';
 import { useProfileContext } from '../context/ProfileContext';
 import ProfileTabs from './ProfileTabs';
@@ -9,7 +9,7 @@ import Image from 'next/image';
 import { toast } from 'sonner';
 import { ProfileData } from '../_types/ProfileData';
 import { PersonalInfoRef } from '../_types/PersonalInfoRef';
-import { getProfile, UserProfile } from '@/api/userApi';
+import { getProfile, getProfilePicture, uploadProfilePicture, UserProfile } from '@/api/userApi';
 import HobbiesSection from './HobbiesSection';
 import LanguagesSection from './LanguagesSection';
 import AchievementsSection from './AchievementsSection';
@@ -17,19 +17,37 @@ import AchievementsSection from './AchievementsSection';
 const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const { profileData, setProfileData, setActiveTab, sidebarActiveTab } = useProfileContext();
   const personalInfoRef = useRef<PersonalInfoRef | null>(null);
-  const [username,setUsername] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+
+  const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setSelectedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    // Show preview instantly
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      const res = await uploadProfilePicture(file);
+
+      if (res.picture_url) {
+        const fullUrl = res.picture_url.startsWith("http")
+          ? res.picture_url
+          : `${"http://localhost:8000"}${res.picture_url}`;
+        setSelectedImage(fullUrl);
+      } else {
+        toast.error("Upload failed. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error uploading profile picture:", error);
+      toast.error("Failed to upload image");
+    } finally {
+      toast.dismiss();
     }
   };
 
@@ -61,12 +79,26 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           setLoading(false);
           return;
         }
-        
+
         const backendProfile = await getProfile();
         setUsername(backendProfile.username ?? null)
         const mappedProfile = mapBackendToFrontend(backendProfile);
 
         setProfileData(mappedProfile);
+        // ✅ Fetch profile picture from backend
+        try {
+          const pictureRes = await getProfilePicture();
+
+          if (pictureRes?.picture_url) {
+            const fullImageUrl = pictureRes.picture_url.startsWith("http")
+              ? pictureRes.picture_url
+              : `${"http://localhost:8000"}${pictureRes.picture_url}`;
+
+            setSelectedImage(fullImageUrl); // <-- Image now persists after reload
+          }
+        } catch (err) {
+          console.warn("No profile picture found");
+        }
 
         toast.success('Profile loaded successfully');
       } catch (err: any) {
@@ -163,7 +195,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
               Welcome to CareerBot,{" "}
               {/* {profileData?.personalInformation?.fullName?.split(" ")[0] ||
                 "User"} */}
-                {username?username : "User"}
+              {username ? username : "User"}
             </h1>
             <p className="text-gray-600 text-base">
               Let&apos;s create your profile and connect you to your dream role.
@@ -250,7 +282,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 rel="noopener noreferrer"
                 className='flex text-sm gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition text-[#0A66C2]'
               >
-                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20}/>
+                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20} />
                 <span className='font-semibold'>LinkedIn</span>
               </a>
             ) : (
@@ -264,7 +296,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 className='flex gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition'
               >
                 {/* <Linkedin className='w-5 h-5' /> */}
-                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20}/>
+                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20} />
                 <span className='font-semibold'>Update</span>
               </button>
             )}
@@ -298,10 +330,12 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
             )}
 
             {/* Improve with AI */}
+            {/*
             <button className='flex text-sm gap-2 items-center bg-black text-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-800 transition'>
               <Sparkles className='w-4 h-4' />
               <span>Improve With AI</span>
             </button>
+            */}
           </div>
         </div>
       )}

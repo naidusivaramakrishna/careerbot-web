@@ -114,3 +114,181 @@ body {
 .animate-fadeIn {
   animation: fadeIn 0.4s ease forwards;
 }
+
+
+
+/* Custom styles for React Quill Editor */
+
+/* Editor container */
+.quill {
+  border-radius: 0.5rem;
+  border: 1px solid #e5e5e5;
+}
+
+/* Toolbar */
+.ql-toolbar.ql-snow {
+  border: none;
+  border-bottom: 1px solid #e5e5e5;
+  border-radius: 0.5rem 0.5rem 0 0;
+  background-color: #f9fafb;
+  padding: 8px;
+}
+
+/* Editor content area */
+.ql-container.ql-snow {
+  border: none;
+  border-radius: 0 0 0.5rem 0.5rem;
+  font-size: 0.875rem;
+  min-height: 150px;
+}
+
+/* Editor text */
+.ql-editor {
+  min-height: 150px;
+  padding: 12px;
+}
+
+/* Placeholder text */
+.ql-editor.ql-blank::before {
+  color: #9ca3af;
+  font-style: normal;
+  font-size: 0.875rem;
+}
+
+/* Bullet and numbered lists */
+.ql-editor ul,
+.ql-editor ol {
+  padding-left: 1.5rem;
+}
+
+.ql-editor li {
+  margin-bottom: 0.25rem;
+}
+
+/* Focus state */
+.quill:focus-within {
+  outline: 2px solid #737373;
+  outline-offset: 2px;
+}
+
+/* Toolbar buttons */
+.ql-toolbar button {
+  width: 28px;
+  height: 28px;
+}
+
+.ql-toolbar button:hover {
+  background-color: #e5e7eb;
+  border-radius: 4px;
+}
+
+.ql-toolbar button.ql-active {
+  background-color: #dbeafe;
+  color: #155DFC;
+  border-radius: 4px;
+}
+
+/* Disabled state */
+.quill.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+
+* Editor content styling */ .editor-content {
+  outline: none;
+  position: relative;
+}
+
+.editor-content:focus {
+  outline: none;
+}
+
+/* Placeholder styling */
+.editor-content:empty:before {
+  content: 'Describe your role and responsibilities...';
+  color: #9ca3af;
+  pointer-events: none;
+  position: absolute;
+}
+
+/* List styling inside editor */
+.editor-content ul {
+  list-style-type: disc;
+  padding-left: 2rem;
+  margin: 0.5rem 0;
+}
+
+.editor-content ol {
+  list-style-type: decimal;
+  padding-left: 2rem;
+  margin: 0.5rem 0;
+}
+
+.editor-content li {
+  margin-bottom: 0.25rem;
+  line-height: 1.6;
+  padding-left: 0.25rem;
+}
+
+.editor-content strong,
+.editor-content b {
+  font-weight: 700;
+}
+
+.editor-content em,
+.editor-content i {
+  font-style: italic;
+}
+
+.editor-content u {
+  text-decoration: underline;
+}
+
+.editor-content a {
+  color: #155DFC;
+  text-decoration: underline;
+}
+
+/* Placeholder for empty editor */
+.editor-content:empty:before {
+  content: "Describe your role and responsibilities...";
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+/* Resume display styles (for viewing the saved content) */
+.resume-description ul {
+  list-style-type: disc;
+  margin-left: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.resume-description ol {
+  list-style-type: decimal;
+  margin-left: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.resume-description li {
+  margin-bottom: 0.25rem;
+  line-height: 1.6;
+}
+
+.resume-description strong,
+.resume-description b {
+  font-weight: 600;
+}
+
+.resume-description em,
+.resume-description i {
+  font-style: italic;
+}
+
+.resume-description u {
+  text-decoration: underline;
+}
+
+.resume-description p {
+  margin-bottom: 0.5rem;
+}

@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import Cookies from "js-cookie"
 
-const GoogleSuccessPage = () => {
+const LinkedInSuccessPage = () => {
     const router = useRouter()
     const searchParams = useSearchParams()
     const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
@@ -123,4 +123,4 @@ const GoogleSuccessPage = () => {
     )
 }
 
-export default GoogleSuccessPage
+export default LinkedInSuccessPage

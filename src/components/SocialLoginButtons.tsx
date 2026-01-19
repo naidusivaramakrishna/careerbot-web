@@ -31,18 +31,17 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup" }) => {
   }
 
   return (
-    <div className="flex gap-2 my-4">
+    <div className="flex  gap-2 my-4">
       {/* Google Button - Uses Backend OAuth */}
       <div className="w-full flex items-center">
         <button
           onClick={handleGoogleLogin}
-          className="flex gap-2 items-center justify-center border border-neutral-200 cursor-pointer rounded-lg px-4 py-2.5 w-full"
+          className="flex gap-2 items-center justify-center border border-neutral-600 cursor-pointer rounded-lg px-4 py-2.5 w-full"
         >
-          <Image src="/assets/icons/google-icon.svg" alt="google-icon" width={20} height={20} className="w-5 h-5" />
-          {/* <span className="text-xl font-semibold">
+          <Image src="/assets/icons/google-icon.svg" alt="google-icon" width={20} height={20} className="w-4 h-4" />
+          <span className="text-sm">
             {variant === "signup" ? "Sign up" : "Sign in"} with Google
-          </span> */}
-          <span className="text-sm">Google</span>
+          </span>
         </button>
       </div>
 
@@ -51,11 +50,10 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup" }) => {
       <div className="w-full flex items-center">
         <button
           onClick={handleLinkedInLogin}
-          className="flex gap-2 items-center justify-center border border-neutral-200 cursor-pointer rounded-lg px-4 py-2.5 w-full"
+          className="flex gap-2 items-center justify-center border border-neutral-600 cursor-pointer rounded-lg px-4 py-2.5 w-full"
         >
-          <Image src="/assets/icons/linkedin-icon.svg" alt="linkedin-icon" width={20} height={20} className="w-5 h-5"  />
-          {/* <span className="text-xl font-semibold">{variant === "signup" ? "Sign up" : "Sign in"} with LinkedIn</span> */}
-          <span className="text-sm">LinkedIn</span>
+          <Image src="/assets/icons/linkedin-icon.svg" alt="linkedin-icon" width={20} height={20} className="w-4 h-4" />
+          <span className="text-sm ">{variant === "signup" ? "Sign up" : "Sign in"} with LinkedIn</span>
         </button>
       </div>
     </div>

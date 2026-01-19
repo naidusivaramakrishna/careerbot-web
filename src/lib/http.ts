@@ -3,26 +3,45 @@ import Cookies from 'js-cookie';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
 
-const getToken = (): string | null => {
+// Determine if current request is for admin based on URL
+const isAdminRequest = (url?: string): boolean => {
+  return url?.includes('/admin/') || false;
+};
+
+const getToken = (isAdmin: boolean = false): string | null => {
   if (typeof window !== 'undefined') {
-    return Cookies.get('access_token') || localStorage.getItem('access_token');
+    const tokenKey = isAdmin ? 'admin_access_token' : 'access_token';
+    return Cookies.get(tokenKey) || localStorage.getItem(tokenKey);
   }
   return null;
 };
 
-const getRefreshToken = (): string | null => {
+const getRefreshToken = (isAdmin: boolean = false): string | null => {
   if (typeof window !== 'undefined') {
-    return Cookies.get('refresh_token') || localStorage.getItem('refresh_token');
+    const tokenKey = isAdmin ? 'admin_refresh_token' : 'refresh_token';
+    return Cookies.get(tokenKey) || localStorage.getItem(tokenKey);
   }
   return null;
 };
 
-const clearAllTokens = () => {
+const clearAllTokens = (isAdmin: boolean = false) => {
   if (typeof window !== 'undefined') {
-    localStorage.clear(); // Clear everything
-    Cookies.remove('access_token');
-    Cookies.remove('refresh_token');
-    // Clear any cached data
+    if (isAdmin) {
+      // Clear admin tokens
+      localStorage.removeItem('admin_access_token');
+      localStorage.removeItem('admin_refresh_token');
+      localStorage.removeItem('admin_id');
+      localStorage.removeItem('admin_role');
+      Cookies.remove('admin_access_token');
+      Cookies.remove('admin_refresh_token');
+    } else {
+      // Clear user tokens
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user_id');
+      Cookies.remove('access_token');
+      Cookies.remove('refresh_token');
+    }
     sessionStorage.clear();
   }
 };
@@ -35,26 +54,38 @@ const client: AxiosInstance = axios.create({
 });
 
 let isRefreshing = false;
+let isAdminRefreshing = false;
 let failedQueue: Array<{
   resolve: (value?: any) => void;
   reject: (reason?: any) => void;
 }> = [];
+let adminFailedQueue: Array<{
+  resolve: (value?: any) => void;
+  reject: (reason?: any) => void;
+}> = [];
 
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach(prom => {
+const processQueue = (error: any, token: string | null = null, isAdmin: boolean = false) => {
+  const queue = isAdmin ? adminFailedQueue : failedQueue;
+  queue.forEach(prom => {
     if (error) {
       prom.reject(error);
     } else {
       prom.resolve(token);
     }
   });
-  failedQueue = [];
+  if (isAdmin) {
+    adminFailedQueue = [];
+  } else {
+    failedQueue = [];
+  }
 };
 
-// Request interceptor - CRITICAL: Add cache busting for GET requests
+// Request interceptor - Add appropriate token based on request type
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = getToken();
+    const isAdmin = isAdminRequest(config.url);
+    const token = getToken(isAdmin);
+
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -79,24 +110,40 @@ client.interceptors.request.use(
   }
 );
 
-// Response interceptor
+// Response interceptor - Handle token refresh separately for user and admin
 client.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const isAdmin = isAdminRequest(originalRequest.url);
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      if (originalRequest.url?.includes('/auth/refresh') || originalRequest.url?.includes('/auth/signin')) {
-        clearAllTokens();
+      // Don't retry on login/refresh endpoints
+      if (originalRequest.url?.includes('/auth/refresh') ||
+        originalRequest.url?.includes('/auth/signin') ||
+        originalRequest.url?.includes('/admin/auth/login') ||
+        originalRequest.url?.includes('/admin/auth/refresh')) {
+        clearAllTokens(isAdmin);
         if (typeof window !== 'undefined') {
-          window.location.href = '/auth/login';
+          if (isAdmin) {
+            window.location.href = '/admin/login';
+          } else {
+            window.dispatchEvent(new Event('openLoginModal'));
+          }
         }
         return Promise.reject(error);
       }
 
-      if (isRefreshing) {
+      // Check if already refreshing
+      const currentlyRefreshing = isAdmin ? isAdminRefreshing : isRefreshing;
+
+      if (currentlyRefreshing) {
         return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
+          if (isAdmin) {
+            adminFailedQueue.push({ resolve, reject });
+          } else {
+            failedQueue.push({ resolve, reject });
+          }
         })
           .then(() => {
             originalRequest._retry = true;
@@ -108,54 +155,89 @@ client.interceptors.response.use(
       }
 
       originalRequest._retry = true;
-      isRefreshing = true;
 
-      const refreshToken = getRefreshToken();
+      if (isAdmin) {
+        isAdminRefreshing = true;
+      } else {
+        isRefreshing = true;
+      }
+
+      const refreshToken = getRefreshToken(isAdmin);
 
       if (!refreshToken) {
-        clearAllTokens();
+        clearAllTokens(isAdmin);
+        if (isAdmin) {
+          isAdminRefreshing = false;
+        } else {
+          isRefreshing = false;
+        }
         if (typeof window !== 'undefined') {
-          window.location.href = '/auth/login';
+          if (isAdmin) {
+            window.location.href = '/admin/login';
+          } else {
+            window.dispatchEvent(new Event('openLoginModal'));
+          }
         }
         return Promise.reject(error);
       }
 
       try {
-        const response = await axios.post(`${BASE_URL}/auth/refresh`, {
+        const refreshEndpoint = isAdmin ? '/admin/auth/refresh' : '/auth/refresh';
+        const response = await axios.post(`${BASE_URL}${refreshEndpoint}`, {
           refresh_token: refreshToken
         });
 
         const { access_token, refresh_token: new_refresh_token } = response.data;
 
         if (typeof window !== 'undefined') {
-          localStorage.setItem('access_token', access_token);
-          localStorage.setItem('refresh_token', new_refresh_token);
+          const accessTokenKey = isAdmin ? 'admin_access_token' : 'access_token';
+          const refreshTokenKey = isAdmin ? 'admin_refresh_token' : 'refresh_token';
 
-          Cookies.set('access_token', access_token, {
+          localStorage.setItem(accessTokenKey, access_token);
+          localStorage.setItem(refreshTokenKey, new_refresh_token);
+
+          Cookies.set(accessTokenKey, access_token, {
             expires: 7,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict'
           });
-          Cookies.set('refresh_token', new_refresh_token, {
+          Cookies.set(refreshTokenKey, new_refresh_token, {
             expires: 30,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict'
           });
 
-          window.dispatchEvent(new Event('tokenUpdated'));
+          const eventName = isAdmin ? 'adminTokenUpdated' : 'tokenUpdated';
+          window.dispatchEvent(new Event(eventName));
         }
 
-        processQueue(null, access_token);
-        isRefreshing = false;
+        processQueue(null, access_token, isAdmin);
+
+        if (isAdmin) {
+          isAdminRefreshing = false;
+        } else {
+          isRefreshing = false;
+        }
 
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return client(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError, null);
-        isRefreshing = false;
-        clearAllTokens();
+        processQueue(refreshError, null, isAdmin);
+
+        if (isAdmin) {
+          isAdminRefreshing = false;
+        } else {
+          isRefreshing = false;
+        }
+
+        clearAllTokens(isAdmin);
+
         if (typeof window !== 'undefined') {
-          window.location.href = '/auth/login';
+          if (isAdmin) {
+            window.location.href = '/admin/login';
+          } else {
+            window.dispatchEvent(new Event('openLoginModal'));
+          }
         }
         return Promise.reject(refreshError);
       }

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import { signOut } from "@/api/authApi";
-import { getProfile, UserProfile } from "@/api/userApi";
+import { getProfile, getProfilePicture, UserProfile } from "@/api/userApi";
 import { toast } from "sonner";
 import { FaRegUser } from "react-icons/fa6";
 import { FiFileText } from "react-icons/fi";
@@ -27,6 +27,8 @@ const Sidebar = () => {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
+    const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
+    const [loadingPic, setLoadingPic] = useState(true);
     // Check authentication status and fetch profile
     useEffect(() => {
         const checkAuthAndFetchProfile = async () => {
@@ -45,7 +47,14 @@ const Sidebar = () => {
                 const profile = await getProfile();
                 console.log('✅ Profile fetched successfully:', profile);
                 setUserProfile(profile);
-
+                // Fetch profile picture
+                const picRes = await getProfilePicture();
+                if (picRes?.picture_url) {
+                    const fullUrl = picRes.picture_url.startsWith("http")
+                        ? picRes.picture_url
+                        : `${"http://localhost:8000"}${picRes.picture_url}`;
+                    setProfilePicUrl(fullUrl);
+                }
                 // Store username in localStorage for quick access
                 if (profile.username) {
                     localStorage.setItem('username', profile.username);
@@ -177,7 +186,7 @@ const Sidebar = () => {
                 {/* User Profile */}
                 <div className="flex items-center gap-3 border-t pt-4">
                     {/* Profile Picture */}
-                    <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-br from-blue-400 to-purple-500 rounded-full border-2 border-[#2200FF] overflow-hidden shrink-0">
+                    {/* <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-br from-blue-400 to-purple-500 rounded-full border-2 border-[#2200FF] overflow-hidden shrink-0">
                         {isLoadingProfile ? (
                             <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         ) : (
@@ -186,6 +195,27 @@ const Sidebar = () => {
                                     userProfile?.username?.[0]?.toUpperCase() ||
                                     userProfile?.email?.[0]?.toUpperCase() ||
                                     'U'}
+                            </span>
+                        )}
+                    </div> */}
+
+                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#2200FF] flex items-center justify-center bg-gray-100">
+                        {isLoadingProfile ? (
+                            <div className="w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                        ) : profilePicUrl ? (
+                            <Image
+                                src={profilePicUrl}
+                                alt="Profile"
+                                width={48}
+                                height={48}
+                                className="object-cover w-full h-full cursor-pointer"
+                            />
+                        ) : (
+                            <span className="text-gray-600 font-bold text-sm">
+                                {userProfile?.full_name?.[0]?.toUpperCase() ||
+                                    userProfile?.username?.[0]?.toUpperCase() ||
+                                    userProfile?.email?.[0]?.toUpperCase() ||
+                                    "U"}
                             </span>
                         )}
                     </div>

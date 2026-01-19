@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { updateProfile } from '@/api/userApi';
 import { ProfileData } from '../_types/ProfileData';
 import { useProfileContext } from '../context/ProfileContext';
+import { useAIGeneration } from '@/hooks/useAIDescriptionGenerator';
 
 interface PersonalInfoSectionProps {
     tempProfile: ProfileData;
@@ -18,6 +19,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
     const githubRef = useRef<HTMLInputElement | null>(null);
     const [saving, setSaving] = useState(false);
 
+    const { generateSummary,isGenerating } = useAIGeneration();
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
     ) => {
@@ -97,6 +99,31 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
         }
     }));
 
+    const handleGenerateSummary = async () => {
+        // Check if at least job title is provided
+        if (!tempProfile.personalInformation?.headline?.trim()) {
+            alert("Please enter a headline first to generate a summary.");
+            return;
+        }
+
+        const description = await generateSummary({
+            fullName: tempProfile.personalInformation.fullName,
+            headline: tempProfile.personalInformation.headline,
+            location: tempProfile.personalInformation.location,
+            skills: tempProfile.skills
+        });
+
+        if (description) {
+            setTempProfile((prev) => ({
+                ...prev,
+                personalInformation: {
+                    ...prev.personalInformation,
+                    summary: description,
+                },
+            }));
+        }
+        toast.success("Summary generated!");
+    };
     return (
         <div>
             {/* Form fields */}
@@ -195,7 +222,13 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                         id="summary"
                         placeholder="Short bio, career goals, highlights..."
                     ></textarea>
-                    <Sparkles className="absolute right-4 top-4 text-[#1F00EC] w-4 h-4 cursor-pointer" />
+                    <Sparkles
+                        className={`absolute right-4 top-4 w-4 h-4 cursor-pointer transition-colors ${isGenerating
+                            ? 'text-gray-400 cursor-not-allowed animate-pulse'
+                            : 'text-[#1F00EC] hover:text-[#1600BE]'
+                            }`}
+                        onClick={isGenerating ? undefined : handleGenerateSummary}
+                    />
                 </div>
             </div>
             <div className='flex justify-between'>

@@ -1,6 +1,7 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { Calendar, MapPin, Pencil, Trash2 } from "lucide-react";
 import { formatDateRange } from "@/utils/formatDate";
 import { Experience } from "@/api/userApi";
+import DOMPurify from 'dompurify';
 
 interface Props {
     exp: Partial<Experience>;
@@ -10,40 +11,55 @@ interface Props {
 }
 
 export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) {
+    const sanitizedDescription = exp.description
+        ? DOMPurify.sanitize(exp.description)
+        : '';
     return (
         <div
             key={exp.id || index}
             className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
         >
             <div>
-                <h3 className="font-semibold">{exp.job_title}</h3>
-                <p className="text-sm">
-                    {exp.company} • {exp.job_type}
+                <h3 className="font-semibold text-lg">{exp.job_title}</h3>
+                <p className="text-base text-[#2200FF]  font-semibold">
+                    {exp.company}
                 </p>
-                <p className="text-xs text-neutral-500">
-                    {formatDateRange(exp.start_date, exp.end_date)}
-                </p>
-                <ul className="list-disc list-inside text-sm space-y-1 my-2">
-                    {exp.description?.split("\n").map((line: string, i: number) => (
-                        <li key={i}>{line}</li>
-                    ))}
-                </ul>
+                <div className="flex gap-4 items-center text-neutral-500 my-4">
+                    <div className="flex gap-1 items-center">
+                        <MapPin className="w-5 h-5" />
+                        <span className="text-sm">{exp.location}</span>
+                    </div>
+                    <div className="flex gap-1 items-center text-neutral-500">
+                        <Calendar className="w-5 h-5" />
+                        <span className="text-sm ">{formatDateRange(exp.start_date, exp.end_date)}</span>
+                    </div>
+                    <span className="rounded-full px-3 py-1 bg-[#f2f4f5] text-sm font-semibold text-black/70">{exp.job_type}</span>
+                </div>
+                <p className="text-black text-base font-semibold">Responsibilities: </p>
+                {sanitizedDescription && (
+                    <div
+                        className="text-sm text-gray-800 space-y-2 resume-description"
+                        dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
+                    />
+                )}
             </div>
             <div className="flex gap-2 mt-2">
                 <button
                     type="button"
                     onClick={() => onEdit(exp, index)}
-                    className="bg-background border border-neutral-200 cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md"
+                    className="text-sm cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
                 >
                     <Pencil className="w-4 h-4" />
+                    Edit
                 </button>
 
                 <button
                     type="button"
                     onClick={() => onDelete(exp.id, index)}
-                    className="bg-background border border-neutral-200 cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md"
+                    className="border border-red-300 text-sm  cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
                 >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                    Delete
                 </button>
             </div>
         </div>

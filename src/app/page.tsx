@@ -1,9 +1,22 @@
 "use client"
 import AuthModal from "@/components/SignUpModal";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const openLogin = () => {
+      setOpen(true);
+    };
+
+    window.addEventListener("openLoginModal", openLogin);
+
+    return () => {
+      window.removeEventListener("openLoginModal", openLogin);
+    };
+  }, []);
+
   return (
     <div>
       <button

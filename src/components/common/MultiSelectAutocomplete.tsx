@@ -38,7 +38,7 @@ export default function MultiSelectAutocomplete({
 
     return (
         <div className="flex flex-col gap-2 mt-2 relative">
-            <label className="text-sm font-medium">{label}</label>
+            <label className="text-sm font-semibold">{label}</label>
             <div className="flex flex-wrap gap-2">
                 {values.map((val) => (
                     <span
