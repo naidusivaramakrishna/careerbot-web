@@ -7263,7 +7263,7 @@ const EditorTab: React.FC<Props> = ({
       if (
         lowerKey.includes(lowerSection) ||
         (sectionName === "Personal Info" &&
-          (lowerKey.includes("fullName") ||
+          (lowerKey.includes("fullname") ||
             lowerKey.includes("email") ||
             lowerKey.includes("phone") ||
             lowerKey.includes("location") ||
@@ -7453,7 +7453,7 @@ const EditorTab: React.FC<Props> = ({
     
     if (sectionName === "Personal Info") {
       return {
-        name: formData["fullName"] || "",
+        name: formData["fullname"] || "",
         email: formData["email"] || "",
         phone: formData["phone"] || "",
         location: formData["location"] || "",

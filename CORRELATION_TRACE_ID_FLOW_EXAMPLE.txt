@@ -1,0 +1,791 @@
+cat > /mnt/user-data/outputs/CORRELATION_TRACE_ID_FLOW_EXAMPLE.txt << 'ENDFLOW'
+╔══════════════════════════════════════════════════════════════════════════╗
+║         CORRELATION ID + TRACE ID FLOW: BACKEND → AI LAYER               ║
+║              Complete Example with Logger Execution                       ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════
+                    SCENARIO: USER UPLOADS RESUME
+═══════════════════════════════════════════════════════════════════════════
+
+User Action: Upload resume → Parse → Extract skills → Match jobs
+
+SYSTEM FLOW:
+Frontend → Backend → AI Layer → Backend → Frontend
+
+IDs USED:
+- correlation_id: "user_session_abc123" (same throughout)
+- trace_id: Changes at each request boundary
+
+
+═══════════════════════════════════════════════════════════════════════════
+            STEP-BY-STEP FLOW WITH CORRELATION & TRACE IDs
+═══════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ FRONTEND (React)                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+User clicks "Upload Resume"
+  ↓
+Generate/Get correlation_id: "user_session_abc123"
+  ↓
+POST /api/v1/resume/parse
+Headers: X-Correlation-ID: user_session_abc123
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ BACKEND (FastAPI) - Request 1                                            │
+└─────────────────────────────────────────────────────────────────────────┘
+Middleware receives request
+  ↓
+Extract: correlation_id = "user_session_abc123" (from header)
+Generate: trace_id = "backend_trace_001" (new!)
+  ↓
+Log: [REQUEST] correlation_id=user_session_abc123 trace_id=backend_trace_001
+  ↓
+Call AI Layer: POST http://ai-layer:8001/api/v1/resume/extract
+Headers: 
+  - X-Correlation-ID: user_session_abc123 (forward)
+  - X-Trace-ID: backend_trace_001 (forward as parent)
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ AI LAYER (FastAPI) - Request 2                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+Middleware receives request
+  ↓
+Extract: correlation_id = "user_session_abc123" (from header)
+Extract: parent_trace_id = "backend_trace_001" (from header)
+Generate: trace_id = "ai_trace_002" (new child!)
+  ↓
+Log: [REQUEST] correlation_id=user_session_abc123 
+              trace_id=ai_trace_002 
+              parent_trace_id=backend_trace_001
+  ↓
+Process resume extraction
+  ↓
+Log: [RESPONSE] correlation_id=user_session_abc123 
+               trace_id=ai_trace_002
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ BACKEND (FastAPI) - Continues                                            │
+└─────────────────────────────────────────────────────────────────────────┘
+Receives AI Layer response
+  ↓
+Log: [AI_RESPONSE] correlation_id=user_session_abc123 
+                  trace_id=backend_trace_001
+  ↓
+Store results in database
+  ↓
+Log: [DB_STORE] correlation_id=user_session_abc123 
+                trace_id=backend_trace_001
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ BACKEND - Returns to Frontend                                            │
+└─────────────────────────────────────────────────────────────────────────┘
+Response to Frontend
+Headers:
+  - X-Correlation-ID: user_session_abc123
+  - X-Trace-ID: backend_trace_001
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    COMPLETE CODE IMPLEMENTATION
+═══════════════════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════════════════
+FILE 1: Backend Middleware
+Location: backend/api/middleware/tracing.py
+═══════════════════════════════════════════════════════════════════════════
+
+from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
+import uuid
+import logging
+
+logger = logging.getLogger(__name__)
+
+class CorrelationTraceMiddleware(BaseHTTPMiddleware):
+    """Middleware handling both correlation_id and trace_id"""
+    
+    async def dispatch(self, request: Request, call_next):
+        # 1. Extract correlation_id from header (set by frontend)
+        correlation_id = request.headers.get("X-Correlation-ID")
+        
+        if not correlation_id:
+            # Generate if frontend didn't provide
+            correlation_id = f"correlation_{uuid.uuid4().hex[:16]}"
+            logger.warning(f"No correlation_id provided, generated: {correlation_id}")
+        
+        # 2. Extract parent_trace_id (if this is a downstream call)
+        parent_trace_id = request.headers.get("X-Trace-ID")
+        
+        # 3. Generate NEW trace_id for THIS service request
+        trace_id = f"backend_trace_{uuid.uuid4().hex[:12]}"
+        
+        # 4. Store in request state (accessible in route handlers)
+        request.state.correlation_id = correlation_id
+        request.state.trace_id = trace_id
+        request.state.parent_trace_id = parent_trace_id
+        
+        # 5. Log request with BOTH IDs
+        logger.info(
+            f"[REQUEST_START] {request.method} {request.url.path}",
+            extra={
+                "correlation_id": correlation_id,
+                "trace_id": trace_id,
+                "parent_trace_id": parent_trace_id,
+                "method": request.method,
+                "path": request.url.path,
+                "service": "backend"
+            }
+        )
+        
+        # 6. Process request
+        import time
+        start_time = time.time()
+        
+        try:
+            response = await call_next(request)
+            duration_ms = (time.time() - start_time) * 1000
+            
+            # 7. Log response with BOTH IDs
+            logger.info(
+                f"[REQUEST_END] {response.status_code} {request.url.path} ({duration_ms:.2f}ms)",
+                extra={
+                    "correlation_id": correlation_id,
+                    "trace_id": trace_id,
+                    "status_code": response.status_code,
+                    "duration_ms": round(duration_ms, 2),
+                    "service": "backend"
+                }
+            )
+            
+            # 8. Add BOTH IDs to response headers
+            response.headers["X-Correlation-ID"] = correlation_id
+            response.headers["X-Trace-ID"] = trace_id
+            
+            return response
+            
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            
+            logger.error(
+                f"[REQUEST_ERROR] {request.url.path} ({duration_ms:.2f}ms): {e}",
+                extra={
+                    "correlation_id": correlation_id,
+                    "trace_id": trace_id,
+                    "error": str(e),
+                    "service": "backend"
+                },
+                exc_info=True
+            )
+            raise
+
+
+═══════════════════════════════════════════════════════════════════════════
+FILE 2: Backend Service (Calls AI Layer)
+Location: backend/services/resume_parser.py
+═══════════════════════════════════════════════════════════════════════════
+
+import httpx
+import logging
+from fastapi import Request
+
+logger = logging.getLogger(__name__)
+
+async def parse_resume(request: Request, file_path: str):
+    """Parse resume by calling AI Layer"""
+    
+    # 1. Get IDs from request state (set by middleware)
+    correlation_id = request.state.correlation_id
+    trace_id = request.state.trace_id
+    
+    logger.info(
+        f"[BACKEND_SERVICE] Starting resume parse",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "operation": "parse_resume",
+            "file_path": file_path,
+            "service": "backend"
+        }
+    )
+    
+    # 2. Call AI Layer with BOTH IDs
+    ai_layer_url = "http://ai-layer:8001/api/v1/resume/extract"
+    
+    async with httpx.AsyncClient() as client:
+        logger.info(
+            f"[BACKEND_TO_AI] Calling AI Layer",
+            extra={
+                "correlation_id": correlation_id,
+                "trace_id": trace_id,
+                "ai_endpoint": ai_layer_url,
+                "service": "backend"
+            }
+        )
+        
+        # 3. Forward BOTH IDs in headers
+        response = await client.post(
+            ai_layer_url,
+            json={"file_path": file_path},
+            headers={
+                "X-Correlation-ID": correlation_id,  # Same correlation
+                "X-Trace-ID": trace_id              # Forward as parent
+            }
+        )
+        
+        # 4. Get child trace_id from AI Layer response
+        ai_trace_id = response.headers.get("X-Trace-ID")
+        
+        logger.info(
+            f"[AI_RESPONSE] Received from AI Layer",
+            extra={
+                "correlation_id": correlation_id,
+                "trace_id": trace_id,              # Backend trace
+                "ai_trace_id": ai_trace_id,        # AI Layer trace (child)
+                "status_code": response.status_code,
+                "service": "backend"
+            }
+        )
+        
+        result = response.json()
+    
+    # 5. Store in database with correlation_id
+    logger.info(
+        f"[DB_STORE] Storing parsed resume",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "operation": "store_resume",
+            "service": "backend"
+        }
+    )
+    
+    # Store logic...
+    
+    return result
+
+
+═══════════════════════════════════════════════════════════════════════════
+FILE 3: Backend Route Handler
+Location: backend/api/routes/resume.py
+═══════════════════════════════════════════════════════════════════════════
+
+from fastapi import APIRouter, Request, UploadFile
+import logging
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+@router.post("/api/v1/resume/parse")
+async def parse_resume_endpoint(request: Request, file: UploadFile):
+    """Endpoint to parse resume"""
+    
+    # Get IDs from middleware
+    correlation_id = request.state.correlation_id
+    trace_id = request.state.trace_id
+    
+    logger.info(
+        f"[ENDPOINT] Resume parse request received",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "endpoint": "/api/v1/resume/parse",
+            "filename": file.filename,
+            "service": "backend"
+        }
+    )
+    
+    # Save file
+    file_path = f"/tmp/{file.filename}"
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+    
+    logger.info(
+        f"[FILE_SAVED] Resume file saved",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "file_path": file_path,
+            "service": "backend"
+        }
+    )
+    
+    # Call service (which calls AI Layer)
+    from services.resume_parser import parse_resume
+    result = await parse_resume(request, file_path)
+    
+    logger.info(
+        f"[ENDPOINT_SUCCESS] Resume parsed successfully",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "service": "backend"
+        }
+    )
+    
+    return {
+        "status": "success",
+        "result": result,
+        "correlation_id": correlation_id,
+        "trace_id": trace_id
+    }
+
+
+═══════════════════════════════════════════════════════════════════════════
+FILE 4: AI Layer Middleware
+Location: ai_layer/api/middleware/tracing.py
+═══════════════════════════════════════════════════════════════════════════
+
+from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
+import uuid
+import logging
+
+logger = logging.getLogger(__name__)
+
+class AILayerTracingMiddleware(BaseHTTPMiddleware):
+    """AI Layer middleware - receives correlation + parent trace"""
+    
+    async def dispatch(self, request: Request, call_next):
+        # 1. Extract correlation_id (forwarded from backend)
+        correlation_id = request.headers.get("X-Correlation-ID")
+        
+        # 2. Extract parent_trace_id (backend's trace_id)
+        parent_trace_id = request.headers.get("X-Trace-ID")
+        
+        # 3. Generate NEW trace_id for AI Layer
+        trace_id = f"ai_trace_{uuid.uuid4().hex[:12]}"
+        
+        # 4. Store in request state
+        request.state.correlation_id = correlation_id
+        request.state.trace_id = trace_id
+        request.state.parent_trace_id = parent_trace_id
+        
+        # 5. Log with PARENT relationship
+        logger.info(
+            f"[AI_REQUEST_START] {request.method} {request.url.path}",
+            extra={
+                "correlation_id": correlation_id,
+                "trace_id": trace_id,
+                "parent_trace_id": parent_trace_id,  # Shows parent!
+                "method": request.method,
+                "path": request.url.path,
+                "service": "ai_layer"
+            }
+        )
+        
+        import time
+        start_time = time.time()
+        
+        try:
+            response = await call_next(request)
+            duration_ms = (time.time() - start_time) * 1000
+            
+            logger.info(
+                f"[AI_REQUEST_END] {response.status_code} {request.url.path} ({duration_ms:.2f}ms)",
+                extra={
+                    "correlation_id": correlation_id,
+                    "trace_id": trace_id,
+                    "parent_trace_id": parent_trace_id,
+                    "status_code": response.status_code,
+                    "duration_ms": round(duration_ms, 2),
+                    "service": "ai_layer"
+                }
+            )
+            
+            # 6. Return IDs in headers
+            response.headers["X-Correlation-ID"] = correlation_id
+            response.headers["X-Trace-ID"] = trace_id
+            
+            return response
+            
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            
+            logger.error(
+                f"[AI_REQUEST_ERROR] {request.url.path}: {e}",
+                extra={
+                    "correlation_id": correlation_id,
+                    "trace_id": trace_id,
+                    "parent_trace_id": parent_trace_id,
+                    "error": str(e),
+                    "service": "ai_layer"
+                },
+                exc_info=True
+            )
+            raise
+
+
+═══════════════════════════════════════════════════════════════════════════
+FILE 5: AI Layer Service
+Location: ai_layer/services/resume_extractor.py
+═══════════════════════════════════════════════════════════════════════════
+
+import logging
+from fastapi import Request
+
+logger = logging.getLogger(__name__)
+
+async def extract_resume_info(request: Request, file_path: str):
+    """Extract information from resume using LLM"""
+    
+    # Get IDs from request state
+    correlation_id = request.state.correlation_id
+    trace_id = request.state.trace_id
+    parent_trace_id = request.state.parent_trace_id
+    
+    logger.info(
+        f"[AI_SERVICE] Starting resume extraction",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "parent_trace_id": parent_trace_id,
+            "operation": "extract_resume_info",
+            "file_path": file_path,
+            "service": "ai_layer"
+        }
+    )
+    
+    # Step 1: Read file
+    logger.info(
+        f"[READ_FILE] Reading resume file",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "service": "ai_layer"
+        }
+    )
+    
+    with open(file_path, 'r') as f:
+        content = f.read()
+    
+    # Step 2: Call LLM
+    logger.info(
+        f"[LLM_CALL] Calling Azure OpenAI",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "model": "gpt-4",
+            "operation": "extract_skills",
+            "service": "ai_layer"
+        }
+    )
+    
+    # Simulate LLM call
+    import asyncio
+    await asyncio.sleep(0.5)  # Simulate processing
+    
+    result = {
+        "name": "John Doe",
+        "skills": ["Python", "FastAPI", "Machine Learning"],
+        "experience": "5 years"
+    }
+    
+    logger.info(
+        f"[LLM_SUCCESS] Skills extracted",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "skills_count": len(result["skills"]),
+            "service": "ai_layer"
+        }
+    )
+    
+    return result
+
+
+═══════════════════════════════════════════════════════════════════════════
+FILE 6: AI Layer Route Handler
+Location: ai_layer/api/routes/resume.py
+═══════════════════════════════════════════════════════════════════════════
+
+from fastapi import APIRouter, Request
+import logging
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+@router.post("/api/v1/resume/extract")
+async def extract_resume_endpoint(request: Request, data: dict):
+    """AI Layer endpoint to extract resume info"""
+    
+    # Get IDs from middleware
+    correlation_id = request.state.correlation_id
+    trace_id = request.state.trace_id
+    parent_trace_id = request.state.parent_trace_id
+    
+    logger.info(
+        f"[AI_ENDPOINT] Resume extraction request",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "parent_trace_id": parent_trace_id,
+            "endpoint": "/api/v1/resume/extract",
+            "service": "ai_layer"
+        }
+    )
+    
+    file_path = data.get("file_path")
+    
+    # Call service
+    from services.resume_extractor import extract_resume_info
+    result = await extract_resume_info(request, file_path)
+    
+    logger.info(
+        f"[AI_ENDPOINT_SUCCESS] Extraction complete",
+        extra={
+            "correlation_id": correlation_id,
+            "trace_id": trace_id,
+            "service": "ai_layer"
+        }
+    )
+    
+    return {
+        "status": "success",
+        "data": result,
+        "trace_id": trace_id,
+        "correlation_id": correlation_id
+    }
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    ACTUAL LOG OUTPUT (Chronological)
+═══════════════════════════════════════════════════════════════════════════
+
+2025-01-07 10:15:00.000 [INFO] [REQUEST_START] POST /api/v1/resume/parse
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  parent_trace_id=None
+  service=backend
+  path=/api/v1/resume/parse
+
+2025-01-07 10:15:00.050 [INFO] [ENDPOINT] Resume parse request received
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  service=backend
+  endpoint=/api/v1/resume/parse
+  filename=resume.pdf
+
+2025-01-07 10:15:00.100 [INFO] [FILE_SAVED] Resume file saved
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  service=backend
+  file_path=/tmp/resume.pdf
+
+2025-01-07 10:15:00.150 [INFO] [BACKEND_SERVICE] Starting resume parse
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  service=backend
+  operation=parse_resume
+  file_path=/tmp/resume.pdf
+
+2025-01-07 10:15:00.200 [INFO] [BACKEND_TO_AI] Calling AI Layer
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  service=backend
+  ai_endpoint=http://ai-layer:8001/api/v1/resume/extract
+
+─────────────────────────────────────────────────────────────────────────
+                    REQUEST CROSSES SERVICE BOUNDARY
+                    Backend → AI Layer
+─────────────────────────────────────────────────────────────────────────
+
+2025-01-07 10:15:00.250 [INFO] [AI_REQUEST_START] POST /api/v1/resume/extract
+  correlation_id=user_session_abc123
+  trace_id=ai_trace_002
+  parent_trace_id=backend_trace_001  ← PARENT IS BACKEND!
+  service=ai_layer
+  path=/api/v1/resume/extract
+
+2025-01-07 10:15:00.300 [INFO] [AI_ENDPOINT] Resume extraction request
+  correlation_id=user_session_abc123
+  trace_id=ai_trace_002
+  parent_trace_id=backend_trace_001
+  service=ai_layer
+  endpoint=/api/v1/resume/extract
+
+2025-01-07 10:15:00.350 [INFO] [AI_SERVICE] Starting resume extraction
+  correlation_id=user_session_abc123
+  trace_id=ai_trace_002
+  parent_trace_id=backend_trace_001
+  service=ai_layer
+  operation=extract_resume_info
+
+2025-01-07 10:15:00.400 [INFO] [READ_FILE] Reading resume file
+  correlation_id=user_session_abc123
+  trace_id=ai_trace_002
+  service=ai_layer
+
+2025-01-07 10:15:00.450 [INFO] [LLM_CALL] Calling Azure OpenAI
+  correlation_id=user_session_abc123
+  trace_id=ai_trace_002
+  service=ai_layer
+  model=gpt-4
+  operation=extract_skills
+
+2025-01-07 10:15:00.950 [INFO] [LLM_SUCCESS] Skills extracted
+  correlation_id=user_session_abc123
+  trace_id=ai_trace_002
+  service=ai_layer
+  skills_count=3
+
+2025-01-07 10:15:01.000 [INFO] [AI_ENDPOINT_SUCCESS] Extraction complete
+  correlation_id=user_session_abc123
+  trace_id=ai_trace_002
+  service=ai_layer
+
+2025-01-07 10:15:01.050 [INFO] [AI_REQUEST_END] 200 /api/v1/resume/extract (800ms)
+  correlation_id=user_session_abc123
+  trace_id=ai_trace_002
+  parent_trace_id=backend_trace_001
+  service=ai_layer
+  status_code=200
+  duration_ms=800
+
+─────────────────────────────────────────────────────────────────────────
+                    RESPONSE RETURNS TO BACKEND
+                    AI Layer → Backend
+─────────────────────────────────────────────────────────────────────────
+
+2025-01-07 10:15:01.100 [INFO] [AI_RESPONSE] Received from AI Layer
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  ai_trace_id=ai_trace_002  ← Child trace
+  service=backend
+  status_code=200
+
+2025-01-07 10:15:01.150 [INFO] [DB_STORE] Storing parsed resume
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  service=backend
+  operation=store_resume
+
+2025-01-07 10:15:01.200 [INFO] [ENDPOINT_SUCCESS] Resume parsed successfully
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  service=backend
+
+2025-01-07 10:15:01.250 [INFO] [REQUEST_END] 200 /api/v1/resume/parse (1250ms)
+  correlation_id=user_session_abc123
+  trace_id=backend_trace_001
+  service=backend
+  status_code=200
+  duration_ms=1250
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    HOW TO SEARCH LOGS
+═══════════════════════════════════════════════════════════════════════════
+
+SEARCH BY CORRELATION ID (ENTIRE WORKFLOW):
+─────────────────────────────────────────────────────────────────────────
+grep "correlation_id=user_session_abc123" logs/app.log
+
+Result: ALL logs from BOTH services (backend + AI layer)
+→ See complete user journey across services
+
+
+SEARCH BY BACKEND TRACE ID:
+─────────────────────────────────────────────────────────────────────────
+grep "trace_id=backend_trace_001" logs/app.log
+
+Result: Only backend service logs
+→ Debug backend-specific issues
+
+
+SEARCH BY AI TRACE ID:
+─────────────────────────────────────────────────────────────────────────
+grep "trace_id=ai_trace_002" logs/app.log
+
+Result: Only AI layer logs
+→ Debug AI layer-specific issues
+
+
+SEARCH BY PARENT RELATIONSHIP:
+─────────────────────────────────────────────────────────────────────────
+grep "parent_trace_id=backend_trace_001" logs/app.log
+
+Result: Find child traces (AI layer calls from this backend request)
+→ See service call hierarchy
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    VISUAL TRACE HIERARCHY
+═══════════════════════════════════════════════════════════════════════════
+
+correlation_id: user_session_abc123 (Links everything)
+│
+└─ trace_id: backend_trace_001 (Backend request)
+   │  service: backend
+   │  operation: POST /api/v1/resume/parse
+   │  duration: 1250ms
+   │
+   └─ trace_id: ai_trace_002 (Child of backend_trace_001)
+      │  service: ai_layer
+      │  parent_trace_id: backend_trace_001
+      │  operation: POST /api/v1/resume/extract
+      │  duration: 800ms
+      │
+      └─ LLM Call (Sub-operation within ai_trace_002)
+         operation: extract_skills
+         duration: 500ms
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    KEY INSIGHTS FROM LOGS
+═══════════════════════════════════════════════════════════════════════════
+
+1. CORRELATION ID STAYS SAME:
+   ✅ user_session_abc123 appears in ALL logs (backend + AI layer)
+   → Can track entire workflow
+
+2. TRACE ID CHANGES AT SERVICE BOUNDARY:
+   ✅ Backend: backend_trace_001
+   ✅ AI Layer: ai_trace_002 (NEW trace, but linked via parent)
+
+3. PARENT-CHILD RELATIONSHIP:
+   ✅ ai_trace_002 has parent_trace_id=backend_trace_001
+   → Shows call hierarchy
+
+4. SERVICE IDENTIFICATION:
+   ✅ service=backend vs service=ai_layer
+   → Know which service generated each log
+
+5. TIMING ANALYSIS:
+   ✅ Backend total: 1250ms
+   ✅ AI Layer: 800ms (64% of total time)
+   ✅ LLM call: 500ms (62% of AI layer time)
+   → Found bottleneck!
+
+
+═══════════════════════════════════════════════════════════════════════════
+                    SUMMARY
+═══════════════════════════════════════════════════════════════════════════
+
+CORRELATION ID:
+  - Generated: Frontend (once per session)
+  - Propagated: Through ALL services
+  - Purpose: Link related requests
+  - Value: user_session_abc123 (stays same)
+
+TRACE ID:
+  - Generated: Each service (per request)
+  - Changes: At service boundaries
+  - Purpose: Track single request in one service
+  - Values: backend_trace_001, ai_trace_002 (different)
+
+PARENT TRACE ID:
+  - Set by: Child service (AI Layer)
+  - Value: Parent's trace_id (backend_trace_001)
+  - Purpose: Show call hierarchy
+
+LOGGER EXECUTION:
+  - Every log includes: correlation_id, trace_id, service
+  - Search by correlation_id: See entire workflow
+  - Search by trace_id: See single service request
+  - Search by parent_trace_id: See service call hierarchy
+
+ENDFLOW
+
+cat /mnt/user-data/outputs/CORRELATION_TRACE_ID_FLOW_EXAMPLE.txt

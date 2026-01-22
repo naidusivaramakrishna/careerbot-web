@@ -2021,7 +2021,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       const newFormData: Record<string, string> = {};
       
       // Personal Info
-      newFormData["name"] = resumeData.personalInfo?.fullName || "";
+      newFormData["name"] = resumeData.personalInfo?.fullname || "";
       newFormData["email"] = resumeData.personalInfo?.email || "";
       newFormData["phone"] = resumeData.personalInfo?.phone || "";
       newFormData["location"] = resumeData.personalInfo?.location || "";
@@ -2248,7 +2248,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     
     const newStatus: Record<string, boolean> = {
       "Personal Info":
-        !!resumeData.personalInfo.fullName &&
+        !!resumeData.personalInfo.fullname &&
         !!resumeData.personalInfo.email &&
         !!resumeData.personalInfo.phone &&
         !!resumeData.personalInfo.location,
@@ -2301,7 +2301,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   return (
     <div
       className={`relative bg-gradient-to-br from-gray-50 to-white h-screen shadow-sm transition-all duration-300 flex flex-col
-        ${isOpen ? `${dynamicWidth} px-3` : "w-12 p-0"}
+        ${isOpen ? `${dynamicWidth}` : "w-12 p-0"}
       `}
     >
       {isOpen && (

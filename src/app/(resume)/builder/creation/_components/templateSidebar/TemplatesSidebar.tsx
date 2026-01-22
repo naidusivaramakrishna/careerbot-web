@@ -469,19 +469,22 @@ const TemplatesSidebar: React.FC<TemplatesSidebarProps> = ({
   };
 
   return (
-    <aside
-      className={`transition-all duration-300 bg-white border-l border-gray-200 relative flex flex-col min-h-[calc(100vh-60px)]
-        ${isOpen ? "w-[28%] px-3" : "w-12 p-0"}`}
+    <div
+      // className={`transition-all duration-300 bg-white border-l border-gray-200 relative flex flex-col min-h-[calc(100vh-60px)]
+      className={`relative bg-gradient-to-br from-gray-50 to-white h-screen shadow-sm transition-all duration-300 flex flex-col
+        ${isOpen ? "w-[28%]" : "w-12 p-0"}`}
     >
-      <Tabs
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        isOpen={isOpen}
-        onToggle={handleToggleSidebar}
+      {isOpen && (
+        <Tabs
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          isOpen={isOpen}
+          onToggle={handleToggleSidebar}
       />
+      )}
 
       {isOpen && (
-        <div className="flex flex-col flex-1 px-1 py-4 overflow-y-scroll scrollbar-hide bg-white">
+        <div className="flex flex-col flex-1 px-2 py-4 overflow-y-scroll scrollbar-hide bg-white">
           {activeTab === "Templates" && (
             <TemplatesTab onTemplateSelect={handleTemplateSelect} />
           )}
@@ -498,7 +501,7 @@ const TemplatesSidebar: React.FC<TemplatesSidebarProps> = ({
           <SidebarClose className="text-blue-500" size={20} />
         </button>
       )}
-    </aside>
+    </div>
   );
 };
 

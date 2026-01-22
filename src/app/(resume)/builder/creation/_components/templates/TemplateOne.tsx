@@ -3611,7 +3611,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
           <header className="mb-2">
             <div className="flex justify-between items-center">
               <h1 className="text-4xl font-bold uppercase" style={nameStyle}>
-                {personalInfo.fullName || "Full Name"}
+                {personalInfo.fullname || "Full Name"}
               </h1>
 
               <div className="text-right flex flex-col gap-1">

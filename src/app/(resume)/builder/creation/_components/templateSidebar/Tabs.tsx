@@ -29,7 +29,7 @@ const Tabs: React.FC<TabsProps> = ({
   if (!isOpen) return null; // hide tabs completely when sidebar closed
 
   return (
-    <div className="flex items-center gap-4 mb-1 border-b border-gray-200 px-3 pt-1 w-full">
+    <div className="flex items-center gap-4 mb-1 border border-gray-200 rounded px-1.5 pt-0.5 w-full shadow-sm relative z-30 transition-all duration-300 ease-in-out">
       {/* Left toggle button */}
       <button
         onClick={onToggle}

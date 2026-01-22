@@ -3647,7 +3647,7 @@ interface Props {
 }
 
 const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
-  const { resumeStyle, sectionOrder } = useResume();
+  const { resumeStyle, sectionOrder, resumeData } = useResume();
   
   const {
     personalInfo,
@@ -3741,7 +3741,9 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
         return (
           <div className="text-center mb-6 page-break-inside-avoid" data-section="personal-info">
             <h1 className="uppercase font-bold mb-1" style={nameStyle}>
-              {personalInfo.fullName || "Full Name"}
+              {/* {personalInfo.fullName || "Full Name"} */}
+              {personalInfo.fullname || "Full Name"}
+
             </h1>
             <div className="flex items-center justify-center flex-wrap gap-2 text-xs" style={baseTextStyle}>
               {[

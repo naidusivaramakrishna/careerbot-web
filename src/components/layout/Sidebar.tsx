@@ -2139,7 +2139,7 @@ import { RiFileEditFill } from "react-icons/ri";
 import Image from "next/image";
 import { FaArrowRightArrowLeft } from "react-icons/fa6";
 import { MdOutlineWork } from "react-icons/md";
-import { LogOut } from "lucide-react";
+import { LogOut, MessageSquare } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { getProfile, UserProfile } from "@/api/userApi";
 import { signOut } from "@/api/authApi";
@@ -2148,10 +2148,10 @@ import axios from "axios";
 
 const navItems = [
   { id: "profile", icon: <FaUser />, label: "Profile", path: "/dashboard/profile" },
-  { 
-    id: "resume", 
-    icon: <RiFileEditFill />, 
-    label: "Resume", 
+  {
+    id: "resume",
+    icon: <RiFileEditFill />,
+    label: "Resume",
     path: "/builder",
   },
   {
@@ -2162,6 +2162,12 @@ const navItems = [
   },
   { id: "jd_match", icon: <FaArrowRightArrowLeft />, label: "Job Match", path: "/job-match" },
   { id: "jobs", icon: <MdOutlineWork />, label: "Jobs", path: "/jobs" },
+  {
+    id: "communication",
+    icon: <MessageSquare />,
+    label: "Comm.",
+    path: "/communication"
+  },
 ];
 
 export default function Sidebar() {

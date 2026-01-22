@@ -5016,6 +5016,7 @@
 
 import axios from 'axios';
 import { httpClient } from '@/lib/http';
+import { getCorrelationId } from '@/lib/correlationId';
 
 export interface CategorizedSkills {
   programming_languages: string[];
@@ -5187,9 +5188,10 @@ export interface BuilderScoreResponse {
 
 // ==================== CREATE RESUME ====================
 export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
+  const correlationId = getCorrelationId();
   try {
-    console.log("📤 Creating resume with authenticated user...");
-    
+    console.log("📤 Creating resume with authenticated user...", { correlationId });
+
     const token = localStorage.getItem("access_token");
     const email = localStorage.getItem("user_email");
     const username = localStorage.getItem("username");
@@ -5243,13 +5245,14 @@ export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
     
   } 
   catch (error) {
-    console.error("❌ Error creating resume:", error);
-    
+    console.error("❌ Error creating resume:", error, { correlationId });
+
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
       const detail = error.response?.data?.detail;
-      
+
       console.error("🔥 Create resume error details:", {
+        correlationId,
         status,
         detail,
         fullURL: `${error.config?.baseURL}${error.config?.url}`,
@@ -5285,8 +5288,9 @@ export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
 
 // ==================== GET ALL RESUMES ====================
 export const getAllResumes = async (): Promise<ResumeResponse[]> => {
+  const correlationId = getCorrelationId();
   try {
-    console.log("📥 Fetching resumes...");
+    console.log("📥 Fetching resumes...", { correlationId });
     const fullURL = `${httpClient.defaults.baseURL}/resumes`;
     console.log("🔍 GET Full Request URL:", fullURL);
     
@@ -5360,10 +5364,11 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
     return [];
     
   } catch (error) {
-    console.error('❌ Error fetching resumes:', error);
-    
+    console.error('❌ Error fetching resumes:', error, { correlationId });
+
     if (axios.isAxiosError(error)) {
       console.error("🔥 Fetch error details:", {
+        correlationId,
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
@@ -5371,29 +5376,30 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
         baseURL: error.config?.baseURL,
         fullURL: `${error.config?.baseURL}${error.config?.url}`,
       });
-      
+
       if (error.response?.status === 404) {
         console.error("⚠️ 404 - Endpoint not found. Check your API route!");
         throw new Error("Resume endpoint not found. Please check API configuration.");
       }
-      
+
       if (error.response?.status === 401) {
         console.error("🔐 Authentication failed");
         throw new Error("Please sign in again");
       }
     }
-    
+
     throw error;
   }
 };
 
 // ==================== UPDATE RESUME ====================
 export const updateResume = async (
-  resumeId: string, 
+  resumeId: string,
   resumeData: Partial<ResumeResponse>
 ): Promise<ResumeResponse> => {
+  const correlationId = getCorrelationId();
   try {
-    console.log("📝 Updating resume:", resumeId);
+    console.log("📝 Updating resume:", resumeId, { correlationId });
     console.log("📋 Update payload:", JSON.stringify(resumeData, null, 2));
     
     const baseURL = httpClient.defaults.baseURL;
@@ -5464,17 +5470,18 @@ export const updateResume = async (
 
 // ==================== GET RESUME BY ID ====================
 export const getResumeById = async (resumeId: string): Promise<ResumeResponse> => {
+  const correlationId = getCorrelationId();
   try {
-    console.log("📥 Fetching resume by ID:", resumeId);
-    
+    console.log("📥 Fetching resume by ID:", resumeId, { correlationId });
+
     const response = await httpClient.get<ResumeResponse>(`/resumes/${resumeId}`);
-    
+
     console.log("✅ Resume fetched successfully:", response.data);
     return response.data;
-    
+
   } catch (error) {
-    console.error("❌ Error fetching resume:", error);
-    
+    console.error("❌ Error fetching resume:", error, { correlationId });
+
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 404) {
         throw new Error("Resume not found");
@@ -5483,7 +5490,7 @@ export const getResumeById = async (resumeId: string): Promise<ResumeResponse> =
         throw new Error("Please sign in again");
       }
     }
-    
+
     throw error;
   }
 };
@@ -5705,16 +5712,17 @@ export const publishResume = async (resumeId: string): Promise<void> => {
 
 // ==================== DOWNLOAD RESUME ====================
 export const downloadResume = async (
-  resumeId: string, 
+  resumeId: string,
   format: 'pdf' | 'doc' | 'docx'
 ): Promise<Blob> => {
+  const correlationId = getCorrelationId();
   try {
-    console.log("⬇️ Downloading resume:", resumeId, "Format:", format);
-    
+    console.log("⬇️ Downloading resume:", resumeId, "Format:", format, { correlationId });
+
     const backendFormat = format === 'doc' ? 'docx' : format;
-    
+
     console.log("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?format=${backendFormat}`);
-    
+
     const response = await httpClient.get(
       `/resumes/${resumeId}/download?format=${backendFormat}`,
       {
@@ -5729,12 +5737,13 @@ export const downloadResume = async (
     });
 
     return response.data;
-    
+
   } catch (error) {
-    console.error('❌ Error downloading:', error);
-    
+    console.error('❌ Error downloading:', error, { correlationId });
+
     if (axios.isAxiosError(error)) {
       console.error("🔥 Download error details:", {
+        correlationId,
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
@@ -5842,21 +5851,22 @@ export const downloadResume = async (
 
 // Keep your existing getTemplatesByCategory function
 export const getTemplatesByCategory = async (category?: string): Promise<TemplateResponse[]> => {
+  const correlationId = getCorrelationId();
   try {
-    console.log("📋 Fetching templates by category:", category);
-    
-    const url = category && category !== 'All' 
+    console.log("📋 Fetching templates by category:", category, { correlationId });
+
+    const url = category && category !== 'All'
       ? `/templates/?category=${encodeURIComponent(category.toLowerCase())}`
       : '/templates/';
-    
+
     console.log("🔍 Request URL:", `${httpClient.defaults.baseURL}${url}`);
-    
+
     const response = await httpClient.get<TemplateResponse[]>(url);
-    
+
     console.log("✅ Templates fetched:", response.data.length);
     return response.data;
   } catch (error) {
-    console.error("❌ Error fetching templates by category:", error);
+    console.error("❌ Error fetching templates by category:", error, { correlationId });
     throw error;
   }
 };
@@ -6054,8 +6064,9 @@ export const applyTemplateToResume = async (
   resumeId: string,
   templateObjectId: string // Always pass the MongoDB _id!
 ): Promise<{ message: string; resume_id: string; template_id: string }> => {
+  const correlationId = getCorrelationId();
   try {
-    console.log("🎨 Applying template:", { resumeId, templateObjectId });
+    console.log("🎨 Applying template:", { resumeId, templateObjectId, correlationId });
 
     // Always use the ObjectId in path
     const endpoint = `/templates/${templateObjectId}/apply`;
@@ -6077,13 +6088,14 @@ export const applyTemplateToResume = async (
     return response.data;
 
   } catch (error) {
-    console.error("❌ Error applying template:", error);
+    console.error("❌ Error applying template:", error, { correlationId });
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
       const detail = error.response?.data?.detail;
       const errorData = error.response?.data?.error;
 
       console.error("🔥 Apply template error details:", {
+        correlationId,
         status,
         statusText: error.response?.statusText,
         detail,

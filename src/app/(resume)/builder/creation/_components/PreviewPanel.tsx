@@ -5065,7 +5065,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const templateMap: { [key: string]: JSX.Element } = {
       // String-based template IDs
       'modern_minimalist': <TemplateOne data={resumeData} style={resumeStyle} />,
-      'compact_professional': <TemplateTwo data={resumeData} style={resumeStyle} />,
+      'clean_simple': <TemplateTwo data={resumeData} style={resumeStyle} />,
       'minimalist_classic': <TemplateThree data={resumeData} style={resumeStyle} />,
       'professional_classic': <TemplateFour data={resumeData} style={resumeStyle} />,
       // Numeric IDs for backward compatibility
@@ -5127,10 +5127,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       {/* Toolbar - When Sidebar is Open */}
       {isTemplateSidebarOpen && (
         <div 
-          className="flex items-center justify-center border border-gray-300 rounded px-2 py-.5 mb-0 gap-2 bg-white shadow-sm space-x-2 relative z-30 transition-all duration-300 ease-in-out"
+          className="flex items-center justify-center border border-gray-300 rounded px-2 py-1.5 mb-0 gap-2 bg-white shadow-sm space-x-2 relative z-30 transition-all duration-300 ease-in-out"
           style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
         >
-          <div className={`flex flex-col items-center justify-center ml-6 bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1.5 text-xs font-semibold relative`}>
+          <div className={`flex flex-col items-center justify-center ml-6 bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold relative`}>
             <span className="text-[#2d2d2d]">{`Resume Score ${overallScore}%`}</span>
           </div>
 

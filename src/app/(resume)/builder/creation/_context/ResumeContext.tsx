@@ -1889,7 +1889,7 @@ export interface CategorizedSkills {
 export interface ResumeData {
   resume_id?: string;
   personalInfo: { 
-    fullName: string; 
+    fullname: string; 
     email: string; 
     phone: string; 
     location: string; 
@@ -2311,7 +2311,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
     
     return {
       personalInfo: { 
-        fullName: "", 
+        fullname: "", 
         email: "", 
         phone: "", 
         location: "", 
@@ -2450,7 +2450,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         const loadedData: ResumeData = {
           resume_id: data.id,
           personalInfo: {
-            fullName: data.personalInfo?.fullName || "",
+            fullname: data.personalInfo?.fullname || "",
             email: data.personalInfo?.email || "",
             phone: data.personalInfo?.phone || "",
             location: data.personalInfo?.location || "",
@@ -2488,7 +2488,48 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
           publications: data.publications || [],
         };
         
-        setResumeData(loadedData);
+        // setResumeData(loadedData);
+        // setResumeData(prev => ({ ...prev, ...loadedData }));
+        // setResumeData(prev => ({ ...prev,  ...loadedData,  personalInfo: {  ...prev.personalInfo,  ...loadedData.personalInfo,},}));
+        setResumeData(prev => ({
+  ...prev,
+  ...loadedData,
+  personalInfo: {
+    ...prev.personalInfo,
+
+    fullname:
+      loadedData.personalInfo.fullname?.trim()
+        ? loadedData.personalInfo.fullname
+        : prev.personalInfo.fullname,
+
+    email:
+      loadedData.personalInfo.email?.trim()
+        ? loadedData.personalInfo.email
+        : prev.personalInfo.email,
+
+    phone:
+      loadedData.personalInfo.phone?.trim()
+        ? loadedData.personalInfo.phone
+        : prev.personalInfo.phone,
+
+    location:
+      loadedData.personalInfo.location?.trim()
+        ? loadedData.personalInfo.location
+        : prev.personalInfo.location,
+
+    linkedinUrl:
+      loadedData.personalInfo.linkedinUrl?.trim()
+        ? loadedData.personalInfo.linkedinUrl
+        : prev.personalInfo.linkedinUrl,
+
+    portifolioUrl:
+      loadedData.personalInfo.portifolioUrl?.trim()
+        ? loadedData.personalInfo.portifolioUrl
+        : prev.personalInfo.portifolioUrl,
+  },
+}));
+
+
         console.log("✅ Resume context populated with backend data");
         
         toast.success("Resume loaded successfully!");

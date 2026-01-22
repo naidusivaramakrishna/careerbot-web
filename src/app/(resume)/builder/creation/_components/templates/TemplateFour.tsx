@@ -2007,7 +2007,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
           <header className="mb-6 page-break-inside-avoid" data-section="personal-info">
             <div className="mb-3">
               <h1 className="uppercase font-bold" style={nameStyle}>
-                {personalInfo.fullName || "FULL NAME"}
+                {personalInfo.fullname || "FULL NAME"}
               </h1>
             </div>
 

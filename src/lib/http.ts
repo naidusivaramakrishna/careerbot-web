@@ -189,6 +189,7 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import Cookies from 'js-cookie';
+import { getCorrelationId, clearCorrelationId } from './correlationId';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -211,7 +212,8 @@ const clearAllTokens = () => {
     localStorage.clear();
     Cookies.remove('access_token');
     Cookies.remove('refresh_token');
-    sessionStorage.clear();
+    // Clear correlation ID on logout/session reset
+    clearCorrelationId();
   }
 };
 
@@ -245,6 +247,12 @@ client.interceptors.request.use(
     const token = getToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // Add correlation ID to all requests for session tracking
+    const correlationId = getCorrelationId();
+    if (correlationId && config.headers) {
+      config.headers['X-Correlation-ID'] = correlationId;
     }
 
     // CACHE BUSTING: Add timestamp to GET requests

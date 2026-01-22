@@ -265,7 +265,7 @@ import { useValidation } from "../../../_hooks/useValidation";
 
 interface Field {
   field: string;
-  key: "fullName" | "email" | "phone" | "location" | "linkedinUrl" | "portifolioUrl";
+  key: "fullname" | "email" | "phone" | "location" | "linkedinUrl" | "portifolioUrl";
   required: boolean;
   type?: string;
 }
@@ -275,7 +275,7 @@ const PersonalInfo: React.FC = () => {
   const { errors, validateRequired, clearError } = useValidation();
 
   const fields: Field[] = [
-    { field: "Full Name", key: "fullName", required: true },
+    { field: "Full Name", key: "fullname", required: true },
     { field: "Email", key: "email", required: true, type: "email" },
     { field: "Phone Number", key: "phone", required: true, type: "tel" },
     { field: "Location", key: "location", required: true },
