@@ -489,7 +489,6 @@ const RightSection = () => {
                     </button>
                     <p className='text-sm text-[#818798]'>30 day money back guarantee</p>
                 </div>
-
                 <div className="flex flex-col items-center p-4 rounded-xl my-4 shadow bg-white">
                     <MessageSquare className='w-8 h-8 text-[#7B899D]' />
                     <h3 className='my-4 font-semibold text-[#344256] text-lg'>Need Help?</h3>

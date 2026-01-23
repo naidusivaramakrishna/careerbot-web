@@ -79,7 +79,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           setLoading(false);
           return;
         }
-
         const backendProfile = await getProfile();
         setUsername(backendProfile.username ?? null)
         const mappedProfile = mapBackendToFrontend(backendProfile);

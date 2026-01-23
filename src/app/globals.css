@@ -28,267 +28,243 @@ body {
 
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* --color-background: var(--background);
+  --color-foreground: var(--foreground); */
+  /* --font-sans: var(--font-sans); */
+  /* --font-sans: var(--font-inter); */
+  /* --font-sans: var(--font-inter); */
+  
 }
 
-@media (prefers-color-scheme: dark) {
+/* Dark Mode */
+/* @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+} */
+
+/* Base Typography */
+body {
+  /* background: var(--background);
+  color: var(--foreground); */
+  /* font-family: var(--font-sans); */
+  /* font-family: var(--font-sans); */
+  /* font-family: var(--font-inter); */
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 21px;
+  /* -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility; */
 }
 
-@layer utilities {
+/* Headings with different weights/sizes */
+h1 {
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 40px;
+}
 
-  /* Hide scrollbar */
+h2 {
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 32px;
+}
+
+h3 {
+  font-weight: 500;
+  font-size: 18px;
+  line-height: 28px;
+}
+
+/* Utilities */
+@layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
-    /* IE & Edge */
     scrollbar-width: none;
-    /* Firefox */
   }
-
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
-    /* Chrome, Safari, Edge */
   }
 
-  /* Scrollbar only visible on hover */
+  .scrollbar-x-hide {
+    overflow-x: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-x-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-x-hide:hover {
+    scrollbar-width: thin;
+  }
+  .scrollbar-x-hide:hover::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+  .scrollbar-x-hide::-webkit-scrollbar-thumb {
+    background: #a3a3a3;
+    border-radius: 6px;
+  }
+  .scrollbar-x-hide:hover::-webkit-scrollbar-thumb {
+    background: #525252;
+  }
+
   .scrollbar-hover {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-
   .scrollbar-hover::-webkit-scrollbar {
     display: none;
   }
-
   .scrollbar-hover:hover {
     scrollbar-width: thin;
-    /* Firefox */
   }
-
   .scrollbar-hover:hover::-webkit-scrollbar {
     display: block;
     width: 8px;
     height: 8px;
   }
-
   .scrollbar-hover::-webkit-scrollbar-track {
     background: transparent;
   }
-
   .scrollbar-hover::-webkit-scrollbar-thumb {
     background: #a3a3a3;
-    /* gray-400 */
     border-radius: 6px;
   }
-
   .scrollbar-hover:hover::-webkit-scrollbar-thumb {
     background: #525252;
-    /* gray-600 */
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* A4 Resume Page Layout */
+.resume-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 0;
 }
 
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.4s ease forwards;
-}
-
-
-
-/* Custom styles for React Quill Editor */
-
-/* Editor container */
-.quill {
-  border-radius: 0.5rem;
-  border: 1px solid #e5e5e5;
-}
-
-/* Toolbar */
-.ql-toolbar.ql-snow {
-  border: none;
-  border-bottom: 1px solid #e5e5e5;
-  border-radius: 0.5rem 0.5rem 0 0;
-  background-color: #f9fafb;
-  padding: 8px;
-}
-
-/* Editor content area */
-.ql-container.ql-snow {
-  border: none;
-  border-radius: 0 0 0.5rem 0.5rem;
-  font-size: 0.875rem;
-  min-height: 150px;
-}
-
-/* Editor text */
-.ql-editor {
-  min-height: 150px;
-  padding: 12px;
-}
-
-/* Placeholder text */
-.ql-editor.ql-blank::before {
-  color: #9ca3af;
-  font-style: normal;
-  font-size: 0.875rem;
-}
-
-/* Bullet and numbered lists */
-.ql-editor ul,
-.ql-editor ol {
-  padding-left: 1.5rem;
-}
-
-.ql-editor li {
-  margin-bottom: 0.25rem;
-}
-
-/* Focus state */
-.quill:focus-within {
-  outline: 2px solid #737373;
-  outline-offset: 2px;
-}
-
-/* Toolbar buttons */
-.ql-toolbar button {
-  width: 28px;
-  height: 28px;
-}
-
-.ql-toolbar button:hover {
-  background-color: #e5e7eb;
-  border-radius: 4px;
-}
-
-.ql-toolbar button.ql-active {
-  background-color: #dbeafe;
-  color: #155DFC;
-  border-radius: 4px;
-}
-
-/* Disabled state */
-.quill.disabled {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-
-* Editor content styling */ .editor-content {
-  outline: none;
-  position: relative;
-}
-
-.editor-content:focus {
-  outline: none;
-}
-
-/* Placeholder styling */
-.editor-content:empty:before {
-  content: 'Describe your role and responsibilities...';
-  color: #9ca3af;
-  pointer-events: none;
+.hidden-content {
   position: absolute;
+  left: -9999px;
+  width: 478px;
+  visibility: hidden;
 }
 
-/* List styling inside editor */
-.editor-content ul {
-  list-style-type: disc;
-  padding-left: 2rem;
-  margin: 0.5rem 0;
+.a4-page {
+  width: 478px;
+  min-height: 1122px;
+  background: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 32px;
+  margin: 0 auto;
+  position: relative;
+  box-sizing: border-box;
+  page-break-after: always;
+  break-after: page;
 }
 
-.editor-content ol {
-  list-style-type: decimal;
-  padding-left: 2rem;
-  margin: 0.5rem 0;
+.a4-page:last-child {
+  page-break-after: auto;
+  break-after: auto;
 }
 
-.editor-content li {
-  margin-bottom: 0.25rem;
-  line-height: 1.6;
-  padding-left: 0.25rem;
+.a4-page-content {
+  width: 100%;
+  min-height: calc(1122px - 64px);
 }
 
-.editor-content strong,
-.editor-content b {
-  font-weight: 700;
+.page-number {
+  position: absolute;
+  bottom: 10px;
+  right: 16px;
+  font-size: 10px;
+  color: #666;
 }
 
-.editor-content em,
-.editor-content i {
-  font-style: italic;
+/* Print Styles */
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  .resume-container {
+    gap: 0;
+    padding: 0;
+  }
+
+  .hidden-content {
+    display: none !important;
+  }
+
+  .a4-page {
+    box-shadow: none;
+    margin: 0;
+    page-break-after: always;
+    break-after: page;
+    min-height: 297mm;
+    width: 210mm;
+  }
+
+  .a4-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .page-number {
+    display: none;
+  }
+
+  @page {
+    size: A4;
+    margin: 0.5cm;
+  }
+
+  section,
+  .resume-section {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+
+  ul, ol, li {
+    page-break-inside: avoid;
+  }
+
+  p, div {
+    orphans: 3;
+    widows: 3;
+  }
+
+  table {
+    page-break-inside: avoid;
+  }
+
+  button,
+  .no-print {
+    display: none !important;
+  }
 }
 
-.editor-content u {
-  text-decoration: underline;
-}
-
-.editor-content a {
-  color: #155DFC;
-  text-decoration: underline;
-}
-
-/* Placeholder for empty editor */
-.editor-content:empty:before {
-  content: "Describe your role and responsibilities...";
-  color: #9ca3af;
-  pointer-events: none;
-}
-
-/* Resume display styles (for viewing the saved content) */
-.resume-description ul {
-  list-style-type: disc;
-  margin-left: 1.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.resume-description ol {
-  list-style-type: decimal;
-  margin-left: 1.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.resume-description li {
-  margin-bottom: 0.25rem;
-  line-height: 1.6;
-}
-
-.resume-description strong,
-.resume-description b {
-  font-weight: 600;
-}
-
-.resume-description em,
-.resume-description i {
-  font-style: italic;
-}
-
-.resume-description u {
-  text-decoration: underline;
-}
-
-.resume-description p {
-  margin-bottom: 0.5rem;
+@media screen {
+  .print\:hidden {
+    display: block !important;
+  }
+  .print\:overflow-visible {
+    overflow: auto !important;
+  }
+  .print\:h-auto {
+    height: auto !important;
+  }
 }
