@@ -10,7 +10,7 @@ import { PersonalInfoRef } from "../_types/PersonalInfoRef";
 import WorkExperienceSection from "./experience/WorkExperienceSection";
 import PersonalInfoSection from "./PersonalInfoSection";
 import SkillsSection from "./SkillsSection";
-import EmploymentInfoSection from "./EmploymentInfoSection";
+import EmploymentInfoSection from "./employmentInfo/EmploymentInfoSection";
 
 interface ProfileTabsProps {
   profile: ProfileData;
@@ -58,17 +58,17 @@ export default function ProfileTabs({
       content: <SkillsSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
     },
     {
-      label: "Employment Information",
-      text: "Employment Info",
-      icon: <FileText />,
-      content: <EmploymentInfoSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
-    },
-    {
       label: "Certifications",
       text: "Certifications",
       icon: <Award />,
       content: <CertificationsSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
     },
+    {
+      label: "Employment Information",
+      text: "Employment Info",
+      icon: <FileText />,
+      content: <EmploymentInfoSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
+    }
   ];
 
   const handleTabChange = (label: string) => {

@@ -38,6 +38,8 @@ export interface CurrentQuestionResponse {
   time_limit?: number;
   is_last_question?: boolean;
   is_last_section?: boolean;
+  story_text?: string; // For story listening section
+  expected_text?: string; // Expected answer for generating MCQ options
   // Add other response fields as per your API response
 }
 
@@ -61,6 +63,8 @@ export interface NextQuestionResponse {
   is_last_section?: boolean;
   completed?: boolean;
   message?: string;
+  story_text?: string; // For story listening section
+  expected_text?: string; // Expected answer for generating MCQ options
   // Add other response fields as per your API response
 }
 
@@ -258,11 +262,13 @@ export const getNextQuestion = async (data: NextQuestionRequest) => {
     console.log('session_id:', data.session_id);
     console.log('previous question_id:', data.question_id);
 
+    // const response = await httpClient.post<any>(
+    //   `/ai-assessment/sessions/${data.session_id}/next-question?question_id=${data.question_id}`,
+    //   {}  // question_id passed as query parameter
+    // );
     const response = await httpClient.post<any>(
-      `/ai-assessment/sessions/${data.session_id}/next-question`,
-      {
-        question_id: data.question_id, // ✅ backend requires this
-      }
+      `/ai-assessment/sessions/${data.session_id}/next-question?completed_question_id=${data.question_id}`,
+      {}  // question_id passed as query parameter
     );
 
     console.log('🔍 RAW next-question response:', response.data);
@@ -323,6 +329,76 @@ export const submitFinalReport = async (data: FinalReportRequest): Promise<Final
     return response.data;
   } catch (error) {
     console.error('Error submitting final report:', error);
+    throw error;
+  }
+};
+
+// ==================== AUDIO TO TEXT API ====================
+
+export interface AudioToTextRequest {
+  email_id: string;
+  test_id: string;
+  audio_files: File[];
+}
+
+export interface AudioToTextResponse {
+  evaluation_id?: string;
+  status: string;
+  message?: string;
+  transcriptions?: { [questionId: string]: string };
+}
+
+/**
+ * Submit all audio files for transcription
+ * Sends email_id, test_id, and all 44 audio files in a single request
+ */
+export const submitAudioToText = async (data: AudioToTextRequest): Promise<AudioToTextResponse> => {
+  try {
+    const formData = new FormData();
+    formData.append('email_id', data.email_id);
+    formData.append('test_id', data.test_id);
+
+    // Append all audio files
+    data.audio_files.forEach((file, index) => {
+      formData.append('audio_files', file, file.name);
+      console.log(`📎 Attaching audio file ${index + 1}:`, file.name, 'Size:', file.size);
+    });
+
+    console.log(`📤 Submitting ${data.audio_files.length} audio files for transcription...`);
+
+    const response = await httpClient.post<AudioToTextResponse>('/ai-assessment/audio-to-text', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    console.log('✅ Audio-to-text submission successful:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Error submitting audio for transcription:', error);
+    throw error;
+  }
+};
+
+// ==================== DOWNLOAD PDF REPORT API ====================
+
+/**
+ * Download assessment report as PDF
+ * @param testId - The test ID to download the report for
+ * @returns Blob of the PDF file
+ */
+export const downloadReportPdf = async (testId: string): Promise<Blob> => {
+  try {
+    console.log('📥 Downloading PDF report for test_id:', testId);
+
+    const response = await httpClient.get(`/ai-assessment/reports/${testId}/download-pdf`, {
+      responseType: 'blob',
+    });
+
+    console.log('✅ PDF download successful');
+    return response.data;
+  } catch (error) {
+    console.error('❌ Error downloading PDF report:', error);
     throw error;
   }
 };

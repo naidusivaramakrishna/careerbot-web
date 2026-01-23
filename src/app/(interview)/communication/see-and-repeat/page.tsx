@@ -1051,6 +1051,13 @@ export default function AssessmentMain() {
         return;
       }
 
+      // Check if section changed to "Listen and Repeat"
+      if (response.section_name === 'Listen and Repeat') {
+        console.log('✅ Navigating to Listen and Repeat section');
+        router.push('/communication/listen-and-repeat');
+        return;
+      }
+
       setCurrentQuestion(response);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch next question');
@@ -1087,7 +1094,7 @@ export default function AssessmentMain() {
           <div className="bg-white rounded-lg p-5 mb-6">
             <div className="flex justify-between items-center mb-2">
               <div>
-                <h1 className="text-lg font-semibold">
+                <h1 className="text-lg text-black font-semibold">
                   {currentQuestion?.section_name}
                 </h1>
                 <p className="text-sm text-gray-500">
@@ -1121,12 +1128,13 @@ export default function AssessmentMain() {
               ) : error ? (
                 <p className="text-red-600">{error}</p>
               ) : (
-                <p className="text-lg">{currentQuestion?.question_text}</p>
+                <p className="text-lg text-black">{currentQuestion?.question_text}</p>
               )}
             </div>
 
             <div className="bg-white rounded-xl p-6 shadow-sm flex flex-col items-center">
               <AudioRecorder
+                key={currentQuestion?.question_id}
                 maxDuration={15}
                 onRecordingComplete={handleRecordingComplete}
               />

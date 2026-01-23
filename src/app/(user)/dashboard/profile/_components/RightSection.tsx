@@ -1,72 +1,76 @@
-"use client"
-import { Crown, MessageSquare, Settings, Sparkles, Upload } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+"use client";
+
+import React, { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { mapResumeToProfile } from "../_utils/resumeMapper";
+
+import {
+    addEducation,
+    addExperience,
+    addSkill,
+    updateProfile,
+    getEducation,
+    getExperience,
+    getSkills,
+    deleteExperience,
+    deleteSkill,
+    deleteEducation,
+} from "@/api/userApi";
+
 import { useProfileContext } from '../context/ProfileContext'
-import { ProfileData } from '../_types/ProfileData'
-import Image from 'next/image'
+import { ResumeExtractResponse, extractResume } from "@/api/resumeParsingApi";
+import { Crown, MessageSquare, Settings, Sparkles, Upload } from "lucide-react";
+import { ProfileData } from "../_types/ProfileData";
+import Image from "next/image";
+import { importLinkedInProfile } from "@/api/linkedinParsingApi";
+import { mapLinkedinToProfile } from "../_utils/linkedinMapper";
+import LinkedinImportModal from "./LinkedinImportModal";
 
 const RightSection = () => {
-    const { profileData } = useProfileContext()
+    const { profileData, setProfileData } = useProfileContext();
+    const [loading, setLoading] = useState(false);
     const [completionPercentage, setCompletionPercentage] = useState(0)
+    const [uploading, setUploading] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const [linkedinModalOpen, setLinkedinModalOpen] = useState(false);
 
     // Calculate profile completion percentage
     const calculateCompletion = (profile: ProfileData): number => {
         if (!profile) return 0
 
         let filledSections = 0
-        const totalSections = 5 // Personal Info, Education, Work Experience, Skills, Employment Info
-
-        // 1. Personal Information - Check if key fields are filled
+        const totalSections = 5
+        
         if (profile?.personalInformation) {
             const { fullName, email, phone, location, headline, summary } = profile.personalInformation
             if (fullName && email && (phone || location || headline || summary)) {
                 filledSections++
-                console.log('✅ Personal Information: Complete')
-            } else {
-                console.log('❌ Personal Information: Incomplete', { fullName, email, phone, location, headline, summary })
             }
         }
 
-        // 2. Education - Check if at least one education entry exists
         if (profile?.education && profile.education.length > 0) {
             const hasValidEducation = profile.education.some(
                 edu => edu.institution && edu.degree
             )
             if (hasValidEducation) {
                 filledSections++
-                console.log('✅ Education: Complete')
-            } else {
-                console.log('❌ Education: Incomplete', profile.education)
             }
-        } else {
-            console.log('❌ Education: No entries')
         }
 
-        // 3. Work Experience - Check if at least one experience exists
         if (profile?.workExperience && profile.workExperience.length > 0) {
             const hasValidExperience = profile.workExperience.some(
-                exp => exp.company && exp.job_title // Fixed: use job_title instead of position
+                exp => exp.company && exp.job_title
             )
             if (hasValidExperience) {
                 filledSections++
-                console.log('✅ Work Experience: Complete')
-            } else {
-                console.log('❌ Work Experience: Incomplete', profile.workExperience)
             }
-        } else {
-            console.log('❌ Work Experience: No entries')
         }
 
-        // 4. Skills - Check if at least one skill exists
         if (profile?.skills && profile.skills.length > 0) {
             filledSections++
-            console.log('✅ Skills: Complete', profile.skills)
-        } else {
-            console.log('❌ Skills: No entries')
         }
 
-        // 5. Employment Info - Check if any field is filled
-        if (profile?.employmentInfo) { // Fixed: use employmentInfo instead of employmentInformation
+        if (profile?.employmentInfo) {
             const {
                 authorized_to_work,
                 disability_status,
@@ -93,33 +97,307 @@ const RightSection = () => {
                 (preferred_roles && preferred_roles.length > 0) ||
                 (preferred_locations && preferred_locations.length > 0)) {
                 filledSections++
-                console.log('✅ Employment Info: Complete')
-            } else {
-                console.log('❌ Employment Info: Incomplete', profile.employmentInfo)
             }
-        } else {
-            console.log('❌ Employment Info: No data')
         }
 
-        // Calculate percentage (round to nearest whole number)
         const percentage = Math.round((filledSections / totalSections) * 100)
-        console.log(`📊 Completion: ${filledSections}/${totalSections} sections = ${percentage}%`)
         return percentage
     }
 
-    // Recalculate completion whenever profileData changes
     useEffect(() => {
-        console.log('🔄 Profile data updated:', profileData)
         const newPercentage = calculateCompletion(profileData)
-        console.log('📊 New percentage calculated:', newPercentage)
         setCompletionPercentage(newPercentage)
     }, [profileData])
 
-    // Force recalculation on component mount and when data changes
     useEffect(() => {
         const percentage = calculateCompletion(profileData)
         setCompletionPercentage(percentage)
     }, [profileData?.education, profileData?.workExperience, profileData?.skills, profileData?.employmentInfo, profileData?.personalInformation])
+
+    const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return
+
+        // Validate file type
+        const allowedTypes = [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/msword"
+        ]
+        if (!allowedTypes.includes(file.type)) {
+            toast.error("Please upload a PDF or DOCX file")
+            return
+        }
+
+        // Validate file size (10MB max)
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error("File size should be less than 10MB")
+            return
+        }
+
+        try {
+            setUploading(true)
+            toast.loading("Uploading and parsing your resume...", { id: "resume-upload" })
+
+            // =====================================================
+            // 1️⃣ DELETE old data before adding newly imported data
+            // =====================================================
+
+            // DELETE EDUCATION
+            try {
+                const existingEducation = await getEducation();
+                for (const edu of existingEducation) {
+                    await deleteEducation(edu.id);
+                }
+            } catch (err) {
+                console.log("Error deleting education:", err);
+            }
+
+            // DELETE EXPERIENCE
+            try {
+                const existingExperience = await getExperience();
+                for (const exp of existingExperience) {
+                    await deleteExperience(exp.id);
+                }
+            } catch (err) {
+                console.log("Error deleting experience:", err);
+            }
+
+            // DELETE SKILLS
+            try {
+                const existingSkills = await getSkills();
+                for (const skill of existingSkills) {
+                    await deleteSkill(skill.id);
+                }
+            } catch (err) {
+                console.log("Error deleting skills:", err);
+            }
+
+            // 1️⃣ Extract resume
+            const result: ResumeExtractResponse = await extractResume(file);
+
+            // 2️⃣ Map to ProfileData format
+            const mapped = mapResumeToProfile(result);
+
+            // ---------------------------------------
+            // 3️⃣ UPDATE PERSONAL INFO IN DB
+            // ---------------------------------------
+            if (mapped.personalInformation) {
+                const personalPayload = {
+                    full_name: mapped.personalInformation.fullName,
+                    email: mapped.personalInformation.email,
+                    phone_number: mapped.personalInformation.phone,
+                    headline: mapped.personalInformation.headline || "Software developer",
+                    location: mapped.personalInformation.location,
+                    linkedin_url: mapped.personalInformation.linkedin,
+                    github_url: mapped.personalInformation.github,
+                    summary: mapped.personalInformation.summary,
+                };
+
+                await updateProfile(personalPayload);
+            }
+
+            // ---------------------------------------
+            // 4️⃣ STORE EDUCATION IN DB
+            // ---------------------------------------
+            if (mapped.education?.length) {
+                for (const edu of mapped.education) {
+                    await addEducation({
+                        institution: edu.institution,
+                        degree: edu.degree,
+                        stream: edu.stream,
+                        cgpa: edu.cgpa || "",
+                        start_date: edu.start_date,
+                        end_date: edu.end_date,
+                    });
+                }
+            }
+
+            // ---------------------------------------
+            // 5️⃣ STORE EXPERIENCE IN DB
+            // ---------------------------------------
+            if (mapped.workExperience?.length) {
+                for (const exp of mapped.workExperience) {
+                    await addExperience({
+                        job_title: exp.job_title,
+                        company: exp.company,
+                        job_type: "full_time",
+                        location: exp.location || "India",
+                        start_date: exp.start_date,
+                        end_date: exp.end_date,
+                        description: exp.description,
+                        key_achievements: exp.description?.split("\n") || [],
+                    });
+                }
+            }
+
+            // ---------------------------------------
+            // 6️⃣ STORE SKILLS IN DB
+            // ---------------------------------------
+            if (mapped.skills?.length) {
+                for (const skill of mapped.skills) {
+                    await addSkill(skill);
+                }
+            }
+
+            // 🔄 7️⃣ RE-FETCH UPDATED DATA FROM DB
+            const [updatedEducation, updatedExp, updatedSkills] = await Promise.all([
+                getEducation(),
+                getExperience(),
+                getSkills(),
+            ]);
+
+            // ---------------------------------------
+            // 8️⃣ UPDATE CONTEXT → UI auto-fills
+            // ---------------------------------------
+            setProfileData((prev) => ({
+                ...prev,
+                personalInformation: {
+                    ...prev.personalInformation,
+                    ...mapped.personalInformation,
+                },
+                education: updatedEducation,
+                workExperience: updatedExp,
+                skills: updatedSkills.map((s) => s.name),
+            }));
+
+            toast.success("Resume imported successfully!");
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to extract resume");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLinkedInImport = async (url: string) => {
+
+        try {
+            toast.loading("Fetching and parsing LinkedIn data...", { id: "linkedin-import" });
+
+
+            const res = await importLinkedInProfile({
+                linkedin_url: url,
+                merge_strategy: "merge"
+            });
+
+            // =====================================================
+            // 1️⃣ DELETE old data before adding newly imported data
+            // =====================================================
+
+            // DELETE EDUCATION
+            try {
+                const existingEducation = await getEducation();
+                for (const edu of existingEducation) {
+                    await deleteEducation(edu.id);
+                }
+            } catch (err) {
+                console.log("Error deleting education:", err);
+            }
+
+            // DELETE EXPERIENCE
+            try {
+                const existingExperience = await getExperience();
+                for (const exp of existingExperience) {
+                    await deleteExperience(exp.id);
+                }
+            } catch (err) {
+                console.log("Error deleting experience:", err);
+            }
+
+            // DELETE SKILLS
+            try {
+                const existingSkills = await getSkills();
+                for (const skill of existingSkills) {
+                    await deleteSkill(skill.id);
+                }
+            } catch (err) {
+                console.log("Error deleting skills:", err);
+            }
+            
+            const mapped = mapLinkedinToProfile(res);
+
+            // -------------------------------
+            // 1️⃣ UPDATE PERSONAL INFO
+            // -------------------------------
+            if (mapped.personalInformation) {
+                await updateProfile({
+                    full_name: mapped.personalInformation.fullName,
+                    email: mapped.personalInformation.email,
+                    phone_number: mapped.personalInformation.phone,
+                    location: mapped.personalInformation.location,
+                    headline: "Software Developer",
+                    linkedin_url: mapped.personalInformation.linkedin,
+                    github_url: mapped.personalInformation.portfolio,
+                    summary: mapped.personalInformation.summary
+                });
+            }
+
+            // -------------------------------
+            // 2️⃣ EDUCATION
+            // -------------------------------
+            for (const edu of mapped.education) {
+                await addEducation({
+                    institution: edu.institution,
+                    degree: edu.degree,
+                    stream: edu.stream || "",
+                    cgpa: edu.cgpa,
+                    start_date: edu.start_date,
+                    end_date: edu.end_date,
+                });
+            }
+
+            // -------------------------------
+            // 3️⃣ EXPERIENCE
+            // -------------------------------
+            for (const exp of mapped.workExperience) {
+                await addExperience({
+                    job_title: exp.job_title,
+                    company: exp.company,
+                    job_type: exp.job_type,
+                    location: exp.location,
+                    start_date: exp.start_date,
+                    end_date: exp.end_date,
+                    description: exp.description,
+                    key_achievements: exp.key_achievements,
+                });
+            }
+
+            // -------------------------------
+            // 4️⃣ SKILLS
+            // -------------------------------
+            for (const skill of mapped.skills) {
+                await addSkill(skill);
+            }
+
+            // -------------------------------
+            // 5️⃣ RELOAD DATA
+            // -------------------------------
+            const [updatedEducation, updatedExp, updatedSkills] = await Promise.all([
+                getEducation(),
+                getExperience(),
+                getSkills(),
+            ]);
+
+            setProfileData((prev) => ({
+                ...prev,
+                personalInformation: {
+                    ...prev.personalInformation,
+                    ...mapped.personalInformation,
+                },
+                education: updatedEducation,
+                workExperience: updatedExp,
+                skills: updatedSkills.map((s) => s.name),
+            }));
+
+            toast.success("LinkedIn imported successfully!", { id: "linkedin-import" });
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to import LinkedIn data", { id: "linkedin-import" });
+        }
+    };
+
 
     return (
         <div className='flex-1 w-1/5'>
@@ -127,26 +405,60 @@ const RightSection = () => {
                 <div className="bg-white p-4 rounded-xl my-4 shadow-sm">
                     <h3 className='my-4 font-semibold text-lg'>Quick Actions</h3>
                     <h3 className='my-4 text-sm'>Auto fill your profile within seconds.</h3>
+
+                    {/* Upload Resume */}
                     <div className='flex flex-col gap-2 mt-2'>
-                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-orange-200 rounded-lg'>
-                            <Upload className='w-4 h-4' />
-                            <span className='text-sm'>Upload Resume</span>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pdf,.docx,.doc"
+                            onChange={handleResumeUpload}
+                            className="hidden"
+                            disabled={uploading}
+                        />
+                        <div
+                            onClick={() => !uploading && fileInputRef.current?.click()}
+                            className={`flex items-center gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg ${uploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                }`}
+                        >
+                            {uploading ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
+                                    <span className='text-sm'>Uploading...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Upload className='w-4 h-4' />
+                                    <span className='text-sm'>Upload Resume</span>
+                                </>
+                            )}
                         </div>
                     </div>
+                    {/*
                     <div className='flex flex-col gap-2 mt-2'>
-                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-orange-200 rounded-lg'>
-                            <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20} />
+                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'>
+                            <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={16} height={16} />
+                            <span className='text-sm'>Import from Linkedin</span>
+                        </div>
+                    </div>
+                    */}
+                    <div className='flex flex-col gap-2 mt-2'>
+                        <div
+                            className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'
+                            onClick={() => setLinkedinModalOpen(true)}
+                        >
+                            <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={16} height={16} />
                             <span className='text-sm'>Import from Linkedin</span>
                         </div>
                     </div>
                     <div className='flex flex-col gap-2 mt-2'>
-                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-orange-200 rounded-lg'>
+                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'>
                             <Sparkles className='w-4 h-4' />
                             <span className='text-sm'>Improve with AI</span>
                         </div>
                     </div>
                     <div className='flex flex-col gap-2 mt-2'>
-                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-orange-200 rounded-lg'>
+                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'>
                             <Settings className='w-4 h-4' />
                             <span className='text-sm'>Manage Settings</span>
                         </div>
@@ -186,8 +498,14 @@ const RightSection = () => {
                     </button>
                 </div>
             </div>
-        </div>
-    )
-}
+            <LinkedinImportModal
+                open={linkedinModalOpen}
+                onClose={() => setLinkedinModalOpen(false)}
+                onSubmit={handleLinkedInImport}
+            />
 
-export default RightSection
+        </div>
+    );
+};
+
+export default RightSection;

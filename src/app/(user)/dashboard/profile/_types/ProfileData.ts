@@ -66,6 +66,7 @@ export interface ProfileData {
     };
 
     projects?: {
+        id?: string;
         projectName?: string;
         role?: string;
         technologies?: string[];

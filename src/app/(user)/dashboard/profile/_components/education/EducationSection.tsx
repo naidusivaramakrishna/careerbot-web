@@ -6,7 +6,10 @@ import { getEducation, addEducation, updateEducation, deleteEducation, Education
 import EducationList from "./EducationList";
 import EducationForm from "./EducationForm";
 import { EducationSectionProps, ValidationError } from "../../_types/education-types";
-import { useProfileContext } from "../../context/ProfileContext"; 
+import { useProfileContext } from "../../context/ProfileContext";
+import ConfirmDeleteModal from "../ConfirmDeleteModal";
+import Modal from "@/components/common/Modal";
+import EducationEmptyState from "./EducationEmptyState";
 
 export default function EducationSection({
     tempProfile,
@@ -17,6 +20,11 @@ export default function EducationSection({
     const [educationForm, setEducationForm] = useState<Partial<Education>>({});
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
     const [loading, setLoading] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<{
+        id?: string;
+        index?: number;
+    } | null>(null);
 
     useEffect(() => {
         const fetchEducation = async () => {
@@ -47,34 +55,25 @@ export default function EducationSection({
             setLoading(true);
             setValidationErrors([]);
 
-            let updatedEducationList;
+            let updatedList = [...(tempProfile.education || [])];
 
             if (editingIndex !== null) {
-                const existing = tempProfile.education?.[editingIndex];
+                const existing = updatedList[editingIndex];
                 if (existing?.id) {
                     const updated = await updateEducation(existing.id, educationForm);
-                    const updatedList = [...(tempProfile.education || [])];
                     updatedList[editingIndex] = updated;
-                    updatedEducationList = updatedList;
-                    toast.success("Education updated successfully");
-                } else {
-                    const newEdu = await addEducation(educationForm as Omit<Education, "id">);
-                    updatedEducationList = [...(tempProfile.education || []), newEdu];
-                    toast.success("Education added successfully");
+                    toast.success("Education updated");
                 }
+            } else {
+                const newEdu = await addEducation(educationForm as Omit<Education, "id">);
+                updatedList.push(newEdu);
+                toast.success("Education added");
             }
 
-            // ✅ Update both local and context state - merge with existing profile data
-            if (updatedEducationList) {
-                setTempProfile((prev) => ({ ...prev, education: updatedEducationList }));
-                setProfileData((prev) => {
-                    const newProfile = { ...prev, education: updatedEducationList };
-                    console.log('✅ Updated profile data after save:', newProfile);
-                    return newProfile;
-                });
-            }
+            setTempProfile((prev) => ({ ...prev, education: updatedList }));
+            setProfileData((prev) => ({ ...prev, education: updatedList }));
 
-            setEditingIndex(null);
+            setIsModalOpen(false);
             setEducationForm({});
         } catch (err: any) {
             if (err?.response?.data?.error?.details?.validation_errors) {
@@ -109,35 +108,65 @@ export default function EducationSection({
         }
     };
 
+    const openAddModal = () => {
+        setEducationForm({});
+        setEditingIndex(null);
+        setIsModalOpen(true);
+    };
+
+    const openEditModal = (exp: Partial<Education>, index: number) => {
+        setEducationForm(exp);
+        setEditingIndex(index);
+        setIsModalOpen(true);
+    };
+
+    const modalTitle =
+        editingIndex === null ? "Add Education" : "Edit Education";
     return (
         <div>
-            {editingIndex !== null ? (
-                <EducationForm
-                    educationForm={educationForm}
-                    setEducationForm={setEducationForm}
-                    onSave={handleSave}
-                    onCancel={() => {
-                        setEditingIndex(null);
-                        setEducationForm({});
-                        setValidationErrors([]);
-                    }}
-                    loading={loading}
-                    validationErrors={validationErrors}
-                />
+            {/* EMPTY STATE */}
+            {!tempProfile.education?.length ? (
+                <EducationEmptyState onAdd={openAddModal} />
             ) : (
-                <EducationList
-                    educationList={tempProfile.education || []}
-                    onEdit={(edu, i) => {
-                        setEducationForm(edu);
-                        setEditingIndex(i);
-                    }}
-                    onDelete={handleDelete}
-                    onAdd={() => {
-                        setEducationForm({});
-                        setEditingIndex((tempProfile.education?.length || 0) + 1);
-                    }}
-                />
+                <>
+                    <EducationList
+                        educationList={tempProfile.education}
+                        onEdit={openEditModal}
+                        onDelete={(id, index) => setDeleteTarget({ id, index })}
+                        onAdd={openAddModal}
+                    />
+                </>
             )}
+
+            {/* MODAL */}
+            <div className="">
+                <Modal
+                    open={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    title={modalTitle}
+                >
+                    <EducationForm
+                        educationForm={educationForm}
+                        setEducationForm={setEducationForm}
+                        onSave={handleSave}
+                        onCancel={() => setIsModalOpen(false)}
+                        loading={loading}
+                        validationErrors={validationErrors}
+                    />
+                </Modal>
+            </div>
+            <ConfirmDeleteModal
+                open={!!deleteTarget}
+                loading={loading}
+                onCancel={() => setDeleteTarget(null)}
+                onConfirm={async () => {
+                    if (!deleteTarget) return;
+                    await handleDelete(deleteTarget.id, deleteTarget.index);
+                    setDeleteTarget(null);
+                }}
+                title="Delete Education"
+                description="Are you sure you want to delete this education? This action cannot be undone."
+            />
         </div>
     );
 }

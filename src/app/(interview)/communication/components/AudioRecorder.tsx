@@ -541,6 +541,9 @@ export default function AudioRecorder({
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
 
+    // Reset the media recorder ref so it can be re-initialized
+    mediaRecorderRef.current = null;
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;

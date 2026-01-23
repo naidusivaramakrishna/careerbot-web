@@ -3,23 +3,49 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { generateTest } from '@/api/communicationApi';
+import { getProfile } from '@/api/userApi';
+import { clearAllAudioRecordings } from '@/utils/audioUtils';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [mode, setMode] = useState('easy');
   const [loading, setLoading] = useState(false);
+  const [loadingEmail, setLoadingEmail] = useState(true);
   const [error, setError] = useState('');
   const router = useRouter();
 
-  // Auto-fill email from localStorage when component mounts
+  // Auto-fill email from localStorage or fetch from API
   useEffect(() => {
-    const userEmail = localStorage.getItem('user_email');
-    if (userEmail) {
-      setEmail(userEmail);
-      console.log('✅ Auto-filled email:', userEmail);
-    } else {
-      console.warn('⚠️ No user email found in localStorage');
-    }
+    const fetchEmail = async () => {
+      // First try to get from localStorage
+      const userEmail = localStorage.getItem('user_email');
+      if (userEmail) {
+        setEmail(userEmail);
+        console.log('✅ Auto-filled email from localStorage:', userEmail);
+        setLoadingEmail(false);
+        return;
+      }
+
+      // If not in localStorage, fetch from profile API
+      console.log('⚠️ No user email in localStorage, fetching from profile API...');
+      try {
+        const profile = await getProfile();
+        if (profile.email) {
+          setEmail(profile.email);
+          // Store it for future use
+          localStorage.setItem('user_email', profile.email);
+          console.log('✅ Fetched and stored email from profile:', profile.email);
+        } else {
+          console.warn('⚠️ No email found in profile');
+        }
+      } catch (err) {
+        console.error('❌ Failed to fetch profile:', err);
+      } finally {
+        setLoadingEmail(false);
+      }
+    };
+
+    fetchEmail();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,6 +66,12 @@ export default function LoginPage() {
       });
 
       console.log('✅ Test generated successfully:', response);
+
+      // Clear all previous audio recordings and text answers from sessionStorage
+      // This ensures only current test's 44 audio files are attached to audio-to-text API
+      clearAllAudioRecordings();
+      sessionStorage.removeItem('text_answers');
+      console.log('🗑️ Cleared previous audio recordings and text answers');
 
       // Store test_id in localStorage for later use
       if (response.test_id) {
@@ -68,11 +100,11 @@ export default function LoginPage() {
             <input
               type="email"
               id="email"
-              value={email}
+              value={loadingEmail ? '' : email}
               readOnly
               required
               className="w-full px-4 py-3 border text-gray-700 bg-gray-100 border-gray-300 rounded-lg cursor-not-allowed"
-              placeholder="Loading email..."
+              placeholder={loadingEmail ? "Loading email..." : "Email not found"}
             />
             <p className="mt-1 text-xs text-gray-500">
               Email is auto-filled from your account
@@ -103,10 +135,10 @@ export default function LoginPage() {
           )}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || loadingEmail || !email}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition duration-200 disabled:bg-blue-400 disabled:cursor-not-allowed"
           >
-            {loading ? 'Generating Test...' : 'Continue'}
+            {loading ? 'Generating Test...' : loadingEmail ? 'Loading...' : 'Continue'}
           </button>
         </form>
       </div>

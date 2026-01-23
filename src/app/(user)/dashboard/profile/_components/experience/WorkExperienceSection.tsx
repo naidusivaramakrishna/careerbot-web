@@ -7,6 +7,9 @@ import ExperienceForm from "./ExperienceForm";
 import ExperienceList from "./ExperienceList";
 import { ExperienceSectionProps, ValidationError } from "../../_types/experience-types";
 import { useProfileContext } from "../../context/ProfileContext";
+import ExperienceEmptyState from "./ExperienceEmptyState";
+import Modal from "@/components/common/Modal";
+import ConfirmDeleteModal from "../ConfirmDeleteModal";
 
 export default function WorkExperienceSection({
     tempProfile,
@@ -17,6 +20,11 @@ export default function WorkExperienceSection({
     const [experienceForm, setExperienceForm] = useState<Partial<Experience>>({});
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
     const [loading, setLoading] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<{
+        id?: string;
+        index?: number;
+    } | null>(null);
 
     useEffect(() => {
 
@@ -47,32 +55,25 @@ export default function WorkExperienceSection({
             setLoading(true);
             setValidationErrors([]);
 
-            let updatedExperienceList;
+            let updatedList = [...(tempProfile.workExperience || [])];
+
             if (editingIndex !== null) {
-                const existing = tempProfile.workExperience?.[editingIndex];
+                const existing = updatedList[editingIndex];
                 if (existing?.id) {
                     const updated = await updateExperience(existing.id, experienceForm);
-                    const updatedList = [...(tempProfile.workExperience || [])];
                     updatedList[editingIndex] = updated;
-                    updatedExperienceList = updatedList
-                    toast.success("Experience updated successfully");
-                } else {
-                    const newExp = await addExperience(experienceForm as Omit<Experience, "id">);
-                    updatedExperienceList = [...(tempProfile.workExperience || []), newExp]
-                    toast.success("Experience added successfully");
+                    toast.success("Experience updated");
                 }
+            } else {
+                const newExp = await addExperience(experienceForm as Omit<Experience, "id">);
+                updatedList.push(newExp);
+                toast.success("Experience added");
             }
 
-            //  Update both local and context state - merge with existing profile data
-            if (updatedExperienceList) {
-                setTempProfile((prev) => ({ ...prev, workExperience: updatedExperienceList }));
-                setProfileData((prev) => {
-                    const newProfile = { ...prev, workExperience: updatedExperienceList };
-                    console.log('✅ Updated profile data after save:', newProfile);
-                    return newProfile;
-                });
-            }
-            setEditingIndex(null);
+            setTempProfile((prev) => ({ ...prev, workExperience: updatedList }));
+            setProfileData((prev) => ({ ...prev, workExperience: updatedList }));
+
+            setIsModalOpen(false);
             setExperienceForm({});
         } catch (err: any) {
             if (err?.response?.data?.error?.details?.validation_errors) {
@@ -106,35 +107,64 @@ export default function WorkExperienceSection({
         }
     };
 
+    const openAddModal = () => {
+        setExperienceForm({});
+        setEditingIndex(null);
+        setIsModalOpen(true);
+    };
+
+    const openEditModal = (exp: Partial<Experience>, index: number) => {
+        setExperienceForm(exp);
+        setEditingIndex(index);
+        setIsModalOpen(true);
+    };
+
+    const modalTitle =
+        editingIndex === null ? "Add Work Experience" : "Edit Work Experience";
+
     return (
         <div>
-            {editingIndex !== null ? (
-                <ExperienceForm
-                    experienceForm={experienceForm}
-                    setExperienceForm={setExperienceForm}
-                    onSave={handleSave}
-                    onCancel={() => {
-                        setEditingIndex(null);
-                        setExperienceForm({});
-                        setValidationErrors([]);
-                    }}
-                    loading={loading}
-                    validationErrors={validationErrors}
-                />
+            {/* EMPTY STATE */}
+            {!tempProfile.workExperience?.length ? (
+                <ExperienceEmptyState onAdd={openAddModal} />
             ) : (
-                <ExperienceList
-                    experienceList={tempProfile.workExperience || []}
-                    onEdit={(exp, i) => {
-                        setExperienceForm(exp);
-                        setEditingIndex(i);
-                    }}
-                    onDelete={handleDelete}
-                    onAdd={() => {
-                        setExperienceForm({});
-                        setEditingIndex((tempProfile.workExperience?.length || 0) + 1);
-                    }}
-                />
+                <>
+                    <ExperienceList
+                        experienceList={tempProfile.workExperience}
+                        onEdit={openEditModal}
+                        onDelete={(id, index) => setDeleteTarget({ id, index })}
+                        onAdd={openAddModal}
+                    />
+                </>
             )}
+
+            {/* MODAL */}
+            <div className="">
+                <Modal
+                    open={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    title={modalTitle}
+                >
+                    <ExperienceForm
+                        experienceForm={experienceForm}
+                        setExperienceForm={setExperienceForm}
+                        onSave={handleSave}
+                        onCancel={() => setIsModalOpen(false)}
+                        loading={loading}
+                        validationErrors={validationErrors}
+                    />
+                </Modal>
+            </div>
+            <ConfirmDeleteModal
+                open={!!deleteTarget}
+                loading={loading}
+                onCancel={() => setDeleteTarget(null)}
+                onConfirm={async () => {
+                    if (!deleteTarget) return;
+                    await handleDelete(deleteTarget.id, deleteTarget.index);
+                    setDeleteTarget(null);
+                }}
+            />
         </div>
     );
 }

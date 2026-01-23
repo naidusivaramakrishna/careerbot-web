@@ -528,58 +528,136 @@ import { useRouter } from 'next/navigation';
 import AudioRecorder from '../components/AudioRecorder';
 import AssessmentSidebar from '../components/AssessmentSidebar';
 import SectionStartModal from '../components/SectionStartModal';
-
-const questionsData = [
-  {
-    id: 1,
-    audioUrl: '/audio/listen-correct-1.mp3',
-  },
-  {
-    id: 2,
-    audioUrl: '/audio/listen-correct-2.mp3',
-  },
-];
+import TextToSpeechPlayer from '../components/TextToSpeechPlayer';
+import {
+  getCurrentQuestion,
+  getNextQuestion,
+  CurrentQuestionResponse,
+} from '@/api/communicationApi';
+import { saveAudioRecording } from '@/utils/audioUtils';
 
 export default function ListenAndCorrectPage() {
   const router = useRouter();
   const [showModal, setShowModal] = useState(true);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [recordedAudios, setRecordedAudios] = useState<Record<number, Blob>>({});
+  const [currentQuestion, setCurrentQuestion] =
+    useState<CurrentQuestionResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const totalQuestions = questionsData.length;
-  const questionNumber = currentQuestionIndex + 1;
-  const currentQuestion = questionsData[currentQuestionIndex];
+  // recordings mapped by question_id
+  const [audioRecordings, setAudioRecordings] = useState<{
+    [questionId: string]: Blob;
+  }>({});
 
-  const handleRecordingComplete = (audio: Blob) => {
-    setRecordedAudios((prev) => ({
-      ...prev,
-      [currentQuestionIndex]: audio,
-    }));
-  };
+  const isVoiceSection =
+    currentQuestion?.question_type === 'VOICE' ||
+    ['See and Repeat', 'Listen and Repeat', 'Listen and Correct', 'Situation Explaining']
+      .includes(currentQuestion?.section_name || '');
 
-  const handleNext = () => {
-    if (currentQuestionIndex < totalQuestions - 1) {
-      setCurrentQuestionIndex((prev) => prev + 1);
-    } else {
-      router.push('/communication/story-listening');
+  // Fetch current question from API
+  const fetchCurrentQuestion = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const sessionId = localStorage.getItem('session_id');
+      if (!sessionId) throw new Error('Session ID not found');
+
+      const response = await getCurrentQuestion(sessionId);
+      setCurrentQuestion(response);
+      console.log('➡️ Listen and Correct - Now showing question:', response.question_id);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch question');
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleStartSection = async () => {
+    setShowModal(false);
+    await fetchCurrentQuestion();
+  };
+
+  // Record audio
+  const handleRecordingComplete = async (blob: Blob) => {
+    if (!currentQuestion?.question_id) return;
+
+    setAudioRecordings((prev) => ({
+      ...prev,
+      [currentQuestion.question_id]: blob,
+    }));
+
+    if (isVoiceSection) {
+      await saveAudioRecording(currentQuestion.question_id, blob);
+    }
+  };
+
+  // Next question
+  const handleNext = async () => {
+    if (!currentQuestion?.question_id) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const sessionId = localStorage.getItem('session_id');
+      if (!sessionId) throw new Error('Session ID not found');
+
+      const response = await getNextQuestion({
+        session_id: sessionId,
+        question_id: currentQuestion.question_id,
+      });
+
+      console.log('🔍 [Listen and Correct] Next question response:', {
+        completed: response.completed,
+        section_name: response.section_name,
+        question_id: response.question_id,
+        question_number: response.question_number,
+        total_questions: response.total_questions,
+      });
+
+      if (response.completed) {
+        console.log('✅ Assessment completed, routing to feedback');
+        router.push('/communication/feedback');
+        return;
+      }
+
+      // Check if section changed to next section
+      if (response.section_name !== 'Listen and Correct') {
+        console.log('✅ Section changed from "Listen and Correct" to:', response.section_name);
+        console.log('🚀 Routing to next section page');
+        // Route to appropriate next section (update this based on your flow)
+        router.push('/communication/story-listening');
+        return;
+      }
+
+      console.log('➡️ Staying in Listen and Correct section, showing next question');
+      setCurrentQuestion(response);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch next question');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const hasRecording =
+    currentQuestion?.question_id &&
+    audioRecordings[currentQuestion.question_id];
 
   return (
     <>
     {/* 🔔 START MODAL */}
           <SectionStartModal
             open={showModal}
-            onStart={() => setShowModal(false)}
-            title="Section 1: See and Repeat"
-            subtitle="Read the sentences and pronounce the highlighted word clearly"
+            onStart={handleStartSection}
+            title="Section 5: Listen and Correct"
+            subtitle="Listen to sentences with errors and record the corrected versions"
             questions={8}
-            duration="2 min"
             instructions={[
-              'Read the sentence displayed on screen',
-              'Focus on the highlighted word',
-              'Click "Start Recording" when ready',
-              'Pronounce the highlighted word clearly',
+              'Click "Play Audio" button to listen to the question',
+              'You can play the audio ONLY ONCE - listen carefully!',
+              'The sentence contains a grammatical error',
+              'Click "Start Recording" when ready to record the corrected sentence',
               'You have 15 seconds for each recording',
             ]}
           />
@@ -594,32 +672,35 @@ export default function ListenAndCorrectPage() {
           {/* HEADER */}
           <div className="mb-4">
             <h1 className="text-lg font-semibold text-gray-900">
-              Listen & Correct
+              {currentQuestion?.section_name || 'Listen and Correct'}
             </h1>
             <p className="text-sm text-gray-500">
               Listen to audio contains an error.
             </p>
           </div>
 
-          {/* PROGRESS + TIMER */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex-1 mr-6">
-              <div className="flex justify-between text-sm text-gray-600 mb-1">
-                <span>
-                  {questionNumber} of {totalQuestions} Questions
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 h-1 rounded-full">
-                <div
-                  className="bg-green-500 h-1 rounded-full transition-all"
-                  style={{ width: `${(questionNumber / totalQuestions) * 100}%` }}
-                />
+          {/* PROGRESS */}
+          <div className="bg-white rounded-lg p-5 mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <div>
+                <p className="text-sm text-gray-600">
+                  {currentQuestion?.question_number} of{' '}
+                  {currentQuestion?.total_questions} Questions
+                </p>
               </div>
             </div>
 
-            {/* TIMER UI */}
-            <div className="bg-black text-white px-4 py-2 rounded-md font-mono text-lg">
-              12:00
+            <div className="w-full bg-gray-200 h-1 rounded-full">
+              <div
+                className="bg-green-500 h-1 rounded-full transition-all"
+                style={{
+                  width: `${
+                    ((currentQuestion?.question_number || 1) /
+                      (currentQuestion?.total_questions || 1)) *
+                    100
+                  }%`,
+                }}
+              />
             </div>
           </div>
 
@@ -628,44 +709,67 @@ export default function ListenAndCorrectPage() {
 
             {/* LEFT CARD */}
             <div className="bg-white rounded-xl p-6 shadow-sm border">
-              <p className="text-sm text-gray-500 mb-6">
-                Listen carefully. The sentence contains a mistake. Record the corrected version.
-              </p>
-
-              {/* AUDIO CARD */}
-              <div className="border rounded-xl p-5 mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
+              {loading ? (
+                <p>Loading...</p>
+              ) : error ? (
+                <p className="text-red-600">{error}</p>
+              ) : (
+                <>
+                  <div className="mb-6">
+                    <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded">
+                      Question {currentQuestion?.question_number}
+                    </span>
                   </div>
-                  <p className="text-sm font-medium">
-                    Listen carefully – audio plays once
+
+                  <p className="text-sm text-gray-500 mb-6">
+                    Listen carefully. The sentence contains a mistake. Record the corrected version.
                   </p>
-                </div>
 
-                <audio
-                  controls
-                  controlsList="nodownload noplaybackrate"
-                  className="w-full"
-                  key={currentQuestionIndex}
-                >
-                  <source src={currentQuestion.audioUrl} type="audio/mpeg" />
-                </audio>
-              </div>
+                  {currentQuestion?.question_text && (
+                    <TextToSpeechPlayer
+                      text={currentQuestion.question_text}
+                      autoPlay={false}
+                    />
+                  )}
 
-              {/* AI TIP */}
-              <div className="bg-amber-50 border-t border-amber-300 p-4 rounded-b-xl">
-                <p className="text-sm text-amber-700">
-                  💡 AI Tip: Listen carefully for grammatical errors. Common mistakes include subject-verb agreement and tense usage.
-                </p>
-              </div>
+                  {/* AI TIP */}
+                  {/* <div className="mt-6 bg-amber-50 border-l-4 border-amber-400 p-4 rounded">
+                    <p className="text-sm text-amber-700 flex items-start gap-2">
+                      <span className="text-amber-600">💡</span>
+                      <span>
+                        AI Tip: Listen carefully for grammatical errors. Common mistakes include subject-verb agreement and tense usage.
+                      </span>
+                    </p>
+                  </div> */}
+
+                  {hasRecording && (
+                    <div className="mt-6 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded">
+                      <svg
+                        className="w-5 h-5 text-green-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                      <span className="text-sm font-medium text-green-800">
+                        Recording Saved
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* RIGHT SIDE - AUDIO RECORDER */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl p-6 shadow-sm flex flex-col items-center">
               <AudioRecorder
+                key={currentQuestion?.question_id}
                 onRecordingComplete={handleRecordingComplete}
                 maxDuration={15}
               />
@@ -675,19 +779,20 @@ export default function ListenAndCorrectPage() {
           {/* FOOTER */}
           <div className="flex justify-between items-center mt-8">
             <p className="text-sm text-gray-500">
-              Record the corrected sentence clearly.
+              Question {currentQuestion?.question_number} of{' '}
+              {currentQuestion?.total_questions}
             </p>
 
             <button
               onClick={handleNext}
-              disabled={!recordedAudios[currentQuestionIndex]}
+              disabled={!hasRecording || loading}
               className={`px-6 py-3 rounded-lg font-semibold transition ${
-                recordedAudios[currentQuestionIndex]
+                hasRecording && !loading
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
             >
-              Next Question →
+              {loading ? 'Loading...' : 'Next Question →'}
             </button>
           </div>
         </div>

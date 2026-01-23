@@ -5030,7 +5030,7 @@ export interface CategorizedSkills {
 export interface ResumeResponse {
   id: string;
   personalInfo?: {
-    fullName?: string;
+    fullname?: string;
     email?: string;
     phone?: string;
     location?: string;

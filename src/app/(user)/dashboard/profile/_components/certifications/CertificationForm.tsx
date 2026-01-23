@@ -31,9 +31,9 @@ export default function CertificationForm({
 
     return (
         <div className="mb-4 border border-neutral-200 rounded-lg p-4 flex flex-col gap-2">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col gap-3">
                 <div className="flex flex-col">
-                    <label className="text-sm font-medium">Certification</label>
+                    <label className="text-sm font-semibold">Certification</label>
                     <input
                         type="text"
                         name="certification_name"
@@ -46,7 +46,7 @@ export default function CertificationForm({
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-sm font-medium">Issuer</label>
+                    <label className="text-sm font-semibold">Issuer</label>
                     <input
                         type="text"
                         name="issuer"
@@ -59,7 +59,7 @@ export default function CertificationForm({
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <label className="text-sm font-medium">Issue Date</label>
+                    <label className="text-sm font-semibold">Issue Date</label>
                     <input
                         type="date"
                         name="start_date"
@@ -80,13 +80,6 @@ export default function CertificationForm({
                     className="bg-[#155DFC] text-white px-4 py-1.5 cursor-pointer rounded disabled:opacity-50"
                 >
                     {loading ? "Saving..." : "Save"}
-                </button>
-                <button
-                    type="button"
-                    onClick={onCancel}
-                    className="bg-gray-400 text-white px-3 py-1 rounded"
-                >
-                    Cancel
                 </button>
             </div>
         </div>
