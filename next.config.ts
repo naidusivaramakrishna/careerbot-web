@@ -1,23 +1,15 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  images: {
-    domains: ['localhost'], // allows http://localhost:3000 AND http://localhost:8000
-    remotePatterns: [
+  reactStrictMode: false, // ✅ Make sure this is here
+  
+  async rewrites() {
+    return [
       {
-        protocol: "http",
-        hostname: "localhost",
-        port: "8000",
-        pathname: "/uploads/profile_pictures/**",
+        source: '/api/:path*',
+        destination: 'http://localhost:8000/api/:path*',
       },
-      {
-        protocol: "http",
-        hostname: "localhost",
-        port: "3000",
-        pathname: "/uploads/profile_pictures/**",
-      }
-    ],
+    ];
   },
 };
 

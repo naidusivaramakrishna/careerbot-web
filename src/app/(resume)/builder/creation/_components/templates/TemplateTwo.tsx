@@ -4022,7 +4022,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
                         <span style={baseTextStyle}> - {cert.issuedBy}</span>
                       </div>
                       <div className="text-xs mt-1">
-                        <span>Issued: {cert.year}</span>
+                        {cert.year && <span>{cert.year}</span>}
                         {cert.expiryDate && (
                           <span className="ml-3">
                             Expires: {cert.expiryDate}

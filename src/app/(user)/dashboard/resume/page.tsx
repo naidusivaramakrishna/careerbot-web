@@ -375,7 +375,7 @@
 import { Plus } from 'lucide-react'
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { toast } from 'sonner';
-import { getAllResumes, deleteResume as deleteResumeApi, downloadResume, getResumeScore, ResumeResponse } from '@/api/resumeApi'; // ✅ Added getResumeScore
+import { getAllResumes, deleteResume as deleteResumeApi, downloadResume, getResumeScore, ResumeResponse } from '@/api/resumeApi';
 import { formatDateResume } from '@/utils/formatDateResume';
 import AddResumeModal from './_components/AddResumeModal';
 import DeleteConfirmModal from './_components/DeleteConfirmModal';

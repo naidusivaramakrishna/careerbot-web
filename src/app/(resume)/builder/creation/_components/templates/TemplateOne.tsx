@@ -3923,38 +3923,18 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
         );
 
       case "Certifications":
-        return (
-          certifications.length > 0 && (
-            <section className="">
-              <h2 style={headingStyle}>CERTIFICATIONS</h2>
-              {certifications.map((cert, idx) => (
-                <div key={idx} className="mb-3 flex items-start">
-                  <span className="mr-2" style={baseTextStyle}>•</span>
-                  <div style={baseTextStyle}>
-                    <div>
-                      <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      <span style={baseTextStyle}> - {cert.issuedBy}</span>
-                    </div>
-                    <div className="text-xs mt-1">
-                      <span>Issued: {cert.year}</span>
-                      {cert.expiryDate && (
-                        <span className="ml-3">
-                          Expires: {cert.expiryDate}
-                        </span>
-                      )}
-                    </div>
-                    {cert.credentialId && (
-                      <div className="text-xs mt-1">
-                        Credential ID: {cert.credentialId}
-                      </div>
-                    )}
+           return (
+             certifications.length > 0 && (
+               <section className="mb-5" data-section="certifications">
+                 <h3 className="border-b border-t border-gray-300 pt-0.5 pb-0.5 mb-2" style={headingStyle}>Certifications</h3>
+                {certifications.map((c, i) => (
+                  <div key={i} className="mb-1" style={{ color: resumeStyle.bodyColor }}>
+                    <span className="font-semibold">{c.name}{c.issuedBy ? ', ' + c.issuedBy : ''} {c.year ? `(${c.year})` : ''}</span>
                   </div>
-                </div>
-              ))}
-              <hr className="border-t border-gray-800 mt-4" />
-            </section>
-          )
-        );
+                ))}
+               </section>
+             )
+           );
 
       case "Awards":
         return (

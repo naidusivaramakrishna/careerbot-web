@@ -902,7 +902,7 @@ const Certifications: React.FC = () => {
                   {/* Year and Expiry Date */}
                   <div className="flex gap-2 text-xs text-gray-600">
                     {certification.year && (
-                      <span>Issued: {certification.year}</span>
+                      <span>{certification.year}</span>
                     )}
                     {certification.expiryDate && (
                       <span>• Expires: {certification.expiryDate}</span>

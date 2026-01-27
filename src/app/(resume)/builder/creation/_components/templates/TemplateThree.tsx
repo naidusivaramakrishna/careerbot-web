@@ -3270,9 +3270,6 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
               <h1 className="uppercase font-bold" style={nameStyle}>
                 {personalInfo.fullname || "FULL NAME"}
               </h1>
-            </div>
-
-            <div className="flex items-center text-sm mb-4 flex-wrap" style={baseTextStyle}>
               {personalInfo.email && (
                 <>
                   <span>{personalInfo.email}</span>
