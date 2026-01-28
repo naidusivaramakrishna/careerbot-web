@@ -462,9 +462,10 @@ import SectionStartModal from '../components/SectionStartModal';
 import {
   getCurrentQuestion,
   getNextQuestion,
+  uploadAudio,
   CurrentQuestionResponse,
 } from '@/api/communicationApi';
-import { saveTextAnswer, textToSpeechAndRecord, saveAudioRecording } from '@/utils/audioUtils';
+import { saveTextAnswer, textToSpeechAndRecord } from '@/utils/audioUtils';
 
 interface JumbledSentencesPageProps {
   sectionName?: string;
@@ -484,6 +485,11 @@ export default function JumbledSentencesPage({
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isConvertingAudio, setIsConvertingAudio] = useState(false);
   const [audioSaved, setAudioSaved] = useState(false);
+
+  // Track audio recordings by question_id
+  const [audioRecordings, setAudioRecordings] = useState<{
+    [questionId: string]: Blob;
+  }>({});
 
   // Fetch current question from API
   const fetchCurrentQuestion = async () => {
@@ -620,11 +626,16 @@ export default function JumbledSentencesPage({
 
       console.log('🔊 Audio blob created (muted), size:', audioBlob.size);
 
-      // Save the audio blob (like sentence-completion section)
-      await saveAudioRecording(currentQuestion.question_id, audioBlob);
+      // IMPORTANT: Don't save to sessionStorage to avoid quota exceeded error
+      // Generated audio files are large (~282KB) and will fill up sessionStorage quickly
+      // We only need to keep in state for immediate upload via progressive API
+      setAudioRecordings((prev) => ({
+        ...prev,
+        [currentQuestion.question_id]: audioBlob,
+      }));
       setAudioSaved(true);
 
-      console.log('✅ Audio recording saved to sessionStorage');
+      console.log('✅ Audio blob saved to state (skipping sessionStorage to avoid quota issues)');
     } catch (err) {
       console.error('❌ Error converting to audio:', err);
       // Don't set error - text answer is still saved, audio is optional
@@ -641,8 +652,59 @@ export default function JumbledSentencesPage({
 
     try {
       const sessionId = localStorage.getItem('session_id');
-      if (!sessionId) throw new Error('Session ID not found');
+      const testId = localStorage.getItem('test_id');
 
+      if (!sessionId) throw new Error('Session ID not found');
+      if (!testId) throw new Error('Test ID not found');
+
+      // Get the audio blob for current question
+      const audioBlob = audioRecordings[currentQuestion.question_id];
+      console.log('📊 Audio blob check for question:', currentQuestion.question_id, {
+        hasBlob: !!audioBlob,
+        blobSize: audioBlob?.size,
+        blobType: audioBlob?.type,
+        allQuestionIds: Object.keys(audioRecordings),
+      });
+
+      if (!audioBlob) {
+        const errorMsg = `No audio recording found for question ${currentQuestion.question_id}. Please try selecting your answer again.`;
+        console.error('❌', errorMsg);
+        alert(errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      if (audioBlob.size === 0 || audioBlob.size < 100) {
+        const errorMsg = `Audio recording is empty or too small (${audioBlob.size} bytes). Please try again.`;
+        console.error('❌', errorMsg);
+        alert(errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      // ✅ STEP 1: Upload audio first
+      console.log('📤 Uploading audio for question:', currentQuestion.question_id);
+      console.log('📊 Audio details:', {
+        size: `${(audioBlob.size / 1024).toFixed(2)} KB`,
+        type: audioBlob.type,
+      });
+
+      const uploadResponse = await uploadAudio({
+        session_id: sessionId,
+        question_id: currentQuestion.question_id,
+        test_id: testId,
+        audio_file: audioBlob,
+      });
+      console.log('✅ Audio uploaded successfully for', currentQuestion.question_id, ':', uploadResponse);
+
+      // Verify upload was successful - backend returns success:true and status:"completed"
+      if (!uploadResponse || !uploadResponse.success) {
+        const errorMsg = `Audio upload failed for question ${currentQuestion.question_id}. Response: ${JSON.stringify(uploadResponse)}`;
+        console.error('❌', errorMsg);
+        alert(errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      // ✅ STEP 2: Then fetch next question
+      console.log('📞 Fetching next question...');
       const response = await getNextQuestion({
         session_id: sessionId,
         question_id: currentQuestion.question_id,
@@ -675,8 +737,8 @@ export default function JumbledSentencesPage({
       setCurrentQuestion(response);
       setSelectedAnswer(null); // Reset selection for new question
     } catch (err: any) {
-      console.error('❌ Error fetching next question:', err);
-      setError(err.message || 'Failed to fetch next question');
+      console.error('❌ Error uploading audio or fetching next question:', err);
+      setError(err.message || 'Failed to upload audio or fetch next question');
     } finally {
       setLoading(false);
     }

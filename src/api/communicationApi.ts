@@ -1,4 +1,75 @@
 import { httpClient } from '@/lib/http';
+import Cookies from 'js-cookie';
+
+// Helper function to get auth token (consistent with httpClient)
+const getAuthToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return Cookies.get('access_token') || localStorage.getItem('access_token');
+  }
+  return null;
+};
+
+// Helper function to get refresh token
+const getRefreshToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return Cookies.get('refresh_token') || localStorage.getItem('refresh_token');
+  }
+  return null;
+};
+
+// Helper function to refresh access token
+const refreshAccessToken = async (): Promise<string | null> => {
+  try {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      console.error('❌ No refresh token available');
+      return null;
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+    const response = await fetch(`${baseUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      console.error('❌ Token refresh failed:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const { access_token, refresh_token: new_refresh_token } = data;
+
+    // Store new tokens
+    if (typeof window !== 'undefined' && access_token) {
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('refresh_token', new_refresh_token);
+
+      Cookies.set('access_token', access_token, {
+        expires: 7,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+      });
+
+      Cookies.set('refresh_token', new_refresh_token, {
+        expires: 30,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+      });
+
+      console.log('✅ Token refreshed successfully');
+      return access_token;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('❌ Error refreshing token:', error);
+    return null;
+  }
+};
 
 // ==================== INTERFACES ====================
 export interface GenerateTestRequest {
@@ -71,7 +142,7 @@ export interface NextQuestionResponse {
 export interface VideoEvaluationRequest {
   email_id: string;
   test_id: string;
-  video: File | Blob;
+  file: File | Blob;
 }
 
 export interface VideoEvaluationResponse {
@@ -143,7 +214,7 @@ export const startSession = async (data: StartSessionRequest): Promise<StartSess
     const responseData: any = response.data;
 
     // Try to find session_id in different possible locations
-    let sessionId = responseData?.session_id ||
+    const sessionId = responseData?.session_id ||
                     responseData?.sessionId ||
                     responseData?.session?.session_id ||  // API returns it here!
                     responseData?.session?.sessionId ||
@@ -275,6 +346,17 @@ export const getNextQuestion = async (data: NextQuestionRequest) => {
 
     const responseData = response.data;
 
+    // If assessment is completed, return completion status
+    if (responseData.completed === true) {
+      console.log('✅ Assessment completed!');
+      return {
+        completed: true,
+        message: responseData.message || 'All questions completed',
+        progress: responseData.progress,
+      } as unknown as CurrentQuestionResponse;
+    }
+
+    // Otherwise, expect current_question
     if (!responseData?.current_question) {
       throw new Error('current_question missing in next-question response');
     }
@@ -300,20 +382,48 @@ export const getNextQuestion = async (data: NextQuestionRequest) => {
 
 /**
  * Submit video for evaluation
+ * - email_id, test_id, and file are all sent as multipart/form-data fields
+ * - video file is sent as-is (no conversion)
  */
 export const submitVideoEvaluation = async (data: VideoEvaluationRequest): Promise<VideoEvaluationResponse> => {
   try {
+    console.log('🎬 Processing video for submission...');
+    console.log(`📊 Video size: ${(data.file.size / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`📊 Video type: ${data.file.type}`);
+    console.log(`📊 Email ID: ${data.email_id}`);
+    console.log(`📊 Test ID: ${data.test_id}`);
+
     const formData = new FormData();
     formData.append('email_id', data.email_id);
     formData.append('test_id', data.test_id);
-    formData.append('video', data.video);
+    formData.append('file', data.file, 'video.webm');
+    console.log('📹 FormData prepared with email_id, test_id, and file (video.webm)', `(${(data.file.size / 1024 / 1024).toFixed(2)} MB)`);
 
-    const response = await httpClient.post<VideoEvaluationResponse>('/ai-assessment/video-evaluation', formData, {
+    // Send all data as FormData fields (no query parameters)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+    const url = `${baseUrl}/ai-assessment/video-evaluation`;
+
+    // Get auth token using the same method as httpClient
+    const token = getAuthToken();
+    console.log('🔑 Auth token present:', !!token);
+
+    const response = await fetch(url, {
+      method: 'POST',
       headers: {
-        'Content-Type': 'multipart/form-data',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       },
+      body: formData, // Browser will auto-set Content-Type with boundary
     });
-    return response.data;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Video evaluation API error:', response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Video evaluation submitted successfully:', result);
+    return result;
   } catch (error) {
     console.error('Error submitting video evaluation:', error);
     throw error;
@@ -333,49 +443,169 @@ export const submitFinalReport = async (data: FinalReportRequest): Promise<Final
   }
 };
 
-// ==================== AUDIO TO TEXT API ====================
+// ==================== PROGRESSIVE AUDIO UPLOAD API ====================
 
-export interface AudioToTextRequest {
-  email_id: string;
+export interface AudioUploadRequest {
+  session_id: string;
+  question_id: string;
   test_id: string;
-  audio_files: File[];
+  audio_file: File | Blob;
 }
 
-export interface AudioToTextResponse {
-  evaluation_id?: string;
+export interface AudioUploadResponse {
+  success: boolean;
+  session_id: string;
+  question_id: string;
   status: string;
-  message?: string;
-  transcriptions?: { [questionId: string]: string };
+  message: string;
+  converted: boolean;
+  upload_id?: string;
 }
 
 /**
- * Submit all audio files for transcription
- * Sends email_id, test_id, and all 44 audio files in a single request
+ * Upload audio file progressively for a specific question
+ * Called after user records audio and clicks "Next Question"
+ * Audio is uploaded before fetching the next question
+ * Automatically retries with refreshed token if 401 error occurs
  */
-export const submitAudioToText = async (data: AudioToTextRequest): Promise<AudioToTextResponse> => {
+export const uploadAudio = async (data: AudioUploadRequest, retryCount = 0): Promise<AudioUploadResponse> => {
   try {
+    console.log('🎙️ Uploading audio for question:', data.question_id);
+    console.log(`📊 Audio file size: ${(data.audio_file.size / 1024).toFixed(2)} KB`);
+    console.log(`📝 Audio file type: ${data.audio_file.type}`);
+
+    // Determine filename extension based on blob type
+    let filename = 'audio.webm';
+    if (data.audio_file.type.includes('wav')) {
+      filename = 'audio.wav';
+    } else if (data.audio_file.type.includes('mp3')) {
+      filename = 'audio.mp3';
+    } else if (data.audio_file.type.includes('webm')) {
+      filename = 'audio.webm';
+    }
+
     const formData = new FormData();
-    formData.append('email_id', data.email_id);
+    formData.append('session_id', data.session_id);
+    formData.append('question_id', data.question_id);
     formData.append('test_id', data.test_id);
+    formData.append('audio_file', data.audio_file, filename);
 
-    // Append all audio files
-    data.audio_files.forEach((file, index) => {
-      formData.append('audio_files', file, file.name);
-      console.log(`📎 Attaching audio file ${index + 1}:`, file.name, 'Size:', file.size);
-    });
+    console.log(`📋 Form data prepared with session_id, question_id, test_id, and audio_file (${filename})`);
 
-    console.log(`📤 Submitting ${data.audio_files.length} audio files for transcription...`);
+    // Get auth token using the same method as httpClient
+    const token = getAuthToken();
+    console.log('🔑 Auth token present:', !!token);
 
-    const response = await httpClient.post<AudioToTextResponse>('/ai-assessment/audio-to-text', formData, {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+    const url = `${baseUrl}/ai-assessment/audio/upload-progressive`;
+
+    const response = await fetch(url, {
+      method: 'POST',
       headers: {
-        'Content-Type': 'multipart/form-data',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       },
+      body: formData, // Browser will auto-set Content-Type with boundary
     });
 
-    console.log('✅ Audio-to-text submission successful:', response.data);
-    return response.data;
+    // Handle 401 - try to refresh token and retry once
+    if (response.status === 401 && retryCount === 0) {
+      console.warn('⚠️ Got 401, attempting to refresh token...');
+
+      const newToken = await refreshAccessToken();
+
+      if (newToken) {
+        console.log('✅ Token refreshed, retrying upload...');
+        // Retry the upload with new token
+        return uploadAudio(data, retryCount + 1);
+      } else {
+        console.error('❌ Token refresh failed, redirecting to login...');
+        // Clear tokens and redirect to login
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          Cookies.remove('access_token');
+          Cookies.remove('refresh_token');
+          alert('Your session has expired. Please log in again.');
+          window.location.href = '/auth/login';
+        }
+        throw new Error('Session expired. Please log in again.');
+      }
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Audio upload API error:', response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Audio uploaded successfully:', result);
+    return result;
   } catch (error) {
-    console.error('❌ Error submitting audio for transcription:', error);
+    console.error('❌ Error uploading audio:', error);
+    throw error;
+  }
+};
+
+// ==================== AUDIO EVALUATION API ====================
+
+export interface AudioEvaluationRequest {
+  session_id: string;
+  email_id: string;
+  test_id: string;
+}
+
+export interface AudioEvaluationResponse {
+  status: string;
+  message?: string;
+  evaluation?: {
+    [key: string]: unknown;
+  };
+  missing_sections?: string[];
+}
+
+/**
+ * Evaluate audio for a session
+ * Called after uploading audio to evaluate transcripts from cache
+ * Passes session_id, email_id, test_id in request body
+ */
+export const evaluateAudio = async (data: AudioEvaluationRequest): Promise<AudioEvaluationResponse> => {
+  try {
+    console.log('📊 Evaluating audio for session:', data.session_id);
+    console.log('📊 Email ID:', data.email_id);
+    console.log('📊 Test ID:', data.test_id);
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+    const url = `${baseUrl}/ai-assessment/audio/evaluate`;
+
+    // Get auth token using the same method as httpClient
+    const token = getAuthToken();
+    console.log('🔑 Auth token present:', !!token);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        session_id: data.session_id,
+        email_id: data.email_id,
+        test_id: data.test_id,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Audio evaluation API error:', response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Audio evaluation completed:', result);
+    return result;
+  } catch (error) {
+    console.error('❌ Error evaluating audio:', error);
     throw error;
   }
 };

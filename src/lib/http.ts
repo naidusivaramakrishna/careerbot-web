@@ -252,9 +252,9 @@ const clearAllTokens = (isAdmin: boolean = false) => {
 
 const client: AxiosInstance = axios.create({
   baseURL: BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // headers: {
+  //   'Content-Type': 'application/json',
+  // },
 });
 
 /* --------------------------------------------------

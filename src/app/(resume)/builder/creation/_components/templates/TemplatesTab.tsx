@@ -5858,7 +5858,7 @@ import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { X } from "lucide-react";
 import { useResume } from "../../_context/ResumeContext";
-import { getTemplatesByCategory, applyTemplateToResume, TemplateResponse } from "@/api/resumeApi";
+import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, TemplateResponse } from "@/api/resumeApi";
 import { toast } from "sonner";
 
 // Interface updated with mongoId (_id)
@@ -5868,7 +5868,7 @@ interface TransformedTemplate {
   template_id: string;
   name: string;
   subtitle: string;
-  imgSrc: string;
+  preview_url: string;
   atsFriendly: boolean;
   description: string;
   category: string;
@@ -5882,7 +5882,7 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
     template_id: "compact_professional",
     name: "Compact Professional",
     subtitle: "Modern",
-    imgSrc: "/assets/templates/template-1.png",
+    preview_url: "/assets/templates/template-1.png",
     atsFriendly: true,
     description: "Clean and modern design perfect for tech professionals",
     category: "modern"
@@ -5891,9 +5891,9 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
     id: "clean_simple",
     mongoId: "6971cbe74c0df89e108ce5b0",
     template_id: "clean_simple",
-    name: "Compact Professional",
+    name: "Clean Simple",
     subtitle: "Minimalist",
-    imgSrc: "/assets/templates/template-2.png",
+    preview_url: "/assets/templates/template-2.png",
     atsFriendly: true,
     description: "Traditional professional layout for corporate roles",
     category: "minimalist"
@@ -5904,7 +5904,7 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
     template_id: "minimalist_classic",
     name: "Minimalist Classic",
     subtitle: "Minimalist",
-    imgSrc: "/assets/templates/template-3.png",
+    preview_url: "/assets/templates/template-3.png",
     atsFriendly: true,
     description: "Clean and simple layout with understated elegance",
     category: "minimalist"
@@ -5915,7 +5915,7 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
     template_id: "professional_classic",
     name: "Professional Classic",
     subtitle: "Professional",
-    imgSrc: "/assets/templates/template-4.png",
+    preview_url: "/assets/templates/template-4.png",
     atsFriendly: true,
     description: "Traditional layout ideal for corporate professionals",
     category: "professional"
@@ -5930,6 +5930,8 @@ const TemplatesTab: React.FC<{ onTemplateSelect?: () => void }> = ({ onTemplateS
   const [previewTemplate, setPreviewTemplate] = useState<TransformedTemplate | null>(null);
   const [templates, setTemplates] = useState<TransformedTemplate[]>(DEFAULT_TEMPLATES);
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState<string[]>(["All"]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   const { selectedTemplate, setSelectedTemplate, resumeStyle, setResumeStyle } = useResume();
@@ -5939,24 +5941,47 @@ const TemplatesTab: React.FC<{ onTemplateSelect?: () => void }> = ({ onTemplateS
     const fetchTemplates = async () => {
       try {
         setLoading(true);
-        const data = await getTemplatesByCategory(selectedCategory === "All" ? undefined : selectedCategory);
-        if (data && data.length > 0) {
+        console.log("🎯 Fetching templates for category:", selectedCategory);
+
+        // Normalize category name (handle case sensitivity and spaces)
+        let categoryParam: string | undefined;
+        if (selectedCategory === "All") {
+          categoryParam = undefined;
+        } else {
+          // Convert to lowercase and remove extra spaces
+          categoryParam = selectedCategory.toLowerCase().trim();
+        }
+
+        console.log("🔍 API call with category param:", categoryParam);
+        const data = await getTemplatesByCategory(categoryParam);
+
+        console.log("📊 Templates fetched from API:", data?.length || 0, data);
+
+        if (data && Array.isArray(data) && data.length > 0) {
           const transformedTemplates: TransformedTemplate[] = data.map((tpl: TemplateResponse) => ({
             id: tpl.id?.toString() || tpl.template_id || "0",
             mongoId: tpl._id || tpl.id?.toString() || "0",
             template_id: tpl.template_id || tpl.id?.toString() || "0",
             name: tpl.name || "Template",
             subtitle: tpl.category ? (tpl.category.charAt(0).toUpperCase() + tpl.category.slice(1)) : "Template",
-            imgSrc: tpl.preview_url || `/assets/templates/template-${tpl.template_id || tpl.id}.png`,
+            preview_url: tpl.preview_url || `/assets/templates/template-${tpl.template_id || tpl.id}.png`,
             atsFriendly: tpl.ats_friendly ?? true,
             description: tpl.description || "Professional resume template",
             category: tpl.category || "modern"
           }));
+          console.log("✅ Templates transformed:", transformedTemplates.length);
           setTemplates(transformedTemplates);
         } else {
-          setTemplates(DEFAULT_TEMPLATES);
+          console.warn("⚠️ No templates returned from API for category:", selectedCategory);
+          // Only use defaults if category is "All", otherwise show empty
+          if (selectedCategory === "All") {
+            setTemplates(DEFAULT_TEMPLATES);
+          } else {
+            setTemplates([]);
+          }
         }
       } catch (error) {
+        console.error("❌ Error fetching templates:", error);
         toast.error("Failed to load templates from API. Using default templates.");
         setTemplates(DEFAULT_TEMPLATES);
       } finally {
@@ -5966,11 +5991,43 @@ const TemplatesTab: React.FC<{ onTemplateSelect?: () => void }> = ({ onTemplateS
     fetchTemplates();
   }, [selectedCategory]);
 
-  const categories = ["All", ...Array.from(new Set(templates.map((tpl) => tpl.subtitle)))];
   const filteredTemplates = templates.filter((tpl) => {
     const matchSearch = tpl.subtitle?.toLowerCase().includes(searchQuery.toLowerCase()) || tpl.name?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchSearch;
   });
+
+  // ✅ Fetch categories when dropdown opens
+  useEffect(() => {
+    if (dropdownOpen) {
+      const fetchCategories = async () => {
+        try {
+          setCategoriesLoading(true);
+          const fetchedCategories = await getTemplateCategories();
+          console.log("📂 Fetched categories from API (lowercase):", fetchedCategories);
+
+          // Capitalize categories for display (convert "professional" -> "Professional")
+          const capitalizedCategories = fetchedCategories.map(cat =>
+            cat.charAt(0).toUpperCase() + cat.slice(1)
+          );
+
+          // Add "All" at the beginning if not already present
+          const categoriesWithAll = capitalizedCategories.includes("All")
+            ? capitalizedCategories
+            : ["All", ...capitalizedCategories];
+
+          console.log("📂 Categories for display (capitalized):", categoriesWithAll);
+          setCategories(categoriesWithAll);
+        } catch (error) {
+          console.error("❌ Error fetching categories:", error);
+          // Fall back to default categories
+          setCategories(["All", ...Array.from(new Set(templates.map((tpl) => tpl.subtitle)))]);
+        } finally {
+          setCategoriesLoading(false);
+        }
+      };
+      fetchCategories();
+    }
+  }, [dropdownOpen, templates]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -6001,17 +6058,23 @@ const TemplatesTab: React.FC<{ onTemplateSelect?: () => void }> = ({ onTemplateS
           toast.error("No resume found. Please create a resume first.");
           return;
         }
-        
-        // Call API to apply template to backend
-        const result = await applyTemplateToResume(resumeId, previewTemplate.mongoId);
+
+        console.log("🎨 Applying template to resume:", {
+          resumeId,
+          templateId: previewTemplate.template_id,
+          templateName: previewTemplate.name
+        });
+
+        // ✅ CORRECTED: Pass template_id from the templates list API response
+        const result = await applyTemplateToResume(resumeId, previewTemplate.template_id);
         console.log("✅ Template applied to backend:", result);
-        
+
         // Keep the template selected
         setSelectedTemplate(previewTemplate.template_id);
         setPreviewTemplate(null);
-        
+
         if (onTemplateSelect) onTemplateSelect();
-        
+
         toast.success(`${previewTemplate.name} applied successfully!`);
       } catch (error) {
         console.error("❌ Error applying template:", error);
@@ -6051,21 +6114,29 @@ const TemplatesTab: React.FC<{ onTemplateSelect?: () => void }> = ({ onTemplateS
           </button>
           {dropdownOpen && (
             <div className="absolute left-0 mt-1 w-40 bg-white border border-gray-200 rounded shadow-md z-10">
-              {categories.map((cat) => (
-                <div
-                  key={cat}
-                  onClick={() => {
-                    setSelectedCategory(cat);
-                    setDropdownOpen(false);
-                    setActivePanel("templates");
-                  }}
-                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-100 ${
-                    selectedCategory === cat ? "bg-blue-50 text-[#2557a7]" : "text-gray-700"
-                  }`}
-                >
-                  {cat}
+              {categoriesLoading ? (
+                <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                  <div className="animate-spin inline-block w-4 h-4 border-2 border-[#2557a7] border-t-transparent rounded-full"></div>
+                  <p className="mt-2">Loading...</p>
                 </div>
-              ))}
+              ) : (
+                categories.map((cat) => (
+                  <div
+                    key={cat}
+                    onClick={() => {
+                      console.log("📌 Category selected:", cat);
+                      setSelectedCategory(cat);
+                      setDropdownOpen(false);
+                      setActivePanel("templates");
+                    }}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-100 ${
+                      selectedCategory === cat ? "bg-blue-50 text-[#2557a7]" : "text-gray-700"
+                    }`}
+                  >
+                    {cat}
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -6109,7 +6180,7 @@ const TemplatesTab: React.FC<{ onTemplateSelect?: () => void }> = ({ onTemplateS
                   </span>
                 )}
                 <Image
-                  src={tpl.imgSrc}
+                  src={tpl.preview_url}
                   alt={`template-${tpl.template_id}`}
                   width={160}
                   height={200}
@@ -6425,7 +6496,7 @@ const TemplatesTab: React.FC<{ onTemplateSelect?: () => void }> = ({ onTemplateS
               <div className="flex-1 bg-gray-100 p-6 overflow-y-auto">
                 <div className="bg-white rounded-lg shadow-lg mx-auto" style={{ maxWidth: '600px' }}>
                   <Image
-                    src={previewTemplate.imgSrc}
+                    src={previewTemplate.preview_url}
                     alt={previewTemplate.name}
                     width={600}
                     height={800}

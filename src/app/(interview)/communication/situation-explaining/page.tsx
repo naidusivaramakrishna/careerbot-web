@@ -6,9 +6,18 @@ import AudioRecorder from '../components/AudioRecorder';
 import AssessmentSidebar from '../components/AssessmentSidebar';
 import SectionStartModal from '../components/SectionStartModal';
 import { useVideoRecording } from '@/contexts/VideoRecordingContext';
-import { submitVideoEvaluation, getCurrentQuestion, getNextQuestion, submitAudioToText } from '@/api/communicationApi';
+// import { submitVideoEvaluation, getCurrentQuestion, getNextQuestion, submitAudioToText } from '@/api/communicationApi';
+// import type { CurrentQuestionResponse } from '@/api/communicationApi';
+// import { getAllAudioRecordings, base64ToBlob, blobToFile, saveAudioRecording } from '@/utils/audioUtils';
+import {
+  submitVideoEvaluation,
+  getCurrentQuestion,
+  getNextQuestion,
+  uploadAudio,
+  // OLD: submitAudioToText - no longer used for batch upload
+  evaluateAudio,  // NEW: Use cached transcripts for evaluation
+} from '@/api/communicationApi';
 import type { CurrentQuestionResponse } from '@/api/communicationApi';
-import { getAllAudioRecordings, base64ToBlob, blobToFile, saveAudioRecording } from '@/utils/audioUtils';
 
 export default function SituationExplainingPage() {
   const router = useRouter();
@@ -18,7 +27,7 @@ export default function SituationExplainingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { stopRecording } = useVideoRecording();
+  const { stopRecording, isRecording: isVideoRecording } = useVideoRecording();
 
   // Fetch current question from API
   const fetchCurrentQuestion = async () => {
@@ -50,15 +59,10 @@ export default function SituationExplainingPage() {
     setRecordedAudio(audioBlob);
     console.log('✅ Recording completed for situation explaining');
 
-    // Save audio to sessionStorage immediately (will also be saved in handleFinish)
-    if (currentQuestion?.question_id) {
-      try {
-        await saveAudioRecording(currentQuestion.question_id, audioBlob);
-        console.log('✅ Audio saved to sessionStorage');
-      } catch (err) {
-        console.error('❌ Failed to save audio to sessionStorage:', err);
-      }
-    }
+    // IMPORTANT: Don't save to sessionStorage to avoid quota exceeded error
+    // Real audio recordings are large (~88KB WebM) and will fill up sessionStorage quickly
+    // We only need to keep in state for immediate upload via progressive API
+    console.log('✅ Audio blob saved to state (skipping sessionStorage to avoid quota issues)');
   };
 
   const handleFinish = async () => {
@@ -70,94 +74,150 @@ export default function SituationExplainingPage() {
     setIsSubmitting(true);
 
     try {
-      // Stop video recording
-      console.log('🛑 Stopping video recording...');
-      const videoBlob = await stopRecording();
-
-      if (!videoBlob) {
-        console.warn('⚠️ No video recording found');
-      }
-
-      // Get email and test_id from localStorage
+      // Get email, test_id, and session_id from localStorage
       const emailId = localStorage.getItem('userEmail') || localStorage.getItem('user_email');
       const testId = localStorage.getItem('test_id');
+      const sessionId = localStorage.getItem('session_id');
 
-      if (!emailId || !testId) {
-        console.error('❌ Missing email or test_id');
+      if (!emailId || !testId || !sessionId) {
+        console.error('❌ Missing email, test_id, or session_id');
         alert('Missing required information. Please start the assessment again.');
         setIsSubmitting(false);
         return;
       }
 
-      // Save the current situation explaining audio to sessionStorage first
+      // ✅ STEP 1: Upload audio first via progressive upload API
       if (currentQuestion?.question_id && recordedAudio) {
-        console.log('💾 Saving situation explaining audio to sessionStorage...');
-        await saveAudioRecording(currentQuestion.question_id, recordedAudio);
-        console.log('✅ Situation explaining audio saved');
-      }
-
-      // ==================== AUDIO TO TEXT SUBMISSION ====================
-      // Collect all audio recordings from sessionStorage and submit
-      console.log('📦 Collecting all audio recordings...');
-      const allRecordings = getAllAudioRecordings();
-      const questionIds = Object.keys(allRecordings);
-      console.log(`📊 Found ${questionIds.length} audio recordings`);
-
-      if (questionIds.length > 0) {
-        // Convert base64 recordings to File objects
-        const audioFiles: File[] = [];
-
-        questionIds.forEach((questionId, index) => {
-          const base64Audio = allRecordings[questionId];
-          if (base64Audio) {
-            try {
-              const blob = base64ToBlob(base64Audio);
-              const file = blobToFile(blob, `audio_${questionId}.webm`);
-              audioFiles.push(file);
-              console.log(`✅ Converted audio ${index + 1}/${questionIds.length}: ${questionId}`);
-            } catch (err) {
-              console.error(`❌ Failed to convert audio for ${questionId}:`, err);
-            }
-          }
+        console.log('📤 Uploading situation explaining audio via progressive API...');
+        console.log('📊 Audio blob details:', {
+          hasBlob: !!recordedAudio,
+          size: `${(recordedAudio.size / 1024).toFixed(2)} KB`,
+          type: recordedAudio.type,
         });
 
-        console.log(`📤 Submitting ${audioFiles.length} audio files for transcription...`);
+        if (recordedAudio.size === 0 || recordedAudio.size < 100) {
+          const errorMsg = `Audio recording is empty or too small (${recordedAudio.size} bytes). Please record your answer again.`;
+          console.error('❌', errorMsg);
+          alert(errorMsg);
+          setIsSubmitting(false);
+          return;
+        }
 
-        // Call the audio-to-text API with all audio files
         try {
-          const audioToTextResponse = await submitAudioToText({
-            email_id: emailId,
+          const uploadResponse = await uploadAudio({
+            session_id: sessionId,
+            question_id: currentQuestion.question_id,
             test_id: testId,
-            audio_files: audioFiles,
+            audio_file: recordedAudio,
           });
-          console.log('✅ Audio-to-text submission successful:', audioToTextResponse);
+          console.log('✅ Audio uploaded successfully for', currentQuestion.question_id, ':', uploadResponse);
 
-          // Store evaluation_id if returned
-          if (audioToTextResponse.evaluation_id) {
-            localStorage.setItem('audio_evaluation_id', audioToTextResponse.evaluation_id);
+          // Verify upload was successful - backend returns success:true and status:"completed"
+          if (!uploadResponse || !uploadResponse.success) {
+            const errorMsg = `Audio upload failed for question ${currentQuestion.question_id}. Response: ${JSON.stringify(uploadResponse)}`;
+            console.error('❌', errorMsg);
+            alert(errorMsg);
+            setIsSubmitting(false);
+            return;
           }
-        } catch (audioError) {
-          console.error('❌ Audio-to-text submission failed:', audioError);
-          // Continue with the flow even if audio submission fails
+        } catch (uploadError) {
+          console.error('❌ Audio upload failed:', uploadError);
+          alert(`Failed to upload audio: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
+          setIsSubmitting(false);
+          return; // Don't continue if upload failed
         }
       } else {
-        console.warn('⚠️ No audio recordings found to submit');
+        console.error('❌ Missing question_id or recordedAudio');
+        alert('Cannot submit: Missing audio recording or question information.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Stop video recording
+      console.log('🛑 Attempting to stop video recording...');
+      console.log('📊 Video recording status before stop:', {
+        isVideoRecording,
+        hasStopFunction: !!stopRecording,
+      });
+
+      const videoBlob = await stopRecording();
+
+      if (!videoBlob) {
+        console.warn('⚠️ No video recording found - continuing without video');
+        console.warn('💡 This may happen if video recording was never started or failed silently');
+      } else {
+        console.log('✅ Video blob retrieved successfully:', videoBlob.size, 'bytes');
+      }
+
+      // Audio already uploaded via progressive API in STEP 1 above
+      // No need to save to sessionStorage (would cause quota exceeded error)
+
+      // ==================== AUDIO EVALUATION ====================
+      // Audio was uploaded progressively during test, now just evaluate from cached transcripts
+      console.log('📊 Evaluating audio from cached transcripts...');
+
+      try {
+        // Call the audio evaluate endpoint with session_id, email_id, test_id
+        const audioEvalResponse = await evaluateAudio({
+          session_id: sessionId,
+          email_id: emailId,
+          test_id: testId,
+        });
+
+        console.log('✅ Audio evaluation response:', audioEvalResponse);
+
+        if (audioEvalResponse.status === 'insufficient') {
+          // Not enough recordings - show error
+          const missing = audioEvalResponse.missing_sections?.length || 0;
+          console.error(`❌ Insufficient recordings: ${missing} missing`);
+          alert(`Missing ${missing} audio recordings. Please go back and complete all sections.`);
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (audioEvalResponse.status === 'partial') {
+          // Some missing but enough to continue
+          console.warn(`⚠️ Partial evaluation: ${audioEvalResponse.missing_sections?.length || 0} missing`);
+        }
+
+        // Store evaluation result
+        if (audioEvalResponse.evaluation) {
+          localStorage.setItem('audio_evaluation', JSON.stringify(audioEvalResponse.evaluation));
+        }
+
+      } catch (audioError) {
+        console.error('❌ Audio evaluation failed:', audioError);
+        // Continue with flow - evaluation might still work from video
       }
 
       // Submit video evaluation if we have a video blob
-      if (videoBlob) {
+      if (videoBlob && videoBlob.size > 0) {
         console.log('📤 Submitting video for evaluation...');
-        const videoEvalResponse = await submitVideoEvaluation({
-          email_id: emailId,
-          test_id: testId,
-          video: videoBlob,
+        console.log('📊 Video blob details:', {
+          size: videoBlob.size,
+          type: videoBlob.type,
         });
-        console.log('✅ Video evaluation submitted successfully');
 
-        // Store video_evaluation_id for final report
-        if (videoEvalResponse.evaluation_id) {
-          localStorage.setItem('video_evaluation_id', videoEvalResponse.evaluation_id);
+        try {
+          const videoEvalResponse = await submitVideoEvaluation({
+            email_id: emailId,
+            test_id: testId,
+            file: videoBlob,
+          });
+          console.log('✅ Video evaluation submitted successfully');
+
+          // Store video_evaluation_id for final report
+          if (videoEvalResponse.evaluation_id) {
+            localStorage.setItem('video_evaluation_id', videoEvalResponse.evaluation_id);
+          }
+        } catch (videoSubmitError) {
+          console.error('❌ Video submission failed:', videoSubmitError);
+          console.warn('⚠️ Continuing without video evaluation - audio evaluation is sufficient');
+          // Don't throw - allow assessment to complete without video
         }
+      } else {
+        console.warn('⚠️ Skipping video evaluation - no valid video blob available');
+        console.info('ℹ️ Assessment will complete with audio evaluation only');
       }
 
       // Call next question API to mark section complete

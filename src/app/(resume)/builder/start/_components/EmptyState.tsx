@@ -992,6 +992,13 @@ const EmptyState = ({ selected, onSelect }: {
     }
   };
 
+  const handleUploadClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("Upload option clicked");
+    onSelect("upload");
+    router.push("/enhancer");
+  };
 
   return (
     <>
@@ -1045,7 +1052,7 @@ const EmptyState = ({ selected, onSelect }: {
           </div>
 
           <div className='flex flex-col gap-4'>
-            <div
+            {/* <div
               onClick={handleLinkedInClick}
               className={`cursor-pointer bg-white border-2 h-full rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
                 ${selected === "linkedin" ? "border-[#155DFC]" : "border-gray-300"}`}
@@ -1057,13 +1064,10 @@ const EmptyState = ({ selected, onSelect }: {
               <p className="text-sm max-w-xs text-center">
                 Build your resume straight from your LinkedIn—fast and effortless.
               </p>
-            </div>
+            </div> */}
 
             <div
-              onClick={() => {
-                console.log("Upload option clicked");
-                onSelect("upload");
-              }}
+              onClick={handleUploadClick}
               className={`cursor-pointer bg-white h-full border-2 rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
                 ${selected === "upload" ? "border-[#155DFC]" : "border-gray-300"}`}
             >
@@ -1080,32 +1084,32 @@ const EmptyState = ({ selected, onSelect }: {
       </div>
 
       {/* LinkedIn URL Modal */}
-      {showLinkedInModal && (
+      {/* {showLinkedInModal && (
         <div
           onClick={handleBackdropClick}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 bg-opacity-60 transition-opacity"
         >
-          <div className="relative bg-white rounded-xl w-[930px] h-[50vh] shadow-lg  max-w-lg mx-4">
+          <div className="relative bg-white rounded-xl w-[930px] h-[50vh] shadow-lg  max-w-lg mx-4"> */}
             {/* Close Button */}
-            <button
+            {/* <button
               onClick={handleCloseModal}
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 transition"
             >
               <X className="w-6 h-6" />
-            </button>
+            </button> */}
 
             {/* Modal Header */}
-            <div className="bg-white rounded-t-xl p-4 flex items-center border-b border-gray-400 justify-center">
+            {/* <div className="bg-white rounded-t-xl p-4 flex items-center border-b border-gray-400 justify-center">
               <div className="bg-[#2557a7] rounded-lg p-2 mr-3">
                 <FaLinkedinIn className="text-white w-6 h-6" />
               </div>
               <h2 className="text-2xl font-semibold text-[#2557a7]">
                 Import from LinkedIn
               </h2>
-            </div>
+            </div> */}
 
             {/* Modal Body */}
-            <div className="p-6">
+            {/* <div className="p-6">
               <label className="block mb-2 mt-6 text-sm font-medium text-gray-700">
                 LinkedIn Profile URL
               </label>
@@ -1135,7 +1139,7 @@ const EmptyState = ({ selected, onSelect }: {
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </>
   );
 };

@@ -174,17 +174,23 @@ const ResumeTableRow = ({
   };
   const { resumeData } = useResume();
 
+  const getInitials = (fullname: string) => {
+    return fullname.charAt(0).toUpperCase();
+  };
+
+  const displayInitials = getInitials(resumeData?.personalInfo?.fullname || resume.name || '');
+
   return (
     <tr className="border-t border-gray-400 hover:bg-gray-50 transition">
       <td className="p-4">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-[#2200ff]/10 text-[#2200ff] rounded-lg flex text-sm items-center justify-center font-semibold">
-            {resume.initials}
+            {displayInitials}
           </div>
           <div>
             <div className='flex gap-2'>
               <p className="font-semibold block">
-  {resumeData?.personalInfo?.fullName || resume.name}
+  {resumeData?.personalInfo?.fullname || 'Full Name'}
 </p>
               {resume.primary && <CircleCheck className='w-4 h-4 text-[#2200ff]' />}
             </div>

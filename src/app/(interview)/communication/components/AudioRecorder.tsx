@@ -365,14 +365,32 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+// interface AudioRecorderProps {
+//   onRecordingComplete?: (audioBlob: Blob) => void;
+//   maxDuration?: number;
+// }
 interface AudioRecorderProps {
   onRecordingComplete?: (audioBlob: Blob) => void;
   maxDuration?: number;
+  // NEW: For progressive upload
+  sessionId?: string;
+  questionId?: string;
+  onUploadStatusChange?: (
+    questionId: string,
+    status: 'uploading' | 'completed' | 'failed',
+    error?: string
+  ) => void;
+  enableProgressiveUpload?: boolean;
 }
+
 
 export default function AudioRecorder({
   onRecordingComplete,
   maxDuration = 15,
+  sessionId,
+  questionId,
+  onUploadStatusChange,
+  enableProgressiveUpload = false,
 }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(maxDuration);
@@ -419,10 +437,38 @@ export default function AudioRecorder({
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
 
-    recorder.onstop = () => {
+    // recorder.onstop = () => {
+    //   const blob = new Blob(chunksRef.current, { type: mimeType });
+    //   onRecordingComplete?.(blob);
+    //   chunksRef.current = [];
+    // };
+    recorder.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: mimeType });
       onRecordingComplete?.(blob);
       chunksRef.current = [];
+
+      // NEW: Progressive upload if enabled
+      if (enableProgressiveUpload && sessionId && questionId) {
+        onUploadStatusChange?.(questionId, 'uploading');
+
+        try {
+          // Import dynamically to avoid circular deps
+          const { uploadProgressiveAudio } = await import('@/api/communicationApi');
+          const result = await uploadProgressiveAudio(sessionId, questionId, blob);
+
+          if (result.success) {
+            onUploadStatusChange?.(questionId, 'completed');
+            console.log(`✅ Progressive upload completed for ${questionId}`);
+          } else {
+            onUploadStatusChange?.(questionId, 'failed', result.error);
+            console.error(`❌ Progressive upload failed for ${questionId}:`, result.error);
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+          onUploadStatusChange?.(questionId, 'failed', errorMsg);
+          console.error(`❌ Progressive upload error for ${questionId}:`, error);
+        }
+      }
     };
 
     const audioContext = new AudioContext();
@@ -514,10 +560,14 @@ export default function AudioRecorder({
 
     draw();
 
-    timerRef.current = setInterval(() => {
+    timerRef.current = setInterval(async () => {
       setTimeLeft((t) => {
         if (t <= 1) {
-          stopRecording();
+          // Call async stopRecording without awaiting in setState
+          // This is OK because the recording will complete regardless
+          stopRecording().catch((err) => {
+            console.error('❌ Error stopping recording:', err);
+          });
           return 0;
         }
         return t - 1;
@@ -525,16 +575,49 @@ export default function AudioRecorder({
     }, 1000);
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
+  const stopRecording = async () => {
+    if (mediaRecorderRef.current?.state !== 'recording') {
+      return;
     }
 
+    // Create a promise that resolves when onstop callback completes
+    const stopPromise = new Promise<void>((resolve) => {
+      const recorder = mediaRecorderRef.current;
+      if (!recorder) {
+        resolve();
+        return;
+      }
+
+      // Store original onstop handler
+      const originalOnStop = recorder.onstop;
+
+      // Wrap onstop to resolve promise after it completes
+      recorder.onstop = async (event: Event) => {
+        try {
+          // Call original onstop handler
+          if (originalOnStop) {
+            await originalOnStop.call(recorder, event);
+          }
+        } finally {
+          // Resolve the promise after onstop completes
+          resolve();
+        }
+      };
+
+      // Now stop the recorder - this will trigger onstop callback
+      recorder.stop();
+    });
+
+    // Wait for onstop callback to complete
+    await stopPromise;
+
+    // NOW cleanup resources after blob is fully created
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
 
+    // Stop audio context and stream AFTER blob creation
     audioContextRef.current?.close();
     audioContextRef.current = null;
 
@@ -554,7 +637,12 @@ export default function AudioRecorder({
   };
 
   useEffect(() => {
-    return () => stopRecording();
+    return () => {
+      // Don't await cleanup in useEffect return, just call it
+      stopRecording().catch((err) => {
+        console.error('❌ Error during cleanup:', err);
+      });
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

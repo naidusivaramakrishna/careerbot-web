@@ -2290,9 +2290,9 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
   const [selectedTemplate, setSelectedTemplateState] = useState<string | number | null>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem("selected_template");
-      return saved || null;
+      return saved || "2"; // Default to template 2
     }
-    return null;
+    return "2"; // Default to template 2
   });
 
   const [resumeData, setResumeData] = useState<ResumeData>(() => {
@@ -2301,14 +2301,21 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
       if (savedData) {
         try {
           const parsed = JSON.parse(savedData);
-          console.log("📦 Loaded resume data from localStorage:", parsed);
+          console.log("✅ Successfully loaded resume data from localStorage:", {
+            timestamp: new Date().toISOString(),
+            dataKeys: Object.keys(parsed),
+            skillsCount: parsed.skills?.length || 0,
+            categorizedSkills: parsed.categorizedSkills
+          });
           return parsed;
         } catch (error) {
           console.error("❌ Failed to parse localStorage data:", error);
         }
+      } else {
+        console.log("ℹ️ No saved resume data in localStorage, using default empty state");
       }
     }
-    
+
     return {
       personalInfo: { 
         fullname: "", 
@@ -2404,8 +2411,34 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
   // ✅ FIXED: Only save to localStorage AFTER initial load is complete
   useEffect(() => {
     if (typeof window !== 'undefined' && hasLoadedInitialData && resumeData) {
-      localStorage.setItem('resumeData', JSON.stringify(resumeData));
-      console.log("💾 Resume data saved to localStorage");
+      try {
+        localStorage.setItem('resumeData', JSON.stringify(resumeData));
+        console.log("💾 Resume data saved to localStorage", {
+          timestamp: new Date().toISOString(),
+          dataKeys: Object.keys(resumeData),
+          skillsCount: resumeData.skills?.length || 0,
+          categorizedSkills: resumeData.categorizedSkills
+        });
+      } catch (error) {
+        console.error("❌ Failed to save resume data to localStorage:", error);
+      }
+    }
+  }, [resumeData, hasLoadedInitialData]);
+
+  // ✅ NEW: Save data before page unload (backup save)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && hasLoadedInitialData) {
+      const handleBeforeUnload = () => {
+        try {
+          localStorage.setItem('resumeData', JSON.stringify(resumeData));
+          console.log("💾 Resume data backup saved before unload");
+        } catch (error) {
+          console.error("❌ Failed to backup save resume data:", error);
+        }
+      };
+
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }
   }, [resumeData, hasLoadedInitialData]);
 
@@ -2417,15 +2450,57 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [selectedTemplate]);
 
-  const setSelectedTemplate = (id: string | number | null) => {
+  const setSelectedTemplate = async (id: string | number | null) => {
     setSelectedTemplateState(id);
     if (id !== null) {
       localStorage.setItem("selected_template", String(id));
       console.log("💾 Template saved to localStorage:", id);
+
+      // ✅ Set as default template on backend
+      try {
+        const { setDefaultTemplate } = await import("@/api/resumeApi");
+        await setDefaultTemplate(id);
+        console.log("✅ Template set as default on backend:", id);
+      } catch (error) {
+        console.error("⚠️ Failed to set default template on backend:", error);
+      }
     } else {
       localStorage.removeItem("selected_template");
     }
   };
+
+  // ✅ Set template 2 as default on provider initialization
+  useEffect(() => {
+    const initializeDefaultTemplate = async () => {
+      try {
+        const savedTemplate = localStorage.getItem("selected_template");
+
+        if (savedTemplate) {
+          // User has a saved template preference, use that
+          console.log("📌 Using saved template preference:", savedTemplate);
+          return;
+        }
+
+        // No saved preference, fetch default template from backend
+        const { getDefaultTemplate } = await import("@/api/resumeApi");
+        try {
+          const defaultTemplateData = await getDefaultTemplate();
+          const defaultTemplateId = String((defaultTemplateData as unknown as Record<string, unknown>)?.template_id || (defaultTemplateData as unknown as Record<string, unknown>)?.id || "2");
+
+          console.log("🎨 Fetched default template from backend:", defaultTemplateId);
+          await setSelectedTemplate(defaultTemplateId);
+        } catch (fetchError) {
+          // If fetching fails, fall back to template 2
+          console.warn("⚠️ Failed to fetch default template, using template 2 as fallback:", fetchError);
+          await setSelectedTemplate("2");
+        }
+      } catch (error) {
+        console.error("⚠️ Failed to initialize default template:", error);
+      }
+    };
+
+    initializeDefaultTemplate();
+  }, []); // Empty dependency array - runs once on mount
 
   // ✅ Load resume from backend (runs once on mount)
   useEffect(() => {
@@ -2433,9 +2508,14 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
       const resumeId = localStorage.getItem("current_resume_id");
       
       if (!resumeId || resumeId === 'null' || resumeId === 'undefined') {
-        console.log("ℹ️ No resume ID - using localStorage or empty resume");
+        console.log("ℹ️ No resume ID found in localStorage - using local data or empty resume", {
+          timestamp: new Date().toISOString()
+        });
         setIsLoadingResume(false);
-        setHasLoadedInitialData(true); // ✅ Mark as loaded even if no backend data
+
+        // ✅ Mark as loaded immediately to enable localStorage persistence
+        setHasLoadedInitialData(true);
+        console.log("✅ hasLoadedInitialData set to true - localStorage saving is now ACTIVE");
         return;
       }
 
@@ -2540,6 +2620,9 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
       } finally {
         setIsLoadingResume(false);
         setHasLoadedInitialData(true); // ✅ Mark as loaded after backend attempt
+        console.log("✅ hasLoadedInitialData set to true - localStorage saving is now ACTIVE", {
+          timestamp: new Date().toISOString()
+        });
       }
     };
 

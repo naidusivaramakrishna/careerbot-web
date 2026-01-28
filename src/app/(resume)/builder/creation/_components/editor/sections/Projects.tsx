@@ -2458,7 +2458,7 @@ const Projects: React.FC = () => {
     const uniqueTechnologies = Array.from(new Set(allTechnologies));
 
     // Merge with existing skills (keep existing skills that aren't from projects)
-    const currentSkills = resumeData.skills || [];
+    const currentSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
     const mergedSkills = Array.from(new Set([...currentSkills, ...uniqueTechnologies]));
 
     // Only update if there's a change to avoid infinite loops

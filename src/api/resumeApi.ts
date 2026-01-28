@@ -5860,11 +5860,33 @@ export const getTemplatesByCategory = async (category?: string): Promise<Templat
       : '/templates/';
 
     console.log("🔍 Request URL:", `${httpClient.defaults.baseURL}${url}`);
+    console.log("📌 Category parameter being sent:", category);
 
-    const response = await httpClient.get<TemplateResponse[]>(url);
+    const response = await httpClient.get<unknown>(url);
 
-    console.log("✅ Templates fetched:", response.data.length);
-    return response.data;
+    console.log("📦 Raw response data:", response.data);
+
+    // Handle different response formats
+    let templates: TemplateResponse[] = [];
+
+    if (Array.isArray(response.data)) {
+      // Response is an array directly
+      templates = response.data;
+    } else if (response.data && typeof response.data === 'object') {
+      const responseObj = response.data as Record<string, unknown>;
+
+      // Check for 'templates' key (main response format)
+      if ('templates' in responseObj && Array.isArray(responseObj.templates)) {
+        templates = responseObj.templates;
+      }
+      // Check for 'data' key (alternative wrapper format)
+      else if ('data' in responseObj && Array.isArray(responseObj.data)) {
+        templates = responseObj.data;
+      }
+    }
+
+    console.log("✅ Templates fetched:", templates.length, templates);
+    return templates;
   } catch (error) {
     console.error("❌ Error fetching templates by category:", error, { correlationId });
     throw error;
@@ -6062,17 +6084,16 @@ export const getTemplatesByCategory = async (category?: string): Promise<Templat
 // };
 export const applyTemplateToResume = async (
   resumeId: string,
-  templateObjectId: string // Always pass the MongoDB _id!
+  templateId: string // Template ID from the templates list API response
 ): Promise<{ message: string; resume_id: string; template_id: string }> => {
   const correlationId = getCorrelationId();
   try {
-    console.log("🎨 Applying template:", { resumeId, templateObjectId, correlationId });
+    console.log("🎨 Applying template to resume:", { resumeId, templateId, correlationId });
 
-    // Always use the ObjectId in path
-    const endpoint = `/templates/${templateObjectId}/apply`;
+    // ✅ CORRECTED: Use /templates/{resume_id}/apply endpoint
+    const endpoint = `/templates/${resumeId}/apply`;
     const payload = {
-      resume_id: resumeId,
-      template_id: templateObjectId // Always use ObjectId here too!
+      template_id: templateId // Pass template_id from list response in request body
     };
 
     console.log("🔍 POST URL:", endpoint);
@@ -6093,6 +6114,7 @@ export const applyTemplateToResume = async (
       const status = error.response?.status;
       const detail = error.response?.data?.detail;
       const errorData = error.response?.data?.error;
+      const message = error.response?.data?.message;
 
       console.error("🔥 Apply template error details:", {
         correlationId,
@@ -6100,13 +6122,18 @@ export const applyTemplateToResume = async (
         statusText: error.response?.statusText,
         detail,
         error: errorData,
+        message,
         fullError: error.response?.data,
         fullURL: `${error.config?.baseURL}${error.config?.url}`,
         requestData: error.config?.data
       });
 
       if (status === 404) {
-        throw new Error(errorData?.message || detail || "Template or Resume not found");
+        throw new Error(message || errorData?.message || detail || "Resume not found");
+      }
+
+      if (status === 400) {
+        throw new Error(message || errorData?.message || detail || "Invalid request - check resume ID and template ID");
       }
 
       if (status === 422) {
@@ -6119,8 +6146,70 @@ export const applyTemplateToResume = async (
         }
         throw new Error(JSON.stringify(validationDetail) || "Invalid request data");
       }
-      throw new Error(errorData?.message || detail || "Failed to apply template");
+      throw new Error(message || errorData?.message || detail || "Failed to apply template");
     }
+    throw error;
+  }
+};
+
+/**
+ * Get all template categories
+ */
+export const getTemplateCategories = async (): Promise<string[]> => {
+  try {
+    const response = await httpClient.get<unknown>(
+      `/templates/categories`
+    );
+    // Handle different response formats
+    const data = response.data as unknown;
+    if (Array.isArray(data)) {
+      return data as string[];
+    }
+    if (data && typeof data === 'object' && 'data' in data) {
+      const arrayData = (data as Record<string, unknown>).data;
+      if (Array.isArray(arrayData)) {
+        return arrayData as string[];
+      }
+    }
+    return [];
+  } catch (error) {
+    console.error("❌ Error getting template categories:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get the default template
+ */
+export const getDefaultTemplate = async (): Promise<unknown> => {
+  try {
+    const response = await httpClient.get(
+      `/templates/default`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error getting default template:", error);
+    throw error;
+  }
+};
+
+/**
+ * Set a template as default
+ */
+export const setDefaultTemplate = async (templateId: string | number): Promise<unknown> => {
+  try {
+    const response = await httpClient.post(
+      `/templates/${templateId}/set-default`,
+      {},
+      {
+        params: {
+          template_id: templateId
+        }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error setting default template:", error);
     throw error;
   }
 };

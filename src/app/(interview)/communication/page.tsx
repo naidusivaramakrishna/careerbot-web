@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { generateTest } from '@/api/communicationApi';
 import { getProfile } from '@/api/userApi';
 import { clearAllAudioRecordings } from '@/utils/audioUtils';
+import { useVideoRecording } from '@/contexts/VideoRecordingContext';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [loadingEmail, setLoadingEmail] = useState(true);
   const [error, setError] = useState('');
   const router = useRouter();
+  const { clearRecordedVideo } = useVideoRecording();
 
   // Auto-fill email from localStorage or fetch from API
   useEffect(() => {
@@ -67,11 +69,12 @@ export default function LoginPage() {
 
       console.log('✅ Test generated successfully:', response);
 
-      // Clear all previous audio recordings and text answers from sessionStorage
-      // This ensures only current test's 44 audio files are attached to audio-to-text API
+      // Clear all previous audio recordings, video recordings, and text answers
+      // This ensures only current test's files are attached to the APIs
       clearAllAudioRecordings();
+      clearRecordedVideo();
       sessionStorage.removeItem('text_answers');
-      console.log('🗑️ Cleared previous audio recordings and text answers');
+      console.log('🗑️ Cleared previous audio recordings, video recording, and text answers');
 
       // Store test_id in localStorage for later use
       if (response.test_id) {

@@ -969,9 +969,9 @@ import SectionStartModal from '../components/SectionStartModal';
 import {
   getCurrentQuestion,
   getNextQuestion,
+  uploadAudio,
   CurrentQuestionResponse,
 } from '@/api/communicationApi';
-import { saveAudioRecording } from '@/utils/audioUtils';
 
 export default function AssessmentMain() {
   const router = useRouter();
@@ -986,11 +986,6 @@ export default function AssessmentMain() {
   const [audioRecordings, setAudioRecordings] = useState<{
     [questionId: string]: Blob;
   }>({});
-
-  const isVoiceSection =
-    currentQuestion?.question_type === 'VOICE' ||
-    ['See and Repeat', 'Listen and Repeat', 'Listen and Correct', 'Situation Explaining']
-      .includes(currentQuestion?.section_name || '');
 
   // ================= FIRST QUESTION =================
   const fetchCurrentQuestion = async () => {
@@ -1025,9 +1020,10 @@ export default function AssessmentMain() {
       [currentQuestion.question_id]: blob,
     }));
 
-    if (isVoiceSection) {
-      await saveAudioRecording(currentQuestion.question_id, blob);
-    }
+    // IMPORTANT: Don't save to sessionStorage to avoid quota exceeded error
+    // Real audio recordings are large (~88KB WebM) and will fill up sessionStorage quickly
+    // We only need to keep in state for immediate upload via progressive API
+    console.log('✅ Audio blob saved to state (skipping sessionStorage to avoid quota issues)');
   };
 
   // ================= NEXT QUESTION =================
@@ -1039,8 +1035,27 @@ export default function AssessmentMain() {
 
     try {
       const sessionId = localStorage.getItem('session_id');
-      if (!sessionId) throw new Error('Session ID not found');
+      const testId = localStorage.getItem('test_id');
 
+      if (!sessionId) throw new Error('Session ID not found');
+      if (!testId) throw new Error('Test ID not found');
+
+      // Get the audio blob for current question
+      const audioBlob = audioRecordings[currentQuestion.question_id];
+      if (!audioBlob) throw new Error('No audio recording found');
+
+      // ✅ STEP 1: Upload audio first
+      console.log('📤 Uploading audio for question:', currentQuestion.question_id);
+      const uploadResponse = await uploadAudio({
+        session_id: sessionId,
+        question_id: currentQuestion.question_id,
+        test_id: testId,
+        audio_file: audioBlob,
+      });
+      console.log('✅ Audio uploaded successfully:', uploadResponse);
+
+      // ✅ STEP 2: Then fetch next question
+      console.log('📞 Fetching next question...');
       const response = await getNextQuestion({
         session_id: sessionId,
         question_id: currentQuestion.question_id, // ✅ REQUIRED
@@ -1060,7 +1075,7 @@ export default function AssessmentMain() {
 
       setCurrentQuestion(response);
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch next question');
+      setError(err.message || 'Failed to upload audio or fetch next question');
     } finally {
       setLoading(false);
     }

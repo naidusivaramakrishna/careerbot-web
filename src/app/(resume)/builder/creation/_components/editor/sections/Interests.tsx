@@ -385,7 +385,9 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
+import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
+import AISuggestions from "../AISuggestions";
 import {
   FaSpellCheck,
   FaListUl,
@@ -399,6 +401,7 @@ import {
 import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2 } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
+import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
 
 interface InterestEntry {
@@ -436,9 +439,15 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Interests: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const {
+    loadingIndex,
+    suggestions,
+    activePopup,
+    setActivePopup,
+    generateSuggestions,
+  } = useAISuggestions();
   const { errors, validateRequired, clearError, clearSectionIndexErrors, reindexErrors } = useValidation();
 
-  const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
 
@@ -597,6 +606,85 @@ const Interests: React.FC = () => {
     if (ed) ed.spellcheck = newState;
   };
 
+  const handleAIWriterClick = (editIndex: number, globalIndex: number, interest: InterestEntry) => {
+    if (!validateRequired("interest", globalIndex, {
+      name: interest.name,
+    })) return;
+
+    const descBox = descriptionRefs.current[editIndex];
+    const formContainer = formScrollRef.current;
+
+    if (descBox && formContainer) {
+      const descBoxTop = descBox.offsetTop;
+      formContainer.scrollTo({
+        top: descBoxTop - 50,
+        behavior: "smooth"
+      });
+    }
+
+    const prompt = `Generate 5 impactful unique(different) interest descriptions for a resume based on the following details:
+
+Interest Name: ${interest.name}
+Category: ${interest.category || "Not specified"}
+
+Requirements for each description:
+- Length: 1-2 lines maximum (approximately 15-25 words)
+- Start directly with a strong action verb (e.g., develop, explore, master, create, analyze, innovate, demonstrate)
+- Focus on professional relevance and industry alignment
+- Highlight how this interest contributes to professional growth and skill development
+- Include specific areas of focus or expertise when possible
+- Use industry keywords for ATS optimization
+- Avoid generic phrases like "interested in" or "passionate about"
+- Each description must be unique and emphasize different aspects: expertise, continuous learning, industry insights, or professional application
+
+Formatting rules:
+- Return ONLY the 5 unique(different) descriptions
+- Each description on a new line
+- NO numbering (1, 2, 3), NO bullet points, NO labels, NO dashes
+- Start each description directly with an action verb
+- Separate descriptions with a blank line
+
+Example format:
+Actively research emerging trends in cloud computing and DevOps practices, implementing cutting-edge containerization technologies to optimize infrastructure scalability
+
+Explore advanced data science methodologies and machine learning applications, applying statistical analysis to drive data-informed business decisions
+
+Master blockchain technologies and distributed systems architecture, contributing to innovation in secure and decentralized application development`;
+
+    generateSuggestions(editIndex, prompt);
+  };
+
+  const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
+    const el = editorRefs.current[editIndex];
+    if (el) {
+      el.innerHTML = suggestion;
+      handleChange(editIndex, "description", suggestion);
+
+      setTimeout(() => {
+        el.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (el.childNodes.length > 0) {
+          range.selectNodeContents(el);
+          range.collapse(false);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
+      }, 0);
+    }
+
+    setActivePopup(null);
+
+    setTimeout(() => {
+      if (formScrollRef.current) {
+        formScrollRef.current.scrollTo({
+          top: 0,
+          behavior: "smooth"
+        });
+      }
+    }, 100);
+  };
+
   useEffect(() => {
     editingEntries.forEach((interest, idx) => {
       const el = editorRefs.current[idx];
@@ -738,9 +826,20 @@ const Interests: React.FC = () => {
 
                     {/* Description */}
                     <div ref={(el) => { descriptionRefs.current[editIndex] = el; }} className="flex flex-col gap-1 relative">
-                      <label className="text-sm font-semibold text-gray-700">
-                        Description <span className="text-red-500">*</span>
-                      </label>
+                      <div className="flex justify-between items-center">
+                        <label className="text-sm font-semibold text-gray-700">
+                          Description <span className="text-red-500">*</span>
+                        </label>
+                        <button
+                          type="button"
+                          disabled={loadingIndex === editIndex}
+                          onClick={() => handleAIWriterClick(editIndex, globalIndex, interest)}
+                          className="flex items-center gap-1.5 px-6 py-2 text-sm font-medium border bg-gradient-to-br from-[#194386] to-[#3b6ecb] text-white hover:bg-blue-700 rounded-full disabled:bg-gray-400"
+                        >
+                          <NibPenSparkleIcon className="w-4 h-4" />
+                          {loadingIndex === editIndex ? "Generating..." : "AI Writer"}
+                        </button>
+                      </div>
 
                       <div className="w-full rounded-lg bg-[#faf9f8] hover:bg-[#f3f2f1] mt-2 focus:border-b focus:border-b-[#2557a7] overflow-hidden">
                         {/* Toolbar */}
@@ -782,7 +881,15 @@ const Interests: React.FC = () => {
           </div>
 
           <div className="w-80 flex-shrink-0 sticky top-2">
-            {showTips && (
+            {activePopup !== null && suggestions[activePopup] ? (
+              <AISuggestions
+                options={suggestions[activePopup]}
+                onSelect={(s) => handleSuggestionSelect(activePopup, s)}
+                onClose={() => {
+                  setActivePopup(null);
+                }}
+              />
+            ) : (
               <div className="bg-[#faf9f8] rounded-lg p-5">
                 <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
                 <div className="border-t border-gray-300 mb-3"></div>
