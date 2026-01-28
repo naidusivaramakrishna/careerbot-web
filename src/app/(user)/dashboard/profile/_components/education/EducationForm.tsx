@@ -106,10 +106,14 @@ export default function EducationForm({
         <div className="flex flex-col">
           <label className="text-sm font-semibold">GPA/Percentage</label>
           <input
-            type="text"
+            type="number"
             name="cgpa"
+            step="0.1"
+            min="0"
+            max="10"
             value={educationForm.cgpa || ""}
             onChange={handleChange}
+            placeholder="e.g., 7.5"
             className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
           />
           {getFieldError("cgpa") && (

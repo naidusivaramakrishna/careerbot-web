@@ -1,68 +1,3 @@
-// import { EducationItem, ExperienceItem, LinkedinImportResponse } from "@/api/linkedinParsingApi";
-// import { ProfileData } from "../_types/ProfileData";
-
-// export const mapLinkedinToProfile = (data: LinkedinImportResponse) => {
-//     const profileData: Partial<ProfileData> = {};
-//     const will_add = data.will_add;
-//     const will_skip = data.will_skip;
-
-//     if (data.personal_info) {
-//         profileData.personalInformation = {
-//             fullName: data.personal_info?.name || "",
-//             email: data.personal_info?.email || "",
-//             phone: data.personal_info?.phone || "",
-//             location: data.personal_info?.location || "",
-//             linkedin: data.personal_info?.linkedinurl || "",
-//             github: '',
-//             summary: data.summary || "",
-//             headline: '',
-//         };
-//     }
-
-//     if (data.will_add) {
-//         if (data.will_add.experience?.length > 0) {
-//             profileData.workExperience = {
-//             }
-//         }
-
-//     }
-//     if (data.will_skip) {
-//         if (data.will_skip.education?.length > 0) {
-//             profileData.education = {
-//             }
-//         }
-//         // -------------------------
-//         // SKILLS
-//         // -------------------------
-//         if (data.will_skip.skills?.length > 0) {
-//             profileData.skills = data.will_skip.skills.map((item) => item);
-//         }
-//     }
-//     return {
-//         education: will_skip.education?.map((edu: EducationItem) => ({
-//             institution: edu.school,
-//             degree: edu.degree,
-//             stream: "",
-//             cgpa: "",
-//             start_date: edu.startDate,
-//             end_date: edu.endDate,
-//         })) || [],
-
-//         workExperience: will_add.experiece?.map((exp: ExperienceItem) => ({
-//             job_title: exp.role,
-//             company: exp.company,
-//             job_type: exp.currentlyWorking ? "full_time" : "contract",
-//             location: exp.location,
-//             start_date: exp.startDate,
-//             end_date: exp.endDate || "",
-//             description: exp.description,
-//             key_achievements: exp.description ? exp.description.split("\n") : []
-//         })) || [],
-//     };
-//     return profileData
-// };
-
-
 import { EducationItem, ExperienceItem, LinkedinImportResponse } from "@/api/linkedinParsingApi";
 import { ProfileData } from "../_types/ProfileData";
 
@@ -76,10 +11,33 @@ export const mapLinkedinToProfile = (data: LinkedinImportResponse): Partial<Prof
     // PERSONAL INFORMATION
     // -----------------------------------
     if (personal_info) {
+        // Normalize phone number - add +91 for Indian numbers
+        let phoneNumber = personal_info.phone || '';
+        const location = personal_info.location || '';
+
+        // If location is India and phone doesn't have country code, add +91
+        if (location.toLowerCase().includes('india') && phoneNumber) {
+            // Remove any spaces, hyphens, or parentheses
+            phoneNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
+
+            // If it's a 10-digit number without country code, add +91 with space
+            if (/^\d{10}$/.test(phoneNumber)) {
+                phoneNumber = '+91 ' + phoneNumber;
+            }
+            // If it starts with 91 but no +, add the + with space
+            else if (/^91\d{10}$/.test(phoneNumber)) {
+                phoneNumber = '+91 ' + phoneNumber.substring(2);
+            }
+            // If it doesn't start with + but is already complete, add + with space
+            else if (/^\d{12}$/.test(phoneNumber) && phoneNumber.startsWith('91')) {
+                phoneNumber = '+91 ' + phoneNumber.substring(2);
+            }
+        }
+
         profileData.personalInformation = {
             fullName: personal_info.name || "",
             email: personal_info.email || "",
-            phone: personal_info.phone || "",
+            phone: phoneNumber,
             location: personal_info.location || "",
             linkedin: personal_info.linkedinurl || "",
             github: "",

@@ -5,6 +5,7 @@ import { getSkills, addSkill, deleteSkill, Skill } from '@/api/userApi';
 import { toast } from "sonner";
 import { useProfileContext } from '../context/ProfileContext';
 import { ProfileData } from '../_types/ProfileData';
+import logger from '@/lib/logger';
 
 const skill_gap_analysis = ["Cloud", "Docker", "React"]
 
@@ -23,13 +24,6 @@ const SkillsSection = ({ tempProfile, setTempProfile }: SkillsSectionProps) => {
     useEffect(() => {
         const fetchSkillsData = async () => {
             try {
-                const token = localStorage.getItem("access_token");
-                if (!token) {
-                    toast.error("Please log in to add skills");
-                    return;
-                }
-
-                // ✅ Always fetch the full skill objects (with IDs) from the database
                 const fetchedSkills = await getSkills();
                 setSkills(fetchedSkills);
 
@@ -43,12 +37,12 @@ const SkillsSection = ({ tempProfile, setTempProfile }: SkillsSectionProps) => {
                     setTempProfile((prev) => ({ ...prev, skills: skillNames }));
                     setProfileData((prev) => {
                         const newProfile = { ...prev, skills: skillNames };
-                        console.log('✅ Updated profile data with skills:', newProfile);
+                        logger.info('✅ Updated profile data with skills:', newProfile);
                         return newProfile;
                     });
                 }
             } catch (error) {
-                console.error('Failed to fetch skills:', error);
+                logger.error('Failed to fetch skills:', error);
             }
         };
 
@@ -71,14 +65,14 @@ const SkillsSection = ({ tempProfile, setTempProfile }: SkillsSectionProps) => {
             setTempProfile((prev) => ({ ...prev, skills: updatedSkillNames }));
             setProfileData((prev) => {
                 const newProfile = { ...prev, skills: updatedSkillNames };
-                console.log('✅ Updated profile data after adding skill:', newProfile);
+                logger.info('✅ Updated profile data after adding skill:', newProfile);
                 return newProfile;
             });
 
             setNewSkill(""); // clear input after adding
             toast.success(`Added skill: ${addedSkill.name}`);
         } catch (error) {
-            console.error('Failed to add skill:', error);
+            logger.error('Failed to add skill:', error);
             toast.error('Failed to add skill. Please try again.');
         } finally {
             setIsLoading(false);
@@ -100,13 +94,13 @@ const SkillsSection = ({ tempProfile, setTempProfile }: SkillsSectionProps) => {
             setTempProfile((prev) => ({ ...prev, skills: updatedSkillNames }));
             setProfileData((prev) => {
                 const newProfile = { ...prev, skills: updatedSkillNames };
-                console.log('✅ Updated profile data after deleting skill:', newProfile);
+                logger.info('✅ Updated profile data after deleting skill:', newProfile);
                 return newProfile;
             });
 
             toast.success('Skill removed');
         } catch (error) {
-            console.error('Failed to delete skill:', error);
+            logger.error('Failed to delete skill:', error);
             toast.error('Failed to delete skill');
         }
     };

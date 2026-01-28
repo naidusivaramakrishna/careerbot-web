@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { mapResumeToProfile } from "../_utils/resumeMapper";
+import { logger } from "@/lib/logger";
 
 import {
     addEducation,
@@ -15,13 +16,15 @@ import {
     deleteExperience,
     deleteSkill,
     deleteEducation,
+    addProject,
+    getProjects,
+    deleteProject
 } from "@/api/userApi";
 
 import { useProfileContext } from '../context/ProfileContext'
 import { ResumeExtractResponse, extractResume } from "@/api/resumeParsingApi";
 import { Crown, MessageSquare, Settings, Sparkles, Upload } from "lucide-react";
 import { ProfileData } from "../_types/ProfileData";
-import Image from "next/image";
 import { importLinkedInProfile } from "@/api/linkedinParsingApi";
 import { mapLinkedinToProfile } from "../_utils/linkedinMapper";
 import LinkedinImportModal from "./LinkedinImportModal";
@@ -147,30 +150,40 @@ const RightSection = () => {
             try {
                 const existingEducation = await getEducation();
                 for (const edu of existingEducation) {
-                    await deleteEducation(edu.id);
+                    if (edu.id) await deleteEducation(edu.id);
                 }
             } catch (err) {
-                console.log("Error deleting education:", err);
+                logger.warn("Error deleting education:", err);
             }
 
             // DELETE EXPERIENCE
             try {
                 const existingExperience = await getExperience();
                 for (const exp of existingExperience) {
-                    await deleteExperience(exp.id);
+                    if (exp.id) await deleteExperience(exp.id);
                 }
             } catch (err) {
-                console.log("Error deleting experience:", err);
+                logger.warn("Error deleting experience:", err);
             }
 
             // DELETE SKILLS
             try {
                 const existingSkills = await getSkills();
                 for (const skill of existingSkills) {
-                    await deleteSkill(skill.id);
+                    if (skill.id) await deleteSkill(skill.id);
                 }
             } catch (err) {
-                console.log("Error deleting skills:", err);
+                logger.warn("Error deleting skills:", err);
+            }
+
+            // DELETE PROJECTS
+            try {
+                const existingProjects = await getProjects();
+                for (const project of existingProjects) {
+                    await deleteProject(project.id!);
+                }
+            } catch (err) {
+                logger.warn("Error deleting projects:", err);
             }
 
             // 1️⃣ Extract resume
@@ -203,11 +216,11 @@ const RightSection = () => {
             if (mapped.education?.length) {
                 for (const edu of mapped.education) {
                     await addEducation({
-                        institution: edu.institution,
-                        degree: edu.degree,
-                        stream: edu.stream,
-                        cgpa: edu.cgpa || "",
-                        start_date: edu.start_date,
+                        institution: edu.institution || '',
+                        degree: edu.degree || '',
+                        stream: edu.stream || '',
+                        cgpa: edu.cgpa,
+                        start_date: edu.start_date || '',
                         end_date: edu.end_date,
                     });
                 }
@@ -219,14 +232,13 @@ const RightSection = () => {
             if (mapped.workExperience?.length) {
                 for (const exp of mapped.workExperience) {
                     await addExperience({
-                        job_title: exp.job_title,
-                        company: exp.company,
+                        job_title: exp.job_title || '',
+                        company: exp.company || '',
                         job_type: "full_time",
                         location: exp.location || "India",
-                        start_date: exp.start_date,
+                        start_date: exp.start_date || '',
                         end_date: exp.end_date,
                         description: exp.description,
-                        key_achievements: exp.description?.split("\n") || [],
                     });
                 }
             }
@@ -240,15 +252,33 @@ const RightSection = () => {
                 }
             }
 
-            // 🔄 7️⃣ RE-FETCH UPDATED DATA FROM DB
-            const [updatedEducation, updatedExp, updatedSkills] = await Promise.all([
+            // ---------------------------------------
+            // 7️⃣ STORE PROJECTS IN DB
+            // ---------------------------------------
+            if (mapped.projects?.length) {
+                for (const project of mapped.projects) {
+                    await addProject({
+                        project_name: project.project_name,
+                        role: project.role,
+                        technologies: project.technologies || '',
+                        start_date: project.start_date || '',
+                        end_date: project.end_date,
+                        description: project.description,
+                        project_link: project.project_link,
+                    });
+                }
+            }
+
+            // 🔄 8️⃣ RE-FETCH UPDATED DATA FROM DB
+            const [updatedEducation, updatedExp, updatedSkills, updatedProjects] = await Promise.all([
                 getEducation(),
                 getExperience(),
                 getSkills(),
+                getProjects(),
             ]);
 
             // ---------------------------------------
-            // 8️⃣ UPDATE CONTEXT → UI auto-fills
+            // 9️⃣ UPDATE CONTEXT → UI auto-fills
             // ---------------------------------------
             setProfileData((prev) => ({
                 ...prev,
@@ -259,14 +289,24 @@ const RightSection = () => {
                 education: updatedEducation,
                 workExperience: updatedExp,
                 skills: updatedSkills.map((s) => s.name),
+                projects: updatedProjects.map((p) => ({
+                    id: p.id,
+                    project_name: p.project_name,
+                    role: p.role,
+                    technologies: p.technologies || '',
+                    start_date: p.start_date,
+                    end_date: p.end_date,
+                    description: p.description,
+                    project_link: p.project_link,
+                })),
             }));
 
-            toast.success("Resume imported successfully!");
+            toast.success("Resume imported successfully!", { id: "resume-upload" });
         } catch (err) {
-            console.error(err);
-            toast.error("Failed to extract resume");
+            logger.error("Error during resume import:", err);
+            toast.error("Failed to extract resume", { id: "resume-upload" });
         } finally {
-            setLoading(false);
+            setUploading(false);
         }
     };
 
@@ -289,32 +329,42 @@ const RightSection = () => {
             try {
                 const existingEducation = await getEducation();
                 for (const edu of existingEducation) {
-                    await deleteEducation(edu.id);
+                    if (edu.id) await deleteEducation(edu.id);
                 }
             } catch (err) {
-                console.log("Error deleting education:", err);
+                logger.warn("Error deleting education:", err);
             }
 
             // DELETE EXPERIENCE
             try {
                 const existingExperience = await getExperience();
                 for (const exp of existingExperience) {
-                    await deleteExperience(exp.id);
+                    if (exp.id) await deleteExperience(exp.id);
                 }
             } catch (err) {
-                console.log("Error deleting experience:", err);
+                logger.warn("Error deleting experience:", err);
             }
 
             // DELETE SKILLS
             try {
                 const existingSkills = await getSkills();
                 for (const skill of existingSkills) {
-                    await deleteSkill(skill.id);
+                    if (skill.id) await deleteSkill(skill.id);
                 }
             } catch (err) {
-                console.log("Error deleting skills:", err);
+                logger.warn("Error deleting skills:", err);
             }
-            
+
+            // DELETE PROJECTS
+            try {
+                const existingProjects = await getProjects();
+                for (const project of existingProjects) {
+                    await deleteProject(project.id!);
+                }
+            } catch (err) {
+                logger.warn("Error deleting projects:", err);
+            }
+
             const mapped = mapLinkedinToProfile(res);
 
             // -------------------------------
@@ -328,7 +378,7 @@ const RightSection = () => {
                     location: mapped.personalInformation.location,
                     headline: "Software Developer",
                     linkedin_url: mapped.personalInformation.linkedin,
-                    github_url: mapped.personalInformation.portfolio,
+                    github_url: mapped.personalInformation.github,
                     summary: mapped.personalInformation.summary
                 });
             }
@@ -336,47 +386,70 @@ const RightSection = () => {
             // -------------------------------
             // 2️⃣ EDUCATION
             // -------------------------------
-            for (const edu of mapped.education) {
-                await addEducation({
-                    institution: edu.institution,
-                    degree: edu.degree,
-                    stream: edu.stream || "",
-                    cgpa: edu.cgpa,
-                    start_date: edu.start_date,
-                    end_date: edu.end_date,
-                });
+            if (mapped.education?.length) {
+                for (const edu of mapped.education) {
+                    await addEducation({
+                        institution: edu.institution || '',
+                        degree: edu.degree || '',
+                        stream: edu.stream || "",
+                        cgpa: edu.cgpa,
+                        start_date: edu.start_date || '',
+                        end_date: edu.end_date,
+                    });
+                }
             }
 
             // -------------------------------
             // 3️⃣ EXPERIENCE
             // -------------------------------
-            for (const exp of mapped.workExperience) {
-                await addExperience({
-                    job_title: exp.job_title,
-                    company: exp.company,
-                    job_type: exp.job_type,
-                    location: exp.location,
-                    start_date: exp.start_date,
-                    end_date: exp.end_date,
-                    description: exp.description,
-                    key_achievements: exp.key_achievements,
-                });
+            if (mapped.workExperience?.length) {
+                for (const exp of mapped.workExperience) {
+                    await addExperience({
+                        job_title: exp.job_title || '',
+                        company: exp.company || '',
+                        job_type: exp.job_type || 'full_time',
+                        location: exp.location || '',
+                        start_date: exp.start_date || '',
+                        end_date: exp.end_date,
+                        description: exp.description,
+                    });
+                }
             }
 
             // -------------------------------
             // 4️⃣ SKILLS
             // -------------------------------
-            for (const skill of mapped.skills) {
-                await addSkill(skill);
+            if (mapped.skills?.length) {
+                for (const skill of mapped.skills) {
+                    await addSkill(skill);
+                }
             }
 
             // -------------------------------
-            // 5️⃣ RELOAD DATA
+            // 5️⃣ PROJECTS
             // -------------------------------
-            const [updatedEducation, updatedExp, updatedSkills] = await Promise.all([
+            if (mapped.projects?.length) {
+                for (const project of mapped.projects) {
+                    await addProject({
+                        project_name: project.project_name,
+                        role: project.role,
+                        technologies: project.technologies || '',
+                        start_date: project.start_date || '',
+                        end_date: project.end_date,
+                        description: project.description,
+                        project_link: project.project_link,
+                    });
+                }
+            }
+
+            // -------------------------------
+            // 6️⃣ RELOAD DATA
+            // -------------------------------
+            const [updatedEducation, updatedExp, updatedSkills, updatedProjects] = await Promise.all([
                 getEducation(),
                 getExperience(),
                 getSkills(),
+                getProjects(),
             ]);
 
             setProfileData((prev) => ({
@@ -388,12 +461,22 @@ const RightSection = () => {
                 education: updatedEducation,
                 workExperience: updatedExp,
                 skills: updatedSkills.map((s) => s.name),
+                projects: updatedProjects.map((p) => ({
+                    id: p.id,
+                    project_name: p.project_name,
+                    role: p.role,
+                    technologies: p.technologies || '',
+                    start_date: p.start_date,
+                    end_date: p.end_date,
+                    description: p.description,
+                    project_link: p.project_link,
+                })),
             }));
 
             toast.success("LinkedIn imported successfully!", { id: "linkedin-import" });
 
         } catch (error) {
-            console.error(error);
+            logger.error("Error during LinkedIn import:", error);
             toast.error("Failed to import LinkedIn data", { id: "linkedin-import" });
         }
     };
@@ -434,15 +517,7 @@ const RightSection = () => {
                             )}
                         </div>
                     </div>
-                    {/*
-                    <div className='flex flex-col gap-2 mt-2'>
-                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'>
-                            <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={16} height={16} />
-                            <span className='text-sm'>Import from Linkedin</span>
-                        </div>
-                    </div>
-                    */}
-                    <div className='flex flex-col gap-2 mt-2'>
+                    {/* <div className='flex flex-col gap-2 mt-2'>
                         <div
                             className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'
                             onClick={() => setLinkedinModalOpen(true)}
@@ -450,7 +525,7 @@ const RightSection = () => {
                             <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={16} height={16} />
                             <span className='text-sm'>Import from Linkedin</span>
                         </div>
-                    </div>
+                    </div> */}
                     <div className='flex flex-col gap-2 mt-2'>
                         <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'>
                             <Sparkles className='w-4 h-4' />

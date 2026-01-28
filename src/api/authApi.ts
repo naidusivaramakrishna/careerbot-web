@@ -1,5 +1,4 @@
 import { httpClient } from "@/lib/http";
-import Cookies from "js-cookie";
 
 export interface LoginRequest {
   email: string;
@@ -24,12 +23,17 @@ export interface SignUpResponse {
   message?: string;
 }
 
-export const getAccessToken = (): string | null => {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("access_token") || Cookies.get("access_token") || null;
-};
+// ✅ Tokens are now httpOnly cookies - never accessible to JavaScript
+// ❌ Removed getAccessToken() - browser manages cookies automatically
 
-export const isAuthenticated = (): boolean => !!getAccessToken();
+export const isAuthenticated = async (): Promise<boolean> => {
+  try {
+    await httpClient.get("/auth/profile");
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
   const response = await httpClient.post<LoginResponse>(
@@ -37,22 +41,19 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     new URLSearchParams({
       username: data.email,
       password: data.password,
-    }),
+    }) as unknown as Record<string, unknown>,
     { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
   );
-  const { access_token, refresh_token } = response.data;
-  localStorage.setItem("access_token", access_token);
-  localStorage.setItem("refresh_token", refresh_token);
-  Cookies.set("access_token", access_token, { expires: 7 });
-  Cookies.set("refresh_token", refresh_token, { expires: 30 });
+
+  // ✅ Backend sets httpOnly cookies automatically
+  // ❌ No need to manually store tokens - browser handles this
   return response.data;
 };
 
 export const signOut = async () => {
   await httpClient.post("/auth/signout").catch(() => {});
-  localStorage.clear();
-  Cookies.remove("access_token");
-  Cookies.remove("refresh_token");
+  // ✅ Backend clears httpOnly cookies automatically
+  // ❌ No manual cleanup needed
   window.location.href = "/";
 };
 
@@ -62,9 +63,14 @@ export const getLinkedInLoginUrl = (): string => "https://www.linkedin.com/oauth
 
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
   try {
-    const response = await httpClient.post<SignUpResponse>("/auth/signup", data);
+    const response = await httpClient.post<SignUpResponse>(
+      "/auth/signup",
+      data as unknown as Record<string, unknown>
+    );
+    // ✅ Backend sets httpOnly cookies automatically after signup
     return response.data;
-  } catch (error: any) {
-    return { success: false, message: error?.message || "Sign up failed" };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Sign up failed";
+    return { success: false, message: errorMessage };
   }
 };

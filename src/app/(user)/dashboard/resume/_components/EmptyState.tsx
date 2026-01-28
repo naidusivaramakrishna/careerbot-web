@@ -864,6 +864,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useState } from "react";
 import { createResumeWithAuth, getAllResumes } from "@/api/resumeApi";
+import { logger } from "@/lib/logger";
 
 
 const EmptyState = ({ selected, onSelect }: { 
@@ -879,62 +880,41 @@ const EmptyState = ({ selected, onSelect }: {
   const handleBuilderClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     console.log("🔵 Builder clicked");
     onSelect("builder");
-    
-    const token = localStorage.getItem("access_token");
-    const userEmail = localStorage.getItem("user_email");
-    
-    if (!token || !userEmail) {
-      toast.error("Please sign in to create a resume");
-      return;
-    }
 
     setIsCreating(true);
-    
+
     try {
       // ✅ Step 1: Check for existing resumes
       console.log("📥 Checking for existing resumes...");
       const existingResumes = await getAllResumes();
-      
+
       if (existingResumes && existingResumes.length > 0) {
         const resume = existingResumes[0];
         console.log("✅ Using existing resume:", resume.id);
-        
-        // ✅ Ensure ID is stored
-        localStorage.setItem("current_resume_id", resume.id);
-        
+
         toast.success("Loading your resume...");
-        
+
         await new Promise(resolve => setTimeout(resolve, 500));
-        router.push("/builder/creation");
+        // ✅ Use URL parameter instead of localStorage
+        router.push(`/builder/creation?resumeId=${resume.id}`);
         return;
       }
-      
+
       // ✅ Step 2: Create new resume only if none exist
       console.log("📤 Creating new resume...");
       const newResume = await createResumeWithAuth();
-      
+
       console.log("✅ Resume created:", newResume);
       console.log("✅ Resume ID:", newResume.id);
-      
-      // ✅ CRITICAL: Store the ID immediately
-      localStorage.setItem("current_resume_id", newResume.id);
-      
-      // ✅ Verify it was stored
-      const storedId = localStorage.getItem("current_resume_id");
-      console.log("💾 Verified stored ID:", storedId);
-      
-      if (storedId !== newResume.id) {
-        console.error("❌ ID storage failed!");
-        throw new Error("Failed to store resume ID");
-      }
-      
+
       toast.success("Resume created successfully!");
-      
+
       await new Promise(resolve => setTimeout(resolve, 500));
-      router.push("/builder/creation");
+      // ✅ Use URL parameter instead of localStorage
+      router.push(`/builder/creation?resumeId=${newResume.id}`);
       
     } catch (error) {
       console.error("❌ Error:", error);

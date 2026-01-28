@@ -1,4 +1,5 @@
 import httpClient from "@/lib/http";
+import logger from "@/lib/logger";
 
 // ========== CONTACT ==========
 export interface ContactInfo {
@@ -144,7 +145,7 @@ export const extractResume = async (file: File): Promise<ResumeExtractResponse> 
 
         const response = await httpClient.post<ResumeExtractResponse>(
             "/parser/parse_resume/",
-            formData,
+            formData as unknown as Record<string, unknown>,
             {
                 headers: {
                     "Content-Type": "multipart/form-data",
@@ -154,7 +155,7 @@ export const extractResume = async (file: File): Promise<ResumeExtractResponse> 
 
         return response.data;
     } catch (error) {
-        console.error("Error extracting resume:", error);
+        logger.error("Error extracting resume:", error);
         throw error;
     }
 };

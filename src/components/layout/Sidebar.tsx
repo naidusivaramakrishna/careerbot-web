@@ -8,7 +8,7 @@ import { Wand2, LogOut, MessageSquare } from "lucide-react";
 import { FaArrowRightArrowLeft } from "react-icons/fa6";
 import { MdOutlineWork } from "react-icons/md";
 import { useRouter, usePathname } from "next/navigation";
-import { getProfile, UserProfile } from "@/api/userApi";
+import { getProfile, getProfilePicture, UserProfile } from "@/api/userApi";
 import { signOut } from "@/api/authApi";
 import { toast } from "sonner";
 import axios from "axios";
@@ -46,7 +46,7 @@ const navItems = [
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [active, setActive] = useState("profile");
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
@@ -54,6 +54,8 @@ export default function Sidebar() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+
+  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -67,7 +69,7 @@ export default function Sidebar() {
       // Check if current pathname starts with the item path
       return pathname.startsWith(item.path);
     });
-    
+
     if (current) setActive(current.id);
     else if (pathname === "/settings") setActive("settings");
   }, [pathname]);
@@ -86,20 +88,30 @@ export default function Sidebar() {
   // Fetch profile
   useEffect(() => {
     const fetchProfile = async () => {
-      const token = localStorage.getItem("access_token");
-      if (!token) return setIsLoadingProfile(false);
-
       try {
         const profile = await getProfile();
+        setIsLoggedIn(true);
         setUserProfile(profile);
-        if (profile.username) localStorage.setItem("username", profile.username);
-      } catch (error) {
+        // Fetch profile picture
+        const picRes = await getProfilePicture();
+        if (picRes?.picture_url) {
+          const fullUrl = picRes.picture_url.startsWith("http")
+            ? picRes.picture_url
+            : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${picRes.picture_url}`;
+          setProfilePicUrl(fullUrl);
+        }
+      } catch (error: any) {
         if (axios.isAxiosError(error)) {
           if ([401, 403].includes(error.response?.status ?? 0)) {
-            localStorage.clear();
+            // ✅ Backend clears httpOnly cookies automatically
+            // ❌ No manual localStorage cleanup needed
+            setIsLoggedIn(false);
             toast.error("Session expired. Please login again.");
             router.push("/signup");
-          } else toast.error("Failed to load profile.");
+          } else {
+            setIsLoggedIn(false);
+            toast.error("Failed to load profile.");
+          }
         }
       } finally {
         setIsLoadingProfile(false);
@@ -107,15 +119,6 @@ export default function Sidebar() {
     };
 
     fetchProfile();
-
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'access_token' || e.key === null) {
-        fetchProfile();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
     const handleTokenUpdate = () => {
       fetchProfile();
     };
@@ -123,7 +126,6 @@ export default function Sidebar() {
     window.addEventListener('tokenUpdated', handleTokenUpdate);
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('tokenUpdated', handleTokenUpdate);
     };
   }, [router]);
@@ -143,6 +145,10 @@ export default function Sidebar() {
 
     try {
       await signOut();
+
+      // Clear state
+      setIsLoggedIn(false);
+      setUserProfile(null);
       toast.success("Logged out successfully");
       router.push("/");
     } catch {
@@ -176,9 +182,9 @@ export default function Sidebar() {
           style={
             isActive || isHovered
               ? {
-                  filter:
-                    "invert(26%) sepia(88%) saturate(1567%) hue-rotate(197deg) brightness(91%) contrast(91%)",
-                }
+                filter:
+                  "invert(26%) sepia(88%) saturate(1567%) hue-rotate(197deg) brightness(91%) contrast(91%)",
+              }
               : {}
           }
         />
@@ -194,7 +200,7 @@ export default function Sidebar() {
 
   return (
     <div className="fixed top-0 left-0 bottom-0 w-20 bg-white flex flex-col items-center z-50 shadow-sm border-r border-gray-100">
-      
+
       {/* Logo */}
       <div className="py-4">
         <Image
@@ -214,21 +220,19 @@ export default function Sidebar() {
             onClick={() => handleNavigation(item.path, item.id)}
             onMouseEnter={() => setHoveredItem(item.id)}
             onMouseLeave={() => setHoveredItem(null)}
-            className={`flex flex-col items-center justify-center gap-1 py-3 px-2 w-full rounded-lg transition-all ${
-              active === item.id
+            className={`flex flex-col items-center justify-center gap-1 py-3 px-2 w-full rounded-lg transition-all ${active === item.id
                 ? "bg-[#e8eff9] text-[#2557a7]"
                 : "text-gray-600 hover:text-[#2557a7] hover:bg-gray-50"
-            }`}
+              }`}
           >
             <div>
               {renderIcon(item)}
             </div>
-            <span 
-              className={`text-[10px] font-medium transition-colors duration-200 ${
-                active === item.id || hoveredItem === item.id
-                  ? "text-[#2557a7]" 
+            <span
+              className={`text-[10px] font-medium transition-colors duration-200 ${active === item.id || hoveredItem === item.id
+                  ? "text-[#2557a7]"
                   : "text-gray-800"
-              }`}
+                }`}
             >
               {item.label}
             </span>
@@ -238,25 +242,23 @@ export default function Sidebar() {
 
       {/* Settings + Profile */}
       <div className="mt-auto flex flex-col items-center gap-2 pb-4 w-full px-1">
-        
+
         {/* Settings */}
         <button
           onClick={() => handleNavigation("/settings", "settings")}
           onMouseEnter={() => setHoveredItem("settings")}
           onMouseLeave={() => setHoveredItem(null)}
-          className={`flex flex-col items-center justify-center gap-1 py-3 px-2 w-full rounded-lg transition-all ${
-            active === "settings"
+          className={`flex flex-col items-center justify-center gap-1 py-3 px-2 w-full rounded-lg transition-all ${active === "settings"
               ? "bg-[#e8eff9] text-[#2557a7]"
               : "text-gray-600 hover:text-[#2557a7] hover:bg-gray-50"
-          }`}
+            }`}
         >
           <FaCog size={24} />
-          <span 
-            className={`text-[10px] font-medium transition-colors duration-200 ${
-              active === "settings" || hoveredItem === "settings"
-                ? "text-[#2557a7]" 
+          <span
+            className={`text-[10px] font-medium transition-colors duration-200 ${active === "settings" || hoveredItem === "settings"
+                ? "text-[#2557a7]"
                 : "text-gray-800"
-            }`}
+              }`}
           >
             Settings
           </span>
@@ -270,9 +272,17 @@ export default function Sidebar() {
           >
             {isLoadingProfile ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : profilePicUrl ? (
+              <Image
+                src={profilePicUrl}
+                alt="Profile"
+                width={48}
+                height={48}
+                className="object-cover w-full h-full cursor-pointer rounded-full"
+              />
             ) : (
-              <span className="text-white font-bold text-sm">{displayInitial}</span>
-            )}
+                <span className="text-white font-bold text-sm">{displayInitial}</span>
+              )}
           </button>
 
           {showProfileDropdown && (
@@ -284,11 +294,11 @@ export default function Sidebar() {
 
               <button
                 onClick={handleLogout}
-                disabled={isLoggingOut}
+                disabled={isLoggingOut || !isLoggedIn}
                 className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition"
               >
                 <LogOut className="w-4 h-4" />
-                <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+                <span className="text-xs">{isLoggingOut ? "Logging out..." : "Logout"}</span>
               </button>
             </div>
           )}

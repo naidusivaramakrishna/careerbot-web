@@ -2,12 +2,11 @@
 import React, { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
-import Cookies from "js-cookie"
 
 /**
  * Google OAuth Success Page
- * This page receives tokens from the backend redirect and stores them,
- * then redirects to the dashboard.
+ * ✅ Backend now sets httpOnly cookies automatically
+ * ❌ No need to manually handle tokens or store them
  */
 const GoogleSuccessPage = () => {
   const router = useRouter()
@@ -15,36 +14,12 @@ const GoogleSuccessPage = () => {
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
 
   useEffect(() => {
-    const storeTokensAndRedirect = async () => {
+    const redirectAfterSuccess = async () => {
       try {
-        // Get tokens from URL query parameters
-        const accessToken = searchParams.get('access_token')
-        const refreshToken = searchParams.get('refresh_token')
-        const tokenType = searchParams.get('token_type')
-        const expiresIn = searchParams.get('expires_in')
+        // ✅ Backend handles httpOnly cookie setting automatically
+        // ❌ No need to manually extract or store tokens from URL
+        // The backend redirects here after setting cookies
 
-        if (!accessToken || !refreshToken) {
-          throw new Error('No tokens received from backend')
-        }
-
-        // Store in localStorage
-        localStorage.setItem('access_token', accessToken)
-        localStorage.setItem('refresh_token', refreshToken)
-
-        // Store in cookies (for middleware and server-side access)
-        Cookies.set('access_token', accessToken, {
-          expires: 7, // 7 days
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          path: '/'
-        })
-
-        Cookies.set('refresh_token', refreshToken, {
-          expires: 30, // 30 days
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          path: '/'
-        })
         setStatus('success')
         toast.success('Successfully signed in with Google!')
 
@@ -54,7 +29,7 @@ const GoogleSuccessPage = () => {
         }, 1000)
 
       } catch (error: any) {
-        console.error('❌ Error storing tokens:', error)
+        console.error('❌ Error:', error)
         setStatus('error')
         toast.error('Failed to complete sign in')
 
@@ -65,7 +40,7 @@ const GoogleSuccessPage = () => {
       }
     }
 
-    storeTokensAndRedirect()
+    redirectAfterSuccess()
   }, [searchParams, router])
 
   return (

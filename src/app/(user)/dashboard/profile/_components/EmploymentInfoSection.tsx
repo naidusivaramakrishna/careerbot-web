@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import MultiSelectAutocomplete from "@/components/common/MultiSelectAutocomplete";
 import { useProfileContext } from "../context/ProfileContext";
 import { ProfileData } from "../_types/ProfileData";
+import logger from "@/lib/logger";
 
 const industries = ["IT", "Finance", "Healthcare", "Education", "E-commerce"];
 const roles = [
@@ -56,24 +57,18 @@ export default function EmploymentInfoSection({
         const fetchEmploymentInfo = async () => {
             try {
                 setLoading(true);
-                const token = localStorage.getItem("access_token");
-                if (!token) {
-                    toast.error("Please log in to view employment information");
-                    setLoading(false);
-                    return;
-                }
-
+                // ✅ httpOnly cookies sent automatically by httpClient with withCredentials
                 const data = await getEmploymentInfo();
 
                 // ✅ Update both tempProfile and global context
                 setTempProfile((prev) => ({ ...prev, employmentInfo: data }));
                 setProfileData((prev) => {
                     const newProfile = { ...prev, employmentInfo: data };
-                    console.log('✅ Updated profile data with employment info:', newProfile);
+                    logger.info('✅ Updated profile data with employment info:', newProfile);
                     return newProfile;
                 });
             } catch (error) {
-                console.error("Error fetching employment info:", error);
+                logger.error("Error fetching employment info:", error);
                 toast.error("Failed to load employment information.");
             } finally {
                 setLoading(false);
@@ -99,14 +94,13 @@ export default function EmploymentInfoSection({
             // ✅ Update global context after successful save
             setProfileData((prev) => {
                 const newProfile = { ...prev, employmentInfo: form };
-                console.log('✅ Updated profile data after saving employment info:', newProfile);
+                logger.info('✅ Updated profile data after saving employment info:', newProfile);
                 return newProfile;
             });
 
             toast.success("Employment information updated successfully");
             setHasChanges(false);
         } catch (error) {
-            console.error(error);
             toast.error("Error updating employment information");
         } finally {
             setLoading(false);

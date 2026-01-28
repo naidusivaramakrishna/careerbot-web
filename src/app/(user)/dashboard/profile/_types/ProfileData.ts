@@ -15,7 +15,7 @@ export interface ProfileData {
         institution?: string;
         degree?: string;
         stream?: string;
-        cgpa?: string;
+        cgpa?: number;
         start_date?: string;
         end_date?: string;
     }[];
@@ -67,13 +67,13 @@ export interface ProfileData {
 
     projects?: {
         id?: string;
-        projectName?: string;
+        project_name?: string;
         role?: string;
-        technologies?: string[];
-        startDate?: string;
-        endDate?: string;
+        technologies?: string;
+        start_date?: string;
+        end_date?: string;
         description?: string;
-        link?: string;
+        project_link?: string;
     }[];
 
     achievements?: {

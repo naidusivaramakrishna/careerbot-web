@@ -1,5 +1,5 @@
 import { httpClient } from '@/lib/http';
-
+import logger from '@/lib/logger';
 // ==================== INTERFACES ====================
 
 export interface AdminListQueryParams {
@@ -116,7 +116,7 @@ export const getAdminList = async (
         const response = await httpClient.get<AdminListResponse>(url);
         return response.data;
     } catch (error) {
-        console.error('Error fetching admin list:', error);
+        logger.error('Error fetching admin list:', error);
         throw error;
     }
 };
@@ -144,7 +144,7 @@ export const getAdminDetails = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error fetching admin details for ${adminId}:`, error);
+        logger.error(`Error fetching admin details for ${adminId}:`, error);
         throw error;
     }
 };
@@ -171,7 +171,7 @@ export const updateAdminRole = async (
     try {
         const response = await httpClient.patch<UpdateAdminRoleResponse>(
             `/admin/auth/${adminId}/role`,
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -180,7 +180,7 @@ export const updateAdminRole = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error updating admin role for ${adminId}:`, error);
+        logger.error(`Error updating admin role for ${adminId}:`, error);
         throw error;
     }
 };
@@ -208,7 +208,7 @@ export const updateAdminStatus = async (
     try {
         const response = await httpClient.patch<UpdateAdminStatusResponse>(
             `/admin/auth/${adminId}/status`,
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -217,7 +217,7 @@ export const updateAdminStatus = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error updating admin status for ${adminId}:`, error);
+        logger.error(`Error updating admin status for ${adminId}:`, error);
         throw error;
     }
 };
@@ -243,7 +243,7 @@ export const deleteAdmin = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error deleting admin ${adminId}:`, error);
+        logger.error(`Error deleting admin ${adminId}:`, error);
         throw error;
     }
 };
@@ -285,10 +285,23 @@ export const getAdminActivityLogs = async (
 
         const url = `/admin/auth/${adminId}/activity${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
 
-        const response = await httpClient.get(url);
+        const response = await httpClient.get<{
+            total: number;
+            page: number;
+            page_size: number;
+            logs: Array<{
+                id: string;
+                admin_id: string;
+                action_type: string;
+                action_details: string;
+                ip_address: string;
+                user_agent: string;
+                created_at: string;
+            }>;
+        }>(url);
         return response.data;
     } catch (error) {
-        console.error(`Error fetching admin activity logs for ${adminId}:`, error);
+        logger.error(`Error fetching admin activity logs for ${adminId}:`, error);
         throw error;
     }
 };
@@ -315,7 +328,7 @@ export const resetAdminPassword = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error resetting password for admin ${adminId}:`, error);
+        logger.error(`Error resetting password for admin ${adminId}:`, error);
         throw error;
     }
 };
@@ -342,10 +355,27 @@ export const getAdminStats = async (): Promise<{
     }>;
 }> => {
     try {
-        const response = await httpClient.get('/admin/auth/stats');
+        const response = await httpClient.get<{
+            total_admins: number;
+            active_admins: number;
+            suspended_admins: number;
+            inactive_admins: number;
+            admins_by_role: {
+                super_admin: number;
+                admin: number;
+                moderator: number;
+                support: number;
+            };
+            recent_logins: Array<{
+                admin_id: string;
+                email: string;
+                full_name: string;
+                last_login: string;
+            }>;
+        }>('/admin/auth/stats');
         return response.data;
     } catch (error) {
-        console.error('Error fetching admin statistics:', error);
+        logger.error('Error fetching admin statistics:', error);
         throw error;
     }
 };

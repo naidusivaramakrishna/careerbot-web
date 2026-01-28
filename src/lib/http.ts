@@ -4,7 +4,6 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from 'axios';
-import Cookies from 'js-cookie';
 import {
   getCorrelationId,
   clearCorrelationId,
@@ -20,36 +19,10 @@ const BASE_URL =
 const isAdminRequest = (url?: string): boolean =>
   url?.includes('/admin/') || false;
 
-const getToken = (isAdmin = false): string | null => {
-  if (typeof window === 'undefined') return null;
-  const key = isAdmin ? 'admin_access_token' : 'access_token';
-  return Cookies.get(key) || localStorage.getItem(key);
-};
-
-const getRefreshToken = (isAdmin = false): string | null => {
-  if (typeof window === 'undefined') return null;
-  const key = isAdmin ? 'admin_refresh_token' : 'refresh_token';
-  return Cookies.get(key) || localStorage.getItem(key);
-};
-
-const clearAllTokens = (isAdmin = false) => {
+const clearAllTokens = () => {
   if (typeof window === 'undefined') return;
-
-  if (isAdmin) {
-    localStorage.removeItem('admin_access_token');
-    localStorage.removeItem('admin_refresh_token');
-    localStorage.removeItem('admin_id');
-    localStorage.removeItem('admin_role');
-    Cookies.remove('admin_access_token');
-    Cookies.remove('admin_refresh_token');
-  } else {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user_id');
-    Cookies.remove('access_token');
-    Cookies.remove('refresh_token');
-  }
-
+  // ✅ Backend clears httpOnly cookies automatically
+  // Works for both user and admin requests
   sessionStorage.clear();
   clearCorrelationId();
 };
@@ -60,6 +33,7 @@ const clearAllTokens = (isAdmin = false) => {
 
 const client: AxiosInstance = axios.create({
   baseURL: BASE_URL,
+  withCredentials: true, // ✅ Enable httpOnly cookie sending/receiving
   headers: {
     'Content-Type': 'application/json',
   },
@@ -101,12 +75,6 @@ const processQueue = (
 
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const isAdmin = isAdminRequest(config.url);
-    const token = getToken(isAdmin);
-
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
 
     const correlationId = getCorrelationId();
     if (correlationId && config.headers) {
@@ -151,7 +119,7 @@ client.interceptors.response.use(
       originalRequest.url?.includes('/admin/auth/login') ||
       originalRequest.url?.includes('/admin/auth/refresh')
     ) {
-      clearAllTokens(isAdmin);
+      clearAllTokens();
       window.location.href = isAdmin
         ? '/admin/login'
         : '/auth/login';
@@ -174,59 +142,22 @@ client.interceptors.response.use(
     originalRequest._retry = true;
     isAdmin ? (isRefreshingAdmin = true) : (isRefreshingUser = true);
 
-    const refreshToken = getRefreshToken(isAdmin);
-    if (!refreshToken) {
-      clearAllTokens(isAdmin);
-      window.location.href = isAdmin
-        ? '/admin/login'
-        : '/auth/login';
-      return Promise.reject(error);
-    }
-
     try {
       const endpoint = isAdmin
         ? '/admin/auth/refresh'
         : '/auth/refresh';
-
-      const res = await axios.post(`${BASE_URL}${endpoint}`, {
-        refresh_token: refreshToken,
-      });
-
-      const { access_token, refresh_token } = res.data;
-
-      const accessKey = isAdmin
-        ? 'admin_access_token'
-        : 'access_token';
-      const refreshKey = isAdmin
-        ? 'admin_refresh_token'
-        : 'refresh_token';
-
-      localStorage.setItem(accessKey, access_token);
-      localStorage.setItem(refreshKey, refresh_token);
-
-      Cookies.set(accessKey, access_token, {
-        expires: 7,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
-
-      Cookies.set(refreshKey, refresh_token, {
-        expires: 30,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
-
+      await client.post(endpoint);
       window.dispatchEvent(
         new Event(isAdmin ? 'adminTokenUpdated' : 'tokenUpdated')
       );
 
-      processQueue(null, access_token, isAdmin);
+      processQueue(null, 'token-refreshed', isAdmin);
 
-      originalRequest.headers.Authorization = `Bearer ${access_token}`;
+      // ✅ Retry original request with new httpOnly cookie
       return client(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError, null, isAdmin);
-      clearAllTokens(isAdmin);
+      clearAllTokens();
       window.location.href = isAdmin
         ? '/admin/login'
         : '/auth/login';

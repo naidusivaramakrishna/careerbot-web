@@ -10,7 +10,7 @@ import { useProfileContext } from "../../context/ProfileContext";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import Modal from "@/components/common/Modal";
 import EducationEmptyState from "./EducationEmptyState";
-
+import {logger} from "@/lib/logger"
 export default function EducationSection({
     tempProfile,
     setTempProfile,
@@ -95,7 +95,7 @@ export default function EducationSection({
             setTempProfile((prev) => ({ ...prev, education: updated }));
             setProfileData((prev) => {
                 const newProfile = { ...prev, education: updated };
-                console.log('✅ Updated profile data after delete:', newProfile);
+                logger.info('✅ Updated profile data after delete:', newProfile);
                 return newProfile;
             });
 
