@@ -10,6 +10,7 @@ import { useProfileContext } from "../../context/ProfileContext";
 import ExperienceEmptyState from "./ExperienceEmptyState";
 import Modal from "@/components/common/Modal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
+import logger from "@/lib/logger";
 
 export default function WorkExperienceSection({
     tempProfile,
@@ -95,7 +96,7 @@ export default function WorkExperienceSection({
             setTempProfile((prev) => ({ ...prev, workExperience: updated }));
             setProfileData((prev) => {
                 const newProfile = { ...prev, workExperience: updated };
-                console.log('✅ Updated profile data after delete:', newProfile);
+                logger.info('✅ Updated profile data after delete:', newProfile);
                 return newProfile;
             });
             toast.success("Experience deleted");

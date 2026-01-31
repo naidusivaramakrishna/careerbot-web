@@ -1,4 +1,5 @@
 import { httpClient } from '@/lib/http';
+import logger from '@/lib/logger';
 // ==================== INTERFACES ====================
 
 export interface Education {
@@ -6,7 +7,7 @@ export interface Education {
     institution: string;
     degree: string;
     stream: string;
-    cgpa: string;
+    cgpa?: number;
     start_date: string;
     end_date?: string;
 }
@@ -70,8 +71,8 @@ export interface UserProfile {
     location?: string;
     summary?: string;
     is_verified?: boolean
-    status: string,
-    role: string,
+    status?: string,
+    role?: string,
     linkedin_url?: string;
     github_url?: string;
     skills?: string[];
@@ -105,7 +106,8 @@ export interface ApiResponse<T> {
 
 export const getProfile = async (): Promise<UserProfile> => {
     try {
-        const response = await httpClient.get<ApiResponse<UserProfile>>('/profile/'); // Use any temporarily
+        // ✅ httpOnly cookies sent automatically by httpClient with withCredentials
+        const response = await httpClient.get<ApiResponse<UserProfile>>('/profile');
 
         let profileData: UserProfile;
 
@@ -113,7 +115,7 @@ export const getProfile = async (): Promise<UserProfile> => {
             profileData = response.data.data;
         } else if (response.data && typeof response.data === 'object') {
             // Flat response
-            profileData = response.data as UserProfile;
+            profileData = response.data as unknown as UserProfile;
         } else {
             throw new Error('Invalid profile response structure');
         }
@@ -125,6 +127,7 @@ export const getProfile = async (): Promise<UserProfile> => {
 
         return profileData;
     } catch (error) {
+        logger.error('Error fetching profile:', error);
         throw error;
     }
 };
@@ -140,7 +143,7 @@ export const updateProfile = async (profileData: Partial<UserProfile>): Promise<
         );
         return response.data.data || response.data as unknown as UserProfile;
     } catch (error) {
-        console.error('Error updating profile:', error);
+        logger.error('Error updating profile:', error);
         throw error;
     }
 };
@@ -166,7 +169,7 @@ export const getEducation = async (): Promise<Education[]> => {
 
         return [];
     } catch (error) {
-        console.error('Error fetching education:', error);
+        logger.error('Error fetching education:', error);
         throw error;
     }
 };
@@ -182,7 +185,7 @@ export const addEducation = async (educationData: Omit<Education, 'id'>): Promis
         );
         return response.data.data || response.data as unknown as Education;
     } catch (error) {
-        console.error('Error adding education:', error);
+        logger.error('Error adding education:', error);
         throw error;
     }
 };
@@ -201,7 +204,7 @@ export const updateEducation = async (
         );
         return response.data.data || response.data as unknown as Education;
     } catch (error) {
-        console.error('Error updating education:', error);
+        logger.error('Error updating education:', error);
         throw error;
     }
 };
@@ -213,7 +216,7 @@ export const deleteEducation = async (educationId: string): Promise<void> => {
     try {
         await httpClient.delete(`/profile/education/${educationId}`);
     } catch (error) {
-        console.error('Error deleting education:', error);
+        logger.error('Error deleting education:', error);
         throw error;
     }
 };
@@ -252,7 +255,7 @@ export const getExperience = async (): Promise<Experience[]> => {
 
         return [];
     } catch (error) {
-        console.error('Error fetching experience:', error);
+        logger.error('Error fetching experience:', error);
         throw error;
     }
 };
@@ -268,7 +271,7 @@ export const addExperience = async (experienceData: Omit<Experience, 'id'>): Pro
         );
         return response.data.data || response.data as unknown as Experience;
     } catch (error) {
-        console.error('Error adding experience:', error);
+        logger.error('Error adding experience:', error);
         throw error;
     }
 };
@@ -287,7 +290,7 @@ export const updateExperience = async (
         );
         return response.data.data || response.data as unknown as Experience;
     } catch (error) {
-        console.error('Error updating education:', error);
+        logger.error('Error updating education:', error);
         throw error;
     }
 };
@@ -299,7 +302,7 @@ export const deleteExperience = async (experienceId: string): Promise<void> => {
     try {
         await httpClient.delete(`/profile/experience/${experienceId}`);
     } catch (error) {
-        console.error('Error deleting education:', error);
+        logger.error('Error deleting education:', error);
         throw error;
     }
 };
@@ -338,7 +341,7 @@ export const getProjects = async (): Promise<Projects[]> => {
 
         return [];
     } catch (error) {
-        console.error('Error fetching projects:', error);
+        logger.error('Error fetching projects:', error);
         throw error;
     }
 };
@@ -354,7 +357,7 @@ export const addProject = async (projectsData: Omit<Projects, 'id'>): Promise<Pr
         );
         return response.data.data || response.data as unknown as Projects;
     } catch (error) {
-        console.error('Error adding projects:', error);
+        logger.error('Error adding projects:', error);
         throw error;
     }
 };
@@ -373,7 +376,7 @@ export const updateProjects = async (
         );
         return response.data.data || response.data as unknown as Projects;
     } catch (error) {
-        console.error('Error updating project:', error);
+        logger.error('Error updating project:', error);
         throw error;
     }
 };
@@ -385,7 +388,7 @@ export const deleteProject = async (projectId: string): Promise<void> => {
     try {
         await httpClient.delete(`/profile/projects/${projectId}`);
     } catch (error) {
-        console.error('Error deleting project:', error);
+        logger.error('Error deleting project:', error);
         throw error;
     }
 };
@@ -425,7 +428,7 @@ export const getSkills = async (): Promise<Skill[]> => {
 
         return [];
     } catch (error) {
-        console.error('Error fetching skills:', error);
+        logger.error('Error fetching skills:', error);
         throw error;
     }
 };
@@ -441,7 +444,7 @@ export const addSkill = async (skillName: string): Promise<Skill> => {
         );
         return response.data.data || response.data as unknown as Skill;
     } catch (error) {
-        console.error('Error adding skill:', error);
+        logger.error('Error adding skill:', error);
         throw error;
     }
 };
@@ -460,7 +463,7 @@ export const updateSkill = async (
         );
         return response.data.data || response.data as unknown as Skill;
     } catch (error) {
-        console.error('Error updating skill:', error);
+        logger.error('Error updating skill:', error);
         throw error;
     }
 };
@@ -472,7 +475,7 @@ export const deleteSkill = async (skillId: string): Promise<void> => {
     try {
         await httpClient.delete(`/profile/skills/${skillId}`);
     } catch (error) {
-        console.error('Error deleting skill:', error);
+        logger.error('Error deleting skill:', error);
         throw error;
     }
 };
@@ -498,7 +501,7 @@ export const getCertification = async (): Promise<Certification[]> => {
 
         return [];
     } catch (error) {
-        console.error('Error fetching certifications:', error);
+        logger.error('Error fetching certifications:', error);
         throw error;
     }
 };
@@ -514,7 +517,7 @@ export const addCertification = async (certificationData: Omit<Certification, 'i
         );
         return response.data.data || response.data as unknown as Certification;
     } catch (error) {
-        console.error('Error adding certification:', error);
+        logger.error('Error adding certification:', error);
         throw error;
     }
 };
@@ -533,7 +536,7 @@ export const updateCertification = async (
         );
         return response.data.data || response.data as unknown as Certification;
     } catch (error) {
-        console.error('Error updating certification:', error);
+        logger.error('Error updating certification:', error);
         throw error;
     }
 };
@@ -545,7 +548,7 @@ export const deleteCertification = async (certificationId: string): Promise<void
     try {
         await httpClient.delete(`/profile/certifications/${certificationId}`);
     } catch (error) {
-        console.error('Error deleting certification:', error);
+        logger.error('Error deleting certification:', error);
         throw error;
     }
 };
@@ -560,7 +563,7 @@ export const getEmploymentInfo = async (): Promise<EmploymentInfo> => {
         const response = await httpClient.get<ApiResponse<EmploymentInfo>>('/profile/employment-info');
         return response.data.data || response.data as unknown as EmploymentInfo;
     } catch (error) {
-        console.error('Error fetching employment info:', error);
+        logger.error('Error fetching employment info:', error);
         throw error;
     }
 };
@@ -576,7 +579,7 @@ export const updateEmploymentInfo = async (employmentData: Partial<EmploymentInf
         );
         return response.data.data || response.data as unknown as EmploymentInfo;
     } catch (error) {
-        console.error('Error updating employment info:', error);
+        logger.error('Error updating employment info:', error);
         throw error;
     }
 };
@@ -592,7 +595,7 @@ export const uploadProfilePicture = async (file: File): Promise<ProfilePictureRe
 
         const response = await httpClient.post<ProfilePictureResponse>(
             "/profile/picture/upload",
-            formData,
+            formData as unknown as Record<string, unknown>,
             {
                 headers: {
                     "Content-Type": "multipart/form-data"
@@ -602,7 +605,7 @@ export const uploadProfilePicture = async (file: File): Promise<ProfilePictureRe
 
         return response.data;
     } catch (error) {
-        console.error("Error uploading profile picture:", error);
+        logger.error("Error uploading profile picture:", error);
         throw error;
     }
 };
@@ -615,7 +618,20 @@ export const getProfilePicture = async (): Promise<ProfilePictureResponse> => {
         const response = await httpClient.get<ProfilePictureResponse>("/profile/picture");
         return response.data;
     } catch (error) {
-        console.error("Error fetching profile picture:", error);
+        logger.error("Error fetching profile picture:", error);
         throw error;
     }
 };
+
+/**
+ * Delete current user's profile picture
+ */
+export const deleteProfilePicture = async (): Promise<{ message: string }> => {
+    try {
+        const response = await httpClient.delete<{ message: string }>("/profile/picture");
+        return response.data;
+    } catch (error) {
+        logger.error("Error deleting profile picture:", error);
+        throw error;
+    }
+}

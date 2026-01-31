@@ -27,4 +27,4 @@ export interface ValidationError {
   msg: string
 }
 
-export type FormType = "signup" | "login"
+export type FormType = "signup" | "signin"

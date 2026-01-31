@@ -32,7 +32,7 @@ export function useATSScore(resumeData: ResumeData) {
       setScore(json.score);
       setDetails(json.details);
     } catch (err) {
-      console.error("ATS Score error:", err);
+      // // console.error("ATS Score error:", err);
     }
   };
 

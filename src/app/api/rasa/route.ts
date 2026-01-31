@@ -4,7 +4,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    console.log('📤 Sending to Rasa:', body);
+    // // console.log('📤 Sending to Rasa:', body);
     
     const response = await fetch('http://localhost:8001/webhooks/rest/webhook', {
       method: 'POST',
@@ -15,16 +15,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      console.error('❌ Rasa error:', response.status);
+      // // console.error('❌ Rasa error:', response.status);
       throw new Error(`Rasa returned ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('📥 Rasa response:', data);
+    // // console.log('📥 Rasa response:', data);
     
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error('❌ Proxy error:', error.message);
+    // // console.error('❌ Proxy error:', error.message);
     return NextResponse.json(
       { error: 'Failed to connect to Rasa', details: error.message },
       { status: 500 }

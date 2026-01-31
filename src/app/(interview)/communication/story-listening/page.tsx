@@ -1,587 +1,21 @@
-// 'use client';
-
-// import { useState } from 'react';
-// import { useRouter } from 'next/navigation';
-// import AudioRecorder from '../components/AudioRecorder';
-
-// const questions = [
-//   'What is your writing process from start to finish?',
-//   'How do you ensure clarity and coherence in your writing?',
-//   'Describe a significant writing project you completed.',
-//   'How do you handle writer\'s block?',
-//   'What techniques do you use for effective editing?',
-//   'How do you adapt your writing style for different audiences?',
-//   'Describe your experience with professional writing.',
-//   'How do you organize your thoughts before writing?',
-// ];
-
-// export default function WritingSkillsPage() {
-//   const router = useRouter();
-//   const [currentQuestion, setCurrentQuestion] = useState(0);
-
-//   const handleNext = () => {
-//     if (currentQuestion < questions.length - 1) {
-//       setCurrentQuestion(currentQuestion + 1);
-//     } else {
-//       router.push('/vocabulary');
-//     }
-//   };
-
-//   const handlePrevious = () => {
-//     if (currentQuestion > 0) {
-//       setCurrentQuestion(currentQuestion - 1);
-//     }
-//   };
-
-//   return (
-//     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
-//       <div className="container mx-auto px-4 py-8">
-//         {/* Header */}
-//         <div className="flex justify-between items-center mb-8">
-//           <div className="bg-white px-6 py-3 rounded-full shadow-lg border-2 border-amber-200">
-//             <span className="text-lg font-bold text-amber-600">
-//               {currentQuestion + 1}/{questions.length}
-//             </span>
-//           </div>
-
-//           <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-8 py-3 rounded-full shadow-lg">
-//             <h1 className="text-xl font-bold text-white">Writing Skills ✍️</h1>
-//           </div>
-//         </div>
-
-//         {/* Main Content */}
-//         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
-//           {/* Left Side - Question */}
-//           <div className="bg-white rounded-3xl shadow-2xl p-8 lg:p-12 border border-gray-100">
-//             <div className="flex items-start space-x-4">
-//               <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-//                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-//                 </svg>
-//               </div>
-//               <div className="flex-1">
-//                 <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-//                   Question {currentQuestion + 1}
-//                 </h2>
-//                 <p className="text-2xl lg:text-3xl font-bold text-gray-800 leading-relaxed">
-//                   {questions[currentQuestion]}
-//                 </p>
-//               </div>
-//             </div>
-
-//             <div className="mt-8 p-6 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-100">
-//               <h3 className="text-sm font-semibold text-amber-600 uppercase mb-3">Recording Guidelines</h3>
-//               <ul className="space-y-2 text-sm text-gray-600">
-//                 <li className="flex items-center">
-//                   <span className="w-2 h-2 bg-amber-400 rounded-full mr-3"></span>
-//                   You have 15 seconds to record your answer
-//                 </li>
-//                 <li className="flex items-center">
-//                   <span className="w-2 h-2 bg-amber-400 rounded-full mr-3"></span>
-//                   Speak clearly and at a moderate pace
-//                 </li>
-//                 <li className="flex items-center">
-//                   <span className="w-2 h-2 bg-amber-400 rounded-full mr-3"></span>
-//                   Click Start to begin recording
-//                 </li>
-//               </ul>
-//             </div>
-//           </div>
-
-//           {/* Right Side - Audio Recording */}
-//           <div className="bg-white rounded-3xl shadow-2xl p-8 lg:p-12 border border-gray-100">
-//             <AudioRecorder maxDuration={15} />
-//           </div>
-//         </div>
-
-//         {/* Navigation Buttons */}
-//         <div className="flex justify-between mt-12">
-//           <button
-//             onClick={handlePrevious}
-//             disabled={currentQuestion === 0}
-//             className="px-8 py-4 bg-gray-200 text-gray-700 rounded-full font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center space-x-3"
-//           >
-//             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-//             </svg>
-//             <span>Previous</span>
-//           </button>
-
-//           <button
-//             onClick={handleNext}
-//             className="group px-10 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full font-bold text-lg shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200 flex items-center space-x-3"
-//           >
-//             <span>{currentQuestion === questions.length - 1 ? 'Next Section' : 'Next Question'}</span>
-//             <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-//             </svg>
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-// 'use client';
-
-// import { useState, useRef } from 'react';
-// import { useRouter } from 'next/navigation';
-// import StoryAudioPlayer from '../components/StoryAudioPlayer';
-
-// // Sample data for Story Listening section
-// const storiesData = [
-//   {
-//     id: 1,
-//     title: 'A Day at the Beach',
-//     audioUrl: '/audio/story1.mp3', // Replace with your actual audio file path
-//     duration: '2:30',
-//     questions: [
-//       {
-//         id: 1,
-//         question: 'Where did the family go for their vacation?',
-//         options: [
-//           { id: 'A', text: 'To the mountains' },
-//           { id: 'B', text: 'To the beach' },
-//           { id: 'C', text: 'To the city' },
-//           { id: 'D', text: 'To a farm' },
-//         ],
-//         correctAnswer: 'B',
-//       },
-//       {
-//         id: 2,
-//         question: 'What did the children do at the beach?',
-//         options: [
-//           { id: 'A', text: 'They went fishing' },
-//           { id: 'B', text: 'They played volleyball' },
-//           { id: 'C', text: 'They built sandcastles' },
-//           { id: 'D', text: 'They went surfing' },
-//         ],
-//         correctAnswer: 'C',
-//       },
-//       {
-//         id: 3,
-//         question: 'How did the family feel about their day?',
-//         options: [
-//           { id: 'A', text: 'They were tired and bored' },
-//           { id: 'B', text: 'They were happy and enjoyed it' },
-//           { id: 'C', text: 'They were disappointed' },
-//           { id: 'D', text: 'They wanted to go home early' },
-//         ],
-//         correctAnswer: 'B',
-//       },
-//     ],
-//   },
-//   // {
-//   //   id: 2,
-//   //   title: 'The Lost Puppy',
-//   //   audioUrl: '/audio/story2.mp3',
-//   //   duration: '2:45',
-//   //   questions: [
-//   //     {
-//   //       id: 1,
-//   //       question: 'What did Sarah find in the park?',
-//   //       options: [
-//   //         { id: 'A', text: 'A lost kitten' },
-//   //         { id: 'B', text: 'A lost puppy' },
-//   //         { id: 'C', text: 'A toy' },
-//   //         { id: 'D', text: 'A ball' },
-//   //       ],
-//   //       correctAnswer: 'B',
-//   //     },
-//   //     {
-//   //       id: 2,
-//   //       question: 'What color was the puppy?',
-//   //       options: [
-//   //         { id: 'A', text: 'Black and white' },
-//   //         { id: 'B', text: 'Brown and white' },
-//   //         { id: 'C', text: 'Golden brown' },
-//   //         { id: 'D', text: 'Gray' },
-//   //       ],
-//   //       correctAnswer: 'C',
-//   //     },
-//   //     {
-//   //       id: 3,
-//   //       question: 'How did Sarah help the puppy?',
-//   //       options: [
-//   //         { id: 'A', text: 'She took it to a shelter' },
-//   //         { id: 'B', text: 'She kept it as her pet' },
-//   //         { id: 'C', text: 'She found the owner using the tag' },
-//   //         { id: 'D', text: 'She called the police' },
-//   //       ],
-//   //       correctAnswer: 'C',
-//   //     },
-//   //   ],
-//   // },
-//   // {
-//   //   id: 3,
-//   //   title: 'The School Competition',
-//   //   audioUrl: '/audio/story3.mp3',
-//   //   duration: '3:00',
-//   //   questions: [
-//   //     {
-//   //       id: 1,
-//   //       question: 'What kind of competition was held at school?',
-//   //       options: [
-//   //         { id: 'A', text: 'A sports competition' },
-//   //         { id: 'B', text: 'A science fair' },
-//   //         { id: 'C', text: 'A spelling bee' },
-//   //         { id: 'D', text: 'An art contest' },
-//   //       ],
-//   //       correctAnswer: 'B',
-//   //     },
-//   //     {
-//   //       id: 2,
-//   //       question: 'What was Tom\'s project about?',
-//   //       options: [
-//   //         { id: 'A', text: 'Solar energy' },
-//   //         { id: 'B', text: 'Water pollution' },
-//   //         { id: 'C', text: 'Plant growth' },
-//   //         { id: 'D', text: 'Recycling' },
-//   //       ],
-//   //       correctAnswer: 'A',
-//   //     },
-//   //     {
-//   //       id: 3,
-//   //       question: 'What prize did Tom win?',
-//   //       options: [
-//   //         { id: 'A', text: 'Third place' },
-//   //         { id: 'B', text: 'Second place' },
-//   //         { id: 'C', text: 'First place' },
-//   //         { id: 'D', text: 'He did not win' },
-//   //       ],
-//   //       correctAnswer: 'C',
-//   //     },
-//   //   ],
-//   // },
-// ];
-
-// interface StoryListeningPageProps {
-//   sectionName?: string;
-//   sectionDescription?: string;
-// }
-
-// export default function StoryListeningPage({
-//   sectionName = 'Story Listening',
-//   sectionDescription = 'Listen to stories and answer comprehension questions',
-// }: StoryListeningPageProps) {
-//   const router = useRouter();
-//   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
-//   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1); // -1 means showing audio
-//   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: string }>({});
-//   const [hasListenedToAudio, setHasListenedToAudio] = useState(false);
-//   const [audioHasPlayed, setAudioHasPlayed] = useState(false);
-//   const audioRef = useRef<HTMLAudioElement>(null);
-
-//   const currentStory = storiesData[currentStoryIndex];
-//   const totalStories = storiesData.length;
-//   const storyNumber = currentStoryIndex + 1;
-
-//   // Check if we're on audio page or question page
-//   const isAudioPage = currentQuestionIndex === -1;
-//   const currentQuestion = !isAudioPage ? currentStory.questions[currentQuestionIndex] : null;
-//   const totalQuestionsInStory = currentStory.questions.length;
-//   const questionNumber = currentQuestionIndex + 1;
-
-//   // Create unique key for storing answers
-//   const getAnswerKey = () => `story${currentStoryIndex}_q${currentQuestionIndex}`;
-
-//   // Handle audio play - restrict to once only
-//   const handleAudioPlay = () => {
-//     if (audioHasPlayed) {
-//       if (audioRef.current) {
-//         audioRef.current.pause();
-//       }
-//       alert('You can only listen to this story once. Please proceed to the questions.');
-//     } else {
-//       setAudioHasPlayed(true);
-//       setHasListenedToAudio(true);
-//     }
-//   };
-
-//   const handleOptionSelect = (optionId: string) => {
-//     setSelectedAnswers((prev) => ({
-//       ...prev,
-//       [getAnswerKey()]: optionId,
-//     }));
-//   };
-
-//   const handleNext = () => {
-//     // If on audio page, move to first question
-//     if (isAudioPage) {
-//       if (hasListenedToAudio) {
-//         setCurrentQuestionIndex(0);
-//       } else {
-//         alert('Please listen to the audio story before proceeding to questions.');
-//       }
-//       return;
-//     }
-
-//     // If on question page
-//     if (currentQuestionIndex < totalQuestionsInStory - 1) {
-//       // Move to next question in current story
-//       setCurrentQuestionIndex((prev) => prev + 1);
-//     } else {
-//       // All questions answered for current story
-//       if (currentStoryIndex < totalStories - 1) {
-//         // Move to next story
-//         setCurrentStoryIndex((prev) => prev + 1);
-//         setCurrentQuestionIndex(-1); // Reset to audio page
-//         setHasListenedToAudio(false);
-//         setAudioHasPlayed(false); // Reset for next story
-//       } else {
-//         // All stories completed
-//         router.push('/situation-explaining');
-//       }
-//     }
-//   };
-
-//   const selectedOption = !isAudioPage ? selectedAnswers[getAnswerKey()] : null;
-//   const isLastQuestionOfLastStory = 
-//     currentStoryIndex === totalStories - 1 && 
-//     currentQuestionIndex === totalQuestionsInStory - 1;
-
-//   // Calculate overall progress
-//   const totalQuestions = storiesData.reduce((sum, story) => sum + story.questions.length, 0);
-//   const answeredQuestions = Object.keys(selectedAnswers).length;
-//   const overallProgress = Math.round((answeredQuestions / totalQuestions) * 100);
-
-//   return (
-//     <div className="min-h-screen bg-gray-50">
-//       <div className="max-w-7xl mx-auto px-6 py-8">
-//         {/* Header Section */}
-//         <div className="mb-6">
-//           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-//             {sectionName}
-//           </h1>
-//           <p className="text-gray-600 text-sm">
-//             {sectionDescription}
-//           </p>
-//         </div>
-
-//         {/* Progress Bar */}
-//         <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
-//           <div className="flex items-center justify-between mb-2">
-//             <span className="text-sm font-medium text-gray-700">
-//               Story {storyNumber} of {totalStories}
-//               {!isAudioPage && ` - Question ${questionNumber} of ${totalQuestionsInStory}`}
-//             </span>
-//             <span className="text-sm font-semibold text-indigo-600">
-//               {overallProgress}% Complete
-//             </span>
-//           </div>
-//           <div className="w-full bg-gray-200 rounded-full h-2">
-//             <div
-//               className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-//               style={{ width: `${overallProgress}%` }}
-//             ></div>
-//           </div>
-//         </div>
-
-//         {/* Story Title */}
-//         {/* <div className="mb-6">
-//           <div className="bg-linear-to-r from-indigo-600 to-purple-600 text-white rounded-lg p-4 shadow-md">
-//             <div className="flex items-center justify-between">
-//               <div>
-//                 <span className="text-sm font-semibold opacity-90">Story {storyNumber}</span>
-//                 <h2 className="text-2xl font-bold mt-1">{currentStory.title}</h2>
-//               </div>
-//               <div className="bg-white/20 px-4 py-2 rounded-lg">
-//                 <span className="text-sm font-semibold">{currentStory.duration}</span>
-//               </div>
-//             </div>
-//           </div>
-//         </div> */}
-
-//         {/* Audio Page */}
-//         {isAudioPage && (
-//           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-6">
-//             <div className="max-w-2xl mx-auto">
-//               {/* <div className="text-center mb-6">
-//                 <div className="inline-flex items-center justify-center w-20 h-20 bg-linear-to-br from-indigo-500 to-purple-600 rounded-full mb-4">
-//                   <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
-//                     <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-//                   </svg>
-//                 </div>
-//                 <h3 className="text-xl font-bold text-gray-900 mb-2">Listen to the Story</h3>
-//                 <p className="text-gray-600 text-sm">
-//                   Listen carefully to the audio story. You will answer questions about it next.
-//                 </p>
-//               </div> */}
-
-//               {/* Audio Player */}
-//               {/* <div className="bg-linear-to-br from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-100">
-//                 <audio 
-//                   ref={audioRef}
-//                   controls 
-//                   className="w-full"
-//                   key={currentStoryIndex}
-//                   controlsList="nodownload"
-//                   onPlay={handleAudioPlay}
-//                   onEnded={() => setHasListenedToAudio(true)}
-//                 >
-//                   <source src="/at-the-coffee-shop.mp3" type="audio/mpeg" />
-//                   Your browser does not support the audio element.
-//                 </audio>
-//               </div> */}
-//               <StoryAudioPlayer
-//   src={currentStory.audioUrl}
-//   onFirstPlay={() => {
-//     setAudioHasPlayed(true);
-//     setHasListenedToAudio(true);
-//   }}
-// />
-
-
-//               <div className="mt-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded">
-//                 <p className="text-sm text-amber-900 flex items-start gap-2 font-semibold">
-//                   <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-//                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-//                   </svg>
-//                   <span>
-//                     ⚠️ Important: You can only listen to this story ONCE. Listen carefully before proceeding to questions.
-//                   </span>
-//                 </p>
-//               </div>
-
-//               {hasListenedToAudio && (
-//                 <div className="mt-4 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded">
-//                   <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-//                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-//                   </svg>
-//                   <span className="text-sm font-medium text-green-800">Audio Completed - Ready to Continue</span>
-//                 </div>
-//               )}
-//             </div>
-//           </div>
-//         )}
-
-//         {/* Question Page */}
-//         {!isAudioPage && currentQuestion && (
-//           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-//             {/* Left Side - Question */}
-//             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-//               <div className="mb-4">
-//                 <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded">
-//                   Question {questionNumber} of {totalQuestionsInStory}
-//                 </span>
-//               </div>
-              
-//               <h2 className="text-xl font-semibold text-gray-900 mb-6">
-//                 {currentQuestion.question}
-//               </h2>
-
-//               <div className="bg-linear-to-br from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100">
-//                 <div className="flex items-center gap-3 mb-3">
-//                   <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center shrink-0">
-//                     <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-//                       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-//                     </svg>
-//                   </div>
-//                   <p className="text-sm font-semibold text-gray-800">Based on the story: {currentStory.title}</p>
-//                 </div>
-//                 <p className="text-sm text-gray-600">
-//                   Select the correct answer from the options on the right.
-//                 </p>
-//               </div>
-
-//               {/* Selection Status */}
-//               {selectedOption && (
-//                 <div className="mt-4 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded">
-//                   <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-//                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-//                   </svg>
-//                   <span className="text-sm font-medium text-green-800">Answer Selected</span>
-//                 </div>
-//               )}
-//             </div>
-
-//             {/* Right Side - Options */}
-//             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-//               <h3 className="text-lg font-semibold text-gray-900 mb-4">
-//                 Select Your Answer
-//               </h3>
-
-//               <div className="space-y-3">
-//                 {currentQuestion.options.map((option) => (
-//                   <div
-//                     key={option.id}
-//                     onClick={() => handleOptionSelect(option.id)}
-//                     className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-//                       selectedOption === option.id
-//                         ? 'border-indigo-600 bg-indigo-50'
-//                         : 'border-gray-200 hover:border-indigo-300 bg-white'
-//                     }`}
-//                   >
-//                     <div className="flex items-center gap-3">
-//                       <div
-//                         className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm ${
-//                           selectedOption === option.id
-//                             ? 'border-indigo-600 bg-indigo-600 text-white'
-//                             : 'border-gray-300 text-gray-600'
-//                         }`}
-//                       >
-//                         {option.id}
-//                       </div>
-//                       <p className="text-base font-medium text-gray-900 flex-1">
-//                         {option.text}
-//                       </p>
-//                       {selectedOption === option.id && (
-//                         <svg className="w-6 h-6 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-//                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-//                         </svg>
-//                       )}
-//                     </div>
-//                   </div>
-//                 ))}
-//               </div>
-//             </div>
-//           </div>
-//         )}
-
-//         {/* Bottom Section - Next Button */}
-//         <div className="flex justify-end">
-//           <button
-//             onClick={handleNext}
-//             disabled={!isAudioPage && !selectedOption}
-//             className={`px-8 py-3 rounded-lg font-semibold text-base transition-all ${
-//               (isAudioPage && hasListenedToAudio) || (!isAudioPage && selectedOption)
-//                 ? 'bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer'
-//                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-//             }`}
-//           >
-//             {isAudioPage 
-//               ? 'Start Questions →'
-//               : isLastQuestionOfLastStory 
-//                 ? 'Complete Section' 
-//                 : currentQuestionIndex === totalQuestionsInStory - 1
-//                   ? 'Next Story →'
-//                   : 'Next Question →'
-//             }
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-// before UI changes
-
-
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import TextToSpeechPlayer from '../components/TextToSpeechPlayer';
-import AssessmentSidebar from '../components/AssessmentSidebar';
-import SectionStartModal from '../components/SectionStartModal';
+import dynamic from 'next/dynamic';
 import {
   getCurrentQuestion,
   getNextQuestion,
   uploadAudio,
   CurrentQuestionResponse,
 } from '@/api/communicationApi';
-import { saveTextAnswer, textToSpeechAndRecord } from '@/utils/audioUtils';
+import { saveTextAnswer, textToSpeechAndRecord, validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audioUtils';
 import { getSectionRoute } from '@/utils/sectionRouter';
+import logger from '@/lib/logger';
+
+const TextToSpeechPlayer = dynamic(() => import('../components/TextToSpeechPlayer'), { loading: () => <div className="animate-pulse p-4">Loading...</div>, ssr: false });
+const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="w-64 bg-gray-100 animate-pulse" /> });
+const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), { loading: () => null });
 
 // Option type for MCQ questions
 interface Option {
@@ -608,17 +42,17 @@ export default function StoryListeningPage() {
   useEffect(() => {
     const isCompleted = sessionStorage.getItem('story_listening_completed');
     if (isCompleted === 'true') {
-      console.log('⚠️ Story Listening section already completed. Preventing access via back navigation.');
+      logger.warn('Story Listening section already completed. Preventing access via back navigation.');
 
       // Get the stored next section route
       const nextSectionRoute = sessionStorage.getItem('story_listening_next_section');
 
       if (nextSectionRoute) {
-        console.log('🚀 Redirecting to stored next section:', nextSectionRoute);
+        logger.info('Redirecting to stored next section:', nextSectionRoute);
         router.push(nextSectionRoute);
       } else {
         // Fallback: redirect to sentence-completion or situation-explaining
-        console.log('🚀 No stored section found, redirecting to sentence-completion as fallback');
+        logger.info('No stored section found, redirecting to sentence-completion as fallback');
         router.push('/communication/sentence-completion');
       }
     }
@@ -631,7 +65,7 @@ export default function StoryListeningPage() {
 
     // If there's no story_text, don't show audio page
     if (!currentQuestion.story_text) {
-      console.log('🔍 [shouldShowStoryAudio] No story_text, returning false');
+      logger.info('[shouldShowStoryAudio] No story_text, returning false');
       return false;
     }
 
@@ -639,7 +73,7 @@ export default function StoryListeningPage() {
     const hasPlayedThisStory = playedStories.has(currentQuestion.story_text);
     const result = !hasPlayedThisStory;
 
-    console.log('🔍 [shouldShowStoryAudio] Checking...', {
+    logger.info('[shouldShowStoryAudio] Checking...', {
       hasStoryText: !!currentQuestion.story_text,
       storyPreview: currentQuestion.story_text.substring(0, 50) + '...',
       hasPlayedThisStory,
@@ -938,13 +372,17 @@ export default function StoryListeningPage() {
       if (!sessionId) throw new Error('Session ID not found');
 
       const response = await getCurrentQuestion(sessionId);
-      setCurrentQuestion(response);
+      // ✅ Normalize section name to match backend's naming
+      setCurrentQuestion({
+        ...response,
+        section_name: 'Story Listen Facts', // Backend uses this name
+      });
       setSelectedAnswer(null);
       setAudioSaved(false);
       setIsConvertingAudio(false);
 
-      console.log('➡️ Story Listening - Now showing question:', response.question_id);
-      console.log('➡️ Has story_text:', !!response.story_text);
+      logger.info('Story Listening - Now showing question:', response.question_id);
+      logger.info('Has story_text:', !!response.story_text);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch question');
     } finally {
@@ -965,7 +403,7 @@ export default function StoryListeningPage() {
 
     // Save text answer immediately
     saveTextAnswer(currentQuestion.question_id, optionText);
-    console.log('✅ Selected answer:', optionText);
+    logger.info('Selected answer:', optionText);
 
     // Convert selected answer to audio blob (muted, not audible)
     setIsConvertingAudio(true);
@@ -979,7 +417,27 @@ export default function StoryListeningPage() {
         lang: 'en-GB',
       });
 
-      console.log('🔊 Audio blob created (muted), size:', audioBlob.size);
+      logger.info('Audio blob created (muted), size:', audioBlob.size);
+
+      // ✅ Validate synthetic audio before saving
+      logger.info('🔍 Validating synthetic audio...');
+      const validation = await validateAudioBlob(audioBlob);
+
+      logger.info('📊 Synthetic audio validation result:', {
+        isValid: validation.isValid,
+        duration: formatDuration(validation.duration),
+        hasSound: validation.hasSound,
+        size: formatFileSize(audioBlob.size),
+        error: validation.error,
+        warning: validation.warning,
+      });
+
+      if (!validation.isValid) {
+        const errorMsg = `Generated audio is invalid: ${validation.error}`;
+        logger.error('❌', errorMsg);
+        // Don't throw - text answer is still saved, audio generation can be retried
+        logger.warn('⚠️ Continuing with text answer, audio validation failed');
+      }
 
       // IMPORTANT: Don't save to sessionStorage to avoid quota exceeded error
       // Generated audio files are large (~282KB) and will fill up sessionStorage quickly
@@ -991,9 +449,9 @@ export default function StoryListeningPage() {
 
       setAudioSaved(true);
 
-      console.log('✅ Audio blob saved to state (skipping sessionStorage to avoid quota issues)');
+      logger.info(`✅ Synthetic audio saved (${formatDuration(validation.duration)}, ${formatFileSize(audioBlob.size)})`);
     } catch (err) {
-      console.error('❌ Error converting to audio:', err);
+      logger.error('Error converting to audio:', err);
       // Don't set error - text answer is still saved, audio is optional
     } finally {
       setIsConvertingAudio(false);
@@ -1002,16 +460,16 @@ export default function StoryListeningPage() {
 
   // Handle "Start Questions" button after story audio
   const handleStartQuestions = () => {
-    console.log('🎯 [handleStartQuestions] Button clicked!');
+    logger.info('[handleStartQuestions] Button clicked!');
 
     if (currentQuestion?.story_text) {
       const storyText = currentQuestion.story_text;
       // Mark this story as played by adding it to the Set
       setPlayedStories(prev => new Set(prev).add(storyText));
-      console.log('✅ [handleStartQuestions] Marked story as played:', storyText.substring(0, 50) + '...');
-      console.log('✅ [handleStartQuestions] Component should re-render now and show the question');
+      logger.info('[handleStartQuestions] Marked story as played:', storyText.substring(0, 50) + '...');
+      logger.info('[handleStartQuestions] Component should re-render now and show the question');
     } else {
-      console.error('❌ [handleStartQuestions] No story_text found!');
+      logger.error('[handleStartQuestions] No story_text found!');
     }
   };
 
@@ -1031,7 +489,7 @@ export default function StoryListeningPage() {
 
       // Get the audio blob for current question
       const audioBlob = audioRecordings[currentQuestion.question_id];
-      console.log('📊 Audio blob check for question:', currentQuestion.question_id, {
+      logger.info('Audio blob check for question:', currentQuestion.question_id, {
         hasBlob: !!audioBlob,
         blobSize: audioBlob?.size,
         blobType: audioBlob?.type,
@@ -1040,21 +498,22 @@ export default function StoryListeningPage() {
 
       if (!audioBlob) {
         const errorMsg = `No audio recording found for question ${currentQuestion.question_id}. Please try selecting your answer again.`;
-        console.error('❌', errorMsg);
+        logger.error(errorMsg);
         alert(errorMsg);
         throw new Error(errorMsg);
       }
 
       if (audioBlob.size === 0 || audioBlob.size < 100) {
         const errorMsg = `Audio recording is empty or too small (${audioBlob.size} bytes). Please try again.`;
-        console.error('❌', errorMsg);
+        logger.error(errorMsg);
         alert(errorMsg);
         throw new Error(errorMsg);
       }
 
       // ✅ STEP 1: Upload audio first
-      console.log('📤 Uploading audio for question:', currentQuestion.question_id);
-      console.log('📊 Audio details:', {
+      // ✅ Upload audio with return_next_question=true
+      logger.info('Uploading audio with return_next_question=true for question:', currentQuestion.question_id);
+      logger.info('Audio details:', {
         size: `${(audioBlob.size / 1024).toFixed(2)} KB`,
         type: audioBlob.type,
       });
@@ -1064,74 +523,127 @@ export default function StoryListeningPage() {
         question_id: currentQuestion.question_id,
         test_id: testId,
         audio_file: audioBlob,
+        return_next_question: true, // ✅ Request next question in response
+        question_number: currentQuestion.question_number, // ✅ Global question number
       });
-      console.log('✅ Audio uploaded successfully for', currentQuestion.question_id, ':', uploadResponse);
+      logger.info('Audio uploaded successfully for', currentQuestion.question_id, ':', uploadResponse);
 
       // Verify upload was successful - backend returns success:true and status:"completed"
       if (!uploadResponse || !uploadResponse.success) {
         const errorMsg = `Audio upload failed for question ${currentQuestion.question_id}. Response: ${JSON.stringify(uploadResponse)}`;
-        console.error('❌', errorMsg);
+        logger.error(errorMsg);
         alert(errorMsg);
         throw new Error(errorMsg);
       }
 
-      // ✅ STEP 2: Then fetch next question
-      console.log('📞 Fetching next question...');
-      const response = await getNextQuestion({
-        session_id: sessionId,
-        question_id: currentQuestion.question_id,
-      });
+      // ✅ Check if next question was included in upload response
+      if (uploadResponse.next_question) {
+        logger.info('Next question received from upload response:', uploadResponse.next_question.question.question_id);
 
-      console.log('🔍 ===== [Story Listening] NEXT QUESTION API RESPONSE =====');
-      console.log('🔍 completed:', response.completed);
-      console.log('🔍 section_name:', response.section_name);
-      console.log('🔍 question_id:', response.question_id);
-      console.log('🔍 question_number:', response.question_number);
-      console.log('🔍 total_questions:', response.total_questions);
-      console.log('🔍 is_last_question:', response.is_last_question);
-      console.log('🔍 is_last_section:', response.is_last_section);
-      console.log('🔍 ==========================================================');
+        const nextQuestion = uploadResponse.next_question.question;
 
-      if (response.completed) {
-        console.log('✅ Assessment completed, routing to feedback');
-        router.push('/communication/feedback');
-        return;
-      }
+        // Check if section changed to next section
+        if (nextQuestion.section_name !== currentQuestion.section_name) {
+          logger.info('Section changed from', currentQuestion.section_name, 'to:', nextQuestion.section_name);
 
-      // Check if section changed to next section
-      // Backend uses "Story Listen Facts" for this section
-      if (response.section_name !== 'Story Listening' && response.section_name !== 'Story Listen Facts') {
-        console.log('✅ Section changed from "Story Listen Facts" to:', response.section_name);
+          // Get the route for the new section dynamically
+          const nextRoute = getSectionRoute(nextQuestion.section_name);
 
-        // Get the route for the new section dynamically
-        const nextRoute = getSectionRoute(response.section_name);
+          if (nextRoute) {
+            logger.info('Routing to next section page:', nextRoute);
+            logger.info('Current URL before routing:', window.location.pathname);
 
-        if (nextRoute) {
-          console.log('🚀 Routing to next section page:', nextRoute);
-          console.log('📍 Current URL before routing:', window.location.pathname);
+            // Mark section as complete and store next section route to prevent back navigation issues
+            sessionStorage.setItem('story_listening_completed', 'true');
+            sessionStorage.setItem('story_listening_next_section', nextRoute);
 
-          // Mark section as complete and store next section route to prevent back navigation issues
-          sessionStorage.setItem('story_listening_completed', 'true');
-          sessionStorage.setItem('story_listening_next_section', nextRoute);
-
-          router.push(nextRoute);
-        } else {
-          console.error('❌ Unknown section name from backend:', response.section_name);
-          setError(`Unknown section: ${response.section_name}. Please contact support.`);
+            router.push(nextRoute);
+          } else {
+            logger.error('Unknown section name from backend:', nextQuestion.section_name);
+            setError(`Unknown section: ${nextQuestion.section_name}. Please contact support.`);
+          }
+          return;
         }
-        return;
-      }
 
-      console.log('➡️ Staying in Story Listen Facts section, showing next question');
-      setCurrentQuestion(response);
-      setSelectedAnswer(null);
+        logger.info('Staying in Story Listen Facts section, showing next question');
+        // Update current question with the next question from upload response
+        setCurrentQuestion({
+          question_id: nextQuestion.question_id,
+          question_text: nextQuestion.question_text,
+          question_type: nextQuestion.question_type || 'MCQ',
+          section_name: 'Story Listen Facts', // ✅ Use backend section name
+          section_id: undefined,
+          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1,
+          total_questions: uploadResponse.next_question.section.total_questions,
+          options: nextQuestion.options,
+          audio_url: nextQuestion.audio_url,
+          time_limit: nextQuestion.time_limit,
+          is_last_question: nextQuestion.is_last_question,
+          is_last_section: nextQuestion.is_last_section,
+          story_text: nextQuestion.story_text,
+          expected_text: nextQuestion.expected_text,
+        });
+        setSelectedAnswer(null);
+      } else {
+        // Fallback: If next_question not in response, fetch it separately
+        logger.warn('Next question not in upload response, fetching separately...');
+        const response = await getNextQuestion({
+          session_id: sessionId,
+          question_id: currentQuestion.question_id,
+        });
+
+        logger.info('===== [Story Listening] NEXT QUESTION API RESPONSE =====');
+        logger.info('completed:', response.completed);
+        logger.info('section_name:', response.section_name);
+        logger.info('question_id:', response.question_id);
+        logger.info('question_number:', response.question_number);
+        logger.info('total_questions:', response.total_questions);
+        logger.info('is_last_question:', response.is_last_question);
+        logger.info('is_last_section:', response.is_last_section);
+        logger.info('==========================================================');
+
+        if (response.completed) {
+          logger.info('Assessment completed, routing to feedback');
+          router.push('/communication/feedback');
+          return;
+        }
+
+        // Check if section changed to next section
+        if (response.section_name !== currentQuestion.section_name) {
+          logger.info('Section changed from', currentQuestion.section_name, 'to:', response.section_name);
+
+          // Get the route for the new section dynamically
+          const nextRoute = getSectionRoute(response.section_name);
+
+          if (nextRoute) {
+            logger.info('Routing to next section page:', nextRoute);
+            logger.info('Current URL before routing:', window.location.pathname);
+
+            // Mark section as complete and store next section route to prevent back navigation issues
+            sessionStorage.setItem('story_listening_completed', 'true');
+            sessionStorage.setItem('story_listening_next_section', nextRoute);
+
+            router.push(nextRoute);
+          } else {
+            logger.error('Unknown section name from backend:', response.section_name);
+            setError(`Unknown section: ${response.section_name}. Please contact support.`);
+          }
+          return;
+        }
+
+        logger.info('Staying in Story Listen Facts section, showing next question');
+        // Update to the next question with normalized section name
+        setCurrentQuestion({
+          ...response,
+          section_name: 'Story Listen Facts', // ✅ Normalize to match backend
+        });
+        setSelectedAnswer(null);
+      }
 
       // Note: playedStories Set is preserved
       // shouldShowStoryAudio will check if this new question's story has been played
-      console.log('📍 Moving to next question:', response.question_id);
-      console.log('📍 Has story_text:', !!response.story_text);
     } catch (err: any) {
-      console.error('❌ Error uploading audio or fetching next question:', err);
+      logger.error('Error uploading audio or fetching next question:', err);
       setError(err.message || 'Failed to upload audio or fetch next question');
     } finally {
       setLoading(false);
@@ -1147,7 +659,7 @@ export default function StoryListeningPage() {
       <SectionStartModal
         open={showModal}
         onStart={handleStartSection}
-        title="Section 6: Story Listening"
+        title="Section 6: Story Listen Facts"
         subtitle="Listen to stories and answer comprehension questions"
         questions={8}
         instructions={[
@@ -1199,11 +711,7 @@ export default function StoryListeningPage() {
               </div>
             </div>
 
-            {loading ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600">Loading...</p>
-              </div>
-            ) : error ? (
+            {error ? (
               <div className="text-center py-12">
                 <p className="text-red-600">{error}</p>
               </div>
@@ -1312,8 +820,8 @@ export default function StoryListeningPage() {
                           </p>
                         </div>
 
-                        {/* Selection Status */}
-                        {selectedAnswer && (
+                        {/* Selection Status - Commented out */}
+                        {/* {selectedAnswer && (
                           <div className={`mt-4 flex items-center gap-2 p-3 rounded ${
                             isConvertingAudio
                               ? 'bg-blue-50 border border-blue-200'
@@ -1345,7 +853,7 @@ export default function StoryListeningPage() {
                               </>
                             )}
                           </div>
-                        )}
+                        )} */}
                       </div>
 
                       {/* RIGHT CARD - Options */}
@@ -1407,14 +915,14 @@ export default function StoryListeningPage() {
 
                       <button
                         onClick={handleNext}
-                        disabled={!selectedAnswer || loading}
+                        disabled={!audioSaved || loading}
                         className={`px-8 py-3 rounded-lg font-semibold flex items-center gap-2 transition ${
-                          selectedAnswer && !loading
+                          audioSaved && !loading
                             ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
                             : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         }`}
                       >
-                        {loading ? 'Loading...' : 'Next Question →'}
+                        Next Question →
                       </button>
                     </div>
                   </>

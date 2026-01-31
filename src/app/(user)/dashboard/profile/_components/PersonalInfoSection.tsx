@@ -6,6 +6,7 @@ import { updateProfile } from '@/api/userApi';
 import { ProfileData } from '../_types/ProfileData';
 import { useProfileContext } from '../context/ProfileContext';
 import { useAIGeneration } from '@/hooks/useAIDescriptionGenerator';
+import { logger } from '@/lib/logger';
 
 interface PersonalInfoSectionProps {
     tempProfile: ProfileData;
@@ -49,14 +50,6 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
     const handleSave = async () => {
         setSaving(true);
         try {
-            const token = localStorage.getItem('access_token');
-
-            if (!token) {
-                toast.error('Please log in to save your profile');
-                return;
-            }
-
-            // Map frontend data to backend format
             const backendData = mapFrontendToBackend(tempProfile);
 
             // Call the update API
@@ -69,13 +62,13 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                     ...prev,
                     personalInformation: tempProfile.personalInformation
                 };
-                console.log('✅ Updated profile data after saving personal info:', newProfile);
+                logger.info('✅ Updated profile data after saving personal info:', newProfile);
                 return newProfile;
             });
 
             toast.success('Profile updated successfully!');
         } catch (err: any) {
-            console.error('Error updating profile:', err);
+            logger.error('Error updating profile:', err);
 
             if (err.response?.status === 401) {
                 toast.error('Session expired. Please log in again');

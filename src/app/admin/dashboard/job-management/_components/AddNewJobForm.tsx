@@ -5,7 +5,7 @@ import React, { useState, ChangeEvent } from "react";
 import { IoHourglassOutline } from "react-icons/io5";
 import { createJob, CreateJobRequest, uploadJobLogo } from "@/api/adminJobsApi";
 import { toast } from 'sonner';
-
+import {logger} from '@/lib/logger';
 type JobStatus = "active" | "draft" | "expired" | "closed";
 type WorkMode = "remote" | "hybrid" | "on-site";
 type JobType = "full-time" | "part-time" | "internship" | "contract";
@@ -208,10 +208,11 @@ export function AddNewJobForm({
             toast.dismiss();
             toast.success('Job published successfully!');
             onPublish();
-        } catch (error: any) {
-            console.error('Error publishing job:', error);
+        } catch (error: unknown) {
+            logger.error('Error publishing job:', error);
             toast.dismiss();
-            toast.error(error.response?.data?.message || 'Failed to publish job');
+            const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to publish job';
+            toast.error(errorMessage);
         } finally {
             setPublishing(false);
         }
@@ -254,9 +255,10 @@ export function AddNewJobForm({
             await createJob(jobData);
             toast.success('Job saved as draft');
             onCancel(); // Go back to list
-        } catch (error: any) {
-            console.error('Error saving draft:', error);
-            toast.error(error.response?.data?.message || 'Failed to save draft');
+        } catch (error: unknown) {
+            logger.error('Error saving draft:', error);
+            const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to save draft';
+            toast.error(errorMessage);
         } finally {
             setPublishing(false);
         }
@@ -629,10 +631,11 @@ export function PreviewJobPage({
             toast.dismiss();
             toast.success('Job published successfully!');
             onPublish();
-        } catch (error: any) {
-            console.error('Error publishing job:', error);
+        } catch (error: unknown) {
+            // // console.error('Error publishing job:', error);
             toast.dismiss();
-            toast.error(error.response?.data?.message || 'Failed to publish job');
+            const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to publish job';
+            toast.error(errorMessage);
         } finally {
             setPublishing(false);
         }

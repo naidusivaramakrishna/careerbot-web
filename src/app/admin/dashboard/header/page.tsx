@@ -3,6 +3,7 @@ import { getCurrentAdmin } from '@/api/adminAuthApi';
 import { Bell } from 'lucide-react'
 import Image from 'next/image'
 import React, { useEffect, useState } from 'react'
+import { logger } from '@/lib/logger'
 
 interface AdminInfo {
   id: string;
@@ -52,10 +53,10 @@ const AdminHeader = () => {
         status: details.status
       });
 
-      console.log('✅ Current admin details loaded:', details);
+      logger.info('Current admin details loaded', { adminId: details.id, role: details.role });
 
     } catch (error) {
-      console.error('❌ Failed to fetch current admin details:', error);
+      logger.error('Failed to fetch current admin details:', error);
 
       // Don't show error to user, just use defaults
       setAdminInfo({
@@ -75,7 +76,7 @@ const AdminHeader = () => {
 
     // Listen for admin token updates (when user logs in)
     const handleTokenUpdate = () => {
-      console.log('🔄 Token updated, refetching admin details...');
+      logger.debug('Token updated, refetching admin details');
       fetchAdminDetails();
     };
 

@@ -1,4 +1,5 @@
 import httpClient from "@/lib/http";
+import logger from "@/lib/logger";
 
 // ========== PERSONAL INFO ==========
 export interface personalInfo {
@@ -54,10 +55,10 @@ export interface LinkedinImportRequest {
 }
 export const importLinkedInProfile = async (body: LinkedinImportRequest): Promise<LinkedinImportResponse> => {
     try {
-        const response = await httpClient.post("/profile/import/linkedin/preview", body);
-        return response.data;
+        const response = await httpClient.post("/profile/import/linkedin/preview", body as unknown as Record<string, unknown>);
+        return response.data as LinkedinImportResponse;
     } catch (error) {
-        console.error("Error extracting linkedin:", error);
+        logger.error("Error extracting linkedin:", error);
         throw error;
     }
 };

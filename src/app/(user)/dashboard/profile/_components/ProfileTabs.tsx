@@ -11,6 +11,7 @@ import WorkExperienceSection from "./experience/WorkExperienceSection";
 import PersonalInfoSection from "./PersonalInfoSection";
 import SkillsSection from "./SkillsSection";
 import EmploymentInfoSection from "./employmentInfo/EmploymentInfoSection";
+import logger from "@/lib/logger";
 
 interface ProfileTabsProps {
   profile: ProfileData;
@@ -29,7 +30,7 @@ export default function ProfileTabs({
   // Sync tempProfile with profileData from context
   useEffect(() => {
     setTempProfile(profileData);
-    console.log("Profile Data synced in ProfileTabs:", profileData); // Debug log
+    logger.info("Profile Data synced in ProfileTabs:", profileData); // Debug log
   }, [profileData]);
 
   const profileTabs = [

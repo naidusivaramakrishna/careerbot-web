@@ -4,10 +4,16 @@
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import logger from '@/lib/logger';
+import meSpeak from 'mespeak';
 
 // Singleton FFmpeg instance
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoading: Promise<FFmpeg> | null = null;
+
+// meSpeak initialization state
+let meSpeakInitialized = false;
+let meSpeakInitializing: Promise<void> | null = null;
 
 /**
  * Get or initialize FFmpeg instance (singleton pattern)
@@ -22,7 +28,7 @@ const getFFmpeg = async (): Promise<FFmpeg> => {
   }
 
   ffmpegLoading = (async () => {
-    console.log('🎬 Loading FFmpeg...');
+    // // console.log('🎬 Loading FFmpeg...');
     const ffmpeg = new FFmpeg();
 
     // Load FFmpeg with CORS-enabled URLs
@@ -32,7 +38,7 @@ const getFFmpeg = async (): Promise<FFmpeg> => {
       wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
     });
 
-    console.log('✅ FFmpeg loaded successfully');
+    // // console.log('✅ FFmpeg loaded successfully');
     ffmpegInstance = ffmpeg;
     return ffmpeg;
   })();
@@ -41,13 +47,68 @@ const getFFmpeg = async (): Promise<FFmpeg> => {
 };
 
 /**
+ * Initialize meSpeak TTS engine (singleton pattern)
+ * Loads configuration and voice files from public directory
+ */
+const initializeMeSpeak = async (): Promise<void> => {
+  if (meSpeakInitialized) {
+    return;
+  }
+
+  if (meSpeakInitializing) {
+    return meSpeakInitializing;
+  }
+
+  meSpeakInitializing = (async () => {
+    try {
+      logger.info('🎤 Initializing meSpeak TTS engine...');
+
+      // Load config and voice from public directory
+      // Files were copied during build from node_modules/mespeak
+      meSpeak.loadConfig('/mespeak/mespeak_config.json');
+      meSpeak.loadVoice('/mespeak/voices/en/en.json');
+
+      // Poll until meSpeak is ready (files load asynchronously)
+      const maxWaitTime = 10000; // 10 seconds max
+      const pollInterval = 300;  // Check every 300ms
+      let waited = 0;
+
+      while (waited < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        waited += pollInterval;
+
+        // Test if meSpeak is ready by generating a short test audio
+        try {
+          const testData = meSpeak.speak('test', { rawdata: 'buffer' });
+          if (testData && testData instanceof Uint8Array && testData.length > 0) {
+            meSpeakInitialized = true;
+            logger.info(`✅ meSpeak initialized successfully (${waited}ms)`);
+            return;
+          }
+        } catch {
+          // Not ready yet, continue waiting
+        }
+      }
+
+      throw new Error(`meSpeak initialization timeout after ${maxWaitTime}ms`);
+    } catch (error) {
+      logger.error('❌ Failed to initialize meSpeak:', error);
+      meSpeakInitializing = null;
+      throw error;
+    }
+  })();
+
+  return meSpeakInitializing;
+};
+
+/**
  * Convert WebM video blob to MP4 format
  * Uses FFmpeg.wasm for video transcoding
  */
 export const convertWebmToMp4 = async (webmBlob: Blob): Promise<Blob> => {
   try {
-    console.log('🎬 Converting WebM video to MP4...');
-    console.log(`📊 Input size: ${(webmBlob.size / 1024 / 1024).toFixed(2)} MB`);
+    // // console.log('🎬 Converting WebM video to MP4...');
+    // // console.log(`📊 Input size: ${(webmBlob.size / 1024 / 1024).toFixed(2)} MB`);
 
     const ffmpeg = await getFFmpeg();
 
@@ -78,10 +139,10 @@ export const convertWebmToMp4 = async (webmBlob: Blob): Promise<Blob> => {
     await ffmpeg.deleteFile('input.webm');
     await ffmpeg.deleteFile('output.mp4');
 
-    console.log(`✅ MP4 conversion complete. Output size: ${(mp4Blob.size / 1024 / 1024).toFixed(2)} MB`);
+    // // console.log(`✅ MP4 conversion complete. Output size: ${(mp4Blob.size / 1024 / 1024).toFixed(2)} MB`);
     return mp4Blob;
   } catch (error) {
-    console.error('❌ Error converting WebM to MP4:', error);
+    // // console.error('❌ Error converting WebM to MP4:', error);
     throw error;
   }
 };
@@ -92,8 +153,8 @@ export const convertWebmToMp4 = async (webmBlob: Blob): Promise<Blob> => {
  */
 export const convertWebmToMp3 = async (webmBlob: Blob): Promise<Blob> => {
   try {
-    console.log('🔄 Converting WebM to MP3...');
-    console.log(`📊 Input audio size: ${(webmBlob.size / 1024).toFixed(2)} KB`);
+    // // console.log('🔄 Converting WebM to MP3...');
+    // // console.log(`📊 Input audio size: ${(webmBlob.size / 1024).toFixed(2)} KB`);
 
     const ffmpeg = await getFFmpeg();
 
@@ -121,10 +182,10 @@ export const convertWebmToMp3 = async (webmBlob: Blob): Promise<Blob> => {
     await ffmpeg.deleteFile('input_audio.webm');
     await ffmpeg.deleteFile('output_audio.mp3');
 
-    console.log(`✅ MP3 conversion complete. Size: ${(mp3Blob.size / 1024).toFixed(2)} KB`);
+    // // console.log(`✅ MP3 conversion complete. Size: ${(mp3Blob.size / 1024).toFixed(2)} KB`);
     return mp3Blob;
   } catch (error) {
-    console.error('❌ Error converting WebM to MP3:', error);
+    // // console.error('❌ Error converting WebM to MP3:', error);
     throw error;
   }
 };
@@ -169,7 +230,7 @@ export const getAllAudioRecordings = (): { [questionId: string]: string } => {
     const recordings = sessionStorage.getItem('audio_recordings');
     return recordings ? JSON.parse(recordings) : {};
   } catch (error) {
-    console.error('Error retrieving audio recordings:', error);
+    // // console.error('Error retrieving audio recordings:', error);
     return {};
   }
 };
@@ -182,7 +243,7 @@ export const getAudioRecording = (questionId: string): string | null => {
     const recordings = getAllAudioRecordings();
     return recordings[questionId] || null;
   } catch (error) {
-    console.error('Error retrieving audio recording:', error);
+    // // console.error('Error retrieving audio recording:', error);
     return null;
   }
 };
@@ -199,9 +260,9 @@ export const saveAudioRecording = async (
     const existingRecordings = getAllAudioRecordings();
     existingRecordings[questionId] = base64Audio;
     sessionStorage.setItem('audio_recordings', JSON.stringify(existingRecordings));
-    console.log(`✅ Audio saved for question ${questionId}`);
+    // // console.log(`✅ Audio saved for question ${questionId}`);
   } catch (error) {
-    console.error('Error saving audio recording:', error);
+    // // console.error('Error saving audio recording:', error);
     throw error;
   }
 };
@@ -318,9 +379,9 @@ export const prepareAudioForAPI = (
 export const clearAllAudioRecordings = (): void => {
   try {
     sessionStorage.removeItem('audio_recordings');
-    console.log('✅ All audio recordings cleared');
+    // // console.log('✅ All audio recordings cleared');
   } catch (error) {
-    console.error('Error clearing audio recordings:', error);
+    // // console.error('Error clearing audio recordings:', error);
   }
 };
 
@@ -332,7 +393,7 @@ export const getAudioRecordingsCount = (): number => {
     const recordings = getAllAudioRecordings();
     return Object.keys(recordings).length;
   } catch (error) {
-    console.error('Error getting audio recordings count:', error);
+    // // console.error('Error getting audio recordings count:', error);
     return 0;
   }
 };
@@ -387,7 +448,7 @@ export const textToSpeech = (text: string, options?: {
 
       if (foreignVoice) {
         utterance.voice = foreignVoice;
-        console.log('🔊 Using voice:', foreignVoice.name, foreignVoice.lang);
+        // // console.log('🔊 Using voice:', foreignVoice.name, foreignVoice.lang);
       } else if (options?.voiceName) {
         const selectedVoice = voices.find(v => v.name === options.voiceName);
         if (selectedVoice) utterance.voice = selectedVoice;
@@ -450,9 +511,9 @@ export const saveTextAnswer = (questionId: string, answerText: string): void => 
     const answers = existingAnswers ? JSON.parse(existingAnswers) : {};
     answers[questionId] = answerText;
     sessionStorage.setItem('text_answers', JSON.stringify(answers));
-    console.log(`✅ Text answer saved for question ${questionId}:`, answerText);
+    // // console.log(`✅ Text answer saved for question ${questionId}:`, answerText);
   } catch (error) {
-    console.error('Error saving text answer:', error);
+    // // console.error('Error saving text answer:', error);
   }
 };
 
@@ -466,7 +527,7 @@ export const getTextAnswer = (questionId: string): string | null => {
     const parsedAnswers = JSON.parse(answers);
     return parsedAnswers[questionId] || null;
   } catch (error) {
-    console.error('Error getting text answer:', error);
+    // // console.error('Error getting text answer:', error);
     return null;
   }
 };
@@ -479,7 +540,7 @@ export const getAllTextAnswers = (): { [questionId: string]: string } => {
     const answers = sessionStorage.getItem('text_answers');
     return answers ? JSON.parse(answers) : {};
   } catch (error) {
-    console.error('Error getting all text answers:', error);
+    // // console.error('Error getting all text answers:', error);
     return {};
   }
 };
@@ -521,52 +582,71 @@ export const textToSpeechAndRecord = async (
       window.speechSynthesis.speak(utterance);
     }
 
-    // Generate a proper silent audio file using Web Audio API
-    // Calculate duration based on text length (rough estimate: 150 words per minute)
-    const wordCount = text.split(/\s+/).length;
-    const estimatedDuration = Math.max(2, Math.min(10, (wordCount / 150) * 60)); // 2-10 seconds
+    // ✅ Generate speech-like audio using advanced formant synthesis
+    // This creates audio with multiple frequencies that simulate human speech
+    // The AI transcription service can process this better than a simple tone
+    logger.info(`🎤 Generating speech-like audio for: "${text.substring(0, 50)}..."`);
+    const audioBlob = await generateSpeechAudio(text);
+    logger.info(`✅ Speech-like audio generated: ${(audioBlob.size / 1024).toFixed(1)} KB`);
 
-    console.log(`🎵 Generating audio file for "${text.substring(0, 50)}..." (${estimatedDuration.toFixed(1)}s)`);
-
-    // Create offline audio context for generating audio
-    const sampleRate = 44100;
-    const numberOfChannels = 1;
-    const length = sampleRate * estimatedDuration;
-
-    const offlineContext = new OfflineAudioContext(
-      numberOfChannels,
-      length,
-      sampleRate
-    );
-
-    // Create a very quiet tone so it's a valid audio file but essentially silent
-    const oscillator = offlineContext.createOscillator();
-    const gainNode = offlineContext.createGain();
-
-    oscillator.frequency.value = 440; // A4 note
-    gainNode.gain.value = 0.001; // Very quiet, almost silent
-
-    oscillator.connect(gainNode);
-    gainNode.connect(offlineContext.destination);
-
-    oscillator.start(0);
-    oscillator.stop(estimatedDuration);
-
-    // Render the audio
-    const audioBuffer = await offlineContext.startRendering();
-
-    // Convert AudioBuffer to WAV format
-    const wavBlob = audioBufferToWav(audioBuffer);
-
-    console.log('✅ Audio file generated, size:', wavBlob.size, 'bytes');
-    return wavBlob;
+    return audioBlob;
 
   } catch (error) {
-    console.error('❌ Error in textToSpeechAndRecord:', error);
+    logger.error('❌ Error in textToSpeechAndRecord:', error);
     // Fallback: create a minimal silent audio file
     return createMinimalAudioBlob();
   }
 };
+
+/**
+ * Generate speech-like audio from text using advanced synthesis
+ * Creates audio with multiple frequencies to simulate speech formants
+ * This produces audio that AI transcription services can process
+ */
+export async function generateSpeechAudio(
+  text: string
+): Promise<Blob> {
+  try {
+    logger.info(`🎤 Generating real speech audio using meSpeak: "${text.substring(0, 50)}..."`);
+
+    // Initialize meSpeak if not already done
+    await initializeMeSpeak();
+
+    // Generate speech audio as raw WAV buffer
+    const audioData = meSpeak.speak(text, {
+      amplitude: 100,        // Volume (0-200, default 100)
+      pitch: 50,             // Voice pitch (0-99, default 50)
+      speed: 175,            // Speaking speed (words per minute, default 175)
+      variant: 'f1',         // Female voice variant (f1-f4 for female, m1-m7 for male)
+      wordgap: 0,            // Additional gap between words in 10ms units
+      rawdata: 'buffer'      // Return Uint8Array buffer instead of playing audio
+    });
+
+    // Check if audio generation succeeded
+    if (!audioData || !(audioData instanceof Uint8Array)) {
+      throw new Error('meSpeak failed to generate audio data');
+    }
+
+    // Convert Uint8Array to Blob with proper MIME type
+    // Create a new ArrayBuffer to ensure type compatibility (meSpeak returns ArrayBufferLike)
+    const buffer = new ArrayBuffer(audioData.length);
+    const view = new Uint8Array(buffer);
+    view.set(audioData);
+    const wavBlob = new Blob([buffer], { type: 'audio/wav' });
+
+    logger.info(`✅ Real speech audio generated: ${(wavBlob.size / 1024).toFixed(1)} KB`);
+    logger.info(`   Text: "${text}"`);
+
+    return wavBlob;
+
+  } catch (error) {
+    logger.error('❌ Error generating speech with meSpeak:', error);
+    logger.warn('⚠️ Falling back to minimal audio blob');
+
+    // Fallback: create a minimal audio file
+    return createMinimalAudioBlob();
+  }
+}
 
 /**
  * Convert AudioBuffer to WAV blob
@@ -653,6 +733,192 @@ function createMinimalAudioBlob(): Blob {
 
   // Data is already zeros (silence)
 
-  console.log('✅ Created minimal silent audio file');
+  // // console.log('✅ Created minimal silent audio file');
   return new Blob([buffer], { type: 'audio/wav' });
+}
+
+/**
+ * Audio validation utilities for communication assessment
+ */
+
+export interface AudioValidationResult {
+  isValid: boolean;
+  duration: number;
+  hasSound: boolean;
+  error?: string;
+  warning?: string;
+}
+
+/**
+ * Validates an audio blob for quality and duration
+ */
+export async function validateAudioBlob(
+  blob: Blob
+): Promise<AudioValidationResult> {
+  try {
+    // Check if blob exists and has content
+    if (!blob || blob.size === 0) {
+      return {
+        isValid: false,
+        duration: 0,
+        hasSound: false,
+        error: 'No audio data found',
+      };
+    }
+
+    // Check minimum file size (very small files are likely silent)
+    const minSizeKB = 2; // At least 2KB for valid audio
+    const sizeKB = blob.size / 1024;
+    if (sizeKB < minSizeKB) {
+      return {
+        isValid: false,
+        duration: 0,
+        hasSound: false,
+        error: `Audio file too small (${sizeKB.toFixed(1)}KB). Please record again with clear speech.`,
+      };
+    }
+
+    // Get audio duration and check for sound
+    const audioData = await analyzeAudioBlob(blob);
+
+    // Check minimum duration (at least 0.5 seconds)
+    if (audioData.duration < 0.5) {
+      return {
+        isValid: false,
+        duration: audioData.duration,
+        hasSound: audioData.hasSound,
+        error: `Recording too short (${audioData.duration.toFixed(1)}s). Please speak for at least 1 second.`,
+      };
+    }
+
+    // Check if audio contains actual sound
+    if (!audioData.hasSound) {
+      return {
+        isValid: false,
+        duration: audioData.duration,
+        hasSound: false,
+        error: 'No speech detected. Please ensure your microphone is working and speak clearly.',
+      };
+    }
+
+    // Warn if audio is very short (but still valid)
+    if (audioData.duration < 1.5) {
+      return {
+        isValid: true,
+        duration: audioData.duration,
+        hasSound: true,
+        warning: `Recording is quite short (${audioData.duration.toFixed(1)}s). Make sure you spoke your full answer.`,
+      };
+    }
+
+    // Valid audio
+    return {
+      isValid: true,
+      duration: audioData.duration,
+      hasSound: true,
+    };
+  } catch (error) {
+    console.error('Error validating audio:', error);
+    return {
+      isValid: false,
+      duration: 0,
+      hasSound: false,
+      error: 'Failed to validate audio. Please try recording again.',
+    };
+  }
+}
+
+/**
+ * Analyzes audio blob to get duration and detect sound
+ */
+async function analyzeAudioBlob(
+  blob: Blob
+): Promise<{ duration: number; hasSound: boolean }> {
+  return new Promise((resolve, reject) => {
+    try {
+      const audioContext = new AudioContext();
+      const fileReader = new FileReader();
+
+      fileReader.onload = async (event) => {
+        try {
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+          const duration = audioBuffer.duration;
+          const hasSound = detectSound(audioBuffer);
+
+          audioContext.close();
+          resolve({ duration, hasSound });
+        } catch (error) {
+          console.error('Error decoding audio:', error);
+          // If we can't decode, assume it might be valid (don't fail unnecessarily)
+          resolve({ duration: 1.0, hasSound: true });
+        }
+      };
+
+      fileReader.onerror = () => {
+        reject(new Error('Failed to read audio file'));
+      };
+
+      fileReader.readAsArrayBuffer(blob);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Detects if audio buffer contains actual sound (not silence)
+ */
+function detectSound(audioBuffer: AudioBuffer): boolean {
+  const channelData = audioBuffer.getChannelData(0); // Get first channel
+  const threshold = 0.01; // Minimum amplitude to consider as sound
+
+  // Check multiple points throughout the audio
+  const checkPoints = 10;
+  const segmentLength = Math.floor(channelData.length / checkPoints);
+  let soundDetectedCount = 0;
+
+  for (let i = 0; i < checkPoints; i++) {
+    const startIdx = i * segmentLength;
+    const endIdx = Math.min(startIdx + segmentLength, channelData.length);
+
+    // Calculate RMS (root mean square) for this segment
+    let sumSquares = 0;
+    for (let j = startIdx; j < endIdx; j++) {
+      sumSquares += channelData[j] * channelData[j];
+    }
+    const rms = Math.sqrt(sumSquares / (endIdx - startIdx));
+
+    // If RMS is above threshold, sound was detected in this segment
+    if (rms > threshold) {
+      soundDetectedCount++;
+    }
+  }
+
+  // Consider audio to have sound if at least 20% of segments have sound
+  const soundRatio = soundDetectedCount / checkPoints;
+  return soundRatio >= 0.2;
+}
+
+/**
+ * Formats audio duration for display
+ */
+export function formatDuration(seconds: number): string {
+  if (seconds < 1) {
+    return `${(seconds * 1000).toFixed(0)}ms`;
+  }
+  return `${seconds.toFixed(1)}s`;
+}
+
+/**
+ * Formats audio file size for display
+ */
+export function formatFileSize(bytes: number): string {
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${kb.toFixed(1)} KB`;
+  }
+  const mb = kb / 1024;
+  return `${mb.toFixed(2)} MB`;
 }

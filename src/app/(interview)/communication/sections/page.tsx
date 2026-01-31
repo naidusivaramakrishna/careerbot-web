@@ -1,318 +1,10 @@
-// 'use client';
-
-// import { useRouter } from 'next/navigation';
-
-// const sections = [
-//   'Introduction',
-//   'Listening Skills',
-//   'Speaking Skills',
-//   'Reading Comprehension',
-//   'Writing Skills',
-//   'Vocabulary',
-//   'Grammar',
-//   'Feedback',
-// ];
-
-// export default function SectionsPage() {
-//   const router = useRouter();
-
-//   return (
-//     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100">
-//       <div className="container mx-auto px-4 py-12">
-//         <h1 className="text-4xl font-bold text-center text-gray-800 mb-12">
-//           Communication Assessment Sections
-//         </h1>
-//         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-//           {sections.map((section, index) => (
-//             <div
-//               key={index}
-//               className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition duration-200"
-//             >
-//               <h2 className="text-xl font-semibold text-gray-800">{section}</h2>
-//             </div>
-//           ))}
-//         </div>
-//         <div className="mt-12 text-center">
-//           <button
-//             onClick={() => router.push('/next-page')} // Replace with your next page route
-//             className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-indigo-700 transition duration-200"
-//           >
-//             Next
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-// 'use client';
-
-// import { useRouter } from 'next/navigation';
-
-// // Example data: replace counts with your actual question numbers
-// const sections = [
-//   { name: 'See and Repeat', count: 8 },
-//   { name: 'Listen and Repeat', count: 8 },
-//   { name: 'Jumbled Sentences', count: 8 },
-//   { name: 'Sentence Completion', count: 8 },
-//   { name: 'Listen and Correct', count: 8 },
-//   { name: 'Story Listening', count: 3 },
-//   { name: 'Situation Explaining', count: 1 },
-// ];
-
-// export default function SectionsPage() {
-//   const router = useRouter();
-
-//   return (
-//     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100">
-//       <div className="container mx-auto px-4 py-12">
-//         <h1 className="text-4xl font-bold text-center text-gray-800 mb-12">
-//           Communication Assessment Sections
-//         </h1>
-//         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-//           {sections.map((section, index) => (
-//             <div
-//               key={index}
-//               className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition duration-200 flex flex-col justify-between"
-//             >
-//               <h2 className="text-xl font-semibold text-gray-800 mb-2">{section.name}</h2>
-//               <span className="text-indigo-600 font-medium">
-//                 {section.count} Questions
-//               </span>
-//             </div>
-//           ))}
-//         </div>
-//         <div className="mt-12 text-center">
-//           <button
-//             onClick={() => router.push('/next-page')}
-//             className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-indigo-700 transition duration-200"
-//           >
-//             Next
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// } side by side sections
-
-
-
-// 'use client';
-
-// import { useRouter } from 'next/navigation';
-
-// const sections = [
-//   { name: 'See and Repeat', count: 8, description: 'View and repeat the given content' },
-//   { name: 'Listen and Repeat', count: 8, description: 'Listen carefully and repeat what you hear' },
-//   { name: 'Jumbled Sentences', count: 8, description: 'Arrange words in the correct order' },
-//   { name: 'Sentence Completion', count: 8, description: 'Complete the sentences appropriately' },
-//   { name: 'Listen and Correct', count: 8, description: 'Identify and correct mistakes' },
-//   { name: 'Story Listening', count: 3, description: 'Listen to stories and answer questions' },
-//   { name: 'Situation Explaining', count: 1, description: 'Explain various situational scenarios' },
-// ];
-
-// export default function SectionsPage() {
-//   const router = useRouter();
-
-//   return (
-//     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100">
-//       <div className="container mx-auto px-4 py-12 max-w-2xl">
-//         <div className="text-center mb-12">
-//           <h1 className="text-3xl font-bold text-gray-800 mb-3">
-//             Communication Assessment Sections
-//           </h1>
-//           <p className="text-gray-600 text-base">
-//             Complete all sections to finish your assessment
-//           </p>
-//         </div>
-
-//         {/* Vertical Layout - Professional & User-Friendly */}
-//         <div className="space-y-4">
-//           {sections.map((section, index) => (
-//             <div
-//               key={index}
-//               className="bg-white p-3 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 border-l-4 border-indigo-600 hover:border-indigo-700 cursor-pointer group"
-//             >
-//               <div className="flex items-center justify-between">
-//                 <div className="flex-1">
-//                   <div className="flex items-center gap-3 mb-2">
-//                     <span className="bg-indigo-100 text-indigo-700 font-bold text-sm px-3 py-1 rounded-full">
-//                       Section {index + 1}
-//                     </span>
-//                     <h2 className="text-lg font-semibold text-gray-800 group-hover:text-indigo-700 transition-colors">
-//                       {section.name}
-//                     </h2>
-//                   </div>
-//                   <p className="text-gray-600 text-xs ml-0 mt-2">
-//                     {section.description}
-//                   </p>
-//                 </div>
-//                 <div className="text-right ml-6">
-//                   <div className="bg-indigo-50 px-4 py-2 rounded-lg">
-//                     <p className="text-2xl font-bold  text-center text-indigo-600">{section.count}</p>
-//                     <p className="text-xs text-gray-600 uppercase tracking-wide">Questions</p>
-//                   </div>
-//                 </div>
-//               </div>
-//             </div>
-//           ))}
-//         </div>
-
-//         {/* Progress Indicator */}
-//         <div className="mt-8 bg-white p-4 rounded-xl shadow-md">
-//           <div className="flex justify-between items-center mb-2">
-//             <span className="text-sm font-medium text-gray-700">Total Questions</span>
-//             <span className="text-lg font-bold text-indigo-600">
-//               {sections.reduce((sum, section) => sum + section.count, 0)}
-//             </span>
-//           </div>
-//         </div>
-
-//         <div className="mt-12 text-center">
-//           <button
-//             onClick={() => router.push('/introduction')}
-//             className="bg-indigo-600 text-white px-12 py-4 rounded-lg font-semibold text-lg hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-//           >
-//             Start Assessment
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// } 
-// one by one before design change and before audio permission added
-
-
-
-// 'use client';
-
-// import { useRouter } from 'next/navigation';
-// import { useState } from 'react';
-
-// const sections = [
-//   { name: 'See and Repeat', count: 8, description: 'View and repeat the given content' },
-//   { name: 'Listen and Repeat', count: 8, description: 'Listen carefully and repeat what you hear' },
-//   { name: 'Jumbled Sentences', count: 8, description: 'Arrange words in the correct order' },
-//   { name: 'Sentence Completion', count: 8, description: 'Complete the sentences appropriately' },
-//   { name: 'Listen and Correct', count: 8, description: 'Identify and correct mistakes' },
-//   { name: 'Story Listening', count: 3, description: 'Listen to stories and answer questions' },
-//   { name: 'Situation Explaining', count: 1, description: 'Explain various situational scenarios' },
-// ];
-
-// export default function SectionsPage() {
-//   const router = useRouter();
-//   const [isRequesting, setIsRequesting] = useState(false);
-
-//   const handleStartAssessment = async () => {
-//     setIsRequesting(true);
-    
-//     try {
-//       // Request microphone permission
-//       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-//       // Permission granted - store stream in sessionStorage flag
-//       sessionStorage.setItem('microphonePermissionGranted', 'true');
-      
-//       // Stop the stream tracks (we'll request it again when actually recording)
-//       stream.getTracks().forEach(track => track.stop());
-      
-//       // Navigate to introduction page
-//       router.push('/see-and-repeat');
-      
-//     } catch (error: any) {
-//       setIsRequesting(false);
-      
-//       // Handle different error types
-//       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-//         alert('Microphone permission is required to take this assessment. Please allow microphone access and try again.');
-//       } else if (error.name === 'NotFoundError') {
-//         alert('No microphone found. Please connect a microphone and try again.');
-//       } else {
-//         alert('Error accessing microphone: ' + error.message);
-//       }
-      
-//       console.error('Microphone permission error:', error);
-//     }
-//   };
-
-//   return (
-//     <div className="min-h-screen bg-linear-to-br from-indigo-50 to-purple-100">
-//       <div className="container mx-auto px-4 py-12 max-w-2xl">
-//         <div className="text-center mb-12">
-//           <h1 className="text-3xl font-bold text-gray-800 mb-3">
-//             Communication Assessment Sections
-//           </h1>
-//           <p className="text-gray-600 text-base">
-//             Complete all sections to finish your assessment
-//           </p>
-//         </div>
-
-//         {/* Vertical Layout - Professional & User-Friendly */}
-//         <div className="space-y-4">
-//           {sections.map((section, index) => (
-//             <div
-//               key={index}
-//               className="bg-white p-3 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 border-l-4 border-indigo-600 hover:border-indigo-700 cursor-pointer group"
-//             >
-//               <div className="flex items-center justify-between">
-//                 <div className="flex-1">
-//                   <div className="flex items-center gap-3 mb-2">
-//                     <span className="bg-indigo-100 text-indigo-700 font-bold text-sm px-3 py-1 rounded-full">
-//                       Section {index + 1}
-//                     </span>
-//                     <h2 className="text-lg font-semibold text-gray-800 group-hover:text-indigo-700 transition-colors">
-//                       {section.name}
-//                     </h2>
-//                   </div>
-//                   <p className="text-gray-600 text-xs ml-0 mt-2">
-//                     {section.description}
-//                   </p>
-//                 </div>
-//                 <div className="text-right ml-6">
-//                   <div className="bg-indigo-50 px-4 py-2 rounded-lg">
-//                     <p className="text-2xl font-bold text-center text-indigo-600">{section.count}</p>
-//                     <p className="text-xs text-gray-600 uppercase tracking-wide">Questions</p>
-//                   </div>
-//                 </div>
-//               </div>
-//             </div>
-//           ))}
-//         </div>
-
-//         {/* Progress Indicator */}
-//         <div className="mt-8 bg-white p-4 rounded-xl shadow-md">
-//           <div className="flex justify-between items-center mb-2">
-//             <span className="text-sm font-medium text-gray-700">Total Questions</span>
-//             <span className="text-lg font-bold text-indigo-600">
-//               {sections.reduce((sum, section) => sum + section.count, 0)}
-//             </span>
-//           </div>
-//         </div>
-
-//         <div className="mt-12 text-center">
-//           <button
-//             onClick={handleStartAssessment}
-//             disabled={isRequesting}
-//             className={`bg-indigo-600 text-white px-12 py-4 rounded-lg font-semibold text-lg hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${
-//               isRequesting ? 'opacity-50 cursor-not-allowed' : ''
-//             }`}
-//           >
-//             {isRequesting ? 'Requesting Permission...' : 'Start Assessment'}
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-
-
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { useState, useRef, useCallback } from 'react';
 import { startSession } from '@/api/communicationApi';
 import { useVideoRecording } from '@/contexts/VideoRecordingContext';
+import logger from '@/lib/logger';
 
 const sections = [
   { name: 'See & Repeat', count: 8, description: 'Read the highlighted word clearly', type: 'VOICE' },
@@ -320,8 +12,8 @@ const sections = [
   { name: 'Jumbled Sentence', count: 8, description: 'Arrange words correctly', type: 'MCQ' },
   { name: 'Sentence Completion', count: 8, description: 'Fill in the blanks', type: 'MCQ' },
   { name: 'Listen & Correct', count: 8, description: 'Fix the mistakes', type: 'VOICE' },
-  { name: 'Story Listening', count: 3, description: 'Comprehension Questions', type: 'MCQ' },
-  { name: 'Situation Explaining', count: 1, description: 'Explain your thoughts', type: 'VOICE' },
+  { name: 'Story Listen Facts', count: 3, description: 'Comprehension Questions', type: 'MCQ' },
+  { name: 'Describe Situation', count: 1, description: 'Explain your thoughts', type: 'VOICE' },
 ];
 
 export default function SectionsPage() {
@@ -351,7 +43,7 @@ export default function SectionsPage() {
         sessionStorage.setItem('cameraPermissionGranted', 'true');
       }
     } catch (error: any) {
-      console.error('Error accessing media devices:', error);
+      logger.error('Error accessing media devices:', error);
       throw error;
     }
   }, []);
@@ -385,15 +77,15 @@ export default function SectionsPage() {
         test_id: testId,
       });
 
-      console.log('✅ Session started successfully:', response);
-      console.log('🔍 Response object type:', typeof response);
-      console.log('🔍 Response keys:', Object.keys(response || {}));
-      console.log('🔍 session_id value:', response.session_id);
+      logger.info('Session started successfully:', response);
+      logger.info('Response object type:', typeof response);
+      logger.info('Response keys:', Object.keys(response || {}));
+      logger.info('session_id value:', response.session_id);
 
       // Store session_id and test start date in localStorage for later use
       if (!response.session_id) {
-        console.error('❌ Session ID not found in response:', response);
-        console.error('❌ Attempting to find session_id in response...');
+        logger.error('Session ID not found in response:', response);
+        logger.error('Attempting to find session_id in response...');
 
         // Try to find it in different locations (API returns session.session_id)
         const possibleSessionId = (response as any)?.sessionId ||
@@ -404,7 +96,7 @@ export default function SectionsPage() {
                                    (response as any)?.data?.sessionId;
 
         if (possibleSessionId) {
-          console.log('✅ Found session_id in alternate location:', possibleSessionId);
+          logger.info('Found session_id in alternate location:', possibleSessionId);
           localStorage.setItem('session_id', possibleSessionId);
         } else {
           throw new Error('Session ID not received from API response. Response: ' + JSON.stringify(response));
@@ -413,11 +105,11 @@ export default function SectionsPage() {
         localStorage.setItem('session_id', response.session_id);
       }
 
-      console.log('✅ Session ID stored in localStorage:', localStorage.getItem('session_id'));
+      logger.info('Session ID stored in localStorage:', localStorage.getItem('session_id'));
 
       // Verify it was stored correctly
       const storedSessionId = localStorage.getItem('session_id');
-      console.log('✅ Verified session_id in localStorage:', storedSessionId);
+      logger.info('Verified session_id in localStorage:', storedSessionId);
 
       // Store the test start date for report display
       const testStartDate = new Date().toISOString();
@@ -426,9 +118,9 @@ export default function SectionsPage() {
       // Start video recording
       try {
         await startRecording();
-        console.log('✅ Video recording started');
+        logger.info('Video recording started');
       } catch (recordingError) {
-        console.error('❌ Failed to start video recording:', recordingError);
+        logger.error('Failed to start video recording:', recordingError);
         // Continue anyway - video recording failure shouldn't block assessment
       }
 
@@ -436,22 +128,22 @@ export default function SectionsPage() {
       try {
         if (document.documentElement.requestFullscreen) {
           await document.documentElement.requestFullscreen();
-          console.log('✅ Entered fullscreen mode');
+          logger.info('Entered fullscreen mode');
         }
       } catch (fullscreenError) {
-        console.warn('⚠️ Could not enter fullscreen:', fullscreenError);
+        logger.warn('Could not enter fullscreen:', fullscreenError);
         // Continue anyway - fullscreen is not critical
       }
 
       // Verify session_id one more time before navigation
       const finalCheck = localStorage.getItem('session_id');
-      console.log('🔍 Final check before navigation - session_id:', finalCheck);
+      logger.info('Final check before navigation - session_id:', finalCheck);
 
       // Wait a bit for all async operations to complete
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Navigate to introduction page
-      console.log('🚀 Navigating to see-and-repeat page...');
+      logger.info('Navigating to see-and-repeat page...');
       router.push('/communication/see-and-repeat');
 
     } catch (error: any) {
@@ -468,7 +160,7 @@ export default function SectionsPage() {
         setError(error?.response?.data?.message || 'Failed to start session. Please try again.');
       }
 
-      console.error('Error starting assessment:', error);
+      logger.error('Error starting assessment:', error);
     }
   };
 

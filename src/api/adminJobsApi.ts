@@ -1,4 +1,8 @@
 import { httpClient } from '@/lib/http';
+import logger from '@/lib/logger';
+// ==================== TYPES ====================
+
+export type JobStatus = 'active' | 'draft' | 'expired' | 'closed';
 
 // ==================== INTERFACES ====================
 
@@ -19,7 +23,7 @@ export interface CreateJobRequest {
     application_deadline?: string;
     who_can_apply?: string;
     company_logo_url?: string;
-    status?: 'draft' | 'active' | 'closed' | 'expired';
+    status?: JobStatus;
     experience_min?: number;
     experience_max?: number;
 }
@@ -37,7 +41,7 @@ export interface JobListQueryParams {
     page?: number;
     page_size?: number;
     search?: string;
-    status?: 'active' | 'draft' | 'expired' | 'closed';
+    status?: JobStatus;
     source?: 'admin' | 'scraped';
     work_mode?: 'remote' | 'hybrid' | 'on-site';
     job_type?: 'full-time' | 'part-time' | 'internship' | 'contract';
@@ -61,7 +65,7 @@ export interface JobListItem {
     salary_min: number;
     salary_max: number;
     salary_currency: string;
-    status: string;
+    status: JobStatus;
     source: string;
     views_count: number;
     applications_count: number;
@@ -95,7 +99,7 @@ export interface JobDetailsResponse {
     application_deadline?: string;
     who_can_apply?: string;
     company_logo_url?: string;
-    status: string;
+    status: JobStatus;
     source: string;
     experience_min?: number;
     experience_max?: number;
@@ -122,7 +126,7 @@ export interface UpdateJobRequest {
     application_deadline?: string;
     who_can_apply?: string;
     company_logo_url?: string;
-    status?: 'draft' | 'active' | 'closed' | 'expired';
+    status?: JobStatus;
     experience_min?: number;
     experience_max?: number;
 }
@@ -141,7 +145,7 @@ export interface DeleteJobResponse {
 
 export interface BulkUpdateStatusRequest {
     job_ids: string[];
-    status: 'draft' | 'active' | 'closed' | 'expired';
+    status: JobStatus;
 }
 
 export interface BulkUpdateStatusResponse {
@@ -193,7 +197,7 @@ export interface JobStatisticsResponse {
 
 export interface ExportJobsQueryParams {
     search?: string;
-    status?: 'active' | 'draft' | 'expired' | 'closed';
+    status?: JobStatus;
     work_mode?: 'remote' | 'hybrid' | 'on-site';
     job_type?: 'full-time' | 'part-time' | 'internship' | 'contract';
 }
@@ -226,7 +230,7 @@ export const createJob = async (
     try {
         const response = await httpClient.post<CreateJobResponse>(
             '/admin/jobs/',
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -235,7 +239,7 @@ export const createJob = async (
         );
         return response.data;
     } catch (error) {
-        console.error('Error creating job:', error);
+        logger.error('Error creating job:', error);
         throw error;
     }
 };
@@ -284,7 +288,7 @@ export const getJobList = async (
         const response = await httpClient.get<JobListResponse>(url);
         return response.data;
     } catch (error) {
-        console.error('Error fetching job list:', error);
+        logger.error('Error fetching job list:', error);
         throw error;
     }
 };
@@ -307,7 +311,7 @@ export const getJobDetails = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error fetching job details for ${jobId}:`, error);
+        logger.error(`Error fetching job details for ${jobId}:`, error);
         throw error;
     }
 };
@@ -332,7 +336,7 @@ export const updateJob = async (
     try {
         const response = await httpClient.put<UpdateJobResponse>(
             `/admin/jobs/${jobId}`,
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -341,7 +345,7 @@ export const updateJob = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error updating job ${jobId}:`, error);
+        logger.error(`Error updating job ${jobId}:`, error);
         throw error;
     }
 };
@@ -361,7 +365,7 @@ export const deleteJob = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error deleting job ${jobId}:`, error);
+        logger.error(`Error deleting job ${jobId}:`, error);
         throw error;
     }
 };
@@ -383,7 +387,7 @@ export const bulkUpdateJobStatus = async (
     try {
         const response = await httpClient.post<BulkUpdateStatusResponse>(
             '/admin/jobs/bulk/update-status',
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -392,7 +396,7 @@ export const bulkUpdateJobStatus = async (
         );
         return response.data;
     } catch (error) {
-        console.error('Error bulk updating job status:', error);
+        logger.error('Error bulk updating job status:', error);
         throw error;
     }
 };
@@ -414,7 +418,7 @@ export const bulkDeleteJobs = async (
     try {
         const response = await httpClient.post<BulkDeleteResponse>(
             '/admin/jobs/bulk/delete',
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -423,7 +427,7 @@ export const bulkDeleteJobs = async (
         );
         return response.data;
     } catch (error) {
-        console.error('Error bulk deleting jobs:', error);
+        logger.error('Error bulk deleting jobs:', error);
         throw error;
     }
 };
@@ -446,7 +450,7 @@ export const getJobStatistics = async (): Promise<JobStatisticsResponse> => {
         );
         return response.data;
     } catch (error) {
-        console.error('Error fetching job statistics:', error);
+        logger.error('Error fetching job statistics:', error);
         throw error;
     }
 };
@@ -481,9 +485,9 @@ export const exportJobsToCSV = async (
             responseType: 'blob',
         });
 
-        return response.data;
+        return response.data as Blob;
     } catch (error) {
-        console.error('Error exporting jobs to CSV:', error);
+        logger.error('Error exporting jobs to CSV:', error);
         throw error;
     }
 };
@@ -510,7 +514,7 @@ export const downloadJobsCSV = async (
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
     } catch (error) {
-        console.error('Error downloading CSV:', error);
+        logger.error('Error downloading CSV:', error);
         throw error;
     }
 };
@@ -540,7 +544,7 @@ export const uploadJobLogo = async (file: File): Promise<string> => {
 
         const response = await httpClient.post<{ logo_url: string }>(
             '/admin/jobs/logo/upload',
-            formData,
+            formData as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'multipart/form-data',
@@ -550,7 +554,7 @@ export const uploadJobLogo = async (file: File): Promise<string> => {
 
         return response.data.logo_url;
     } catch (error) {
-        console.error('Error uploading job logo:', error);
+        logger.error('Error uploading job logo:', error);
         throw error;
     }
 };
@@ -590,7 +594,7 @@ export const getJobApplicationsCount = async (
             applications_count: job.applications_count,
         };
     } catch (error) {
-        console.error(`Error fetching applications count for job ${jobId}:`, error);
+        logger.error(`Error fetching applications count for job ${jobId}:`, error);
         throw error;
     }
 };
@@ -608,7 +612,7 @@ export const getJobViewsCount = async (
             views_count: job.views_count,
         };
     } catch (error) {
-        console.error(`Error fetching views count for job ${jobId}:`, error);
+        logger.error(`Error fetching views count for job ${jobId}:`, error);
         throw error;
     }
 };

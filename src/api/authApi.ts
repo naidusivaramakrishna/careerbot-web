@@ -1,19 +1,4 @@
-import { httpClient } from '@/lib/http';
-import Cookies from 'js-cookie';
-
-// ==================== INTERFACES ====================
-export interface SignUpRequest {
-  email: string;
-  username: string;
-  password: string;
-}
-
-export interface SignUpResponse {
-  id: string;
-  email: string;
-  username: string;
-  created_at: string;
-}
+import { httpClient } from "@/lib/http";
 
 export interface LoginRequest {
   email: string;
@@ -27,180 +12,65 @@ export interface LoginResponse {
   expires_in?: number;
 }
 
-export interface GoogleLoginUrlResponse {
-  auth_url: string;
+export interface SignUpRequest {
+  email: string;
+  password: string;
+  name?: string;
 }
 
-export interface GoogleCallbackRequest {
-  code: string;
-  redirect_uri?: string;
+export interface SignUpResponse {
+  success: boolean;
+  message?: string;
 }
 
-// ==================== AUTH API FUNCTIONS ====================
+// ✅ Tokens are now httpOnly cookies - never accessible to JavaScript
+// ❌ Removed getAccessToken() - browser manages cookies automatically
 
-/**
- * Sign up a new user
- */
+export const isAuthenticated = async (): Promise<boolean> => {
+  try {
+    await httpClient.get("/auth/profile");
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
+  const response = await httpClient.post<LoginResponse>(
+    "/auth/signin",
+    new URLSearchParams({
+      username: data.email,
+      password: data.password,
+    }) as unknown as Record<string, unknown>,
+    { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+  );
+
+  // ✅ Backend sets httpOnly cookies automatically
+  // ❌ No need to manually store tokens - browser handles this
+  return response.data;
+};
+
+export const signOut = async () => {
+  await httpClient.post("/auth/signout").catch(() => {});
+  // ✅ Backend clears httpOnly cookies automatically
+  // ❌ No manual cleanup needed
+  window.location.href = "/";
+};
+
+export const getGoogleLoginUrl = (): string => "https://accounts.google.com/o/oauth2/auth?...";
+
+export const getLinkedInLoginUrl = (): string => "https://www.linkedin.com/oauth/v2/authorization?...";
+
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
   try {
-    const response = await httpClient.post<SignUpResponse>('/auth/signup', data);
-    return response.data;
-  } catch (error) {
-    console.error('Error signing up:', error);
-    throw error;
-  }
-};
-
-/**
- * Sign in a user
- */
-export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
-  try {
-    // CLEAR EVERYTHING FIRST
-    if (typeof window !== 'undefined') {
-      localStorage.clear();
-      sessionStorage.clear();
-      Cookies.remove('access_token');
-      Cookies.remove('refresh_token');
-    }
-
-    const response = await httpClient.post<LoginResponse>(
-      '/auth/signin',
-      new URLSearchParams({
-        username: data.email,
-        password: data.password,
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
+    const response = await httpClient.post<SignUpResponse>(
+      "/auth/signup",
+      data as unknown as Record<string, unknown>
     );
-
-    const { access_token, refresh_token } = response.data;
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-
-      Cookies.set('access_token', access_token, {
-        expires: 7,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict'
-      });
-      Cookies.set('refresh_token', refresh_token, {
-        expires: 30,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict'
-      });
-
-      window.dispatchEvent(new Event('tokenUpdated'));
-    }
-
+    // ✅ Backend sets httpOnly cookies automatically after signup
     return response.data;
-  } catch (error) {
-    console.error('Error signing in:', error);
-    throw error;
-  }
-};
-/**
- * Refresh access token using refresh token
- */
-export const refreshToken = async (refreshToken: string): Promise<LoginResponse> => {
-  try {
-    // CLEAR OLD DATA FIRST
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('username');
-      Cookies.remove('access_token');
-      Cookies.remove('refresh_token');
-    }
-
-    const response = await httpClient.post<LoginResponse>(
-      '/auth/refresh',
-      { refresh_token: refreshToken }
-    );
-
-    const { access_token, refresh_token } = response.data;
-
-    // Update tokens in both storage locations
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-
-      Cookies.set('access_token', access_token, {
-        expires: 7,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict'
-      });
-      Cookies.set('refresh_token', refresh_token, {
-        expires: 30,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict'
-      });
-
-    }
-    // Dispatch event to notify other tabs
-    window.dispatchEvent(new Event('tokenUpdated'));
-    return response.data;
-  } catch (error) {
-    console.error('Error refreshing token:', error);
-    throw error;
-  }
-};
-
-/**
- * Sign out user
- */
-
-export const signOut = async (): Promise<void> => {
-  try {
-    await httpClient.post('/auth/signout');
-  } catch (error) {
-    console.error('Error signing out:', error);
-  } finally {
-    if (typeof window !== 'undefined') {
-      // Clear EVERYTHING
-      localStorage.clear();
-      sessionStorage.clear();
-      Cookies.remove('access_token');
-      Cookies.remove('refresh_token');
-
-      // Force redirect
-      window.location.href = '/';
-    }
-  }
-};
-// ==================== GOOGLE OAUTH FUNCTIONS ====================
-
-
-/**
- * Get Google OAuth login URL
- * Returns the URL that frontend should redirect user to for Google authentication
- */
-export const getGoogleLoginUrl = async (): Promise<string> => {
-  try {
-    const response = await httpClient.get<GoogleLoginUrlResponse>('/auth/google/login-url');
-    return response.data.auth_url;
-  } catch (error) {
-    console.error('Error getting Google login URL:', error);
-    throw error;
-  }
-};
-
-// ==================== LINKEDIN OAUTH FUNCTIONS ====================
-
-/**
- * Get LinkedIn OAuth login URL
- * Returns the URL that frontend should redirect user to for LinkedIn authentication
- */
-export const getLinkedInLoginUrl = async (): Promise<string> => {
-  try {
-    const response = await httpClient.get<GoogleLoginUrlResponse>('/auth/linkedin/login-url');
-    return response.data.auth_url;
-  } catch (error) {
-    console.error('Error getting LinkedIn login URL:', error);
-    throw error;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Sign up failed";
+    return { success: false, message: errorMessage };
   }
 };

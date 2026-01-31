@@ -1,8 +1,5 @@
-import HomePage from "./scans/components/page";
+import HomePage from "./_components/HomePage";
 
-
-export default function Ats() {
-  return <HomePage/>
-  
-  
+export default function AtsPage() {
+  return <HomePage />;
 }

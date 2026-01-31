@@ -14,7 +14,7 @@ export default function ClientLayout({
   useEffect(() => {
     // Listen for token updates (login/logout from other tabs)
     const handleTokenUpdate = () => {
-      console.log('Token updated - reloading page');
+      // // console.log('Token updated - reloading page');
       // Force reload to clear all caches
       window.location.reload();
     };
@@ -24,7 +24,7 @@ export default function ClientLayout({
     // Also listen for storage changes (from other tabs)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'access_token' || e.key === null) {
-        console.log('Storage changed - reloading page');
+        // // console.log('Storage changed - reloading page');
         // Token changed or storage cleared
         window.location.reload();
       }

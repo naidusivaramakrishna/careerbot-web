@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getAudioStatus } from '@/api/communicationApi';
+import logger from '@/lib/logger';
 
 interface AudioUploadStatusProps {
   sessionId: string;
@@ -43,7 +44,7 @@ export function AudioUploadStatus({
         setStatus(newStatus);
         onStatusChange?.(newStatus);
       } catch (error) {
-        console.error('Failed to fetch audio status:', error);
+        logger.error('Failed to fetch audio status:', error);
       } finally {
         setIsLoading(false);
       }

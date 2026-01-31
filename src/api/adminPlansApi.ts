@@ -1,4 +1,5 @@
 import { httpClient } from '@/lib/http';
+import logger from '@/lib/logger';
 
 // ==================== INTERFACES ====================
 
@@ -121,7 +122,7 @@ export const createPlan = async (
     try {
         const response = await httpClient.post<CreatePlanResponse>(
             '/admin/settings/plans',
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -130,7 +131,7 @@ export const createPlan = async (
         );
         return response.data;
     } catch (error) {
-        console.error('Error creating plan:', error);
+        logger.error('Error creating plan:', error);
         throw error;
     }
 };
@@ -158,7 +159,7 @@ export const getAllPlans = async (): Promise<GetAllPlansResponse> => {
         );
         return response.data;
     } catch (error) {
-        console.error('Error fetching plans:', error);
+        logger.error('Error fetching plans:', error);
         throw error;
     }
 };
@@ -184,7 +185,7 @@ export const getPlanDetails = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error fetching plan details for ${planId}:`, error);
+        logger.error(`Error fetching plan details for ${planId}:`, error);
         throw error;
     }
 };
@@ -215,7 +216,7 @@ export const updatePlan = async (
     try {
         const response = await httpClient.put<UpdatePlanResponse>(
             `/admin/settings/plans/${planId}`,
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -224,7 +225,7 @@ export const updatePlan = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error updating plan ${planId}:`, error);
+        logger.error(`Error updating plan ${planId}:`, error);
         throw error;
     }
 };
@@ -249,7 +250,7 @@ export const deletePlan = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error deleting plan ${planId}:`, error);
+        logger.error(`Error deleting plan ${planId}:`, error);
         throw error;
     }
 };
@@ -278,7 +279,7 @@ export const setPopularPlan = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error setting plan ${planId} as popular:`, error);
+        logger.error(`Error setting plan ${planId} as popular:`, error);
         throw error;
     }
 };
@@ -313,7 +314,7 @@ export const seedDefaultPlans = async (): Promise<SeedDefaultPlansResponse> => {
         );
         return response.data;
     } catch (error) {
-        console.error('Error seeding default plans:', error);
+        logger.error('Error seeding default plans:', error);
         throw error;
     }
 };
@@ -358,7 +359,7 @@ export const getActivePlans = async (): Promise<PlanItem[]> => {
         const response = await getAllPlans();
         return response.plans.filter((plan) => plan.is_active);
     } catch (error) {
-        console.error('Error fetching active plans:', error);
+        logger.error('Error fetching active plans:', error);
         throw error;
     }
 };
@@ -374,7 +375,7 @@ export const getPopularPlan = async (): Promise<PlanItem | null> => {
         const popularPlan = response.plans.find((plan) => plan.is_popular);
         return popularPlan || null;
     } catch (error) {
-        console.error('Error fetching popular plan:', error);
+        logger.error('Error fetching popular plan:', error);
         throw error;
     }
 };
@@ -391,7 +392,7 @@ export const getPlansSortedByPrice = async (
             return ascending ? a.price - b.price : b.price - a.price;
         });
     } catch (error) {
-        console.error('Error fetching plans sorted by price:', error);
+        logger.error('Error fetching plans sorted by price:', error);
         throw error;
     }
 };
@@ -434,7 +435,7 @@ export const getPlanStatistics = async (): Promise<{
             lowest_priced_plan: lowestPricedPlan,
         };
     } catch (error) {
-        console.error('Error fetching plan statistics:', error);
+        logger.error('Error fetching plan statistics:', error);
         throw error;
     }
 };
@@ -468,7 +469,7 @@ export const duplicatePlan = async (
 
         return await createPlan(newPlanData);
     } catch (error) {
-        console.error(`Error duplicating plan ${planId}:`, error);
+        logger.error(`Error duplicating plan ${planId}:`, error);
         throw error;
     }
 };

@@ -1,0 +1,45 @@
+/* src/app/(jobs)/jobmatch/components/_styles/docx-preview.css */
+.docx-preview-container {
+  width: 100%;
+  height: 100%;
+  background: #ffffff !important;
+  padding: 32px !important;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.docx-wrapper {
+  max-width: 816px !important;
+  margin: 0 auto !important;
+  background: #ffffff !important;
+  box-sizing: border-box;
+}
+
+.docx-wrapper p {
+  margin: 0.4rem 0 !important;
+  line-height: 1.5 !important;
+  font-size: 14px !important;
+  color: #000 !important;
+}
+
+.docx-wrapper h1, .docx-wrapper h2, .docx-wrapper h3 {
+  font-weight: bold !important;
+  margin: 0.8rem 0 0.4rem 0 !important;
+  color: #000 !important;
+}
+
+.docx-wrapper ul, .docx-wrapper ol {
+  padding-left: 1.5rem !important;
+  margin: 0.2rem 0 !important;
+}
+
+.docx-wrapper table {
+  border-collapse: collapse !important;
+  width: 100% !important;
+  margin: 0.5rem 0 !important;
+}
+
+.docx-wrapper td, .docx-wrapper th {
+  border: 1px solid #d1d5db !important;
+  padding: 0.4rem !important;
+}

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     // Handle OAuth errors
     if (error) {
-      console.error('OAuth error:', error);
+      // // console.error('OAuth error:', error);
       return NextResponse.redirect(
         new URL(`/signup?error=${encodeURIComponent(error)}`, request.url)
       );
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     );
 
   } catch (error) {
-    console.error('Callback route error:', error);
+    // // console.error('Callback route error:', error);
     return NextResponse.redirect(
       new URL('/signup?error=callback_failed', request.url)
     );

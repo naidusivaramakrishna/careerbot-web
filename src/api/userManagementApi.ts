@@ -1,4 +1,5 @@
 import { httpClient } from '@/lib/http';
+import logger from '@/lib/logger';
 
 // ==================== INTERFACES ====================
 
@@ -106,20 +107,30 @@ export interface UserActivityQueryParams {
 }
 
 export interface UserActivityLog {
-    id: string;
-    user_id: string;
-    event_type: string;
-    event_details: string;
-    ip_address: string;
+    event: string;
+    description: string;
+    timestamp: number;
+    ip: string;
     user_agent: string;
-    created_at: string;
+    method: string;
+    status_code: number;
 }
 
 export interface UserActivityResponse {
-    activities: UserActivityLog[];
-    total: number;
+    user_id: string;
+    total_events: number;
     page: number;
-    page_size: number;
+    limit: number;
+    total_pages: number;
+    events: UserActivityLog[];
+    statistics: {
+        total_logins: number;
+        total_logouts: number;
+        total_api_calls: number;
+        features_used: number;
+        last_login: string | null;
+        active_days: number;
+    };
 }
 
 export interface ExportUsersRequest {
@@ -177,7 +188,7 @@ export const getUserList = async (
         const response = await httpClient.get<UserListResponse>(url);
         return response.data;
     } catch (error) {
-        console.error('Error fetching user list:', error);
+        logger.error('Error fetching user list:', error);
         throw error;
     }
 };
@@ -210,7 +221,7 @@ export const getUserDetails = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error fetching user details for ${userId}:`, error);
+        logger.error(`Error fetching user details for ${userId}:`, error);
         throw error;
     }
 };
@@ -233,7 +244,7 @@ export const updateUser = async (
     try {
         const response = await httpClient.put<UpdateUserResponse>(
             `/admin/users/${userId}`,
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -242,7 +253,7 @@ export const updateUser = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error updating user ${userId}:`, error);
+        logger.error(`Error updating user ${userId}:`, error);
         throw error;
     }
 };
@@ -281,7 +292,7 @@ export const deleteUser = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error deleting user ${userId}:`, error);
+        logger.error(`Error deleting user ${userId}:`, error);
         throw error;
     }
 };
@@ -310,7 +321,7 @@ export const suspendUser = async (
     try {
         const response = await httpClient.post<SuspendUserResponse>(
             `/admin/users/${userId}/suspend`,
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -319,7 +330,7 @@ export const suspendUser = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error suspending user ${userId}:`, error);
+        logger.error(`Error suspending user ${userId}:`, error);
         throw error;
     }
 };
@@ -351,7 +362,7 @@ export const unsuspendUser = async (
         );
         return response.data;
     } catch (error) {
-        console.error(`Error unsuspending user ${userId}:`, error);
+        logger.error(`Error unsuspending user ${userId}:`, error);
         throw error;
     }
 };
@@ -392,7 +403,7 @@ export const getUserActivity = async (
         const response = await httpClient.get<UserActivityResponse>(url);
         return response.data;
     } catch (error) {
-        console.error(`Error fetching user activity for ${userId}:`, error);
+        logger.error(`Error fetching user activity for ${userId}:`, error);
         throw error;
     }
 };
@@ -425,7 +436,7 @@ export const exportUsers = async (
     try {
         const response = await httpClient.post(
             `/admin/users/export`,
-            data,
+            data as unknown as Record<string, unknown>,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -437,9 +448,9 @@ export const exportUsers = async (
             }
         );
 
-        return response.data;
+        return response.data as Blob;
     } catch (error) {
-        console.error('Error exporting users:', error);
+        logger.error('Error exporting users:', error);
         throw error;
     }
 };

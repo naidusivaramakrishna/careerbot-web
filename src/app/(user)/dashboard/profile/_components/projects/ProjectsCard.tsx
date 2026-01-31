@@ -62,46 +62,56 @@ export default function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
         >
             <div>
                 <h3 className="font-semibold text-lg">{pro.project_name}</h3>
-                <p className="text-base font-semibold text-neutral-700">
-                    <span className="text-[#2200FF]">{pro.role} </span>
-                </p>
-                <div className="flex gap-4 items-center text-neutral-500 my-4">
-                    <div className="flex gap-1 items-center text-neutral-500">
-                        <Calendar className="w-5 h-5" />
-                        <span className="text-sm ">{formatDateRange(pro.start_date, pro.end_date)} </span>
+                {pro.role && pro.role.trim() !== '' && (
+                    <p className="text-base font-semibold text-neutral-700">
+                        <span className="text-[#2200FF]">{pro.role} </span>
+                    </p>
+                )}
+                {(pro.start_date || pro.project_link) && (
+                    <div className="flex gap-4 items-center text-neutral-500 my-4">
+                        {pro.start_date && (
+                            <div className="flex gap-1 items-center text-neutral-500">
+                                <Calendar className="w-5 h-5" />
+                                <span className="text-sm ">{formatDateRange(pro.start_date, pro.end_date)} </span>
+                            </div>
+                        )}
+                        {pro.project_link && (
+                            <div>
+                                <a href={pro.project_link} target="_blank" className="text-blue-600 underline text-sm">
+                                    GitHub
+                                </a>
+                            </div>
+                        )}
                     </div>
-                    {pro.project_link && (
-                        <div>
-                            <a href={pro.project_link} target="_blank" className="text-blue-600 underline text-sm">
-                                GitHub
-                            </a>
-                        </div>
-                    )}
-                </div>
-                <div className="flex flex-col gap-2">
-                    <span className="text-base font-semibold">
-                        Technologies:
-                    </span>
+                )}
+                {pro.technologies && pro.technologies.trim() !== '' && (
+                    <div className="flex flex-col gap-2">
+                        <span className="text-base font-semibold">
+                            Technologies:
+                        </span>
 
-                    <div className="flex flex-wrap gap-2 mb-2">
-                        {pro.technologies
-                            ?.split(",")
-                            .map((technology: string, index: number) => (
-                                <span
-                                    key={index}
-                                    className="text-xs bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg cursor-pointer"
-                                >
-                                    {technology.trim()}
-                                </span>
-                            ))}
+                        <div className="flex flex-wrap gap-2 mb-2">
+                            {pro.technologies
+                                ?.split(",")
+                                .map((technology: string, index: number) => (
+                                    <span
+                                        key={index}
+                                        className="text-xs bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg cursor-pointer"
+                                    >
+                                        {technology.trim()}
+                                    </span>
+                                ))}
+                        </div>
                     </div>
-                </div>
-                <p className="text-black text-base font-semibold">Description: </p>
+                )}
                 {sanitizedDescription && (
-                    <div
-                        className="text-sm text-gray-800 space-y-2 resume-description"
-                        dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
-                    />
+                    <>
+                        <p className="text-black text-base font-semibold">Description: </p>
+                        <div
+                            className="text-sm text-gray-800 space-y-2 resume-description"
+                            dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
+                        />
+                    </>
                 )}
             </div>
             <div className="flex gap-2 mt-2">

@@ -104,7 +104,7 @@
 //     e.preventDefault();
 //     e.stopPropagation();
     
-//     console.log("🔵 Builder clicked - Starting process");
+//     // // console.log("🔵 Builder clicked - Starting process");
     
 //     // Select the card visually
 //     onSelect("builder");
@@ -114,14 +114,14 @@
 //     const userEmail = localStorage.getItem("user_email");
 //     const username = localStorage.getItem("username");
     
-//     console.log("🔍 Auth check:", { 
+//     // // console.log("🔍 Auth check:", { 
 //       hasToken: !!token, 
 //       email: userEmail, 
 //       username: username 
 //     });
     
 //     if (!token) {
-//       console.log("❌ No token found");
+//       // // console.log("❌ No token found");
 //       toast.error("Please sign in to create a resume");
 //       return;
 //     }
@@ -129,19 +129,19 @@
 //     setIsCreating(true);
     
 //     // Navigate immediately for better UX
-//     console.log("🚀 Navigating to /builder/creation immediately");
+//     // // console.log("🚀 Navigating to /builder/creation immediately");
 //     router.push("/builder/creation");
     
 //     // Create resume in background
-//     console.log("📤 Creating resume in background...");
+//     // // console.log("📤 Creating resume in background...");
 //     createResumeWithAuth()
 //       .then((resume) => {
-//         console.log("✅ Resume created with ID:", resume.id);
+//         // // console.log("✅ Resume created with ID:", resume.id);
 //         localStorage.setItem("current_resume_id", resume.id);
 //         toast.success("Resume ready!");
 //       })
 //       .catch((error) => {
-//         console.error("❌ Resume creation failed:", error);
+//         // // console.error("❌ Resume creation failed:", error);
 //         toast.error(error instanceof Error ? error.message : "Failed to create resume");
 //       })
 //       .finally(() => {
@@ -202,7 +202,7 @@
 //         <div className='flex flex-col gap-4'>
 //           <div
 //             onClick={() => {
-//               console.log("LinkedIn option clicked");
+//               // // console.log("LinkedIn option clicked");
 //               onSelect("linkedin");
 //             }}
 //             className={`cursor-pointer bg-white border-2 h-full rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
@@ -219,7 +219,7 @@
 
 //           <div
 //             onClick={() => {
-//               console.log("Upload option clicked");
+//               // // console.log("Upload option clicked");
 //               onSelect("upload");
 //             }}
 //             className={`cursor-pointer bg-white h-full border-2 rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
@@ -265,7 +265,7 @@
 //     e.preventDefault();
 //     e.stopPropagation();
     
-//     console.log("🔵 Builder clicked - Starting process");
+//     // // console.log("🔵 Builder clicked - Starting process");
     
 //     // Select the card visually
 //     onSelect("builder");
@@ -275,14 +275,14 @@
 //     const userEmail = localStorage.getItem("user_email");
 //     const username = localStorage.getItem("username");
     
-//     console.log("🔍 Auth check:", { 
+//     // // console.log("🔍 Auth check:", { 
 //       hasToken: !!token, 
 //       email: userEmail, 
 //       username: username 
 //     });
     
 //     if (!token) {
-//       console.log("❌ No token found");
+//       // // console.log("❌ No token found");
 //       toast.error("Please sign in to create a resume");
 //       return;
 //     }
@@ -291,10 +291,10 @@
     
 //     try {
 //       // ✅ WAIT for resume creation FIRST
-//       console.log("📤 Creating resume...");
+//       // // console.log("📤 Creating resume...");
 //       const resume = await createResumeWithAuth();
       
-//       console.log("✅ Resume created with ID:", resume.id);
+//       // // console.log("✅ Resume created with ID:", resume.id);
       
 //       // ✅ Store the resume ID
 //       localStorage.setItem("current_resume_id", resume.id);
@@ -302,11 +302,11 @@
 //       toast.success("Resume created successfully!");
       
 //       // ✅ Navigate AFTER resume is created
-//       console.log("🚀 Navigating to /builder/creation");
+//       // // console.log("🚀 Navigating to /builder/creation");
 //       router.push("/builder/creation");
       
 //     } catch (error) {
-//       console.error("❌ Resume creation failed:", error);
+//       // // console.error("❌ Resume creation failed:", error);
 //       toast.error(error instanceof Error ? error.message : "Failed to create resume");
 //       setIsCreating(false); // Re-enable button on error
 //     }
@@ -366,7 +366,7 @@
 //         <div className='flex flex-col gap-4'>
 //           <div
 //             onClick={() => {
-//               console.log("LinkedIn option clicked");
+//               // // console.log("LinkedIn option clicked");
 //               onSelect("linkedin");
 //             }}
 //             className={`cursor-pointer bg-white border-2 h-full rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
@@ -383,7 +383,7 @@
 
 //           <div
 //             onClick={() => {
-//               console.log("Upload option clicked");
+//               // // console.log("Upload option clicked");
 //               onSelect("upload");
 //             }}
 //             className={`cursor-pointer bg-white h-full border-2 rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
@@ -428,7 +428,7 @@
 //     e.preventDefault();
 //     e.stopPropagation();
     
-//     console.log("🔵 Builder clicked - Starting process");
+//     // // console.log("🔵 Builder clicked - Starting process");
     
 //     // Select the card visually
 //     onSelect("builder");
@@ -438,14 +438,14 @@
 //     const userEmail = localStorage.getItem("user_email");
 //     const username = localStorage.getItem("username");
     
-//     console.log("🔍 Auth check:", { 
+//     // // console.log("🔍 Auth check:", { 
 //       hasToken: !!token, 
 //       email: userEmail, 
 //       username: username 
 //     });
     
 //     if (!token) {
-//       console.log("❌ No token found");
+//       // // console.log("❌ No token found");
 //       toast.error("Please sign in to create a resume");
 //       return;
 //     }
@@ -454,10 +454,10 @@
     
 //     try {
 //       // ✅ WAIT for resume creation FIRST
-//       console.log("📤 Creating resume...");
+//       // // console.log("📤 Creating resume...");
 //       const resume = await createResumeWithAuth();
       
-//       console.log("✅ Resume created with ID:", resume.id);
+//       // // console.log("✅ Resume created with ID:", resume.id);
       
 //       // ✅ Store the resume ID
 //       localStorage.setItem("current_resume_id", resume.id);
@@ -465,11 +465,11 @@
 //       toast.success("Resume created successfully!");
       
 //       // ✅ Navigate AFTER resume is created
-//       console.log("🚀 Navigating to /builder/creation");
+//       // // console.log("🚀 Navigating to /builder/creation");
 //       router.push("/builder/creation");
       
 //     } catch (error) {
-//       console.error("❌ Resume creation failed:", error);
+//       // // console.error("❌ Resume creation failed:", error);
 //       toast.error(error instanceof Error ? error.message : "Failed to create resume");
 //       setIsCreating(false); // Re-enable button on error
 //     }
@@ -529,7 +529,7 @@
 //         <div className='flex flex-col gap-4'>
 //           <div
 //             onClick={() => {
-//               console.log("LinkedIn option clicked");
+//               // // console.log("LinkedIn option clicked");
 //               onSelect("linkedin");
 //             }}
 //             className={`cursor-pointer bg-white border-2 h-full rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
@@ -546,7 +546,7 @@
 
 //           <div
 //             onClick={() => {
-//               console.log("Upload option clicked");
+//               // // console.log("Upload option clicked");
 //               onSelect("upload");
 //             }}
 //             className={`cursor-pointer bg-white h-full border-2 rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
@@ -589,7 +589,7 @@
 //   //   e.preventDefault();
 //   //   e.stopPropagation();
     
-//   //   console.log("🔵 Builder clicked - Starting process");
+//   //   // // console.log("🔵 Builder clicked - Starting process");
     
 //   //   onSelect("builder");
     
@@ -597,20 +597,20 @@
 //   //   const userEmail = localStorage.getItem("user_email");
 //   //   const username = localStorage.getItem("username");
     
-//   //   console.log("🔍 Auth check:", { 
+//   //   // // console.log("🔍 Auth check:", { 
 //   //     hasToken: !!token, 
 //   //     email: userEmail, 
 //   //     username: username 
 //   //   });
     
 //   //   if (!token) {
-//   //     console.log("❌ No token found");
+//   //     // // console.log("❌ No token found");
 //   //     toast.error("Please sign in to create a resume");
 //   //     return;
 //   //   }
 
 //   //   if (!userEmail) {
-//   //     console.log("❌ No user email found");
+//   //     // // console.log("❌ No user email found");
 //   //     toast.error("User email not found. Please sign in again.");
 //   //     return;
 //   //   }
@@ -618,16 +618,16 @@
 //   //   setIsCreating(true);
     
 //   //   try {
-//   //     console.log("📤 Step 1: Checking for existing resumes...");
+//   //     // // console.log("📤 Step 1: Checking for existing resumes...");
       
 //   //     // First, check if any resumes exist
 //   //     const existingResumes = await getAllResumes();
-//   //     console.log("📊 Existing resumes:", existingResumes);
+//   //     // // console.log("📊 Existing resumes:", existingResumes);
       
 //   //     if (existingResumes && existingResumes.length > 0) {
 //   //       // Use the first existing resume
 //   //       const existingResume = existingResumes[0];
-//   //       console.log("✅ Found existing resume:", existingResume.id);
+//   //       // // console.log("✅ Found existing resume:", existingResume.id);
         
 //   //       localStorage.setItem("current_resume_id", existingResume.id);
         
@@ -635,36 +635,36 @@
         
 //   //       await new Promise(resolve => setTimeout(resolve, 100));
         
-//   //       console.log("🚀 Navigating to /builder/creation");
+//   //       // // console.log("🚀 Navigating to /builder/creation");
 //   //       router.push("/builder/creation");
 //   //       return;
 //   //     }
       
-//   //     console.log("📤 Step 2: No existing resumes, creating new one...");
+//   //     // // console.log("📤 Step 2: No existing resumes, creating new one...");
       
 //   //     // Try to create new resume
 //   //     const resume = await createResumeWithAuth();
       
-//   //     console.log("✅ Resume created successfully:", resume);
-//   //     console.log("✅ Resume ID:", resume.id);
+//   //     // // console.log("✅ Resume created successfully:", resume);
+//   //     // // console.log("✅ Resume ID:", resume.id);
       
 //   //     localStorage.setItem("current_resume_id", resume.id);
-//   //     console.log("💾 Stored resume ID:", resume.id);
+//   //     // // console.log("💾 Stored resume ID:", resume.id);
       
 //   //     toast.success("Resume created successfully!");
       
 //   //     await new Promise(resolve => setTimeout(resolve, 100));
       
-//   //     console.log("🚀 Navigating to /builder/creation");
+//   //     // // console.log("🚀 Navigating to /builder/creation");
 //   //     router.push("/builder/creation");
       
 //   //   } catch (error) {
-//   //     console.error("❌ Resume creation error:", error);
+//   //     // // console.error("❌ Resume creation error:", error);
       
 //   //     if (error instanceof Error) {
 //   //       if (error.message.includes("already exists") || error.message.includes("409")) {
-//   //         console.log("⚠️ Got 409 error, but getAllResumes returned empty");
-//   //         console.log("⚠️ This indicates backend data inconsistency");
+//   //         // // console.log("⚠️ Got 409 error, but getAllResumes returned empty");
+//   //         // // console.log("⚠️ This indicates backend data inconsistency");
           
 //   //         toast.error("Backend error: Resume exists but not found. Please contact support or try logging out and back in.");
           
@@ -673,7 +673,7 @@
           
 //   //         setIsCreating(false);
 //   //       } else {
-//   //         console.error("❌ Unexpected error:", error.message);
+//   //         // // console.error("❌ Unexpected error:", error.message);
 //   //         toast.error(error.message);
 //   //         setIsCreating(false);
 //   //       }
@@ -688,7 +688,7 @@
 //   e.preventDefault();
 //   e.stopPropagation();
   
-//   console.log("🔵 Builder clicked");
+//   // // console.log("🔵 Builder clicked");
 //   onSelect("builder");
   
 //   const token = localStorage.getItem("access_token");
@@ -703,12 +703,12 @@
   
 //   try {
 //     // ✅ Step 1: Check for existing resumes
-//     console.log("📥 Checking for existing resumes...");
+//     // // console.log("📥 Checking for existing resumes...");
 //     const existingResumes = await getAllResumes();
     
 //     if (existingResumes && existingResumes.length > 0) {
 //       const resume = existingResumes[0];
-//       console.log("✅ Using existing resume:", resume.id);
+//       // // console.log("✅ Using existing resume:", resume.id);
       
 //       // ✅ Ensure ID is stored
 //       localStorage.setItem("current_resume_id", resume.id);
@@ -721,21 +721,21 @@
 //     }
     
 //     // ✅ Step 2: Create new resume only if none exist
-//     console.log("📤 Creating new resume...");
+//     // // console.log("📤 Creating new resume...");
 //     const newResume = await createResumeWithAuth();
     
-//     console.log("✅ Resume created:", newResume);
-//     console.log("✅ Resume ID:", newResume.id);
+//     // // console.log("✅ Resume created:", newResume);
+//     // // console.log("✅ Resume ID:", newResume.id);
     
 //     // ✅ CRITICAL: Store the ID immediately
 //     localStorage.setItem("current_resume_id", newResume.id);
     
 //     // ✅ Verify it was stored
 //     const storedId = localStorage.getItem("current_resume_id");
-//     console.log("💾 Verified stored ID:", storedId);
+//     // // console.log("💾 Verified stored ID:", storedId);
     
 //     if (storedId !== newResume.id) {
-//       console.error("❌ ID storage failed!");
+//       // // console.error("❌ ID storage failed!");
 //       throw new Error("Failed to store resume ID");
 //     }
     
@@ -745,7 +745,7 @@
 //     router.push("/builder/creation");
     
 //   } catch (error) {
-//     console.error("❌ Error:", error);
+//     // // console.error("❌ Error:", error);
     
 //     if (error instanceof Error) {
 //       if (error.message === "RESUME_EXISTS") {
@@ -815,7 +815,7 @@
 //         <div className='flex flex-col gap-4'>
 //           <div
 //             onClick={() => {
-//               console.log("LinkedIn option clicked");
+//               // // console.log("LinkedIn option clicked");
 //               onSelect("linkedin");
 //             }}
 //             className={`cursor-pointer bg-white border-2 h-full rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
@@ -832,7 +832,7 @@
 
 //           <div
 //             onClick={() => {
-//               console.log("Upload option clicked");
+//               // // console.log("Upload option clicked");
 //               onSelect("upload");
 //             }}
 //             className={`cursor-pointer bg-white h-full border-2 rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center
@@ -864,6 +864,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useState } from "react";
 import { createResumeWithAuth, getAllResumes } from "@/api/resumeApi";
+import { logger } from "@/lib/logger";
 
 
 const EmptyState = ({ selected, onSelect }: { 
@@ -879,65 +880,44 @@ const EmptyState = ({ selected, onSelect }: {
   const handleBuilderClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    console.log("🔵 Builder clicked");
+
+    // // console.log("🔵 Builder clicked");
     onSelect("builder");
-    
-    const token = localStorage.getItem("access_token");
-    const userEmail = localStorage.getItem("user_email");
-    
-    if (!token || !userEmail) {
-      toast.error("Please sign in to create a resume");
-      return;
-    }
 
     setIsCreating(true);
-    
+
     try {
       // ✅ Step 1: Check for existing resumes
-      console.log("📥 Checking for existing resumes...");
+      // // console.log("📥 Checking for existing resumes...");
       const existingResumes = await getAllResumes();
-      
+
       if (existingResumes && existingResumes.length > 0) {
         const resume = existingResumes[0];
-        console.log("✅ Using existing resume:", resume.id);
-        
-        // ✅ Ensure ID is stored
-        localStorage.setItem("current_resume_id", resume.id);
-        
+        // // console.log("✅ Using existing resume:", resume.id);
+
         toast.success("Loading your resume...");
-        
+
         await new Promise(resolve => setTimeout(resolve, 500));
-        router.push("/builder/creation");
+        // ✅ Use URL parameter instead of localStorage
+        router.push(`/builder/creation?resumeId=${resume.id}`);
         return;
       }
-      
+
       // ✅ Step 2: Create new resume only if none exist
-      console.log("📤 Creating new resume...");
+      // // console.log("📤 Creating new resume...");
       const newResume = await createResumeWithAuth();
-      
-      console.log("✅ Resume created:", newResume);
-      console.log("✅ Resume ID:", newResume.id);
-      
-      // ✅ CRITICAL: Store the ID immediately
-      localStorage.setItem("current_resume_id", newResume.id);
-      
-      // ✅ Verify it was stored
-      const storedId = localStorage.getItem("current_resume_id");
-      console.log("💾 Verified stored ID:", storedId);
-      
-      if (storedId !== newResume.id) {
-        console.error("❌ ID storage failed!");
-        throw new Error("Failed to store resume ID");
-      }
-      
+
+      // // console.log("✅ Resume created:", newResume);
+      // // console.log("✅ Resume ID:", newResume.id);
+
       toast.success("Resume created successfully!");
-      
+
       await new Promise(resolve => setTimeout(resolve, 500));
-      router.push("/builder/creation");
+      // ✅ Use URL parameter instead of localStorage
+      router.push(`/builder/creation?resumeId=${newResume.id}`);
       
     } catch (error) {
-      console.error("❌ Error:", error);
+      // // console.error("❌ Error:", error);
       
       if (error instanceof Error) {
         if (error.message === "RESUME_EXISTS") {
@@ -955,7 +935,7 @@ const EmptyState = ({ selected, onSelect }: {
   const handleLinkedInClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log("LinkedIn option clicked");
+    // // console.log("LinkedIn option clicked");
     onSelect("linkedin");
     setShowLinkedInModal(true);
   };
@@ -977,7 +957,7 @@ const EmptyState = ({ selected, onSelect }: {
       return;
     }
     
-    console.log("LinkedIn URL submitted:", linkedInUrl);
+    // // console.log("LinkedIn URL submitted:", linkedInUrl);
     toast.success("Processing LinkedIn URL...");
     
     // Add your LinkedIn import logic here
@@ -1061,7 +1041,7 @@ const EmptyState = ({ selected, onSelect }: {
 
             <div
               onClick={() => {
-                console.log("Upload option clicked");
+                // // console.log("Upload option clicked");
                 onSelect("upload");
               }}
               className={`cursor-pointer bg-white h-full border-2 rounded-xl p-6 shadow-sm transition hover:shadow-md flex flex-col justify-center items-center text-center

@@ -1,5 +1,5 @@
 import { httpClient } from '@/lib/http';
-import Cookies from 'js-cookie';
+import logger from '@/lib/logger';
 // ==================== INTERFACES ====================
 
 export interface AdminBootstrapRequest {
@@ -112,7 +112,7 @@ export const getCurrentAdmin = async (): Promise<CurrentAdminResponse> => {
     const response = await httpClient.get<CurrentAdminResponse>('/admin/auth/profile');
     return response.data;
   } catch (error) {
-    console.error('Error fetching current admin details:', error);
+    logger.error('Error fetching current admin details:', error);
     throw error;
   }
 };
@@ -135,8 +135,8 @@ export const bootstrapAdmin = async (
 
     const response = await httpClient.post<AdminBootstrapResponse>(
       '/admin/auth/bootstrap',
-      formData,
-      {
+      formData as unknown as Record<string, unknown>,
+      { 
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
@@ -144,7 +144,7 @@ export const bootstrapAdmin = async (
     );
     return response.data;
   } catch (error) {
-    console.error('Error bootstrapping admin:', error);
+    logger.error('Error bootstrapping admin:', error);
     throw error;
   }
 };
@@ -164,7 +164,7 @@ export const adminSignUp = async (
 
     const response = await httpClient.post<AdminSignUpResponse>(
       '/admin/auth/signup',
-      formData,
+      formData as unknown as Record<string, unknown>,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -173,7 +173,7 @@ export const adminSignUp = async (
     );
     return response.data;
   } catch (error) {
-    console.error('Error signing up admin:', error);
+    logger.error('Error signing up admin:', error);
     throw error;
   }
 };
@@ -186,16 +186,8 @@ export const adminLogin = async (
   data: AdminLoginRequest
 ): Promise<AdminLoginResponse> => {
   try {
-    // CLEAR EVERYTHING FIRST
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('admin_access_token');
-      localStorage.removeItem('admin_refresh_token');
-      localStorage.removeItem('admin_id');
-      localStorage.removeItem('admin_role');
-      sessionStorage.clear();
-      Cookies.remove('admin_access_token');
-      Cookies.remove('admin_refresh_token');
-    }
+    // ✅ Backend sets httpOnly cookies automatically
+    // ❌ No need to clear or manually store tokens
 
     // Create form data - backend expects 'username' field (OAuth2 standard)
     const formData = new URLSearchParams();
@@ -207,11 +199,11 @@ export const adminLogin = async (
       formData.append('totp_code', data.totp_code);
     }
 
-    console.log('🔐 Attempting admin login for:', data.email);
+    logger.info('🔐 Attempting admin login for:', data.email);
 
     const response = await httpClient.post<AdminLoginResponse>(
       '/admin/auth/login',
-      formData,
+      formData as unknown as Record<string, unknown>,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -219,54 +211,26 @@ export const adminLogin = async (
       }
     );
 
-    console.log('✅ Login successful');
+    logger.info('✅ Login successful');
 
-    const { access_token, token_type } = response.data;
-
+    // ✅ Backend sets httpOnly cookies - tokens are automatically sent with requests
     if (typeof window !== 'undefined') {
-      // Store tokens with 'admin_' prefix to differentiate from user tokens
-      localStorage.setItem('admin_access_token', access_token);
-
-      // Backend might not return these fields in response, store what we have
-      if (response.data.refresh_token) {
-        localStorage.setItem('admin_refresh_token', response.data.refresh_token);
-      }
-      if (response.data.admin_id) {
-        localStorage.setItem('admin_id', response.data.admin_id);
-      }
-      if (response.data.role) {
-        localStorage.setItem('admin_role', response.data.role);
-      }
-
-      Cookies.set('admin_access_token', access_token, {
-        expires: 7,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
-
-      if (response.data.refresh_token) {
-        Cookies.set('admin_refresh_token', response.data.refresh_token, {
-          expires: 30,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-        });
-      }
-
       window.dispatchEvent(new Event('adminTokenUpdated'));
     }
 
     return response.data;
-  } catch (error: any) {
-    console.error('❌ Admin login error:', error);
+  } catch (error: unknown) {
+    logger.error('❌ Admin login error:', error);
 
     // Provide more detailed error information
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', error.response.data);
-    } else if (error.request) {
-      console.error('No response received:', error.request);
-    } else {
-      console.error('Error setting up request:', error.message);
+    const axiosError = error as { response?: { status?: number; data?: unknown }; request?: unknown; message?: string };
+    if (axiosError.response) {
+      logger.error('Response status:', axiosError.response.status);
+      logger.error('Response data:', axiosError.response.data);
+    } else if (axiosError.request) {
+      logger.error('No response received:', axiosError.request);
+    } else if (axiosError.message) {
+      logger.error('Error setting up request:', axiosError.message);
     }
 
     throw error;
@@ -283,7 +247,7 @@ export const createAdmin = async (
   try {
     const response = await httpClient.post<CreateAdminResponse>(
       '/admin/auth/admins',
-      data,
+      data as unknown as Record<string, unknown>,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -292,32 +256,23 @@ export const createAdmin = async (
     );
     return response.data;
   } catch (error) {
-    console.error('Error creating admin:', error);
+    logger.error('Error creating admin:', error);
     throw error;
   }
 };
 
 /**
  * Admin logout endpoint
- * Clears all admin tokens and sessions
+ * ✅ Backend clears httpOnly cookies automatically
+ * ❌ No need to manually clear tokens
  */
 export const adminLogout = async (): Promise<void> => {
   try {
     await httpClient.post('/admin/auth/logout');
   } catch (error) {
-    console.error('Error logging out admin:', error);
+    logger.error('Error logging out admin:', error);
   } finally {
     if (typeof window !== 'undefined') {
-      // Clear admin-specific tokens
-      localStorage.removeItem('admin_access_token');
-      localStorage.removeItem('admin_refresh_token');
-      localStorage.removeItem('admin_id');
-      localStorage.removeItem('admin_role');
-
-      sessionStorage.clear();
-      Cookies.remove('admin_access_token');
-      Cookies.remove('admin_refresh_token');
-
       // Force redirect to admin login
       window.location.href = '/admin/login';
     }
@@ -337,7 +292,7 @@ export const setup2FA = async (): Promise<Setup2FAResponse> => {
     );
     return response.data;
   } catch (error) {
-    console.error('Error setting up 2FA:', error);
+    logger.error('Error setting up 2FA:', error);
     throw error;
   }
 };
@@ -353,7 +308,7 @@ export const enable2FA = async (
   try {
     const response = await httpClient.post<Enable2FAResponse>(
       '/admin/auth/2fa/enable',
-      data,
+      data as unknown as Record<string, unknown>,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -362,7 +317,7 @@ export const enable2FA = async (
     );
     return response.data;
   } catch (error) {
-    console.error('Error enabling 2FA:', error);
+    logger.error('Error enabling 2FA:', error);
     throw error;
   }
 };
@@ -383,13 +338,14 @@ export const disable2FA = async (totp_code: string): Promise<{ success: boolean 
     );
     return response.data;
   } catch (error) {
-    console.error('Error disabling 2FA:', error);
+    logger.error('Error disabling 2FA:', error);
     throw error;
   }
 };
 
 /**
  * Verify 2FA backup code
+ * ✅ Backend sets httpOnly cookies automatically
  */
 export const verify2FABackupCode = async (
   email: string,
@@ -406,94 +362,39 @@ export const verify2FABackupCode = async (
       }
     );
 
-    const { access_token } = response.data;
-
+    // ✅ Backend handles httpOnly cookie setting automatically
     if (typeof window !== 'undefined') {
-      localStorage.setItem('admin_access_token', access_token);
-
-      if (response.data.refresh_token) {
-        localStorage.setItem('admin_refresh_token', response.data.refresh_token);
-      }
-      if (response.data.admin_id) {
-        localStorage.setItem('admin_id', response.data.admin_id);
-      }
-      if (response.data.role) {
-        localStorage.setItem('admin_role', response.data.role);
-      }
-
-      Cookies.set('admin_access_token', access_token, {
-        expires: 7,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
-
-      if (response.data.refresh_token) {
-        Cookies.set('admin_refresh_token', response.data.refresh_token, {
-          expires: 30,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-        });
-      }
-
       window.dispatchEvent(new Event('adminTokenUpdated'));
     }
 
     return response.data;
   } catch (error) {
-    console.error('Error verifying backup code:', error);
+    logger.error('Error verifying backup code:', error);
     throw error;
   }
 };
 
 /**
  * Refresh admin access token using refresh token
+ * ✅ Backend sets httpOnly cookies automatically
  */
-export const refreshAdminToken = async (
-  refreshToken: string
-): Promise<AdminLoginResponse> => {
+export const refreshAdminToken = async (): Promise<AdminLoginResponse> => {
   try {
-    // CLEAR OLD DATA FIRST
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('admin_access_token');
-      Cookies.remove('admin_access_token');
-    }
-
+    // ✅ httpOnly cookies are sent automatically by browser
+    // ❌ No need to manually manage tokens
     const response = await httpClient.post<AdminLoginResponse>(
-      '/admin/auth/refresh',
-      { refresh_token: refreshToken }
+      '/admin/auth/refresh'
     );
 
-    const { access_token } = response.data;
-
-    // Update tokens in both storage locations
+    // ✅ Backend handles httpOnly cookie setting automatically
     if (typeof window !== 'undefined') {
-      localStorage.setItem('admin_access_token', access_token);
-
-      if (response.data.refresh_token) {
-        localStorage.setItem('admin_refresh_token', response.data.refresh_token);
-      }
-
-      Cookies.set('admin_access_token', access_token, {
-        expires: 7,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
-
-      if (response.data.refresh_token) {
-        Cookies.set('admin_refresh_token', response.data.refresh_token, {
-          expires: 30,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-        });
-      }
-
       // Dispatch event to notify other tabs
       window.dispatchEvent(new Event('adminTokenUpdated'));
     }
 
     return response.data;
   } catch (error) {
-    console.error('Error refreshing admin token:', error);
+    logger.error('Error refreshing admin token:', error);
     throw error;
   }
 };

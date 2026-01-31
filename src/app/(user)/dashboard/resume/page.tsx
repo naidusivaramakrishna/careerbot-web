@@ -81,7 +81,7 @@
 //   //       toast.info("No resumes found. Create your first resume!");
 //   //     }
 //   //   } catch (err: any) {
-//   //     console.error('Error fetching resumes:', err);
+//   //     // // console.error('Error fetching resumes:', err);
 
 //   //     if (err.response?.status === 401) {
 //   //       toast.error("Session expired. Please log in again");
@@ -102,21 +102,21 @@
 // //       return;
 // //     }
 
-// //     console.log("🔍 Fetching resumes from ResumePage...");
+// //     // // console.log("🔍 Fetching resumes from ResumePage...");
 // //     const data = await getAllResumes();
-// //     console.log("📊 Fetched resumes:", data);
+// //     // // console.log("📊 Fetched resumes:", data);
     
 // //     const transformedData = transformResumeData(data);
 // //     setResumes(transformedData);
 
 // //     if (transformedData.length === 0) {
-// //       console.log("⚠️ No resumes found - showing EmptyState");
+// //       // // console.log("⚠️ No resumes found - showing EmptyState");
 // //       toast.info("No resumes found. Create your first resume!");
 // //     } else {
-// //       console.log(`✅ Loaded ${transformedData.length} resume(s)`);
+// //       // // console.log(`✅ Loaded ${transformedData.length} resume(s)`);
 // //     }
 // //   } catch (err: any) {
-// //     console.error('❌ Error fetching resumes:', err);
+// //     // // console.error('❌ Error fetching resumes:', err);
 
 // //     if (err.response?.status === 401 || err.message?.includes("sign in")) {
 // //       toast.error("Session expired. Please log in again");
@@ -142,21 +142,21 @@
 //         return;
 //       }
 
-//       console.log("🔍 Fetching resumes from ResumePage...");
+//       // // console.log("🔍 Fetching resumes from ResumePage...");
 //       const data = await getAllResumes();
-//       console.log("📊 Fetched resumes:", data);
+//       // // console.log("📊 Fetched resumes:", data);
       
 //       const transformedData = transformResumeData(data);
 //       setResumes(transformedData);
 
 //       if (transformedData.length === 0) {
-//         console.log("⚠️ No resumes found - showing EmptyState");
+//         // // console.log("⚠️ No resumes found - showing EmptyState");
 //         toast.info("No resumes found. Create your first resume!");
 //       } else {
-//         console.log(`✅ Loaded ${transformedData.length} resume(s)`);
+//         // // console.log(`✅ Loaded ${transformedData.length} resume(s)`);
 //       }
 //     } catch (err: any) {
-//       console.error('❌ Error fetching resumes:', err);
+//       // // console.error('❌ Error fetching resumes:', err);
 
 //       if (err.response?.status === 401 || err.message?.includes("sign in")) {
 //         toast.error("Session expired. Please log in again");
@@ -175,9 +175,9 @@
 
 //  useEffect(() => {
 //   // ✅ Debug: Log the httpClient configuration
-//   // console.log("🔍 httpClient baseURL:", httpClient.defaults.baseURL);
-//   // console.log("🔍 Expected GET URL:", `${httpClient.defaults.baseURL}/resumes`);
-//   // console.log("🔍 Expected POST URL:", `${httpClient.defaults.baseURL}/resumes`);
+//   // // // console.log("🔍 httpClient baseURL:", httpClient.defaults.baseURL);
+//   // // // console.log("🔍 Expected GET URL:", `${httpClient.defaults.baseURL}/resumes`);
+//   // // // console.log("🔍 Expected POST URL:", `${httpClient.defaults.baseURL}/resumes`);
   
 //   fetchResumes();
 // }, []);
@@ -202,7 +202,7 @@
 //       setIsDropdownOpen(null);
 
 //     } catch (err: any) {
-//       console.error('Error deleting resume:', err);
+//       // // console.error('Error deleting resume:', err);
 
 //       if (err.response?.status === 401) {
 //         toast.error("Session expired. Please log in again");
@@ -245,7 +245,7 @@
 //       setIsDropdownOpen(null);
 
 //     } catch (err: any) {
-//       console.error('Error downloading resume:', err);
+//       // // console.error('Error downloading resume:', err);
 
 //       if (err.response?.status === 401) {
 //         toast.error("Session expired. Please log in again");
@@ -382,6 +382,7 @@ import DeleteConfirmModal from './_components/DeleteConfirmModal';
 import DownloadModal from './_components/DownloadModal';
 import EmptyState from './_components/EmptyState';
 import ResumeTableRow from './_components/ResumeTableRow';
+import { logger } from '@/lib/logger';
 
 export interface Resume {
   id: string;
@@ -439,33 +440,26 @@ const ResumePage = () => {
   const fetchResumes = useCallback(async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("access_token");
-
-      if (!token) {
-        toast.error("Please log in first");
-        return;
-      }
-
-      console.log("🔍 Fetching resumes from ResumePage...");
+      logger.info("Fetching resumes from ResumePage");
       const data = await getAllResumes();
-      console.log("📊 Fetched resumes:", data);
+      logger.debug("Resumes fetched successfully", { count: data.length });
       
       const transformedData = transformResumeData(data);
       
       // ✅ Fetch scores for each resume
-      console.log("📊 Fetching scores for all resumes...");
+      logger.info("Fetching scores for all resumes");
       const resumesWithScores = await Promise.all(
         transformedData.map(async (resume) => {
           try {
             const scoreData = await getResumeScore(resume.id);
-            console.log(`✅ Score for ${resume.name}:`, scoreData.overall_score);
+            logger.debug(`Score for ${resume.name}: ${scoreData.overall_score}`);
             
             return {
               ...resume,
               score: scoreData.overall_score, // ✅ Use score from Score API
             };
           } catch (error) {
-            console.error(`❌ Failed to fetch score for ${resume.name}:`, error);
+            logger.error(`Failed to fetch score for ${resume.name}:`, error);
             // Keep score as 0 if fetch fails
             return resume;
           }
@@ -475,13 +469,13 @@ const ResumePage = () => {
       setResumes(resumesWithScores);
 
       if (resumesWithScores.length === 0) {
-        console.log("⚠️ No resumes found - showing EmptyState");
+        logger.warn("No resumes found");
         toast.info("No resumes found. Create your first resume!");
       } else {
-        console.log(`✅ Loaded ${resumesWithScores.length} resume(s) with scores`);
+        logger.info(`Loaded ${resumesWithScores.length} resume(s) with scores`);
       }
     } catch (err: any) {
-      console.error('❌ Error fetching resumes:', err);
+      logger.error('Error fetching resumes:', err);
 
       if (err.response?.status === 401 || err.message?.includes("sign in")) {
         toast.error("Session expired. Please log in again");
@@ -503,24 +497,18 @@ const ResumePage = () => {
 
   const handleDeleteResume = async (resumeId: string) => {
     try {
+      logger.warn(`Deleting resume: ${resumeId}`);
       setDeleting(true);
-      const token = localStorage.getItem("access_token");
-
-      if (!token) {
-        toast.error("Please log in first");
-        setDeleteConfirmId(null);
-        return;
-      }
-
       await deleteResumeApi(resumeId);
       setResumes(prevResumes => prevResumes.filter(r => r.id !== resumeId));
       toast.success("Resume deleted successfully");
+      logger.info(`Resume deleted successfully: ${resumeId}`);
 
       setDeleteConfirmId(null);
       setIsDropdownOpen(null);
 
     } catch (err: any) {
-      console.error('Error deleting resume:', err);
+      logger.error(`Error deleting resume: ${resumeId}`, err);
 
       if (err.response?.status === 401) {
         toast.error("Session expired. Please log in again");
@@ -538,14 +526,9 @@ const ResumePage = () => {
 
   const handleDownloadResume = async (resumeId: string, format: 'pdf' | 'docx') => {
     try {
+      logger.info(`Downloading resume: ${resumeId} as ${format}`);
       setDownloading(true);
-      const token = localStorage.getItem("access_token");
-
-      if (!token) {
-        toast.error("Please log in first");
-        return;
-      }
-
+      // ✅ httpOnly cookies sent automatically by httpClient with withCredentials
       const blob = await downloadResume(resumeId, format);
 
       const url = window.URL.createObjectURL(blob);
@@ -559,11 +542,12 @@ const ResumePage = () => {
       window.URL.revokeObjectURL(url);
 
       toast.success(`Resume downloaded as ${format.toUpperCase()}`);
+      logger.info(`Resume downloaded successfully: ${resumeId}`);
       setDownloadModalOpen(false);
       setIsDropdownOpen(null);
 
     } catch (err: any) {
-      console.error('Error downloading resume:', err);
+      logger.error(`Error downloading resume: ${resumeId}`, err);
 
       if (err.response?.status === 401) {
         toast.error("Session expired. Please log in again");
@@ -764,22 +748,22 @@ export default ResumePage;
 //         return;
 //       }
 
-//       console.log("📥 Fetching resumes...");
+//       // // console.log("📥 Fetching resumes...");
 //       const data = await getAllResumes();
-//       console.log("📊 Fetched resume data:", data);
+//       // // console.log("📊 Fetched resume data:", data);
       
 //       const transformedData = transformResumeData(data);
-//       console.log("🔄 Transformed data:", transformedData);
+//       // // console.log("🔄 Transformed data:", transformedData);
       
 //       setResumes(transformedData);
 
 //       if (transformedData.length === 0) {
-//         console.log("ℹ️ No resumes found");
+//         // // console.log("ℹ️ No resumes found");
 //       } else {
-//         console.log(`✅ ${transformedData.length} resume(s) loaded`);
+//         // // console.log(`✅ ${transformedData.length} resume(s) loaded`);
 //       }
 //     } catch (err: unknown) {
-//       console.error('❌ Error fetching resumes:', err);
+//       logger.error('Error fetching resumes:', err);
 
 //       if (axios.isAxiosError(err)) {
 //         if (err.response?.status === 401) {
@@ -822,7 +806,7 @@ export default ResumePage;
 //       setIsDropdownOpen(null);
 
 //     } catch (err: unknown) {
-//       console.error('Error deleting resume:', err);
+//       // // console.error('Error deleting resume:', err);
 
 //       if (axios.isAxiosError(err)) {
 //         if (err.response?.status === 401) {
@@ -861,7 +845,7 @@ export default ResumePage;
 //       setIsDropdownOpen(null);
 
 //     } catch (err: unknown) {
-//       console.error('Error downloading resume:', err);
+//       // // console.error('Error downloading resume:', err);
 
 //       if (axios.isAxiosError(err)) {
 //         if (err.response?.status === 401) {

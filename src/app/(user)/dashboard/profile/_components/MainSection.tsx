@@ -1,5 +1,5 @@
 "use client";
-import { Camera, Github, Mail, MapPin, Phone } from 'lucide-react';
+import { Camera, Github, Mail, MapPin, Phone, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import ProjectsSection from './projects/ProjectsSection';
 import CareerInsightsSection from './CareerInsightsSection';
@@ -9,10 +9,11 @@ import Image from 'next/image';
 import { toast } from 'sonner';
 import { ProfileData } from '../_types/ProfileData';
 import { PersonalInfoRef } from '../_types/PersonalInfoRef';
-import { getProfile, getProfilePicture, uploadProfilePicture, UserProfile } from '@/api/userApi';
+import { getProfile, getProfilePicture, uploadProfilePicture, deleteProfilePicture, UserProfile } from '@/api/userApi';
 import HobbiesSection from './HobbiesSection';
 import LanguagesSection from './LanguagesSection';
 import AchievementsSection from './AchievementsSection';
+import { logger } from '@/lib/logger';
 
 const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const { profileData, setProfileData, setActiveTab, sidebarActiveTab } = useProfileContext();
@@ -20,6 +21,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const [username, setUsername] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isHoveringImage, setIsHoveringImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,16 +40,31 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
       if (res.picture_url) {
         const fullUrl = res.picture_url.startsWith("http")
           ? res.picture_url
-          : `${"http://localhost:8000"}${res.picture_url}`;
+          : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${res.picture_url}`;
         setSelectedImage(fullUrl);
       } else {
         toast.error("Upload failed. Please try again.");
       }
     } catch (error) {
-      console.error("Error uploading profile picture:", error);
+      logger.error("Error uploading profile picture:", error);
       toast.error("Failed to upload image");
     } finally {
       toast.dismiss();
+    }
+  };
+
+  const handleDeleteImage = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!selectedImage) return;
+
+    try {
+      const result = await deleteProfilePicture();
+      setSelectedImage(null);
+      toast.success(result.message);
+    } catch (error) {
+      logger.error("Error deleting profile picture:", error);
+      toast.error("Failed to delete profile picture");
     }
   };
 
@@ -55,7 +72,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const mapBackendToFrontend = (backendProfile: UserProfile): ProfileData => {
     return {
       personalInformation: {
-        fullName: backendProfile.full_name || '',
+        fullName: backendProfile.full_name || backendProfile.username || '',
         headline: backendProfile.headline || '',
         location: backendProfile.location || '',
         email: backendProfile.email || '',
@@ -72,13 +89,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
     const fetchProfileData = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-          toast.error('Please log in to view your profile');
-          setLoading(false);
-          return;
-        }
+        // ✅ httpOnly cookies are sent automatically - no need to check localStorage
         const backendProfile = await getProfile();
         setUsername(backendProfile.username ?? null)
         const mappedProfile = mapBackendToFrontend(backendProfile);
@@ -91,23 +102,23 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           if (pictureRes?.picture_url) {
             const fullImageUrl = pictureRes.picture_url.startsWith("http")
               ? pictureRes.picture_url
-              : `${"http://localhost:8000"}${pictureRes.picture_url}`;
+              : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${pictureRes.picture_url}`;
 
             setSelectedImage(fullImageUrl); // <-- Image now persists after reload
           }
         } catch (err) {
-          console.warn("No profile picture found");
+          logger.warn("No profile picture found");
         }
 
         toast.success('Profile loaded successfully');
       } catch (err: any) {
-        console.error('Error fetching profile:', err);
+        logger.error('Error fetching profile:', err);
 
         if (err.response?.status === 401) {
           toast.error('Session expired. Please log in again');
         } else if (err.response?.status === 404) {
           // Profile doesn't exist yet - this is fine for new users
-          console.log('No profile found. User can create one.');
+          logger.info('No profile found. User can create one.');
         } else {
           toast.error(err.response?.data?.detail || 'Failed to load profile');
         }
@@ -153,7 +164,11 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
       {!hasProfileData && (
         <div className="flex items-center gap-6 bg-[#F9FAFB] p-6">
           {/* Profile Image */}
-          <div className="relative w-24 h-24">
+          <div
+            className="relative w-24 h-24"
+            onMouseEnter={() => setIsHoveringImage(true)}
+            onMouseLeave={() => setIsHoveringImage(false)}
+          >
             <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#1099C6] overflow-hidden">
               {selectedImage ? (
                 <Image
@@ -171,6 +186,16 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 />
               )}
             </div>
+
+            {/* Delete icon - shows on hover if image exists */}
+            {isHoveringImage && selectedImage && (
+              <div
+                onClick={handleDeleteImage}
+                className="bg-red-500 flex items-center justify-center absolute top-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
+              >
+                <X className="w-4 h-4 text-white" />
+              </div>
+            )}
 
             {/* Camera icon */}
             <div
@@ -192,8 +217,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           <div className='text-center flex-1'>
             <h1 className="text-2xl font-semibold text-black">
               Welcome to CareerBot,{" "}
-              {/* {profileData?.personalInformation?.fullName?.split(" ")[0] ||
-                "User"} */}
               {username ? username : "User"}
             </h1>
             <p className="text-gray-600 text-base">
@@ -208,7 +231,11 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           {/* Profile Info */}
           <div className="flex-1">
             <div className='flex items-center gap-4'>
-              <div className="relative w-24 h-24">
+              <div
+                className="relative w-24 h-24"
+                onMouseEnter={() => setIsHoveringImage(true)}
+                onMouseLeave={() => setIsHoveringImage(false)}
+              >
                 <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#1099C6] overflow-hidden">
                   {selectedImage ? (
                     <Image
@@ -226,6 +253,17 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                     />
                   )}
                 </div>
+
+                {/* Delete icon - shows on hover if image exists */}
+                {isHoveringImage && selectedImage && (
+                  <div
+                    onClick={handleDeleteImage}
+                    className="bg-gray-500 flex items-center justify-center absolute top-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </div>
+                )}
+
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   className="bg-[#1099C6] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
@@ -327,14 +365,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 <span className='font-semibold'>Connect</span>
               </button>
             )}
-
-            {/* Improve with AI */}
-            {/*
-            <button className='flex text-sm gap-2 items-center bg-black text-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-800 transition'>
-              <Sparkles className='w-4 h-4' />
-              <span>Improve With AI</span>
-            </button>
-            */}
           </div>
         </div>
       )}

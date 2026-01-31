@@ -33,7 +33,7 @@ export const VideoRecordingProvider: React.FC<VideoRecordingProviderProps> = ({ 
 
   const startRecording = useCallback(async () => {
     try {
-      console.log('🎥 Starting video recording...');
+      // // console.log('🎥 Starting video recording...');
 
       // Get media stream with video and audio
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -58,15 +58,15 @@ export const VideoRecordingProvider: React.FC<VideoRecordingProviderProps> = ({ 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           recordedChunksRef.current.push(event.data);
-          console.log('📹 Video chunk received:', event.data.size, 'bytes. Total chunks:', recordedChunksRef.current.length);
+          // // console.log('📹 Video chunk received:', event.data.size, 'bytes. Total chunks:', recordedChunksRef.current.length);
         }
       };
 
       mediaRecorder.onstop = () => {
-        console.log('🛑 MediaRecorder onstop triggered. Total chunks:', recordedChunksRef.current.length);
+        // // console.log('🛑 MediaRecorder onstop triggered. Total chunks:', recordedChunksRef.current.length);
         const videoBlob = new Blob(recordedChunksRef.current, { type: mimeType });
         recordedVideoRef.current = videoBlob;
-        console.log('✅ Video recording stopped. Size:', videoBlob.size, 'bytes');
+        // // console.log('✅ Video recording stopped. Size:', videoBlob.size, 'bytes');
 
         // Update state to reflect recording has stopped
         setIsRecording(false);
@@ -78,15 +78,15 @@ export const VideoRecordingProvider: React.FC<VideoRecordingProviderProps> = ({ 
         }
       };
 
-      mediaRecorder.onerror = (event: Event) => {
-        console.error('❌ MediaRecorder error:', event);
+      mediaRecorder.onerror = () => {
+        // // console.error('❌ MediaRecorder error');
         setIsRecording(false);
 
         // Save whatever chunks we have so far
         if (recordedChunksRef.current.length > 0) {
           const videoBlob = new Blob(recordedChunksRef.current, { type: mimeType });
           recordedVideoRef.current = videoBlob;
-          console.log('⚠️ Saved partial recording:', videoBlob.size, 'bytes');
+          // // console.log('⚠️ Saved partial recording:', videoBlob.size, 'bytes');
         }
       };
 
@@ -94,9 +94,9 @@ export const VideoRecordingProvider: React.FC<VideoRecordingProviderProps> = ({ 
       mediaRecorder.start(1000); // Collect data every second
       setIsRecording(true);
 
-      console.log('✅ Video recording started successfully');
+      // // console.log('✅ Video recording started successfully');
     } catch (error) {
-      console.error('❌ Error starting video recording:', error);
+      // // console.error('❌ Error starting video recording:', error);
       setIsRecording(false);
       throw error;
     }
@@ -104,32 +104,43 @@ export const VideoRecordingProvider: React.FC<VideoRecordingProviderProps> = ({ 
 
   const stopRecording = useCallback(async (): Promise<Blob | null> => {
     return new Promise((resolve) => {
-      console.log('🛑 Stopping video recording...');
-      console.log('📊 Current recording state:', {
-        hasMediaRecorder: !!mediaRecorderRef.current,
-        recorderState: mediaRecorderRef.current?.state,
-        hasRecordedVideo: !!recordedVideoRef.current,
-        chunksCount: recordedChunksRef.current.length,
-        isRecordingState: isRecording,
-      });
+      // // console.log('🛑 Stopping video recording...');
+      // // console.log('📊 Current recording state:', {
+      //   hasMediaRecorder: !!mediaRecorderRef.current,
+      //   recorderState: mediaRecorderRef.current?.state,
+      //   hasRecordedVideo: !!recordedVideoRef.current,
+      //   chunksCount: recordedChunksRef.current.length,
+      //   isRecordingState: isRecording,
+      // });
 
       // If recorder is inactive but we have chunks, create blob from chunks
       if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
-        console.warn('⚠️ MediaRecorder is inactive or null');
+        // // console.warn('⚠️ MediaRecorder is inactive or null');
 
         // If we have chunks but no recorded video yet, create it now
         if (recordedChunksRef.current.length > 0 && !recordedVideoRef.current) {
           const mimeType = mediaRecorderRef.current?.mimeType || 'video/webm';
           const videoBlob = new Blob(recordedChunksRef.current, { type: mimeType });
           recordedVideoRef.current = videoBlob;
-          console.log('✅ Created video blob from chunks:', videoBlob.size, 'bytes');
+          // // console.log('✅ Created video blob from chunks:', videoBlob.size, 'bytes');
         }
 
         // Return whatever we have (could be null if never recorded)
         if (recordedVideoRef.current) {
-          console.log('✅ Returning previously recorded video:', recordedVideoRef.current.size, 'bytes');
+          // // console.log('✅ Returning previously recorded video:', recordedVideoRef.current.size, 'bytes');
         } else {
-          console.error('❌ No video recording found');
+          // // console.error('❌ No video recording found');
+        }
+
+        // Stop all tracks even if recorder is inactive
+        if (streamRef.current) {
+          // // console.log('🔴 Stopping camera/microphone tracks...');
+          streamRef.current.getTracks().forEach(track => {
+            // // console.log(`🛑 Stopping track: ${track.kind} (${track.label})`);
+            track.stop();
+          });
+          streamRef.current = null;
+          // // console.log('✅ All tracks stopped');
         }
 
         setIsRecording(false);
@@ -138,12 +149,12 @@ export const VideoRecordingProvider: React.FC<VideoRecordingProviderProps> = ({ 
       }
 
       // Recorder is still active, stop it normally
-      console.log('🛑 Stopping active MediaRecorder...');
+      // // console.log('🛑 Stopping active MediaRecorder...');
       mediaRecorderRef.current.onstop = () => {
         const mimeType = mediaRecorderRef.current?.mimeType || 'video/webm';
         const videoBlob = new Blob(recordedChunksRef.current, { type: mimeType });
         recordedVideoRef.current = videoBlob;
-        console.log('✅ Video recording stopped. Size:', videoBlob.size, 'bytes');
+        // // console.log('✅ Video recording stopped. Size:', videoBlob.size, 'bytes');
 
         // Stop all tracks
         if (streamRef.current) {
@@ -158,17 +169,17 @@ export const VideoRecordingProvider: React.FC<VideoRecordingProviderProps> = ({ 
 
       mediaRecorderRef.current.stop();
     });
-  }, [isRecording]);
+  }, []);
 
   const getRecordedVideo = useCallback(() => {
     return recordedVideoRef.current;
   }, []);
 
   const clearRecordedVideo = useCallback(() => {
-    console.log('🗑️ Clearing recorded video...');
+    // // console.log('🗑️ Clearing recorded video...');
     recordedVideoRef.current = null;
     recordedChunksRef.current = [];
-    console.log('✅ Video storage cleared');
+    // // console.log('✅ Video storage cleared');
   }, []);
 
   const value: VideoRecordingContextType = {

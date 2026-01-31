@@ -276,6 +276,11 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
     const [errors, setErrors] = useState<ErrorState>({ email: "", username: "", password: "", login: "" })
     const [loading, setLoading] = useState<LoadingState>({ signUp: false, login: false })
 
+    // Clear errors when switching between signup and signin
+    useEffect(() => {
+        setErrors({ email: "", username: "", password: "", login: "" })
+    }, [formType])
+
     // handleChange for both forms
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target
@@ -293,13 +298,11 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
             toast.success("Sign up successful")
 
             // auto login after signup
-            const loginData = await signIn({ email: signUpForm.email, password: signUpForm.password })
-            localStorage.setItem("access_token", loginData.access_token)
-            localStorage.setItem("refresh_token", loginData.refresh_token)
-            localStorage.setItem("username", signUpForm.username)
-            localStorage.setItem("user_email", signUpForm.email)
+            // ✅ Tokens are in httpOnly cookies - browser manages them automatically
+            // ❌ No need to manually store tokens
+            await signIn({ email: signUpForm.email, password: signUpForm.password })
 
-            router.push("/dashboard/profile")
+            window.location.href = "/dashboard/profile"
             onClose()
         } catch (err) {
             handleApiError(err)
@@ -313,11 +316,9 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
         setErrors((prev) => ({ ...prev, login: "" }))
         setLoading((prev) => ({ ...prev, login: true }))
         try {
-            const data = await signIn(loginForm)
-            localStorage.setItem("access_token", data.access_token)
-            localStorage.setItem("refresh_token", data.refresh_token)
-            localStorage.setItem("username", loginForm.email.split('@')[0])
-            localStorage.setItem("user_email", loginForm.email)
+            // ✅ Tokens are in httpOnly cookies - browser manages them automatically
+            // ❌ No need to manually store tokens
+            await signIn(loginForm)
             toast.success("Login successful")
             setLoginForm({ email: "", password: "" })
             window.location.href = "/dashboard/profile"
@@ -333,16 +334,43 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
     const handleApiError = (err: any, isLogin = false) => {
         if (axios.isAxiosError(err)) {
             const res = err.response
-            if (!isLogin && res?.status === 422 && Array.isArray(res.data.detail)) {
-                const newErrors: ErrorState = { email: "", username: "", password: "", login: "" }
-                res.data.detail.forEach((e: ValidationError) => {
-                    const field = e.loc[e.loc.length - 1]
-                    if (field in newErrors) newErrors[field as keyof ErrorState] = e.msg
-                })
+            const newErrors: ErrorState = { email: "", username: "", password: "", login: "" }
+
+            // Handle new backend validation error format - show only first error
+            if (res?.data?.error?.details?.validation_errors) {
+                const validationErrors = res.data.error.details.validation_errors
+                if (validationErrors.length > 0) {
+                    const firstError = validationErrors[0]
+                    const field = firstError.field
+                    if (field in newErrors) {
+                        let message = firstError.message
+                        // Simplify email error message
+                        if (field === 'email' && message.includes(':')) {
+                            message = message.split(':')[0]
+                        }
+                        // Simplify password error message - extract only the main message
+                        if (field === 'password' && message.includes('Value error,')) {
+                            message = message.replace('Value error,', '').trim()
+                        }
+                        newErrors[field as keyof ErrorState] = message
+                    }
+                }
                 setErrors(newErrors)
-            } else {
+            }
+            // Handle old validation error format (422 with detail array) - show only first error
+            else if (!isLogin && res?.status === 422 && Array.isArray(res.data.detail)) {
+                if (res.data.detail.length > 0) {
+                    const firstError = res.data.detail[0]
+                    const field = firstError.loc[firstError.loc.length - 1]
+                    if (field in newErrors) {
+                        newErrors[field as keyof ErrorState] = firstError.msg
+                    }
+                }
+                setErrors(newErrors)
+            }
+            // Handle generic error messages
+            else {
                 const detail = res?.data?.error?.message || res?.data?.detail || "Something went wrong"
-                const newErrors: ErrorState = { email: "", username: "", password: "", login: "" }
                 if (typeof detail === "string") {
                     if (detail.toLowerCase().includes("email")) newErrors.email = detail
                     else if (detail.toLowerCase().includes("username")) newErrors.username = detail
@@ -423,10 +451,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
                 </div>
 
                 {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
-                {errors.login && formType === "login" && <p className="text-red-500 text-sm">{errors.login}</p>}
+                {errors.login && formType === "signin" && <p className="text-red-500 text-sm">{errors.login}</p>}
             </div>
 
-            {formType === "login" && (
+            {formType === "signin" && (
                 <p className="text-xs font-semibold cursor-pointer flex justify-end my-2">
                     Forgot Password?
                 </p>
@@ -457,7 +485,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
                     <>
                         Already have an account?{" "}
                         <span
-                            onClick={() => setFormType("login")}
+                            onClick={() => setFormType("signin")}
                             className="text-[#2200FF] font-semibold cursor-pointer"
                         >
                             Sign in
@@ -482,7 +510,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50">
-            <div className="relative w-[480px] h-[580px] bg-white p-10 rounded-4xl shadow-xl">
+            <div className="relative w-[480px] h-[600px] bg-white p-10 rounded-4xl shadow-xl">
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 p-2 cursor-pointer hover:bg-black hover:text-white rounded-full"

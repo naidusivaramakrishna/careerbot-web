@@ -15,7 +15,7 @@
 //       const loginUrl = await getGoogleLoginUrl()
 //       window.location.href = loginUrl
 //     } catch (error) {
-//       console.error('Error initiating Google login:', error)
+//       // // console.error('Error initiating Google login:', error)
 //       toast.error('Failed to initiate Google login')
 //     }
 //   }
@@ -25,7 +25,7 @@
 //       const loginUrl = await getLinkedInLoginUrl()
 //       window.location.href = loginUrl
 //     } catch (error) {
-//       console.error('Error initiating LinkedIn login:', error)
+//       // // console.error('Error initiating LinkedIn login:', error)
 //       toast.error('Failed to initiate LinkedIn login')
 //     }
 //   }
@@ -81,7 +81,7 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup" }) => {
       const loginUrl = await getGoogleLoginUrl()
       window.location.href = loginUrl
     } catch (error) {
-      console.error('Error initiating Google login:', error)
+      // // console.error('Error initiating Google login:', error)
       toast.error('Failed to initiate Google login')
     }
   }
@@ -91,7 +91,7 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup" }) => {
       const loginUrl = await getLinkedInLoginUrl()
       window.location.href = loginUrl
     } catch (error) {
-      console.error('Error initiating LinkedIn login:', error)
+      // // console.error('Error initiating LinkedIn login:', error)
       toast.error('Failed to initiate LinkedIn login')
     }
   }
