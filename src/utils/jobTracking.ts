@@ -32,7 +32,7 @@ export function getApplicationHistory(): JobApplication[] {
     const stored = localStorage.getItem(APPLIED_JOBS_KEY);
     return stored ? JSON.parse(stored) as JobApplication[] : [];
   } catch (e) {
-    console.error("getApplicationHistory: Failed to parse stored applications:", e);
+    // // console.error("getApplicationHistory: Failed to parse stored applications:", e);
     return [];
   }
 }
@@ -69,7 +69,7 @@ export function recordJobApplication(
     history.push(newApplication);
     localStorage.setItem(APPLIED_JOBS_KEY, JSON.stringify(history));
   } catch (e) {
-    console.error("recordJobApplication: Failed to save application:", e instanceof Error ? e.message : String(e));
+    // // console.error("recordJobApplication: Failed to save application:", e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -86,7 +86,7 @@ export function getSavedJobs(): SavedJob[] {
     const stored = localStorage.getItem(SAVED_JOBS_KEY);
     return stored ? JSON.parse(stored) as SavedJob[] : [];
   } catch (e) {
-    console.error("getSavedJobs: Failed to parse stored jobs:", e);
+    // // console.error("getSavedJobs: Failed to parse stored jobs:", e);
     return [];
   }
 }
@@ -136,7 +136,7 @@ export function toggleJobSaved(
       return true;
     }
   } catch (e) {
-    console.error("toggleJobSaved: Failed to toggle saved job:", e instanceof Error ? e.message : String(e));
+    // // console.error("toggleJobSaved: Failed to toggle saved job:", e instanceof Error ? e.message : String(e));
     return false;
   }
 }
@@ -153,7 +153,7 @@ export function removeSavedJob(jobId: string): void {
     saved = saved.filter((job) => job.jobId !== jobId);
     localStorage.setItem(SAVED_JOBS_KEY, JSON.stringify(saved));
   } catch (e) {
-    console.error("removeSavedJob: Failed to remove saved job:", e instanceof Error ? e.message : String(e));
+    // // console.error("removeSavedJob: Failed to remove saved job:", e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -165,7 +165,7 @@ export function clearAllApplications(): void {
   try {
     localStorage.removeItem(APPLIED_JOBS_KEY);
   } catch (e) {
-    console.error("clearAllApplications: Failed to clear:", e instanceof Error ? e.message : String(e));
+    // // console.error("clearAllApplications: Failed to clear:", e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -175,6 +175,6 @@ export function clearAllSavedJobs(): void {
   try {
     localStorage.removeItem(SAVED_JOBS_KEY);
   } catch (e) {
-    console.error("clearAllSavedJobs: Failed to clear:", e instanceof Error ? e.message : String(e));
+    // // console.error("clearAllSavedJobs: Failed to clear:", e instanceof Error ? e.message : String(e));
   }
 }

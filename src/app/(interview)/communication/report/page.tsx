@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { downloadReportPdf } from '@/api/communicationApi';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
+import logger from '@/lib/logger';
 
 export default function ReportPage() {
   const router = useRouter();
@@ -77,7 +78,7 @@ export default function ReportPage() {
         return;
       }
 
-      console.log('📥 Downloading PDF report for test_id:', testId);
+      logger.info('Downloading PDF report for test_id:', testId);
 
       // Call the download PDF API
       const pdfBlob = await downloadReportPdf(testId);
@@ -92,10 +93,10 @@ export default function ReportPage() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      console.log('✅ PDF downloaded successfully');
+      logger.info('PDF downloaded successfully');
       alert('Report downloaded successfully!');
     } catch (error) {
-      console.error('❌ Error downloading report:', error);
+      logger.error('Error downloading report:', error);
       alert('Failed to download report. Please try again.');
     } finally {
       setIsDownloading(false);

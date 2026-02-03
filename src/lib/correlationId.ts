@@ -38,7 +38,7 @@ export function getCorrelationId(): string | null {
     sessionStorage.setItem(SESSION_STORAGE_KEY, correlationId);
 
     if (process.env.NODE_ENV === 'development') {
-      console.log(`[Correlation] New session started: ${correlationId}`);
+      // // console.log(`[Correlation] New session started: ${correlationId}`);
     }
   }
 
@@ -52,7 +52,7 @@ export function clearCorrelationId(): void {
   if (typeof window !== 'undefined') {
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
     if (process.env.NODE_ENV === 'development') {
-      console.log('[Correlation] Session ID cleared');
+      // // console.log('[Correlation] Session ID cleared');
     }
   }
 }
@@ -77,7 +77,7 @@ export function regenerateCorrelationId(): string {
   sessionStorage.setItem(SESSION_STORAGE_KEY, newId);
 
   if (process.env.NODE_ENV === 'development') {
-    console.log(`[Correlation] Session regenerated: ${newId}`);
+    // // console.log(`[Correlation] Session regenerated: ${newId}`);
   }
 
   return newId;

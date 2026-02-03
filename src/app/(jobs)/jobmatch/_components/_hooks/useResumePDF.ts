@@ -12,13 +12,13 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
   const [refetchTrigger, setRefetchTrigger] = useState(0);
 
   const refetch = () => {
-    console.log("🔄 Manual PDF refetch triggered");
+    // // console.log("🔄 Manual PDF refetch triggered");
     setRefetchTrigger((prev) => prev + 1);
   };
 
   useEffect(() => {
     if (!resumeId) {
-      console.warn("⚠️ No resume ID provided - will use frontend template");
+      // // console.warn("⚠️ No resume ID provided - will use frontend template");
       // Don't set error, let fallback handle it
       return;
     }
@@ -30,7 +30,7 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
       setPdfError(null);
 
       try {
-        console.log("📥 Fetching resume with ID:", resumeId, "| Refetch count:", refetchTrigger);
+        // // console.log("📥 Fetching resume with ID:", resumeId, "| Refetch count:", refetchTrigger);
 
         // Add cache-busting timestamp to prevent browser caching
         const cacheBuster = Date.now();
@@ -57,8 +57,8 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
         const blob = resp.data;
         const contentType = resp.headers["content-type"] || "";
 
-        console.log("📄 File content-type:", contentType);
-        console.log("📦 Blob size:", blob.size);
+        // // console.log("📄 File content-type:", contentType);
+        // // console.log("📦 Blob size:", blob.size);
 
         // Handle DOCX files
         if (
@@ -67,7 +67,7 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
           contentType.includes("application/vnd.openxmlformats-officedocument.wordprocessingml.document") ||
           contentType.includes("msword")
         ) {
-          console.log("✅ Detected DOCX file");
+          // // console.log("✅ Detected DOCX file");
           setIsDocx(true);
           setDocxBlob(blob);
           setPdfBlobUrl(null);
@@ -77,7 +77,7 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
 
         // Handle PDF files
         if (contentType.includes("pdf") || contentType.includes("application/pdf")) {
-          console.log("✅ Detected PDF file");
+          // // console.log("✅ Detected PDF file");
           setIsDocx(false);
           setDocxBlob(null);
           const url = URL.createObjectURL(blob);
@@ -86,13 +86,13 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
           return;
         }
 
-        console.warn("⚠️ Unsupported file type:", contentType);
+        // // console.warn("⚠️ Unsupported file type:", contentType);
         setPdfError("Unsupported document type. Please use PDF or DOCX format.");
       } catch (err: any) {
-        console.error("❌ Error loading resume PDF:", err);
+        // // console.error("❌ Error loading resume PDF:", err);
         // Don't set error - let it fall back to frontend template
         if (isMounted) {
-          console.log("📋 Will fall back to frontend template");
+          // // console.log("📋 Will fall back to frontend template");
           setPdfBlobUrl(null);
           setPdfError(null); // Clear error so fallback works
         }

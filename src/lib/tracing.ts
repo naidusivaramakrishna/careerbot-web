@@ -61,9 +61,9 @@ function formatLogMessage(
   };
 
   if (data) {
-    console.log(`%c${fullMessage}`, styles[level], data);
+    // // console.log(`%c${fullMessage}`, styles[level], data);
   } else {
-    console.log(`%c${fullMessage}`, styles[level]);
+    // // console.log(`%c${fullMessage}`, styles[level]);
   }
 }
 
@@ -101,7 +101,7 @@ export class TraceLogger {
       formatLogMessage(LogLevel.ERROR, message, this.context, data);
     } else {
       // Production: log only message and correlation ID
-      console.error(`[ERROR] ${message}`, { correlationId: this.context.correlationId });
+      // // console.error(`[ERROR] ${message}`, { correlationId: this.context.correlationId });
     }
   }
 
@@ -225,9 +225,9 @@ export function displaySessionInfo(): void {
 
   const correlationId = getCorrelationId();
   console.group('%c🔍 Session Tracing Info', 'color: #0066cc; font-weight: bold; font-size: 14px');
-  console.log(`Correlation ID: ${correlationId || 'Not initialized'}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
-  console.log(`Timestamp: ${new Date().toISOString()}`);
+  // // console.log(`Correlation ID: ${correlationId || 'Not initialized'}`);
+  // // console.log(`Environment: ${process.env.NODE_ENV}`);
+  // // console.log(`Timestamp: ${new Date().toISOString()}`);
   console.groupEnd();
 }
 

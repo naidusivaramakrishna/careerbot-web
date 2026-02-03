@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import SessionProviderWrapper from "./SessionProviderWrapper";
 import ClientLayout from "./ClientLayout";
 import { Toaster } from "sonner";
 
@@ -16,12 +15,10 @@ export default function ProfileLayout({
     return (
         <html lang="en">
             <body>
-                <SessionProviderWrapper>
                     <ClientLayout>
                         {children}
                         <Toaster richColors position="bottom-right" />
                     </ClientLayout>
-                </SessionProviderWrapper>
             </body>
         </html>
     );

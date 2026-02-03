@@ -79,7 +79,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // Force cleanup and reload when pdfBlobUrl changes
   useEffect(() => {
     if (pdfBlobUrl) {
-      console.log("🔄 PDF blob URL changed, forcing iframe reload");
+      // // console.log("🔄 PDF blob URL changed, forcing iframe reload");
       reloadCounter++;
       setIframeKey(reloadCounter);
 
@@ -93,7 +93,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     }
     return () => {
       if (pdfBlobUrl) {
-        console.log("🧹 Cleaning up old PDF blob URL:", pdfBlobUrl);
+        // // console.log("🧹 Cleaning up old PDF blob URL:", pdfBlobUrl);
         URL.revokeObjectURL(pdfBlobUrl);
       }
     };

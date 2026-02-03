@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { textToSpeech, stopSpeech, getAvailableVoices } from '@/utils/audioUtils';
-import { Play, Square, Volume2 } from 'lucide-react';
+import { textToSpeech, getAvailableVoices } from '@/utils/audioUtils';
+import { Play } from 'lucide-react';
+import logger from '@/lib/logger';
 
 interface TextToSpeechPlayerProps {
   text: string;
@@ -39,7 +40,7 @@ export default function TextToSpeechPlayer({
 
       if (voiceToUse) {
         setSelectedVoice(voiceToUse);
-        console.log('🔊 Selected voice:', voiceToUse.name, voiceToUse.lang);
+        logger.info('Selected voice:', voiceToUse.name, voiceToUse.lang);
       }
     };
 
@@ -80,16 +81,10 @@ export default function TextToSpeechPlayer({
       setIsPlaying(false);
       setHasPlayedOnce(true); // Mark as played after completion
     } catch (err) {
-      console.error('TTS Error:', err);
+      logger.error('TTS Error:', err);
       setError('Failed to play audio');
       setIsPlaying(false);
     }
-  };
-
-  const handleStop = () => {
-    stopSpeech();
-    setIsPlaying(false);
-    setHasPlayedOnce(true); // Mark as played even if stopped mid-way
   };
 
   return (
@@ -114,28 +109,27 @@ export default function TextToSpeechPlayer({
 
         {/* Control Buttons */}
         <div className="flex items-center justify-center gap-4">
-          {!isPlaying ? (
-            <button
-              onClick={handlePlay}
-              disabled={!text || hasPlayedOnce}
-              className={`group flex items-center gap-3 px-6 py-3 rounded-full font-semibold shadow-md transition-all ${
-                hasPlayedOnce
-                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+          <button
+            onClick={handlePlay}
+            disabled={!text || hasPlayedOnce || isPlaying}
+            className={`group flex items-center gap-3 px-6 py-3 rounded-full font-semibold shadow-md transition-all ${
+              hasPlayedOnce
+                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                : isPlaying
+                  ? 'bg-indigo-500 text-white cursor-not-allowed opacity-75'
                   : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              <Play className="w-5 h-5 fill-white" />
-              <span>{hasPlayedOnce ? 'Audio Already Played' : 'Play Audio'}</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleStop}
-              className="group flex items-center gap-3 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-full font-semibold shadow-md hover:shadow-lg transition-all animate-pulse"
-            >
-              <Square className="w-5 h-5 fill-white" />
-              <span>Stop</span>
-            </button>
-          )}
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <Play className="w-5 h-5 fill-white" />
+            <span>
+              {hasPlayedOnce
+                ? 'Audio Already Played'
+                : isPlaying
+                  ? 'Playing Audio...'
+                  : 'Play Audio'
+              }
+            </span>
+          </button>
 
           {/* Volume Indicator */}
           {/* <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm">

@@ -36,7 +36,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
 
       if (onAddSkill) {
         onAddSkill(skill).catch((err) => {
-          console.error("Failed to add skill:", err);
+          // // console.error("Failed to add skill:", err);
           setMatchedCritical((p) => ({ ...p, [skill]: false }));
           // Remove from tracking if API failed
           setAddedCritical((prev) => prev.filter((s) => s !== skill));
@@ -56,7 +56,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
             setAddedCritical((prev) => prev.filter((s) => s !== skill));
           })
           .catch((err) => {
-            console.error("Failed to remove skill:", err);
+            // // console.error("Failed to remove skill:", err);
           });
       } else {
         // Fallback: just update local state if no API handler
@@ -81,7 +81,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
 
       if (onAddSkill) {
         onAddSkill(skill).catch((err) => {
-          console.error("Failed to add skill:", err);
+          // // console.error("Failed to add skill:", err);
           setMatchedImportant((p) => ({ ...p, [skill]: false }));
           setAddedImportant((prev) => prev.filter((s) => s !== skill));
         });
@@ -99,7 +99,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
             setAddedImportant((prev) => prev.filter((s) => s !== skill));
           })
           .catch((err) => {
-            console.error("Failed to remove skill:", err);
+            // // console.error("Failed to remove skill:", err);
           });
       } else {
         setMatchedImportant((prev) => ({ ...prev, [skill]: false }));
@@ -123,7 +123,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
 
       if (onAddSkill) {
         onAddSkill(skill).catch((err) => {
-          console.error("Failed to add skill:", err);
+          // // console.error("Failed to add skill:", err);
           setMatchedNice((p) => ({ ...p, [skill]: false }));
           setAddedNice((prev) => prev.filter((s) => s !== skill));
         });
@@ -141,7 +141,7 @@ const MissingTechnicalSkillsCard: React.FC<MissingTechnicalSkillsCardProps> = ({
             setAddedNice((prev) => prev.filter((s) => s !== skill));
           })
           .catch((err) => {
-            console.error("Failed to remove skill:", err);
+            // // console.error("Failed to remove skill:", err);
           });
       } else {
         setMatchedNice((prev) => ({ ...prev, [skill]: false }));

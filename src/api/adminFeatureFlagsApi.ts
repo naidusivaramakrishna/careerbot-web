@@ -57,7 +57,7 @@ export enum FeatureFlagKey {
  * ```typescript
  * const flags = await getFeatureFlags();
  * const atsScanEnabled = flags.flags.find(f => f.key === 'ats_scan')?.enabled;
- * console.log(`ATS Scan is ${atsScanEnabled ? 'enabled' : 'disabled'}`);
+ * // // console.log(`ATS Scan is ${atsScanEnabled ? 'enabled' : 'disabled'}`);
  * ```
  */
 export const getFeatureFlags = async (): Promise<FeatureFlagsResponse> => {
@@ -92,7 +92,7 @@ export const getFeatureFlags = async (): Promise<FeatureFlagsResponse> => {
  *   }
  * });
  * 
- * console.log('Flags updated:', updated.updated_at);
+ * // // console.log('Flags updated:', updated.updated_at);
  * ```
  */
 export const updateFeatureFlags = async (

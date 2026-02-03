@@ -74,9 +74,9 @@ export enum AllowedFileType {
  * Example:
  * ```typescript
  * const config = await getSystemConfig();
- * console.log(`Platform: ${config.platform_name}`);
- * console.log(`Maintenance: ${config.maintenance_mode ? 'ON' : 'OFF'}`);
- * console.log(`Max users: ${config.maximum_users}`);
+ * // // console.log(`Platform: ${config.platform_name}`);
+ * // // console.log(`Maintenance: ${config.maintenance_mode ? 'ON' : 'OFF'}`);
+ * // // console.log(`Max users: ${config.maximum_users}`);
  * ```
  */
 export const getSystemConfig = async (): Promise<SystemConfigResponse> => {
@@ -161,7 +161,7 @@ export const updateSystemConfig = async (
  * Example:
  * ```typescript
  * const defaultConfig = await resetSystemConfig();
- * console.log('Configuration reset to defaults');
+ * // // console.log('Configuration reset to defaults');
  * ```
  */
 export const resetSystemConfig = async (): Promise<ResetSystemConfigResponse> => {

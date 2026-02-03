@@ -4,6 +4,8 @@ interface Certification {
   name: string;
   issuedBy: string;
   year: string;
+  expiryDate?: string;
+  credentialId?: string;
 }
 
 interface Props {
@@ -12,23 +14,39 @@ interface Props {
 
 export default function CertificationsForm({ onSave }: Props) {
   const [entries, setEntries] = useState<Certification[]>([
-    { name: "", issuedBy: "", year: "" },
+    {
+      name: "",
+      issuedBy: "",
+      year: "",
+      expiryDate: "",
+      credentialId: "",
+    },
   ]);
 
-  const handleChange = (i: number, field: keyof Certification, value: string) => {
+  const handleChange = (
+    i: number,
+    field: keyof Certification,
+    value: string
+  ) => {
     const updated = [...entries];
     updated[i] = { ...updated[i], [field]: value };
     setEntries(updated);
   };
 
-  // const addEntry = () =>
-  //   setEntries([...entries, { name: "", issuedBy: "", year: "" }]);
-
   const removeEntry = (i: number) =>
     setEntries(entries.filter((_, idx) => idx !== i));
 
   const handleSave = () =>
-    onSave(entries.filter((e) => e.name || e.issuedBy || e.year));
+    onSave(
+      entries.filter(
+        (e) =>
+          e.name ||
+          e.issuedBy ||
+          e.year ||
+          e.expiryDate ||
+          e.credentialId
+      )
+    );
 
   return (
     <div>
@@ -43,22 +61,26 @@ export default function CertificationsForm({ onSave }: Props) {
           </label>
           <input
             type="text"
-            placeholder="Enter Certification Name"
+            placeholder="Enter certification name"
             className="w-full p-1 mb-3 text-[15px] border border-gray-300 text-gray-700 rounded"
             value={entry.name}
-            onChange={(e) => handleChange(i, "name", e.target.value)}
+            onChange={(e) =>
+              handleChange(i, "name", e.target.value)
+            }
           />
 
           {/* Issued By */}
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Issued By
+            Issued By <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
-            placeholder="Enter Issuing Organization"
+            placeholder="Issuing organization"
             className="w-full p-1 mb-3 text-[15px] border border-gray-300 text-gray-700 rounded"
             value={entry.issuedBy}
-            onChange={(e) => handleChange(i, "issuedBy", e.target.value)}
+            onChange={(e) =>
+              handleChange(i, "issuedBy", e.target.value)
+            }
           />
 
           {/* Year */}
@@ -67,56 +89,59 @@ export default function CertificationsForm({ onSave }: Props) {
           </label>
           <input
             type="text"
-            placeholder="e.g. 2024"
-            className="w-full p-1 text-[15px] border border-gray-300 text-gray-700 rounded"
+            placeholder="e.g. 2023"
+            className="w-full p-1 mb-3 text-[15px] border border-gray-300 text-gray-700 rounded"
             value={entry.year}
-            onChange={(e) => handleChange(i, "year", e.target.value)}
+            onChange={(e) =>
+              handleChange(i, "year", e.target.value)
+            }
           />
 
-          {/* Remove button */}
-          {/* {entries.length > 1 && (
-            <button
-              type="button"
-              onClick={() => removeEntry(i)}
-              className="mt-2 text-red-500 text-sm"
-            >
-              Remove
-            </button>
-          )} */}
-           <button
-          type="button"
-          onClick={handleSave}
-          className="px-4 py-1 bg-[#2557a7] text-white rounded-lg"
-        >
-          Save
-        </button>
-            <button
-              type="button"
-              onClick={() => removeEntry(i)}
-              className="mt-2 px-4 text-red-500 text-sm"
-            >
-              Remove
-            </button>
+          {/* Expiry Date */}
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Expiry Date
+          </label>
+          <input
+            type="month"
+            className="w-full p-1 mb-3 text-[15px] border border-gray-300 text-gray-700 rounded"
+            value={entry.expiryDate}
+            onChange={(e) =>
+              handleChange(i, "expiryDate", e.target.value)
+            }
+          />
+
+          {/* Credential ID */}
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Credential ID
+          </label>
+          <input
+            type="text"
+            placeholder="Optional credential ID"
+            className="w-full p-1 mb-2 text-[15px] border border-gray-300 text-gray-700 rounded"
+            value={entry.credentialId}
+            onChange={(e) =>
+              handleChange(i, "credentialId", e.target.value)
+            }
+          />
+
+          {/* Actions */}
+          <button
+            type="button"
+            onClick={handleSave}
+            className="px-4 py-1 bg-[#2557a7] text-white rounded-lg"
+          >
+            Save
+          </button>
+
+          <button
+            type="button"
+            onClick={() => removeEntry(i)}
+            className="mt-2 px-4 text-red-500 text-sm"
+          >
+            Remove
+          </button>
         </div>
       ))}
-
-      {/* Add More & Save buttons */}
-      {/* <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={addEntry}
-          className="px-3 py-1 bg-gray-200 text-gray-700 rounded-lg"
-        >
-          + Add More
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="px-4 py-1 bg-orange-500 text-white rounded-lg"
-        >
-          Save
-        </button>
-      </div> */}
     </div>
   );
 }

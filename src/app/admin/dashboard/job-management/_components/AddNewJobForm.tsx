@@ -632,7 +632,7 @@ export function PreviewJobPage({
             toast.success('Job published successfully!');
             onPublish();
         } catch (error: unknown) {
-            console.error('Error publishing job:', error);
+            // // console.error('Error publishing job:', error);
             toast.dismiss();
             const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to publish job';
             toast.error(errorMessage);

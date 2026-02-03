@@ -15,9 +15,8 @@ export const SECTION_ROUTES: { [key: string]: string } = {
   'Jumbled Sentences': '/communication/jumbled-sentences',
   'Sentence Completion': '/communication/sentence-completion',
   'Listen and Correct': '/communication/listen-and-correct',
-  'Story Listening': '/communication/story-listening',
   'Story Listen Facts': '/communication/story-listening', // Backend uses this name for story listening section
-  'Situation Explaining': '/communication/situation-explaining',
+  // 'Situation Explaining': '/communication/situation-explaining',
   'Describe Situation': '/communication/situation-explaining', // Backend also uses this name
 };
 
@@ -30,7 +29,7 @@ export const getSectionRoute = (sectionName: string): string | null => {
   const route = SECTION_ROUTES[sectionName];
 
   if (!route) {
-    console.warn(`⚠️ Unknown section name: "${sectionName}". Available sections:`, Object.keys(SECTION_ROUTES));
+    // // console.warn(`⚠️ Unknown section name: "${sectionName}". Available sections:`, Object.keys(SECTION_ROUTES));
     return null;
   }
 

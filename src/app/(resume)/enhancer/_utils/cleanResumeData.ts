@@ -84,7 +84,7 @@ export function cleanResumeData(resumeData: any): any {
         const { cleanContent } = cleanResumeContent(value);
         cleaned[key] = cleanContent;
       } catch (error) {
-        console.error(`Error cleaning field "${key}":`, error);
+        // // console.error(`Error cleaning field "${key}":`, error);
         cleaned[key] = value; // Keep original value if cleaning fails
       }
     } else if (typeof value === 'object' && value !== null) {

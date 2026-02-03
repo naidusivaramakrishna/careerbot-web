@@ -6,9 +6,9 @@ import "@/app/(jobs)/jobmatch/_components/_styles/docx-preview.css";
 import ClientLayout from "./ClientLayout";
 
 export const metadata: Metadata = {
-  title: "JobMatch - AI Resume Analyzer & Job Matcher",
+  title: "Careerbot",
   description: "AI-powered resume analysis, ATS score checking, and intelligent job matching.",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  // viewport: "width=device-width, initial-scale=1, maximum-scale=1",
   icons: { icon: "/favicon.ico" },
 };
 

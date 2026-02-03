@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FaUser, FaCog } from "react-icons/fa";
-import { RiFileEditFill } from "react-icons/ri";
+import { FaUser, FaRegUser, FaCog } from "react-icons/fa";
+import { RiFileEditFill, RiFileEditLine } from "react-icons/ri";
 import Image from "next/image";
 import { Wand2, LogOut, MessageSquare } from "lucide-react";
 import { FaArrowRightArrowLeft } from "react-icons/fa6";
@@ -14,8 +14,8 @@ import { toast } from "sonner";
 import axios from "axios";
 
 const navItems = [
-  { id: "profile", icon: <FaUser size={24} />, label: "Profile", path: "/dashboard/profile" },
-  { id: "resume", icon: <RiFileEditFill size={24} />, label: "Resume", path: "/builder" },
+  { id: "profile", icon: "profile_icon", label: "Profile", path: "/dashboard/profile" },
+  { id: "resume", icon: "resume_icon", label: "Resume", path: "/builder" },
 
   // ATS Login Page (Updated)
   {
@@ -46,7 +46,6 @@ const navItems = [
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [active, setActive] = useState("profile");
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
@@ -90,7 +89,6 @@ export default function Sidebar() {
     const fetchProfile = async () => {
       try {
         const profile = await getProfile();
-        setIsLoggedIn(true);
         setUserProfile(profile);
         // Fetch profile picture
         const picRes = await getProfilePicture();
@@ -105,12 +103,10 @@ export default function Sidebar() {
           if ([401, 403].includes(error.response?.status ?? 0)) {
             // ✅ Backend clears httpOnly cookies automatically
             // ❌ No manual localStorage cleanup needed
-            setIsLoggedIn(false);
             toast.error("Session expired. Please login again.");
-            router.push("/signup");
+            // router.push("/signup");
           } else {
-            setIsLoggedIn(false);
-            toast.error("Failed to load profile.");
+            // toast.error("Failed to load profile image.");
           }
         }
       } finally {
@@ -147,10 +143,9 @@ export default function Sidebar() {
       await signOut();
 
       // Clear state
-      setIsLoggedIn(false);
       setUserProfile(null);
       toast.success("Logged out successfully");
-      router.push("/");
+      // Note: signOut() already redirects to "/"
     } catch {
       toast.error("Logout failed.");
     } finally {
@@ -158,12 +153,31 @@ export default function Sidebar() {
     }
   };
 
-  // ATS dynamic icon renderer with hover support
+  // Dynamic icon renderer with hover support
   const renderIcon = (item: typeof navItems[0]) => {
-    if (item.icon === "ats_scan") {
-      const isActive = active === item.id;
-      const isHovered = hoveredItem === item.id;
+    const isActive = active === item.id;
+    const isHovered = hoveredItem === item.id;
 
+    // Profile icon - filled when active, outline when inactive
+    if (item.icon === "profile_icon") {
+      return isActive || isHovered ? (
+        <FaUser size={24} />
+      ) : (
+        <FaRegUser size={24} />
+      );
+    }
+
+    // Resume icon - filled when active, outline when inactive
+    if (item.icon === "resume_icon") {
+      return isActive || isHovered ? (
+        <RiFileEditFill size={24} />
+      ) : (
+        <RiFileEditLine size={24} />
+      );
+    }
+
+    // ATS icon
+    if (item.icon === "ats_scan") {
       return (
         <Image
           src={
@@ -199,7 +213,7 @@ export default function Sidebar() {
   const displayInitial = displayName?.[0]?.toUpperCase() || "U";
 
   return (
-    <div className="fixed top-0 left-0 bottom-0 w-20 bg-white flex flex-col items-center z-50 shadow-sm border-r border-gray-100">
+    <div className="fixed top-0 left-0 bottom-0 w-20 bg-white flex flex-col items-center z-50 shadow-sm">
 
       {/* Logo */}
       <div className="py-4">
@@ -213,14 +227,14 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col items-center gap-1 w-full px-1">
+      <nav className="flex flex-col items-center gap-1 w-full px-2">
         {navItems.map((item) => (
           <button
             key={item.id}
             onClick={() => handleNavigation(item.path, item.id)}
             onMouseEnter={() => setHoveredItem(item.id)}
             onMouseLeave={() => setHoveredItem(null)}
-            className={`flex flex-col items-center justify-center gap-1 py-3 px-2 w-full rounded-lg transition-all ${active === item.id
+            className={`flex flex-col items-center justify-center py-2  w-full rounded-lg transition-all ${active === item.id
                 ? "bg-[#e8eff9] text-[#2557a7]"
                 : "text-gray-600 hover:text-[#2557a7] hover:bg-gray-50"
               }`}
@@ -294,8 +308,8 @@ export default function Sidebar() {
 
               <button
                 onClick={handleLogout}
-                disabled={isLoggingOut || !isLoggedIn}
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition"
+                disabled={isLoggingOut}
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <LogOut className="w-4 h-4" />
                 <span className="text-xs">{isLoggingOut ? "Logging out..." : "Logout"}</span>

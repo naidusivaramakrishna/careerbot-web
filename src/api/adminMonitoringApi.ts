@@ -145,8 +145,8 @@ export interface LogsQueryParams {
  * Example:
  * ```typescript
  * const overview = await getSystemOverview();
- * console.log(overview.health_cards); // Array of health status cards
- * console.log(overview.database_stats.queries_per_second); // QPS
+ * // // console.log(overview.health_cards); // Array of health status cards
+ * // // console.log(overview.database_stats.queries_per_second); // QPS
  * ```
  */
 export const getSystemOverview = async (): Promise<SystemOverviewResponse> => {
@@ -184,8 +184,8 @@ export const getSystemOverview = async (): Promise<SystemOverviewResponse> => {
  * Example:
  * ```typescript
  * const metrics = await getApiRequestMetrics('last_7_days', true);
- * console.log(metrics.time_series.data_points); // Chart data
- * console.log(metrics.insight); // AI insight
+ * // // console.log(metrics.time_series.data_points); // Chart data
+ * // // console.log(metrics.insight); // AI insight
  * ```
  */
 export const getApiRequestMetrics = async (
@@ -232,9 +232,9 @@ export const getApiRequestMetrics = async (
  * Example:
  * ```typescript
  * const cpu = await getCpuUsage('last_7_days', true);
- * console.log(`Current: ${cpu.current}%`);
- * console.log(`Average: ${cpu.period_average}%`);
- * console.log(`Peak: ${cpu.peak}%`);
+ * // // console.log(`Current: ${cpu.current}%`);
+ * // // console.log(`Average: ${cpu.period_average}%`);
+ * // // console.log(`Peak: ${cpu.peak}%`);
  * ```
  */
 export const getCpuUsage = async (
@@ -281,8 +281,8 @@ export const getCpuUsage = async (
  * Example:
  * ```typescript
  * const memory = await getMemoryUsage('today', true);
- * console.log(`Current: ${memory.current}%`);
- * console.log(`Peak: ${memory.peak}%`);
+ * // // console.log(`Current: ${memory.current}%`);
+ * // // console.log(`Peak: ${memory.peak}%`);
  * ```
  */
 export const getMemoryUsage = async (

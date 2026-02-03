@@ -30,7 +30,7 @@ const MissingSoftSkillsCard: React.FC<MissingSoftSkillsCardProps> = ({
 
       if (onAddSkill) {
         onAddSkill(skill).catch((err) => {
-          console.error("Failed to add soft skill:", err);
+          // // console.error("Failed to add soft skill:", err);
           setMatched((p) => ({ ...p, [skill]: false }));
           // Remove from tracking if API failed
           setAddedSkills((prev) => prev.filter((s) => s !== skill));
@@ -50,7 +50,7 @@ const MissingSoftSkillsCard: React.FC<MissingSoftSkillsCardProps> = ({
             setAddedSkills((prev) => prev.filter((s) => s !== skill));
           })
           .catch((err) => {
-            console.error("Failed to remove soft skill:", err);
+            // // console.error("Failed to remove soft skill:", err);
           });
       } else {
         // Fallback: just update local state if no API handler

@@ -68,7 +68,7 @@ export default function JobsContents() {
           // Store timestamp of this fetch to identify new jobs
           localStorage.setItem("lastJobFetchTime", new Date().toISOString());
         } catch (aggregatorError) {
-          console.error("Aggregator error:", aggregatorError);
+          // // console.error("Aggregator error:", aggregatorError);
           toast.warning("Using cached jobs. Fresh jobs fetch failed.");
         }
       }

@@ -93,7 +93,7 @@ export default function CertificationsSection({
             setTempProfile((prev) => ({ ...prev, certifications: updated }));
             setProfileData((prev) => {
                 const newProfile = { ...prev, certifications: updated };
-                console.log('✅ Updated profile data after delete:', newProfile);
+                // // console.log('✅ Updated profile data after delete:', newProfile);
                 return newProfile;
             });
 

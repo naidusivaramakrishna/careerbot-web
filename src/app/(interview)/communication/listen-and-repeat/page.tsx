@@ -1,217 +1,35 @@
-// 'use client';
-
-// import { useState } from 'react';
-// import { useRouter } from 'next/navigation';
-// import AudioRecorder from '../components/AudioRecorder';
-
-// // Sample questions data for Listen and Repeat section
-// const questionsData = {
-//   'Listen and Repeat': [
-//     { 
-//       id: 1, 
-//       audioUrl: '/audio/question1.mp3', // Replace with your actual audio file paths
-//       description: 'Listen to the audio and repeat what you hear clearly.'
-//     },
-//     { 
-//       id: 2, 
-//       audioUrl: '/audio/question2.mp3',
-//       description: 'Listen to the audio and repeat what you hear clearly.'
-//     },
-//     { 
-//       id: 3, 
-//       audioUrl: '/audio/question3.mp3',
-//       description: 'Listen to the audio and repeat what you hear clearly.'
-//     },
-//     { 
-//       id: 4, 
-//       audioUrl: '/audio/question4.mp3',
-//       description: 'Listen to the audio and repeat what you hear clearly.'
-//     },
-//     { 
-//       id: 5, 
-//       audioUrl: '/audio/question5.mp3',
-//       description: 'Listen to the audio and repeat what you hear clearly.'
-//     },
-//     { 
-//       id: 6, 
-//       audioUrl: '/audio/question6.mp3',
-//       description: 'Listen to the audio and repeat what you hear clearly.'
-//     },
-//     { 
-//       id: 7, 
-//       audioUrl: '/audio/question7.mp3',
-//       description: 'Listen to the audio and repeat what you hear clearly.'
-//     },
-//     { 
-//       id: 8, 
-//       audioUrl: '/audio/question8.mp3',
-//       description: 'Listen to the audio and repeat what you hear clearly.'
-//     },
-//   ],
-// };
-
-// interface ListenAndRepeatPageProps {
-//   sectionName?: string;
-//   sectionDescription?: string;
-// }
-
-// export default function ListenAndRepeatPage({
-//   sectionName = 'Listen and Repeat',
-//   sectionDescription = 'Listen carefully and repeat what you hear',
-// }: ListenAndRepeatPageProps) {
-//   const router = useRouter();
-//   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-//   const [recordedAudios, setRecordedAudios] = useState<{ [key: number]: Blob }>({});
-
-//   const questions = questionsData[sectionName as keyof typeof questionsData] || [];
-//   const currentQuestion = questions[currentQuestionIndex];
-//   const totalQuestions = questions.length;
-//   const questionNumber = currentQuestionIndex + 1;
-
-//   const handleRecordingComplete = (audioBlob: Blob) => {
-//     setRecordedAudios((prev) => ({
-//       ...prev,
-//       [currentQuestionIndex]: audioBlob,
-//     }));
-//     console.log('Recording saved for question:', questionNumber);
-//   };
-
-//   const handleNext = () => {
-//     if (currentQuestionIndex < totalQuestions - 1) {
-//       setCurrentQuestionIndex((prev) => prev + 1);
-//     } else {
-//       router.push('/next-section');
-//     }
-//   };
-
-//   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
-
-//   return (
-//     <div className="min-h-screen bg-gray-50">
-//       <div className="max-w-7xl mx-auto px-6 py-8">
-//         {/* Header Section */}
-//         <div className="mb-6">
-//           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-//             {sectionName}
-//           </h1>
-//           <p className="text-gray-600 text-sm">
-//             {sectionDescription}
-//           </p>
-//         </div>
-
-//         {/* Progress Bar */}
-//         <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
-//           <div className="flex items-center justify-between mb-2">
-//             <span className="text-sm font-medium text-gray-700">
-//               Question {questionNumber} of {totalQuestions}
-//             </span>
-//             <span className="text-sm font-semibold text-indigo-600">
-//               {Math.round((questionNumber / totalQuestions) * 100)}%
-//             </span>
-//           </div>
-//           <div className="w-full bg-gray-200 rounded-full h-2">
-//             <div
-//               className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-//               style={{ width: `${(questionNumber / totalQuestions) * 100}%` }}
-//             ></div>
-//           </div>
-//         </div>
-
-//         {/* Main Content Area */}
-//         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-//           {/* Left Side - Audio Player */}
-//           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-//             <div className="mb-4">
-//               <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded">
-//                 Question {questionNumber}
-//               </span>
-//             </div>
-            
-//             <h2 className="text-xl font-semibold text-gray-900 mb-4">
-//               Listen to the Audio
-//             </h2>
-
-//             {/* Audio Player */}
-//             <div className="mb-6 p-2 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
-//               {/* <div className="flex items-center justify-center mb-4">
-//                 <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center">
-//                   <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-//                     <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-//                   </svg>
-//                 </div>
-//               </div> */}
-              
-//               <audio 
-//                 controls 
-//                 className="w-full"
-//                 key={currentQuestionIndex}
-//                 controlsList="nodownload"
-//               >
-//                 <source src={currentQuestion?.audioUrl} type="audio/mpeg" />
-//                 Your browser does not support the audio element.
-//               </audio>
-//             </div>
-            
-//             <div className="bg-blue-50 border-l-4 border-indigo-600 p-4 rounded">
-//               <p className="text-sm text-gray-700">
-//                 💡 {currentQuestion?.description}
-//               </p>
-//             </div>
-
-//             {/* Recording Status */}
-//             {recordedAudios[currentQuestionIndex] && (
-//               <div className="mt-4 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded">
-//                 <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-//                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-//                 </svg>
-//                 <span className="text-sm font-medium text-green-800">Recording Saved</span>
-//               </div>
-//             )}
-//           </div>
-
-//           {/* Right Side - Audio Recorder */}
-//           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-//             <AudioRecorder 
-//               onRecordingComplete={handleRecordingComplete}
-//               maxDuration={15}
-//             />
-//           </div>
-//         </div>
-
-//         {/* Bottom Section - Next Button */}
-//         <div className="flex justify-end">
-//           <button
-//             onClick={handleNext}
-//             disabled={!recordedAudios[currentQuestionIndex]}
-//             className={`px-8 py-3 rounded-lg font-semibold text-base transition-all ${
-//               recordedAudios[currentQuestionIndex]
-//                 ? 'bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer'
-//                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-//             }`}
-//           >
-//             {isLastQuestion ? 'Complete Section' : 'Next Question →'}
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
-import AudioRecorder from '../components/AudioRecorder';
-import AssessmentSidebar from '../components/AssessmentSidebar';
-import TextToSpeechPlayer from '../components/TextToSpeechPlayer';
-import SectionStartModal from '../components/SectionStartModal';
+import dynamic from 'next/dynamic';
 import {
   getCurrentQuestion,
   getNextQuestion,
+  uploadAudio,
   CurrentQuestionResponse,
 } from '@/api/communicationApi';
-import { saveAudioRecording } from '@/utils/audioUtils';
+import logger from '@/lib/logger';
+import { validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audioUtils';
+
+// ✅ Lazy load heavy components for faster initial page load
+const AudioRecorder = dynamic(() => import('../components/AudioRecorder'), {
+  loading: () => <div className="flex items-center justify-center p-8"><div className="animate-pulse">Loading recorder...</div></div>,
+  ssr: false, // Disable SSR for media recorder
+});
+
+const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), {
+  loading: () => <div className="w-64 bg-gray-100 animate-pulse" />,
+});
+
+const TextToSpeechPlayer = dynamic(() => import('../components/TextToSpeechPlayer'), {
+  loading: () => <div className="animate-pulse p-4">Loading audio...</div>,
+  ssr: false,
+});
+
+const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), {
+  loading: () => null,
+});
 
 export default function ListenAndRepeatPage() {
   const router = useRouter();
@@ -220,16 +38,12 @@ export default function ListenAndRepeatPage() {
     useState<CurrentQuestionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [validationWarning, setValidationWarning] = useState('');
 
   // recordings mapped by question_id
   const [audioRecordings, setAudioRecordings] = useState<{
     [questionId: string]: Blob;
   }>({});
-
-  const isVoiceSection =
-    currentQuestion?.question_type === 'VOICE' ||
-    ['See and Repeat', 'Listen and Repeat', 'Listen and Correct', 'Situation Explaining']
-      .includes(currentQuestion?.section_name || '');
 
   // Fetch current question
   const fetchCurrentQuestion = async () => {
@@ -242,7 +56,7 @@ export default function ListenAndRepeatPage() {
 
       const response = await getCurrentQuestion(sessionId);
       setCurrentQuestion(response);
-      console.log('➡️ Now showing question:', response.question_id);
+      logger.info('➡️ Now showing question:', response.question_id);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch question');
     } finally {
@@ -259,14 +73,47 @@ export default function ListenAndRepeatPage() {
   const handleRecordingComplete = async (blob: Blob) => {
     if (!currentQuestion?.question_id) return;
 
+    // ✅ Validate audio before saving
+    logger.info('🔍 Validating audio recording...');
+    const validation = await validateAudioBlob(blob);
+
+    logger.info('📊 Audio validation result:', {
+      isValid: validation.isValid,
+      duration: formatDuration(validation.duration),
+      hasSound: validation.hasSound,
+      size: formatFileSize(blob.size),
+      error: validation.error,
+      warning: validation.warning,
+    });
+
+    // Show error if audio is invalid
+    if (!validation.isValid) {
+      setError(validation.error || 'Invalid audio recording');
+      setValidationWarning('');
+      alert(`⚠️ Invalid Recording!\n\n${validation.error}\n\nPlease record again.`);
+      return; // Don't save invalid audio
+    }
+
+    // Show warning if audio is valid but concerning
+    if (validation.warning) {
+      setValidationWarning(validation.warning);
+      logger.warn('⚠️', validation.warning);
+    } else {
+      setValidationWarning('');
+    }
+
+    // Clear any previous errors
+    setError('');
+
     setAudioRecordings((prev) => ({
       ...prev,
       [currentQuestion.question_id]: blob,
     }));
 
-    if (isVoiceSection) {
-      await saveAudioRecording(currentQuestion.question_id, blob);
-    }
+    // IMPORTANT: Don't save to sessionStorage to avoid quota exceeded error
+    // Real audio recordings are large (~88KB WebM) and will fill up sessionStorage quickly
+    // We only need to keep in state for immediate upload via progressive API
+    logger.info(`✅ Valid audio saved (${formatDuration(validation.duration)}, ${formatFileSize(blob.size)})`);
   };
 
   // Next question
@@ -278,29 +125,104 @@ export default function ListenAndRepeatPage() {
 
     try {
       const sessionId = localStorage.getItem('session_id');
-      if (!sessionId) throw new Error('Session ID not found');
+      const testId = localStorage.getItem('test_id');
 
-      const response = await getNextQuestion({
-        session_id: sessionId,
+      if (!sessionId) throw new Error('Session ID not found');
+      if (!testId) throw new Error('Test ID not found');
+
+      // Get the audio blob for current question
+      const audioBlob = audioRecordings[currentQuestion.question_id];
+
+      // ✅ Enhanced validation and logging
+      if (!audioBlob) {
+        const errorMsg = `❌ No audio recording found for question: ${currentQuestion.question_id}`;
+        logger.error(errorMsg);
+        logger.error('Available recordings:', Object.keys(audioRecordings));
+        throw new Error('Please record your audio before clicking Next');
+      }
+
+      // ✅ Log audio blob details
+      logger.info('🎙️ Audio blob details:', {
         question_id: currentQuestion.question_id,
+        size: `${(audioBlob.size / 1024).toFixed(2)} KB`,
+        type: audioBlob.type,
       });
 
-      if (response.completed) {
-        router.push('/communication/feedback');
-        return;
-      }
+      // ✅ Upload audio with return_next_question=true
+      logger.info('📤 Uploading audio with return_next_question=true for question:', currentQuestion.question_id);
 
-      // Check if section changed to next section
-      if (response.section_name !== 'Listen and Repeat') {
-        console.log('✅ Navigating to next section:', response.section_name);
-        // Route to appropriate next section
-        router.push('/communication/jumbled-sentences');
-        return;
-      }
+      const uploadResponse = await uploadAudio({
+        session_id: sessionId,
+        question_id: currentQuestion.question_id,
+        test_id: testId,
+        audio_file: audioBlob,
+        return_next_question: true, // ✅ Request next question in response
+        question_number: currentQuestion.question_number, // ✅ Global question number
+      });
 
-      setCurrentQuestion(response);
+      logger.info('✅ Audio uploaded successfully:', uploadResponse);
+      logger.info(`✅ Upload confirmed for ${currentQuestion.question_id} - Size: ${(audioBlob.size / 1024).toFixed(2)} KB`);
+
+      // ✅ Check if next question was included in upload response
+      if (uploadResponse.next_question) {
+        logger.info('📬 Next question received from upload response:', uploadResponse.next_question.question.question_id);
+
+        const nextQuestion = uploadResponse.next_question.question;
+
+        // Check if section changed to next section
+        if (nextQuestion.section_name !== currentQuestion.section_name) {
+          logger.info('✅ Section changed from', currentQuestion.section_name, 'to:', nextQuestion.section_name);
+          router.push('/communication/jumbled-sentences');
+          return;
+        }
+
+        // Update current question with the next question from upload response
+        setCurrentQuestion({
+          question_id: nextQuestion.question_id,
+          question_text: nextQuestion.question_text,
+          question_type: nextQuestion.question_type || 'VOICE',
+          section_name: nextQuestion.section_name,
+          section_id: undefined,
+          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1,
+          total_questions: uploadResponse.next_question.section.total_questions,
+          options: nextQuestion.options,
+          audio_url: nextQuestion.audio_url,
+          time_limit: nextQuestion.time_limit,
+          is_last_question: nextQuestion.is_last_question,
+          is_last_section: nextQuestion.is_last_section,
+          story_text: nextQuestion.story_text,
+          expected_text: nextQuestion.expected_text,
+        });
+      } else {
+        // Fallback: If next_question not in response, fetch it separately
+        logger.warn('⚠️ Next question not in upload response, fetching separately...');
+        const response = await getNextQuestion({
+          session_id: sessionId,
+          question_id: currentQuestion.question_id,
+        });
+
+        if (response.completed) {
+          router.push('/communication/feedback');
+          return;
+        }
+
+        // Check if section changed to next section
+        if (response.section_name !== currentQuestion.section_name) {
+          logger.info('✅ Section changed from', currentQuestion.section_name, 'to:', response.section_name);
+          router.push('/communication/jumbled-sentences');
+          return;
+        }
+
+        setCurrentQuestion(response);
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch next question');
+      const errorMessage = err.message || 'Failed to upload audio or fetch next question';
+      logger.error('❌ Error in handleSubmit:', errorMessage);
+      logger.error('❌ Full error:', err);
+
+      // ✅ Show error to user
+      setError(errorMessage);
+      alert(`⚠️ Upload Failed!\n\n${errorMessage}\n\nPlease try recording again.`);
     } finally {
       setLoading(false);
     }
@@ -363,9 +285,7 @@ export default function ListenAndRepeatPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-xl p-6 shadow-sm">
-              {loading ? (
-                <p>Loading...</p>
-              ) : error ? (
+              {error ? (
                 <p className="text-red-600">{error}</p>
               ) : (
                 <>
@@ -382,7 +302,30 @@ export default function ListenAndRepeatPage() {
                     />
                   )}
 
-                  {hasRecording && (
+                  {/* Show validation warning if exists */}
+                  {validationWarning && hasRecording && (
+                    <div className="mt-6 flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                      <svg
+                        className="w-5 h-5 text-yellow-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                      <span className="text-sm font-medium text-yellow-800">
+                        {validationWarning}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Show success indicator when valid recording exists */}
+                  {hasRecording && !validationWarning && (
                     <div className="mt-6 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded">
                       <svg
                         className="w-5 h-5 text-green-600"
@@ -398,7 +341,7 @@ export default function ListenAndRepeatPage() {
                         />
                       </svg>
                       <span className="text-sm font-medium text-green-800">
-                        Recording Saved
+                        Valid Recording Saved
                       </span>
                     </div>
                   )}

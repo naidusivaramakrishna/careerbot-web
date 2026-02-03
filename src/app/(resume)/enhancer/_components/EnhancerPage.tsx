@@ -50,7 +50,7 @@ const EnhancerPage: React.FC = () => {
 
     try {
       if (process.env.NODE_ENV === 'development') {
-        console.log("File uploaded:", file.name);
+        // // console.log("File uploaded:", file.name);
       }
 
       // Store file metadata
@@ -80,8 +80,8 @@ const EnhancerPage: React.FC = () => {
       setUploadProgress(100);
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("Resume parsing result:", parseResult);
-        console.log("Resume enhancement result:", enhanceResult);
+        // // console.log("Resume parsing result:", parseResult);
+        // // console.log("Resume enhancement result:", enhanceResult);
       }
 
       // Store the resume_id and enhanced_id for later use
@@ -100,10 +100,10 @@ const EnhancerPage: React.FC = () => {
       const llmData = parsedData.llm_data || rawData.llm_data || {};
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== JOBMATCH-STYLE EXTRACTION ===");
-        console.log("rawData:", rawData);
-        console.log("parsedData:", parsedData);
-        console.log("llmData:", llmData);
+        // // console.log("=== JOBMATCH-STYLE EXTRACTION ===");
+        // // console.log("rawData:", rawData);
+        // // console.log("parsedData:", parsedData);
+        // // console.log("llmData:", llmData);
       }
 
       // Extract contact with multiple fallbacks (like JobMatch)
@@ -370,7 +370,7 @@ const EnhancerPage: React.FC = () => {
         .filter((h: { name: string; description: string } | null): h is { name: string; description: string } => h !== null);
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("Extracted hobbies:", hobbies);
+        // // console.log("Extracted hobbies:", hobbies);
       }
 
       // ============================================
@@ -411,7 +411,7 @@ const EnhancerPage: React.FC = () => {
         .filter((l: { language: string; proficiency: string } | null): l is { language: string; proficiency: string } => l !== null);
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("Extracted languages:", languages);
+        // // console.log("Extracted languages:", languages);
       }
 
       // ============================================
@@ -426,7 +426,7 @@ const EnhancerPage: React.FC = () => {
         [];
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== AWARDS RAW DATA ===", awardsRaw);
+        // // console.log("=== AWARDS RAW DATA ===", awardsRaw);
       }
 
       const awards = awardsRaw
@@ -467,7 +467,7 @@ const EnhancerPage: React.FC = () => {
         [];
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== ACHIEVEMENTS RAW DATA ===", achievementsRaw);
+        // // console.log("=== ACHIEVEMENTS RAW DATA ===", achievementsRaw);
       }
 
       const achievements = achievementsRaw
@@ -507,7 +507,7 @@ const EnhancerPage: React.FC = () => {
         [];
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== VOLUNTEERING RAW DATA ===", volunteeringRaw);
+        // // console.log("=== VOLUNTEERING RAW DATA ===", volunteeringRaw);
       }
 
       const volunteering = volunteeringRaw
@@ -549,7 +549,7 @@ const EnhancerPage: React.FC = () => {
         [];
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== PUBLICATIONS RAW DATA ===", publicationsRaw);
+        // // console.log("=== PUBLICATIONS RAW DATA ===", publicationsRaw);
       }
 
       const publications = publicationsRaw
@@ -591,7 +591,7 @@ const EnhancerPage: React.FC = () => {
         [];
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== REFERENCES RAW DATA ===", referencesRaw);
+        // // console.log("=== REFERENCES RAW DATA ===", referencesRaw);
       }
 
       const references = referencesRaw
@@ -659,16 +659,16 @@ const EnhancerPage: React.FC = () => {
       };
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== CLEANED DATA DEBUG ===");
-        console.log("Awards count:", awards.length);
-        console.log("Achievements count:", achievements.length);
-        console.log("Volunteering count:", volunteering.length);
-        console.log("Publications count:", publications.length);
-        console.log("References count:", references.length);
+        // // console.log("=== CLEANED DATA DEBUG ===");
+        // // console.log("Awards count:", awards.length);
+        // // console.log("Achievements count:", achievements.length);
+        // // console.log("Volunteering count:", volunteering.length);
+        // // console.log("Publications count:", publications.length);
+        // // console.log("References count:", references.length);
 
-        console.log("=== IMPROVEMENTS DEBUG ===");
-        console.log("Backend enhancement_report:", enhanceResult.enhancement_report);
-        console.log("Validation results:", enhanceResult.enhancement_report?.details?.validation_results);
+        // // console.log("=== IMPROVEMENTS DEBUG ===");
+        // // console.log("Backend enhancement_report:", enhanceResult.enhancement_report);
+        // // console.log("Validation results:", enhanceResult.enhancement_report?.details?.validation_results);
       }
 
       // Extract improvements from backend response (SOURCE OF TRUTH)
@@ -704,8 +704,8 @@ const EnhancerPage: React.FC = () => {
       const backendSuggestions = enhanceResult.suggestions || [];
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== BACKEND SUGGESTIONS (RAW) ===");
-        console.log("Suggestions array:", backendSuggestions);
+        // // console.log("=== BACKEND SUGGESTIONS (RAW) ===");
+        // // console.log("Suggestions array:", backendSuggestions);
       }
 
       // Transform backend suggestions to improvement format
@@ -769,9 +769,9 @@ const EnhancerPage: React.FC = () => {
       allImprovements.sort((a, b) => b.impact_points - a.impact_points);
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== AI SUGGESTIONS ===");
-        console.log("Total suggestions:", allImprovements.length);
-        console.log("Suggestions:", allImprovements);
+        // // console.log("=== AI SUGGESTIONS ===");
+        // // console.log("Total suggestions:", allImprovements.length);
+        // // console.log("Suggestions:", allImprovements);
       }
 
       // Store enhancement report and improvements
@@ -788,7 +788,7 @@ const EnhancerPage: React.FC = () => {
 
       // Set the resume data in context
       if (process.env.NODE_ENV === 'development') {
-        console.log("Setting resume data:", transformedResumeData);
+        // // console.log("Setting resume data:", transformedResumeData);
       }
       setResumeData(transformedResumeData);
 
@@ -799,22 +799,22 @@ const EnhancerPage: React.FC = () => {
       const sectionsToEnable: SectionName[] = ["PersonalInfo"];
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== SECTION DETECTION ===");
-        console.log("professionalSummary:", transformedResumeData.professionalSummary?.substring(0, 50));
-        console.log("workExperience.length:", transformedResumeData.workExperience.length);
-        console.log("skills.length:", transformedResumeData.skills.length);
-        console.log("education.length:", transformedResumeData.education.length);
-        console.log("projects.length:", transformedResumeData.projects.length);
-        console.log("languages.length:", transformedResumeData.languages.length);
-        console.log("certifications.length:", transformedResumeData.certifications.length);
-        console.log("awards.length:", transformedResumeData.awards.length);
-        console.log("hobbies.length:", transformedResumeData.hobbies.length);
-        console.log("internships.length:", transformedResumeData.internships.length);
-        console.log("achievements.length:", transformedResumeData.achievements?.length || 0);
-        console.log("volunteering.length:", transformedResumeData.volunteering?.length || 0);
-        console.log("publications.length:", transformedResumeData.publications?.length || 0);
-        console.log("references.length:", transformedResumeData.references?.length || 0);
-        console.log("interests.length:", transformedResumeData.interests?.length || 0);
+        // // console.log("=== SECTION DETECTION ===");
+        // // console.log("professionalSummary:", transformedResumeData.professionalSummary?.substring(0, 50));
+        // // console.log("workExperience.length:", transformedResumeData.workExperience.length);
+        // // console.log("skills.length:", transformedResumeData.skills.length);
+        // // console.log("education.length:", transformedResumeData.education.length);
+        // // console.log("projects.length:", transformedResumeData.projects.length);
+        // // console.log("languages.length:", transformedResumeData.languages.length);
+        // // console.log("certifications.length:", transformedResumeData.certifications.length);
+        // // console.log("awards.length:", transformedResumeData.awards.length);
+        // // console.log("hobbies.length:", transformedResumeData.hobbies.length);
+        // // console.log("internships.length:", transformedResumeData.internships.length);
+        // // console.log("achievements.length:", transformedResumeData.achievements?.length || 0);
+        // // console.log("volunteering.length:", transformedResumeData.volunteering?.length || 0);
+        // // console.log("publications.length:", transformedResumeData.publications?.length || 0);
+        // // console.log("references.length:", transformedResumeData.references?.length || 0);
+        // // console.log("interests.length:", transformedResumeData.interests?.length || 0);
       }
 
       if (transformedResumeData.professionalSummary) sectionsToEnable.push("Summary");
@@ -834,14 +834,14 @@ const EnhancerPage: React.FC = () => {
       if (transformedResumeData.interests && transformedResumeData.interests.length > 0) sectionsToEnable.push("Interests");
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("=== FINAL ENABLED SECTIONS ===");
-        console.log("sectionsToEnable:", sectionsToEnable);
+        // // console.log("=== FINAL ENABLED SECTIONS ===");
+        // // console.log("sectionsToEnable:", sectionsToEnable);
       }
 
       setEnabledSections(sectionsToEnable);
 
       if (process.env.NODE_ENV === 'development') {
-        console.log("Navigating to /enhancer/builder");
+        // // console.log("Navigating to /enhancer/builder");
       }
 
       // Small delay to ensure state is set before navigation
@@ -850,13 +850,13 @@ const EnhancerPage: React.FC = () => {
       // Navigate to builder page
       router.push("/enhancer/builder");
     } catch (error: unknown) {
-      console.error("=== UPLOAD ERROR ===");
-      console.error("Full error:", error);
+      // // console.error("=== UPLOAD ERROR ===");
+      // // console.error("Full error:", error);
 
       const err = error as { message?: string; response?: unknown; __raw?: unknown };
-      console.error("Error message:", err?.message);
-      console.error("Error response:", err?.response);
-      console.error("Error __raw:", err?.__raw);
+      // // console.error("Error message:", err?.message);
+      // // console.error("Error response:", err?.response);
+      // // console.error("Error __raw:", err?.__raw);
 
       // Try to extract meaningful error message
       let errorMessage = "Error uploading file. Please try again.";

@@ -44,7 +44,7 @@ class IndexedDBStorage {
 
       request.onerror = () => {
         if (process.env.NODE_ENV === "development") {
-          console.error("IndexedDB initialization error:", request.error);
+          // // console.error("IndexedDB initialization error:", request.error);
         }
         reject(new Error(`Failed to open IndexedDB: ${request.error?.message}`));
       };
@@ -62,7 +62,7 @@ class IndexedDBStorage {
           db.createObjectStore(this.config.storeName, { keyPath: "id", autoIncrement: true });
 
           if (process.env.NODE_ENV === "development") {
-            console.log(`Created object store: ${this.config.storeName}`);
+            // // console.log(`Created object store: ${this.config.storeName}`);
           }
         }
       };
@@ -83,7 +83,7 @@ class IndexedDBStorage {
       return new Promise((resolve, reject) => {
         request.onerror = () => {
           if (process.env.NODE_ENV === "development") {
-            console.error("Error storing value:", request.error);
+            // // console.error("Error storing value:", request.error);
           }
           reject(new Error(`Failed to store value: ${request.error?.message}`));
         };
@@ -92,7 +92,7 @@ class IndexedDBStorage {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV === "development") {
-        console.error("Storage.set error:", message);
+        // // console.error("Storage.set error:", message);
       }
       throw error;
     }
@@ -112,7 +112,7 @@ class IndexedDBStorage {
       return new Promise((resolve, reject) => {
         request.onerror = () => {
           if (process.env.NODE_ENV === "development") {
-            console.error("Error retrieving value:", request.error);
+            // // console.error("Error retrieving value:", request.error);
           }
           reject(new Error(`Failed to retrieve value: ${request.error?.message}`));
         };
@@ -124,7 +124,7 @@ class IndexedDBStorage {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV === "development") {
-        console.error("Storage.get error:", message);
+        // // console.error("Storage.get error:", message);
       }
       return null;
     }
@@ -147,7 +147,7 @@ class IndexedDBStorage {
       });
     } catch (error: unknown) {
       if (process.env.NODE_ENV === "development") {
-        console.error("Storage.has error:", error);
+        // // console.error("Storage.has error:", error);
       }
       return false;
     }
@@ -167,7 +167,7 @@ class IndexedDBStorage {
       return new Promise((resolve, reject) => {
         request.onerror = () => {
           if (process.env.NODE_ENV === "development") {
-            console.error("Error removing value:", request.error);
+            // // console.error("Error removing value:", request.error);
           }
           reject(new Error(`Failed to remove value: ${request.error?.message}`));
         };
@@ -176,7 +176,7 @@ class IndexedDBStorage {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV === "development") {
-        console.error("Storage.remove error:", message);
+        // // console.error("Storage.remove error:", message);
       }
       throw error;
     }
@@ -196,7 +196,7 @@ class IndexedDBStorage {
       return new Promise((resolve, reject) => {
         request.onerror = () => {
           if (process.env.NODE_ENV === "development") {
-            console.error("Error clearing store:", request.error);
+            // // console.error("Error clearing store:", request.error);
           }
           reject(new Error(`Failed to clear store: ${request.error?.message}`));
         };
@@ -205,7 +205,7 @@ class IndexedDBStorage {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV === "development") {
-        console.error("Storage.clear error:", message);
+        // // console.error("Storage.clear error:", message);
       }
       throw error;
     }
@@ -225,7 +225,7 @@ class IndexedDBStorage {
       return new Promise((resolve, reject) => {
         request.onerror = () => {
           if (process.env.NODE_ENV === "development") {
-            console.error("Error getting all values:", request.error);
+            // // console.error("Error getting all values:", request.error);
           }
           reject(new Error(`Failed to get all values: ${request.error?.message}`));
         };
@@ -241,7 +241,7 @@ class IndexedDBStorage {
       });
     } catch (error: unknown) {
       if (process.env.NODE_ENV === "development") {
-        console.error("Storage.getAll error:", error);
+        // // console.error("Storage.getAll error:", error);
       }
       return [];
     }

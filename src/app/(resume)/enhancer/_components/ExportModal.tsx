@@ -71,7 +71,7 @@ export default function ExportModal({
 
     // Use API if enhancedId is provided
     if (!enhancedId) {
-      console.error("No enhanced_id provided for download");
+      // // console.error("No enhanced_id provided for download");
       alert("Cannot download: No enhanced resume ID found");
       return;
     }
@@ -92,9 +92,9 @@ export default function ExportModal({
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      console.log(`✅ Resume downloaded as ${format.toUpperCase()}`);
+      // // console.log(`✅ Resume downloaded as ${format.toUpperCase()}`);
     } catch (error) {
-      console.error(`Download failed:`, error);
+      // // console.error(`Download failed:`, error);
       alert(`Failed to download resume. Please try again.`);
     } finally {
       setIsDownloading(false);

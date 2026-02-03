@@ -20,7 +20,7 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
 
     const documentXml = await zip.file("word/document.xml")?.async("string");
     if (!documentXml) {
-      console.warn("⚠️ No document.xml");
+      // // console.warn("⚠️ No document.xml");
       return docxBlob;
     }
 
@@ -31,7 +31,7 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
     );
 
     if (process.env.NODE_ENV === 'development') {
-      console.log("📄 Header files:", headerFiles);
+      // // console.log("📄 Header files:", headerFiles);
     }
 
     if (headerFiles.length === 0) {
@@ -82,7 +82,7 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.log("📝 Raw extracted:", allHeaderTexts);
+      // // console.log("📝 Raw extracted:", allHeaderTexts);
     }
 
     // ULTRA-AGGRESSIVE filtering - remove ALL junk
@@ -136,12 +136,12 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
     const uniqueTexts = Array.from(new Set(cleanedTexts));
 
     if (process.env.NODE_ENV === 'development') {
-      console.log("✨ Cleaned texts:", uniqueTexts);
+      // // console.log("✨ Cleaned texts:", uniqueTexts);
     }
 
     if (uniqueTexts.length === 0) {
       if (process.env.NODE_ENV === 'development') {
-        console.log("ℹ️ No valid text found");
+        // // console.log("ℹ️ No valid text found");
       }
       return docxBlob;
     }
@@ -172,13 +172,13 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.log("📊 Name parts:", nameParts);
-      console.log("📊 Contact parts:", contactParts);
+      // // console.log("📊 Name parts:", nameParts);
+      // // console.log("📊 Contact parts:", contactParts);
     }
 
     if (nameParts.length === 0 && contactParts.length === 0) {
       if (process.env.NODE_ENV === 'development') {
-        console.log("⚠️ No valid data found");
+        // // console.log("⚠️ No valid data found");
       }
       return docxBlob;
     }
@@ -251,7 +251,7 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
 
     const body = documentJson["w:document"]?.["w:body"];
     if (!body) {
-      console.warn("⚠️ No body");
+      // // console.warn("⚠️ No body");
       return docxBlob;
     }
 
@@ -275,7 +275,7 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
     });
 
     if (process.env.NODE_ENV === 'development') {
-      console.log("✅ SUCCESS! Header:", {
+      // // console.log("✅ SUCCESS! Header:", {
         fullName: nameParts.join(" "),
         contact: contactParts.join(" | ")
       });
@@ -283,7 +283,7 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
 
     return updatedBlob;
   } catch (e) {
-    console.error("convertDocxHeaderToParagraphs error:", e instanceof Error ? e.message : String(e));
+    // // console.error("convertDocxHeaderToParagraphs error:", e instanceof Error ? e.message : String(e));
     return docxBlob;
   }
 }

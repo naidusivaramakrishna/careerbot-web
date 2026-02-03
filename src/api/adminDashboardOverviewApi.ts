@@ -79,8 +79,8 @@ export type DashboardPeriod = 'daily' | 'weekly' | 'monthly';
  * Example:
  * ```typescript
  * const overview = await getDashboardOverview('weekly');
- * console.log(overview.metrics.total_users.growth); // Growth percentage
- * console.log(overview.realtime_stats.users_online); // Current online users
+ * // // console.log(overview.metrics.total_users.growth); // Growth percentage
+ * // // console.log(overview.realtime_stats.users_online); // Current online users
  * ```
  */
 export const getDashboardOverview = async (

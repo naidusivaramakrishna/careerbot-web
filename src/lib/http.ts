@@ -31,6 +31,10 @@ const clearAllTokens = () => {
    Axios Instance
 -------------------------------------------------- */
 
+/* --------------------------------------------------
+   Axios Instance
+-------------------------------------------------- */
+
 const client: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   withCredentials: true, // ✅ Enable httpOnly cookie sending/receiving

@@ -29,7 +29,7 @@ const GoogleSuccessPage = () => {
         }, 1000)
 
       } catch (error: any) {
-        console.error('❌ Error:', error)
+        // // console.error('❌ Error:', error)
         setStatus('error')
         toast.error('Failed to complete sign in')
 

@@ -141,7 +141,7 @@ IMPORTANT:
         const data = await response.json();
 
         if (!response.ok) {
-            console.error("Azure Error:", data);
+            // // console.error("Azure Error:", data);
             return NextResponse.json(
                 { error: "Azure request failed", details: data },
                 { status: 500 }
@@ -164,7 +164,7 @@ IMPORTANT:
             return NextResponse.json({ description });
         }
     } catch (error) {
-        console.error("AI ERROR:", error);
+        // // console.error("AI ERROR:", error);
         return NextResponse.json(
             { error: "Unexpected server error", details: error },
             { status: 500 }

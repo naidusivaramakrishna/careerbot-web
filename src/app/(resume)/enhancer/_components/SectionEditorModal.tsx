@@ -41,11 +41,11 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
         const parts = resumeData.personalInfo.fullName?.split(" ") || [];
         const pInfo = resumeData.personalInfo;
         
-        console.log("=== LOADING PersonalInfo ===");
-        console.log("Full personalInfo object:", pInfo);
-        console.log("linkedinUrl:", pInfo.linkedinUrl);
-        console.log("githubUrl:", pInfo.githubUrl);
-        console.log("portifolioUrl:", pInfo.portifolioUrl);
+        // // console.log("=== LOADING PersonalInfo ===");
+        // // console.log("Full personalInfo object:", pInfo);
+        // // console.log("linkedinUrl:", pInfo.linkedinUrl);
+        // // console.log("githubUrl:", pInfo.githubUrl);
+        // // console.log("portifolioUrl:", pInfo.portifolioUrl);
         
         const loadedData = {
           firstName: parts[0] || "",
@@ -58,7 +58,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
           portfolioUrl: pInfo.portifolioUrl || "",
         };
         
-        console.log("Loaded formData:", loadedData);
+        // // console.log("Loaded formData:", loadedData);
         setFormData(loadedData);
         break;
       }
@@ -149,9 +149,9 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
       case "Skills":
         // Convert categorizedSkills from arrays to comma-separated strings
-        console.log("=== LOADING SKILLS ===");
-        console.log("Full resumeData:", resumeData);
-        console.log("categorizedSkills in resumeData:", resumeData.categorizedSkills);
+        // // console.log("=== LOADING SKILLS ===");
+        // // console.log("Full resumeData:", resumeData);
+        // // console.log("categorizedSkills in resumeData:", resumeData.categorizedSkills);
 
         // Normalize keys: backend/local data may use snake_case (programming_languages, cloud_platforms, soft_skills)
         const rawSkills = resumeData.categorizedSkills || {};
@@ -173,7 +173,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
           softSkills: getVal(rawSkills, "softSkills", "soft_skills", "softSkillsList"),
         } as Record<string, any>;
 
-        console.log("Normalized skills data:", skillsData);
+        // // console.log("Normalized skills data:", skillsData);
 
         const convertedSkills = {
           languages: Array.isArray(skillsData.languages) ? skillsData.languages.join(", ") : (skillsData.languages || ""),
@@ -199,7 +199,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
         ) {
           const flatSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
           if (flatSkills.length > 0) {
-            console.log("Using flat resumeData.skills as fallback for Skills modal (auto-categorizing)");
+            // // console.log("Using flat resumeData.skills as fallback for Skills modal (auto-categorizing)");
             const auto = autoCategorizeFlatSkills(flatSkills as string[]);
             // Only set fields that are empty
             Object.keys(auto).forEach((k) => {
@@ -208,7 +208,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
             });
           }
         }
-        console.log("Converted skills:", convertedSkills);
+        // // console.log("Converted skills:", convertedSkills);
         setFormData({
           categorizedSkills: convertedSkills
         });
@@ -258,7 +258,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
         ) {
           const flatSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
           if (flatSkills.length > 0) {
-            console.log("Using flat resumeData.skills as fallback for Languages modal (auto-categorizing)");
+            // // console.log("Using flat resumeData.skills as fallback for Languages modal (auto-categorizing)");
             const auto2 = autoCategorizeFlatSkills(flatSkills as string[]);
             Object.keys(auto2).forEach((k) => {
               const key = k as keyof typeof convertedSkills2;
@@ -418,11 +418,11 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
     switch (activeSection) {
       case "PersonalInfo":
-        console.log("=== SAVING PersonalInfo ===");
-        console.log("Current formData:", formData);
-        console.log("linkedinUrl from form:", formData.linkedinUrl);
-        console.log("githubUrl from form:", formData.githubUrl);
-        console.log("portfolioUrl from form:", formData.portfolioUrl);
+        // // console.log("=== SAVING PersonalInfo ===");
+        // // console.log("Current formData:", formData);
+        // // console.log("linkedinUrl from form:", formData.linkedinUrl);
+        // // console.log("githubUrl from form:", formData.githubUrl);
+        // // console.log("portfolioUrl from form:", formData.portfolioUrl);
 
         const newPersonalInfo = {
           fullName: `${formData.firstName || ""} ${formData.lastName || ""}`.trim(),
@@ -434,9 +434,9 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
           portifolioUrl: formData.portfolioUrl || "",
         };
 
-        console.log("New personalInfo object:", newPersonalInfo);
+        // // console.log("New personalInfo object:", newPersonalInfo);
         updated.personalInfo = newPersonalInfo;
-        console.log("Full updated resume data:", updated);
+        // // console.log("Full updated resume data:", updated);
         break;
 
       case "Summary":
@@ -526,7 +526,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
     try {
       const enhancedId = sessionStorage.getItem("enhanced_id");
       if (enhancedId) {
-        console.log("💾 Saving changes to backend...");
+        // // console.log("💾 Saving changes to backend...");
 
         // Transform frontend data structure to backend format
         const backendPayload = transformToBackendFormat(updated);
@@ -535,10 +535,10 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
           enhanced_sections: backendPayload
         });
 
-        console.log("✅ Successfully saved to backend!");
+        // // console.log("✅ Successfully saved to backend!");
       }
     } catch (error) {
-      console.error("❌ Failed to save to backend:", error);
+      // // console.error("❌ Failed to save to backend:", error);
       // Still close modal - changes are saved in React state for preview
     }
 

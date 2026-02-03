@@ -542,7 +542,7 @@ export default function ResumeScorePage() {
         setScoreData(transformATSDataToScoreFormat(atsData));
       }
     } catch (err) {
-      console.log("Error reading ATS data");
+      // // console.log("Error reading ATS data");
     } finally {
       setLoading(false);
     }

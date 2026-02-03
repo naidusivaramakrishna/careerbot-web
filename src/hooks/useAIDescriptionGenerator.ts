@@ -52,7 +52,7 @@
 //         } catch (err) {
 //             const errorMessage = err instanceof Error ? err.message : "Failed to generate description";
 //             setError(errorMessage);
-//             console.error("Error generating description:", err);
+//             // // console.error("Error generating description:", err);
 //             return null;
 //         } finally {
 //             setGenerating(false);
@@ -131,7 +131,7 @@ export const useAIGeneration = () => {
             toast.success("Description generated!", { id: "ai-generation" });
             return data.description;
         } catch (error) {
-            console.error("Error generating description:", error);
+            // // console.error("Error generating description:", error);
             toast.error("Failed to generate description", { id: "ai-generation" });
             return null;
         } finally {
@@ -176,7 +176,7 @@ export const useAIGeneration = () => {
             toast.success("Project description generated!", { id: "ai-generation" });
             return data.description;
         } catch (error) {
-            console.error("Error generating project description:", error);
+            // // console.error("Error generating project description:", error);
             toast.error("Failed to generate project description", { id: "ai-generation" });
             return null;
         } finally {
@@ -216,7 +216,7 @@ export const useAIGeneration = () => {
             toast.success("Summary generated!", { id: "ai-generation" });
             return data.summary;
         } catch (error) {
-            console.error("Error generating summary:", error);
+            // // console.error("Error generating summary:", error);
             toast.error("Failed to generate summary", { id: "ai-generation" });
             return null;
         } finally {

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { generateTest } from '@/api/communicationApi';
 import { getProfile } from '@/api/userApi';
 import { clearAllAudioRecordings } from '@/utils/audioUtils';
+import { useVideoRecording } from '@/contexts/VideoRecordingContext';
+import logger from '@/lib/logger';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,33 +15,32 @@ export default function LoginPage() {
   const [loadingEmail, setLoadingEmail] = useState(true);
   const [error, setError] = useState('');
   const router = useRouter();
+  const { clearRecordedVideo } = useVideoRecording();
 
-  // Auto-fill email from localStorage or fetch from API
+  // ✅ Auto-fill email from profile API (always fetch fresh data)
   useEffect(() => {
     const fetchEmail = async () => {
-      // First try to get from localStorage
-      const userEmail = localStorage.getItem('user_email');
-      if (userEmail) {
-        setEmail(userEmail);
-        console.log('✅ Auto-filled email from localStorage:', userEmail);
-        setLoadingEmail(false);
-        return;
-      }
-
-      // If not in localStorage, fetch from profile API
-      console.log('⚠️ No user email in localStorage, fetching from profile API...');
       try {
+        logger.info('Fetching user email from profile API...');
         const profile = await getProfile();
+
         if (profile.email) {
           setEmail(profile.email);
-          // Store it for future use
+          // Update localStorage with fresh data
           localStorage.setItem('user_email', profile.email);
-          console.log('✅ Fetched and stored email from profile:', profile.email);
+          logger.info('Email fetched and updated:', profile.email);
         } else {
-          console.warn('⚠️ No email found in profile');
+          logger.warn('No email found in profile');
         }
       } catch (err) {
-        console.error('❌ Failed to fetch profile:', err);
+        logger.error('Failed to fetch profile:', err);
+
+        // ✅ Only fallback to localStorage if API fails
+        const cachedEmail = localStorage.getItem('user_email');
+        if (cachedEmail) {
+          setEmail(cachedEmail);
+          logger.warn('Using cached email from localStorage:', cachedEmail);
+        }
       } finally {
         setLoadingEmail(false);
       }
@@ -65,13 +66,14 @@ export default function LoginPage() {
         do_not_repeat_list: [], // Add logic to fetch previously attempted questions if needed
       });
 
-      console.log('✅ Test generated successfully:', response);
+      logger.info('Test generated successfully:', response);
 
-      // Clear all previous audio recordings and text answers from sessionStorage
-      // This ensures only current test's 44 audio files are attached to audio-to-text API
+      // Clear all previous audio recordings, video recordings, and text answers
+      // This ensures only current test's files are attached to the APIs
       clearAllAudioRecordings();
+      clearRecordedVideo();
       sessionStorage.removeItem('text_answers');
-      console.log('🗑️ Cleared previous audio recordings and text answers');
+      logger.info('Cleared previous audio recordings, video recording, and text answers');
 
       // Store test_id in localStorage for later use
       if (response.test_id) {
@@ -81,7 +83,7 @@ export default function LoginPage() {
       // Navigate to next page after successful API call
       router.push('/communication/sections');
     } catch (err: any) {
-      console.error('❌ Error generating test:', err);
+      logger.error('Error generating test:', err);
       setError(err?.response?.data?.message || 'Failed to generate test. Please try again.');
     } finally {
       setLoading(false);

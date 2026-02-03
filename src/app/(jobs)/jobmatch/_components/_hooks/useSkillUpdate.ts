@@ -28,7 +28,7 @@ export const useSkillUpdate = (
   const handleAddSingleSkill = useCallback(
     async (skill: string, skillType: SkillType = "technical") => {
       if (isUpdating) {
-        console.warn("⚠️ Skill operation already in progress, please wait...");
+        // // console.warn("⚠️ Skill operation already in progress, please wait...");
         return;
       }
 
@@ -37,19 +37,19 @@ export const useSkillUpdate = (
 
         const matchId = getMatchId();
 
-        console.log("🔍 Match data structure:", {
+        // // console.log("🔍 Match data structure:", {
           matchResults,
           extractedMatchId: matchId,
         });
 
         if (!matchId) {
-          console.error("❌ Cannot find match_id");
+          // // console.error("❌ Cannot find match_id");
           throw new Error(
             "Match ID not found - cannot add skill to live match. Please reload and try again."
           );
         }
 
-        console.log(
+        // // console.log(
           `🔄 Adding ${skillType} skill "${skill}" to match ${matchId}...`
         );
 
@@ -60,16 +60,16 @@ export const useSkillUpdate = (
         );
 
         const matcherData = response.data;
-        console.log("✅ Skill added via matcher endpoint", matcherData);
+        // // console.log("✅ Skill added via matcher endpoint", matcherData);
 
         // Note: Backend parser API doesn't have add-skills endpoint yet
         // The newly added skills will be tracked in matchResults and displayed via frontend template
-        console.log(`📝 Skill "${skill}" will be shown in resume via frontend template`);
+        // // console.log(`📝 Skill "${skill}" will be shown in resume via frontend template`);
 
         // Trigger UI update to force re-render of resume preview
         if (onResumeUpdated) {
           setTimeout(() => {
-            console.log("🔄 Triggering resume preview refresh...");
+            // // console.log("🔄 Triggering resume preview refresh...");
             onResumeUpdated();
           }, 100);
         }
@@ -195,7 +195,7 @@ export const useSkillUpdate = (
               duplicate: prev?.duplicate,
             };
 
-            console.log("✅ UI State Updated", {
+            // // console.log("✅ UI State Updated", {
               new_score: updated.data.ats_score,
               newly_added_skills: updated.data.newly_added_skills,
               newly_added_soft_skills: updated.data.newly_added_soft_skills,
@@ -205,9 +205,9 @@ export const useSkillUpdate = (
           });
         }
 
-        console.log("🎉 Skill addition completed successfully!");
+        // // console.log("🎉 Skill addition completed successfully!");
       } catch (err: unknown) {
-        console.error("❌ Add skill failed:", err);
+        // // console.error("❌ Add skill failed:", err);
         throw err;
       } finally {
         setIsUpdating(false);
@@ -220,7 +220,7 @@ export const useSkillUpdate = (
   const handleRemoveSingleSkill = useCallback(
     async (skill: string, skillType: SkillType = "technical") => {
       if (isUpdating) {
-        console.warn("⚠️ Skill operation already in progress, please wait...");
+        // // console.warn("⚠️ Skill operation already in progress, please wait...");
         return;
       }
 
@@ -230,11 +230,11 @@ export const useSkillUpdate = (
         const matchId = getMatchId();
 
         if (!matchId) {
-          console.error("❌ Cannot find match_id");
+          // // console.error("❌ Cannot find match_id");
           throw new Error("Match ID not found - cannot remove skill.");
         }
 
-        console.log(
+        // // console.log(
           `🔄 Removing ${skillType} skill "${skill}" from match ${matchId}...`
         );
 
@@ -245,16 +245,16 @@ export const useSkillUpdate = (
         );
 
         const matcherData = response.data;
-        console.log("✅ Skill removed via matcher endpoint", matcherData);
+        // // console.log("✅ Skill removed via matcher endpoint", matcherData);
 
         // Note: Backend parser API doesn't have remove-skills endpoint yet
         // The removed skills will be tracked in matchResults and frontend template will update
-        console.log(`📝 Skill "${skill}" will be removed from resume preview`);
+        // // console.log(`📝 Skill "${skill}" will be removed from resume preview`);
 
         // Trigger UI update to force re-render of resume preview
         if (onResumeUpdated) {
           setTimeout(() => {
-            console.log("🔄 Triggering resume preview refresh...");
+            // // console.log("🔄 Triggering resume preview refresh...");
             onResumeUpdated();
           }, 100);
         }
@@ -361,7 +361,7 @@ export const useSkillUpdate = (
               duplicate: prev?.duplicate,
             };
 
-            console.log("✅ UI State Updated after removal", {
+            // // console.log("✅ UI State Updated after removal", {
               new_score: updated.data.ats_score,
               newly_added_skills: updated.data.newly_added_skills,
               newly_added_soft_skills: updated.data.newly_added_soft_skills,
@@ -371,9 +371,9 @@ export const useSkillUpdate = (
           });
         }
 
-        console.log("🎉 Skill removal completed successfully!");
+        // // console.log("🎉 Skill removal completed successfully!");
       } catch (err: unknown) {
-        console.error("❌ Remove skill failed:", err);
+        // // console.error("❌ Remove skill failed:", err);
         throw err;
       } finally {
         setIsUpdating(false);

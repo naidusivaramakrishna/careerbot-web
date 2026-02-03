@@ -33,15 +33,15 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
   // Debug logs
   useEffect(() => {
-    console.log("🔍 AnalysisContent - parsedResumeData:", parsedResumeData);
-    console.log("🔍 AnalysisContent - initialMatchResults:", initialMatchResults);
+    // // console.log("🔍 AnalysisContent - parsedResumeData:", parsedResumeData);
+    // // console.log("🔍 AnalysisContent - initialMatchResults:", initialMatchResults);
 
     const id = resolveResumeId(parsedResumeData);
     if (id) {
       setResumeId(id);
-      console.log("✅ Resume ID set in AnalysisContent:", id);
+      // // console.log("✅ Resume ID set in AnalysisContent:", id);
     } else {
-      console.error("❌ No resume ID could be resolved!");
+      // // console.error("❌ No resume ID could be resolved!");
     }
 
     // Extract match ID from matchResults
@@ -54,7 +54,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
     if (extractedMatchId) {
       setMatchId(extractedMatchId);
-      console.log("✅ Match ID set in AnalysisContent:", extractedMatchId);
+      // // console.log("✅ Match ID set in AnalysisContent:", extractedMatchId);
     }
   }, [resolveResumeId, parsedResumeData, initialMatchResults, matchResults]);
 
@@ -239,14 +239,14 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
   const handleDownload = useCallback(async (format: "pdf" | "docx" = "pdf") => {
     if (!resumeId) {
-      console.warn("No resume ID available for download");
+      // // console.warn("No resume ID available for download");
       alert("Resume ID not available. Please try again.");
       return;
     }
 
     setIsDownloading(true);
     try {
-      console.log(`📥 Downloading resume as ${format.toUpperCase()}:`, resumeId);
+      // // console.log(`📥 Downloading resume as ${format.toUpperCase()}:`, resumeId);
 
       // Use the correct download endpoint with format parameter
       const response = await httpClient.get(`/parser/download/${resumeId}?format=${format}`, {
@@ -288,9 +288,9 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      console.log(`✅ Resume downloaded successfully as ${extension.toUpperCase()}`);
+      // // console.log(`✅ Resume downloaded successfully as ${extension.toUpperCase()}`);
     } catch (err) {
-      console.error("❌ Error downloading resume:", err);
+      // // console.error("❌ Error downloading resume:", err);
       alert(`Failed to download resume as ${format.toUpperCase()}. Please try again.`);
     } finally {
       setIsDownloading(false);

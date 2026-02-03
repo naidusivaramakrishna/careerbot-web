@@ -307,6 +307,9 @@ body {
 
 .react-pdf__Page__annotations.annotationLayer {
   position: absolute;
+  left: -9999px;
+  width: 478px;
+  visibility: hidden;
 }
 
 .react-pdf__Page__annotations section {

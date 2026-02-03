@@ -70,7 +70,7 @@ export default function BuilderPage() {
         const parsed = JSON.parse(storedAtsScore);
         setAtsScore(parsed);
       } catch (err) {
-        console.error('Failed to parse ATS score:', err);
+        // // console.error('Failed to parse ATS score:', err);
       }
     }
 
@@ -81,7 +81,7 @@ export default function BuilderPage() {
         const parsed = JSON.parse(stored);
         setImprovements(parsed);
       } catch (err) {
-        console.error('Failed to parse improvements:', err);
+        // // console.error('Failed to parse improvements:', err);
         setImprovements([]);
       }
     }
@@ -210,7 +210,7 @@ export default function BuilderPage() {
       setActiveTab('sections');
     } else {
       // If we can't map to a specific section, just show a message
-      console.log('Cannot determine which section to edit for:', suggestion.title);
+      // // console.log('Cannot determine which section to edit for:', suggestion.title);
       alert('Please manually edit the relevant section to apply this suggestion.');
     }
   };
@@ -256,10 +256,10 @@ export default function BuilderPage() {
         }
       });
 
-      console.log('✅ Resume saved to backend before export');
+      // // console.log('✅ Resume saved to backend before export');
       setIsExportModalOpen(true);
     } catch (error) {
-      console.error('Failed to save resume:', error);
+      // // console.error('Failed to save resume:', error);
       alert('Failed to save your changes. Please try again.');
     } finally {
       setIsSaving(false);

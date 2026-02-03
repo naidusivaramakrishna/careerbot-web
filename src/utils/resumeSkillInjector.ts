@@ -29,7 +29,7 @@ export async function addSkillsToPdf(pdfBlob: Blob, newSkills: string[]): Promis
     const buffer = savedPdfBytes.buffer.slice(savedPdfBytes.byteOffset, savedPdfBytes.byteOffset + savedPdfBytes.byteLength) as ArrayBuffer;
     return new Blob([buffer], { type: 'application/pdf' });
   } catch (e) {
-    console.error("addSkillsToPdf error:", e instanceof Error ? e.message : String(e));
+    // // console.error("addSkillsToPdf error:", e instanceof Error ? e.message : String(e));
     return pdfBlob;
   }
 }
@@ -78,7 +78,7 @@ export async function addSkillsToDocxSkillsSection(docxBlob: Blob, newSkills: st
     zip.file("word/document.xml", newXml);
     return await zip.generateAsync({ type: "blob" });
   } catch (e) {
-    console.error("addSkillsToDocxSkillsSection error:", e instanceof Error ? e.message : String(e));
+    // // console.error("addSkillsToDocxSkillsSection error:", e instanceof Error ? e.message : String(e));
     return docxBlob;
   }
 }

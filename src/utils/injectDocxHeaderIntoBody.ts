@@ -87,7 +87,7 @@ export async function injectDocxHeaderIntoBody(docxBlob: Blob): Promise<Blob> {
 
     return await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   } catch (e) {
-    console.error("injectDocxHeaderIntoBody error:", e instanceof Error ? e.message : String(e));
+    // // console.error("injectDocxHeaderIntoBody error:", e instanceof Error ? e.message : String(e));
     return docxBlob;
   }
 }

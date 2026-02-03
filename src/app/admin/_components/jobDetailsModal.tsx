@@ -44,7 +44,7 @@ const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate }) => {
                 status: details.status as any,
             });
         } catch (error) {
-            console.error('Error fetching job details:', error);
+            // // console.error('Error fetching job details:', error);
             toast.error('Failed to load job details');
         } finally {
             setLoading(false);
@@ -61,7 +61,7 @@ const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate }) => {
             // Refresh details
             await fetchJobDetails();
         } catch (error) {
-            console.error('Error updating job:', error);
+            // // console.error('Error updating job:', error);
             toast.error('Failed to update job');
         } finally {
             setSaving(false);

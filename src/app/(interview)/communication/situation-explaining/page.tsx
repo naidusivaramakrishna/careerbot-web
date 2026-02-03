@@ -2,13 +2,22 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import AudioRecorder from '../components/AudioRecorder';
-import AssessmentSidebar from '../components/AssessmentSidebar';
-import SectionStartModal from '../components/SectionStartModal';
+import dynamic from 'next/dynamic';
 import { useVideoRecording } from '@/contexts/VideoRecordingContext';
-import { submitVideoEvaluation, getCurrentQuestion, getNextQuestion, submitAudioToText } from '@/api/communicationApi';
+import {
+  submitVideoEvaluation,
+  getCurrentQuestion,
+  uploadAudio,
+  evaluateAudio,
+  completeSession,
+} from '@/api/communicationApi';
 import type { CurrentQuestionResponse } from '@/api/communicationApi';
-import { getAllAudioRecordings, base64ToBlob, blobToFile, saveAudioRecording } from '@/utils/audioUtils';
+import logger from '@/lib/logger';
+import { validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audioUtils';
+
+const AudioRecorder = dynamic(() => import('../components/AudioRecorder'), { loading: () => <div className="flex items-center justify-center p-8"><div className="animate-pulse">Loading...</div></div>, ssr: false });
+const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="w-64 bg-gray-100 animate-pulse" /> });
+const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), { loading: () => null });
 
 export default function SituationExplainingPage() {
   const router = useRouter();
@@ -18,7 +27,8 @@ export default function SituationExplainingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { stopRecording } = useVideoRecording();
+  const [validationWarning, setValidationWarning] = useState('');
+  const { stopRecording, isRecording: isVideoRecording } = useVideoRecording();
 
   // Fetch current question from API
   const fetchCurrentQuestion = async () => {
@@ -30,11 +40,15 @@ export default function SituationExplainingPage() {
       if (!sessionId) throw new Error('Session ID not found');
 
       const response = await getCurrentQuestion(sessionId);
-      setCurrentQuestion(response);
-      console.log('✅ Situation Explaining - Loaded question:', response.question_id);
-      console.log('📍 Question text:', response.question_text);
+      // ✅ Normalize section name to match backend's naming
+      setCurrentQuestion({
+        ...response,
+        section_name: 'Describe Situation', // Backend uses this name
+      });
+      logger.info('Situation Explaining - Loaded question:', response.question_id);
+      logger.info('Question text:', response.question_text);
     } catch (err) {
-      console.error('❌ Failed to fetch question:', err);
+      logger.error('Failed to fetch question:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch question');
     } finally {
       setLoading(false);
@@ -47,18 +61,44 @@ export default function SituationExplainingPage() {
   };
 
   const handleRecordingComplete = async (audioBlob: Blob) => {
-    setRecordedAudio(audioBlob);
-    console.log('✅ Recording completed for situation explaining');
+    // ✅ Validate audio before saving
+    logger.info('🔍 Validating audio recording...');
+    const validation = await validateAudioBlob(audioBlob);
 
-    // Save audio to sessionStorage immediately (will also be saved in handleFinish)
-    if (currentQuestion?.question_id) {
-      try {
-        await saveAudioRecording(currentQuestion.question_id, audioBlob);
-        console.log('✅ Audio saved to sessionStorage');
-      } catch (err) {
-        console.error('❌ Failed to save audio to sessionStorage:', err);
-      }
+    logger.info('📊 Audio validation result:', {
+      isValid: validation.isValid,
+      duration: formatDuration(validation.duration),
+      hasSound: validation.hasSound,
+      size: formatFileSize(audioBlob.size),
+      error: validation.error,
+      warning: validation.warning,
+    });
+
+    // Show error if audio is invalid
+    if (!validation.isValid) {
+      setError(validation.error || 'Invalid audio recording');
+      setValidationWarning('');
+      alert(`⚠️ Invalid Recording!\n\n${validation.error}\n\nPlease record again.`);
+      return; // Don't save invalid audio
     }
+
+    // Show warning if audio is valid but concerning
+    if (validation.warning) {
+      setValidationWarning(validation.warning);
+      logger.warn('⚠️', validation.warning);
+    } else {
+      setValidationWarning('');
+    }
+
+    // Clear any previous errors
+    setError('');
+
+    setRecordedAudio(audioBlob);
+    logger.info(`✅ Valid audio saved (${formatDuration(validation.duration)}, ${formatFileSize(audioBlob.size)})`);
+
+    // IMPORTANT: Don't save to sessionStorage to avoid quota exceeded error
+    // Real audio recordings are large (~88KB WebM) and will fill up sessionStorage quickly
+    // We only need to keep in state for immediate upload via progressive API
   };
 
   const handleFinish = async () => {
@@ -70,122 +110,205 @@ export default function SituationExplainingPage() {
     setIsSubmitting(true);
 
     try {
-      // Stop video recording
-      console.log('🛑 Stopping video recording...');
-      const videoBlob = await stopRecording();
-
-      if (!videoBlob) {
-        console.warn('⚠️ No video recording found');
-      }
-
-      // Get email and test_id from localStorage
+      // Get email, test_id, and session_id from localStorage
       const emailId = localStorage.getItem('userEmail') || localStorage.getItem('user_email');
       const testId = localStorage.getItem('test_id');
+      const sessionId = localStorage.getItem('session_id');
 
-      if (!emailId || !testId) {
-        console.error('❌ Missing email or test_id');
+      if (!emailId || !testId || !sessionId) {
+        logger.error('Missing email, test_id, or session_id');
         alert('Missing required information. Please start the assessment again.');
         setIsSubmitting(false);
         return;
       }
 
-      // Save the current situation explaining audio to sessionStorage first
-      if (currentQuestion?.question_id && recordedAudio) {
-        console.log('💾 Saving situation explaining audio to sessionStorage...');
-        await saveAudioRecording(currentQuestion.question_id, recordedAudio);
-        console.log('✅ Situation explaining audio saved');
+      if (!currentQuestion?.question_id || !recordedAudio) {
+        logger.error('Missing question_id or recordedAudio');
+        alert('Cannot submit: Missing audio recording or question information.');
+        setIsSubmitting(false);
+        return;
       }
 
-      // ==================== AUDIO TO TEXT SUBMISSION ====================
-      // Collect all audio recordings from sessionStorage and submit
-      console.log('📦 Collecting all audio recordings...');
-      const allRecordings = getAllAudioRecordings();
-      const questionIds = Object.keys(allRecordings);
-      console.log(`📊 Found ${questionIds.length} audio recordings`);
+      // ==================== STEP 1: Upload Audio ====================
+      logger.info('📤 STEP 1: Uploading audio for final question...');
 
-      if (questionIds.length > 0) {
-        // Convert base64 recordings to File objects
-        const audioFiles: File[] = [];
+      if (recordedAudio.size === 0 || recordedAudio.size < 100) {
+        const errorMsg = `Audio recording is empty or too small (${recordedAudio.size} bytes). Please record your answer again.`;
+        logger.error(errorMsg);
+        alert(errorMsg);
+        setIsSubmitting(false);
+        return;
+      }
 
-        questionIds.forEach((questionId, index) => {
-          const base64Audio = allRecordings[questionId];
-          if (base64Audio) {
-            try {
-              const blob = base64ToBlob(base64Audio);
-              const file = blobToFile(blob, `audio_${questionId}.webm`);
-              audioFiles.push(file);
-              console.log(`✅ Converted audio ${index + 1}/${questionIds.length}: ${questionId}`);
-            } catch (err) {
-              console.error(`❌ Failed to convert audio for ${questionId}:`, err);
-            }
-          }
+      try {
+        const uploadResponse = await uploadAudio({
+          session_id: sessionId,
+          question_id: currentQuestion.question_id,
+          test_id: testId,
+          audio_file: recordedAudio,
+          return_next_question: false,
+          question_number: currentQuestion.question_number,
         });
 
-        console.log(`📤 Submitting ${audioFiles.length} audio files for transcription...`);
+        logger.info('✅ STEP 1 Complete: Audio uploaded successfully');
 
-        // Call the audio-to-text API with all audio files
-        try {
-          const audioToTextResponse = await submitAudioToText({
-            email_id: emailId,
-            test_id: testId,
-            audio_files: audioFiles,
-          });
-          console.log('✅ Audio-to-text submission successful:', audioToTextResponse);
-
-          // Store evaluation_id if returned
-          if (audioToTextResponse.evaluation_id) {
-            localStorage.setItem('audio_evaluation_id', audioToTextResponse.evaluation_id);
-          }
-        } catch (audioError) {
-          console.error('❌ Audio-to-text submission failed:', audioError);
-          // Continue with the flow even if audio submission fails
+        if (!uploadResponse || !uploadResponse.success) {
+          const errorMsg = `Audio upload failed. Response: ${JSON.stringify(uploadResponse)}`;
+          logger.error(errorMsg);
+          alert(errorMsg);
+          setIsSubmitting(false);
+          return;
         }
-      } else {
-        console.warn('⚠️ No audio recordings found to submit');
+      } catch (uploadError) {
+        logger.error('❌ STEP 1 Failed: Audio upload error:', uploadError);
+        alert(`Failed to upload audio: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
+        setIsSubmitting(false);
+        return;
       }
 
-      // Submit video evaluation if we have a video blob
-      if (videoBlob) {
-        console.log('📤 Submitting video for evaluation...');
-        const videoEvalResponse = await submitVideoEvaluation({
+      // ==================== STEP 2: Complete Session ====================
+      logger.info('📋 STEP 2: Completing session...');
+
+      try {
+        const completeResponse = await completeSession(sessionId);
+        logger.info('✅ STEP 2 Complete: Session completed successfully:', completeResponse);
+      } catch (completeError) {
+        logger.error('❌ STEP 2 Failed: Complete session error:', completeError);
+        // Continue anyway - session might already be complete
+        logger.warn('⚠️ Continuing despite complete session error...');
+      }
+
+      // ==================== Prepare Video Blob ====================
+      logger.info('🎥 Stopping video recording...');
+      const videoBlob = await stopRecording();
+
+      if (!videoBlob) {
+        logger.warn('No video recording found - will skip video evaluation');
+      } else {
+        logger.info(`Video blob retrieved: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`);
+      }
+
+      // ==================== STEP 3: Parallel Evaluations ====================
+      logger.info('📊 STEP 3: Running audio and video evaluations in parallel...');
+
+      const evaluationPromises = [];
+
+      // Audio evaluation promise
+      const audioEvalPromise = evaluateAudio({
+        session_id: sessionId,
+        email_id: emailId,
+        test_id: testId,
+        allow_partial: true,
+      })
+        .then((audioEvalResponse) => {
+          logger.info('✅ Audio evaluation completed:', audioEvalResponse.status);
+
+          if (audioEvalResponse.status === 'insufficient') {
+            const missing = audioEvalResponse.missing_sections?.length || 0;
+            throw new Error(`Missing ${missing} audio recordings. Please complete all sections.`);
+          }
+
+          if (audioEvalResponse.status === 'partial') {
+            logger.warn(`⚠️ Partial evaluation: ${audioEvalResponse.missing_sections?.join(', ')}`);
+          }
+
+          // Store results
+          if (audioEvalResponse.evaluation) {
+            localStorage.setItem('audio_evaluation', JSON.stringify(audioEvalResponse.evaluation));
+          }
+          if (audioEvalResponse.audio_evaluation_id) {
+            localStorage.setItem('audio_evaluation_id', audioEvalResponse.audio_evaluation_id);
+          }
+          localStorage.setItem('audio_evaluation_response', JSON.stringify(audioEvalResponse));
+
+          return { type: 'audio', success: true, data: audioEvalResponse };
+        })
+        .catch((audioError: any) => {
+          logger.error('❌ Audio evaluation failed:', audioError);
+
+          // Check for incomplete submission error
+          if (audioError?.response?.data?.error === 'Incomplete submission') {
+            const errorData = audioError.response.data;
+            const message = `⚠️ Assessment Incomplete!\n\n` +
+              `Completed: ${errorData.completed || 0}/${errorData.total_required || 44}\n` +
+              `Missing: ${errorData.missing_sections?.join(', ') || 'Unknown'}`;
+            throw new Error(message);
+          }
+
+          return { type: 'audio', success: false, error: audioError.message || 'Audio evaluation failed' };
+        });
+
+      evaluationPromises.push(audioEvalPromise);
+
+      // Video evaluation promise (only if we have video)
+      if (videoBlob && videoBlob.size > 0) {
+        const videoEvalPromise = submitVideoEvaluation({
           email_id: emailId,
           test_id: testId,
-          video: videoBlob,
-        });
-        console.log('✅ Video evaluation submitted successfully');
+          file: videoBlob,
+        })
+          .then((videoEvalResponse) => {
+            logger.info('✅ Video evaluation completed');
 
-        // Store video_evaluation_id for final report
-        if (videoEvalResponse.evaluation_id) {
-          localStorage.setItem('video_evaluation_id', videoEvalResponse.evaluation_id);
-        }
+            if (videoEvalResponse.evaluation_id) {
+              localStorage.setItem('video_evaluation_id', videoEvalResponse.evaluation_id);
+            }
+            localStorage.setItem('video_evaluation_response', JSON.stringify(videoEvalResponse));
+
+            return { type: 'video', success: true, data: videoEvalResponse };
+          })
+          .catch((videoError) => {
+            logger.error('❌ Video evaluation failed:', videoError);
+            return { type: 'video', success: false, error: videoError.message || 'Video evaluation failed' };
+          });
+
+        evaluationPromises.push(videoEvalPromise);
+      } else {
+        logger.warn('⚠️ Skipping video evaluation - no valid video blob');
       }
 
-      // Call next question API to mark section complete
-      if (currentQuestion?.question_id) {
-        const sessionId = localStorage.getItem('session_id');
-        if (sessionId) {
-          const response = await getNextQuestion({
-            session_id: sessionId,
-            question_id: currentQuestion.question_id,
-          });
-          console.log('✅ Section completed, response:', response);
+      // Wait for all evaluations to complete
+      try {
+        const results = await Promise.all(evaluationPromises);
+        logger.info('✅ STEP 3 Complete: All evaluations finished');
+
+        // Check if audio evaluation failed critically
+        const audioResult = results.find(r => r.type === 'audio');
+        if (audioResult && !audioResult.success) {
+          alert(audioResult.error || 'Audio evaluation failed');
+          setIsSubmitting(false);
+          return;
         }
+
+        // Video failure is non-critical
+        const videoResult = results.find(r => r.type === 'video');
+        if (videoResult && !videoResult.success) {
+          logger.warn('⚠️ Video evaluation failed but continuing:', videoResult.error);
+        }
+
+      } catch (evalError) {
+        logger.error('❌ STEP 3 Failed: Evaluation error:', evalError);
+        alert(evalError instanceof Error ? evalError.message : 'Evaluation failed');
+        setIsSubmitting(false);
+        return;
       }
 
       // Exit fullscreen mode before navigating
       try {
         if (document.fullscreenElement) {
           await document.exitFullscreen();
-          console.log('✅ Exited fullscreen mode');
+          logger.info('Exited fullscreen mode');
         }
       } catch (fullscreenError) {
-        console.warn('⚠️ Could not exit fullscreen:', fullscreenError);
+        logger.warn('Could not exit fullscreen:', fullscreenError);
       }
 
       // Navigate to feedback page
+      logger.info('✅ All steps complete! Navigating to feedback page...');
       router.push('/communication/feedback');
+
     } catch (error) {
-      console.error('❌ Error finishing assessment:', error);
+      logger.error('❌ Error finishing assessment:', error);
       alert('Failed to submit. Please try again.');
       setIsSubmitting(false);
     }
@@ -207,10 +330,10 @@ export default function SituationExplainingPage() {
       <SectionStartModal
         open={showModal}
         onStart={handleStartSection}
-        title="Section 7: Situation Explaining"
+        title="Section 7: Describe Situation"
         subtitle="Explain the given situation clearly and comprehensively"
         questions={1}
-        duration="1 min"
+        // duration="1 min"
         instructions={[
           'Read the situation prompt carefully',
           'Think about your response before recording',
@@ -255,11 +378,7 @@ export default function SituationExplainingPage() {
               </div>
             </div>
 
-            {loading ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600">Loading question...</p>
-              </div>
-            ) : error ? (
+            {error ? (
               <div className="text-center py-12">
                 <p className="text-red-600">{error}</p>
               </div>
@@ -313,8 +432,8 @@ export default function SituationExplainingPage() {
                       </p>
                     </div> */}
 
-                    {/* Recording Status */}
-                    {recordedAudio && (
+                    {/* Recording Status - Commented out */}
+                    {/* {recordedAudio && (
                       <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded flex items-center gap-2">
                         <svg
                           className="w-5 h-5 text-green-600"
@@ -333,7 +452,7 @@ export default function SituationExplainingPage() {
                           Recording Saved - Ready to Finish
                         </span>
                       </div>
-                    )}
+                    )} */}
                   </div>
 
                   {/* Right Side - Recorder */}

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { submitFinalReport } from '@/api/communicationApi';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
+import logger from '@/lib/logger';
 
 export default function FeedbackPage() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function FeedbackPage() {
       // TODO: Call API to submit feedback
       // await submitFeedbackAPI({ rating, feedbackText });
 
-      console.log('Feedback submitted:', { rating, feedbackText });
+      logger.info('Feedback submitted:', { rating, feedbackText });
 
       // Call final report API
       await submitFinalReportAPI();
@@ -32,7 +33,7 @@ export default function FeedbackPage() {
       // Navigate to report page after successful submission
       router.push('/communication/report');
     } catch (error) {
-      console.error('Error submitting feedback:', error);
+      logger.error('Error submitting feedback:', error);
       alert('Failed to submit feedback. Please try again.');
       setIsSubmitting(false);
     }
@@ -48,7 +49,7 @@ export default function FeedbackPage() {
       // Navigate to report page without submitting feedback
       router.push('/communication/report');
     } catch (error) {
-      console.error('Error submitting final report:', error);
+      logger.error('Error submitting final report:', error);
       alert('Failed to generate report. Please try again.');
       setIsSubmitting(false);
     }
@@ -65,17 +66,55 @@ export default function FeedbackPage() {
       throw new Error('Missing required information (email or test_id)');
     }
 
-    // Call final report API
+    // Get full evaluation response objects from localStorage
+    const videoEvaluationStr = localStorage.getItem('video_evaluation_response');
+    const audioEvaluationStr = localStorage.getItem('audio_evaluation_response');
+
+    let videoEvaluation = {};
+    let audioEvaluation = {};
+
+    try {
+      if (videoEvaluationStr) {
+        videoEvaluation = JSON.parse(videoEvaluationStr);
+        logger.info('Parsed video evaluation response from localStorage');
+      } else {
+        logger.warn('No video evaluation response found in localStorage');
+      }
+    } catch (error) {
+      logger.error('Error parsing video evaluation response:', error);
+    }
+
+    try {
+      if (audioEvaluationStr) {
+        audioEvaluation = JSON.parse(audioEvaluationStr);
+        logger.info('Parsed audio evaluation response from localStorage');
+      } else {
+        logger.warn('No audio evaluation response found in localStorage');
+      }
+    } catch (error) {
+      logger.error('Error parsing audio evaluation response:', error);
+    }
+
+    logger.info('Final report request data:', {
+      email_id: emailId,
+      test_id: testId,
+      video_evaluation_id: videoEvaluationId || '',
+      audio_evaluation_id: audioEvaluationId || '',
+      has_video_evaluation: Object.keys(videoEvaluation).length > 0,
+      has_audio_evaluation: Object.keys(audioEvaluation).length > 0,
+    });
+
+    // Call final report API with full evaluation objects
     const response = await submitFinalReport({
       email_id: emailId,
       test_id: testId,
       video_evaluation_id: videoEvaluationId || '',
       audio_evaluation_id: audioEvaluationId || '',
-      video_evaluation: {},
-      audio_evaluation: {},
+      video_evaluation: videoEvaluation,
+      audio_evaluation: audioEvaluation,
     });
 
-    console.log('✅ Final report submitted successfully:', response);
+    logger.info('Final report submitted successfully:', response);
     return response;
   };
 
