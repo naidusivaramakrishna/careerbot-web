@@ -42,7 +42,6 @@ export const useJobManagement = () => {
             })
         } catch (error) {
             logger.error('Error fetching jobs:', error)
-            toast.error('Failed to fetch jobs')
         } finally {
             setLoading(false)
         }
@@ -138,7 +137,6 @@ export const useJobManagement = () => {
             return jobDetails
         } catch (error) {
             logger.error('Error fetching job details:', error)
-            toast.error('Failed to load job details')
             throw error
         }
     }, [])

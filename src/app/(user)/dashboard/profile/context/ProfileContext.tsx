@@ -18,6 +18,8 @@ interface ProfileContextType {
   clearSidebarActive: () => void;
   dynamicSections: Section[];
   addSection: (section: Section) => void;
+  profilePicUrl: string | null;
+  setProfilePicUrl: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
@@ -27,6 +29,7 @@ export function ProfileContextProvider({ children }: { children: ReactNode }) {
   const [activeTab, setActiveTab] = useState("Personal Information"); // default tab
   const [sidebarActiveTab, setSidebarActiveTab] = useState("Personal Information");
   const [dynamicSections, setDynamicSections] = useState<Section[]>([]);
+  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
 
   const clearSidebarActive = () => setSidebarActiveTab("");
 
@@ -49,6 +52,8 @@ export function ProfileContextProvider({ children }: { children: ReactNode }) {
         clearSidebarActive,
         dynamicSections,
         addSection,
+        profilePicUrl,
+        setProfilePicUrl,
       }}
     >
       {children}

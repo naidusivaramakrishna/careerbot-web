@@ -115,14 +115,25 @@ export default function Sidebar() {
     };
 
     fetchProfile();
+
     const handleTokenUpdate = () => {
       fetchProfile();
     };
 
+    // Listen for profile picture updates from MainSection
+    const handleProfilePictureUpdate = (event: CustomEvent) => {
+      const newPicUrl = event.detail?.profilePicUrl;
+      if (newPicUrl !== undefined) {
+        setProfilePicUrl(newPicUrl);
+      }
+    };
+
     window.addEventListener('tokenUpdated', handleTokenUpdate);
+    window.addEventListener('profilePictureUpdated', handleProfilePictureUpdate as EventListener);
 
     return () => {
       window.removeEventListener('tokenUpdated', handleTokenUpdate);
+      window.removeEventListener('profilePictureUpdated', handleProfilePictureUpdate as EventListener);
     };
   }, [router]);
 

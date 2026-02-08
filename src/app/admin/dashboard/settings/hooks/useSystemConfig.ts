@@ -30,7 +30,6 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
             setSystemConfig(config);
         } catch (error: unknown) {
             logger.error('Error fetching system config:', error);
-            toast.error('Failed to fetch system configuration');
         } finally {
             setLoading(false);
         }

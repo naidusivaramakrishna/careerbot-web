@@ -63,8 +63,6 @@ export const useAdminManagement = () => {
       setTotalAdmins(response.total);
     } catch (error: unknown) {
       logger.error("Error fetching admins:", error);
-      const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to fetch admins";
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

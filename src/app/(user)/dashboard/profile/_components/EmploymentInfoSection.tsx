@@ -8,35 +8,7 @@ import MultiSelectAutocomplete from "@/components/common/MultiSelectAutocomplete
 import { useProfileContext } from "../context/ProfileContext";
 import { ProfileData } from "../_types/ProfileData";
 import logger from "@/lib/logger";
-
-const industries = ["IT", "Finance", "Healthcare", "Education", "E-commerce"];
-const roles = [
-    "Frontend Developer",
-    "React Developer",
-    "NextJs Developer",
-    "Angular Developer",
-    "Backend Developer",
-    "Java Developer",
-    "Python Developer",
-    "Fullstack Developer",
-    "UI/UX Designer",
-];
-const locations = ["Hyderabad", "Bangalore", "Chennai", "Pune", "Delhi", "Mumbai", "Gurugram", "Gurgaon"];
-const jobTypes = [
-    { label: "Full-time", value: "full_time" },
-    { label: "Part-time", value: "part_time" },
-    { label: "Contract", value: "contract" },
-    { label: "Internship", value: "internship" },
-    { label: "Freelance", value: "freelance" },
-];
-const notice_period = [
-    { label: "0", value: "0" },
-    { label: "7", value: "7" },
-    { label: "15", value: "15" },
-    { label: "30", value: "30" },
-    { label: "45", value: "45" },
-    { label: "60", value: "60" },
-];
+import { industries, roles, locations, jobTypes, noticePeriod } from "../_utils/employmentData";
 interface EmploymentInfoSectionProps {
     tempProfile: ProfileData;
     setTempProfile: React.Dispatch<React.SetStateAction<ProfileData>>;
@@ -208,7 +180,7 @@ export default function EmploymentInfoSection({
                         className="border border-neutral-200  p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     >
                         <option value="">Select Notice Period</option>
-                        {notice_period.map((days) => (
+                        {noticePeriod.map((days) => (
                             <option key={days.value} value={days.value}>
                                 {days.label}
                             </option>

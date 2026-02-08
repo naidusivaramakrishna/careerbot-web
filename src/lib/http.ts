@@ -124,9 +124,11 @@ client.interceptors.response.use(
       originalRequest.url?.includes('/admin/auth/refresh')
     ) {
       clearAllTokens();
-      window.location.href = isAdmin
-        ? '/admin/login'
-        : '/auth/login';
+      if (isAdmin) {
+        window.location.href = '/admin/login';
+      } else {
+        window.location.href = '/?showLogin=true';
+      }
       return Promise.reject(error);
     }
 
@@ -162,9 +164,11 @@ client.interceptors.response.use(
     } catch (refreshError) {
       processQueue(refreshError, null, isAdmin);
       clearAllTokens();
-      window.location.href = isAdmin
-        ? '/admin/login'
-        : '/auth/login';
+      if (isAdmin) {
+        window.location.href = '/admin/login';
+      } else {
+        window.location.href = '/?showLogin=true';
+      }
       return Promise.reject(refreshError);
     } finally {
       isAdmin

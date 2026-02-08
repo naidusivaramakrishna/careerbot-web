@@ -21,26 +21,36 @@ export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) 
         >
             <div>
                 <h3 className="font-semibold text-lg">{exp.job_title}</h3>
-                <p className="text-base text-[#2200FF]  font-semibold">
-                    {exp.company}
-                </p>
+                {exp.company && (
+                    <p className="text-base text-[#2200FF]  font-semibold">
+                        {exp.company}
+                    </p>
+                )}
                 <div className="flex gap-4 items-center text-neutral-500 my-4">
-                    <div className="flex gap-1 items-center">
-                        <MapPin className="w-5 h-5" />
-                        <span className="text-sm">{exp.location}</span>
-                    </div>
-                    <div className="flex gap-1 items-center text-neutral-500">
-                        <Calendar className="w-5 h-5" />
-                        <span className="text-sm ">{formatDateRange(exp.start_date, exp.end_date)}</span>
-                    </div>
-                    <span className="rounded-full px-3 py-1 bg-[#f2f4f5] text-sm font-semibold text-black/70">{exp.job_type}</span>
+                    {exp.location && (
+                        <div className="flex gap-1 items-center">
+                            <MapPin className="w-5 h-5" />
+                            <span className="text-sm">{exp.location}</span>
+                        </div>
+                    )}
+                    {formatDateRange(exp.start_date, exp.end_date) && (
+                        <div className="flex gap-1 items-center text-neutral-500">
+                            <Calendar className="w-5 h-5" />
+                            <span className="text-sm">{formatDateRange(exp.start_date, exp.end_date)}</span>
+                        </div>
+                    )}
+                    {exp.job_type && (
+                        <span className="rounded-full px-3 py-1 bg-[#f2f4f5] text-sm font-semibold text-black/70">{exp.job_type}</span>
+                    )}
                 </div>
-                <p className="text-black text-base font-semibold">Responsibilities: </p>
                 {sanitizedDescription && (
-                    <div
-                        className="text-sm text-gray-800 space-y-2 resume-description"
-                        dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
-                    />
+                    <>
+                        <p className="text-black text-base font-semibold">Responsibilities: </p>
+                        <div
+                            className="text-sm text-gray-800 space-y-2 resume-description"
+                            dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
+                        />
+                    </>
                 )}
             </div>
             <div className="flex gap-2 mt-2">

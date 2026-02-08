@@ -6,6 +6,14 @@ export default function Home() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
+    // Check for showLogin query parameter (from http.ts redirect)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('showLogin') === 'true') {
+      setOpen(true);
+      // Clean up URL to avoid showing the param on refresh
+      window.history.replaceState({}, '', '/');
+    }
+
     const openLogin = () => {
       setOpen(true);
     };

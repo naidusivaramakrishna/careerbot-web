@@ -24,7 +24,6 @@ export const useFeatureFlags = (): UseFeatureFlagsReturn => {
             setFeatureFlags(response.flags);
         } catch (error: unknown) {
             logger.error('Error fetching feature flags:', error);
-            toast.error('Failed to fetch feature flags');
         } finally {
             setLoading(false);
         }

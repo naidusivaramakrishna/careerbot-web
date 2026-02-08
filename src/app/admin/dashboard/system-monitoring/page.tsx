@@ -11,9 +11,16 @@ import { MemoryUsageSection } from './_components/MemoryUsageSection'
 import { SystemLogsSection } from './_components/SystemLogsSection'
 import { PerformanceMetrics } from './_components/PerformanceMetrics'
 import { logger } from '@/lib/logger'
+import { useAdminAccess } from '../../_hooks/useAdminAccess'
+import { LockedPageOverlay } from '../../_components/LockedPageOverlay'
 
 const SystemMonitoring = () => {
-    const [activeTab, setActiveTab] = useState<string>("Today")
+    const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('system-monitoring');
+    // Separate time tab state for each section
+    const [apiActiveTab, setApiActiveTab] = useState<string>("Today")
+    const [cpuActiveTab, setCpuActiveTab] = useState<string>("Today")
+    const [memoryActiveTab, setMemoryActiveTab] = useState<string>("Today")
+
     const [apiShowComparison, setApiShowComparison] = useState(false)
     const [cpuShowComparison, setCpuShowComparison] = useState(false)
     const [memoryShowComparison, setMemoryShowComparison] = useState(false)
@@ -30,7 +37,9 @@ const SystemMonitoring = () => {
         lastRefreshed,
         fetchAllData
     } = useSystemMonitoring({
-        activeTab,
+        activeTab: apiActiveTab,
+        cpuActiveTab: cpuActiveTab,
+        memoryActiveTab: memoryActiveTab,
         apiShowComparison,
         cpuShowComparison,
         memoryShowComparison,
@@ -46,6 +55,11 @@ const SystemMonitoring = () => {
         logger.debug(`Auto-refresh changed to: ${value}`)
         setAutoRefresh(value)
     }, [])
+
+    // Check access first
+    if (!accessLoading && !hasAccess) {
+        return <LockedPageOverlay requiredRoles={requiredRoles} pageName="System Monitoring" />;
+    }
 
     if (loading) {
         return <LoadingSpinner />
@@ -92,8 +106,8 @@ const SystemMonitoring = () => {
 
             {/* API Requests Section */}
             <ApiRequestsSection
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
+                activeTab={apiActiveTab}
+                onTabChange={setApiActiveTab}
                 showComparison={apiShowComparison}
                 onComparisonChange={setApiShowComparison}
                 metrics={apiMetrics}
@@ -101,8 +115,8 @@ const SystemMonitoring = () => {
 
             {/* CPU Usage Section */}
             <CpuUsageSection
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
+                activeTab={cpuActiveTab}
+                onTabChange={setCpuActiveTab}
                 showComparison={cpuShowComparison}
                 onComparisonChange={setCpuShowComparison}
                 metrics={cpuMetrics}
@@ -110,8 +124,8 @@ const SystemMonitoring = () => {
 
             {/* Memory Usage Section */}
             <MemoryUsageSection
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
+                activeTab={memoryActiveTab}
+                onTabChange={setMemoryActiveTab}
                 showComparison={memoryShowComparison}
                 onComparisonChange={setMemoryShowComparison}
                 metrics={memoryMetrics}

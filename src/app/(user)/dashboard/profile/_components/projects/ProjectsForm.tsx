@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react";
 import Image from "next/image";
 import { useAIGeneration } from "@/hooks/useAIDescriptionGenerator";
 import RichTextEditor from "@/components/common/Richtexteditor";
+import { toast } from "sonner";
 
 interface Props {
     projectsForm: Partial<Projects>;
@@ -44,7 +45,7 @@ export default function ProjectsForm({
     const handleGenerateDescription = async () => {
         // Check if at least job title is provided
         if (!projectsForm.project_name?.trim()) {
-            alert("Please enter a project name first to generate a description.");
+            toast.error("Please enter a project name first to generate a description.");
             return;
         }
 
@@ -77,8 +78,8 @@ export default function ProjectsForm({
                         onChange={handleChange}
                         className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     />
-                    {getFieldError("projectName") && (
-                        <p className="text-red-500 text-sm mt-1">{getFieldError("projectName")}</p>
+                    {getFieldError("project_name") && (
+                        <p className="text-red-500 text-sm mt-1">{getFieldError("project_name")}</p>
                     )}
                 </div>
 
@@ -141,8 +142,8 @@ export default function ProjectsForm({
                         onChange={handleChange}
                         className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
                     />
-                    {getFieldError("link") && (
-                        <p className="text-red-500 text-sm mt-1">{getFieldError("link")}</p>
+                    {getFieldError("project_link") && (
+                        <p className="text-red-500 text-sm mt-1">{getFieldError("project_link")}</p>
                     )}
                 </div>
             </div>

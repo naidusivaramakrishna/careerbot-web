@@ -14,25 +14,39 @@ interface AddNewJobFormProps {
     onCancel: () => void
     initialData?: Partial<JobFormData>
     isEdit?: boolean
+    jobId?: string
 }
 
 const FormHeader = memo(({
     isEdit,
     onPreview,
+    onCancel,
     form
 }: {
     isEdit: boolean
     onPreview: (data: JobFormData) => void
+    onCancel: () => void
     form: JobFormData
 }) => (
     <div className="flex justify-between items-start mb-6 p-4">
-        <div>
-            <h1 className="text-2xl font-semibold">
-                {isEdit ? 'Edit Job' : 'Add New Job'}
-            </h1>
-            <p className="text-sm text-gray-500">
-                {isEdit ? 'Update job posting details' : 'Create a new job posting'}
-            </p>
+        <div className="flex items-center gap-4">
+            <button
+                onClick={onCancel}
+                className="text-gray-600 cursor-pointer hover:text-gray-900 transition-colors"
+                title="Go back"
+            >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <div>
+                <h1 className="text-2xl font-semibold">
+                    {isEdit ? 'Edit Job' : 'Add New Job'}
+                </h1>
+                <p className="text-sm text-gray-500">
+                    {isEdit ? 'Update job posting details' : 'Create a new job posting'}
+                </p>
+            </div>
         </div>
         <button
             onClick={() => onPreview(form)}
@@ -79,7 +93,8 @@ export const AddNewJobForm = memo(({
     onPublish,
     onCancel,
     initialData,
-    isEdit = false
+    isEdit = false,
+    jobId
 }: AddNewJobFormProps) => {
     const {
         form,
@@ -92,7 +107,7 @@ export const AddNewJobForm = memo(({
         removeSkill,
         publishJob,
         saveDraft
-    } = useJobForm(initialData)
+    } = useJobForm({ initialData, isEdit, jobId })
 
     const handlePublish = () => {
         publishJob(onPublish)
@@ -104,7 +119,7 @@ export const AddNewJobForm = memo(({
 
     return (
         <div className="min-h-screen p-4 rounded-xl bg-white">
-            <FormHeader isEdit={isEdit} onPreview={onPreview} form={form} />
+            <FormHeader isEdit={isEdit} onPreview={onPreview} onCancel={onCancel} form={form} />
 
             <div className="max-w-6xl mx-auto grid grid-cols-12 gap-6">
                 {/* Left - Form Fields */}

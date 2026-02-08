@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Award, Briefcase, CircleUserRound, FileText, GraduationCap, Lightbulb } from "lucide-react";
+import { Award, Briefcase, CircleUserRound, FileText, FolderKanban, GraduationCap, Lightbulb } from "lucide-react";
 import EducationSection from "./education/EducationSection";
 import CertificationsSection from "./certifications/CertificationsSection";
 import { useProfileContext } from "../context/ProfileContext";
@@ -12,6 +12,7 @@ import PersonalInfoSection from "./PersonalInfoSection";
 import SkillsSection from "./SkillsSection";
 import EmploymentInfoSection from "./employmentInfo/EmploymentInfoSection";
 import logger from "@/lib/logger";
+import ProjectsSection from "./projects/ProjectsSection";
 
 interface ProfileTabsProps {
   profile: ProfileData;
@@ -69,6 +70,12 @@ export default function ProfileTabs({
       text: "Employment Info",
       icon: <FileText />,
       content: <EmploymentInfoSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
+    },
+    {
+      label: "Projects",
+      text: "Projects",
+      icon: <FolderKanban />,
+      content: <ProjectsSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
     }
   ];
 

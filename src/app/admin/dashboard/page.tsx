@@ -40,6 +40,10 @@ import { ErrorState } from './_components/ErrorState';
 // Import mock data and constants
 import { userGrowthData, revenueData, CHART_COLORS, PERIOD_MAP } from './_constants/mockData';
 
+// Import access control
+import { useAdminAccess } from '../_hooks/useAdminAccess';
+import { LockedPageOverlay } from '../_components/LockedPageOverlay';
+
 const DashboardContent = () => {
   const [period, setPeriod] = useState<DashboardPeriod>('monthly');
   const [dashboardData, setDashboardData] = useState<DashboardOverviewResponse | null>(null);
@@ -302,6 +306,8 @@ const DashboardContent = () => {
 };
 
 const AdminDashboard = () => {
+  const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('dashboard');
+
   // Fallback component for error boundary
   const errorFallback = (_error: Error, reset: () => void) => (
     <ErrorState
@@ -310,6 +316,11 @@ const AdminDashboard = () => {
       onRetry={reset}
     />
   );
+
+  // Check access
+  if (!accessLoading && !hasAccess) {
+    return <LockedPageOverlay requiredRoles={requiredRoles} pageName="Dashboard" />;
+  }
 
   return (
     <ErrorBoundary fallback={errorFallback}>

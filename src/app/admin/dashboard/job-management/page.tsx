@@ -11,10 +11,13 @@ import { JobListControls, JobsPagination, JobsTable } from './_components/job-ma
 import { PreviewJobPage } from './_components/job-form'
 import { useJobManagement } from './_hooks/useJobManagement'
 import { logger } from '@/lib/logger'
+import { useAdminAccess } from '../../_hooks/useAdminAccess'
+import { LockedPageOverlay } from '../../_components/LockedPageOverlay'
 
 type PageState = "list" | "add" | "edit" | "preview"
 
 const JobManagement = () => {
+  const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('job-management');
   // Custom hook for all job management logic
   const {
     jobs,
@@ -137,6 +140,11 @@ const JobManagement = () => {
     setPageState(editingJobDetails ? "edit" : "add")
   }, [editingJobDetails])
 
+  // Check access first
+  if (!accessLoading && !hasAccess) {
+    return <LockedPageOverlay requiredRoles={requiredRoles} pageName="Job Management" />;
+  }
+
   // Render different page states
   if (pageState === "preview") {
     return (
@@ -201,6 +209,7 @@ const JobManagement = () => {
           logo: editingJobDetails.company_logo_url || null,
         }}
         isEdit={true}
+        jobId={editingJobDetails.id}
         onPreview={handlePreview}
         onPublish={handleJobPublished}
         onCancel={handleCancelForm}

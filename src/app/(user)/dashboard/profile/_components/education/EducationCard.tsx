@@ -59,16 +59,24 @@ export default function EducationCard({ edu, index, onEdit, onDelete }: Props) {
     >
       <div>
         <h3 className="font-semibold text-lg">{edu.institution}</h3>
-        <p className="text-base font-semibold text-neutral-700">
-          <span className="text-[#2200FF]">{edu.degree} </span>
-          in {edu.stream}
-        </p>
+        {edu.degree && (
+          <p className="text-base font-semibold text-neutral-700">
+            <span className="text-[#2200FF]">{edu.degree}</span>
+            {edu.stream && <span> in {edu.stream}</span>}
+          </p>
+        )}
         <div className="flex gap-4 items-center text-neutral-500 my-4">
-          <div className="flex gap-1 items-center text-neutral-500">
-            <Calendar className="w-5 h-5" />
-            <span className="text-sm ">{formatDateRange(edu.start_date, edu.end_date)} </span>
-          </div>
-          <span className="rounded-full px-3 py-1 bg-[#f2f4f5] text-sm font-semibold text-black/70">GPA: {edu.cgpa}</span>
+          {formatDateRange(edu.start_date, edu.end_date) && (
+            <div className="flex gap-1 items-center text-neutral-500">
+              <Calendar className="w-5 h-5" />
+              <span className="text-sm">{formatDateRange(edu.start_date, edu.end_date)}</span>
+            </div>
+          )}
+          {edu.cgpa && (
+            <span className="rounded-full px-3 py-1 bg-[#f2f4f5] text-sm font-semibold text-black/70">
+              GPA: {edu.cgpa}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex gap-2 mt-2">

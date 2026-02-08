@@ -50,8 +50,6 @@ export const usePlans = (): UsePlansReturn => {
             setPlans(response.plans);
         } catch (error: unknown) {
             logger.error('Error fetching plans:', error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to fetch plans';
-            toast.error(errorMessage);
         } finally {
             setLoading(false);
         }

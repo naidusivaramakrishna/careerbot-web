@@ -19,6 +19,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
     const linkedinRef = useRef<HTMLInputElement | null>(null);
     const githubRef = useRef<HTMLInputElement | null>(null);
     const [saving, setSaving] = useState(false);
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
     const { generateSummary,isGenerating } = useAIGeneration();
     const handleChange = (
@@ -32,6 +33,14 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                 [name]: value,
             },
         }));
+        // Clear error for this field when user starts editing
+        if (fieldErrors[name]) {
+            setFieldErrors((prev) => {
+                const newErrors = { ...prev };
+                delete newErrors[name];
+                return newErrors;
+            });
+        }
     };
 
     // Map frontend ProfileData to backend UserProfile format
@@ -49,6 +58,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
 
     const handleSave = async () => {
         setSaving(true);
+        setFieldErrors({}); // Clear previous errors
         try {
             const backendData = mapFrontendToBackend(tempProfile);
 
@@ -70,12 +80,40 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
         } catch (err: any) {
             logger.error('Error updating profile:', err);
 
+            // Extract field-specific errors from the error message
+            const errorMessage = err.response?.data?.error?.message || err.response?.data?.detail || '';
+
+            // Map field names based on error message content
+            const fieldErrorMap: Record<string, string> = {
+                'phone': 'Invalid phone number: Phone number must include country code (e.g., +1)',
+            };
+
+            let fieldErrorDetected = false;
+
+            // Check if error message contains phone validation error
+            if (errorMessage.includes('phone') || errorMessage.toLowerCase().includes('phone number')) {
+                setFieldErrors({ phone: 'Phone number must include country code (e.g., +1)' });
+                fieldErrorDetected = true;
+            }
+            // Check for other field-specific errors
+            else if (errorMessage.includes('linkedin') || errorMessage.toLowerCase().includes('linkedin')) {
+                setFieldErrors({ linkedin: 'Invalid LinkedIn URL format' });
+                fieldErrorDetected = true;
+            } else if (errorMessage.includes('github') || errorMessage.toLowerCase().includes('github')) {
+                setFieldErrors({ github: 'Invalid GitHub URL format' });
+                fieldErrorDetected = true;
+            } else if (errorMessage.includes('headline')) {
+                setFieldErrors({ headline: 'Headline is invalid' });
+                fieldErrorDetected = true;
+            } else if (errorMessage.includes('location')) {
+                setFieldErrors({ location: 'Location is invalid' });
+                fieldErrorDetected = true;
+            } else if (errorMessage.includes('summary')) {
+                setFieldErrors({ summary: 'Summary is invalid' });
+                fieldErrorDetected = true;
+            }
             if (err.response?.status === 401) {
                 toast.error('Session expired. Please log in again');
-            } else if (err.response?.status === 400) {
-                toast.error('Invalid profile data. Please check your inputs');
-            } else {
-                toast.error(err.response?.data?.detail || 'Failed to update profile');
             }
         } finally {
             setSaving(false);
@@ -117,91 +155,53 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
         }
         toast.success("Summary generated!");
     };
+
+    // Helper component to render input with error message
+    const renderInputField = (
+        label: string,
+        name: string,
+        value: string,
+        placeholder: string,
+        type: string = 'text',
+        ref?: React.Ref<HTMLInputElement>,
+        disabled: boolean = false
+    ) => (
+        <div>
+            <label className="text-sm font-medium">{label}</label>
+            <input
+                ref={ref}
+                type={type}
+                name={name}
+                value={value}
+                onChange={handleChange}
+                disabled={disabled}
+                className={`w-full text-sm border p-2.5 rounded-lg bg-white outline-neutral-500 transition-colors ${
+                    fieldErrors[name]
+                        ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500'
+                        : 'border-neutral-200'
+                } ${disabled ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
+                placeholder={placeholder}
+            />
+            {fieldErrors[name] && (
+                <p className="text-red-600 text-xs mt-1 flex items-center gap-1">
+                    {fieldErrors[name]}
+                </p>
+            )}
+        </div>
+    );
     return (
         <div>
             {/* Form fields */}
             <div className="grid grid-cols-3 gap-4 my-4">
-                <div>
-                    <label className="text-sm font-medium">Full Name</label>
-                    <input
-                        type="text"
-                        name="fullName"
-                        value={tempProfile.personalInformation?.fullName || ""}
-                        onChange={handleChange}
-                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
-                        placeholder="John Doe"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium">Headline</label>
-                    <input
-                        type="text"
-                        name="headline"
-                        value={tempProfile.personalInformation?.headline || ""}
-                        onChange={handleChange}
-                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
-                        placeholder="Software Engineer"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium">Location</label>
-                    <input
-                        type="text"
-                        name="location"
-                        value={tempProfile.personalInformation?.location || ""}
-                        onChange={handleChange}
-                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
-                        placeholder="New York, USA"
-                    />
-                </div>
+                {renderInputField('Full Name', 'fullName', tempProfile.personalInformation?.fullName || '', 'John Doe')}
+                {renderInputField('Headline', 'headline', tempProfile.personalInformation?.headline || '', 'Software Engineer')}
+                {renderInputField('Location', 'location', tempProfile.personalInformation?.location || '', 'New York, USA')}
             </div>
             <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="text-sm font-medium">Email</label>
-                    <input
-                        type="email"
-                        name="email"
-                        value={tempProfile.personalInformation?.email || ""}
-                        onChange={handleChange}
-                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
-                        placeholder="john@example.com"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium">Phone</label>
-                    <input
-                        type="text"
-                        name="phone"
-                        value={tempProfile.personalInformation?.phone || ""}
-                        onChange={handleChange}
-                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
-                        placeholder="+91 9876543210"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium">LinkedIn</label>
-                    <input
-                        ref={linkedinRef}
-                        type="text"
-                        name="linkedin"
-                        value={tempProfile.personalInformation?.linkedin || ""}
-                        onChange={handleChange}
-                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
-                        placeholder="https://linkedin.com/in/johndoe"
-                    />
-                </div>
-                <div>
-                    <label className="text-sm font-medium">GitHub</label>
-                    <input
-                        ref={githubRef}
-                        type="text"
-                        name="github"
-                        value={tempProfile.personalInformation?.github || ""}
-                        onChange={handleChange}
-                        className="w-full text-sm border border-neutral-200 p-2.5 rounded-lg bg-white outline-neutral-500"
-                        placeholder="https://github.com/johndoe"
-                    />
-                </div>
+                {renderInputField('Email', 'email', tempProfile.personalInformation?.email || '', 'john@example.com', 'email', undefined, true)}
+                {renderInputField('Phone', 'phone', tempProfile.personalInformation?.phone || '', '+91 9876543210')}
+                {renderInputField('LinkedIn', 'linkedin', tempProfile.personalInformation?.linkedin || '', 'https://linkedin.com/in/johndoe', 'text', linkedinRef)}
+                {renderInputField('GitHub', 'github', tempProfile.personalInformation?.github || '', 'https://github.com/johndoe', 'text', githubRef)}
             </div>
             <div className='mt-4'>
                 <label className="text-sm font-medium">Professional Summary</label>
@@ -210,7 +210,11 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                         rows={5}
                         value={tempProfile.personalInformation?.summary || ""}
                         onChange={handleChange}
-                        className="w-full text-sm border border-neutral-200 px-10 py-3 rounded-lg bg-white outline-neutral-500"
+                        className={`w-full text-sm border p-3 rounded-lg bg-white outline-neutral-500 pr-10 transition-colors ${
+                            fieldErrors['summary']
+                                ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500'
+                                : 'border-neutral-200'
+                        }`}
                         name="summary"
                         id="summary"
                         placeholder="Short bio, career goals, highlights..."
@@ -222,6 +226,11 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                             }`}
                         onClick={isGenerating ? undefined : handleGenerateSummary}
                     />
+                    {fieldErrors['summary'] && (
+                        <p className="text-red-600 text-xs mt-1 flex items-center gap-1">
+                            <span>✕</span> {fieldErrors['summary']}
+                        </p>
+                    )}
                 </div>
             </div>
             <div className='flex justify-between'>

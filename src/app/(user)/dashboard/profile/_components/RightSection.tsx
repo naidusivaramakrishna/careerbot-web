@@ -43,10 +43,10 @@ const RightSection = () => {
 
         let filledSections = 0
         const totalSections = 5
-        
+
         if (profile?.personalInformation) {
-            const { fullName, email, phone, location, headline, summary } = profile.personalInformation
-            if (fullName && email && (phone || location || headline || summary)) {
+            const { fullName, phone, location, summary } = profile.personalInformation
+            if (fullName && phone && location && summary) {
                 filledSections++
             }
         }
@@ -107,15 +107,17 @@ const RightSection = () => {
         return percentage
     }
 
+    // Update completion percentage whenever any part of the profile changes
     useEffect(() => {
         const newPercentage = calculateCompletion(profileData)
         setCompletionPercentage(newPercentage)
-    }, [profileData])
-
-    useEffect(() => {
-        const percentage = calculateCompletion(profileData)
-        setCompletionPercentage(percentage)
-    }, [profileData?.education, profileData?.workExperience, profileData?.skills, profileData?.employmentInfo, profileData?.personalInformation])
+    }, [
+        profileData?.personalInformation,
+        profileData?.education,
+        profileData?.workExperience,
+        profileData?.skills,
+        profileData?.employmentInfo
+    ])
 
     const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -484,7 +486,7 @@ const RightSection = () => {
 
     return (
         <div className='flex-1 w-1/5'>
-            <div>
+            <div className="flex flex-col justify-center">
                 <div className="bg-white p-4 rounded-xl my-4 shadow-sm">
                     <h3 className='my-4 font-semibold text-lg'>Quick Actions</h3>
                     <h3 className='my-4 text-sm'>Auto fill your profile within seconds.</h3>
@@ -526,18 +528,6 @@ const RightSection = () => {
                             <span className='text-sm'>Import from Linkedin</span>
                         </div>
                     </div> */}
-                    <div className='flex flex-col gap-2 mt-2'>
-                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'>
-                            <Sparkles className='w-4 h-4' />
-                            <span className='text-sm'>Improve with AI</span>
-                        </div>
-                    </div>
-                    <div className='flex flex-col gap-2 mt-2'>
-                        <div className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'>
-                            <Settings className='w-4 h-4' />
-                            <span className='text-sm'>Manage Settings</span>
-                        </div>
-                    </div>
                 </div>
                 <div className="bg-[#F9F9FA] p-4 rounded-xl my-4 shadow-sm">
                     <div className='flex items-center justify-between'>

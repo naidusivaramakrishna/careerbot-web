@@ -16,16 +16,22 @@ export default function CertificationCard({ cert, index, onEdit, onDelete }: Pro
             className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
         >
             <div>
-                <h3 className="font-semibold text-black/80 text-lg">
-                    Certification: <span className="text-black">{cert.certification_name}</span>
-                </h3>
-                <p className="text-base font-semibold text-black/80">
-                    Issuer: <span className="text-[#2200FF]">{cert.issuer}</span>
-                </p>
-                <div className="flex gap-1 items-center text-neutral-500 my-2">
-                    <Calendar className="w-5 h-5" />
-                    <span className="text-sm ">{formatDateRange(cert.start_date, cert.end_date)} </span>
-                </div>
+                {cert.certification_name && (
+                    <h3 className="font-semibold text-black/80 text-lg">
+                        Certification: <span className="text-black">{cert.certification_name}</span>
+                    </h3>
+                )}
+                {cert.issuer && (
+                    <p className="text-base font-semibold text-black/80">
+                        Issuer: <span className="text-[#2200FF]">{cert.issuer}</span>
+                    </p>
+                )}
+                {formatDateRange(cert.start_date, cert.end_date) && (
+                    <div className="flex gap-1 items-center text-neutral-500 my-2">
+                        <Calendar className="w-5 h-5" />
+                        <span className="text-sm">{formatDateRange(cert.start_date, cert.end_date)}</span>
+                    </div>
+                )}
             </div>
             <div className="flex gap-2 mt-2">
                 <button

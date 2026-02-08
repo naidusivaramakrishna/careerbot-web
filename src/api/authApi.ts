@@ -57,9 +57,15 @@ export const signOut = async () => {
   window.location.href = "/";
 };
 
-export const getGoogleLoginUrl = (): string => "https://accounts.google.com/o/oauth2/auth?...";
+export const getGoogleLoginUrl = async (): Promise<string> => {
+  const response = await httpClient.get<{ auth_url: string }>("/auth/google/login-url");
+  return response.data.auth_url;
+};
 
-export const getLinkedInLoginUrl = (): string => "https://www.linkedin.com/oauth/v2/authorization?...";
+export const getLinkedInLoginUrl = async (): Promise<string> => {
+  const response = await httpClient.get<{ auth_url: string }>("/auth/linkedin/login-url");
+  return response.data.auth_url;
+};
 
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
   try {

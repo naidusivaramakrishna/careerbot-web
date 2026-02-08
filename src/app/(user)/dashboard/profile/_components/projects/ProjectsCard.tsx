@@ -61,29 +61,29 @@ export default function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
             className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
         >
             <div>
-                <h3 className="font-semibold text-lg">{pro.project_name}</h3>
+                {pro.project_name && (
+                    <h3 className="font-semibold text-lg">{pro.project_name}</h3>
+                )}
                 {pro.role && pro.role.trim() !== '' && (
                     <p className="text-base font-semibold text-neutral-700">
-                        <span className="text-[#2200FF]">{pro.role} </span>
+                        <span className="text-[#2200FF]">{pro.role}</span>
                     </p>
                 )}
-                {(pro.start_date || pro.project_link) && (
-                    <div className="flex gap-4 items-center text-neutral-500 my-4">
-                        {pro.start_date && (
-                            <div className="flex gap-1 items-center text-neutral-500">
-                                <Calendar className="w-5 h-5" />
-                                <span className="text-sm ">{formatDateRange(pro.start_date, pro.end_date)} </span>
-                            </div>
-                        )}
-                        {pro.project_link && (
-                            <div>
-                                <a href={pro.project_link} target="_blank" className="text-blue-600 underline text-sm">
-                                    GitHub
-                                </a>
-                            </div>
-                        )}
-                    </div>
-                )}
+                <div className="flex gap-4 items-center text-neutral-500 my-4">
+                    {pro.start_date && (
+                        <div className="flex gap-1 items-center text-neutral-500">
+                            <Calendar className="w-5 h-5" />
+                            <span className="text-sm">{formatDateRange(pro.start_date, pro.end_date)}</span>
+                        </div>
+                    )}
+                    {pro.project_link && pro.project_link.trim() !== '' && (
+                        <div>
+                            <a href={pro.project_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-sm">
+                                GitHub
+                            </a>
+                        </div>
+                    )}
+                </div>
                 {pro.technologies && pro.technologies.trim() !== '' && (
                     <div className="flex flex-col gap-2">
                         <span className="text-base font-semibold">

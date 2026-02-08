@@ -19,9 +19,12 @@ import { TabType } from './types';
 import { SystemConfigTab } from './_components/SystemConfigTab';
 
 // Types
+import { useAdminAccess } from '../../_hooks/useAdminAccess';
+import { LockedPageOverlay } from '../../_components/LockedPageOverlay';
 
 
 const AdminSettings: React.FC = () => {
+    const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('settings');
     const [activeTab, setActiveTab] = useState<TabType>('Subscription Plans');
 
     // Plans hook
@@ -109,6 +112,11 @@ const AdminSettings: React.FC = () => {
 
     // Get selected plan for modal props
     const selectedPlan = getSelectedPlan();
+
+    // Check access
+    if (!accessLoading && !hasAccess) {
+        return <LockedPageOverlay requiredRoles={requiredRoles} pageName="Settings" />;
+    }
 
     return (
         <div>

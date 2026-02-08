@@ -100,37 +100,7 @@ const AdminHeader = () => {
   return (
     <div className='border-b py-2 border-[#E5E7EB]'>
       <div className='flex gap-4 pr-8 items-center justify-self-end'>
-        <div className='relative'>
-          <Bell className='w-5 h-5 cursor-pointer hover:text-gray-600 transition' />
-          <span className='bg-[#FB2C36] absolute -top-2 left-3 text-white text-xs flex items-center justify-center w-4 h-4 rounded-md'>
-            2
-          </span>
-        </div>
         <div className='flex items-center gap-4'>
-          {/* Avatar with fallback */}
-          <div className='relative w-10 h-10'>
-            <Image
-              src="/assets/images/admin_dashboard_profile.png"
-              alt='admin-profile-icon'
-              width={40}
-              height={40}
-              className='w-10 h-10 rounded-full object-cover'
-              onError={(e) => {
-                // Fallback to initials if image fails to load
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const fallback = target.nextElementSibling as HTMLDivElement;
-                if (fallback) fallback.style.display = 'flex';
-              }}
-            />
-            {/* Fallback initials avatar */}
-            <div
-              className='absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-full items-center justify-center font-semibold text-sm'
-              style={{ display: 'none' }}
-            >
-              {getInitials(adminInfo.name)}
-            </div>
-          </div>
           <div>
             {loading ? (
               <>

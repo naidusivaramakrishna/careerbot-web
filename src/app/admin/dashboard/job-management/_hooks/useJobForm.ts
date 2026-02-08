@@ -1,6 +1,6 @@
 import { useState, useCallback, ChangeEvent } from 'react'
 import { toast } from 'sonner'
-import { createJob, uploadJobLogo, type CreateJobRequest } from '@/api/adminJobsApi'
+import { createJob, updateJob, uploadJobLogo, type CreateJobRequest, type UpdateJobRequest } from '@/api/adminJobsApi'
 import type { JobFormData } from '../_types/jobFormTypes'
 import { logger } from '@/lib/logger'
 
@@ -29,7 +29,13 @@ const defaultForm: JobFormData = {
     companyLogoUrl: "",
 }
 
-export const useJobForm = (initialData?: Partial<JobFormData>) => {
+interface UseJobFormProps {
+    initialData?: Partial<JobFormData>
+    isEdit?: boolean
+    jobId?: string
+}
+
+export const useJobForm = ({ initialData, isEdit = false, jobId }: UseJobFormProps = {}) => {
     const [form, setForm] = useState<JobFormData>({
         ...defaultForm,
         ...initialData,
@@ -125,8 +131,8 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
         return logoUrl
     }, [form.companyLogoUrl, form.logoFile])
 
-    const buildJobData = useCallback((logoUrl: string | undefined, status: 'active' | 'draft'): CreateJobRequest => {
-        return {
+    const buildJobData = useCallback((logoUrl: string | undefined, status: 'active' | 'draft'): CreateJobRequest | UpdateJobRequest => {
+        const jobData: CreateJobRequest = {
             job_title: form.jobTitle,
             company: form.company,
             location: form.location || (status === 'draft' ? 'TBD' : form.location),
@@ -146,6 +152,7 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
             experience_max: Number(form.experienceMax) || undefined,
             company_logo_url: logoUrl,
         }
+        return jobData
     }, [form])
 
     const publishJob = useCallback(async (onSuccess: () => void) => {
@@ -157,9 +164,17 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
             const jobData = buildJobData(logoUrl, 'active')
 
             toast.loading('Publishing job...')
-            await createJob(jobData)
+
+            if (isEdit && jobId) {
+                await updateJob(jobId, jobData as UpdateJobRequest)
+                logger.info(`Job updated successfully: ${jobId}`)
+            } else {
+                await createJob(jobData as CreateJobRequest)
+                logger.info('Job created successfully')
+            }
+
             toast.dismiss()
-            toast.success('Job published successfully!')
+            toast.success(`Job ${isEdit ? 'updated' : 'published'} successfully!`)
             onSuccess()
         } catch (error: unknown) {
             logger.error('Error publishing job:', error)
@@ -169,7 +184,7 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
         } finally {
             setPublishing(false)
         }
-    }, [validateForm, uploadLogoIfNeeded, buildJobData])
+    }, [validateForm, uploadLogoIfNeeded, buildJobData, isEdit, jobId])
 
     const saveDraft = useCallback(async (onSuccess: () => void) => {
         if (!form.jobTitle.trim() || !form.company.trim()) {
@@ -182,8 +197,15 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
             const logoUrl = await uploadLogoIfNeeded()
             const jobData = buildJobData(logoUrl, 'draft')
 
-            await createJob(jobData)
-            toast.success('Job saved as draft')
+            if (isEdit && jobId) {
+                await updateJob(jobId, jobData as UpdateJobRequest)
+                logger.info(`Job draft updated successfully: ${jobId}`)
+            } else {
+                await createJob(jobData as CreateJobRequest)
+                logger.info('Job draft created successfully')
+            }
+
+            toast.success(`Job ${isEdit ? 'updated' : 'saved'} as draft`)
             onSuccess()
         } catch (error: unknown) {
             logger.error('Error saving draft:', error)
@@ -192,7 +214,7 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
         } finally {
             setPublishing(false)
         }
-    }, [form.jobTitle, form.company, uploadLogoIfNeeded, buildJobData])
+    }, [form.jobTitle, form.company, uploadLogoIfNeeded, buildJobData, isEdit, jobId])
 
     return {
         form,

@@ -48,7 +48,6 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
             setTwoFAEnabled(data.totp_enabled);
         } catch (error: unknown) {
             logger.error('Error fetching admin data:', error);
-            toast.error('Failed to fetch admin details');
         } finally {
             setLoading(false);
         }

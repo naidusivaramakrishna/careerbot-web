@@ -6,8 +6,7 @@ import { toast } from "sonner";
 import { useProfileContext } from '../context/ProfileContext';
 import { ProfileData } from '../_types/ProfileData';
 import logger from '@/lib/logger';
-
-const skill_gap_analysis = ["Cloud", "Docker", "React"]
+import { suggestedSkills } from '../_utils/skillsData';
 
 interface SkillsSectionProps {
     tempProfile: ProfileData;
@@ -19,6 +18,7 @@ const SkillsSection = ({ tempProfile, setTempProfile }: SkillsSectionProps) => {
     const [newSkill, setNewSkill] = useState<string>("");
     const [skills, setSkills] = useState<Skill[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
 
     // Fetch skills on component mount
     useEffect(() => {
@@ -52,31 +52,7 @@ const SkillsSection = ({ tempProfile, setTempProfile }: SkillsSectionProps) => {
 
     const handleAddSkill = async () => {
         if (newSkill.trim() === "") return;
-
-        setIsLoading(true);
-        try {
-            const addedSkill = await addSkill(newSkill.trim());
-            const updatedSkills = [...skills, addedSkill];
-            const updatedSkillNames = updatedSkills.map(s => s.name);
-
-            setSkills(updatedSkills);
-
-            // ✅ Update both tempProfile and global context using functional updates
-            setTempProfile((prev) => ({ ...prev, skills: updatedSkillNames }));
-            setProfileData((prev) => {
-                const newProfile = { ...prev, skills: updatedSkillNames };
-                logger.info('✅ Updated profile data after adding skill:', newProfile);
-                return newProfile;
-            });
-
-            setNewSkill(""); // clear input after adding
-            toast.success(`Added skill: ${addedSkill.name}`);
-        } catch (error) {
-            logger.error('Failed to add skill:', error);
-            toast.error('Failed to add skill. Please try again.');
-        } finally {
-            setIsLoading(false);
-        }
+        await handleSelectSkill(newSkill.trim());
     };
 
     const handleDeleteSkill = async (index: number) => {
@@ -105,6 +81,44 @@ const SkillsSection = ({ tempProfile, setTempProfile }: SkillsSectionProps) => {
         }
     };
 
+    // Get filtered skill suggestions based on input and focus state
+    const currentSkillNames = skills.map(s => s.name);
+    const filteredSuggestions =
+        isFocused && newSkill.trim() === ""
+            ? suggestedSkills.filter((skill) => !currentSkillNames.includes(skill))
+            : newSkill.trim() === ""
+            ? []
+            : suggestedSkills.filter(
+                (skill) =>
+                    skill.toLowerCase().includes(newSkill.toLowerCase()) &&
+                    !currentSkillNames.includes(skill)
+            );
+
+    const handleSelectSkill = async (skill: string) => {
+        setIsLoading(true);
+        try {
+            const addedSkill = await addSkill(skill);
+            const updatedSkills = [...skills, addedSkill];
+            const updatedSkillNames = updatedSkills.map(s => s.name);
+
+            setSkills(updatedSkills);
+
+            // ✅ Update both tempProfile and global context using functional updates
+            setTempProfile((prev) => ({ ...prev, skills: updatedSkillNames }));
+            setProfileData((prev) => {
+                const newProfile = { ...prev, skills: updatedSkillNames };
+                return newProfile;
+            });
+
+            setNewSkill(""); // clear input after adding
+            setIsFocused(false);
+        } catch (error) {
+            logger.error('Failed to add skill:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div>
             {/* Skills List */}
@@ -129,54 +143,47 @@ const SkillsSection = ({ tempProfile, setTempProfile }: SkillsSectionProps) => {
                     ))}
                 </div>
 
-                {/* Input */}
-                <div className='flex gap-2 items-center my-4'>
-                    <input
-                        type="text"
-                        value={newSkill}
-                        onChange={(e) => setNewSkill(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleAddSkill()}
-                        placeholder="Add a skill..."
-                        className="px-3 py-2 w-2/5 rounded-lg text-sm bg-background border border-gray-300"
-                    />
+                {/* Input with Suggestions */}
+                <div className='flex gap-2 items-center my-4 relative'>
+                    <div className='relative w-2/5'>
+                        <input
+                            type="text"
+                            value={newSkill}
+                            onChange={(e) => setNewSkill(e.target.value)}
+                            onFocus={() => setIsFocused(true)}
+                            onBlur={() => setTimeout(() => setIsFocused(false), 250)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && newSkill.trim()) {
+                                    e.preventDefault();
+                                    handleAddSkill();
+                                }
+                            }}
+                            placeholder="Add a skill..."
+                            className="px-3 py-2 w-full rounded-lg text-sm bg-background border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        />
+
+                        {/* Suggestions Dropdown */}
+                        {filteredSuggestions.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 border border-gray-300 rounded mt-1 max-h-48 overflow-y-auto bg-white shadow-lg z-20 text-sm">
+                                {filteredSuggestions.map((skill) => (
+                                    <div
+                                        key={skill}
+                                        onMouseDown={() => handleSelectSkill(skill)}
+                                        className="px-3 py-2 cursor-pointer hover:bg-blue-100 transition-colors"
+                                    >
+                                        {skill}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         onClick={handleAddSkill}
                         disabled={isLoading || !newSkill.trim()}
                         className='bg-black text-white text-sm rounded-lg cursor-pointer px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed'
                     >
                         {isLoading ? 'Adding...' : 'Add'}
-                    </button>
-                    <button className='bg-background shadow-sm text-sm cursor-pointer text-black flex items-center gap-1 rounded-lg px-3 py-2'>
-                        <Sparkles className='w-4 h-4' />
-                        Suggest With AI
-                    </button>
-                </div>
-            </div>
-            <div className='grid grid-cols-2 gap-4'>
-                <div className="bg-white p-4 rounded-xl  my-4 shadow-sm border border-neutral-200">
-                    <h3 className='my-4'>Skill Gap Analysis</h3>
-                    <span className="text-sm text-neutral-600">
-                        For the role <span className="font-medium">Software Engineer</span>, you are missing:
-                        <div className='my-4 flex gap-1'>
-                            {skill_gap_analysis.map((skill, index) => (
-                                <span key={index} className='rounded-lg bg-black text-white  gap-2 px-2 py-1'>
-                                    {skill}
-                                </span>
-                            ))}
-                        </div>
-                    </span>
-                    <button className='rounded-lg border border-neutral-200 cursor-pointer bg-white hover:bg-gray-100 px-4 py-1'>Generate Learning Plan</button>
-                </div>
-                <div className="bg-white p-4 rounded-xl  my-4 shadow-sm border border-neutral-200">
-                    <h3 className='my-4'>Interview Readiness</h3>
-                    <p className="text-sm text-neutral-600">Overall</p>
-                    <div className="w-full h-2 bg-gray-200 rounded-lg mt-1">
-                        <div className="h-2 bg-black rounded-lg" style={{ width: `60%` }}></div>
-                    </div>
-                    <span className='mt-2 text-xs text-neutral-500'>Based on mock interviews & coding bot results.</span>
-                    <button className='bg-black shadow-sm mt-2 text-sm cursor-pointer text-white flex items-center gap-1 rounded-lg px-3 py-2'>
-                        <Sparkles className='w-4 h-4' />
-                        <span >Practice Interview</span>
                     </button>
                 </div>
             </div>

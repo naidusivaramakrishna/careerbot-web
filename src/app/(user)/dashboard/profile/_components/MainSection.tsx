@@ -1,22 +1,17 @@
 "use client";
 import { Camera, Github, Mail, MapPin, Phone, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
-import ProjectsSection from './projects/ProjectsSection';
-import CareerInsightsSection from './CareerInsightsSection';
 import { useProfileContext } from '../context/ProfileContext';
 import ProfileTabs from './ProfileTabs';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { ProfileData } from '../_types/ProfileData';
 import { PersonalInfoRef } from '../_types/PersonalInfoRef';
-import { getProfile, getProfilePicture, uploadProfilePicture, deleteProfilePicture, UserProfile } from '@/api/userApi';
-import HobbiesSection from './HobbiesSection';
-import LanguagesSection from './LanguagesSection';
-import AchievementsSection from './AchievementsSection';
+import { getProfile, getProfilePicture, uploadProfilePicture, deleteProfilePicture, UserProfile, getEducation, getExperience, getSkills, getEmploymentInfo, Skill } from '@/api/userApi';
 import { logger } from '@/lib/logger';
 
 const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
-  const { profileData, setProfileData, setActiveTab, sidebarActiveTab } = useProfileContext();
+  const { profileData, setProfileData, setActiveTab, setProfilePicUrl } = useProfileContext();
   const personalInfoRef = useRef<PersonalInfoRef | null>(null);
   const [username, setUsername] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -42,6 +37,12 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           ? res.picture_url
           : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${res.picture_url}`;
         setSelectedImage(fullUrl);
+        // Sync image with sidebar via ProfileContext
+        setProfilePicUrl(fullUrl);
+        // Dispatch event to sync with Sidebar
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('profilePictureUpdated', { detail: { profilePicUrl: fullUrl } }));
+        }
       } else {
         toast.error("Upload failed. Please try again.");
       }
@@ -61,6 +62,12 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
     try {
       const result = await deleteProfilePicture();
       setSelectedImage(null);
+      // Sync deletion with sidebar via ProfileContext
+      setProfilePicUrl(null);
+      // Dispatch event to sync with Sidebar
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('profilePictureUpdated', { detail: { profilePicUrl: null } }));
+      }
       toast.success(result.message);
     } catch (error) {
       logger.error("Error deleting profile picture:", error);
@@ -94,7 +101,24 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
         setUsername(backendProfile.username ?? null)
         const mappedProfile = mapBackendToFrontend(backendProfile);
 
-        setProfileData(mappedProfile);
+        // Fetch all profile sections in parallel to ensure completion score calculates correctly
+        const [education, experience, skills, employmentInfo] = await Promise.all([
+          getEducation().catch(() => []),
+          getExperience().catch(() => []),
+          getSkills().catch(() => []),
+          getEmploymentInfo().catch(() => ({}))
+        ]);
+
+        // Set complete profile data with all sections
+        setProfileData((prev) => ({
+          ...prev,
+          personalInformation: mappedProfile.personalInformation,
+          education: education,
+          workExperience: experience,
+          skills: skills.map((s: Skill) => s.name),
+          employmentInfo: employmentInfo,
+        }));
+
         // ✅ Fetch profile picture from backend
         try {
           const pictureRes = await getProfilePicture();
@@ -105,6 +129,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
               : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${pictureRes.picture_url}`;
 
             setSelectedImage(fullImageUrl); // <-- Image now persists after reload
+            setProfilePicUrl(fullImageUrl); // Sync with sidebar
           }
         } catch (err) {
           logger.warn("No profile picture found");
@@ -138,15 +163,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   }, [initialData, loading, setProfileData]);
 
   const hasProfileData = !!profileData?.personalInformation?.fullName;
-
-  const dynamicComponents: Record<string, React.ReactNode> = {
-    CareerInsights: <CareerInsightsSection />,
-    Hobbies: <HobbiesSection tempProfile={profileData} setTempProfile={setProfileData} />,
-    Projects: <ProjectsSection tempProfile={profileData} setTempProfile={setProfileData} />,
-    Languages: <LanguagesSection tempProfile={profileData} setTempProfile={setProfileData} />,
-    Achievements: <AchievementsSection tempProfile={profileData} setTempProfile={setProfileData} />,
-  };
-
   // Show loading state
   if (loading) {
     return (
@@ -305,7 +321,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
               </div>
             </div>
           </div>
-          <span className='text-neutral-600 text-sm my-4'>{profileData?.personalInformation?.summary || ""}</span>
+          {profileData?.personalInformation?.summary && (
+            <span className='text-neutral-600 border border-gray-400 rounded-lg text-sm my-4 p-2'>{profileData.personalInformation.summary}</span>
+          )}
 
           {/* Action Buttons */}
           <div className='flex gap-3'>
@@ -376,11 +394,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           setProfile={setProfileData}
           personalInfoRef={personalInfoRef}
         />
-      </div>
-
-      {/* Show only selected dynamic section */}
-      <div className="mt-6">
-        {sidebarActiveTab && dynamicComponents[sidebarActiveTab]}
       </div>
     </div>
   );

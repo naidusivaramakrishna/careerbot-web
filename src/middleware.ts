@@ -4,14 +4,13 @@ import type { NextRequest } from 'next/server';
 // Define protected routes that require authentication
 const protectedRoutes = [
     '/dashboard/profile',
-    '/dashboard/resume',
-    '/dashboard/atsscan',
-    '/dashboard/jobs',
-    '/dashboard/job-match',
+    '/builder/start',
+    '/atslogin',
+    '/enhancer',
+    '/jobmatch',
+    '/jobs',
+    '/communication',
 ];
-
-// Define auth routes (login/signup pages)
-const authRoutes = ['/login', '/signup'];
 
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
@@ -24,21 +23,14 @@ export function middleware(request: NextRequest) {
         pathname.startsWith(route)
     );
 
-    // Check if the current route is an auth route
-    const isAuthRoute = authRoutes.some((route) =>
-        pathname.startsWith(route)
-    );
-
     // If user is not logged in and trying to access protected route
+    // Redirect them to home page (landing page with login modal)
     if (isProtectedRoute && !token) {
-        const loginUrl = new URL('/signup', request.url);
-        loginUrl.searchParams.set('redirect', pathname); // Save the intended destination
-        return NextResponse.redirect(loginUrl);
+        return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // If user is logged in and trying to access auth routes (login/signup)
-    // Redirect them to dashboard
-    if (isAuthRoute && token) {
+    // If user is logged in and on root path (landing page), redirect to dashboard
+    if (pathname === '/' && token) {
         return NextResponse.redirect(new URL('/dashboard/profile', request.url));
     }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 /**
  * Google OAuth Callback API Route
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     // Handle OAuth errors
     if (error) {
-      // // console.error('OAuth error:', error);
+      logger.debug('OAuth callback received error param');
       return NextResponse.redirect(
         new URL(`/signup?error=${encodeURIComponent(error)}`, request.url)
       );
@@ -30,14 +31,41 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Redirect to a client page that will handle the token exchange
-    // Pass the code as a query parameter
-    return NextResponse.redirect(
-      new URL(`/auth/google/process?code=${encodeURIComponent(code)}`, request.url)
-    );
+    // Exchange authorization code with backend
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000';
+    const backendUrl = `${baseUrl}/api/v1/auth/google/callback?code=${encodeURIComponent(code)}`;
+
+    const response = await fetch(backendUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      logger.debug('Backend callback failed with status:', { status: response.status });
+      return NextResponse.redirect(
+        new URL('/signup?error=auth_failed', request.url)
+      );
+    }
+
+    // Backend sets httpOnly cookies automatically
+    // Redirect to success page
+    const successUrl = new URL('/auth/google/success', request.url);
+
+    // Copy cookies from backend response to client response
+    const redirectResponse = NextResponse.redirect(successUrl);
+
+    // Forward Set-Cookie headers from backend response
+    const setCookieHeaders = response.headers.getSetCookie();
+    for (const cookie of setCookieHeaders) {
+      redirectResponse.headers.append('Set-Cookie', cookie);
+    }
+
+    return redirectResponse;
 
   } catch (error) {
-    // // console.error('Callback route error:', error);
+    logger.debug('Google OAuth callback failed');
     return NextResponse.redirect(
       new URL('/signup?error=callback_failed', request.url)
     );
