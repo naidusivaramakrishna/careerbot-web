@@ -19,6 +19,7 @@ import { Trash2 } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import logger from "@/lib/logger";
 
 interface HobbyEntry {
   name: string;
@@ -143,7 +144,7 @@ const Hobbies: React.FC = () => {
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -154,12 +155,12 @@ const Hobbies: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      // // console.log("🗑️ Deleting hobby item:", { resumeId, itemId, index });
+      logger.info("🗑️ Deleting hobby item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "hobbies", itemId);
 
-      // // console.log("✅ Hobby item deleted from backend successfully");
+      logger.info("✅ Hobby item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -169,7 +170,7 @@ const Hobbies: React.FC = () => {
       reindexErrors("hobby", index);
 
     } catch (error) {
-      // // console.error("❌ Failed to delete hobby item:", error);
+      logger.error("❌ Failed to delete hobby item:", error);
       alert("Failed to delete hobby. Please try again.");
     } finally {
       setDeletingIndex(null);

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useState } from "react";
 import { createResumeWithAuth, getAllResumes } from "@/api/resumeApi";
+import logger from "@/lib/logger";
 
 
 const EmptyState = ({ selected, onSelect }: { 
@@ -22,7 +23,7 @@ const EmptyState = ({ selected, onSelect }: {
     e.preventDefault();
     e.stopPropagation();
 
-    // // console.log("🔵 Builder clicked");
+    logger.info("Builder clicked");
     onSelect("builder");
 
     // ✅ Authentication is handled via httpOnly cookies
@@ -33,7 +34,7 @@ const EmptyState = ({ selected, onSelect }: {
 
     try {
       // ✅ Step 1: Check for existing resumes
-      // // console.log("📥 Checking for existing resumes...");
+      logger.info("Checking for existing resumes...");
       const existingResumes = await getAllResumes();
       
       if (existingResumes && existingResumes.length > 0) {
@@ -59,9 +60,9 @@ const EmptyState = ({ selected, onSelect }: {
 
       // ✅ Navigate immediately without artificial delay
       router.push(`/builder/creation/${newResume.id}`);
-      
+
     } catch (error: unknown) {
-      // // console.error("❌ Error:", error);
+      logger.error("Error:", error);
 
       // Check if it's an authentication error (401 or 403)
       const axiosError = error as { response?: { status?: number } };

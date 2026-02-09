@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
+import logger from "@/lib/logger";
 import { Trash2 } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
@@ -96,7 +97,7 @@ const Awards: React.FC = () => {
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      logger.warn("No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -107,12 +108,12 @@ const Awards: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      // // console.log("🗑️ Deleting award item:", { resumeId, itemId, index });
+      logger.info("Deleting award item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "awards", itemId);
 
-      // // console.log("✅ Award item deleted from backend successfully");
+      logger.info("Award item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -122,7 +123,7 @@ const Awards: React.FC = () => {
       reindexErrors("award", index);
 
     } catch (error) {
-      // // console.error("❌ Failed to delete award item:", error);
+      logger.error("Failed to delete award item:", error);
       alert("Failed to delete award. Please try again.");
     } finally {
       setDeletingIndex(null);

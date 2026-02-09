@@ -3,18 +3,6 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: false, // ✅ Make sure this is here
 
-  // ✅ Enable faster page transitions
-  experimental: {
-    optimizePackageImports: ['lucide-react', '@/components', '@/utils'],
-  },
-
-  // ✅ Optimize production builds
-  compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' ? {
-      exclude: ['error', 'warn'],
-    } : false,
-  },
-
   images: {
     remotePatterns: [
       {
@@ -58,30 +46,6 @@ const nextConfig: NextConfig = {
       ...config.resolve.alias,
       'uuid': require.resolve('uuid'),
     };
-
-    // ✅ Keep Next.js default optimization, just add chunk splitting hints
-    // Don't override optimization completely - merge with defaults
-    if (config.optimization) {
-      config.optimization.moduleIds = 'deterministic';
-
-      // Only customize splitChunks if it exists
-      if (config.optimization.splitChunks && typeof config.optimization.splitChunks !== 'boolean') {
-        config.optimization.splitChunks = {
-          ...config.optimization.splitChunks,
-          chunks: 'all',
-          cacheGroups: {
-            ...(typeof config.optimization.splitChunks === 'object' && 'cacheGroups' in config.optimization.splitChunks ? config.optimization.splitChunks.cacheGroups : {}),
-            // Add custom cache group for lucide-react icons
-            icons: {
-              test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
-              name: 'icons',
-              chunks: 'all',
-              priority: 30,
-            },
-          },
-        };
-      }
-    }
 
     return config;
   },

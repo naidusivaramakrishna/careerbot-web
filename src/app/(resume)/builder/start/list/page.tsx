@@ -10,6 +10,7 @@ import DeleteConfirmModal from '../_components/DeleteConfirmModal';
 import DownloadModal from '../_components/DownloadModal';
 import ResumeTableRow from '../_components/ResumeTableRow';
 import { useRouter, useSearchParams } from 'next/navigation';
+import logger from "@/lib/logger";
 
 export interface Resume {
   id: string;
@@ -54,7 +55,7 @@ const ResumeListPage = () => {
   const transformResumeData = (backendData: ResumeResponse[], userProfileName?: string): Resume[] => {
     return backendData.map((item) => {
       // Debug: Log what we're getting from backend
-      console.log('📋 Resume data from backend:', {
+      logger.info('Resume data from backend:', {
         id: item.id,
         'personalInfo (full)': JSON.stringify(item.personalInfo, null, 2),
         fullname: item.personalInfo?.fullname,
@@ -93,9 +94,9 @@ const ResumeListPage = () => {
       let userProfile;
       try {
         userProfile = await getProfile();
-        console.log('👤 User profile fetched:', userProfile?.full_name);
+        logger.info('User profile fetched:', userProfile?.full_name);
       } catch (profileError) {
-        console.warn('⚠️ Could not fetch user profile:', profileError);
+        logger.warn('Could not fetch user profile:', profileError);
       }
 
       // ✅ No manual token check needed - httpClient sends cookies automatically
@@ -148,7 +149,7 @@ const ResumeListPage = () => {
   }, [router, refreshParam]);
 
   useEffect(() => {
-    console.log('🔄 Fetching resumes... (refresh param:', refreshParam, ')');
+    logger.info('Fetching resumes... (refresh param:', refreshParam, ')');
     fetchResumes();
   }, [fetchResumes, refreshParam]); // ✅ Refetch when refresh parameter changes
 
@@ -262,7 +263,7 @@ const ResumeListPage = () => {
                   Manage, analyze and optimize your resumes with AI
                 </p>
               </div>
-              <div className="relative">
+              {/* <div className="relative">
                 <button
                   ref={buttonRef}
                   onClick={() => setIsModalOpen(!isModalOpen)}
@@ -276,7 +277,7 @@ const ResumeListPage = () => {
                   isOpen={isModalOpen}
                   onClose={() => setIsModalOpen(false)}
                 />
-              </div>
+              </div> */}
             </div>
 
             <div className="bg-white w-full rounded-2xl border border-gray-200">

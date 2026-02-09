@@ -118,32 +118,25 @@ export default function SectionsPage() {
       // Start video recording
       try {
         await startRecording();
-        logger.info('Video recording started');
+        logger.info('✅ Video recording started');
       } catch (recordingError) {
         logger.error('Failed to start video recording:', recordingError);
         // Continue anyway - video recording failure shouldn't block assessment
       }
 
-      // Enter fullscreen mode
+      // Enter fullscreen mode (keep this before navigation for better UX)
       try {
         if (document.documentElement.requestFullscreen) {
           await document.documentElement.requestFullscreen();
-          logger.info('Entered fullscreen mode');
+          logger.info('✅ Entered fullscreen mode');
         }
       } catch (fullscreenError) {
         logger.warn('Could not enter fullscreen:', fullscreenError);
         // Continue anyway - fullscreen is not critical
       }
 
-      // Verify session_id one more time before navigation
-      const finalCheck = localStorage.getItem('session_id');
-      logger.info('Final check before navigation - session_id:', finalCheck);
-
-      // Wait a bit for all async operations to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Navigate to introduction page
-      logger.info('Navigating to see-and-repeat page...');
+      // ✅ OPTIMIZED: Navigate immediately without unnecessary delay
+      logger.info('🚀 Navigating to see-and-repeat page...');
       router.push('/communication/see-and-repeat');
 
     } catch (error: any) {

@@ -5,6 +5,7 @@ import ProgressBar from "./ProgressBar";
 import MultiColorCircularScore from "./MultiColorCircularScore";
 import { toast } from "sonner";
 import { useScore } from "../../_context/ScoreContext";
+import logger from "@/lib/logger";
 
 export default function ATSScorePanel() {
   const [scoreData, setScoreData] = useState<ResumeScoreResponse | null>(null);
@@ -23,9 +24,9 @@ export default function ATSScorePanel() {
 
     const fetchScore = async () => {
       const resumeId = localStorage.getItem("current_resume_id");
-      
+
       if (!resumeId || resumeId === 'null' || resumeId === 'undefined') {
-        // // console.warn("⚠️ No resume ID found");
+        logger.warn("No resume ID found");
         setError("No resume found. Please create a resume first.");
         setIsLoading(false);
         return;
@@ -33,7 +34,7 @@ export default function ATSScorePanel() {
 
       // ✅ Check if this is a new resume (ID changed)
       if (previousResumeIdRef.current !== null && previousResumeIdRef.current !== resumeId) {
-        // // console.log("🆕 New resume detected, resetting score to 0");
+        logger.info("New resume detected, resetting score to 0");
         resetScore();
         setScoreData(null);
       }
@@ -43,19 +44,19 @@ export default function ATSScorePanel() {
       try {
         setIsLoading(true);
         setError(null);
-        // // console.log("📊 Fetching ATS score for resume:", resumeId);
-        
+        logger.info("Fetching ATS score for resume:", resumeId);
+
         const data = await getResumeScore(resumeId);
-        
+
         // ✅ Only update state if component is still mounted
         if (isMountedRef.current) {
           setScoreData(data);
           setOverallScore(data.overall_score);
-          // // console.log("✅ Score loaded successfully:", data.overall_score);
+          logger.info("Score loaded successfully:", data.overall_score);
         }
-        
+
       } catch (err) {
-        // // console.error("❌ Error fetching score:", err);
+        logger.error("Error fetching score:", err);
         const errorMessage = err instanceof Error ? err.message : "Failed to fetch score";
         
         // ✅ Only update state if component is still mounted

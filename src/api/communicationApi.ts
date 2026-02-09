@@ -85,14 +85,10 @@ export interface VideoEvaluationResponse {
 export interface FinalReportRequest {
   email_id: string;
   test_id: string;
-  video_evaluation_id: string;
-  audio_evaluation_id: string;
-  video_evaluation?: {
-    [key: string]: any;
-  };
-  audio_evaluation?: {
-    [key: string]: any;
-  };
+  video_evaluation_id?: string;
+  audio_evaluation_id?: string;
+  // Backend will retrieve evaluation data using these IDs
+  // No need to send full evaluation objects from frontend
 }
 
 export interface FinalReportResponse {
@@ -312,11 +308,32 @@ export const submitVideoEvaluation = async (data: VideoEvaluationRequest): Promi
     logger.debug(`📊 Email ID: ${data.email_id}`);
     logger.debug(`📊 Test ID: ${data.test_id}`);
 
+    // ✅ Clean MIME type - remove codecs specification that backend might reject
+    // e.g., "video/webm;codecs=vp8,opus" → "video/webm"
+    let cleanMimeType = data.file.type;
+    let filename = 'video.webm';
+
+    if (cleanMimeType.includes(';')) {
+      cleanMimeType = cleanMimeType.split(';')[0];
+      logger.debug(`🧹 Cleaned video MIME type: "${data.file.type}" → "${cleanMimeType}"`);
+    }
+
+    // Determine filename based on clean MIME type
+    if (cleanMimeType.includes('mp4')) {
+      filename = 'video.mp4';
+    } else if (cleanMimeType.includes('webm')) {
+      filename = 'video.webm';
+    }
+
+    // ✅ Create new blob with clean MIME type (without codecs)
+    const cleanBlob = new Blob([data.file], { type: cleanMimeType });
+    logger.debug(`📋 Created clean video blob: type="${cleanBlob.type}", size=${(cleanBlob.size / 1024 / 1024).toFixed(2)} MB`);
+
     const formData = new FormData();
     formData.append('email_id', data.email_id);
     formData.append('test_id', data.test_id);
-    formData.append('file', data.file, 'video.webm');
-    logger.debug('📹 FormData prepared with email_id, test_id, and file (video.webm)', `(${(data.file.size / 1024 / 1024).toFixed(2)} MB)`);
+    formData.append('file', cleanBlob, filename); // ✅ Use clean blob instead of original
+    logger.debug(`📹 FormData prepared with email_id, test_id, and file (${filename})`, `(${(cleanBlob.size / 1024 / 1024).toFixed(2)} MB)`);
 
     // Use httpClient for automatic correlation ID and cookie handling
     // Note: Must explicitly set Content-Type to undefined to let axios handle FormData
@@ -446,21 +463,34 @@ export const uploadAudio = async (data: AudioUploadRequest): Promise<AudioUpload
       logger.debug(`📋 Converting question_id: "${data.question_id}" → "${simpleQuestionId}"`);
     }
 
-    // Determine filename extension based on blob type
+    // ✅ Clean MIME type - remove codecs specification that backend might reject
+    // e.g., "audio/webm;codecs=opus" → "audio/webm"
+    let cleanMimeType = data.audio_file.type;
     let filename = 'audio.webm';
-    if (data.audio_file.type.includes('wav')) {
+
+    if (cleanMimeType.includes(';')) {
+      cleanMimeType = cleanMimeType.split(';')[0];
+      logger.debug(`🧹 Cleaned MIME type: "${data.audio_file.type}" → "${cleanMimeType}"`);
+    }
+
+    // Determine filename based on clean MIME type
+    if (cleanMimeType.includes('wav')) {
       filename = 'audio.wav';
-    } else if (data.audio_file.type.includes('mp3')) {
+    } else if (cleanMimeType.includes('mp3')) {
       filename = 'audio.mp3';
-    } else if (data.audio_file.type.includes('webm')) {
+    } else if (cleanMimeType.includes('webm')) {
       filename = 'audio.webm';
     }
+
+    // ✅ Create new blob with clean MIME type (without codecs)
+    const cleanBlob = new Blob([data.audio_file], { type: cleanMimeType });
+    logger.debug(`📋 Created clean blob: type="${cleanBlob.type}", size=${(cleanBlob.size / 1024).toFixed(2)} KB`);
 
     const formData = new FormData();
     formData.append('session_id', data.session_id);
     formData.append('question_id', simpleQuestionId); // Use simple format
     formData.append('test_id', data.test_id);
-    formData.append('audio_file', data.audio_file, filename);
+    formData.append('audio_file', cleanBlob, filename); // ✅ Use clean blob instead of original
 
     // Add return_next_question parameter if provided
     if (data.return_next_question !== undefined) {
@@ -491,6 +521,41 @@ export const uploadAudio = async (data: AudioUploadRequest): Promise<AudioUpload
     return response.data;
   } catch (error) {
     logger.error('❌ Error uploading audio:', error);
+    throw error;
+  }
+};
+
+// ==================== AUDIO STATUS API ====================
+
+export interface AudioStatusResponse {
+  session_id: string;
+  total_expected: number;
+  completed: number;
+  processing: number;
+  failed: number;
+  overall_status: 'complete' | 'partial' | 'pending' | 'failed';
+  questions: {
+    [key: string]: 'completed' | 'processing' | 'pending' | 'failed';
+  };
+  missing: string[];
+}
+
+/**
+ * Get audio processing status for a session
+ * Checks how many audio files have been transcribed
+ */
+export const getAudioStatus = async (sessionId: string): Promise<AudioStatusResponse> => {
+  try {
+    logger.debug('📊 Checking audio status for session:', sessionId);
+
+    const response = await httpClient.get<AudioStatusResponse>(
+      `/ai-assessment/audio/status/${sessionId}`
+    );
+
+    logger.info(`✅ Audio status: ${response.data.completed}/${response.data.total_expected} complete (${response.data.processing} processing)`);
+    return response.data;
+  } catch (error) {
+    logger.error('❌ Error getting audio status:', error);
     throw error;
   }
 };

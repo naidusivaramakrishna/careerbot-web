@@ -19,6 +19,7 @@ import { Trash2 } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import logger from "@/lib/logger";
 
 interface InterestEntry {
   name: string;
@@ -141,7 +142,7 @@ const Interests: React.FC = () => {
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -152,12 +153,12 @@ const Interests: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      // // console.log("🗑️ Deleting interest item:", { resumeId, itemId, index });
+      logger.info("🗑️ Deleting interest item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "interests", itemId);
 
-      // // console.log("✅ Interest item deleted from backend successfully");
+      logger.info("✅ Interest item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -167,7 +168,7 @@ const Interests: React.FC = () => {
       reindexErrors("interest", index);
 
     } catch (error) {
-      // // console.error("❌ Failed to delete interest item:", error);
+      logger.error("❌ Failed to delete interest item:", error);
       alert("Failed to delete interest. Please try again.");
     } finally {
       setDeletingIndex(null);

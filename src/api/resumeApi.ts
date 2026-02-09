@@ -1,6 +1,7 @@
 import { httpClient } from '@/lib/http';
 import logger from '@/lib/logger';
 import { getProfile } from './userApi';
+import type { CustomSection, CustomField } from '@/app/(resume)/builder/creation/_context/ResumeContext';
 
 export interface CategorizedSkills {
   programming_languages: string[];
@@ -118,7 +119,7 @@ export interface ResumeResponse {
   };
   updatedAt: string;
   createdAt: string;
-  // customSections?: CustomSection[];
+  customSections?: CustomSection[];
 }
 
 export interface TemplateResponse {
@@ -322,6 +323,166 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
 };
 
 // ==================== HELPER FUNCTIONS ====================
+
+/**
+ * Transform frontend customSections (fields-based) to backend format (items-based)
+ */
+const transformCustomSectionsForBackend = (customSections: CustomSection[]): any[] => {
+  return customSections.map((section) => {
+    // Create an item from the fields
+    const item: any = {
+      title: '',
+      subtitle: '',
+      description: '',
+      startDate: '',
+      endDate: '',
+      url: '',
+      tags: [],
+      location: '',
+    };
+
+    // Map fields to backend structure
+    section.fields.forEach((field) => {
+      const fieldValue = field.value;
+
+      // Smart mapping based on field name and type
+      if (field.fieldType === 'text') {
+        // First text field → title, others → subtitle or custom fields
+        if (!item.title && (field.fieldName.toLowerCase().includes('title') || field.fieldName.toLowerCase().includes('name'))) {
+          item.title = fieldValue as string;
+        } else if (!item.subtitle && field.fieldName.toLowerCase().includes('subtitle')) {
+          item.subtitle = fieldValue as string;
+        } else if (!item.location && field.fieldName.toLowerCase().includes('location')) {
+          item.location = fieldValue as string;
+        } else if (!item.title) {
+          item.title = fieldValue as string;
+        } else if (!item.subtitle) {
+          item.subtitle = fieldValue as string;
+        }
+      } else if (field.fieldType === 'textarea') {
+        // Textarea → description
+        item.description = fieldValue as string;
+      } else if (field.fieldType === 'date') {
+        // Date fields
+        if (field.fieldName.toLowerCase().includes('start')) {
+          item.startDate = fieldValue as string;
+        } else if (field.fieldName.toLowerCase().includes('end')) {
+          item.endDate = fieldValue as string;
+        } else if (!item.startDate) {
+          item.startDate = fieldValue as string;
+        }
+      } else if (field.fieldType === 'url') {
+        // URL field
+        item.url = fieldValue as string;
+      } else if (field.fieldType === 'list') {
+        // List → tags
+        item.tags = (fieldValue as string[]).filter(v => v.trim() !== '');
+      }
+    });
+
+    return {
+      sectionName: section.sectionName,
+      icon: 'custom', // Default icon
+      items: [item], // Single item per section for now
+    };
+  });
+};
+
+/**
+ * Transform backend customSections (items-based) to frontend format (fields-based)
+ */
+const transformCustomSectionsFromBackend = (backendSections: any[]): CustomSection[] => {
+  if (!backendSections || backendSections.length === 0) return [];
+
+  return backendSections.map((section, sectionIndex) => {
+    const fields: CustomField[] = [];
+
+    // If section has items, convert first item to fields
+    if (section.items && section.items.length > 0) {
+      const item = section.items[0]; // Take first item
+
+      // Map backend item fields to frontend fields
+      if (item.title) {
+        fields.push({
+          id: `field_title_${sectionIndex}`,
+          fieldName: 'Title',
+          fieldType: 'text',
+          value: item.title,
+        });
+      }
+
+      if (item.subtitle) {
+        fields.push({
+          id: `field_subtitle_${sectionIndex}`,
+          fieldName: 'Subtitle',
+          fieldType: 'text',
+          value: item.subtitle,
+        });
+      }
+
+      if (item.description) {
+        fields.push({
+          id: `field_description_${sectionIndex}`,
+          fieldName: 'Description',
+          fieldType: 'textarea',
+          value: item.description,
+        });
+      }
+
+      if (item.startDate) {
+        fields.push({
+          id: `field_startDate_${sectionIndex}`,
+          fieldName: 'Start Date',
+          fieldType: 'date',
+          value: item.startDate,
+        });
+      }
+
+      if (item.endDate) {
+        fields.push({
+          id: `field_endDate_${sectionIndex}`,
+          fieldName: 'End Date',
+          fieldType: 'date',
+          value: item.endDate,
+        });
+      }
+
+      if (item.url) {
+        fields.push({
+          id: `field_url_${sectionIndex}`,
+          fieldName: 'URL',
+          fieldType: 'url',
+          value: item.url,
+        });
+      }
+
+      if (item.location) {
+        fields.push({
+          id: `field_location_${sectionIndex}`,
+          fieldName: 'Location',
+          fieldType: 'text',
+          value: item.location,
+        });
+      }
+
+      if (item.tags && item.tags.length > 0) {
+        fields.push({
+          id: `field_tags_${sectionIndex}`,
+          fieldName: 'Tags',
+          fieldType: 'list',
+          value: item.tags,
+        });
+      }
+    }
+
+    return {
+      id: section.id || `custom_${Date.now()}_${sectionIndex}`,
+      sectionName: section.sectionName,
+      fields,
+    };
+  });
+};
+
 /**
  * Transform professionalSummary from object to string for backward compatibility
  * TODO: Remove this once backend is updated to handle object format
@@ -332,6 +493,13 @@ const transformResumeDataForBackend = (resumeData: Partial<ResumeResponse>): Par
   // If professionalSummary is an object, extract just the summary string
   if (transformed.professionalSummary && typeof transformed.professionalSummary === 'object') {
     transformed.professionalSummary = transformed.professionalSummary.summary || '';
+  }
+
+  // Transform customSections from fields-based to items-based structure
+  if (transformed.customSections && Array.isArray(transformed.customSections) && transformed.customSections.length > 0) {
+    logger.info("🔄 Transforming customSections from fields to items format...");
+    transformed.customSections = transformCustomSectionsForBackend(transformed.customSections as any) as any;
+    logger.info("✅ Transformed customSections:", transformed.customSections);
   }
 
   return transformed;
@@ -375,6 +543,13 @@ export const getResumeById = async (resumeId: string): Promise<ResumeResponse> =
     logger.debug("📥 Fetching resume by ID:", resumeId);
 
     const response = await httpClient.get<ResumeResponse>(`/resumes/${resumeId}`);
+
+    // Transform backend customSections (items) to frontend format (fields)
+    if (response.data.customSections && Array.isArray(response.data.customSections) && response.data.customSections.length > 0) {
+      logger.info("🔄 Transforming backend customSections to frontend format...");
+      response.data.customSections = transformCustomSectionsFromBackend(response.data.customSections as any) as any;
+      logger.info("✅ Transformed customSections:", response.data.customSections);
+    }
 
     logger.info("✅ Resume fetched successfully");
     return response.data;

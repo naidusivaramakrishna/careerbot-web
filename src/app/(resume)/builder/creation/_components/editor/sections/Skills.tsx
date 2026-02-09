@@ -72,8 +72,15 @@ const Skills: React.FC = () => {
     // Flatten all skills into the main skills array for backward compatibility
     const allSkills = Object.values(newCategorizedSkills).flat();
 
-    setResumeData({ 
-      ...resumeData, 
+    console.log("🎯 Skills updated:", {
+      category,
+      updatedSkills,
+      allSkills,
+      categorizedSkills: newCategorizedSkills
+    });
+
+    setResumeData({
+      ...resumeData,
       categorizedSkills: newCategorizedSkills,
       skills: allSkills // Keep flattened version for templates
     });

@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useResume } from "../../_context/ResumeContext";
 import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, TemplateResponse } from "@/api/resumeApi";
 import { toast } from "sonner";
+import logger from "@/lib/logger";
 
 // Interface updated with mongoId (_id)
 interface TransformedTemplate {
@@ -91,7 +92,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
     const fetchTemplates = async () => {
       try {
         setLoading(true);
-        // // console.log("🎯 Fetching templates for category:", selectedCategory);
+        logger.info("Fetching templates for category:", selectedCategory);
 
         // Normalize category name (handle case sensitivity and spaces)
         let categoryParam: string | undefined;
@@ -102,10 +103,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           categoryParam = selectedCategory.toLowerCase().trim();
         }
 
-        // // console.log("🔍 API call with category param:", categoryParam);
+        logger.info("API call with category param:", categoryParam);
         const data = await getTemplatesByCategory(categoryParam);
 
-        // // console.log("📊 Templates fetched from API:", data?.length || 0, data);
+        logger.info("Templates fetched from API:", data?.length || 0, data);
 
         if (data && Array.isArray(data) && data.length > 0) {
           const transformedTemplates: TransformedTemplate[] = data.map((tpl: TemplateResponse) => {
@@ -122,10 +123,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
               category: tpl.category || "modern"
             };
           });
-          // // console.log("✅ Templates transformed:", transformedTemplates.length, transformedTemplates);
+          logger.info("Templates transformed:", transformedTemplates.length, transformedTemplates);
           setTemplates(transformedTemplates);
         } else {
-          // // console.warn("⚠️ No templates returned from API for category:", selectedCategory);
+          logger.warn("No templates returned from API for category:", selectedCategory);
           // Only use defaults if category is "All", otherwise show empty
           if (selectedCategory === "All") {
             setTemplates(DEFAULT_TEMPLATES);
@@ -134,7 +135,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           }
         }
       } catch (error) {
-        // // console.error("❌ Error fetching templates:", error);
+        logger.error("Error fetching templates:", error);
         toast.error("Failed to load templates from API. Using default templates.");
         setTemplates(DEFAULT_TEMPLATES);
       } finally {
@@ -156,7 +157,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         try {
           setCategoriesLoading(true);
           const fetchedCategories = await getTemplateCategories();
-          // // console.log("📂 Fetched categories from API (lowercase):", fetchedCategories);
+          logger.info("Fetched categories from API (lowercase):", fetchedCategories);
 
           // Capitalize categories for display (convert "professional" -> "Professional")
           const capitalizedCategories = fetchedCategories.map(cat =>
@@ -168,10 +169,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             ? capitalizedCategories
             : ["All", ...capitalizedCategories];
 
-          // // console.log("📂 Categories for display (capitalized):", categoriesWithAll);
+          logger.info("Categories for display (capitalized):", categoriesWithAll);
           setCategories(categoriesWithAll);
         } catch (error) {
-          // // console.error("❌ Error fetching categories:", error);
+          logger.error("Error fetching categories:", error);
           // Fall back to default categories
           setCategories(["All", ...Array.from(new Set(templates.map((tpl) => tpl.subtitle)))]);
         } finally {
@@ -196,7 +197,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   const handleTemplateClick = (tpl: TransformedTemplate) => {
     // Update selected template immediately for live preview
     setSelectedTemplate(tpl.template_id);
-    // // console.log("🎯 Template selected for preview:", tpl.template_id);
+    logger.info("Template selected for preview:", tpl.template_id);
     
     // Also open the modal for more details
     setPreviewTemplate(tpl);
@@ -215,7 +216,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         // ✅ Validate templateId (mongoId contains the 'id' from API response)
         const templateId = previewTemplate.mongoId;
         if (!templateId || templateId === "0") {
-          // // console.error("❌ Invalid template ID:", previewTemplate);
+          logger.error("Invalid template ID:", previewTemplate);
           toast.error("Template ID is not available. Please try refreshing the page.");
           return;
         }
@@ -231,7 +232,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
 
         toast.success(`${previewTemplate.name} applied successfully!`);
       } catch (error) {
-        // // console.error("❌ Error applying template:", error);
+        logger.error("Error applying template:", error);
         toast.error(error instanceof Error ? error.message : "Failed to apply template");
       }
     }
@@ -278,7 +279,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                   <div
                     key={cat}
                     onClick={() => {
-                      // // console.log("📌 Category selected:", cat);
+                      logger.info("Category selected:", cat);
                       setSelectedCategory(cat);
                       setDropdownOpen(false);
                       setActivePanel("templates");

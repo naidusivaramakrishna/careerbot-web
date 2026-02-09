@@ -1,4 +1,5 @@
 import { useState } from "react";
+import logger from "@/lib/logger";
 
 // Replace these with your actual Azure OpenAI values
 const AZURE_OPENAI_API_KEY = process.env.NEXT_PUBLIC_AZURE_OPENAI_API_KEY || "";
@@ -50,7 +51,7 @@ export function useAISuggestions() {
       }));
       setActivePopup(index);
     } catch (err) {
-      // // console.error("Error generating AI suggestions:", err);
+      logger.error("Error generating AI suggestions:", err);
       setSuggestions((prev) => ({
         ...prev,
         [index]: ["⚠️ Error generating suggestions. Try again."],

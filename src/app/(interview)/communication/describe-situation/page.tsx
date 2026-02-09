@@ -18,6 +18,7 @@ import { validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audio
 const AudioRecorder = dynamic(() => import('../components/AudioRecorder'), { loading: () => <div className="flex items-center justify-center p-8"><div className="animate-pulse">Loading...</div></div>, ssr: false });
 const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="w-64 bg-gray-100 animate-pulse" /> });
 const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), { loading: () => null });
+const AssessmentSummaryPanel = dynamic(() => import('../components/AssessmentSummaryPanel'), { loading: () => null, ssr: false });
 
 export default function SituationExplainingPage() {
   const router = useRouter();
@@ -28,7 +29,13 @@ export default function SituationExplainingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [validationWarning, setValidationWarning] = useState('');
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const { stopRecording, isRecording: isVideoRecording } = useVideoRecording();
+
+  // ✅ Track section-specific question number for display only (1 of 1 for "Situation Explaining")
+  // Note: currentQuestion.question_number remains global for backend upload API
+  const [sectionQuestionNumber] = useState(1);
+  const SECTION_TOTAL_QUESTIONS = 1; // Total questions in this section
 
   // Fetch current question from API
   const fetchCurrentQuestion = async () => {
@@ -101,7 +108,8 @@ export default function SituationExplainingPage() {
     // We only need to keep in state for immediate upload via progressive API
   };
 
-  const handleFinish = async () => {
+  // Step 1: Upload current question audio and open summary panel
+  const handleUploadCurrentAudio = async () => {
     if (!recordedAudio) {
       alert('Please record your answer before finishing.');
       return;
@@ -110,13 +118,11 @@ export default function SituationExplainingPage() {
     setIsSubmitting(true);
 
     try {
-      // Get email, test_id, and session_id from localStorage
-      const emailId = localStorage.getItem('userEmail') || localStorage.getItem('user_email');
       const testId = localStorage.getItem('test_id');
       const sessionId = localStorage.getItem('session_id');
 
-      if (!emailId || !testId || !sessionId) {
-        logger.error('Missing email, test_id, or session_id');
+      if (!testId || !sessionId) {
+        logger.error('Missing test_id or session_id');
         alert('Missing required information. Please start the assessment again.');
         setIsSubmitting(false);
         return;
@@ -129,8 +135,8 @@ export default function SituationExplainingPage() {
         return;
       }
 
-      // ==================== STEP 1: Upload Audio ====================
-      logger.info('📤 STEP 1: Uploading audio for final question...');
+      // ==================== Upload Audio Only ====================
+      logger.info('📤 Uploading audio for final question...');
 
       if (recordedAudio.size === 0 || recordedAudio.size < 100) {
         const errorMsg = `Audio recording is empty or too small (${recordedAudio.size} bytes). Please record your answer again.`;
@@ -140,40 +146,65 @@ export default function SituationExplainingPage() {
         return;
       }
 
-      try {
-        const uploadResponse = await uploadAudio({
-          session_id: sessionId,
-          question_id: currentQuestion.question_id,
-          test_id: testId,
-          audio_file: recordedAudio,
-          return_next_question: false,
-          question_number: currentQuestion.question_number,
-        });
+      const uploadResponse = await uploadAudio({
+        session_id: sessionId,
+        question_id: currentQuestion.question_id,
+        test_id: testId,
+        audio_file: recordedAudio,
+        return_next_question: false,
+        question_number: currentQuestion.question_number,
+      });
 
-        logger.info('✅ STEP 1 Complete: Audio uploaded successfully');
+      logger.info('✅ Audio uploaded successfully');
 
-        if (!uploadResponse || !uploadResponse.success) {
-          const errorMsg = `Audio upload failed. Response: ${JSON.stringify(uploadResponse)}`;
-          logger.error(errorMsg);
-          alert(errorMsg);
-          setIsSubmitting(false);
-          return;
-        }
-      } catch (uploadError) {
-        logger.error('❌ STEP 1 Failed: Audio upload error:', uploadError);
-        alert(`Failed to upload audio: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
+      if (!uploadResponse || !uploadResponse.success) {
+        const errorMsg = `Audio upload failed. Response: ${JSON.stringify(uploadResponse)}`;
+        logger.error(errorMsg);
+        alert(errorMsg);
         setIsSubmitting(false);
         return;
       }
 
-      // ==================== STEP 2: Complete Session ====================
-      logger.info('📋 STEP 2: Completing session...');
+      // Mark question as completed in sessionStorage for Assessment Summary Panel
+      sessionStorage.setItem(`q_44_completed`, 'true');
+      logger.info('✅ Marked question 44 as completed');
+
+      // Open the summary panel
+      setIsSubmitting(false);
+      setIsPanelOpen(true);
+      logger.info('✅ Audio uploaded. Opening assessment summary panel...');
+
+    } catch (error) {
+      logger.error('❌ Error uploading audio:', error);
+      alert('Failed to upload audio. Please try again.');
+      setIsSubmitting(false);
+    }
+  };
+
+  // Step 2: Complete session and run evaluations (called from panel)
+  const handleFinalSubmit = async () => {
+    setIsSubmitting(true);
+
+    try {
+      const emailId = localStorage.getItem('userEmail') || localStorage.getItem('user_email');
+      const testId = localStorage.getItem('test_id');
+      const sessionId = localStorage.getItem('session_id');
+
+      if (!emailId || !testId || !sessionId) {
+        logger.error('Missing email, test_id, or session_id');
+        alert('Missing required information. Please start the assessment again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // ==================== STEP 1: Complete Session ====================
+      logger.info('📋 STEP 1: Completing session...');
 
       try {
         const completeResponse = await completeSession(sessionId);
-        logger.info('✅ STEP 2 Complete: Session completed successfully:', completeResponse);
+        logger.info('✅ STEP 1 Complete: Session completed successfully:', completeResponse);
       } catch (completeError) {
-        logger.error('❌ STEP 2 Failed: Complete session error:', completeError);
+        logger.error('❌ STEP 1 Failed: Complete session error:', completeError);
         // Continue anyway - session might already be complete
         logger.warn('⚠️ Continuing despite complete session error...');
       }
@@ -188,8 +219,8 @@ export default function SituationExplainingPage() {
         logger.info(`Video blob retrieved: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`);
       }
 
-      // ==================== STEP 3: Parallel Evaluations ====================
-      logger.info('📊 STEP 3: Running audio and video evaluations in parallel...');
+      // ==================== STEP 2: Parallel Evaluations ====================
+      logger.info('📊 STEP 2: Running audio and video evaluations in parallel...');
 
       const evaluationPromises = [];
 
@@ -212,14 +243,11 @@ export default function SituationExplainingPage() {
             logger.warn(`⚠️ Partial evaluation: ${audioEvalResponse.missing_sections?.join(', ')}`);
           }
 
-          // Store results
-          if (audioEvalResponse.evaluation) {
-            localStorage.setItem('audio_evaluation', JSON.stringify(audioEvalResponse.evaluation));
-          }
+          // ✅ Only store the evaluation ID (backend will retrieve full data using this ID)
           if (audioEvalResponse.audio_evaluation_id) {
             localStorage.setItem('audio_evaluation_id', audioEvalResponse.audio_evaluation_id);
+            logger.info('✅ Stored audio_evaluation_id:', audioEvalResponse.audio_evaluation_id);
           }
-          localStorage.setItem('audio_evaluation_response', JSON.stringify(audioEvalResponse));
 
           return { type: 'audio', success: true, data: audioEvalResponse };
         })
@@ -229,9 +257,13 @@ export default function SituationExplainingPage() {
           // Check for incomplete submission error
           if (audioError?.response?.data?.error === 'Incomplete submission') {
             const errorData = audioError.response.data;
-            const message = `⚠️ Assessment Incomplete!\n\n` +
+            const missing = errorData.missing_sections || [];
+            const message = `⏳ Transcriptions Still Processing!\n\n` +
+              `The backend is still processing ${errorData.missing_count || 9} audio transcriptions.\n\n` +
               `Completed: ${errorData.completed || 0}/${errorData.total_required || 44}\n` +
-              `Missing: ${errorData.missing_sections?.join(', ') || 'Unknown'}`;
+              `Missing: ${missing.join(', ')}\n\n` +
+              `Please wait 30 seconds and click "Finish Assessment" again.\n\n` +
+              `This happens because audio transcription runs in the background and may take a few seconds to complete.`;
             throw new Error(message);
           }
 
@@ -250,10 +282,11 @@ export default function SituationExplainingPage() {
           .then((videoEvalResponse) => {
             logger.info('✅ Video evaluation completed');
 
+            // ✅ Only store the evaluation ID (backend will retrieve full data using this ID)
             if (videoEvalResponse.evaluation_id) {
               localStorage.setItem('video_evaluation_id', videoEvalResponse.evaluation_id);
+              logger.info('✅ Stored video_evaluation_id:', videoEvalResponse.evaluation_id);
             }
-            localStorage.setItem('video_evaluation_response', JSON.stringify(videoEvalResponse));
 
             return { type: 'video', success: true, data: videoEvalResponse };
           })
@@ -270,7 +303,7 @@ export default function SituationExplainingPage() {
       // Wait for all evaluations to complete
       try {
         const results = await Promise.all(evaluationPromises);
-        logger.info('✅ STEP 3 Complete: All evaluations finished');
+        logger.info('✅ STEP 2 Complete: All evaluations finished');
 
         // Check if audio evaluation failed critically
         const audioResult = results.find(r => r.type === 'audio');
@@ -287,7 +320,7 @@ export default function SituationExplainingPage() {
         }
 
       } catch (evalError) {
-        logger.error('❌ STEP 3 Failed: Evaluation error:', evalError);
+        logger.error('❌ STEP 2 Failed: Evaluation error:', evalError);
         alert(evalError instanceof Error ? evalError.message : 'Evaluation failed');
         setIsSubmitting(false);
         return;
@@ -308,7 +341,7 @@ export default function SituationExplainingPage() {
       router.push('/communication/feedback');
 
     } catch (error) {
-      logger.error('❌ Error finishing assessment:', error);
+      logger.error('❌ Error during final submission:', error);
       alert('Failed to submit. Please try again.');
       setIsSubmitting(false);
     }
@@ -364,16 +397,16 @@ export default function SituationExplainingPage() {
             <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-700">
-                  Final Section - Situation Explaining
+                  Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
                 </span>
                 <span className="text-sm font-semibold text-indigo-600">
-                  1 Question
+                  100%
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: '100%' }}
+                  style={{ width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%` }}
                 />
               </div>
             </div>
@@ -464,10 +497,10 @@ export default function SituationExplainingPage() {
                   </div>
                 </div>
 
-                {/* Finish Button */}
+                {/* Finish Assessment Button */}
                 <div className="flex justify-end">
                   <button
-                    onClick={handleFinish}
+                    onClick={handleUploadCurrentAudio}
                     disabled={!recordedAudio || isSubmitting}
                     className={`px-10 py-4 rounded-lg font-semibold text-lg transition-all flex items-center gap-2 ${
                       recordedAudio && !isSubmitting
@@ -496,7 +529,7 @@ export default function SituationExplainingPage() {
                             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                           ></path>
                         </svg>
-                        Submitting...
+                        Uploading...
                       </>
                     ) : (
                       <>
@@ -523,6 +556,14 @@ export default function SituationExplainingPage() {
           </div>
         </main>
       </div>
+
+      {/* Assessment Summary Panel */}
+      <AssessmentSummaryPanel
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+        onFinish={handleFinalSubmit}
+        isSubmitting={isSubmitting}
+      />
     </>
   );
 }

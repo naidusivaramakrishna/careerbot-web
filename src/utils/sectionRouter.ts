@@ -15,9 +15,8 @@ export const SECTION_ROUTES: { [key: string]: string } = {
   'Jumbled Sentences': '/communication/jumbled-sentences',
   'Sentence Completion': '/communication/sentence-completion',
   'Listen and Correct': '/communication/listen-and-correct',
-  'Story Listen Facts': '/communication/story-listening', // Backend uses this name for story listening section
-  // 'Situation Explaining': '/communication/situation-explaining',
-  'Describe Situation': '/communication/situation-explaining', // Backend also uses this name
+  'Story Listen Facts': '/communication/story-listen-facts', // Backend uses this name for story listening section
+  'Describe Situation': '/communication/describe-situation', // Backend also uses this name
 };
 
 /**

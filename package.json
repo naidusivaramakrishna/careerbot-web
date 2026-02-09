@@ -26,7 +26,6 @@
     "lodash.debounce": "^4.0.8",
     "lucide-react": "^0.545.0",
     "mammoth": "^1.11.0",
-    "mespeak": "^2.0.2",
     "next": "^15.5.10",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.394",

@@ -19,6 +19,7 @@ import TemplateTwo from "./templates/TemplateTwo";
 import TemplateThree from "./templates/TemplateThree";
 import TemplateFour from "./templates/TemplateFour";
 import { downloadResume } from "../../../../../api/resumeApi";
+import logger from "@/lib/logger";
 
 interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
@@ -62,7 +63,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         const effectivePageHeight = A4_HEIGHT_PX;
         const calculatedPages = Math.ceil(contentHeight / effectivePageHeight);
         setTotalPages(calculatedPages > 0 ? calculatedPages : 1);
-        // // console.log(`📄 Total pages calculated: ${calculatedPages}`);
+        logger.info(`Total pages calculated: ${calculatedPages}`);
       }
     };
 
@@ -132,7 +133,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         throw new Error("No resume ID found. Please save your resume first.");
       }
 
-      // // console.log("📥 Downloading resume:", resumeId, "Format:", type);
+      logger.info("Downloading resume:", resumeId, "Format:", type);
 
       const format = type.toLowerCase() as "pdf" | "doc";
       const blob = await downloadResume(resumeId, format);
@@ -147,7 +148,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
       const filename = sanitizedName ? `${sanitizedName}.${format}` : `resume.${format}`;
 
-      console.log("📥 Downloading as:", filename);
+      logger.info("Downloading as:", filename);
 
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -162,7 +163,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       setShowExportOptions(false);
 
     } catch (error) {
-      // // console.error("Download failed:", error);
+      logger.error("Download failed:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to download";
       setDownloadError(`Failed to download ${type}. ${errorMessage}`);
     } finally {
@@ -179,7 +180,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   // ✅ UPDATED: renderTemplate to support all 4 templates with both string and number IDs
   const renderTemplate = () => {
-    // // console.log("🎨 Rendering template:", selectedTemplate, typeof selectedTemplate);
+    logger.info("Rendering template:", selectedTemplate, typeof selectedTemplate);
     
     // Template map with both string template_ids and numeric IDs
     const templateMap: { [key: string]: JSX.Element } = {
@@ -199,12 +200,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const template = templateMap[String(selectedTemplate)];
     
     if (template) {
-      // // console.log("✅ Template found and rendering:", selectedTemplate);
+      logger.info("Template found and rendering:", selectedTemplate);
       return template;
     }
 
     // Default empty state
-    // // console.log("⚠️ No template selected, showing empty state");
+    logger.warn("No template selected, showing empty state");
     return (
       <div className="w-full max-w-[100%] min-h-[800px] bg-white rounded-xl shadow-lg flex flex-col px-2 py-14 items-center">
         <div className="mb-6">

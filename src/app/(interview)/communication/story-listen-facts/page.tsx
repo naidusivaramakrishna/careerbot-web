@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
@@ -23,7 +23,7 @@ interface Option {
   text: string;
 }
 
-export default function StoryListeningPage() {
+export default function StoryListenFactsPage() {
   const router = useRouter();
   const [showModal, setShowModal] = useState(true);
   const [currentQuestion, setCurrentQuestion] =
@@ -38,25 +38,11 @@ export default function StoryListeningPage() {
   // Track which story has been played (by story text content)
   const [playedStories, setPlayedStories] = useState<Set<string>>(new Set());
 
-  // Check if section was already completed - prevents back navigation issues
-  useEffect(() => {
-    const isCompleted = sessionStorage.getItem('story_listening_completed');
-    if (isCompleted === 'true') {
-      logger.warn('Story Listening section already completed. Preventing access via back navigation.');
+  // ✅ Track section-specific question number for display only (1-3 for "Story Listening")
+  // Note: currentQuestion.question_number remains global for backend upload API
+  const [sectionQuestionNumber, setSectionQuestionNumber] = useState(1);
+  const SECTION_TOTAL_QUESTIONS = 3; // Total 3 questions for the story
 
-      // Get the stored next section route
-      const nextSectionRoute = sessionStorage.getItem('story_listening_next_section');
-
-      if (nextSectionRoute) {
-        logger.info('Redirecting to stored next section:', nextSectionRoute);
-        router.push(nextSectionRoute);
-      } else {
-        // Fallback: redirect to sentence-completion or situation-explaining
-        logger.info('No stored section found, redirecting to sentence-completion as fallback');
-        router.push('/communication/sentence-completion');
-      }
-    }
-  }, [router]);
 
   // Check if we should show story audio page
   // Show audio if the current question has story_text and we haven't played it yet
@@ -392,6 +378,7 @@ export default function StoryListeningPage() {
 
   const handleStartSection = async () => {
     setShowModal(false);
+    setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
     await fetchCurrentQuestion();
   };
 
@@ -536,6 +523,13 @@ export default function StoryListeningPage() {
         throw new Error(errorMsg);
       }
 
+      // ✅ Mark question as completed in sessionStorage for Assessment Summary Panel
+      // Using lightweight marker (just "true" string, not the audio blob)
+      if (currentQuestion.question_number) {
+        sessionStorage.setItem(`q_${currentQuestion.question_number}_completed`, 'true');
+        logger.info(`✅ Marked question ${currentQuestion.question_number} as completed`);
+      }
+
       // ✅ Check if next question was included in upload response
       if (uploadResponse.next_question) {
         logger.info('Next question received from upload response:', uploadResponse.next_question.question.question_id);
@@ -553,10 +547,6 @@ export default function StoryListeningPage() {
             logger.info('Routing to next section page:', nextRoute);
             logger.info('Current URL before routing:', window.location.pathname);
 
-            // Mark section as complete and store next section route to prevent back navigation issues
-            sessionStorage.setItem('story_listening_completed', 'true');
-            sessionStorage.setItem('story_listening_next_section', nextRoute);
-
             router.push(nextRoute);
           } else {
             logger.error('Unknown section name from backend:', nextQuestion.section_name);
@@ -573,7 +563,7 @@ export default function StoryListeningPage() {
           question_type: nextQuestion.question_type || 'MCQ',
           section_name: 'Story Listen Facts', // ✅ Use backend section name
           section_id: undefined,
-          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1,
+          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1, // ✅ Keep global for backend
           total_questions: uploadResponse.next_question.section.total_questions,
           options: nextQuestion.options,
           audio_url: nextQuestion.audio_url,
@@ -584,6 +574,9 @@ export default function StoryListeningPage() {
           expected_text: nextQuestion.expected_text,
         });
         setSelectedAnswer(null);
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
       } else {
         // Fallback: If next_question not in response, fetch it separately
         logger.warn('Next question not in upload response, fetching separately...');
@@ -619,10 +612,6 @@ export default function StoryListeningPage() {
             logger.info('Routing to next section page:', nextRoute);
             logger.info('Current URL before routing:', window.location.pathname);
 
-            // Mark section as complete and store next section route to prevent back navigation issues
-            sessionStorage.setItem('story_listening_completed', 'true');
-            sessionStorage.setItem('story_listening_next_section', nextRoute);
-
             router.push(nextRoute);
           } else {
             logger.error('Unknown section name from backend:', response.section_name);
@@ -638,6 +627,9 @@ export default function StoryListeningPage() {
           section_name: 'Story Listen Facts', // ✅ Normalize to match backend
         });
         setSelectedAnswer(null);
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
       }
 
       // Note: playedStories Set is preserved
@@ -681,7 +673,7 @@ export default function StoryListeningPage() {
             {/* HEADER */}
             <div className="mb-4">
               <h1 className="text-lg font-semibold text-gray-900">
-                {currentQuestion?.section_name || 'Story Listening'}
+                {currentQuestion?.section_name || 'Story Listen Facts'}
               </h1>
               <p className="text-sm text-gray-500">
                 Listen to stories and answer comprehension questions
@@ -692,8 +684,7 @@ export default function StoryListeningPage() {
             <div className="bg-white rounded-lg p-5 mb-6">
               <div className="flex justify-between items-center mb-2">
                 <p className="text-sm text-gray-600">
-                  {currentQuestion?.question_number} of{' '}
-                  {currentQuestion?.total_questions} Questions
+                  {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS} Questions
                 </p>
               </div>
 
@@ -701,11 +692,7 @@ export default function StoryListeningPage() {
                 <div
                   className="bg-green-500 h-1 rounded-full transition-all"
                   style={{
-                    width: `${
-                      ((currentQuestion?.question_number || 1) /
-                        (currentQuestion?.total_questions || 1)) *
-                      100
-                    }%`,
+                    width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%`,
                   }}
                 />
               </div>
@@ -909,8 +896,7 @@ export default function StoryListeningPage() {
                     {/* FOOTER */}
                     <div className="flex justify-between items-center mt-8">
                       <p className="text-sm text-gray-500">
-                        Question {currentQuestion.question_number} of{' '}
-                        {currentQuestion.total_questions}
+                        Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
                       </p>
 
                       <button

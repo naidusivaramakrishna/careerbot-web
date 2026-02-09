@@ -13,10 +13,11 @@ import SectionItem from "./SectionItem";
 import AddNewSection from "./AddNewSection";
 import CircularProgress from "./CircularProgress";
 import { sectionIcons } from "../../_utils/sectionsConfig";
-import { Plus, Sparkles, X } from "lucide-react";
+import { Plus, Sparkles, X, FileText } from "lucide-react";
 import { useResume } from "../../_context/ResumeContext";
 import { updateResume, getAllResumes, autoSaveResume } from "@/api/resumeApi";
 import { toast } from "sonner";
+import logger from "@/lib/logger";
 
 
 interface SectionComponentProps {
@@ -43,6 +44,7 @@ interface Props {
   completionStatus: Record<string, boolean>;
   onSidebarToggle?: (isOpen: boolean) => void;
   clearErrors: (fields?: string[]) => void;
+  onCustomSectionClick?: (sectionName: string) => boolean;
 }
 
 
@@ -61,6 +63,7 @@ const EditorTab: React.FC<Props> = ({
   completionStatus = {},
   onSidebarToggle,
   clearErrors,
+  onCustomSectionClick,
 }) => {
   const nonDeletableSections = [
     "Personal Info",
@@ -70,12 +73,13 @@ const EditorTab: React.FC<Props> = ({
   ];
 
 
-  const { 
-    setSectionOrder, 
-    selectedTemplate, 
-    setSelectedTemplate, 
-    getCompletionPercentage, 
-    setCompletionStatus 
+  const {
+    resumeData,
+    setSectionOrder,
+    selectedTemplate,
+    setSelectedTemplate,
+    getCompletionPercentage,
+    setCompletionStatus
   } = useResume();
   
   const [openModalSection, setOpenModalSection] = useState<string | null>(null);
@@ -89,42 +93,42 @@ const EditorTab: React.FC<Props> = ({
   useEffect(() => {
     const validateResumeId = async () => {
       const storedId = localStorage.getItem("current_resume_id");
-      
-      // // console.log("🔍 Validating resume ID on page load:", storedId);
-      
+
+      logger.info("Validating resume ID on page load:", storedId);
+
       if (!storedId || storedId === 'null' || storedId === 'undefined') {
-        // // console.error("❌ No valid resume ID found");
-        toast.error("Resume ID missing. Redirecting to dashboard...", { 
-          duration: 3000 
+        logger.error("No valid resume ID found");
+        toast.error("Resume ID missing. Redirecting to dashboard...", {
+          duration: 3000
         });
-        
+
         return;
       }
-      
+
       try {
         const resumes = await getAllResumes();
         const exists = resumes.some(r => r.id === storedId);
-        
+
         if (!exists) {
-          // // console.error("❌ Stored ID doesn't exist in backend");
-          // // console.error("❌ Stored ID:", storedId);
-          // // console.error("❌ Available IDs:", resumes.map(r => r.id));
-          
+          logger.error("Stored ID doesn't exist in backend");
+          logger.error("Stored ID:", storedId);
+          logger.error("Available IDs:", resumes.map(r => r.id));
+
           toast.warning("Resume ID mismatch. Using latest resume...");
-          
+
           if (resumes.length > 0) {
             const newId = resumes[0].id;
             localStorage.setItem("current_resume_id", newId);
-            // // console.log("💾 Updated to new ID:", newId);
+            logger.info("Updated to new ID:", newId);
             toast.success(`Switched to resume: ${newId.substring(0, 8)}...`);
           } else {
             toast.error("No resumes found. Redirecting...");
           }
         } else {
-          // // console.log("✅ Resume ID validated successfully");
+          logger.info("Resume ID validated successfully");
         }
       } catch (err) {
-        // // console.error("❌ Failed to validate resume ID:", err);
+        logger.error("Failed to validate resume ID:", err);
       }
     };
     
@@ -154,6 +158,12 @@ const EditorTab: React.FC<Props> = ({
 
 
   const handleToggleSection = (sectionName: string) => {
+    // ✅ Check if this is a custom section
+    if (onCustomSectionClick && onCustomSectionClick(sectionName)) {
+      // Custom section was handled by the callback
+      return;
+    }
+
     if (!selectedTemplate) {
       setSelectedTemplate(1);
       if (onSidebarToggle) {
@@ -235,14 +245,14 @@ const EditorTab: React.FC<Props> = ({
       const resumeId = localStorage.getItem("current_resume_id");
       
       if (!resumeId || !sectionName || resumeId === 'null' || resumeId === 'undefined') {
-        // // console.log("⏸️ Skipping auto-save: No valid resume ID");
+        logger.info("Skipping auto-save: No valid resume ID");
         return;
       }
       
       try {
         setIsAutoSaving(true);
-        // // console.log("💾 Auto-saving:", sectionName);
-        
+        logger.info("Auto-saving:", sectionName);
+
         const sectionData = transformFormDataToBackend(sectionName);
         
         const sectionKeyMap: Record<string, string> = {
@@ -265,25 +275,30 @@ const EditorTab: React.FC<Props> = ({
         };
         
         const backendKey = sectionKeyMap[sectionName] || sectionName.toLowerCase().replace(/\s+/g, "_");
-        
-        const updatePayload = {
+
+        const updatePayload: Record<string, any> = {
           [backendKey]: sectionData,
         };
-        
-        // // console.log("📤 Auto-save payload:", updatePayload);
-        
+
+        // ✅ For Skills section, also include categorizedSkills from resumeData
+        if (sectionName === "Skills" && resumeData.categorizedSkills) {
+          updatePayload.categorizedSkills = resumeData.categorizedSkills;
+        }
+
+        logger.info("Auto-save payload:", updatePayload);
+
         await autoSaveResume(resumeId, updatePayload);
-        
+
         setLastSaved(new Date());
-        // // console.log("✅ Auto-saved successfully");
-        
+        logger.info("Auto-saved successfully");
+
       } catch (error) {
-        // // console.error("❌ Auto-save failed:", error);
+        logger.error("Auto-save failed:", error);
       } finally {
         setIsAutoSaving(false);
       }
     }, 3000);
-  }, []);
+  }, [resumeData]);
 
 
   useEffect(() => {
@@ -352,9 +367,9 @@ const EditorTab: React.FC<Props> = ({
 
   const transformFormDataToBackend = (sectionName: string) => {
     const sectionFields = getSectionFields(sectionName);
-    
-    // // console.log("🔄 Transforming section:", sectionName);
-    // // console.log("📋 Section fields:", sectionFields);
+
+    logger.info("Transforming section:", sectionName);
+    logger.info("Section fields:", sectionFields);
     
     if (sectionName === "Professional Summary") {
       const summaryValue = formData["professionalSummary"] || formData["summary"] || "";
@@ -365,13 +380,15 @@ const EditorTab: React.FC<Props> = ({
     
     if (sectionName === "Skills") {
       const skillsValue = formData["skills"];
+      let skillsArray: string[] = [];
+
       if (typeof skillsValue === 'string') {
-        return skillsValue.split(',').map(s => s.trim()).filter(s => s);
+        skillsArray = skillsValue.split(',').map(s => s.trim()).filter(s => s);
+      } else if (Array.isArray(skillsValue)) {
+        skillsArray = skillsValue;
       }
-      if (Array.isArray(skillsValue)) {
-        return skillsValue;
-      }
-      return [];
+
+      return skillsArray;
     }
     
     if (sectionName === "Personal Info") {
@@ -398,8 +415,8 @@ const EditorTab: React.FC<Props> = ({
         });
         index++;
       }
-      
-      // // console.log("🎓 Education array:", educationArray);
+
+      logger.info("Education array:", educationArray);
       return educationArray.length > 0 ? educationArray : [];
     }
     
@@ -419,8 +436,8 @@ const EditorTab: React.FC<Props> = ({
         });
         index++;
       }
-      
-      // // console.log("💼 Work Experience array:", workArray);
+
+      logger.info("Work Experience array:", workArray);
       return workArray.length > 0 ? workArray : [];
     }
     
@@ -442,8 +459,8 @@ const EditorTab: React.FC<Props> = ({
         });
         index++;
       }
-      
-      // // console.log("🚀 Projects array:", projectsArray);
+
+      logger.info("Projects array:", projectsArray);
       return projectsArray.length > 0 ? projectsArray : [];
     }
     
@@ -595,8 +612,8 @@ const EditorTab: React.FC<Props> = ({
         });
         index++;
       }
-      
-      // // console.log("📄 Publications array:", publicationsArray);
+
+      logger.info("Publications array:", publicationsArray);
       return publicationsArray.length > 0 ? publicationsArray : [];
     }
     
@@ -615,8 +632,8 @@ const EditorTab: React.FC<Props> = ({
       
       return referencesArray.length > 0 ? referencesArray : [];
     }
-    
-    // // console.warn("⚠️ Unknown section:", sectionName);
+
+    logger.warn("Unknown section:", sectionName);
     return {};
   };
   const handleSaveForm = async () => {
@@ -645,7 +662,7 @@ const EditorTab: React.FC<Props> = ({
     // ✅ Step 3: Fetch resumeId safely (with fallback)
     let resumeId = localStorage.getItem("current_resume_id");
     if (!resumeId || resumeId === "null" || resumeId === "undefined") {
-      // // console.warn("⚠️ No valid resume ID found, refetching...");
+      logger.warn("No valid resume ID found, refetching...");
       const resumes = await getAllResumes();
       if (resumes.length > 0) {
         resumeId = resumes[0].id;
@@ -684,11 +701,16 @@ const EditorTab: React.FC<Props> = ({
       sectionKeyMap[openModalSection] ||
       openModalSection.toLowerCase().replace(/\s+/g, "_");
 
-    const updatePayload = {
+    const updatePayload: Record<string, any> = {
       [backendKey]: sectionData,
     };
 
-    // // console.log("📤 Sending payload:", updatePayload);
+    // ✅ For Skills section, also include categorizedSkills from resumeData
+    if (openModalSection === "Skills" && resumeData.categorizedSkills) {
+      updatePayload.categorizedSkills = resumeData.categorizedSkills;
+    }
+
+    logger.info("Sending payload:", updatePayload);
 
     // ✅ Step 5: Call update API safely
     await updateResume(resumeId, updatePayload);
@@ -703,7 +725,7 @@ const EditorTab: React.FC<Props> = ({
     toast.success(`${openModalSection} saved successfully!`);
     closeModal();
   } catch (error) {
-    // // console.error("❌ Save failed:", error);
+    logger.error("Save failed:", error);
     if (error instanceof Error) {
       toast.error(error.message || "Failed to save section.");
     } else {
@@ -718,6 +740,9 @@ const EditorTab: React.FC<Props> = ({
 
   const completionPercentage = getCompletionPercentage();
 
+  // ✅ Calculate actual section counts for CircularProgress display
+  const totalSections = Object.keys(completionStatus).length;
+  const completedSectionsCount = Object.values(completionStatus).filter(Boolean).length;
 
   return (
     <>
@@ -743,7 +768,13 @@ const EditorTab: React.FC<Props> = ({
           </p>
         </div>
         <div className="relative">
-          <CircularProgress percentage={completionPercentage} size={54} strokeWidth={4} />
+          <CircularProgress
+            percentage={completionPercentage}
+            size={54}
+            strokeWidth={4}
+            totalSections={totalSections}
+            completedSections={completedSectionsCount}
+          />
         </div>
       </div>
 
@@ -759,9 +790,30 @@ const EditorTab: React.FC<Props> = ({
               {visibleSections.map((s, idx) => {
                 const originalIndex =
                   activeSection !== null ? activeSection : idx;
-                const Icon = sectionIcons[s.name];
+                const Icon = sectionIcons[s.name] || FileText; // Use FileText as default icon for custom sections
                 const id = `${s.name}-${originalIndex}`;
 
+                // ✅ Get resumeId and sectionKey for delete functionality
+                const resumeId = localStorage.getItem("current_resume_id") || undefined;
+                const sectionKeyMap: Record<string, string> = {
+                  "Personal Info": "personal_info",
+                  "Professional Summary": "professional_summary",
+                  "Skills": "skills",
+                  "Education": "education",
+                  "Work Experience": "work_experience",
+                  "Projects": "projects",
+                  "Certifications": "certifications",
+                  "Achievements": "achievements",
+                  "Volunteering": "volunteering",
+                  "Internships": "internships",
+                  "Awards": "awards",
+                  "Hobbies": "hobbies",
+                  "Interests": "interests",
+                  "Languages": "languages",
+                  "Publications": "publications",
+                  "References": "references",
+                };
+                const sectionKey = sectionKeyMap[s.name] || s.name.toLowerCase().replace(/\s+/g, "_");
 
                 return (
                   <Draggable
@@ -789,6 +841,8 @@ const EditorTab: React.FC<Props> = ({
                           onDelete={() => handleDeleteSection(originalIndex)}
                           disableDelete={nonDeletableSections.includes(s.name)}
                           isComplete={completionStatus[s.name] || false}
+                          resumeId={resumeId}
+                          sectionKey={sectionKey}
                         />
                       </div>
                     )}

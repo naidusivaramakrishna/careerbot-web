@@ -5,6 +5,7 @@ import { FaCheckCircle } from 'react-icons/fa';
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
 import { RiSparkling2Fill } from 'react-icons/ri';
 import { deleteResumeSection } from "@/api/resumeApi"; // ✅ Import the delete API
+import logger from "@/lib/logger";
 
 interface Props {
   title: string;
@@ -51,26 +52,54 @@ const SectionItem: React.FC<Props> = ({
   // ✅ NEW: Handle delete with API call
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     if (!resumeId || !sectionKey) {
-      // // console.error("❌ Missing resumeId or sectionKey for deletion");
+      logger.error("Missing resumeId or sectionKey for deletion");
       return;
     }
 
     try {
       setIsDeleting(true);
-      // // console.log("🗑️ Deleting section:", { resumeId, sectionKey });
-      
-      // ✅ Call the API to delete the section
-      await deleteResumeSection(resumeId, sectionKey);
-      
-      // // console.log("✅ Section deleted successfully from backend");
-      
+      logger.info("Deleting section:", { resumeId, sectionKey, title });
+
+      // ✅ List of standard sections that use the DELETE API
+      const standardSections = [
+        "personal_info",
+        "professional_summary",
+        "skills",
+        "education",
+        "work_experience",
+        "projects",
+        "certifications",
+        "achievements",
+        "volunteering",
+        "internships",
+        "awards",
+        "hobbies",
+        "interests",
+        "languages",
+        "publications",
+        "references",
+      ];
+
+      // ✅ Check if this is a standard section or custom section
+      const isStandardSection = standardSections.includes(sectionKey);
+
+      if (isStandardSection) {
+        // ✅ Standard section: Call the DELETE API
+        await deleteResumeSection(resumeId, sectionKey);
+        logger.info("Section deleted successfully from backend");
+      } else {
+        // ✅ Custom section: Just call onDelete() without API call
+        // The parent component will handle removing it from customSections array
+        logger.info("Custom section detected, delegating to parent handler");
+      }
+
       // ✅ Call parent's onDelete to update UI
       onDelete();
-      
+
     } catch (error) {
-      // // console.error("❌ Failed to delete section:", error);
+      logger.error("Failed to delete section:", error);
       // You can add toast notification here
       alert("Failed to delete section. Please try again.");
     } finally {

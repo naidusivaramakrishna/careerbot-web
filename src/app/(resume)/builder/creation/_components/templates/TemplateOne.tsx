@@ -29,6 +29,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
     interests,
     languages,
     publications,
+    customSections,
   } = data;
 
   const formatDate = (dateString?: string): string => {
@@ -658,6 +659,60 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
         );
 
       default:
+        // Check if it's a custom section
+        const customSection = customSections?.find(cs => cs.id === section || cs.sectionName === section);
+        if (customSection && customSection.fields.length > 0) {
+          return (
+            <section className="">
+              <h2 style={headingStyle}>{customSection.sectionName.toUpperCase()}</h2>
+              <div className="space-y-3">
+                {customSection.fields.map((field) => {
+                  const hasValue = field.fieldType === "list"
+                    ? (field.value as string[]).some(v => v.trim() !== "")
+                    : field.value && field.value.toString().trim() !== "";
+
+                  if (!hasValue) return null;
+
+                  return (
+                    <div key={field.id} className="mb-2">
+                      <div className="font-semibold mb-1" style={titleStyle}>
+                        {field.fieldName}:
+                      </div>
+                      {field.fieldType === "list" ? (
+                        <ul className="list-disc pl-5" style={baseTextStyle}>
+                          {(field.value as string[])
+                            .filter(v => v.trim() !== "")
+                            .map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                        </ul>
+                      ) : field.fieldType === "url" ? (
+                        <a
+                          href={field.value as string}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={linkStyle}
+                          className="hover:underline"
+                        >
+                          {field.value as string}
+                        </a>
+                      ) : field.fieldType === "textarea" ? (
+                        <div
+                          className="resume-description"
+                          style={descriptionStyle}
+                          dangerouslySetInnerHTML={{ __html: field.value as string }}
+                        />
+                      ) : (
+                        <div style={baseTextStyle}>{field.value as string}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <hr className="border-t border-gray-800 mt-4" />
+            </section>
+          );
+        }
         return null;
     }
   };

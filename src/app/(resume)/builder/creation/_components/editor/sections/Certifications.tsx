@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
+import logger from "@/lib/logger";
 import { Trash2 } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
@@ -100,7 +101,7 @@ const Certifications: React.FC = () => {
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      logger.warn("No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -111,12 +112,12 @@ const Certifications: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      // // console.log("🗑️ Deleting certification item:", { resumeId, itemId, index });
+      logger.info("Deleting certification item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "certifications", itemId);
 
-      // // console.log("✅ Certification item deleted from backend successfully");
+      logger.info("Certification item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -126,7 +127,7 @@ const Certifications: React.FC = () => {
       reindexErrors("certification", index);
 
     } catch (error) {
-      // // console.error("❌ Failed to delete certification item:", error);
+      logger.error("Failed to delete certification item:", error);
       alert("Failed to delete certification. Please try again.");
     } finally {
       setDeletingIndex(null);

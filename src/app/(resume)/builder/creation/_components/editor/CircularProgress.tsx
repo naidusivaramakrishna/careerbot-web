@@ -5,18 +5,23 @@ interface CircularProgressProps {
   percentage: number;
   size?: number;
   strokeWidth?: number;
+  totalSections?: number; // ✅ Add prop for total sections count
+  completedSections?: number; // ✅ Add prop for completed sections count
 }
 
-const CircularProgress: React.FC<CircularProgressProps> = ({ 
-  percentage, 
-  size = 56, 
-  strokeWidth = 4 
+const CircularProgress: React.FC<CircularProgressProps> = ({
+  percentage,
+  size = 56,
+  strokeWidth = 4,
+  totalSections = 16, // ✅ Default to 16 for backward compatibility
+  completedSections: completedSectionsProp
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-  const completedSections = Math.round((percentage / 100) * 16); // 16 total sections
+  // ✅ Use provided completedSections or calculate from percentage
+  const completedSections = completedSectionsProp ?? Math.round((percentage / 100) * totalSections);
 
   return (
     <div className="flex items-center justify-center">
@@ -47,7 +52,7 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
       {/* Centered text */}
       <div className="absolute flex items-center justify-center flex-col">
         <span className="text-[14px] font-bold text-gray-700">
-          {completedSections}/{16}
+          {completedSections}/{totalSections}
         </span>
       </div>
     </div>

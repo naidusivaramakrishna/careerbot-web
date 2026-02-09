@@ -5,6 +5,7 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2 } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import logger from "@/lib/logger";
 
 interface ReferenceEntry {
   name: string;
@@ -96,7 +97,7 @@ const References: React.FC = () => {
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -107,12 +108,12 @@ const References: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      // // console.log("🗑️ Deleting reference item:", { resumeId, itemId, index });
+      logger.info("🗑️ Deleting reference item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "references", itemId);
 
-      // // console.log("✅ Reference item deleted from backend successfully");
+      logger.info("✅ Reference item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -122,7 +123,7 @@ const References: React.FC = () => {
       reindexErrors("reference", index);
 
     } catch (error) {
-      // // console.error("❌ Failed to delete reference item:", error);
+      logger.error("❌ Failed to delete reference item:", error);
       alert("Failed to delete reference. Please try again.");
     } finally {
       setDeletingIndex(null);

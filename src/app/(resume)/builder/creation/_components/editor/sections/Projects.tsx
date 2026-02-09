@@ -21,6 +21,7 @@ import { Trash2 } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import logger from "@/lib/logger";
 
 interface ProjectEntry {
   title: string;
@@ -180,7 +181,7 @@ const Projects: React.FC = () => {
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -191,12 +192,12 @@ const Projects: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      // // console.log("🗑️ Deleting project item:", { resumeId, itemId, index });
+      logger.info("🗑️ Deleting project item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "projects", itemId);
 
-      // // console.log("✅ Project item deleted from backend successfully");
+      logger.info("✅ Project item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -206,7 +207,7 @@ const Projects: React.FC = () => {
       reindexErrors("project", index);
 
     } catch (error) {
-      // // console.error("❌ Failed to delete project item:", error);
+      logger.error("❌ Failed to delete project item:", error);
       alert("Failed to delete project. Please try again.");
     } finally {
       setDeletingIndex(null);

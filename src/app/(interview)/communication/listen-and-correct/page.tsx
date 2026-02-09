@@ -26,6 +26,11 @@ export default function ListenAndCorrectPage() {
   const [error, setError] = useState('');
   const [validationWarning, setValidationWarning] = useState('');
 
+  // ✅ Track section-specific question number for display only (1-8 for "Listen and Correct")
+  // Note: currentQuestion.question_number remains global for backend upload API
+  const [sectionQuestionNumber, setSectionQuestionNumber] = useState(1);
+  const SECTION_TOTAL_QUESTIONS = 8; // Total questions in this section
+
   // recordings mapped by question_id
   const [audioRecordings, setAudioRecordings] = useState<{
     [questionId: string]: Blob;
@@ -52,6 +57,7 @@ export default function ListenAndCorrectPage() {
 
   const handleStartSection = async () => {
     setShowModal(false);
+    setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
     await fetchCurrentQuestion();
   };
 
@@ -132,6 +138,12 @@ export default function ListenAndCorrectPage() {
       });
       logger.info('✅ Audio uploaded successfully:', uploadResponse);
 
+      // ✅ Mark question as completed in sessionStorage for Assessment Summary Panel
+      if (currentQuestion.question_number) {
+        sessionStorage.setItem(`q_${currentQuestion.question_number}_completed`, 'true');
+        logger.info(`✅ Marked question ${currentQuestion.question_number} as completed`);
+      }
+
       // ✅ Check if next question was included in upload response
       if (uploadResponse.next_question) {
         logger.info('📬 Next question received from upload response:', uploadResponse.next_question.question.question_id);
@@ -142,7 +154,7 @@ export default function ListenAndCorrectPage() {
         if (nextQuestion.section_name !== currentQuestion.section_name) {
           logger.info('✅ Section changed from', currentQuestion.section_name, 'to:', nextQuestion.section_name);
           logger.info('🚀 Routing to next section page');
-          router.push('/communication/story-listening');
+          router.push('/communication/story-listen-facts');
           return;
         }
 
@@ -154,7 +166,7 @@ export default function ListenAndCorrectPage() {
           question_type: nextQuestion.question_type || 'VOICE',
           section_name: nextQuestion.section_name,
           section_id: undefined,
-          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1,
+          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1, // ✅ Keep global for backend
           total_questions: uploadResponse.next_question.section.total_questions,
           options: nextQuestion.options,
           audio_url: nextQuestion.audio_url,
@@ -164,6 +176,9 @@ export default function ListenAndCorrectPage() {
           story_text: nextQuestion.story_text,
           expected_text: nextQuestion.expected_text,
         });
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
       } else {
         // Fallback: If next_question not in response, fetch it separately
         logger.warn('⚠️ Next question not in upload response, fetching separately...');
@@ -190,12 +205,15 @@ export default function ListenAndCorrectPage() {
         if (response.section_name !== currentQuestion.section_name) {
           logger.info('✅ Section changed from', currentQuestion.section_name, 'to:', response.section_name);
           logger.info('🚀 Routing to next section page');
-          router.push('/communication/story-listening');
+          router.push('/communication/story-listen-facts');
           return;
         }
 
         logger.info('➡️ Staying in Listen and Correct section, showing next question');
         setCurrentQuestion(response);
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
       }
     } catch (err: any) {
       logger.error('❌ Error uploading audio or fetching next question:', err);
@@ -249,8 +267,7 @@ export default function ListenAndCorrectPage() {
             <div className="flex justify-between items-center mb-2">
               <div>
                 <p className="text-sm text-gray-600">
-                  {currentQuestion?.question_number} of{' '}
-                  {currentQuestion?.total_questions} Questions
+                  {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS} Questions
                 </p>
               </div>
             </div>
@@ -259,11 +276,7 @@ export default function ListenAndCorrectPage() {
               <div
                 className="bg-green-500 h-1 rounded-full transition-all"
                 style={{
-                  width: `${
-                    ((currentQuestion?.question_number || 1) /
-                      (currentQuestion?.total_questions || 1)) *
-                    100
-                  }%`,
+                  width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%`,
                 }}
               />
             </div>
@@ -280,7 +293,7 @@ export default function ListenAndCorrectPage() {
                 <>
                   <div className="mb-6">
                     <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded">
-                      Question {currentQuestion?.question_number}
+                      Question {sectionQuestionNumber}
                     </span>
                   </div>
 
@@ -342,8 +355,7 @@ export default function ListenAndCorrectPage() {
           {/* FOOTER */}
           <div className="flex justify-between items-center mt-8">
             <p className="text-sm text-gray-500">
-              Question {currentQuestion?.question_number} of{' '}
-              {currentQuestion?.total_questions}
+              Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
             </p>
 
             <button

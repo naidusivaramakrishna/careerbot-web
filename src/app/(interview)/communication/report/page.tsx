@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { downloadReportPdf } from '@/api/communicationApi';
+import { getProfile } from '@/api/userApi';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import logger from '@/lib/logger';
@@ -13,31 +14,44 @@ export default function ReportPage() {
   const [candidateName, setCandidateName] = useState('');
   const [testDate, setTestDate] = useState('');
 
-  // Get dynamic data from localStorage
+  // Get dynamic data from user profile and localStorage
   useEffect(() => {
-    // Get username from localStorage (stored during signup)
-    const username = localStorage.getItem('username') || 'User';
-    setCandidateName(username);
+    const fetchUserData = async () => {
+      try {
+        // Fetch user profile to get full name
+        const profile = await getProfile();
+        const fullName = profile.full_name || profile.username || 'User';
+        setCandidateName(fullName);
+        logger.info('✅ Loaded candidate name from profile:', fullName);
+      } catch (error) {
+        logger.error('❌ Failed to fetch user profile:', error);
+        // Fallback to localStorage username
+        const username = localStorage.getItem('username') || 'User';
+        setCandidateName(username);
+      }
 
-    // Get test start date from localStorage (stored when assessment starts)
-    const testStartDate = localStorage.getItem('test_start_date');
-    if (testStartDate) {
-      const date = new Date(testStartDate);
-      const formattedDate = date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-      setTestDate(formattedDate);
-    } else {
-      // Fallback to current date if not found
-      const formattedDate = new Date().toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-      setTestDate(formattedDate);
-    }
+      // Get test start date from localStorage (stored when assessment starts)
+      const testStartDate = localStorage.getItem('test_start_date');
+      if (testStartDate) {
+        const date = new Date(testStartDate);
+        const formattedDate = date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        setTestDate(formattedDate);
+      } else {
+        // Fallback to current date if not found
+        const formattedDate = new Date().toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        setTestDate(formattedDate);
+      }
+    };
+
+    fetchUserData();
   }, []);
 
   // Assessment results structure

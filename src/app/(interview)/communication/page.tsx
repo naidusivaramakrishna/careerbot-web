@@ -68,26 +68,31 @@ export default function LoginPage() {
 
       logger.info('Test generated successfully:', response);
 
-      // Clear all previous audio recordings, video recordings, and text answers
-      // This ensures only current test's files are attached to the APIs
-      clearAllAudioRecordings();
-      clearRecordedVideo();
-      sessionStorage.removeItem('text_answers');
-      logger.info('Cleared previous audio recordings, video recording, and text answers');
-
       // Store test_id in localStorage for later use
       if (response.test_id) {
         localStorage.setItem('test_id', response.test_id);
       }
 
-      // Navigate to next page after successful API call
+      // ✅ OPTIMISTIC NAVIGATION: Navigate immediately for better UX
+      logger.info('🚀 Navigating to sections page immediately...');
       router.push('/communication/sections');
+
+      // ✅ Run cleanup in background (fire-and-forget)
+      // Clear all previous audio recordings, video recordings, and text answers
+      // This ensures only current test's files are attached to the APIs
+      Promise.resolve().then(() => {
+        clearAllAudioRecordings();
+        clearRecordedVideo();
+        sessionStorage.removeItem('text_answers');
+        logger.info('✅ Background cleanup completed: audio recordings, video recording, and text answers cleared');
+      });
+
     } catch (err: any) {
       logger.error('Error generating test:', err);
       setError(err?.response?.data?.message || 'Failed to generate test. Please try again.');
-    } finally {
       setLoading(false);
     }
+    // Note: Don't setLoading(false) on success since we're navigating away
   };
 
   return (

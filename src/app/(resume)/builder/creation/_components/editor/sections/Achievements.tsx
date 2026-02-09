@@ -3,6 +3,7 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import logger from "@/lib/logger";
 import {
   FaSpellCheck,
   FaListUl,
@@ -151,7 +152,7 @@ const Achievements: React.FC = () => {
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      logger.warn("No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -162,12 +163,12 @@ const Achievements: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      // // console.log("🗑️ Deleting achievement item:", { resumeId, itemId, index });
+      logger.info("Deleting achievement item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "achievements", itemId);
 
-      // // console.log("✅ Achievement item deleted from backend successfully");
+      logger.info("Achievement item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -177,7 +178,7 @@ const Achievements: React.FC = () => {
       reindexErrors("achievement", index);
 
     } catch (error) {
-      // // console.error("❌ Failed to delete achievement item:", error);
+      logger.error("Failed to delete achievement item:", error);
       alert("Failed to delete achievement. Please try again.");
     } finally {
       setDeletingIndex(null);

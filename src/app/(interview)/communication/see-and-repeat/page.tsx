@@ -36,6 +36,11 @@ export default function AssessmentMain() {
   const [error, setError] = useState('');
   const [validationWarning, setValidationWarning] = useState('');
 
+  // ✅ Track section-specific question number for display only (1-8 for "See and Repeat")
+  // Note: currentQuestion.question_number remains global for backend upload API
+  const [sectionQuestionNumber, setSectionQuestionNumber] = useState(1);
+  const SECTION_TOTAL_QUESTIONS = 8; // Total questions in this section
+
   // ✅ recordings mapped by question_id
   const [audioRecordings, setAudioRecordings] = useState<{
     [questionId: string]: Blob;
@@ -62,6 +67,7 @@ export default function AssessmentMain() {
 
   const handleStartSection = async () => {
     setShowModal(false);
+    setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
     await fetchCurrentQuestion();
   };
 
@@ -114,7 +120,10 @@ export default function AssessmentMain() {
 
   // ================= NEXT QUESTION =================
   const handleNext = async () => {
-    if (!currentQuestion?.question_id) return;
+    if (!currentQuestion?.question_id) {
+      logger.warn('⚠️ No current question, cannot proceed');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -123,12 +132,35 @@ export default function AssessmentMain() {
       const sessionId = localStorage.getItem('session_id');
       const testId = localStorage.getItem('test_id');
 
-      if (!sessionId) throw new Error('Session ID not found');
-      if (!testId) throw new Error('Test ID not found');
+      // ✅ Log all parameters before calling API
+      logger.info('🔍 ===== Preparing to upload audio =====');
+      logger.info('  📋 session_id:', sessionId || 'MISSING');
+      logger.info('  📋 test_id:', testId || 'MISSING');
+      logger.info('  📋 question_id:', currentQuestion.question_id);
+      logger.info('  📋 question_number:', currentQuestion.question_number || 'MISSING');
+
+      if (!sessionId) {
+        logger.error('❌ Session ID not found in localStorage');
+        throw new Error('Session ID not found. Please restart the assessment.');
+      }
+      if (!testId) {
+        logger.error('❌ Test ID not found in localStorage');
+        throw new Error('Test ID not found. Please restart the assessment.');
+      }
 
       // Get the audio blob for current question
       const audioBlob = audioRecordings[currentQuestion.question_id];
-      if (!audioBlob) throw new Error('No audio recording found');
+
+      if (!audioBlob) {
+        logger.error('❌ No audio recording found for question:', currentQuestion.question_id);
+        logger.error('  📋 Available recordings:', Object.keys(audioRecordings));
+        throw new Error('No audio recording found. Please record your answer first.');
+      }
+
+      logger.info('  📋 audio_file size:', `${(audioBlob.size / 1024).toFixed(2)} KB`);
+      logger.info('  📋 audio_file type:', audioBlob.type);
+      logger.info('  📋 return_next_question: true');
+      logger.info('🔍 ===== All parameters validated, calling API =====');
 
       // ✅ Upload audio with return_next_question=true
       logger.info('📤 Uploading audio with return_next_question=true for question:', currentQuestion.question_id);
@@ -141,6 +173,12 @@ export default function AssessmentMain() {
         question_number: currentQuestion.question_number, // ✅ Global question number
       });
       logger.info('✅ Audio uploaded successfully:', uploadResponse);
+
+      // ✅ Mark question as completed in sessionStorage for Assessment Summary Panel
+      if (currentQuestion.question_number) {
+        sessionStorage.setItem(`q_${currentQuestion.question_number}_completed`, 'true');
+        logger.info(`✅ Marked question ${currentQuestion.question_number} as completed`);
+      }
 
       // ✅ Check if next question was included in upload response
       if (uploadResponse.next_question) {
@@ -162,7 +200,7 @@ export default function AssessmentMain() {
           question_type: nextQuestion.question_type || 'VOICE',
           section_name: nextQuestion.section_name,
           section_id: undefined, // Backend returns string, frontend expects number - omit for now
-          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1,
+          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1, // ✅ Keep global for backend
           total_questions: uploadResponse.next_question.section.total_questions,
           options: nextQuestion.options,
           audio_url: nextQuestion.audio_url,
@@ -172,6 +210,9 @@ export default function AssessmentMain() {
           story_text: nextQuestion.story_text,
           expected_text: nextQuestion.expected_text,
         });
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
       } else {
         // Fallback: If next_question not in response, fetch it separately
         logger.warn('⚠️ Next question not in upload response, fetching separately...');
@@ -193,9 +234,25 @@ export default function AssessmentMain() {
         }
 
         setCurrentQuestion(response);
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to upload audio or fetch next question');
+      logger.error('❌ Error in handleNext:', err);
+      logger.error('  Error message:', err.message);
+      logger.error('  Error response:', err.response);
+      logger.error('  Error response data:', err.response?.data);
+      logger.error('  Error response status:', err.response?.status);
+
+      // Show detailed error message from backend if available
+      const errorMessage = err.response?.data?.message ||
+                          err.response?.data?.error ||
+                          err.message ||
+                          'Failed to upload audio or fetch next question';
+
+      setError(errorMessage);
+      logger.error('❌ Showing error to user:', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -237,8 +294,7 @@ export default function AssessmentMain() {
                 </p>
               </div>
               <p className="text-sm text-gray-600">
-                {currentQuestion?.question_number} of{' '}
-                {currentQuestion?.total_questions} Questions
+                {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS} Questions
               </p>
             </div>
 
@@ -246,11 +302,7 @@ export default function AssessmentMain() {
               <div
                 className="bg-green-500 h-1 rounded-full transition-all"
                 style={{
-                  width: `${
-                    ((currentQuestion?.question_number || 1) /
-                      (currentQuestion?.total_questions || 1)) *
-                    100
-                  }%`,
+                  width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%`,
                 }}
               />
             </div>
@@ -281,8 +333,7 @@ export default function AssessmentMain() {
 
           <div className="flex justify-between items-center mt-6">
             <p className="text-sm text-gray-500">
-              Question {currentQuestion?.question_number} of{' '}
-              {currentQuestion?.total_questions}
+              Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
             </p>
 
             <button
@@ -306,197 +357,3 @@ export default function AssessmentMain() {
 
 
 
-// 'use client';
-
-// import { useState } from 'react';
-// import { useRouter } from 'next/navigation';
-// import AudioRecorder from '../components/AudioRecorder'; // Import your audio recorder component
-
-// // Sample questions data - replace with your actual data
-// const questionsData = {
-//   'See and Repeat': [
-//     { id: 1, question: 'Look at the word "HELLO" and repeat it clearly.' },
-//     { id: 2, question: 'Look at the phrase "Good Morning" and repeat it.' },
-//     { id: 3, question: 'Look at the sentence "I am learning English" and repeat it.' },
-//     { id: 4, question: 'Look at "Communication is important" and repeat it.' },
-//     { id: 5, question: 'Look at "Practice makes perfect" and repeat it.' },
-//     { id: 6, question: 'Look at "Welcome to the assessment" and repeat it.' },
-//     { id: 7, question: 'Look at "Thank you for your time" and repeat it.' },
-//   ],
-// };
-
-// interface AssessmentQuestionPageProps {
-//   sectionName?: string;
-//   sectionDescription?: string;
-// }
-
-// export default function AssessmentQuestionPage({
-//   sectionName = 'See and Repeat',
-//   sectionDescription = 'View and repeat the given content clearly and accurately',
-// }: AssessmentQuestionPageProps) {
-//   const router = useRouter();
-//   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-//   const [recordedAudios, setRecordedAudios] = useState<{ [key: number]: Blob }>({});
-
-//   const questions = questionsData[sectionName as keyof typeof questionsData] || [];
-//   const currentQuestion = questions[currentQuestionIndex];
-//   const totalQuestions = questions.length;
-//   const questionNumber = currentQuestionIndex + 1;
-
-//   const handleRecordingComplete = (audioBlob: Blob) => {
-//     setRecordedAudios((prev) => ({
-//       ...prev,
-//       [currentQuestionIndex]: audioBlob,
-//     }));
-//     // // console.log('Recording saved for question:', questionNumber);
-//   };
-
-//   const handleNext = () => {
-//     if (currentQuestionIndex < totalQuestions - 1) {
-//       setCurrentQuestionIndex((prev) => prev + 1);
-//     } else {
-//       // Navigate to next section or results page
-//       router.push('/next-section');
-//     }
-//   };
-
-//   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
-
-//   return (
-//     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden">
-//       {/* Background Decoration */}
-//       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-200 via-transparent to-transparent opacity-40"></div>
-
-//       <div className="container mx-auto px-6 py-8 max-w-7xl relative z-10">
-//         {/* Header Section - Top Left */}
-//         <div className="mb-8">
-//           <div className="flex items-center gap-3 mb-3">
-//             <span className="inline-block bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm">
-//               SECTION
-//             </span>
-//             <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
-//               {sectionName}
-//             </h1>
-//           </div>
-//           <p className="text-slate-600 text-lg ml-0">
-//             {sectionDescription}
-//           </p>
-//         </div>
-
-//         {/* Main Content Area */}
-//         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-//           {/* Left Side - Question */}
-//           <div className="flex flex-col justify-start">
-//             <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-200 p-8 h-full">
-//               <div className="mb-6">
-//                 <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-bold px-4 py-2 rounded-lg">
-//                   Question {questionNumber}
-//                 </span>
-//               </div>
-              
-//               <div className="prose prose-lg max-w-none">
-//                 <h2 className="text-2xl md:text-3xl font-bold text-slate-900 leading-relaxed mb-6">
-//                   {currentQuestion?.question}
-//                 </h2>
-                
-//                 <div className="mt-8 p-6 bg-indigo-50 rounded-xl border-l-4 border-indigo-500">
-//                   <p className="text-slate-700 font-medium flex items-start gap-3">
-//                     <svg className="w-6 h-6 text-indigo-600 flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-//                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-//                     </svg>
-//                     <span>
-//                       Read the text carefully and record your answer by clicking the "Start Recording" button on the right.
-//                     </span>
-//                   </p>
-//                 </div>
-//               </div>
-
-//               {/* Recording Status Indicator */}
-//               {recordedAudios[currentQuestionIndex] && (
-//                 <div className="mt-6 flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
-//                   <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
-//                     <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-//                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-//                     </svg>
-//                   </div>
-//                   <div>
-//                     <p className="font-semibold text-emerald-800">Recording Saved</p>
-//                     <p className="text-sm text-emerald-600">You can re-record if needed</p>
-//                   </div>
-//                 </div>
-//               )}
-//             </div>
-//           </div>
-
-//           {/* Right Side - Audio Recorder */}
-//           <div className="flex flex-col">
-//             <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-200 p-8 h-full flex flex-col">
-//               {/* Question Progress - Top Right */}
-//               <div className="mb-8 flex justify-end">
-//                 <div className="bg-gradient-to-br from-indigo-50 to-purple-50 px-6 py-4 rounded-2xl border-2 border-indigo-200 shadow-sm">
-//                   <p className="text-sm text-slate-600 uppercase tracking-widest font-semibold mb-1 text-center">
-//                     Progress
-//                   </p>
-//                   <p className="text-3xl font-bold text-center">
-//                     <span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-transparent bg-clip-text">
-//                       {questionNumber}
-//                     </span>
-//                     <span className="text-slate-400 mx-2">/</span>
-//                     <span className="text-slate-600">{totalQuestions}</span>
-//                   </p>
-//                 </div>
-//               </div>
-
-//               {/* Audio Recorder Component */}
-//               <div className="flex-1 flex items-center justify-center">
-//                 <AudioRecorder 
-//                   onRecordingComplete={handleRecordingComplete}
-//                   maxDuration={15}
-//                 />
-//               </div>
-//             </div>
-//           </div>
-//         </div>
-
-//         {/* Bottom Section - Next Button (Right Aligned) */}
-//         <div className="flex justify-end">
-//           <button
-//             onClick={handleNext}
-//             disabled={!recordedAudios[currentQuestionIndex]}
-//             className={`group relative inline-flex items-center gap-3 px-10 py-5 rounded-2xl font-bold text-lg shadow-xl transform transition-all duration-300 ${
-//               recordedAudios[currentQuestionIndex]
-//                 ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 hover:shadow-2xl hover:-translate-y-1 cursor-pointer'
-//                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-//             }`}
-//           >
-//             <span>{isLastQuestion ? 'Complete Section' : 'Next Question'}</span>
-//             <svg 
-//               className={`w-5 h-5 transition-transform ${recordedAudios[currentQuestionIndex] ? 'group-hover:translate-x-1' : ''}`}
-//               fill="none" 
-//               viewBox="0 0 24 24" 
-//               stroke="currentColor"
-//             >
-//               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-//             </svg>
-//           </button>
-//         </div>
-
-//         {/* Progress Bar */}
-//         <div className="mt-8 bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-4">
-//           <div className="flex items-center justify-between mb-2">
-//             <span className="text-sm font-medium text-slate-700">Section Progress</span>
-//             <span className="text-sm font-bold text-indigo-600">
-//               {Math.round((questionNumber / totalQuestions) * 100)}%
-//             </span>
-//           </div>
-//           <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-//             <div
-//               className="bg-gradient-to-r from-indigo-600 to-purple-600 h-full rounded-full transition-all duration-500 ease-out"
-//               style={{ width: `${(questionNumber / totalQuestions) * 100}%` }}
-//             ></div>
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }

@@ -2,12 +2,13 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { RiArrowLeftLine } from 'react-icons/ri';
+import logger from "@/lib/logger";
 
 const Header: React.FC = () => {
   const router = useRouter();
 
   const handleBackClick = () => {
-    console.log('🔙 Navigating to: /builder/start/list');
+    logger.info('Navigating to: /builder/start/list');
 
     // ✅ Clear localStorage resume data to force fresh fetch
     localStorage.removeItem('resumeData');

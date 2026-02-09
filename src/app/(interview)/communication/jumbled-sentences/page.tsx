@@ -34,6 +34,11 @@ export default function JumbledSentencesPage({
   const [isConvertingAudio, setIsConvertingAudio] = useState(false);
   const [audioSaved, setAudioSaved] = useState(false);
 
+  // ✅ Track section-specific question number for display only (1-8 for "Jumbled Sentences")
+  // Note: currentQuestion.question_number remains global for backend upload API
+  const [sectionQuestionNumber, setSectionQuestionNumber] = useState(1);
+  const SECTION_TOTAL_QUESTIONS = 8; // Total questions in this section
+
   // Track audio recordings by question_id
   const [audioRecordings, setAudioRecordings] = useState<{
     [questionId: string]: Blob;
@@ -63,6 +68,7 @@ export default function JumbledSentencesPage({
 
   const handleStartSection = async () => {
     setShowModal(false);
+    setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
     await fetchCurrentQuestion();
   };
 
@@ -273,6 +279,12 @@ export default function JumbledSentencesPage({
         throw new Error(errorMsg);
       }
 
+      // ✅ Mark question as completed in sessionStorage for Assessment Summary Panel
+      if (currentQuestion.question_number) {
+        sessionStorage.setItem(`q_${currentQuestion.question_number}_completed`, 'true');
+        logger.info(`✅ Marked question ${currentQuestion.question_number} as completed`);
+      }
+
       // ✅ Check if next question was included in upload response
       if (uploadResponse.next_question) {
         logger.info('📬 Next question received from upload response:', uploadResponse.next_question.question.question_id);
@@ -295,7 +307,7 @@ export default function JumbledSentencesPage({
           question_type: nextQuestion.question_type || 'MCQ',
           section_name: nextQuestion.section_name,
           section_id: undefined,
-          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1,
+          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1, // ✅ Keep global for backend
           total_questions: uploadResponse.next_question.section.total_questions,
           options: nextQuestion.options,
           audio_url: nextQuestion.audio_url,
@@ -306,6 +318,9 @@ export default function JumbledSentencesPage({
           expected_text: nextQuestion.expected_text,
         });
         setSelectedAnswer(null); // Reset selection for new question
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
       } else {
         // Fallback: If next_question not in response, fetch it separately
         logger.warn('⚠️ Next question not in upload response, fetching separately...');
@@ -339,6 +354,9 @@ export default function JumbledSentencesPage({
         logger.info('➡️ Staying in Jumbled Sentence section, showing next question');
         setCurrentQuestion(response);
         setSelectedAnswer(null); // Reset selection for new question
+
+        // ✅ Increment section-specific question number for display
+        setSectionQuestionNumber((prev) => prev + 1);
       }
     } catch (err: any) {
       logger.error('❌ Error uploading audio or fetching next question:', err);
@@ -387,16 +405,16 @@ export default function JumbledSentencesPage({
           <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">
-                Question {currentQuestion?.question_number || 0} of {currentQuestion?.total_questions || 0}
+                Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
               </span>
               <span className="text-sm font-semibold text-indigo-600">
-                {Math.round(((currentQuestion?.question_number || 0) / (currentQuestion?.total_questions || 1)) * 100)}%
+                {Math.round((sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100)}%
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${((currentQuestion?.question_number || 0) / (currentQuestion?.total_questions || 1)) * 100}%` }}
+                style={{ width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%` }}
               />
             </div>
           </div>

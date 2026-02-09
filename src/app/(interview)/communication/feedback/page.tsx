@@ -66,55 +66,23 @@ export default function FeedbackPage() {
       throw new Error('Missing required information (email or test_id)');
     }
 
-    // Get full evaluation response objects from localStorage
-    const videoEvaluationStr = localStorage.getItem('video_evaluation_response');
-    const audioEvaluationStr = localStorage.getItem('audio_evaluation_response');
-
-    let videoEvaluation = {};
-    let audioEvaluation = {};
-
-    try {
-      if (videoEvaluationStr) {
-        videoEvaluation = JSON.parse(videoEvaluationStr);
-        logger.info('Parsed video evaluation response from localStorage');
-      } else {
-        logger.warn('No video evaluation response found in localStorage');
-      }
-    } catch (error) {
-      logger.error('Error parsing video evaluation response:', error);
-    }
-
-    try {
-      if (audioEvaluationStr) {
-        audioEvaluation = JSON.parse(audioEvaluationStr);
-        logger.info('Parsed audio evaluation response from localStorage');
-      } else {
-        logger.warn('No audio evaluation response found in localStorage');
-      }
-    } catch (error) {
-      logger.error('Error parsing audio evaluation response:', error);
-    }
-
-    logger.info('Final report request data:', {
+    logger.info('📋 Final report request data:', {
       email_id: emailId,
       test_id: testId,
-      video_evaluation_id: videoEvaluationId || '',
-      audio_evaluation_id: audioEvaluationId || '',
-      has_video_evaluation: Object.keys(videoEvaluation).length > 0,
-      has_audio_evaluation: Object.keys(audioEvaluation).length > 0,
+      video_evaluation_id: videoEvaluationId || '(none)',
+      audio_evaluation_id: audioEvaluationId || '(none)',
     });
 
-    // Call final report API with full evaluation objects
+    // ✅ Call final report API with only IDs
+    // Backend will retrieve full evaluation data using these IDs
     const response = await submitFinalReport({
       email_id: emailId,
       test_id: testId,
-      video_evaluation_id: videoEvaluationId || '',
-      audio_evaluation_id: audioEvaluationId || '',
-      video_evaluation: videoEvaluation,
-      audio_evaluation: audioEvaluation,
+      video_evaluation_id: videoEvaluationId,
+      audio_evaluation_id: audioEvaluationId,
     });
 
-    logger.info('Final report submitted successfully:', response);
+    logger.info('✅ Final report submitted successfully:', response);
     return response;
   };
 

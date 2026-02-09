@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from "react";
 import debounce from "lodash.debounce";
 import { ResumeData } from "../_context/ResumeContext";
+import logger from "@/lib/logger";
 
 interface ATSDetails {
   keywords_score: number;
@@ -32,7 +33,7 @@ export function useATSScore(resumeData: ResumeData) {
       setScore(json.score);
       setDetails(json.details);
     } catch (err) {
-      // // console.error("ATS Score error:", err);
+      logger.error("ATS Score error:", err);
     }
   };
 

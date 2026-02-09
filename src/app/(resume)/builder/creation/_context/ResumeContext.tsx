@@ -1,7 +1,8 @@
 "use client";
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
-import { getResumeById } from "@/api/resumeApi";
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from "react";
+import { getResumeById, updateResume } from "@/api/resumeApi";
 import { toast } from "sonner";
+import logger from "@/lib/logger";
 
 export interface CategorizedSkills {
   programming_languages: string[];
@@ -10,6 +11,20 @@ export interface CategorizedSkills {
   tools: string[];
   cloud_platforms: string[];
   soft_skills: string[];
+}
+
+// Custom sections support
+export interface CustomField {
+  id: string;
+  fieldName: string;
+  fieldType: "text" | "textarea" | "date" | "url" | "list";
+  value: string | string[];
+}
+
+export interface CustomSection {
+  id: string;
+  sectionName: string;
+  fields: CustomField[];
 }
 
 // Resume data structure
@@ -104,13 +119,14 @@ export interface ResumeData {
     language: string; 
     proficiency: string; 
   }[];
-  publications: { 
-    title: string; 
-    authors: string; 
-    publicationName: string; 
-    date: string; 
-    url: string; 
+  publications: {
+    title: string;
+    authors: string;
+    publicationName: string;
+    date: string;
+    url: string;
   }[];
+  customSections: CustomSection[];
 }
 
 // Style settings
@@ -142,6 +158,12 @@ interface ResumeContextType {
   setCompletionStatus: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   getCompletionPercentage: () => number;
   isLoadingResume: boolean;
+  // Custom sections methods
+  addCustomSection: (sectionName: string) => void;
+  removeCustomSection: (sectionId: string) => void;
+  addCustomField: (sectionId: string, fieldName: string, fieldType: CustomField["fieldType"]) => void;
+  updateCustomFieldValue: (sectionId: string, fieldId: string, value: string | string[]) => void;
+  deleteCustomField: (sectionId: string, fieldId: string) => void;
 }
 
 const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
@@ -164,7 +186,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
   const [resumeData, setResumeData] = useState<ResumeData>(() => {
     // ✅ If resumeId is provided, don't use localStorage (we'll load from backend)
     if (resumeIdProp && resumeIdProp !== 'null' && resumeIdProp !== 'undefined') {
-      console.log("🔄 Resume ID provided, will load from backend:", resumeIdProp);
+      logger.info("Resume ID provided, will load from backend:", resumeIdProp);
       return getEmptyResumeData(); // Return empty data, will be loaded from backend
     }
 
@@ -174,10 +196,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
       if (savedData) {
         try {
           const parsed = JSON.parse(savedData);
-          console.log("📥 Loaded resume data from localStorage");
+          logger.info("Loaded resume data from localStorage");
           return parsed;
         } catch (error) {
-          console.warn("⚠️ Failed to parse localStorage data");
+          logger.warn("Failed to parse localStorage data");
         }
       }
     }
@@ -222,6 +244,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
       interests: [],
       languages: [],
       publications: [],
+      customSections: [],
     };
   }
 
@@ -299,9 +322,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
       const handleBeforeUnload = () => {
         try {
           localStorage.setItem('resumeData', JSON.stringify(resumeData));
-          // // console.log("💾 Resume data backup saved before unload");
+          logger.info("Resume data backup saved before unload");
         } catch (error) {
-          // // console.error("❌ Failed to backup save resume data:", error);
+          logger.error("Failed to backup save resume data:", error);
         }
       };
 
@@ -314,7 +337,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
   useEffect(() => {
     if (selectedTemplate !== null) {
       localStorage.setItem("selected_template", String(selectedTemplate));
-      // // console.log("💾 Template saved to localStorage:", selectedTemplate);
+      logger.info("Template saved to localStorage:", selectedTemplate);
     }
   }, [selectedTemplate]);
 
@@ -322,7 +345,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
     setSelectedTemplateState(id);
     if (id !== null) {
       localStorage.setItem("selected_template", String(id));
-      // // console.log("💾 Template saved to localStorage:", id);
+      logger.info("Template saved to localStorage:", id);
 
       // Note: set-default API requires MongoDB ID (like "6971cbe74c0df89e108ce5b0")
       // This is handled separately in TemplatesTab when applying a template
@@ -341,24 +364,24 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
           // First, try to set clean_simple as default (in case it's not already)
           try {
             await setDefaultTemplate("6971cbe74c0df89e108ce5b0"); // MongoDB ID for clean_simple
-            console.log("✅ Set clean_simple as default template");
+            logger.info("Set clean_simple as default template");
           } catch (setError) {
-            console.warn("⚠️ Could not set default template (might already be set):", setError);
+            logger.warn("Could not set default template (might already be set):", setError);
           }
 
           // Then fetch the default template
           const defaultTemplateData = await getDefaultTemplate();
           const defaultTemplateId = String((defaultTemplateData as unknown as Record<string, unknown>)?.template_id || (defaultTemplateData as unknown as Record<string, unknown>)?.id || "clean_simple");
 
-          console.log("🎨 Fetched default template from backend:", defaultTemplateId);
+          logger.info("Fetched default template from backend:", defaultTemplateId);
           await setSelectedTemplate(defaultTemplateId);
         } catch (fetchError) {
           // If fetching fails, use clean_simple as fallback
-          console.warn("⚠️ Failed to fetch default template, using clean_simple:", fetchError);
+          logger.warn("Failed to fetch default template, using clean_simple:", fetchError);
           await setSelectedTemplate("clean_simple");
         }
       } catch (error) {
-        console.error("⚠️ Failed to initialize default template:", error);
+        logger.error("Failed to initialize default template:", error);
         // Last resort fallback
         await setSelectedTemplate("clean_simple");
       }
@@ -389,11 +412,11 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
         if (cachedData) {
           try {
             data = JSON.parse(cachedData);
-            console.log("⚡ Using cached resume data for instant load");
+            logger.info("Using cached resume data for instant load");
             // Clear cache after use to ensure fresh data on subsequent loads
             localStorage.removeItem("cached_resume_data");
           } catch {
-            console.warn("Failed to parse cached data, fetching from backend");
+            logger.warn("Failed to parse cached data, fetching from backend");
             data = await getResumeById(resumeId);
           }
         } else {
@@ -417,7 +440,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
           workExperience: data.workExperience || [],
           projects: data.projects || [],
           skills: data.skills || [],
-          categorizedSkills: data.categorizedSkills || {
+          categorizedSkills: data.categorizedSkills || data.categorized_skills || (data as any).categorizedSkills || {
             programming_languages: [],
             frameworks: [],
             databases: [],
@@ -441,6 +464,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
           interests: data.interests || [],
           languages: data.languages || [],
           publications: data.publications || [],
+          customSections: data.customSections || [],
         };
 
         // ✅ Replace data completely (don't merge with previous state)
@@ -448,9 +472,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
         setResumeData(loadedData);
 
         toast.success("Resume loaded successfully!");
-        
+
       } catch (error) {
-        // // console.error("❌ Failed to load resume:", error);
+        logger.error("Failed to load resume:", error);
         toast.error("Failed to load resume data");
       } finally {
         setIsLoadingResume(false);
@@ -483,9 +507,127 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
       const result = await res.json();
       setResumeId(result.id);
     } catch (error) {
-      // // console.error("Error creating resume:", error);
+      logger.error("Error creating resume:", error);
     }
   };
+
+  // Custom sections management
+  const addCustomSection = (sectionName: string) => {
+    const newSection: CustomSection = {
+      id: `custom_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      sectionName,
+      fields: [],
+    };
+    setResumeData((prev) => ({
+      ...prev,
+      customSections: [...prev.customSections, newSection],
+    }));
+
+    // ✅ Add custom section to sectionOrder so it appears in the template
+    setSectionOrder((prev) => [...prev, newSection.id]);
+  };
+
+  const removeCustomSection = (sectionId: string) => {
+    setResumeData((prev) => ({
+      ...prev,
+      customSections: prev.customSections.filter((s) => s.id !== sectionId),
+    }));
+
+    // ✅ Remove custom section from sectionOrder
+    setSectionOrder((prev) => prev.filter((s) => s !== sectionId));
+  };
+
+  const addCustomField = (
+    sectionId: string,
+    fieldName: string,
+    fieldType: CustomField["fieldType"]
+  ) => {
+    const newField: CustomField = {
+      id: `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      fieldName,
+      fieldType,
+      value: fieldType === "list" ? [] : "",
+    };
+
+    setResumeData((prev) => ({
+      ...prev,
+      customSections: prev.customSections.map((section) =>
+        section.id === sectionId
+          ? { ...section, fields: [...section.fields, newField] }
+          : section
+      ),
+    }));
+  };
+
+  const updateCustomFieldValue = (
+    sectionId: string,
+    fieldId: string,
+    value: string | string[]
+  ) => {
+    setResumeData((prev) => ({
+      ...prev,
+      customSections: prev.customSections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              fields: section.fields.map((field) =>
+                field.id === fieldId ? { ...field, value } : field
+              ),
+            }
+          : section
+      ),
+    }));
+  };
+
+  const deleteCustomField = (sectionId: string, fieldId: string) => {
+    setResumeData((prev) => ({
+      ...prev,
+      customSections: prev.customSections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              fields: section.fields.filter((field) => field.id !== fieldId),
+            }
+          : section
+      ),
+    }));
+  };
+
+  // ✅ Auto-save custom sections to backend whenever they change
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Skip autosave if:
+    // 1. No resume ID (resume not created yet)
+    // 2. Resume is still loading
+    // 3. Custom sections are empty
+    if (!resumeIdProp || isLoadingResume || resumeData.customSections.length === 0) {
+      return;
+    }
+
+    // Debounce autosave to avoid too many API calls
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        logger.info("💾 Saving custom sections to backend...", resumeData.customSections);
+        await updateResume(resumeIdProp, {
+          customSections: resumeData.customSections,
+        });
+        logger.info("✅ Custom sections saved successfully");
+      } catch (error) {
+        logger.error("❌ Failed to save custom sections:", error);
+      }
+    }, 2000); // Wait 2 seconds after last change before saving
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [resumeData.customSections, resumeIdProp, isLoadingResume]);
 
   return (
     <ResumeContext.Provider
@@ -505,6 +647,11 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
         setCompletionStatus,
         getCompletionPercentage,
         isLoadingResume,
+        addCustomSection,
+        removeCustomSection,
+        addCustomField,
+        updateCustomFieldValue,
+        deleteCustomField,
       }}
     >
       {children}
