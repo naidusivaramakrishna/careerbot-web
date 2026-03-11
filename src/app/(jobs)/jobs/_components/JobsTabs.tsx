@@ -19,7 +19,7 @@ export default function JobsTabs({ activeTab = "all", onTabChange, newCount = 0,
   ];
 
   return (
-    <div className="flex gap-6 text-sm border-b mt-3">
+    <div className="flex gap-6 text-sm border-b border-gray-200 mt-0 pb-3 mb-4">
       {TABS.map((tab) => (
         <button
           key={tab.id}

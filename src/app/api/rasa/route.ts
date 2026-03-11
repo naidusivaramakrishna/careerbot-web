@@ -23,17 +23,18 @@ export async function POST(request: NextRequest) {
     // // console.log('📥 Rasa response:', data);
     
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // // console.error('❌ Proxy error:', error.message);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to connect to Rasa', details: error.message },
+      { error: 'Failed to connect to Rasa', details: errorMessage },
       { status: 500 }
     );
   }
 }
 
 // Handle CORS preflight
-export async function OPTIONS(request: NextRequest) {
+export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
     headers: {

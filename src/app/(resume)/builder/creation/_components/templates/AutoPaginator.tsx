@@ -54,7 +54,7 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
 
     setPages(newPages);
     onPageCountChange?.(newPages.length); // IMPORTANT: Notify PreviewPanel
-  }, [children]);
+  }, [children, onPageCountChange]);
 
   return (
     <>
@@ -78,12 +78,13 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
 };
 
 /* Convert React node to HTML string for height measurement */
-function serialize(child: any): string {
+function serialize(child: unknown): string {
   if (typeof child === "string" || typeof child === "number") return `${child}`;
-  if (!child?.props) return "";
+  const reactChild = child as { props?: { children?: React.ReactNode } };
+  if (!reactChild?.props) return "";
 
   let html = "<div>";
-  React.Children.forEach(child.props.children, (inner) => {
+  React.Children.forEach(reactChild.props.children, (inner) => {
     html += serialize(inner);
   });
   html += "</div>";

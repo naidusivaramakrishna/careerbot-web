@@ -42,7 +42,6 @@ export const useJobManagement = () => {
             })
         } catch (error) {
             logger.error('Error fetching jobs:', error)
-            toast.error('Failed to fetch jobs')
         } finally {
             setLoading(false)
         }
@@ -80,13 +79,24 @@ export const useJobManagement = () => {
         }
     }, [])
 
-    const handleApplyFilters = useCallback((advancedFilters: any) => {
-        setFilters(prev => ({
-            ...prev,
-            ...advancedFilters,
-            page: 1
-        }))
-    }, [])
+    const handleApplyFilters = useCallback(async (advancedFilters: Partial<JobListQueryParams>) => {
+        try {
+            // First, validate filters by calling API
+            const newFilters = {
+                ...filters,
+                ...advancedFilters,
+                page: 1
+            }
+            // Call API to validate filters - this will throw if validation fails
+            await getJobList(newFilters)
+            // If validation succeeds, update filters state
+            setFilters(newFilters)
+        } catch (error) {
+            // API validation failed - re-throw so modal stays open
+            logger.error('Filter validation failed:', error)
+            throw error
+        }
+    }, [filters])
 
     const handleResetFilters = useCallback(() => {
         setFilters({
@@ -138,7 +148,6 @@ export const useJobManagement = () => {
             return jobDetails
         } catch (error) {
             logger.error('Error fetching job details:', error)
-            toast.error('Failed to load job details')
             throw error
         }
     }, [])

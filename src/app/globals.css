@@ -1,4 +1,9 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&display=swap');
+
+:root {
+  --font-montserrat: 'Montserrat', sans-serif;
+}
 
 /* Base Typography */
 body {
@@ -715,5 +720,51 @@ section.docx {
 .docx-rendered-content h3 strong {
   font-weight: bold;
   text-decoration: underline;
+}
+
+/* Rich Text Editor - List Styles */
+.editor-content ul,
+.editor-content ol {
+  margin-left: 1rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.editor-content li {
+  margin-bottom: 0.3rem;
+  line-height: 1.6;
+  display: list-item;
+}
+
+.editor-content ul li {
+  list-style-type: disc;
+}
+
+.editor-content ol li {
+  list-style-type: decimal;
+}
+
+/* Resume Description - List Styles (for saved content display) */
+.resume-description ul,
+.resume-description ol {
+  margin-left: 1rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.resume-description li {
+  margin-bottom: 0.3rem;
+  line-height: 1.6;
+  display: list-item;
+}
+
+.resume-description ul li {
+  list-style-type: disc;
+}
+
+.resume-description ol li {
+  list-style-type: decimal;
 }
 

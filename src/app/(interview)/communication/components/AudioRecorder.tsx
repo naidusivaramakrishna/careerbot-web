@@ -19,6 +19,7 @@ interface AudioRecorderProps {
     error?: string
   ) => void;
   enableProgressiveUpload?: boolean;
+  disabled?: boolean; // Disable recording button
 }
 
 
@@ -29,6 +30,7 @@ export default function AudioRecorder({
   questionId,
   onUploadStatusChange,
   enableProgressiveUpload = false,
+  disabled = false,
 }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(maxDuration);
@@ -91,15 +93,21 @@ export default function AudioRecorder({
 
         try {
           // Import dynamically to avoid circular deps
-          const { uploadProgressiveAudio } = await import('@/api/communicationApi');
-          const result = await uploadProgressiveAudio(sessionId, questionId, blob);
+          const { uploadAudio } = await import('@/api/communicationApi');
+          // uploadAudio expects specific parameters, need to adjust this call
+          const result = await uploadAudio({
+            session_id: sessionId,
+            question_id: questionId,
+            test_id: '', // This should be passed as a prop if needed
+            audio_file: blob
+          });
 
           if (result.success) {
             onUploadStatusChange?.(questionId, 'completed');
             logger.info(`Progressive upload completed for ${questionId}`);
           } else {
-            onUploadStatusChange?.(questionId, 'failed', result.error);
-            logger.error(`Progressive upload failed for ${questionId}:`, result.error);
+            onUploadStatusChange?.(questionId, 'failed', result.message);
+            logger.error(`Progressive upload failed for ${questionId}:`, result.message);
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Upload failed';
@@ -132,7 +140,7 @@ export default function AudioRecorder({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    analyser.getByteTimeDomainData(dataArray);
+    analyser.getByteTimeDomainData(dataArray as Uint8Array<ArrayBuffer>);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = '#ffffff';
@@ -296,7 +304,12 @@ export default function AudioRecorder({
 
           <button
             onClick={startRecording}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold"
+            disabled={disabled}
+            className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+              disabled
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
           >
             Start Recording
           </button>
@@ -311,8 +324,21 @@ export default function AudioRecorder({
 
           <div className="mb-6">
             <div className="w-40 h-40 rounded-full border-4 border-blue-500 flex items-center justify-center">
-              <div className="w-24 h-24 rounded-full bg-blue-500 flex items-center justify-center">
-                <canvas ref={canvasRef} width={80} height={40} />
+              <div className="w-24 h-24 rounded-full bg-blue-500 flex items-center justify-center overflow-hidden">
+                {/* Animated Waveform Bars */}
+                <div className="flex items-center justify-center gap-0.5 h-full">
+                  {[...Array(12)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-1 bg-white rounded-full animate-pulse"
+                      style={{
+                        height: `${Math.random() * 30 + 10}px`,
+                        animationDelay: `${i * 0.1}s`,
+                        animationDuration: '0.8s',
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>

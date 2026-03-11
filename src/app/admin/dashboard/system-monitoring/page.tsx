@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 import Dropdown from '@/components/common/CustomDropdown'
 import { LoadingSpinner } from '../_components/LoadingSpinner'
@@ -11,13 +11,28 @@ import { MemoryUsageSection } from './_components/MemoryUsageSection'
 import { SystemLogsSection } from './_components/SystemLogsSection'
 import { PerformanceMetrics } from './_components/PerformanceMetrics'
 import { logger } from '@/lib/logger'
+import { useAdminAccess } from '../../_hooks/useAdminAccess'
+import { LockedPageOverlay } from '../../_components/LockedPageOverlay'
 
 const SystemMonitoring = () => {
-    const [activeTab, setActiveTab] = useState<string>("Today")
+    const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('system-monitoring');
+    // Separate time tab state for each section
+    const [apiActiveTab, setApiActiveTab] = useState<string>("Today")
+    const [cpuActiveTab, setCpuActiveTab] = useState<string>("Today")
+    const [memoryActiveTab, setMemoryActiveTab] = useState<string>("Today")
+
     const [apiShowComparison, setApiShowComparison] = useState(false)
     const [cpuShowComparison, setCpuShowComparison] = useState(false)
     const [memoryShowComparison, setMemoryShowComparison] = useState(false)
     const [autoRefresh, setAutoRefresh] = useState<string>("Off")
+
+    // Load auto-refresh preference from localStorage on mount
+    useEffect(() => {
+        const savedAutoRefresh = localStorage.getItem('systemMonitoring_autoRefresh')
+        if (savedAutoRefresh) {
+            setAutoRefresh(savedAutoRefresh)
+        }
+    }, [])
 
     const {
         systemOverview,
@@ -30,7 +45,9 @@ const SystemMonitoring = () => {
         lastRefreshed,
         fetchAllData
     } = useSystemMonitoring({
-        activeTab,
+        activeTab: apiActiveTab,
+        cpuActiveTab: cpuActiveTab,
+        memoryActiveTab: memoryActiveTab,
         apiShowComparison,
         cpuShowComparison,
         memoryShowComparison,
@@ -45,7 +62,19 @@ const SystemMonitoring = () => {
     const handleAutoRefreshChange = useCallback((value: string) => {
         logger.debug(`Auto-refresh changed to: ${value}`)
         setAutoRefresh(value)
+        // Save to localStorage
+        localStorage.setItem('systemMonitoring_autoRefresh', value)
     }, [])
+
+    // Block render until access check completes
+    if (accessLoading) {
+        return <LoadingSpinner />;
+    }
+
+    // Check access
+    if (!hasAccess) {
+        return <LockedPageOverlay requiredRoles={requiredRoles} pageName="System Monitoring" />;
+    }
 
     if (loading) {
         return <LoadingSpinner />
@@ -63,7 +92,7 @@ const SystemMonitoring = () => {
                 </div>
                 <div className='flex gap-4'>
                     <Dropdown
-                        options={["Off", "On"]}
+                        options={["Auto-refresh","Off", "On"]}
                         defaultValue={autoRefresh}
                         bgColor="bg-gray-100"
                         bgOptions="bg-white"
@@ -92,8 +121,8 @@ const SystemMonitoring = () => {
 
             {/* API Requests Section */}
             <ApiRequestsSection
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
+                activeTab={apiActiveTab}
+                onTabChange={setApiActiveTab}
                 showComparison={apiShowComparison}
                 onComparisonChange={setApiShowComparison}
                 metrics={apiMetrics}
@@ -101,8 +130,8 @@ const SystemMonitoring = () => {
 
             {/* CPU Usage Section */}
             <CpuUsageSection
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
+                activeTab={cpuActiveTab}
+                onTabChange={setCpuActiveTab}
                 showComparison={cpuShowComparison}
                 onComparisonChange={setCpuShowComparison}
                 metrics={cpuMetrics}
@@ -110,8 +139,8 @@ const SystemMonitoring = () => {
 
             {/* Memory Usage Section */}
             <MemoryUsageSection
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
+                activeTab={memoryActiveTab}
+                onTabChange={setMemoryActiveTab}
                 showComparison={memoryShowComparison}
                 onComparisonChange={setMemoryShowComparison}
                 metrics={memoryMetrics}

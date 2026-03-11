@@ -10,6 +10,13 @@ import { ActivityTab, PaymentsTab, ResumesTab, SubscriptionTab } from './TabCont
 import { UserActionButtons } from './UserActionButtons'
 import { DeleteDialog, SuspendDialog } from './ActionDialogs'
 
+interface UserEditData {
+    email: string
+    full_name: string
+    role: string
+    subscription_plan: string
+}
+
 interface Props {
     userId: string
     onClose: () => void
@@ -68,7 +75,7 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
         setIsEditing(false)
     }, [])
 
-    const handleSaveEdit = useCallback(async (data: any) => {
+    const handleSaveEdit = useCallback(async (data: UserEditData) => {
         const success = await handleUpdateUser(data)
         if (success) {
             setIsEditing(false)

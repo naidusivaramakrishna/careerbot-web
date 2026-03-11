@@ -49,7 +49,7 @@ const EnhancerPage: React.FC = () => {
     setUploadProgress(0);
 
     try {
-      // // console.log("File uploaded:", file.name);
+      console.log("File uploaded:", file.name);
 
       // Store file metadata
       sessionStorage.setItem("uploadedFileName", file.name);
@@ -77,8 +77,8 @@ const EnhancerPage: React.FC = () => {
       clearInterval(interval);
       setUploadProgress(100);
 
-      // // console.log("Resume parsing result:", parseResult);
-      // // console.log("Resume enhancement result:", enhanceResult);
+      console.log("Resume parsing result:", parseResult);
+      console.log("Resume enhancement result:", enhanceResult);
 
       // Store the resume_id and enhanced_id for later use
       sessionStorage.setItem("resume_id", parseResult.resume_id);
@@ -91,14 +91,17 @@ const EnhancerPage: React.FC = () => {
       // ============================================
 
       // Get the raw data - try multiple sources like JobMatch does
-      const rawData = enhanceResult.enhanced_resume || {};
-      const parsedData = parseResult.parsed_data || rawData.parsed_data || rawData || {};
-      const llmData = parsedData.llm_data || rawData.llm_data || {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawData: any = enhanceResult.enhanced_resume || {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parsedData: any = parseResult.parsed_data || rawData.parsed_data || rawData || {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const llmData: any = parsedData.llm_data || rawData.llm_data || {};
 
-      // // console.log("=== JOBMATCH-STYLE EXTRACTION ===");
-      // // console.log("rawData:", rawData);
-      // // console.log("parsedData:", parsedData);
-      // // console.log("llmData:", llmData);
+      console.log("=== JOBMATCH-STYLE EXTRACTION ===");
+      console.log("rawData:", rawData);
+      console.log("parsedData:", parsedData);
+      console.log("llmData:", llmData);
 
       // Extract contact with multiple fallbacks (like JobMatch)
       const contact =
@@ -253,9 +256,9 @@ const EnhancerPage: React.FC = () => {
       // PROJECTS - JobMatch-style extraction
       // ============================================
       // Handle both llmData.projects and llmData.additional[0].projects
-      const additionalData = Array.isArray(llmData.additional) && llmData.additional.length > 0
+      const additionalData = (Array.isArray(llmData.additional) && llmData.additional.length > 0
         ? llmData.additional[0]
-        : {};
+        : {}) as Record<string, unknown>;
 
       let projects =
         rawData.projects ||
@@ -363,7 +366,7 @@ const EnhancerPage: React.FC = () => {
         })
         .filter((h: { name: string; description: string } | null): h is { name: string; description: string } => h !== null);
 
-      // // console.log("Extracted hobbies:", hobbies);
+      console.log("Extracted hobbies:", hobbies);
 
       // ============================================
       // LANGUAGES - JobMatch-style extraction
@@ -402,7 +405,7 @@ const EnhancerPage: React.FC = () => {
         })
         .filter((l: { language: string; proficiency: string } | null): l is { language: string; proficiency: string } => l !== null);
 
-      // // console.log("Extracted languages:", languages);
+      console.log("Extracted languages:", languages);
 
       // ============================================
       // AWARDS - Extract from awards field (NOT achievements)
@@ -414,7 +417,7 @@ const EnhancerPage: React.FC = () => {
         llmData.awards ||
         enhancedData.awards ||
         [];
-      // // console.log("=== AWARDS RAW DATA ===", awardsRaw);
+      console.log("=== AWARDS RAW DATA ===", awardsRaw);
       const awards = awardsRaw
         .map((award: Record<string, unknown> | string) => {
           if (typeof award === 'string') {
@@ -451,7 +454,7 @@ const EnhancerPage: React.FC = () => {
         llmData.achievements ||
         enhancedData.achievements ||
         [];
-      // // console.log("=== ACHIEVEMENTS RAW DATA ===", achievementsRaw);
+      console.log("=== ACHIEVEMENTS RAW DATA ===", achievementsRaw);
       const achievements = achievementsRaw
         .map((achievement: Record<string, unknown> | string) => {
           if (typeof achievement === 'string') {
@@ -487,7 +490,7 @@ const EnhancerPage: React.FC = () => {
         llmData.volunteering ||
         enhancedData.volunteering ||
         [];
-      // // console.log("=== VOLUNTEERING RAW DATA ===", volunteeringRaw);
+      console.log("=== VOLUNTEERING RAW DATA ===", volunteeringRaw);
       const volunteering = volunteeringRaw
         .map((vol: Record<string, unknown> | string) => {
           if (typeof vol === 'string') {
@@ -525,7 +528,7 @@ const EnhancerPage: React.FC = () => {
         llmData.publications ||
         enhancedData.publications ||
         [];
-      // // console.log("=== PUBLICATIONS RAW DATA ===", publicationsRaw);
+      console.log("=== PUBLICATIONS RAW DATA ===", publicationsRaw);
       const publications = publicationsRaw
         .map((pub: Record<string, unknown> | string) => {
           if (typeof pub === 'string') {
@@ -563,7 +566,7 @@ const EnhancerPage: React.FC = () => {
         llmData.references ||
         enhancedData.references ||
         [];
-      // // console.log("=== REFERENCES RAW DATA ===", referencesRaw);
+      console.log("=== REFERENCES RAW DATA ===", referencesRaw);
       const references = referencesRaw
         .map((ref: Record<string, unknown> | string) => {
           if (typeof ref === 'string') {
@@ -625,19 +628,19 @@ const EnhancerPage: React.FC = () => {
         publications,
         categorizedSkills,
         // Include raw backend summary variants (if any) so editors can show AI suggestions
-        summaryVariants: rawData.summary_variants || enhanceResult.enhanced_resume?.summary_variants || [],
+        summaryVariants: rawData.summary_variants || [],
       };
 
-      // // console.log("=== CLEANED DATA DEBUG ===");
-      // // console.log("Awards count:", awards.length);
-      // // console.log("Achievements count:", achievements.length);
-      // // console.log("Volunteering count:", volunteering.length);
-      // // console.log("Publications count:", publications.length);
-      // // console.log("References count:", references.length);
+      console.log("=== CLEANED DATA DEBUG ===");
+      console.log("Awards count:", awards.length);
+      console.log("Achievements count:", achievements.length);
+      console.log("Volunteering count:", volunteering.length);
+      console.log("Publications count:", publications.length);
+      console.log("References count:", references.length);
 
-      // // console.log("=== IMPROVEMENTS DEBUG ===");
-      // // console.log("Backend enhancement_report:", enhanceResult.enhancement_report);
-      // // console.log("Validation results:", enhanceResult.enhancement_report?.details?.validation_results);
+      console.log("=== IMPROVEMENTS DEBUG ===");
+      console.log("Backend enhancement_report:", enhanceResult.enhancement_report);
+      console.log("Validation results:", enhanceResult.enhancement_report?.details?.validation_results);
 
       // Extract improvements from backend response (SOURCE OF TRUTH)
       interface BackendIssue {
@@ -670,8 +673,8 @@ const EnhancerPage: React.FC = () => {
 
       // Parse ONLY the backend suggestions array
       const backendSuggestions = enhanceResult.suggestions || [];
-      // // console.log("=== BACKEND SUGGESTIONS (RAW) ===");
-      // // console.log("Suggestions array:", backendSuggestions);
+      console.log("=== BACKEND SUGGESTIONS (RAW) ===");
+      console.log("Suggestions array:", backendSuggestions);
 
       // Transform backend suggestions to improvement format
       const allImprovements = backendSuggestions.map((suggestion, index) => {
@@ -733,9 +736,9 @@ const EnhancerPage: React.FC = () => {
       // Sort by impact points (highest first)
       allImprovements.sort((a, b) => b.impact_points - a.impact_points);
 
-      // // console.log("=== AI SUGGESTIONS ===");
-      // // console.log("Total suggestions:", allImprovements.length);
-      // // console.log("Suggestions:", allImprovements);
+      console.log("=== AI SUGGESTIONS ===");
+      console.log("Total suggestions:", allImprovements.length);
+      console.log("Suggestions:", allImprovements);
 
       // Store enhancement report and improvements
       if (enhanceResult.enhancement_report) {
@@ -750,7 +753,7 @@ const EnhancerPage: React.FC = () => {
       }
 
       // Set the resume data in context
-      // // console.log("Setting resume data:", transformedResumeData);
+      console.log("Setting resume data:", transformedResumeData);
       setResumeData(transformedResumeData);
 
       // Set default template to atlas (TemplateTwo)
@@ -759,22 +762,22 @@ const EnhancerPage: React.FC = () => {
       // Enable sections that have data
       const sectionsToEnable: SectionName[] = ["PersonalInfo"];
 
-      // // console.log("=== SECTION DETECTION ===");
-      // // console.log("professionalSummary:", transformedResumeData.professionalSummary?.substring(0, 50));
-      // // console.log("workExperience.length:", transformedResumeData.workExperience.length);
-      // // console.log("skills.length:", transformedResumeData.skills.length);
-      // // console.log("education.length:", transformedResumeData.education.length);
-      // // console.log("projects.length:", transformedResumeData.projects.length);
-      // // console.log("languages.length:", transformedResumeData.languages.length);
-      // // console.log("certifications.length:", transformedResumeData.certifications.length);
-      // // console.log("awards.length:", transformedResumeData.awards.length);
-      // // console.log("hobbies.length:", transformedResumeData.hobbies.length);
-      // // console.log("internships.length:", transformedResumeData.internships.length);
-      // // console.log("achievements.length:", transformedResumeData.achievements?.length || 0);
-      // // console.log("volunteering.length:", transformedResumeData.volunteering?.length || 0);
-      // // console.log("publications.length:", transformedResumeData.publications?.length || 0);
-      // // console.log("references.length:", transformedResumeData.references?.length || 0);
-      // // console.log("interests.length:", transformedResumeData.interests?.length || 0);
+      console.log("=== SECTION DETECTION ===");
+      console.log("professionalSummary:", transformedResumeData.professionalSummary?.substring(0, 50));
+      console.log("workExperience.length:", transformedResumeData.workExperience.length);
+      console.log("skills.length:", transformedResumeData.skills.length);
+      console.log("education.length:", transformedResumeData.education.length);
+      console.log("projects.length:", transformedResumeData.projects.length);
+      console.log("languages.length:", transformedResumeData.languages.length);
+      console.log("certifications.length:", transformedResumeData.certifications.length);
+      console.log("awards.length:", transformedResumeData.awards.length);
+      console.log("hobbies.length:", transformedResumeData.hobbies.length);
+      console.log("internships.length:", transformedResumeData.internships.length);
+      console.log("achievements.length:", transformedResumeData.achievements?.length || 0);
+      console.log("volunteering.length:", transformedResumeData.volunteering?.length || 0);
+      console.log("publications.length:", transformedResumeData.publications?.length || 0);
+      console.log("references.length:", transformedResumeData.references?.length || 0);
+      console.log("interests.length:", transformedResumeData.interests?.length || 0);
 
       if (transformedResumeData.professionalSummary) sectionsToEnable.push("Summary");
       if (transformedResumeData.workExperience.length > 0) sectionsToEnable.push("Experience");
@@ -792,12 +795,12 @@ const EnhancerPage: React.FC = () => {
       if (transformedResumeData.references && transformedResumeData.references.length > 0) sectionsToEnable.push("References");
       if (transformedResumeData.interests && transformedResumeData.interests.length > 0) sectionsToEnable.push("Interests");
 
-      // // console.log("=== FINAL ENABLED SECTIONS ===");
-      // // console.log("sectionsToEnable:", sectionsToEnable);
+      console.log("=== FINAL ENABLED SECTIONS ===");
+      console.log("sectionsToEnable:", sectionsToEnable);
 
       setEnabledSections(sectionsToEnable);
 
-      // // console.log("Navigating to /enhancer/builder");
+      console.log("Navigating to /enhancer/builder");
       
       // Small delay to ensure state is set before navigation
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -805,13 +808,13 @@ const EnhancerPage: React.FC = () => {
       // Navigate to builder page
       router.push("/enhancer/builder");
     } catch (error: unknown) {
-      // // console.error("=== UPLOAD ERROR ===");
-      // // console.error("Full error:", error);
+      console.error("=== UPLOAD ERROR ===");
+      console.error("Full error:", error);
 
       const err = error as { message?: string; response?: unknown; __raw?: unknown };
-      // // console.error("Error message:", err?.message);
-      // // console.error("Error response:", err?.response);
-      // // console.error("Error __raw:", err?.__raw);
+      console.error("Error message:", err?.message);
+      console.error("Error response:", err?.response);
+      console.error("Error __raw:", err?.__raw);
 
       // Try to extract meaningful error message
       let errorMessage = "Error uploading file. Please try again.";
@@ -854,11 +857,6 @@ const EnhancerPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="bg-white px-8">
-        <h1 className="text-3xl font-bold text-gray-900 pt-6">CareerBot</h1>
-      </header>
-
       <main className="px-8 py-8">
         {/* Gray Background Container - Original Layout */}
         <div className="bg-gray-100 rounded-3xl p-8 border border-gray-200">

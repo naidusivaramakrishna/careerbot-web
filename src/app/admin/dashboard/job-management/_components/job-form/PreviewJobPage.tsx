@@ -94,7 +94,7 @@ export const PreviewJobPage = memo(({
             setPublishing(true)
 
             // Upload logo if needed
-            let logoUrl = data.companyLogoUrl || undefined
+            let logoUrl: string | undefined = undefined
             if (data.logoFile) {
                 toast.loading('Uploading company logo...')
                 logoUrl = await uploadJobLogo(data.logoFile)

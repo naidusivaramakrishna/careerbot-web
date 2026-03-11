@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Toaster } from "sonner";
+import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 
 export default function ClientLayout({
   children,
@@ -10,36 +11,46 @@ export default function ClientLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
 
+  // Determine if user is authenticated based on current route
+  // Must match the protectedRoutes array in middleware.ts
+  const isAuthenticatedRoute = pathname?.startsWith('/dashboard') ||
+    pathname?.startsWith('/profile') ||
+    pathname?.startsWith('/builder') ||
+    pathname?.startsWith('/atslogin') ||
+    pathname?.startsWith('/enhancer') ||
+    pathname?.startsWith('/jobmatch') ||
+    pathname?.startsWith('/jobs') ||
+    pathname?.startsWith('/communication') ||
+    pathname?.startsWith('/settings') ||
+    pathname?.startsWith('/admin');
+
+  // Setup automatic token refresh (30 min expiry)
+  useTokenRefresh(isAuthenticatedRoute, 30 * 60 * 1000, pathname);
+
+  // Listen for logout events from HTTP interceptor
+  // When token refresh fails, http.ts redirects to login
+  // This ensures redirect happens even without API calls if using a logout endpoint
   useEffect(() => {
-    // Listen for token updates (login/logout from other tabs)
-    const handleTokenUpdate = () => {
-      // // console.log('Token updated - reloading page');
-      // Force reload to clear all caches
-      window.location.reload();
-    };
+    if (!isAuthenticatedRoute) return;
 
-    window.addEventListener('tokenUpdated', handleTokenUpdate);
-
-    // Also listen for storage changes (from other tabs)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'access_token' || e.key === null) {
-        // // console.log('Storage changed - reloading page');
-        // Token changed or storage cleared
-        window.location.reload();
+    const handleTokenExpired = () => {
+      const isAdminRoute = pathname?.startsWith('/admin');
+      if (isAdminRoute) {
+        router.push('/admin/login');
+      } else {
+        router.push('/?showLogin=true');
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('tokenUpdated', handleTokenUpdate);
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [pathname]);
+    // Listen for logout event from elsewhere in the app
+    window.addEventListener('userLoggedOut', handleTokenExpired);
+    return () => window.removeEventListener('userLoggedOut', handleTokenExpired);
+  }, [isAuthenticatedRoute, pathname, router]);
 
   return <>
-  <Toaster richColors position="bottom-right"/>
+    <Toaster richColors position="bottom-right" />
     {children}
   </>;
 }

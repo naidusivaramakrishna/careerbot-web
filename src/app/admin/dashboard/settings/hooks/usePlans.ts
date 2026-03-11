@@ -6,6 +6,15 @@ import { formatTemplateForApi, formatTemplateForDisplay, INITIAL_FORM_DATA } fro
 import { ModalMode, PlanFormData, PlanItem } from '../types';
 import { logger } from '@/lib/logger';
 
+// Helper function to convert form value to API value
+const convertLimitValue = (value: string): string | number => {
+    if (!value) return 0;
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === 'unlimited') return 'unlimited';
+    const num = parseInt(trimmed);
+    return isNaN(num) ? 0 : num;
+};
+
 interface UsePlansReturn {
     plans: PlanItem[];
     loading: boolean;
@@ -50,47 +59,44 @@ export const usePlans = (): UsePlansReturn => {
             setPlans(response.plans);
         } catch (error: unknown) {
             logger.error('Error fetching plans:', error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to fetch plans';
-            toast.error(errorMessage);
         } finally {
             setLoading(false);
         }
     }, []);
 
     const handleCreatePlan = useCallback(async () => {
-        if (!formData.planName || !formData.price) {
-            toast.error('Plan name and price are required');
-            return;
-        }
+        logger.debug('handleCreatePlan called', { planName: formData.planName, price: formData.price });
 
         try {
             const planData = {
                 name: formData.planName,
                 price: parseFloat(formData.price),
-                resume_scan_limit: parseInt(formData.resumeLimit) || 0,
-                job_application_limit: parseInt(formData.jobLimit) || 0,
-                ai_credits: parseInt(formData.aiCredits) || 0,
+                resume_scan_limit: convertLimitValue(formData.resumeLimit),
+                job_application_limit: convertLimitValue(formData.jobLimit),
+                ai_credits: convertLimitValue(formData.aiCredits),
                 templates: formatTemplateForApi(formData.templates),
                 features: formData.features,
                 is_active: true,
             };
 
+            logger.debug('Creating plan with data:', planData);
             await createPlan(planData);
+            logger.debug('Plan created successfully');
             toast.success('Plan created successfully');
             closeModal();
             fetchPlans();
         } catch (error: unknown) {
             logger.error('Error creating plan:', error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to create plan';
-            toast.error(errorMessage);
+            // Re-throw error so modal can display inline validation errors
+            throw error;
         }
     }, [formData, closeModal, fetchPlans]);
 
     const handleUpdatePlan = useCallback(async () => {
-        if (!selectedPlanId) return;
+        logger.debug('handleUpdatePlan called', { planId: selectedPlanId, planName: formData.planName, price: formData.price });
 
-        if (!formData.planName || !formData.price) {
-            toast.error('Plan name and price are required');
+        if (!selectedPlanId) {
+            logger.warn('Update plan failed - no plan selected');
             return;
         }
 
@@ -98,21 +104,23 @@ export const usePlans = (): UsePlansReturn => {
             const planData = {
                 name: formData.planName,
                 price: parseFloat(formData.price),
-                resume_scan_limit: parseInt(formData.resumeLimit) || 0,
-                job_application_limit: parseInt(formData.jobLimit) || 0,
-                ai_credits: parseInt(formData.aiCredits) || 0,
+                resume_scan_limit: convertLimitValue(formData.resumeLimit),
+                job_application_limit: convertLimitValue(formData.jobLimit),
+                ai_credits: convertLimitValue(formData.aiCredits),
                 templates: formatTemplateForApi(formData.templates),
                 features: formData.features,
             };
 
+            logger.debug('Updating plan with data:', { planId: selectedPlanId, planData });
             await updatePlan(selectedPlanId, planData);
+            logger.debug('Plan updated successfully');
             toast.success('Plan updated successfully');
             closeModal();
             fetchPlans();
         } catch (error: unknown) {
             logger.error('Error updating plan:', error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to update plan';
-            toast.error(errorMessage);
+            // Re-throw error so modal can display inline validation errors
+            throw error;
         }
     }, [selectedPlanId, formData, closeModal, fetchPlans]);
 

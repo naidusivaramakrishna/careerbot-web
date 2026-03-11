@@ -48,9 +48,9 @@ export interface UserDetailsResponse {
     joined_at: string;
     last_login: string | null;
     subscription: string | null;
-    resumes: any[];
-    payments: any[];
-    activity: any[];
+    resumes: Resume[];
+    payments: Payment[];
+    activity: UserActivityLog[];
 }
 
 export interface UpdateUserRequest {
@@ -67,7 +67,6 @@ export interface UpdateUserResponse {
 }
 
 export interface DeleteUserRequest {
-    delete_type: string;
     reason: string;
     confirm: boolean;
 }
@@ -96,6 +95,19 @@ export interface UnsuspendUserResponse {
     message: string;
     user_id: string;
     status: string;
+}
+
+export interface Resume {
+    id: string;
+    title?: string;
+    updated_at: string;
+}
+
+export interface Payment {
+    id: string;
+    amount: number;
+    created_at: string;
+    status: 'completed' | 'pending' | 'failed';
 }
 
 export interface UserActivityQueryParams {

@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Plus, Check, Search } from "lucide-react";
+import RichTextEditorField from "./RichTextEditorField";
 
 export interface ExperienceItemForm {
   company: string;
@@ -142,7 +143,7 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
             value={company}
             onChange={(e) => updateCurrent({ company: e.target.value })}
             placeholder="e.g., Google, Microsoft, Acme Inc."
-            className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:ring-0 transition-colors"
+            className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
           />
         </div>
 
@@ -155,7 +156,7 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
             <input
               value={role}
               onChange={(e) => updateCurrent({ role: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:ring-0 transition-colors"
+              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
             />
           </div>
 
@@ -168,7 +169,7 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
               onChange={(e) =>
                 updateCurrent({ location: e.target.value })
               }
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:ring-0 transition-colors"
+              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
             />
           </div>
         </div>
@@ -183,7 +184,7 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
               value={client}
               onChange={(e) => updateCurrent({ client: e.target.value })}
               placeholder="e.g., Amazon, Netflix"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:ring-0 transition-colors"
+              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
             />
           </div>
 
@@ -196,7 +197,7 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
               value={years}
               onChange={(e) => updateCurrent({ years: e.target.value })}
               placeholder="e.g., 2, 3.5"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:ring-0 transition-colors"
+              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
             />
           </div>
         </div>
@@ -227,7 +228,7 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
                     updateCurrent({ duration: startFormatted + (end ? " - " + end : "") });
                   }}
                   placeholder="Start Date"
-                  className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:ring-0 transition-colors"
+                  className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
                 />
               </div>
               <div className="relative">
@@ -240,7 +241,7 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
                     updateCurrent({ duration: start + " - " + endFormatted });
                   }}
                   placeholder="End Date"
-                  className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:ring-0 transition-colors"
+                  className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
                 />
               </div>
             </div>
@@ -251,7 +252,7 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
               value={duration}
               onChange={(e) => updateCurrent({ duration: e.target.value })}
               placeholder="e.g., 2 years, 3.5 years, Jan 2022 - Present"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:ring-0 transition-colors"
+              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
             />
           )}
 
@@ -263,37 +264,13 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
         </div>
 
         {/* Description editor */}
-        <div>
-          <label className="text-sm font-semibold mb-1.5 block text-gray-700">
-            Work description
-          </label>
-
-          <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
-            {/* Toolbar */}
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-200 text-sm text-gray-600">
-              <button className="font-bold hover:text-gray-900">B</button>
-              <button className="italic hover:text-gray-900">I</button>
-              <button className="hover:text-gray-900">•</button>
-              <button className="hover:text-gray-900">1.</button>
-              <button className="hover:text-gray-900">↺</button>
-              <button className="hover:text-gray-900">↻</button>
-              <button className="hover:text-gray-900">🔗</button>
-              <button className="ml-auto border border-gray-300 px-2.5 py-1 rounded text-blue-600 hover:bg-blue-50">
-                A
-              </button>
-            </div>
-
-            <textarea
-              rows={6}
-              value={description}
-              onChange={(e) =>
-                updateCurrent({ description: e.target.value })
-              }
-              onFocus={() => setActiveTab("examples")}
-              className="w-full px-4 py-3 text-sm leading-5 resize-none outline-none min-h-[140px] text-gray-900"
-            />
-          </div>
-        </div>
+        <RichTextEditorField
+          label="Work description"
+          value={description}
+          onChange={(val) => updateCurrent({ description: val })}
+          placeholder="Describe your responsibilities, achievements, and impact..."
+          minHeight="160px"
+        />
       </div>
 
       {/* ================= RIGHT ================= */}

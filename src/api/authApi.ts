@@ -57,20 +57,191 @@ export const signOut = async () => {
   window.location.href = "/";
 };
 
-export const getGoogleLoginUrl = (): string => "https://accounts.google.com/o/oauth2/auth?...";
+export const getGoogleLoginUrl = async (): Promise<string> => {
+  const response = await httpClient.get<{ auth_url: string }>("/auth/google/login-url");
+  return response.data.auth_url;
+};
 
-export const getLinkedInLoginUrl = (): string => "https://www.linkedin.com/oauth/v2/authorization?...";
+export const getLinkedInLoginUrl = async (): Promise<string> => {
+  const response = await httpClient.get<{ auth_url: string }>("/auth/linkedin/login-url");
+  return response.data.auth_url;
+};
 
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
+  const response = await httpClient.post<SignUpResponse>(
+    "/auth/signup",
+    data as unknown as Record<string, unknown>
+  );
+  // ✅ Backend sets httpOnly cookies automatically after signup
+  return response.data;
+};
+
+// ==================== EMAIL VERIFICATION ENDPOINTS ====================
+
+export interface ResendEmailRequest {
+  email: string;
+}
+
+export interface ResendEmailResponse {
+  message: string;
+}
+
+/**
+ * Resend verification email
+ *
+ * Use this if user didn't receive the original verification email.
+ *
+ * @param data - User email address
+ * @returns Message confirming email was sent
+ */
+export const resendVerificationEmail = async (
+  data: ResendEmailRequest
+): Promise<ResendEmailResponse> => {
+  const response = await httpClient.post<ResendEmailResponse>(
+    "/auth/email/resend",
+    data as unknown as Record<string, unknown>,
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  return response.data;
+};
+
+export interface VerifyEmailRequest {
+  token: string;
+}
+
+export interface VerifyEmailResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Verify user email address
+ *
+ * Confirms email verification using the token sent to the user's email.
+ *
+ * @param data - Verification token from email
+ * @returns Success status and message
+ */
+export const verifyEmail = async (
+  data: VerifyEmailRequest
+): Promise<VerifyEmailResponse> => {
+  const response = await httpClient.post<VerifyEmailResponse>(
+    "/auth/email/verify",
+    data as unknown as Record<string, unknown>,
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  return response.data;
+};
+
+// ==================== PASSWORD RESET ENDPOINTS ====================
+
+export interface RequestPasswordResetRequest {
+  email: string;
+}
+
+export interface RequestPasswordResetResponse {
+  message: string;
+}
+
+/**
+ * Request password reset
+ *
+ * Sends a password reset email to the user with a unique token.
+ * Includes rate limiting to prevent abuse.
+ *
+ * @param data - User email address
+ * @returns Message confirming reset email was sent
+ */
+export const requestPasswordReset = async (
+  data: RequestPasswordResetRequest
+): Promise<RequestPasswordResetResponse> => {
+  const response = await httpClient.post<RequestPasswordResetResponse>(
+    "/auth/password/reset",
+    data as unknown as Record<string, unknown>,
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  return response.data;
+};
+
+export interface ConfirmPasswordResetRequest {
+  token: string;
+  new_password: string;
+}
+
+export interface ConfirmPasswordResetResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Confirm password reset
+ *
+ * Completes the password reset process using the token from the reset email.
+ * Password must meet security requirements.
+ *
+ * @param data - Reset token and new password
+ * @returns Success status and message
+ */
+export const confirmPasswordReset = async (
+  data: ConfirmPasswordResetRequest
+): Promise<ConfirmPasswordResetResponse> => {
+  const response = await httpClient.patch<ConfirmPasswordResetResponse>(
+    "/auth/password/reset",
+    data as unknown as Record<string, unknown>,
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  return response.data;
+};
+
+// ==================== TOKEN REFRESH ====================
+
+export interface TokenRefreshResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in?: number;
+}
+
+/**
+ * Refresh access token using refresh token
+ *
+ * Called automatically when access token is about to expire.
+ * Tokens are stored in httpOnly cookies - this endpoint just refreshes them.
+ *
+ * @returns New access token and expiry information
+ */
+export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
   try {
-    const response = await httpClient.post<SignUpResponse>(
-      "/auth/signup",
-      data as unknown as Record<string, unknown>
+    const response = await httpClient.post<TokenRefreshResponse>(
+      "/auth/refresh",
+      { refresh_token: "" } as unknown as Record<string, unknown>,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
     );
-    // ✅ Backend sets httpOnly cookies automatically after signup
+    // ✅ Backend reads refresh_token from httpOnly cookie automatically
+    // Backend sets new access_token as httpOnly cookie in response
     return response.data;
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Sign up failed";
-    return { success: false, message: errorMessage };
+    const errorMessage = error instanceof Error ? error.message : "Token refresh failed";
+    throw new Error(errorMessage);
   }
 };

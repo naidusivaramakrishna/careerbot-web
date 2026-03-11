@@ -229,7 +229,7 @@ export const getAllAudioRecordings = (): { [questionId: string]: string } => {
   try {
     const recordings = sessionStorage.getItem('audio_recordings');
     return recordings ? JSON.parse(recordings) : {};
-  } catch (error) {
+  } catch {
     // // console.error('Error retrieving audio recordings:', error);
     return {};
   }
@@ -242,7 +242,7 @@ export const getAudioRecording = (questionId: string): string | null => {
   try {
     const recordings = getAllAudioRecordings();
     return recordings[questionId] || null;
-  } catch (error) {
+  } catch {
     // // console.error('Error retrieving audio recording:', error);
     return null;
   }
@@ -352,7 +352,7 @@ export const blobToFile = (blob: Blob, fileName: string): File => {
 export const prepareAudioForAPI = (
   questionId: string,
   blob: Blob,
-  additionalData?: { [key: string]: any }
+  additionalData?: { [key: string]: unknown }
 ): FormData => {
   const formData = new FormData();
 
@@ -366,7 +366,7 @@ export const prepareAudioForAPI = (
   // Add any additional data
   if (additionalData) {
     Object.keys(additionalData).forEach((key) => {
-      formData.append(key, additionalData[key]);
+      formData.append(key, String(additionalData[key]));
     });
   }
 
@@ -380,7 +380,7 @@ export const clearAllAudioRecordings = (): void => {
   try {
     sessionStorage.removeItem('audio_recordings');
     // // console.log('✅ All audio recordings cleared');
-  } catch (error) {
+  } catch {
     // // console.error('Error clearing audio recordings:', error);
   }
 };
@@ -392,7 +392,7 @@ export const getAudioRecordingsCount = (): number => {
   try {
     const recordings = getAllAudioRecordings();
     return Object.keys(recordings).length;
-  } catch (error) {
+  } catch {
     // // console.error('Error getting audio recordings count:', error);
     return 0;
   }
@@ -512,7 +512,7 @@ export const saveTextAnswer = (questionId: string, answerText: string): void => 
     answers[questionId] = answerText;
     sessionStorage.setItem('text_answers', JSON.stringify(answers));
     // // console.log(`✅ Text answer saved for question ${questionId}:`, answerText);
-  } catch (error) {
+  } catch {
     // // console.error('Error saving text answer:', error);
   }
 };
@@ -526,7 +526,7 @@ export const getTextAnswer = (questionId: string): string | null => {
     if (!answers) return null;
     const parsedAnswers = JSON.parse(answers);
     return parsedAnswers[questionId] || null;
-  } catch (error) {
+  } catch {
     // // console.error('Error getting text answer:', error);
     return null;
   }
@@ -539,7 +539,7 @@ export const getAllTextAnswers = (): { [questionId: string]: string } => {
   try {
     const answers = sessionStorage.getItem('text_answers');
     return answers ? JSON.parse(answers) : {};
-  } catch (error) {
+  } catch {
     // // console.error('Error getting all text answers:', error);
     return {};
   }
@@ -646,54 +646,6 @@ export async function generateSpeechAudio(
     // Fallback: create a minimal audio file
     return createMinimalAudioBlob();
   }
-}
-
-/**
- * Convert AudioBuffer to WAV blob
- */
-function audioBufferToWav(buffer: AudioBuffer): Blob {
-  const numberOfChannels = buffer.numberOfChannels;
-  const length = buffer.length * numberOfChannels * 2;
-  const arrayBuffer = new ArrayBuffer(44 + length);
-  const view = new DataView(arrayBuffer);
-
-  // WAV header
-  const writeString = (offset: number, string: string) => {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  };
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + length, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true); // PCM format
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, numberOfChannels, true);
-  view.setUint32(24, buffer.sampleRate, true);
-  view.setUint32(28, buffer.sampleRate * numberOfChannels * 2, true);
-  view.setUint16(32, numberOfChannels * 2, true);
-  view.setUint16(34, 16, true); // 16-bit
-  writeString(36, 'data');
-  view.setUint32(40, length, true);
-
-  // Write audio data
-  const channels: Float32Array[] = [];
-  for (let i = 0; i < numberOfChannels; i++) {
-    channels.push(buffer.getChannelData(i));
-  }
-
-  let offset = 44;
-  for (let i = 0; i < buffer.length; i++) {
-    for (let channel = 0; channel < numberOfChannels; channel++) {
-      const sample = Math.max(-1, Math.min(1, channels[channel][i]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
-      offset += 2;
-    }
-  }
-
-  return new Blob([arrayBuffer], { type: 'audio/wav' });
 }
 
 /**

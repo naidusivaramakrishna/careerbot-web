@@ -8,11 +8,12 @@ import logger from '@/lib/logger';
 interface TextToSpeechPlayerProps {
   text: string;
   autoPlay?: boolean;
+  onAudioEnd?: () => void; // Callback when audio finishes playing
 }
 
 export default function TextToSpeechPlayer({
   text,
-  autoPlay = false
+  onAudioEnd
 }: TextToSpeechPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
@@ -80,6 +81,7 @@ export default function TextToSpeechPlayer({
       });
       setIsPlaying(false);
       setHasPlayedOnce(true); // Mark as played after completion
+      onAudioEnd?.(); // Notify parent that audio has finished
     } catch (err) {
       logger.error('TTS Error:', err);
       setError('Failed to play audio');

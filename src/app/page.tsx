@@ -4,9 +4,24 @@ import { useEffect, useState } from "react";
 
 export default function Home() {
   const [open, setOpen] = useState(false)
+  const [initialFormType, setInitialFormType] = useState<"signup" | "signin">("signup")
 
   useEffect(() => {
+    // Check for showLogin query parameter (from http.ts redirect)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('showLogin') === 'true') {
+      setInitialFormType("signin");
+      setOpen(true);
+      // Store verified state in sessionStorage before cleaning URL
+      if (params.get('verified') === 'true') {
+        sessionStorage.setItem('emailVerified', 'true');
+      }
+      // Clean up URL to avoid showing the param on refresh
+      window.history.replaceState({}, '', '/');
+    }
+
     const openLogin = () => {
+      setInitialFormType("signin");
       setOpen(true);
     };
 
@@ -20,13 +35,14 @@ export default function Home() {
   return (
     <div>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { setInitialFormType("signup"); setOpen(true); }}
         className="flex justify-self-end text-sm  gap-2 border border-neutral-200 cursor-pointer bg-black text-white font-semibold rounded-lg px-6 py-2 m-4">
         SignUp
       </button>
       <AuthModal
         open={open}
         onClose={() => setOpen(false)}
+        initialFormType={initialFormType}
       />
     </div>
   );

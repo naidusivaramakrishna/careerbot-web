@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
@@ -8,7 +8,7 @@ import { toast } from "sonner"
  * ✅ Backend now sets httpOnly cookies automatically
  * ❌ No need to manually handle tokens or store them
  */
-const GoogleSuccessPage = () => {
+const GoogleSuccessContent = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
@@ -33,9 +33,9 @@ const GoogleSuccessPage = () => {
         setStatus('error')
         toast.error('Failed to complete sign in')
 
-        // Redirect to signup page after error
+        // Redirect to home page after error
         setTimeout(() => {
-          router.push('/signup')
+          router.push('/')
         }, 2000)
       }
     }
@@ -87,12 +87,18 @@ const GoogleSuccessPage = () => {
             </div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Oops!</h2>
             <p className="text-gray-600 mb-4">Something went wrong</p>
-            <p className="text-sm text-gray-500">Redirecting back to sign up...</p>
+            <p className="text-sm text-gray-500">Redirecting home...</p>
           </>
         )}
       </div>
     </div>
   )
 }
+
+const GoogleSuccessPage = () => (
+  <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+    <GoogleSuccessContent />
+  </Suspense>
+)
 
 export default GoogleSuccessPage

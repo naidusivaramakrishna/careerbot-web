@@ -1,23 +1,21 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Banknote, Briefcase, CirclePlay, ExternalLink, MapPin, X } from "lucide-react";
-import Dropdown from "@/components/common/CustomDropdown";
 import { IoHourglassOutline } from "react-icons/io5";
-import { getJobDetails, updateJob, JobDetailsResponse, UpdateJobRequest } from "@/api/adminJobsApi";
+import { getJobDetails, closeJob, JobDetailsResponse } from "@/api/adminJobsApi";
 import { toast } from 'sonner';
 
 interface Props {
     job: { id: string } | null;
     onClose: () => void;
     onUpdate?: () => void;
+    onEdit?: (jobId: string) => void;
 }
 
-const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate }) => {
-    const [editMode, setEditMode] = useState(false);
+const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate, onEdit }) => {
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [closing, setClosing] = useState(false);
     const [jobDetails, setJobDetails] = useState<JobDetailsResponse | null>(null);
-    const [updatedJob, setUpdatedJob] = useState<UpdateJobRequest>({});
 
     useEffect(() => {
         if (job?.id) {
@@ -30,41 +28,24 @@ const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate }) => {
             setLoading(true);
             const details = await getJobDetails(job!.id);
             setJobDetails(details);
-            // Initialize update form with current values
-            setUpdatedJob({
-                job_title: details.job_title,
-                company: details.company,
-                location: details.location,
-                work_mode: details.work_mode as any,
-                salary_min: details.salary_min,
-                salary_max: details.salary_max,
-                job_type: details.job_type as any,
-                job_description: details.job_description,
-                skills: details.skills,
-                status: details.status as any,
-            });
         } catch (error) {
-            // // console.error('Error fetching job details:', error);
             toast.error('Failed to load job details');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSave = async () => {
+    const handleCloseJob = async () => {
         try {
-            setSaving(true);
-            await updateJob(job!.id, updatedJob);
-            toast.success('Job updated successfully');
-            setEditMode(false);
+            setClosing(true);
+            await closeJob(job!.id);
+            toast.success('Job closed successfully');
             if (onUpdate) onUpdate();
-            // Refresh details
-            await fetchJobDetails();
+            onClose();
         } catch (error) {
-            // // console.error('Error updating job:', error);
-            toast.error('Failed to update job');
+            toast.error('Failed to close job');
         } finally {
-            setSaving(false);
+            setClosing(false);
         }
     };
 
@@ -117,18 +98,13 @@ const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate }) => {
                 </button>
 
                 {/* Header */}
-                <h2 className="text-xl font-semibold">
-                    {editMode ? "Edit Job" : "Job Details"}
-                </h2>
+                <h2 className="text-xl font-semibold">Job Details</h2>
                 <p className="text-sm text-gray-500 border-b pb-2">
-                    {editMode
-                        ? "Edit and update job information"
-                        : "Complete job description and details"}
+                    Complete job description and details
                 </p>
 
-                {/* ---------------- VIEW MODE ---------------- */}
-                {!editMode && (
-                    <div className="mt-4">
+                {/* Job Details */}
+                <div className="mt-4">
                         <h3 className="text-lg font-semibold">{jobDetails.job_title}</h3>
                         <p className="text-gray-600">{jobDetails.company}</p>
                         <div className="flex gap-2 my-4 flex-wrap">
@@ -258,166 +234,21 @@ const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate }) => {
 
                             <div className="flex justify-end gap-3 mt-8">
                                 <button
-                                    onClick={onClose}
-                                    className="px-4 py-2 cursor-pointer rounded-md border border-black/80 bg-white text-sm text-[#9E5559]"
+                                    onClick={handleCloseJob}
+                                    disabled={closing || jobDetails.status === 'closed'}
+                                    className="px-4 py-2 cursor-pointer rounded-md border border-black/80 bg-white text-sm text-[#9E5559] disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    Close
+                                    {closing ? 'Closing...' : 'Close Job'}
                                 </button>
                                 <button
-                                    onClick={() => setEditMode(true)}
+                                    onClick={() => onEdit?.(job!.id)}
                                     className="px-5 py-2 cursor-pointer rounded-md bg-[#5E5EFF] text-white text-sm"
                                 >
                                     Edit Job
                                 </button>
                             </div>
                         </div>
-                    </div>
-                )}
-
-                {/* ---------------- EDIT MODE ---------------- */}
-                {editMode && (
-                    <div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 my-4">
-                            <div className="flex flex-col gap-2">
-                                <label className="text-lg font-semibold">Job Title</label>
-                                <input
-                                    type="text"
-                                    value={updatedJob.job_title || ''}
-                                    onChange={(e) => setUpdatedJob(prev => ({ ...prev, job_title: e.target.value }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                                />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <label className="text-lg font-semibold">Company</label>
-                                <input
-                                    type="text"
-                                    value={updatedJob.company || ''}
-                                    onChange={(e) => setUpdatedJob(prev => ({ ...prev, company: e.target.value }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                                />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <label className="text-lg font-semibold">Location</label>
-                                <input
-                                    type="text"
-                                    value={updatedJob.location || ''}
-                                    onChange={(e) => setUpdatedJob(prev => ({ ...prev, location: e.target.value }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                                />
-                            </div>
-
-                            {/* Work Mode */}
-                            <div className="flex flex-col gap-2">
-                                <label className="text-lg font-semibold">Work Mode</label>
-                                <select
-                                    value={updatedJob.work_mode || ''}
-                                    onChange={(e) => setUpdatedJob(prev => ({ ...prev, work_mode: e.target.value as any }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                                >
-                                    <option value="remote">Remote</option>
-                                    <option value="hybrid">Hybrid</option>
-                                    <option value="on-site">On-site</option>
-                                </select>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-5 col-span-2">
-                                {/* Salary Min */}
-                                <div className="flex flex-col gap-2">
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-lg font-semibold">Salary Range (LPA)</label>
-                                        <span className="text-xs text-gray-600">Min</span>
-                                    </div>
-                                    <div>
-                                        <input
-                                            type="number"
-                                            value={updatedJob.salary_min || ''}
-                                            onChange={(e) => setUpdatedJob(prev => ({
-                                                ...prev,
-                                                salary_min: e.target.value ? Number(e.target.value) : undefined
-                                            }))}
-                                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm pr-10"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Salary Max */}
-                                <div className="flex flex-col gap-2">
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-lg opacity-0 select-none">.</label>
-                                        <span className="text-xs text-gray-600">Max</span>
-                                    </div>
-                                    <div>
-                                        <input
-                                            type="number"
-                                            value={updatedJob.salary_max || ''}
-                                            onChange={(e) => setUpdatedJob(prev => ({
-                                                ...prev,
-                                                salary_max: e.target.value ? Number(e.target.value) : undefined
-                                            }))}
-                                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm pr-10"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Job Type */}
-                            <div className="flex flex-col gap-2">
-                                <label className="text-lg font-semibold">Job Type</label>
-                                <select
-                                    value={updatedJob.job_type || ''}
-                                    onChange={(e) => setUpdatedJob(prev => ({ ...prev, job_type: e.target.value as any }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                                >
-                                    <option value="full-time">Full-time</option>
-                                    <option value="part-time">Part-time</option>
-                                    <option value="internship">Internship</option>
-                                    <option value="contract">Contract</option>
-                                </select>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <label className="text-lg font-semibold">Status</label>
-                                <select
-                                    value={updatedJob.status || ''}
-                                    onChange={(e) => setUpdatedJob(prev => ({ ...prev, status: e.target.value as any }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                                >
-                                    <option value="draft">Draft</option>
-                                    <option value="active">Active</option>
-                                    <option value="closed">Closed</option>
-                                    <option value="expired">Expired</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="flex flex-col gap-2 my-2">
-                            <label className="text-lg font-semibold">Job Description</label>
-                            <textarea
-                                rows={4}
-                                value={updatedJob.job_description || ''}
-                                onChange={(e) => setUpdatedJob(prev => ({ ...prev, job_description: e.target.value }))}
-                                className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                                placeholder="Describe the role, responsibilities, and requirements...."
-                            />
-                        </div>
-
-                        {/* Buttons */}
-                        <div className="flex justify-end gap-3 mt-8">
-                            <button
-                                onClick={() => setEditMode(false)}
-                                className="px-4 py-2 cursor-pointer rounded-md border border-black/80 bg-white text-sm text-[#9E5559]"
-                                disabled={saving}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={saving}
-                                className="px-5 py-2 cursor-pointer rounded-md bg-[#5E5EFF] text-white text-sm disabled:opacity-50"
-                            >
-                                {saving ? 'Saving...' : 'Save Changes'}
-                            </button>
-                        </div>
-                    </div>
-                )}
+                </div>
             </div>
         </div>
     );

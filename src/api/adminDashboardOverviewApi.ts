@@ -23,11 +23,12 @@ export interface DashboardMetrics {
 }
 
 export interface RealtimeStats {
-    users_online: number;
-    active_sessions: number;
-    api_requests_per_minute: number;
-    db_queries_per_second: number;
+    active_users_now: number;
+    api_requests_per_min: number;
+    db_queries_per_sec: number;
     cache_hit_rate: number;
+    error_rate: number;
+    timestamp: string;
 }
 
 export interface SubscriptionBreakdownItem {
@@ -44,12 +45,17 @@ export interface RecentActivityItem {
     user_initial: string;
 }
 
+export interface AutoRefreshSettings {
+    enabled: boolean;
+    interval_seconds: number;
+}
+
 export interface DashboardOverviewResponse {
     period: 'daily' | 'weekly' | 'monthly';
     metrics: DashboardMetrics;
-    realtime_stats: RealtimeStats;
     subscription_breakdown: SubscriptionBreakdownItem[];
     recent_activity: RecentActivityItem[];
+    auto_refresh: AutoRefreshSettings;
     timestamp: string;
 }
 
@@ -150,13 +156,26 @@ export const getRevenueMetric = async (
 
 /**
  * Get real-time statistics
- * 
- * Helper function to get just the real-time stats
+ *
+ * Lightweight endpoint for frequent polling (every 30 seconds with auto-refresh)
+ * Returns only current system metrics without the full dashboard overview
+ * Data is cached in Redis for 5 seconds (minimal TTL for real-time accuracy)
+ *
+ * Real-Time Metrics:
+ * - active_users_now: Number of active users at this moment
+ * - api_requests_per_min: API request rate per minute
+ * - db_queries_per_sec: Database query rate per second
+ * - cache_hit_rate: Cache hit rate percentage (0-100)
+ * - error_rate: Error rate percentage (0-100)
+ *
+ * @returns Real-time system statistics
  */
 export const getRealtimeStats = async (): Promise<RealtimeStats> => {
     try {
-        const overview = await getDashboardOverview('daily'); // Use daily for real-time
-        return overview.realtime_stats;
+        const response = await httpClient.get<RealtimeStats>(
+            '/admin/analytics/dashboard/realtime-stats'
+        );
+        return response.data;
     } catch (error) {
         logger.error('Error fetching realtime stats:', error);
         throw error;
@@ -182,8 +201,8 @@ export const getSubscriptionBreakdown = async (
 
 /**
  * Get recent activity
- * 
- * Helper function to get recent user activity
+ *
+ * Helper function to get recent user activity from the last 24 hours
  */
 export const getRecentActivity = async (): Promise<RecentActivityItem[]> => {
     try {
@@ -191,6 +210,37 @@ export const getRecentActivity = async (): Promise<RecentActivityItem[]> => {
         return overview.recent_activity;
     } catch (error) {
         logger.error('Error fetching recent activity:', error);
+        throw error;
+    }
+};
+
+/**
+ * Toggle auto-refresh setting for dashboard
+ *
+ * Enables/disables automatic dashboard refresh with fixed 30-second interval
+ * Setting is stored per admin user
+ *
+ * @param enabled - Enable or disable auto-refresh
+ * @returns Auto-refresh configuration with success status
+ *
+ * Example:
+ * ```typescript
+ * const result = await toggleAutoRefresh(true);
+ * // result.auto_refresh.enabled === true
+ * // result.auto_refresh.interval_seconds === 30
+ * ```
+ */
+export const toggleAutoRefresh = async (
+    enabled: boolean
+): Promise<{ success: boolean; message: string; auto_refresh: AutoRefreshSettings }> => {
+    try {
+        const response = await httpClient.post<{ success: boolean; message: string; auto_refresh: AutoRefreshSettings }>(
+            '/admin/analytics/dashboard/auto-refresh',
+            { enabled }
+        );
+        return response.data;
+    } catch (error) {
+        logger.error('Error toggling auto-refresh:', error);
         throw error;
     }
 };

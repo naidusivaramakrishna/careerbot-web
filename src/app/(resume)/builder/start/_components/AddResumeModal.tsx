@@ -1,6 +1,6 @@
 import { Linkedin, Sparkles, Upload } from "lucide-react";
 
-const AddResumeModal = ({ isOpen, onClose }: {
+const AddResumeModal = ({ isOpen }: {
     isOpen: boolean;
     onClose: () => void;
 }) => {

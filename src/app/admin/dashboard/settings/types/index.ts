@@ -15,9 +15,9 @@ export interface PlanFormData {
 export interface CreatePlanPayload {
     name: string;
     price: number;
-    resume_scan_limit: number;
-    job_application_limit: number;
-    ai_credits: number;
+    resume_scan_limit: number | string;
+    job_application_limit: number | string;
+    ai_credits: number | string;
     templates: 'limited' | 'premium' | 'unlimited';
     features: string[];
     is_active: boolean;
@@ -26,9 +26,9 @@ export interface CreatePlanPayload {
 export interface UpdatePlanPayload {
     name: string;
     price: number;
-    resume_scan_limit: number;
-    job_application_limit: number;
-    ai_credits: number;
+    resume_scan_limit: number | string;
+    job_application_limit: number | string;
+    ai_credits: number | string;
     templates: 'limited' | 'premium' | 'unlimited';
     features: string[];
 }

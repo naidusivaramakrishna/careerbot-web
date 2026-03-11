@@ -223,7 +223,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
             <AutocompleteInput
               label="Target Role"
               required
-              value={resumeData.professionalSummary.targetRole}
+              value={resumeData.professionalSummary.targetRole ?? ""}
               onChange={(val) => handleTargetRoleChange(val)}
               onBlur={() => validateRequired("summary", 0, { targetRole: resumeData.professionalSummary.targetRole })}
               placeholder="e.g., Frontend Developer, Data Analyst"

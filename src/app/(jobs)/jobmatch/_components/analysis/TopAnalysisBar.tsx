@@ -30,48 +30,44 @@ const TopAnalysisBar: React.FC<TopAnalysisBarProps> = ({
     {
       label: "Critical Skills",
       count: missingCriticalCount,
-      bgColor: "bg-red-50",
-      borderColor: "border-red-300",
-      underlineColor:
-        "bg-gradient-to-r from-red-300 via-red-400 to-red-500",
-      textColor: "text-slate-700",
+      bgColor: "bg-[#eff6ff]",
+      borderColor: "border-[#bfdbfe]",
+      underlineColor: "bg-[#2557a7]",
+      textColor: "text-[#1d4ed8]",
     },
     {
       label: "Important Skills",
       count: missingImportantCount,
-      bgColor: "bg-yellow-50",
-      borderColor: "border-yellow-300",
-      underlineColor:
-        "bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500",
-      textColor: "text-slate-700",
+      bgColor: "bg-[#eff6ff]",
+      borderColor: "border-[#bfdbfe]",
+      underlineColor: "bg-[#2557a7]",
+      textColor: "text-[#1e3a8a]",
     },
     {
       label: "Nice to Have",
       count: missingNiceToHaveCount,
-      bgColor: "bg-cyan-50",
-      borderColor: "border-cyan-300",
-      underlineColor:
-        "bg-gradient-to-r from-cyan-300 via-cyan-400 to-cyan-500",
-      textColor: "text-slate-700",
+      bgColor: "bg-[#eff6ff]",
+      borderColor: "border-[#bfdbfe]",
+      underlineColor: "bg-[#2557a7]",
+      textColor: "text-[#3b82f6]",
     },
     {
       label: "Soft Skills",
       count: missingSoftSkillsCount,
-      bgColor: "bg-purple-50",
-      borderColor: "border-purple-300",
-      underlineColor:
-        "bg-gradient-to-r from-purple-300 via-purple-400 to-purple-500",
-      textColor: "text-slate-700",
+      bgColor: "bg-[#eff6ff]",
+      borderColor: "border-[#bfdbfe]",
+      underlineColor: "bg-[#2557a7]",
+      textColor: "text-[#2557a7]",
     },
   ];
 
   return (
-    <div className="bg-white border-2 border-slate-200 rounded-2xl p-3 md:p-4 shadow-lg hover:shadow-xl transition-all duration-500">
-      <div className="flex flex-col lg:flex-row items-center gap-3 md:gap-4">
+    <div className="bg-gradient-to-br from-white to-[#f8fbff] border border-[#e0eaf5] rounded-3xl p-4 md:p-6 shadow-lg hover:shadow-xl transition-all duration-500">
+      <div className="flex flex-col lg:flex-row items-center gap-4 md:gap-6">
         {/* Circle gauge on the left */}
         <div className="relative flex-shrink-0">
           <div className="relative w-32 h-32 md:w-40 md:h-40 flex items-center justify-center">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-full blur-xl opacity-60" />
+            <div className="absolute inset-0 bg-gradient-to-br from-[#e8eff9] to-[#dce8f5] rounded-full blur-xl opacity-60" />
             <svg
               height={r * 2}
               width={r * 2}
@@ -86,7 +82,7 @@ const TopAnalysisBar: React.FC<TopAnalysisBarProps> = ({
                 cy={r}
               />
               <circle
-                stroke="url(#gaugeGreen)"
+                stroke="url(#gaugeBlue)"
                 fill="transparent"
                 strokeWidth={stroke}
                 strokeDasharray={circumference + " " + circumference}
@@ -101,20 +97,20 @@ const TopAnalysisBar: React.FC<TopAnalysisBarProps> = ({
               />
               <defs>
                 <linearGradient
-                  id="gaugeGreen"
+                  id="gaugeBlue"
                   x1="0%"
                   y1="0%"
                   x2="100%"
                   y2="100%"
                 >
-                  <stop offset="0%" stopColor="#6EE7B7" />
-                  <stop offset="50%" stopColor="#34D399" />
-                  <stop offset="100%" stopColor="#10B981" />
+                  <stop offset="0%" stopColor="#5b8dd9" />
+                  <stop offset="50%" stopColor="#2557a7" />
+                  <stop offset="100%" stopColor="#1a4a8f" />
                 </linearGradient>
               </defs>
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
-              <span className="text-xl md:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-teal-600">
+              <span className="text-xl md:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#2557a7] to-[#1a4a8f]">
                 {clamp01(matchScore)}%
               </span>
               <span className="text-xs text-slate-500 font-semibold mt-0.5 tracking-wide">
@@ -126,11 +122,11 @@ const TopAnalysisBar: React.FC<TopAnalysisBarProps> = ({
 
         {/* Text + tiles on the right */}
         <div className="flex-1 w-full">
-          <div className="mb-2">
-            <h2 className="text-lg md:text-xl font-black text-slate-800 mb-0.5">
+          <div className="mb-3">
+            <h2 className="text-lg md:text-2xl font-bold text-gray-900 mb-1">
               Job Match Analysis
             </h2>
-            <p className="text-xs md:text-sm text-slate-600 font-medium">
+            <p className="text-sm md:text-base text-gray-600">
               {matchScore >= 80
                 ? "Excellent Match! Your resume aligns perfectly with the job requirements."
                 : matchScore >= 60
@@ -139,12 +135,12 @@ const TopAnalysisBar: React.FC<TopAnalysisBarProps> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
             {tiles.map((t) => (
               <div
                 key={t.label}
                 className={[
-                  "relative overflow-hidden rounded-xl p-3 transition-all duration-300 hover:shadow-md",
+                  "relative overflow-hidden rounded-2xl p-4 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:border-[#2557a7]/60",
                   t.bgColor,
                   "border-2",
                   t.borderColor,

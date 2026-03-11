@@ -6,9 +6,11 @@ import Dropdown from '@/components/common/CustomDropdown';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import {
   getDashboardOverview,
+  getRealtimeStats,
   DashboardPeriod,
   formatMetricValue,
-  DashboardOverviewResponse
+  DashboardOverviewResponse,
+  RealtimeStats
 } from '@/api/adminDashboardOverviewApi';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
@@ -40,9 +42,15 @@ import { ErrorState } from './_components/ErrorState';
 // Import mock data and constants
 import { userGrowthData, revenueData, CHART_COLORS, PERIOD_MAP } from './_constants/mockData';
 
+// Import access control
+import { useAdminAccess } from '../_hooks/useAdminAccess';
+import { LockedPageOverlay } from '../_components/LockedPageOverlay';
+
 const DashboardContent = () => {
   const [period, setPeriod] = useState<DashboardPeriod>('monthly');
   const [dashboardData, setDashboardData] = useState<DashboardOverviewResponse | null>(null);
+  const [realtimeStats, setRealtimeStats] = useState<RealtimeStats | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -52,9 +60,16 @@ const DashboardContent = () => {
       logger.info('Fetching dashboard data for period:', period);
       setLoading(true);
       setError(false);
-      const data = await getDashboardOverview(period);
+
+      // Fetch overview and realtime stats in parallel
+      const [data, stats] = await Promise.all([
+        getDashboardOverview(period),
+        getRealtimeStats()
+      ]);
+
       logger.debug('Dashboard data received successfully');
       setDashboardData(data);
+      setRealtimeStats(stats);
     } catch (error) {
       logger.error('Error fetching dashboard data:', error);
       toast.error('Failed to fetch dashboard data');
@@ -69,16 +84,21 @@ const DashboardContent = () => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // Auto-refresh with cleanup - debounced
+  // Fetch realtime stats more frequently (every 30 seconds) when auto-refresh is enabled
   useEffect(() => {
-    if (!dashboardData) return; // Don't auto-refresh if no initial data
+    if (!dashboardData || !autoRefresh) return; // Don't auto-refresh if no initial data or auto-refresh is disabled
 
-    const interval = setInterval(() => {
-      fetchDashboardData();
+    const interval = setInterval(async () => {
+      try {
+        const stats = await getRealtimeStats();
+        setRealtimeStats(stats);
+      } catch (error) {
+        logger.error('Error fetching realtime stats:', error);
+      }
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [fetchDashboardData, dashboardData]);
+  }, [dashboardData, autoRefresh]);
 
   // Memoized period change handler
   const handlePeriodChange = useCallback((value: string) => {
@@ -153,7 +173,7 @@ const DashboardContent = () => {
       name: item.plan_name,
       value: item.percentage,
       count: item.count
-    }));
+    })) as Array<{ name: string; value: number; count?: number }>;
   }, [dashboardData?.subscription_breakdown]);
 
   // Show skeleton loading on first load
@@ -226,8 +246,10 @@ const DashboardContent = () => {
       {/* Real-time Statistics - Lazy load */}
       <Suspense fallback={<div className="h-48 animate-pulse bg-gray-100 rounded-lg" />}>
         <RealtimeStatsSection
-          data={dashboardData.realtime_stats}
+          data={realtimeStats}
+          autoRefresh={autoRefresh}
           refreshInterval={30}
+          onAutoRefreshChange={setAutoRefresh}
         />
       </Suspense>
 
@@ -278,7 +300,7 @@ const DashboardContent = () => {
                   ></span>
                   <span>
                     {item.value}% {item.name}
-                    {(item as any).count !== undefined && ` (${(item as any).count})`}
+                    {item.count !== undefined && ` (${item.count})`}
                   </span>
                 </div>
               ))}
@@ -302,6 +324,8 @@ const DashboardContent = () => {
 };
 
 const AdminDashboard = () => {
+  const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('dashboard');
+
   // Fallback component for error boundary
   const errorFallback = (_error: Error, reset: () => void) => (
     <ErrorState
@@ -310,6 +334,20 @@ const AdminDashboard = () => {
       onRetry={reset}
     />
   );
+
+  // Block render until access check completes
+  if (accessLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Check access
+  if (!hasAccess) {
+    return <LockedPageOverlay requiredRoles={requiredRoles} pageName="Dashboard" />;
+  }
 
   return (
     <ErrorBoundary fallback={errorFallback}>

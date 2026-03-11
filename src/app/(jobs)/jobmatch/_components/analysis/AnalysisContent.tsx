@@ -33,15 +33,15 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
   // Debug logs
   useEffect(() => {
-    // // console.log("🔍 AnalysisContent - parsedResumeData:", parsedResumeData);
-    // // console.log("🔍 AnalysisContent - initialMatchResults:", initialMatchResults);
+    console.log("🔍 AnalysisContent - parsedResumeData:", parsedResumeData);
+    console.log("🔍 AnalysisContent - initialMatchResults:", initialMatchResults);
 
     const id = resolveResumeId(parsedResumeData);
     if (id) {
       setResumeId(id);
-      // // console.log("✅ Resume ID set in AnalysisContent:", id);
+      console.log("✅ Resume ID set in AnalysisContent:", id);
     } else {
-      // // console.error("❌ No resume ID could be resolved!");
+      console.error("❌ No resume ID could be resolved!");
     }
 
     // Extract match ID from matchResults
@@ -54,7 +54,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
     if (extractedMatchId) {
       setMatchId(extractedMatchId);
-      // // console.log("✅ Match ID set in AnalysisContent:", extractedMatchId);
+      console.log("✅ Match ID set in AnalysisContent:", extractedMatchId);
     }
   }, [resolveResumeId, parsedResumeData, initialMatchResults, matchResults]);
 
@@ -239,21 +239,21 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
   const handleDownload = useCallback(async (format: "pdf" | "docx" = "pdf") => {
     if (!resumeId) {
-      // // console.warn("No resume ID available for download");
+      console.warn("No resume ID available for download");
       alert("Resume ID not available. Please try again.");
       return;
     }
 
     setIsDownloading(true);
     try {
-      // // console.log(`📥 Downloading resume as ${format.toUpperCase()}:`, resumeId);
+      console.log(`📥 Downloading resume as ${format.toUpperCase()}:`, resumeId);
 
       // Use the correct download endpoint with format parameter
       const response = await httpClient.get(`/parser/download/${resumeId}?format=${format}`, {
         responseType: "blob",
       });
 
-      const blob = response.data;
+      const blob = response.data as Blob;
       const contentType = response.headers["content-type"] || "";
 
       // Determine file extension from format parameter or content-type
@@ -288,9 +288,9 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      // // console.log(`✅ Resume downloaded successfully as ${extension.toUpperCase()}`);
+      console.log(`✅ Resume downloaded successfully as ${extension.toUpperCase()}`);
     } catch (err) {
-      // // console.error("❌ Error downloading resume:", err);
+      console.error("❌ Error downloading resume:", err);
       alert(`Failed to download resume as ${format.toUpperCase()}. Please try again.`);
     } finally {
       setIsDownloading(false);
@@ -298,60 +298,86 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
   }, [resumeId]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 p-4 md:p-6">
-      <div className="max-w-[1800px] mx-auto space-y-6">
-        {/* Top Analysis Bar with circular gauge */}
-        <TopAnalysisBar
-          matchScore={score}
-          missingCriticalCount={missingCriticalCount}
-          missingImportantCount={missingImportantCount}
-          missingNiceToHaveCount={missingNiceToHaveCount}
-          missingSoftSkillsCount={missingSoftSkillsCount}
-        />
+    <div className="min-h-screen bg-gradient-to-br from-[#f8fafb] via-white to-[#f0f6ff] p-4 md:p-8">
+      <div className="max-w-[1600px] mx-auto space-y-12">
+        {/* Section 1: Match Score Overview */}
+        <div className="animate-fadeIn">
+          <TopAnalysisBar
+            matchScore={score}
+            missingCriticalCount={missingCriticalCount}
+            missingImportantCount={missingImportantCount}
+            missingNiceToHaveCount={missingNiceToHaveCount}
+            missingSoftSkillsCount={missingSoftSkillsCount}
+          />
+        </div>
 
-        {/* Missing Requirements Cards */}
-        <div className="bg-white rounded-3xl border-2 border-slate-200 p-6 shadow-xl">
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-2 h-10 bg-gradient-to-b from-slate-400 to-slate-500 rounded-full shadow-md"></div>
-              <h2 className="text-2xl font-black text-slate-800">
-                Missing Requirements
-              </h2>
+        {/* Section 2: Missing Requirements */}
+        <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <div className="w-2 h-12 bg-gradient-to-b from-[#2557a7] to-[#1a4a8f] rounded-full shadow-md"></div>
+              <div>
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
+                  Missing Requirements
+                </h2>
+                <p className="text-sm md:text-base text-gray-600 mt-2">
+                  Click on skills to add them to your resume and boost your match score
+                </p>
+              </div>
             </div>
-            <p className="text-sm text-slate-500 ml-5">
-              Add these items to improve your match score
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <MissingTechnicalSkillsCard
-              criticalSkills={missingCriticalSkills}
-              importantSkills={missingImportantSkills}
-              niceToHaveSkills={missingNiceToHaveSkills}
-              onAddSkill={handleAddTechnicalSkill}
-              onRemoveSkill={handleRemoveTechnicalSkill}
-            />
-            <MissingSoftSkillsCard
-              softSkills={missingSoftSkills}
-              onAddSkill={handleAddSoftSkill}
-              onRemoveSkill={handleRemoveSoftSkill}
-            />
+          {/* Skills Cards Grid - Reorganized */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Technical Skills Card - Spans 2 columns */}
+            <div className="lg:col-span-2">
+              <MissingTechnicalSkillsCard
+                criticalSkills={missingCriticalSkills}
+                importantSkills={missingImportantSkills}
+                niceToHaveSkills={missingNiceToHaveSkills}
+                onAddSkill={handleAddTechnicalSkill}
+                onRemoveSkill={handleRemoveTechnicalSkill}
+              />
+            </div>
+
+            {/* Soft Skills Card - Spans 1 column */}
+            <div className="lg:col-span-1">
+              <MissingSoftSkillsCard
+                softSkills={missingSoftSkills}
+                onAddSkill={handleAddSoftSkill}
+                onRemoveSkill={handleRemoveSoftSkill}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Resume & JD Preview Section */}
-        <div className="bg-white rounded-3xl border-2 border-slate-200 overflow-hidden shadow-xl">
-          <div className="grid grid-cols-1 xl:grid-cols-2">
-            {/* Resume Preview (use ResumeHeader + ResumePreview) */}
-            <div className="p-6 bg-gray-50 flex flex-col">
-              <div className="bg-white rounded-2xl ring-2 ring-amber-100 shadow-lg overflow-hidden hover:ring-amber-200 transition-all duration-300">
+        {/* Section 3: Resume & Job Description Comparison */}
+        <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <div className="w-2 h-12 bg-gradient-to-b from-[#2557a7] to-[#1a4a8f] rounded-full shadow-md"></div>
+              <div>
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
+                  Match Details
+                </h2>
+                <p className="text-sm md:text-base text-gray-600 mt-2">
+                  Review your resume and job description to see what matches and what's missing
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            {/* Resume Preview Column */}
+            <div className="flex flex-col">
+              <div className="bg-gradient-to-br from-white to-[#f8fbff] rounded-3xl border border-[#e0eaf5] overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
                 <ResumeHeader
                   onDownload={handleDownload}
                   isDownloading={isDownloading}
                 />
-                <div className="relative h-[600px] bg-white">
+                <div className="relative h-[600px] bg-gradient-to-b from-[#f9fbff] to-[#f0f6ff]">
                   {isUpdating && (
-                    <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50">
+                    <div className="absolute inset-0 bg-white/95 flex items-center justify-center z-50 backdrop-blur-sm">
                       <div className="flex flex-col items-center gap-3">
                         <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2557a7] border-t-transparent" />
                         <p className="text-sm font-semibold text-slate-600">
@@ -381,11 +407,11 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
               </div>
             </div>
 
-            {/* Job Description Highlighter */}
-            <div className="p-6 bg-gray-50 flex flex-col border-l-2 border-slate-200">
-              <div className="bg-white rounded-2xl ring-2 ring-sky-100 shadow-lg overflow-hidden hover:ring-sky-200 transition-all duration-300">
+            {/* Job Description Column */}
+            <div className="flex flex-col">
+              <div className="bg-gradient-to-br from-white to-[#f8fbff] rounded-3xl border border-[#e0eaf5] overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
                 <JDHeader />
-                <div className="p-6 overflow-y-auto h-[600px] bg-white">
+                <div className="p-6 overflow-y-auto h-[600px] bg-gradient-to-b from-[#f9fbff] to-[#f0f6ff]">
                   <JDHighlighter
                     text={jdText}
                     matchedSkills={allMatchedSkills}

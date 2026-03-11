@@ -4,6 +4,7 @@ import { X, Plus, Trash2 } from 'lucide-react';
 import Dropdown from '@/components/common/CustomDropdown';
 import { AddPlanModalProps, PlanFormData } from '../types';
 import { INITIAL_FORM_DATA, TEMPLATE_OPTIONS } from '../utils';
+import { logger } from '@/lib/logger';
 
 // ==================== SUB-COMPONENTS ====================
 
@@ -11,16 +12,18 @@ interface FormInputProps {
     label: string;
     required?: boolean;
     hint?: string;
+    error?: string;
     children: React.ReactNode;
 }
 
-const FormInput = memo<FormInputProps>(({ label, required, hint, children }) => (
+const FormInput = memo<FormInputProps>(({ label, required, hint, error, children }) => (
     <div className="flex flex-col gap-2">
         <label className="text-sm font-semibold">
             {label} {required && <span className="text-red-500">*</span>}
         </label>
         {children}
-        {hint && <p className="text-xs text-gray-500">{hint}</p>}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        {hint && !error && <p className="text-xs text-gray-500">{hint}</p>}
     </div>
 ));
 FormInput.displayName = 'FormInput';
@@ -82,6 +85,7 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
     isPopular = false
 }) => {
     const [newFeature, setNewFeature] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
     const handleChange = useCallback((key: keyof PlanFormData, value: string) => {
         setFormData({ ...formData, [key]: value });
@@ -103,6 +107,7 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
     const handleReset = useCallback(() => {
         setFormData(INITIAL_FORM_DATA);
         setNewFeature('');
+        setFieldErrors({});
     }, [setFormData]);
 
     const handleKeyPress = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
@@ -115,6 +120,32 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
     const handleFeatureInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         setNewFeature(e.target.value);
     }, []);
+
+    const getFieldError = useCallback((field: string): string | undefined => {
+        return fieldErrors[field];
+    }, [fieldErrors]);
+
+    const handleApply = useCallback(async () => {
+        logger.debug('handleApply called in AddPlanModal', { planName: formData.planName, price: formData.price });
+        setFieldErrors({});
+        try {
+            logger.debug('Calling onApply with formData:', formData);
+            await onApply();
+            logger.debug('onApply completed successfully');
+        } catch (error: unknown) {
+            logger.error('Error in handleApply:', error);
+            type ErrorResponse = { response?: { data?: { error?: { details?: { validation_errors?: Array<{ field: string; message: string }> } } } } }
+            const err = error as ErrorResponse;
+            const errorData = err?.response?.data?.error;
+            if (errorData?.details?.validation_errors) {
+                const errors: Record<string, string> = {};
+                errorData.details.validation_errors.forEach((validation: { field: string; message: string }) => {
+                    errors[validation.field] = validation.message;
+                });
+                setFieldErrors(errors);
+            }
+        }
+    }, [onApply]);
 
     if (!open) return null;
 
@@ -153,87 +184,94 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
                 {/* Form Inputs */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-4">
-                    <FormInput label="Plan Name" required>
+                    <FormInput label="Plan Name" required error={getFieldError('name')}>
                         <input
                             value={formData.planName}
                             onChange={(e) => handleChange('planName', e.target.value)}
                             placeholder="e.g., Basic, Pro, Enterprise"
-                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500"
+                            className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500 ${getFieldError('name') ? 'border-2 border-red-500' : ''}`}
                         />
                     </FormInput>
 
-                    <FormInput label="Price (₹)" required>
+                    <FormInput label="Price (₹)" required error={getFieldError('price')}>
                         <input
                             type="number"
                             value={formData.price}
                             onChange={(e) => handleChange('price', e.target.value)}
                             placeholder="e.g., 499"
-                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500"
+                            className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500 ${getFieldError('price') ? 'border-2 border-red-500' : ''}`}
                         />
                     </FormInput>
 
-                    <FormInput label="Resume Scan Limit" hint="Enter 0 for unlimited scans">
+                    <FormInput label="Resume Scan Limit" hint="Enter a number or 'unlimited'" error={getFieldError('resume_scan_limit')}>
                         <input
-                            type="number"
+                            type="text"
                             value={formData.resumeLimit}
                             onChange={(e) => handleChange('resumeLimit', e.target.value)}
-                            placeholder="e.g., 50 (0 for unlimited)"
-                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g., 50 or unlimited"
+                            className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500 ${getFieldError('resume_scan_limit') ? 'border-2 border-red-500' : ''}`}
                         />
                     </FormInput>
 
-                    <FormInput label="Job Application Limit" hint="Enter 0 for unlimited applications">
+                    <FormInput label="Job Application Limit" hint="Enter a number or 'unlimited'" error={getFieldError('job_application_limit')}>
                         <input
-                            type="number"
+                            type="text"
                             value={formData.jobLimit}
                             onChange={(e) => handleChange('jobLimit', e.target.value)}
-                            placeholder="e.g., 100 (0 for unlimited)"
-                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g., 100 or unlimited"
+                            className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500 ${getFieldError('job_application_limit') ? 'border-2 border-red-500' : ''}`}
                         />
                     </FormInput>
 
-                    <FormInput label="AI Credits" hint="Monthly AI credits allocation">
+                    <FormInput label="AI Credits" hint="Enter a number or 'unlimited'" error={getFieldError('ai_credits')}>
                         <input
-                            type="number"
+                            type="text"
                             value={formData.aiCredits}
                             onChange={(e) => handleChange('aiCredits', e.target.value)}
-                            placeholder="e.g., 1000"
-                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g., 1000 or unlimited"
+                            className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500 ${getFieldError('ai_credits') ? 'border-2 border-red-500' : ''}`}
                         />
                     </FormInput>
 
-                    <FormInput label="Templates">
+                    <FormInput label="Templates" error={getFieldError('templates')}>
                         <Dropdown
                             options={[...TEMPLATE_OPTIONS]}
                             defaultValue={formData.templates || 'Limited Templates'}
                             onChange={(v) => handleChange('templates', v)}
                             bgColor="bg-gray-100"
                             bgOptions="bg-white"
-                            className="w-full"
+                            className={`w-full ${getFieldError('templates') ? 'border-2 border-red-500' : ''}`}
                         />
                     </FormInput>
                 </div>
 
                 {/* Features Section */}
                 <div className="flex flex-col gap-2 my-4">
-                    <label className="text-sm font-semibold">Features</label>
+                    <label className="text-sm font-semibold">
+                        Features {getFieldError('features') && <span className="text-red-500">*</span>}
+                    </label>
 
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={newFeature}
-                            onChange={handleFeatureInputChange}
-                            onKeyPress={handleKeyPress}
-                            className="flex-1 p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500"
-                            placeholder="Type a feature and press Add or Enter"
-                        />
-                        <button
-                            onClick={handleAddFeature}
-                            className="flex items-center gap-1 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Add
-                        </button>
+                    <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={newFeature}
+                                onChange={handleFeatureInputChange}
+                                onKeyPress={handleKeyPress}
+                                className={`flex-1 p-2 bg-gray-100 rounded-md outline-none text-sm focus:ring-2 focus:ring-blue-500 ${getFieldError('features') ? 'border-2 border-red-500' : ''}`}
+                                placeholder="Type a feature and press Add or Enter"
+                            />
+                            <button
+                                onClick={handleAddFeature}
+                                className="flex items-center gap-1 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add
+                            </button>
+                        </div>
+                        {getFieldError('features') && (
+                            <p className="text-xs text-red-600">{getFieldError('features')}</p>
+                        )}
                     </div>
 
                     {hasFeatures ? (
@@ -259,7 +297,7 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
                         <div className="space-y-3">
                             <div className="grid grid-cols-4 gap-3">
                                 <button
-                                    onClick={onApply}
+                                    onClick={handleApply}
                                     className="px-5 py-2 cursor-pointer bg-[#5E5EFF] text-white rounded-md hover:bg-[#4E4EEF] transition flex items-center justify-center gap-2"
                                 >
                                     Update
@@ -308,7 +346,7 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
                             </button>
 
                             <button
-                                onClick={onApply}
+                                onClick={handleApply}
                                 className="px-5 py-2 cursor-pointer bg-[#5E5EFF] text-white rounded-md hover:bg-[#4E4EEF] transition"
                             >
                                 Create Plan

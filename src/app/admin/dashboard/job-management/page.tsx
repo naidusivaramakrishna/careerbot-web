@@ -5,16 +5,21 @@ import { toast } from 'sonner'
 import FilterModal from '../../_components/FilterModal'
 import JobDetailsModal from '../../_components/jobDetailsModal'
 import AddNewJobForm from './_components/job-form/AddNewJobForm'
-import ConfirmDeleteModal from '@/app/(user)/dashboard/profile/_components/ConfirmDeleteModal'
+import ConfirmDeleteModal from '@/app/(user)/profile/_components/ConfirmDeleteModal'
 import type { JobListItem, JobDetailsResponse } from '@/api/adminJobsApi'
+import type { JobFormData } from './_types/jobFormTypes'
 import { JobListControls, JobsPagination, JobsTable } from './_components/job-management'
 import { PreviewJobPage } from './_components/job-form'
 import { useJobManagement } from './_hooks/useJobManagement'
 import { logger } from '@/lib/logger'
+import { useAdminAccess } from '../../_hooks/useAdminAccess'
+import { LockedPageOverlay } from '../../_components/LockedPageOverlay'
 
 type PageState = "list" | "add" | "edit" | "preview"
+type AdvancedFilters = Record<string, unknown>
 
 const JobManagement = () => {
+  const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('job-management');
   // Custom hook for all job management logic
   const {
     jobs,
@@ -40,7 +45,7 @@ const JobManagement = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [jobToDelete, setJobToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [formData, setFormData] = useState<any>(null)
+  const [formData, setFormData] = useState<Partial<JobFormData> | null>(null)
   const [editingJobDetails, setEditingJobDetails] = useState<JobDetailsResponse | null>(null)
   const [loadingJobDetails, setLoadingJobDetails] = useState(false)
 
@@ -53,9 +58,15 @@ const JobManagement = () => {
     setFilterModalOpen(false)
   }, [])
 
-  const handleApplyFiltersAndClose = useCallback((advancedFilters: any) => {
-    handleApplyFilters(advancedFilters)
-    setFilterModalOpen(false)
+  const handleApplyFiltersAndClose = useCallback(async (advancedFilters: AdvancedFilters) => {
+    try {
+      await handleApplyFilters(advancedFilters)
+      // Only close modal if filters were successfully applied
+      setFilterModalOpen(false)
+    } catch (error) {
+      // Keep modal open and re-throw so FilterModal can display errors
+      throw error
+    }
   }, [handleApplyFilters])
 
   // Job Actions
@@ -77,6 +88,21 @@ const JobManagement = () => {
     } catch (error) {
       logger.error(`Failed to load job details for job: ${job.id}`, error)
       // Error already toasted in hook
+    } finally {
+      setLoadingJobDetails(false)
+    }
+  }, [fetchJobDetails])
+
+  const handleEditFromModal = useCallback(async (jobId: string) => {
+    try {
+      logger.info(`Editing job from modal: ${jobId}`)
+      setLoadingJobDetails(true)
+      const jobDetails = await fetchJobDetails(jobId)
+      setEditingJobDetails(jobDetails)
+      setSelectedJob(null)
+      setPageState("edit")
+    } catch (error) {
+      logger.error(`Failed to load job details for job: ${jobId}`, error)
     } finally {
       setLoadingJobDetails(false)
     }
@@ -116,7 +142,7 @@ const JobManagement = () => {
     setPageState("add")
   }, [])
 
-  const handlePreview = useCallback((data: any) => {
+  const handlePreview = useCallback((data: Partial<JobFormData>) => {
     setFormData(data)
     setPageState("preview")
   }, [])
@@ -124,18 +150,42 @@ const JobManagement = () => {
   const handleJobPublished = useCallback(() => {
     setPageState("list")
     setEditingJobDetails(null)
+    setFormData(null)
     fetchJobs()
     toast.success('Job published successfully!')
+  }, [fetchJobs])
+
+  const handleJobSavedAsDraft = useCallback(() => {
+    setPageState("list")
+    setEditingJobDetails(null)
+    setFormData(null)
+    fetchJobs()
+    toast.success('Job saved as draft successfully!')
   }, [fetchJobs])
 
   const handleCancelForm = useCallback(() => {
     setPageState("list")
     setEditingJobDetails(null)
+    setFormData(null)
   }, [])
 
   const handleBackToEdit = useCallback(() => {
     setPageState(editingJobDetails ? "edit" : "add")
   }, [editingJobDetails])
+
+  // Block render until access check completes
+  if (accessLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Check access
+  if (!hasAccess) {
+    return <LockedPageOverlay requiredRoles={requiredRoles} pageName="Job Management" />;
+  }
 
   // Render different page states
   if (pageState === "preview") {
@@ -154,6 +204,8 @@ const JobManagement = () => {
         onPreview={handlePreview}
         onPublish={handleJobPublished}
         onCancel={handleCancelForm}
+        onSaveDraft={handleJobSavedAsDraft}
+        initialData={formData || undefined}
       />
     )
   }
@@ -182,10 +234,10 @@ const JobManagement = () => {
           jobTitle: editingJobDetails.job_title,
           company: editingJobDetails.company,
           location: editingJobDetails.location,
-          workMode: editingJobDetails.work_mode as any,
+          workMode: editingJobDetails.work_mode as 'remote' | 'hybrid' | 'on-site',
           salaryMin: editingJobDetails.salary_min?.toString() || '',
           salaryMax: editingJobDetails.salary_max?.toString() || '',
-          jobType: editingJobDetails.job_type as any,
+          jobType: editingJobDetails.job_type as 'full-time' | 'part-time' | 'internship' | 'contract',
           openings: editingJobDetails.number_of_openings?.toString() || '1',
           jobDescription: editingJobDetails.job_description || '',
           aboutCompany: editingJobDetails.about_company || '',
@@ -193,7 +245,7 @@ const JobManagement = () => {
           applicationUrl: editingJobDetails.application_url || '',
           applyBy: editingJobDetails.application_deadline || '',
           whoCanApply: editingJobDetails.who_can_apply || '',
-          status: editingJobDetails.status as any,
+          status: editingJobDetails.status as 'active' | 'draft' | 'expired' | 'closed',
           startDate: 'Immediately',
           experience: editingJobDetails.experience_min?.toString() || '0',
           experienceMin: editingJobDetails.experience_min?.toString() || '',
@@ -201,9 +253,11 @@ const JobManagement = () => {
           logo: editingJobDetails.company_logo_url || null,
         }}
         isEdit={true}
+        jobId={editingJobDetails.id}
         onPreview={handlePreview}
         onPublish={handleJobPublished}
         onCancel={handleCancelForm}
+        onSaveDraft={handleJobSavedAsDraft}
       />
     )
   }
@@ -279,6 +333,7 @@ const JobManagement = () => {
           job={selectedJob}
           onClose={handleCloseJobDetails}
           onUpdate={fetchJobs}
+          onEdit={handleEditFromModal}
         />
       )}
 

@@ -81,7 +81,7 @@ export function useEnhancer(): UseEnhancerReturn {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to process resume';
       setError(errorMessage);
-      // // console.error('Error processing resume:', err);
+      console.error('Error processing resume:', err);
       return null;
     } finally {
       setIsProcessing(false);
@@ -100,12 +100,12 @@ export function useEnhancer(): UseEnhancerReturn {
 
     try {
       await updateEnhancedResume(enhancedId, {
-        enhanced_sections: enhancedSections,
+        enhanced_sections: enhancedSections as Record<string, unknown>,
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update resume';
       setError(errorMessage);
-      // // console.error('Error updating resume:', err);
+      console.error('Error updating resume:', err);
       throw err;
     } finally {
       setIsProcessing(false);
@@ -137,7 +137,7 @@ export function useEnhancer(): UseEnhancerReturn {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to download resume';
       setError(errorMessage);
-      // // console.error('Error downloading resume:', err);
+      console.error('Error downloading resume:', err);
       throw err;
     } finally {
       setIsProcessing(false);
@@ -169,7 +169,7 @@ export function useEnhancer(): UseEnhancerReturn {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to preview resume';
       setError(errorMessage);
-      // // console.error('Error previewing resume:', err);
+      console.error('Error previewing resume:', err);
       throw err;
     } finally {
       setIsProcessing(false);
@@ -191,7 +191,7 @@ export function useEnhancer(): UseEnhancerReturn {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch resume';
       setError(errorMessage);
-      // // console.error('Error fetching resume:', err);
+      console.error('Error fetching resume:', err);
       return null;
     } finally {
       setIsProcessing(false);
@@ -210,7 +210,7 @@ export function useEnhancer(): UseEnhancerReturn {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete resume';
       setError(errorMessage);
-      // // console.error('Error deleting resume:', err);
+      console.error('Error deleting resume:', err);
       throw err;
     } finally {
       setIsProcessing(false);
@@ -232,7 +232,7 @@ export function useEnhancer(): UseEnhancerReturn {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch history';
       setError(errorMessage);
-      // // console.error('Error fetching history:', err);
+      console.error('Error fetching history:', err);
       return [];
     } finally {
       setIsProcessing(false);

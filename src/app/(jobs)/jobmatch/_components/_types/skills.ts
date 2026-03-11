@@ -11,6 +11,7 @@ export interface TokenPillProps {
 
 export interface ListSectionProps {
   title: string;
+  titleColor?: string;
   items: string[];
   matchedMap: MatchedMap;
   onToggle: (item: string) => void;

@@ -21,7 +21,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
             />
 
             {/* Modal */}
-            <div className="relative bg-white rounded-xl w-full max-w-2xl max-h-[650px] overflow-y-auto shadow-lg z-10">
+            <div className="relative bg-white rounded-xl w-full max-w-2xl max-h-[650px] overflow-y-auto shadow-lg z-10 [scrollbar-gutter:stable]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4">
                     <h2 className="text-lg font-semibold">{title}</h2>

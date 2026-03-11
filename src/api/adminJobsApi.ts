@@ -11,8 +11,8 @@ export interface CreateJobRequest {
     company: string;
     location: string;
     work_mode: 'remote' | 'hybrid' | 'on-site';
-    salary_min: number;
-    salary_max: number;
+    salary_min?: number;
+    salary_max?: number;
     salary_currency?: string;
     job_type: 'full-time' | 'part-time' | 'internship' | 'contract';
     number_of_openings: number;
@@ -49,6 +49,8 @@ export interface JobListQueryParams {
     salary_max?: number;
     min_views?: number;
     min_applications?: number;
+    minimum_views?: number;
+    minimum_applications?: number;
     posted_from?: string; // ISO date
     posted_to?: string; // ISO date
     sort_by?: string;
@@ -167,6 +169,19 @@ export interface BulkDeleteResponse {
     job_ids: string[];
 }
 
+export interface GetJobLogoResponse {
+    success: boolean;
+    job_id: string;
+    logo_url: string | null;
+    has_logo: boolean;
+}
+
+export interface RemoveJobLogoResponse {
+    success: boolean;
+    message: string;
+    job_id: string;
+}
+
 export interface JobStatisticsResponse {
     total_jobs: number;
     active_jobs: number;
@@ -276,8 +291,11 @@ export const getJobList = async (
         if (params?.job_type) queryParams.append('job_type', params.job_type);
         if (params?.salary_min) queryParams.append('salary_min', params.salary_min.toString());
         if (params?.salary_max) queryParams.append('salary_max', params.salary_max.toString());
-        if (params?.min_views) queryParams.append('min_views', params.min_views.toString());
-        if (params?.min_applications) queryParams.append('min_applications', params.min_applications.toString());
+        // Support both field names for backwards compatibility
+        if (params?.minimum_views) queryParams.append('minimum_views', params.minimum_views.toString());
+        else if (params?.min_views) queryParams.append('minimum_views', params.min_views.toString());
+        if (params?.minimum_applications) queryParams.append('minimum_applications', params.minimum_applications.toString());
+        else if (params?.min_applications) queryParams.append('minimum_applications', params.min_applications.toString());
         if (params?.posted_from) queryParams.append('posted_from', params.posted_from);
         if (params?.posted_to) queryParams.append('posted_to', params.posted_to);
         if (params?.sort_by) queryParams.append('sort_by', params.sort_by);
@@ -369,6 +387,7 @@ export const deleteJob = async (
         throw error;
     }
 };
+
 
 /**
  * Bulk update job status
@@ -559,6 +578,50 @@ export const uploadJobLogo = async (file: File): Promise<string> => {
     }
 };
 
+/**
+ * Get job logo
+ *
+ * Retrieves the logo URL and status for a specific job
+ *
+ * @param jobId - The ID of the job
+ * @returns Promise with logo URL and has_logo boolean
+ */
+export const getJobLogo = async (jobId: string): Promise<GetJobLogoResponse> => {
+    try {
+        const response = await httpClient.get<GetJobLogoResponse>(
+            `/admin/jobs/${jobId}/logo`
+        );
+        return response.data;
+    } catch (error) {
+        logger.error(`Error fetching logo for job ${jobId}:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Remove job logo
+ *
+ * Delete/remove the company logo from a job posting.
+ * Sets company_logo_url to null for the specified job.
+ *
+ * Use case:
+ * - Remove incorrect logo
+ * - Clear logo before re-uploading
+ *
+ * @param jobId - The ID of the job
+ * @returns Promise with success message
+ */
+export const removeJobLogo = async (jobId: string): Promise<RemoveJobLogoResponse> => {
+    try {
+        const response = await httpClient.delete<RemoveJobLogoResponse>(
+            `/admin/jobs/${jobId}/logo`
+        );
+        return response.data;
+    } catch (error) {
+        logger.error(`Error removing logo for job ${jobId}:`, error);
+        throw error;
+    }
+};
 
 /**
  * Publish a draft job (change status to active)
@@ -569,9 +632,33 @@ export const publishJob = async (jobId: string): Promise<UpdateJobResponse> => {
 
 /**
  * Close a job (stop accepting applications)
+ *
+ * Changes job status from active/draft to 'closed'
+ *
+ * Use cases:
+ * - Position has been filled
+ * - Hiring is complete
+ * - Need to stop accepting applications
+ *
+ * @param jobId - The ID of the job to close
+ * @returns Promise with update response including updated_at timestamp
  */
 export const closeJob = async (jobId: string): Promise<UpdateJobResponse> => {
-    return updateJob(jobId, { status: 'closed' });
+    try {
+        const response = await httpClient.put<UpdateJobResponse>(
+            `/admin/jobs/${jobId}/close`,
+            {},
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        return response.data;
+    } catch (error) {
+        logger.error(`Error closing job ${jobId}:`, error);
+        throw error;
+    }
 };
 
 /**

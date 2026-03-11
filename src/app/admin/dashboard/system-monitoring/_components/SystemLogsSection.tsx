@@ -27,9 +27,9 @@ export const SystemLogsSection = memo(({ logs }: SystemLogsSectionProps) => {
     return (
         <div className="bg-white rounded-lg p-6 my-10">
             <h1 className='font-semibold pb-4'>System Logs</h1>
-            <div className="overflow-x-auto">
-                <table className="w-full border-collapse border-2 border-[#E5E7EB] text-sm">
-                    <thead className='border-b border-2 border-[#E5E7EB]'>
+            <div className="overflow-x-auto overflow-y-auto max-h-96 border border-[#E5E7EB] rounded-lg">
+                <table className="w-full border-collapse text-sm">
+                    <thead className='border-b border-[#E5E7EB] sticky top-0 bg-white'>
                         <tr className="text-left text-gray-700">
                             <th className="p-3 font-semibold">Message</th>
                             <th className="p-3 font-semibold">Level</th>
@@ -37,7 +37,7 @@ export const SystemLogsSection = memo(({ logs }: SystemLogsSectionProps) => {
                             <th className="p-3 font-semibold">Timestamp</th>
                         </tr>
                     </thead>
-                    <tbody className="border-t-0 border-2 border-[#E5E7EB]">
+                    <tbody>
                         {logs && logs.length > 0 ? (
                             logs.map((log) => (
                                 <LogRow key={log.id} log={log} />

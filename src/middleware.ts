@@ -3,44 +3,42 @@ import type { NextRequest } from 'next/server';
 
 // Define protected routes that require authentication
 const protectedRoutes = [
-    '/dashboard/profile',
-    '/dashboard/resume',
-    '/dashboard/atsscan',
-    '/dashboard/jobs',
-    '/dashboard/job-match',
+    '/profile',
+    '/builder/start',
+    '/atslogin',
+    '/enhancer',
+    '/jobmatch',
+    '/jobs',
+    '/communication',
+    '/settings'
 ];
-
-// Define auth routes (login/signup pages)
-const authRoutes = ['/login', '/signup'];
 
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    // Get token from cookies or check if it exists
-    const token = request.cookies.get('access_token')?.value;
+    // Get tokens from cookies
+    const accessToken = request.cookies.get('access_token')?.value;
+    const refreshToken = request.cookies.get('refresh_token')?.value;
 
     // Check if the current route is protected
     const isProtectedRoute = protectedRoutes.some((route) =>
         pathname.startsWith(route)
     );
 
-    // Check if the current route is an auth route
-    const isAuthRoute = authRoutes.some((route) =>
-        pathname.startsWith(route)
-    );
-
     // If user is not logged in and trying to access protected route
-    if (isProtectedRoute && !token) {
-        const loginUrl = new URL('/signup', request.url);
-        loginUrl.searchParams.set('redirect', pathname); // Save the intended destination
-        return NextResponse.redirect(loginUrl);
+    // Check for both access_token AND refresh_token
+    // - If access_token exists, allow (fresh session)
+    // - If no access_token but refresh_token exists, allow (let interceptor refresh)
+    // - If neither exists, redirect to home page (not authenticated)
+    if (isProtectedRoute && !accessToken && !refreshToken) {
+        return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // If user is logged in and trying to access auth routes (login/signup)
-    // Redirect them to dashboard
-    if (isAuthRoute && token) {
-        return NextResponse.redirect(new URL('/dashboard/profile', request.url));
-    }
+    // TODO: Re-enable automatic redirect to dashboard for logged-in users
+    // Disabled temporarily due to issues with login flows
+    // if (pathname === '/' && token && !searchParams.has('showLogin')) {
+    //     return NextResponse.redirect(new URL('/profile', request.url));
+    // }
 
     return NextResponse.next();
 }

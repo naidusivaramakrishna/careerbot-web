@@ -55,11 +55,26 @@ export function cleanResumeContent(content: string): CleanedResumeData {
     .replace(/[ \t]+/g, ' ')      // Replace multiple spaces with single space
     .trim();
 
+  // If the cleaned content is a JSON-stringified object containing a `summary` field,
+  // unwrap it so downstream templates receive plain text instead of a JSON blob.
+  try {
+    const candidate = cleanContent.replace(/\.$/, '');
+    const parsed = JSON.parse(candidate);
+    if (parsed && typeof parsed === 'object') {
+      if (typeof (parsed as any).summary === 'string') {
+        cleanContent = (parsed as any).summary.trim();
+      }
+    }
+  } catch (e) {
+    // Not JSON — ignore and continue
+  }
+
   return {
     cleanContent,
     extractedSuggestions,
   };
 }
+
 
 /**
  * Clean all text fields in resume data object
@@ -84,7 +99,7 @@ export function cleanResumeData(resumeData: any): any {
         const { cleanContent } = cleanResumeContent(value);
         cleaned[key] = cleanContent;
       } catch (error) {
-        // // console.error(`Error cleaning field "${key}":`, error);
+        console.error(`Error cleaning field "${key}":`, error);
         cleaned[key] = value; // Keep original value if cleaning fails
       }
     } else if (typeof value === 'object' && value !== null) {

@@ -8,7 +8,7 @@ import AddPlanModal from './_components/AddPlanModal';
 import SubscriptionPlansTab from './_components/SubscriptionPlansTab';
 import FeatureFlagsTab from './_components/FeatureFlagsTab';
 import SecurityTab from './_components/SecurityTab';
-import ConfirmDeleteModal from '@/app/(user)/dashboard/profile/_components/ConfirmDeleteModal';
+import ConfirmDeleteModal from '@/app/(user)/profile/_components/ConfirmDeleteModal';
 import { logger } from '@/lib/logger';
 
 // Hooks
@@ -19,9 +19,12 @@ import { TabType } from './types';
 import { SystemConfigTab } from './_components/SystemConfigTab';
 
 // Types
+import { useAdminAccess } from '../../_hooks/useAdminAccess';
+import { LockedPageOverlay } from '../../_components/LockedPageOverlay';
 
 
 const AdminSettings: React.FC = () => {
+    const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('settings');
     const [activeTab, setActiveTab] = useState<TabType>('Subscription Plans');
 
     // Plans hook
@@ -109,6 +112,20 @@ const AdminSettings: React.FC = () => {
 
     // Get selected plan for modal props
     const selectedPlan = getSelectedPlan();
+
+    // Block render until access check completes
+    if (accessLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+        );
+    }
+
+    // Check access
+    if (!hasAccess) {
+        return <LockedPageOverlay requiredRoles={requiredRoles} pageName="Settings" />;
+    }
 
     return (
         <div>

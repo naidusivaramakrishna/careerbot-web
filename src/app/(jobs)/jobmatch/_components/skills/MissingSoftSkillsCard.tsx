@@ -30,7 +30,7 @@ const MissingSoftSkillsCard: React.FC<MissingSoftSkillsCardProps> = ({
 
       if (onAddSkill) {
         onAddSkill(skill).catch((err) => {
-          // // console.error("Failed to add soft skill:", err);
+          console.error("Failed to add soft skill:", err);
           setMatched((p) => ({ ...p, [skill]: false }));
           // Remove from tracking if API failed
           setAddedSkills((prev) => prev.filter((s) => s !== skill));
@@ -50,7 +50,7 @@ const MissingSoftSkillsCard: React.FC<MissingSoftSkillsCardProps> = ({
             setAddedSkills((prev) => prev.filter((s) => s !== skill));
           })
           .catch((err) => {
-            // // console.error("Failed to remove soft skill:", err);
+            console.error("Failed to remove soft skill:", err);
           });
       } else {
         // Fallback: just update local state if no API handler
@@ -72,27 +72,25 @@ const MissingSoftSkillsCard: React.FC<MissingSoftSkillsCardProps> = ({
   }, [softSkills, addedSkills]);
 
   return (
-    <div className={`bg-white rounded-2xl p-6 border border-slate-200 space-y-4 ${className}`}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-10 bg-purple-400 rounded-full"></div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">Missing Soft Skills</h3>
-            <p className="text-xs text-slate-500 font-medium">
-              Click to add skills • Click ✕ to remove
-            </p>
-          </div>
+    <div className={`bg-gradient-to-br from-white to-[#f8fbff] rounded-3xl p-6 border border-[#e0eaf5] shadow-lg space-y-6 ${className}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-2xl font-bold text-gray-900">Soft Skills</h3>
+          <p className="text-sm text-gray-600 mt-2">
+            Click skills to add • Click ✕ to remove
+          </p>
         </div>
-        <div className="px-3 py-1.5 rounded-lg bg-purple-50 border border-purple-200">
-          <span className="text-sm font-bold text-purple-700">
-            {totalSelected} / {mergedSkills.length} added
+        <div className="px-4 py-2.5 rounded-xl bg-gradient-to-br from-[#eff6ff] to-[#dbeafe] border border-[#bfdbfe]">
+          <span className="text-sm font-bold text-[#2557a7]">
+            {totalSelected} / {mergedSkills.length}
           </span>
         </div>
       </div>
 
-      <div className="bg-purple-50 rounded-xl p-4 border border-purple-200 max-h-[400px] overflow-y-auto">
+      <div className="bg-gradient-to-br from-[#eff6ff] to-white rounded-2xl p-5 border border-[#bfdbfe] max-h-[450px] overflow-y-auto hover:shadow-md transition-all duration-300">
         <ListSection
-          title="💼 Soft Skills"
+          title="Soft Skills"
+          titleColor="text-[#2557a7]"
           items={mergedSkills}
           matchedMap={matched}
           onToggle={toggle}

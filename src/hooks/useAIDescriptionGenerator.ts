@@ -130,8 +130,7 @@ export const useAIGeneration = () => {
 
             toast.success("Description generated!", { id: "ai-generation" });
             return data.description;
-        } catch (error) {
-            // // console.error("Error generating description:", error);
+        } catch {
             toast.error("Failed to generate description", { id: "ai-generation" });
             return null;
         } finally {
@@ -175,8 +174,7 @@ export const useAIGeneration = () => {
 
             toast.success("Project description generated!", { id: "ai-generation" });
             return data.description;
-        } catch (error) {
-            // // console.error("Error generating project description:", error);
+        } catch {
             toast.error("Failed to generate project description", { id: "ai-generation" });
             return null;
         } finally {
@@ -215,8 +213,7 @@ export const useAIGeneration = () => {
 
             toast.success("Summary generated!", { id: "ai-generation" });
             return data.summary;
-        } catch (error) {
-            // // console.error("Error generating summary:", error);
+        } catch {
             toast.error("Failed to generate summary", { id: "ai-generation" });
             return null;
         } finally {

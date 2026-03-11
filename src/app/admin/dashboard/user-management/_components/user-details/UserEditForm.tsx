@@ -3,9 +3,16 @@ import { Check } from 'lucide-react'
 import Dropdown from '@/components/common/CustomDropdown'
 import type { UserDetailsResponse } from '@/api/userManagementApi'
 
+interface EditFormData {
+    email: string
+    full_name: string
+    role: string
+    subscription_plan: string
+}
+
 interface UserEditFormProps {
     user: UserDetailsResponse
-    onSave: (data: any) => Promise<boolean>
+    onSave: (data: EditFormData) => Promise<boolean>
     onCancel: () => void
     loading: boolean
 }

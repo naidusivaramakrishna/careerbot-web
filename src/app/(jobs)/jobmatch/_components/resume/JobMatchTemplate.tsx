@@ -6,16 +6,16 @@ interface JobMatchTemplateProps {
 
 const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data }) => {
   // Debug: log the data structure
-  // // console.log("🔍 JobMatchTemplate FULL DATA:", data);
-  // // console.log("🔍 data.parsed_data:", data?.parsed_data);
+  console.log("🔍 JobMatchTemplate FULL DATA:", data);
+  console.log("🔍 data.parsed_data:", data?.parsed_data);
 
   // Extract parsed_data - this is where your backend stores the resume content
   const parsedData = data?.parsed_data || data || {};
   const llmData = parsedData?.llm_data || {};
 
-  // // console.log("🔍 parsedData:", parsedData);
-  // // console.log("🔍 llmData:", llmData);
-  // // console.log("🔍 llmData.soft_skills:", llmData?.soft_skills);
+  console.log("🔍 parsedData:", parsedData);
+  console.log("🔍 llmData:", llmData);
+  console.log("🔍 llmData.soft_skills:", llmData?.soft_skills);
 
   // ============================================
   // PERSONAL INFO / CONTACT
@@ -174,9 +174,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data }) => {
   // ============================================
   // SOFT SKILLS
   // ============================================
-  // // console.log("🔍 DEBUG - Soft Skills Extraction:");
-  // // console.log("parsedData.soft_skills:", parsedData.soft_skills);
-  // // console.log("llmData.soft_skills:", llmData.soft_skills);
+  console.log("🔍 DEBUG - Soft Skills Extraction:");
+  console.log("parsedData.soft_skills:", parsedData.soft_skills);
+  console.log("llmData.soft_skills:", llmData.soft_skills);
 
   let softSkills = parsedData.soft_skills || llmData.soft_skills || [];
   if (!Array.isArray(softSkills)) softSkills = [];
@@ -193,8 +193,8 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data }) => {
     softSkills = [...softSkills, ...newlyAddedSoftSkills];
   }
 
-  // // console.log("✅ Final softSkills array:", softSkills);
-  // // console.log("✅ softSkills.length:", softSkills.length);
+  console.log("✅ Final softSkills array:", softSkills);
+  console.log("✅ softSkills.length:", softSkills.length);
 
   // ============================================
   // INTERNSHIPS

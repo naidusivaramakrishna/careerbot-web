@@ -2,10 +2,14 @@
 import React from "react";
 import { useAdminManagement } from "./_hooks/useAdminManagement";
 import { AdminDetailsModal, AdminTable, AdvancedFiltersPanel, Pagination, SearchFilterControls } from "./_components";
-import ConfirmDeleteModal from "@/app/(user)/dashboard/profile/_components/ConfirmDeleteModal";
+import ConfirmDeleteModal from "@/app/(user)/profile/_components/ConfirmDeleteModal";
 import { logger } from "@/lib/logger";
+import { useAdminAccess } from "../../_hooks/useAdminAccess";
+import { LockedPageOverlay } from "../../_components/LockedPageOverlay";
 
 const AdminManagement = () => {
+  const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('admin-management');
+
   const {
     admins,
     loading,
@@ -30,6 +34,20 @@ const AdminManagement = () => {
     handleCancelDelete,
     handleCloseModal,
   } = useAdminManagement();
+
+  // Block render until access check completes
+  if (accessLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Check access
+  if (!hasAccess) {
+    return <LockedPageOverlay requiredRoles={requiredRoles} pageName="Admin Management" />;
+  }
 
   return (
     <div>

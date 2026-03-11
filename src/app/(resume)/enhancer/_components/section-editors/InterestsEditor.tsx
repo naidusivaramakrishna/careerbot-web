@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
+import RichTextEditorField from "./RichTextEditorField";
 
 interface InterestItemForm {
   name: string;
-  category: string;
   description: string;
 }
 
@@ -16,22 +16,8 @@ interface Props {
   setFormData: (data: any) => void;
 }
 
-const INTEREST_CATEGORIES = [
-  "Select category",
-  "Technology",
-  "Business",
-  "Science",
-  "Arts & Design",
-  "Health & Wellness",
-  "Education",
-  "Innovation",
-  "Sustainability",
-  "Other",
-];
-
 const emptyItem: InterestItemForm = {
   name: "",
-  category: "",
   description: "",
 };
 
@@ -44,7 +30,7 @@ export default function InterestsEditor({ formData, setFormData }: Props) {
   const activeIndex = formData?.activeIndex ?? 0;
   const current: InterestItemForm = items[activeIndex] || emptyItem;
 
-  const { name, category, description } = current;
+  const { name, description } = current;
 
   /* ================= HELPERS ================= */
   const updateCurrent = (patch: Partial<InterestItemForm>) => {
@@ -74,94 +60,14 @@ export default function InterestsEditor({ formData, setFormData }: Props) {
           />
         </div>
 
-        {/* Category */}
-        <div>
-          <label className="block text-sm font-semibold mb-2 text-gray-700">
-            Category
-          </label>
-          <select
-            value={category}
-            onChange={(e) => updateCurrent({ category: e.target.value })}
-            className="w-full px-4 py-3 rounded-xl bg-gray-100 border border-transparent focus:border-blue-700 outline-none transition-colors cursor-pointer"
-          >
-            {INTEREST_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat === "Select category" ? "" : cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* Description */}
-        <div>
-          <label className="block text-sm font-semibold mb-2 text-gray-700">
-            Description <span className="text-red-500">*</span>
-          </label>
-
-          <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
-            {/* Toolbar */}
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-200 bg-gray-50">
-              <button
-                type="button"
-                className="font-bold text-gray-700 hover:text-gray-900 text-sm"
-              >
-                B
-              </button>
-              <button
-                type="button"
-                className="italic text-gray-700 hover:text-gray-900 text-sm"
-              >
-                I
-              </button>
-              <button
-                type="button"
-                className="underline text-gray-700 hover:text-gray-900 text-sm"
-              >
-                U
-              </button>
-              <div className="h-4 border-r border-gray-300"></div>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                ‣
-              </button>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                1.
-              </button>
-              <div className="h-4 border-r border-gray-300"></div>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                ↻
-              </button>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                ↺
-              </button>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                🔗
-              </button>
-            </div>
-
-            <textarea
-              rows={5}
-              value={description}
-              onChange={(e) => updateCurrent({ description: e.target.value })}
-              placeholder="Describe how you engage with this interest and its relevance to your career..."
-              className="w-full px-4 py-3 text-sm leading-5 resize-none outline-none min-h-[120px] text-gray-900 focus:border-none"
-            />
-          </div>
-        </div>
+        <RichTextEditorField
+          label="Description *"
+          value={description}
+          onChange={(val) => updateCurrent({ description: val })}
+          placeholder="Describe how you engage with this interest and its relevance to your career..."
+          minHeight="140px"
+        />
       </div>
 
       {/* ================= RIGHT SIDE - TIPS ================= */}
@@ -176,9 +82,8 @@ export default function InterestsEditor({ formData, setFormData }: Props) {
           </p>
 
           <p>
-            Select appropriate categories to help ATS systems better understand
-            the relevance of your interests. Describe how you engage with these
-            interests actively.
+            Describe how you engage with these interests actively and explain how
+            they relate to your career goals or demonstrate your professional development.
           </p>
 
           <p className="text-xs text-gray-500 italic">

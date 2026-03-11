@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { Search, Plus, Check } from "lucide-react";
+import RichTextEditorField from "./RichTextEditorField";
 
 interface AchievementItemForm {
   title: string;
@@ -132,76 +133,13 @@ export default function AchievementsEditor({ formData, setFormData }: Props) {
         </div>
 
         {/* Achievement Description */}
-        <div>
-          <label className="block text-sm font-semibold mb-2 text-gray-700">
-            Achievement description
-          </label>
-
-          <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
-            {/* Toolbar */}
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-200 bg-gray-50">
-              <button
-                type="button"
-                className="font-bold text-gray-700 hover:text-gray-900 text-sm"
-              >
-                B
-              </button>
-              <button
-                type="button"
-                className="italic text-gray-700 hover:text-gray-900 text-sm"
-              >
-                I
-              </button>
-              <button
-                type="button"
-                className="underline text-gray-700 hover:text-gray-900 text-sm"
-              >
-                U
-              </button>
-              <div className="h-4 border-r border-gray-300"></div>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                ‣
-              </button>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                1.
-              </button>
-              <div className="h-4 border-r border-gray-300"></div>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                ↻
-              </button>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                ↺
-              </button>
-              <button
-                type="button"
-                className="text-gray-700 hover:text-gray-900 text-sm"
-              >
-                🔗
-              </button>
-            </div>
-
-            <textarea
-              rows={6}
-              value={description}
-              onChange={(e) => updateCurrent({ description: e.target.value })}
-              onFocus={() => setActiveTab("examples")}
-              placeholder="Describe your achievement, what you accomplished, and why it matters..."
-              className="w-full px-4 py-3 text-sm leading-5 resize-none outline-none min-h-[140px] text-gray-900 focus:border-none"
-            />
-          </div>
-        </div>
+        <RichTextEditorField
+          label="Achievement description"
+          value={description}
+          onChange={(val) => updateCurrent({ description: val })}
+          placeholder="Describe your achievement, what you accomplished, and why it matters..."
+          minHeight="140px"
+        />
       </div>
 
       {/* ================= RIGHT SIDE - TIPS & EXAMPLES ================= */}

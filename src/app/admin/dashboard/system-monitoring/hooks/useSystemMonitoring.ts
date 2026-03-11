@@ -16,6 +16,8 @@ import { logger } from '@/lib/logger'
 
 interface UseSystemMonitoringProps {
     activeTab: string
+    cpuActiveTab?: string
+    memoryActiveTab?: string
     apiShowComparison: boolean
     cpuShowComparison: boolean
     memoryShowComparison: boolean
@@ -24,6 +26,8 @@ interface UseSystemMonitoringProps {
 
 export const useSystemMonitoring = ({
     activeTab,
+    cpuActiveTab,
+    memoryActiveTab,
     apiShowComparison,
     cpuShowComparison,
     memoryShowComparison,
@@ -53,13 +57,15 @@ export const useSystemMonitoring = ({
     const fetchAllData = useCallback(async () => {
         setIsRefreshing(true)
         try {
-            const period = getPeriodFromTab(activeTab)
+            const apiPeriod = getPeriodFromTab(activeTab)
+            const cpuPeriod = getPeriodFromTab(cpuActiveTab || activeTab)
+            const memoryPeriod = getPeriodFromTab(memoryActiveTab || activeTab)
 
             const [overview, api, cpu, memory, logs] = await Promise.all([
                 getSystemOverview(),
-                getApiRequestMetrics(period, apiShowComparison),
-                getCpuUsage(period, cpuShowComparison),
-                getMemoryUsage(period, memoryShowComparison),
+                getApiRequestMetrics(apiPeriod, apiShowComparison),
+                getCpuUsage(cpuPeriod, cpuShowComparison),
+                getMemoryUsage(memoryPeriod, memoryShowComparison),
                 getSystemLogs({ page: 1, page_size: 10 })
             ])
 
@@ -81,7 +87,7 @@ export const useSystemMonitoring = ({
             setLoading(false)
             setIsRefreshing(false)
         }
-    }, [activeTab, apiShowComparison, cpuShowComparison, memoryShowComparison, getPeriodFromTab])
+    }, [activeTab, cpuActiveTab, memoryActiveTab, apiShowComparison, cpuShowComparison, memoryShowComparison, getPeriodFromTab])
 
     // Initial fetch
     useEffect(() => {

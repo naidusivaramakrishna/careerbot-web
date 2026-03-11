@@ -2,6 +2,19 @@ import React, { memo } from 'react'
 import { FileText, CreditCard, Activity } from 'lucide-react'
 import type { UserDetailsResponse, UserActivityLog } from '@/api/userManagementApi'
 
+interface Resume {
+    id: string
+    title?: string
+    updated_at: string
+}
+
+interface Payment {
+    id: string
+    amount: number
+    created_at: string
+    status: 'completed' | 'pending' | 'failed'
+}
+
 interface SubscriptionTabProps {
     user: UserDetailsResponse
 }
@@ -31,7 +44,7 @@ export const SubscriptionTab = memo(({ user }: SubscriptionTabProps) => {
 SubscriptionTab.displayName = 'SubscriptionTab'
 
 interface ResumesTabProps {
-    resumes: any[]
+    resumes: Resume[]
     formatDate: (date: string) => string
 }
 
@@ -43,7 +56,7 @@ export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
             </h4>
             {resumes && resumes.length > 0 ? (
                 <div className="divide-y divide-gray-300">
-                    {resumes.map((resume: any) => (
+                    {resumes.map((resume) => (
                         <div key={resume.id} className="py-2 flex justify-between items-center">
                             <div>
                                 <p className="font-semibold text-black">{resume.title || 'Untitled Resume'}</p>
@@ -52,7 +65,7 @@ export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
                                 </p>
                             </div>
                             <span className="cursor-pointer font-semibold text-blue-600 hover:text-blue-700 transition-colors">
-                                View
+                                Download
                             </span>
                         </div>
                     ))}
@@ -67,7 +80,7 @@ export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
 ResumesTab.displayName = 'ResumesTab'
 
 interface PaymentsTabProps {
-    payments: any[]
+    payments: Payment[]
     formatDate: (date: string) => string
 }
 
@@ -79,7 +92,7 @@ export const PaymentsTab = memo(({ payments, formatDate }: PaymentsTabProps) => 
             </h4>
             {payments && payments.length > 0 ? (
                 <div className="divide-y divide-gray-300">
-                    {payments.map((payment: any) => (
+                    {payments.map((payment) => (
                         <div key={payment.id} className="py-2 flex justify-between items-center">
                             <div>
                                 <p className="font-semibold text-black">₹{payment.amount}</p>

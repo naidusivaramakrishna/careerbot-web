@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Plus, Search, Check } from "lucide-react";
+import RichTextEditorField from "./RichTextEditorField";
 
 interface SummaryVariant {
   role: string;
@@ -95,35 +96,13 @@ function SummaryEditor({ formData, setFormData, summaryVariants }: Props) {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {/* LEFT: editor */}
       <div className="md:col-span-2">
-        <h3 className="text-sm font-semibold mb-3 text-gray-900">
-          How can you describe yourself?
-        </h3>
-
-        <div className="border border-gray-300 rounded-xl bg-white overflow-hidden">
-          {/* toolbar */}
-          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 text-sm text-gray-600">
-            <button className="font-bold hover:text-gray-900">B</button>
-            <button className="italic hover:text-gray-900">I</button>
-            <button className="hover:text-gray-900">1.</button>
-            <button className="hover:text-gray-900">↺</button>
-            <button className="hover:text-gray-900">↻</button>
-            <button className="hover:text-gray-900">🔗</button>
-            <button className="ml-auto border border-gray-300 px-2.5 py-1 rounded text-blue-600 hover:bg-blue-50">
-              A
-            </button>
-          </div>
-
-          <textarea
-            rows={16}
-            value={summaryValue}
-            onChange={(e) =>
-              setFormData({ ...formData, summary: e.target.value })
-            }
-            onFocus={() => setActiveTab("examples")}
-            placeholder="Write a short professional summary..."
-            className="w-full px-4 pt-3 pb-4 text-sm leading-6 resize-none outline-none min-h-[320px] text-gray-900"
-          />
-        </div>
+        <RichTextEditorField
+          label="How can you describe yourself?"
+          value={summaryValue}
+          onChange={(val) => setFormData({ ...formData, summary: val })}
+          placeholder="Write a short professional summary..."
+          minHeight="320px"
+        />
       </div>
 
       {/* RIGHT: tips / examples */}

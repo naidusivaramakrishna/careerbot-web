@@ -201,6 +201,11 @@ export const adminLogin = async (
 
     logger.info('🔐 Attempting admin login for:', data.email);
 
+    // Clear cached role before login to ensure fresh role on next page access
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('admin_role');
+    }
+
     const response = await httpClient.post<AdminLoginResponse>(
       '/admin/auth/login',
       formData as unknown as Record<string, unknown>,
@@ -273,6 +278,8 @@ export const adminLogout = async (): Promise<void> => {
     logger.error('Error logging out admin:', error);
   } finally {
     if (typeof window !== 'undefined') {
+      // Clear cached admin role from sessionStorage so next login uses fresh role
+      sessionStorage.removeItem('admin_role');
       // Force redirect to admin login
       window.location.href = '/admin/login';
     }
@@ -325,11 +332,11 @@ export const enable2FA = async (
 /**
  * Disable 2FA for admin account
  */
-export const disable2FA = async (totp_code: string): Promise<{ success: boolean }> => {
+export const disable2FA = async (password: string): Promise<{ success: boolean }> => {
   try {
     const response = await httpClient.post<{ success: boolean }>(
       '/admin/auth/2fa/disable',
-      { totp_code },
+      { password },
       {
         headers: {
           'Content-Type': 'application/json',

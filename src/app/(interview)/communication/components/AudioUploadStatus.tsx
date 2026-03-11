@@ -39,7 +39,7 @@ export function AudioUploadStatus({
           completed: data.completed,
           processing: data.processing,
           failed: data.failed,
-          missing: data.missing,
+          missing: data.missing.length,
         };
         setStatus(newStatus);
         onStatusChange?.(newStatus);

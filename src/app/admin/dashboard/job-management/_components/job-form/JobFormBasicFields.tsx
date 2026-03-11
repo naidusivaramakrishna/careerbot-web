@@ -4,9 +4,10 @@ import { JobFormData, JobType, WorkMode } from '../../_types/jobFormTypes'
 interface JobFormBasicFieldsProps {
     form: JobFormData
     onUpdate: <K extends keyof JobFormData>(key: K, value: JobFormData[K]) => void
+    getFieldError: (field: string) => string | undefined
 }
 
-export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsProps) => {
+export const JobFormBasicFields = memo(({ form, onUpdate, getFieldError }: JobFormBasicFieldsProps) => {
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 my-4">
             {/* Job Title */}
@@ -18,9 +19,12 @@ export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsPr
                     type="text"
                     value={form.jobTitle}
                     onChange={(e) => onUpdate("jobTitle", e.target.value)}
-                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
+                    className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('job_title') ? 'border-2 border-red-500' : ''}`}
                     placeholder="e.g. Senior Frontend Developer"
                 />
+                {getFieldError('job_title') && (
+                    <p className="text-xs text-red-600">{getFieldError('job_title')}</p>
+                )}
             </div>
 
             {/* Company */}
@@ -32,9 +36,12 @@ export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsPr
                     type="text"
                     value={form.company}
                     onChange={(e) => onUpdate("company", e.target.value)}
-                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
+                    className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('company') ? 'border-2 border-red-500' : ''}`}
                     placeholder="e.g. Tech Corp"
                 />
+                {getFieldError('company') && (
+                    <p className="text-xs text-red-600">{getFieldError('company')}</p>
+                )}
             </div>
 
             {/* Location */}
@@ -46,9 +53,12 @@ export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsPr
                     type="text"
                     value={form.location}
                     onChange={(e) => onUpdate("location", e.target.value)}
-                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
+                    className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('location') ? 'border-2 border-red-500' : ''}`}
                     placeholder="e.g. Bangalore"
                 />
+                {getFieldError('location') && (
+                    <p className="text-xs text-red-600">{getFieldError('location')}</p>
+                )}
             </div>
 
             {/* Work Mode */}
@@ -78,9 +88,12 @@ export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsPr
                         type="number"
                         value={form.salaryMin}
                         onChange={(e) => onUpdate("salaryMin", e.target.value)}
-                        className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
+                        className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('salary_min') ? 'border-2 border-red-500' : ''}`}
                         placeholder="e.g. 6"
                     />
+                    {getFieldError('salary_min') && (
+                        <p className="text-xs text-red-600">{getFieldError('salary_min')}</p>
+                    )}
                 </div>
                 <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
@@ -91,9 +104,12 @@ export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsPr
                         type="number"
                         value={form.salaryMax}
                         onChange={(e) => onUpdate("salaryMax", e.target.value)}
-                        className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
+                        className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('salary_max') ? 'border-2 border-red-500' : ''}`}
                         placeholder="e.g. 12"
                     />
+                    {getFieldError('salary_max') && (
+                        <p className="text-xs text-red-600">{getFieldError('salary_max')}</p>
+                    )}
                 </div>
             </div>
 
@@ -119,9 +135,12 @@ export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsPr
                     type="number"
                     value={form.openings}
                     onChange={(e) => onUpdate("openings", e.target.value)}
-                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
+                    className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('number_of_openings') ? 'border-2 border-red-500' : ''}`}
                     min="1"
                 />
+                {getFieldError('number_of_openings') && (
+                    <p className="text-xs text-red-600">{getFieldError('number_of_openings')}</p>
+                )}
             </div>
 
             {/* Experience Range */}
@@ -135,10 +154,12 @@ export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsPr
                         type="number"
                         value={form.experienceMin}
                         onChange={(e) => onUpdate("experienceMin", e.target.value)}
-                        className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
+                        className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('experience_min') ? 'border-2 border-red-500' : ''}`}
                         placeholder="0"
-                        min="0"
                     />
+                    {getFieldError('experience_min') && (
+                        <p className="text-xs text-red-600">{getFieldError('experience_min')}</p>
+                    )}
                 </div>
                 <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
@@ -149,10 +170,12 @@ export const JobFormBasicFields = memo(({ form, onUpdate }: JobFormBasicFieldsPr
                         type="number"
                         value={form.experienceMax}
                         onChange={(e) => onUpdate("experienceMax", e.target.value)}
-                        className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
+                        className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('experience_max') ? 'border-2 border-red-500' : ''}`}
                         placeholder="5"
-                        min="0"
                     />
+                    {getFieldError('experience_max') && (
+                        <p className="text-xs text-red-600">{getFieldError('experience_max')}</p>
+                    )}
                 </div>
             </div>
         </div>

@@ -16,6 +16,7 @@ export default function MultiSelectAutocomplete({
     onChange,
 }: MultiSelectAutocompleteProps) {
     const [input, setInput] = useState("");
+    const [isFocused, setIsFocused] = useState(false);
 
     const handleAdd = (val: string) => {
         if (!values.includes(val)) {
@@ -28,16 +29,18 @@ export default function MultiSelectAutocomplete({
         onChange(values.filter((v) => v !== val));
     };
 
-    // Only show options that match input AND input is non-empty
+    // Show all options on focus (empty input), or show filtered options when typing
     const filteredOptions =
-        input.trim() === ""
+        isFocused && input.trim() === ""
+            ? options.filter((opt) => !values.includes(opt))
+            : input.trim() === ""
             ? []
             : options.filter(
                 (opt) => opt.toLowerCase().includes(input.toLowerCase()) && !values.includes(opt)
             );
 
     return (
-        <div className="flex flex-col gap-2 mt-2 relative">
+        <div className="flex flex-col gap-2 mt-2">
             <label className="text-sm font-semibold">{label}</label>
             <div className="flex flex-wrap gap-2">
                 {values.map((val) => (
@@ -59,33 +62,37 @@ export default function MultiSelectAutocomplete({
                 ))}
             </div>
 
-            <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === "Enter" && input.trim() !== "") {
-                        handleAdd(input.trim());
-                        e.preventDefault();
-                    }
-                }}
-                placeholder="Type to search..."
-                className="border border-neutral-200  p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
-            />
+            <div className="relative">
+                <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setTimeout(() => setIsFocused(false), 250)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" && input.trim() !== "") {
+                            handleAdd(input.trim());
+                            e.preventDefault();
+                        }
+                    }}
+                    placeholder="Type to search..."
+                    className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
 
-            {filteredOptions.length > 0 && (
-                <div className="absolute border border-neutral-200 rounded mt-1 max-h-32 overflow-y-auto bg-white shadow-md w-full z-10 text-sm">
-                    {filteredOptions.map((opt) => (
-                        <div
-                            key={opt}
-                            onClick={() => handleAdd(opt)}
-                            className="px-3 py-1 cursor-pointer hover:bg-gray-100"
-                        >
-                            {opt}
-                        </div>
-                    ))}
-                </div>
-            )}
+                {filteredOptions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 border border-neutral-200 rounded mt-1 max-h-40 overflow-y-auto bg-white shadow-lg z-20 text-sm">
+                        {filteredOptions.map((opt) => (
+                            <div
+                                key={opt}
+                                onMouseDown={() => handleAdd(opt)}
+                                className="px-3 py-2 cursor-pointer hover:bg-blue-100 transition-colors"
+                            >
+                                {opt}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

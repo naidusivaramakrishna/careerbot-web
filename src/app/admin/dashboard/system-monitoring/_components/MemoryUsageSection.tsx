@@ -32,7 +32,7 @@ export const MemoryUsageSection = memo(({
                 minute: '2-digit',
                 hour12: false
             })
-            const data: any = { time, memory: point.value }
+            const data: { time: string; memory: number; previous?: number } = { time, memory: point.value }
 
             if (showComparison && metrics.comparison?.enabled && metrics.comparison.previous_period?.data_points[index]) {
                 data.previous = metrics.comparison.previous_period.data_points[index].value

@@ -12,6 +12,15 @@ import {
 } from '@/api/userManagementApi'
 import { logger } from '@/lib/logger'
 
+type ApiError = {
+    response?: {
+        data?: {
+            error?: { message?: string };
+            detail?: string;
+        };
+    };
+}
+
 export const useUserDetails = (userId: string) => {
     const [user, setUser] = useState<UserDetailsResponse | null>(null)
     const [activities, setActivities] = useState<UserActivityLog[]>([])
@@ -27,7 +36,8 @@ export const useUserDetails = (userId: string) => {
             setUser(details)
         } catch (error: unknown) {
             logger.error('Error fetching user details:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to load user details'
+            const err = error as ApiError
+            const errorMessage = err?.response?.data?.error?.message || err?.response?.data?.detail || 'Failed to load user details'
             toast.error(errorMessage)
         } finally {
             setLoading(false)
@@ -69,7 +79,8 @@ export const useUserDetails = (userId: string) => {
             return true
         } catch (error: unknown) {
             logger.error('Error updating user:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to update user'
+            const err = error as ApiError
+            const errorMessage = err?.response?.data?.error?.message || err?.response?.data?.detail || 'Failed to update user'
             toast.error(errorMessage)
             return false
         } finally {
@@ -90,7 +101,8 @@ export const useUserDetails = (userId: string) => {
             return true
         } catch (error: unknown) {
             logger.error('Error suspending user:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to suspend user'
+            const err = error as ApiError
+            const errorMessage = err?.response?.data?.error?.message || err?.response?.data?.detail || 'Failed to suspend user'
             toast.error(errorMessage)
             return false
         } finally {
@@ -107,7 +119,8 @@ export const useUserDetails = (userId: string) => {
             await fetchUserDetails()
         } catch (error: unknown) {
             logger.error('Error unsuspending user:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to unsuspend user'
+            const err = error as ApiError
+            const errorMessage = err?.response?.data?.error?.message || err?.response?.data?.detail || 'Failed to unsuspend user'
             toast.error(errorMessage)
         } finally {
             setActionLoading(false)
@@ -125,7 +138,6 @@ export const useUserDetails = (userId: string) => {
             await deleteUser(
                 userId,
                 {
-                    delete_type: isPermanent ? 'permanent' : 'soft',
                     reason,
                     confirm: confirmed,
                 },
@@ -135,7 +147,8 @@ export const useUserDetails = (userId: string) => {
             return true
         } catch (error: unknown) {
             logger.error('Error deleting user:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to delete user'
+            const err = error as ApiError
+            const errorMessage = err?.response?.data?.error?.message || err?.response?.data?.detail || 'Failed to delete user'
             toast.error(errorMessage)
             return false
         } finally {

@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { Eye, EyeClosed, X } from 'lucide-react';
+import { Eye, EyeClosed } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { adminLogin, adminSignUp, bootstrapAdmin } from "@/api/adminAuthApi";
 import { toast } from "sonner";
@@ -8,33 +8,50 @@ import logger from "@/lib/logger";
 
 // Type guard for API errors
 interface ApiError {
-  response?: {
-    status: number;
-    data?: {
-      detail?: string;
-      error?: {
-        message?: string;
-      };
+    response?: {
+        status: number;
+        data?: {
+            detail?: string;
+            error?: {
+                message?: string;
+                details?: {
+                    validation_errors?: Array<{
+                        field: string;
+                        message: string;
+                        type: string;
+                        input?: string;
+                    }>;
+                };
+            };
+            details?: {
+                validation_errors?: Array<{
+                    field: string;
+                    message: string;
+                    type: string;
+                    input?: string;
+                }>;
+            };
+        };
     };
-  };
-  request?: unknown;
-  message?: string;
+    request?: unknown;
+    message?: string;
 }
 
 function isApiError(err: unknown): err is ApiError {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    ('response' in err || 'request' in err || 'message' in err)
-  );
+    return (
+        typeof err === 'object' &&
+        err !== null &&
+        ('response' in err || 'request' in err || 'message' in err)
+    );
 }
 
 const AdminLoginPage = () => {
     const [isSignUp, setIsSignUp] = useState(false); // Start with Sign In
-    const [open, setOpen] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
+    const [showSignUpPassword, setShowSignUpPassword] = useState(false);
+    const [showLoginPassword, setShowLoginPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
     const [totpRequired, setTotpRequired] = useState(false);
 
     const router = useRouter();
@@ -53,19 +70,27 @@ const AdminLoginPage = () => {
             ...prev,
             [name]: value
         }));
-        setError(''); // Clear error on input change
+        setError(''); // Clear general error on input change
+        // Clear field-specific error for this field
+        if (fieldErrors[name]) {
+            setFieldErrors(prev => ({
+                ...prev,
+                [name]: ''
+            }));
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError('');
+        setFieldErrors({});
 
         try {
             if (isSignUp) {
                 // Step 1: Try bootstrap endpoint first (works only when no admins exist)
                 let signupSuccess = false;
-                
+
                 try {
                     await bootstrapAdmin({
                         email: formData.email,
@@ -93,17 +118,17 @@ const AdminLoginPage = () => {
                     const adminsAlreadyExist = (
                         (bootstrapStatus === 400 || bootstrapStatus === 403 || bootstrapStatus === 409) &&
                         (bootstrapDetailStr.includes('admin already') ||
-                         bootstrapDetailStr.includes('admin exists') ||
-                         bootstrapDetailStr.includes('already created') ||
-                         bootstrapDetailStr.includes('already exist') ||
-                         bootstrapDetailStr.includes('bootstrap') ||
-                         bootstrapDetailStr.includes('cannot bootstrap'))
+                            bootstrapDetailStr.includes('admin exists') ||
+                            bootstrapDetailStr.includes('already created') ||
+                            bootstrapDetailStr.includes('already exist') ||
+                            bootstrapDetailStr.includes('bootstrap') ||
+                            bootstrapDetailStr.includes('cannot bootstrap'))
                     );
 
                     if (adminsAlreadyExist) {
                         // Silently fall back to regular signup (don't show bootstrap error)
                         logger.info('ℹ️ Admins already exist, falling back to regular signup');
-                        
+
                         try {
                             await adminSignUp({
                                 email: formData.email,
@@ -126,6 +151,9 @@ const AdminLoginPage = () => {
                     }
                 }
 
+                // Validation errors are thrown separately, so if we reach here, bootstrap/signup succeeded
+                // But if there were validation errors, they'll be caught by outer try-catch
+
                 // Step 2: Auto-login after successful signup
                 if (signupSuccess) {
                     await adminLogin({
@@ -147,7 +175,7 @@ const AdminLoginPage = () => {
                 });
                 logger.info('✅ Login response:', response);
                 toast.success("Login successful");
-                
+
                 // Redirect to admin dashboard on successful login
                 router.push('/admin/dashboard');
             }
@@ -179,9 +207,25 @@ const AdminLoginPage = () => {
                 } else if (is2FARequired && totpRequired) {
                     errorMessage = 'Invalid 2FA code. Please check your authenticator app and try again.';
                 } else if (status === 401) {
-                    errorMessage = 'Invalid email or password';
-                } else if (status === 422) {
-                    errorMessage = apiErrorMsg || 'Validation error. Please check your input.';
+                    // Show login error below password field
+                    setFieldErrors({ password: 'Invalid email or password' });
+                    errorMessage = '';
+                } else if (status === 422 || status === 400) {
+                    // Check for validation_errors in details object (check both nested locations)
+                    const validationErrors = data?.details?.validation_errors || data?.error?.details?.validation_errors;
+                    if (validationErrors && Array.isArray(validationErrors) && validationErrors.length > 0) {
+                        // Map field errors for inline display
+                        const errors: { [key: string]: string } = {};
+                        validationErrors.forEach(err => {
+                            // Normalize field names (full_name -> fullName)
+                            const fieldName = err.field === 'full_name' ? 'fullName' : err.field;
+                            errors[fieldName] = err.message;
+                        });
+                        setFieldErrors(errors);
+                        errorMessage = ''; // Clear general error message for validation errors
+                    } else {
+                        errorMessage = apiErrorMsg || 'Validation error. Please check your input.';
+                    }
                 } else if (status === 429) {
                     errorMessage = 'Too many attempts. Please try again later.';
                 } else {
@@ -198,7 +242,10 @@ const AdminLoginPage = () => {
             }
 
             setError(errorMessage);
-            toast.error(errorMessage);
+            // Only show toast if there's an actual error message (field errors are shown inline)
+            if (errorMessage) {
+                toast.error(errorMessage);
+            }
         } finally {
             setLoading(false);
         }
@@ -209,7 +256,7 @@ const AdminLoginPage = () => {
             <div className="min-h-screen flex items-center justify-center bg-black/20 px-4">
                 <div className="relative h-auto w-full max-w-md rounded-4xl bg-white backdrop-blur-xl p-8 shadow-2xl border border-white/10">
                     {/* Toggle Buttons */}
-                    <div className='flex items-center justify-between mb-6'>
+                    <div className='flex items-center mb-6'>
                         <div className="flex w-[200px] rounded-full bg-gray-300 p-1">
                             <button
                                 type="button"
@@ -217,6 +264,9 @@ const AdminLoginPage = () => {
                                     setIsSignUp(true);
                                     setTotpRequired(false);
                                     setError('');
+                                    setFieldErrors({});
+                                    setShowSignUpPassword(false);
+                                    setShowLoginPassword(false);
                                     setFormData({ fullName: '', email: '', password: '', totpCode: '' });
                                 }}
                                 className={`flex-1 cursor-pointer py-2 rounded-full text-sm font-medium transition-all ${isSignUp ? "bg-black text-white" : "text-gray-600"
@@ -230,6 +280,9 @@ const AdminLoginPage = () => {
                                     setIsSignUp(false);
                                     setTotpRequired(false);
                                     setError('');
+                                    setFieldErrors({});
+                                    setShowSignUpPassword(false);
+                                    setShowLoginPassword(false);
                                     setFormData({ fullName: '', email: '', password: '', totpCode: '' });
                                 }}
                                 className={`flex-1 cursor-pointer py-2 rounded-full text-sm font-medium transition-all ${!isSignUp ? "bg-black text-white" : "text-gray-600"
@@ -238,15 +291,7 @@ const AdminLoginPage = () => {
                                 Sign in
                             </button>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setOpen(false)}
-                            className="cursor-pointer hover:bg-black hover:text-white rounded-full p-1.5"
-                        >
-                            <X className="h-4 w-4" />
-                        </button>
                     </div>
-
                     <h2 className="text-xl font-semibold mb-6 text-center">
                         {isSignUp ? "Create an account" : "Welcome back"}
                     </h2>
@@ -267,8 +312,12 @@ const AdminLoginPage = () => {
                                     onChange={handleInputChange}
                                     placeholder="Full Name"
                                     required
-                                    className="w-full rounded-lg bg-gray-100 outline-none px-4 py-3 placeholder-gray-500 transition"
+                                    className={`w-full rounded-lg bg-gray-100 outline-none px-4 py-3 placeholder-gray-500 transition ${fieldErrors.fullName ? 'border-2 border-red-500' : ''
+                                        }`}
                                 />
+                                {fieldErrors.fullName && (
+                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.fullName}</p>
+                                )}
                             </div>
                         )}
                         <div>
@@ -279,26 +328,40 @@ const AdminLoginPage = () => {
                                 onChange={handleInputChange}
                                 placeholder="Email address"
                                 required
-                                className="w-full rounded-lg bg-gray-100 outline-none px-4 py-3 placeholder-gray-500 transition"
+                                className={`w-full rounded-lg bg-gray-100 outline-none px-4 py-3 placeholder-gray-500 transition ${fieldErrors.email ? 'border-2 border-red-500' : ''
+                                    }`}
                             />
+                            {fieldErrors.email && (
+                                <p className="text-red-500 text-xs mt-1">{fieldErrors.email}</p>
+                            )}
                         </div>
                         <div className="relative">
                             <input
-                                type={showPassword ? "text" : "password"}
+                                type={(isSignUp ? showSignUpPassword : showLoginPassword) ? "text" : "password"}
                                 name="password"
                                 value={formData.password}
                                 onChange={handleInputChange}
                                 placeholder="Password"
                                 required
-                                className="w-full rounded-lg bg-gray-100 outline-none px-4 py-3 placeholder-gray-500 transition"
+                                className={`w-full rounded-lg bg-gray-100 outline-none px-4 py-3 placeholder-gray-500 transition ${fieldErrors.password ? 'border-2 border-red-500' : ''
+                                    }`}
                             />
                             <button
                                 type="button"
-                                onClick={() => setShowPassword((p) => !p)}
+                                onClick={() => {
+                                    if (isSignUp) {
+                                        setShowSignUpPassword(!showSignUpPassword);
+                                    } else {
+                                        setShowLoginPassword(!showLoginPassword);
+                                    }
+                                }}
                                 className="absolute inset-y-0 right-3 flex items-center text-gray-600"
                             >
-                                {showPassword ? <Eye size={20} /> : <EyeClosed size={20} />}
+                                {(isSignUp ? showSignUpPassword : showLoginPassword) ? <Eye size={20} className="cursor-pointer" /> : <EyeClosed size={20} className="cursor-pointer" />}
                             </button>
+                            {fieldErrors.password && (
+                                <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>
+                            )}
                         </div>
 
                         {/* 2FA Toggle Link - Show when not in signup mode and 2FA not yet shown */}

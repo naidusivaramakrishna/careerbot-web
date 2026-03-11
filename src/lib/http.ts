@@ -24,12 +24,9 @@ const clearAllTokens = () => {
   // ✅ Backend clears httpOnly cookies automatically
   // Works for both user and admin requests
   sessionStorage.clear();
+  localStorage.removeItem('token_last_refreshed_at');
   clearCorrelationId();
 };
-
-/* --------------------------------------------------
-   Axios Instance
--------------------------------------------------- */
 
 /* --------------------------------------------------
    Axios Instance
@@ -116,17 +113,25 @@ client.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Block auth endpoints from retry
+    // Signin/login 401 = wrong credentials — just reject so the form can show inline error
     if (
       originalRequest.url?.includes('/auth/signin') ||
+      originalRequest.url?.includes('/admin/auth/login')
+    ) {
+      return Promise.reject(error);
+    }
+
+    // Refresh token 401 = session expired — clear tokens and redirect to login
+    if (
       originalRequest.url?.includes('/auth/refresh') ||
-      originalRequest.url?.includes('/admin/auth/login') ||
       originalRequest.url?.includes('/admin/auth/refresh')
     ) {
       clearAllTokens();
-      window.location.href = isAdmin
-        ? '/admin/login'
-        : '/auth/login';
+      if (isAdmin) {
+        window.location.href = '/admin/login';
+      } else {
+        window.location.href = '/?showLogin=true';
+      }
       return Promise.reject(error);
     }
 
@@ -162,9 +167,11 @@ client.interceptors.response.use(
     } catch (refreshError) {
       processQueue(refreshError, null, isAdmin);
       clearAllTokens();
-      window.location.href = isAdmin
-        ? '/admin/login'
-        : '/auth/login';
+      if (isAdmin) {
+        window.location.href = '/admin/login';
+      } else {
+        window.location.href = '/?showLogin=true';
+      }
       return Promise.reject(refreshError);
     } finally {
       isAdmin

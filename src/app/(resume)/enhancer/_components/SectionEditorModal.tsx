@@ -26,555 +26,25 @@ import ReferencesEditor from "./section-editors/ReferencesEditor";
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  onSave?: (didChange: boolean, section: string, changedFieldNames: string[]) => void;
 };
 
-const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { resumeData, setResumeData, activeSection } = useResume();
+/** Returns "idx.fieldName" keys for fields that changed (any edit, not just empty→filled) */
+function getAddedFieldKeys(oldItems: any[], newItems: any[]): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < newItems.length; i++) {
+    const old = i < oldItems.length ? (oldItems[i] || {}) : {};
+    const next = newItems[i] || {};
+    for (const key of Object.keys(next)) {
+      if (String(old[key] || '') !== String(next[key] || '') && next[key]) keys.push(`${i}.${key}`);
+    }
+  }
+  return keys;
+}
+
+const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
+  const { resumeData, setResumeData, activeSection, addAddedFields } = useResume();
   const [formData, setFormData] = useState<any>(null);
-
-  /* ================= INIT FORM DATA ================= */
-  useEffect(() => {
-    if (!isOpen || !resumeData || !activeSection) return;
-
-    switch (activeSection) {
-      case "PersonalInfo": {
-        const parts = resumeData.personalInfo.fullName?.split(" ") || [];
-        const pInfo = resumeData.personalInfo;
-        
-        // // console.log("=== LOADING PersonalInfo ===");
-        // // console.log("Full personalInfo object:", pInfo);
-        // // console.log("linkedinUrl:", pInfo.linkedinUrl);
-        // // console.log("githubUrl:", pInfo.githubUrl);
-        // // console.log("portifolioUrl:", pInfo.portifolioUrl);
-        
-        const loadedData = {
-          firstName: parts[0] || "",
-          lastName: parts.slice(1).join(" ") || "",
-          email: pInfo.email || "",
-          phone: pInfo.phone || "",
-          location: pInfo.location || "",
-          linkedinUrl: pInfo.linkedinUrl || "",
-          githubUrl: pInfo.githubUrl || "",
-          portfolioUrl: pInfo.portifolioUrl || "",
-        };
-        
-        // // console.log("Loaded formData:", loadedData);
-        setFormData(loadedData);
-        break;
-      }
-
-      case "Summary":
-        setFormData({ summary: resumeData.professionalSummary || "" });
-        break;
-
-      case "Experience":
-        setFormData({
-          items:
-            resumeData.workExperience?.length > 0
-              ? resumeData.workExperience
-              : [
-                  {
-                    company: "",
-                    role: "",
-                    location: "",
-                    client: "",
-                    years: "",
-                    skills: "",
-                    startDate: "",
-                    endDate: "",
-                    description: "",
-                    currentlyWorking: false,
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Education":
-        setFormData({
-          items:
-            resumeData.education?.length > 0
-              ? resumeData.education
-              : [
-                  {
-                    college: "",
-                    degree: "",
-                    branch: "",
-                    duration: "",
-                    grade: "",
-                    gradeType: "",
-                    achievements: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Internships":
-        setFormData({
-          items:
-            resumeData.internships?.length > 0
-              ? resumeData.internships
-              : [
-                  {
-                    company: "",
-                    role: "",
-                    duration: "",
-                    location: "",
-                    description: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Projects":
-        setFormData({
-          items:
-            resumeData.projects?.length > 0
-              ? resumeData.projects
-              : [
-                  {
-                    title: "",
-                    link: "",
-                    client: "",
-                    startDate: "",
-                    endDate: "",
-                    description: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Skills":
-        // Convert categorizedSkills from arrays to comma-separated strings
-        // // console.log("=== LOADING SKILLS ===");
-        // // console.log("Full resumeData:", resumeData);
-        // // console.log("categorizedSkills in resumeData:", resumeData.categorizedSkills);
-
-        // Normalize keys: backend/local data may use snake_case (programming_languages, cloud_platforms, soft_skills)
-        const rawSkills = resumeData.categorizedSkills || {};
-        const getVal = (obj: any, ...keys: string[]) => {
-          for (const k of keys) {
-            if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
-          }
-          return undefined;
-        };
-
-        const skillsData = {
-          languages: getVal(rawSkills, "languages", "programming_languages", "programmingLanguages", "programming_languages"),
-          frameworks: getVal(rawSkills, "frameworks", "frameworks_list"),
-          libraries: getVal(rawSkills, "libraries", "library"),
-          databases: getVal(rawSkills, "databases", "database"),
-          technologies: getVal(rawSkills, "technologies", "tech", "technology"),
-          tools: getVal(rawSkills, "tools", "toolset"),
-          cloudPlatforms: getVal(rawSkills, "cloudPlatforms", "cloud_platforms", "cloudPlatformsList"),
-          softSkills: getVal(rawSkills, "softSkills", "soft_skills", "softSkillsList"),
-        } as Record<string, any>;
-
-        // // console.log("Normalized skills data:", skillsData);
-
-        const convertedSkills = {
-          languages: Array.isArray(skillsData.languages) ? skillsData.languages.join(", ") : (skillsData.languages || ""),
-          frameworks: Array.isArray(skillsData.frameworks) ? skillsData.frameworks.join(", ") : (skillsData.frameworks || ""),
-          libraries: Array.isArray(skillsData.libraries) ? skillsData.libraries.join(", ") : (skillsData.libraries || ""),
-          databases: Array.isArray(skillsData.databases) ? skillsData.databases.join(", ") : (skillsData.databases || ""),
-          technologies: Array.isArray(skillsData.technologies) ? skillsData.technologies.join(", ") : (skillsData.technologies || ""),
-          tools: Array.isArray(skillsData.tools) ? skillsData.tools.join(", ") : (skillsData.tools || ""),
-          cloudPlatforms: Array.isArray(skillsData.cloudPlatforms) ? skillsData.cloudPlatforms.join(", ") : (skillsData.cloudPlatforms || ""),
-          softSkills: Array.isArray(skillsData.softSkills) ? skillsData.softSkills.join(", ") : (skillsData.softSkills || "")
-        };
-        // Fallback: if categorized fields are empty but there is a flat `resumeData.skills` array,
-        // show those in the Languages field so users see their existing skills in the modal.
-        if (
-          (!convertedSkills.languages || convertedSkills.languages.trim() === "") &&
-          (!convertedSkills.frameworks || convertedSkills.frameworks.trim() === "") &&
-          (!convertedSkills.libraries || convertedSkills.libraries.trim() === "") &&
-          (!convertedSkills.databases || convertedSkills.databases.trim() === "") &&
-          (!convertedSkills.technologies || convertedSkills.technologies.trim() === "") &&
-          (!convertedSkills.tools || convertedSkills.tools.trim() === "") &&
-          (!convertedSkills.cloudPlatforms || convertedSkills.cloudPlatforms.trim() === "") &&
-          (!convertedSkills.softSkills || convertedSkills.softSkills.trim() === "")
-        ) {
-          const flatSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
-          if (flatSkills.length > 0) {
-            // // console.log("Using flat resumeData.skills as fallback for Skills modal (auto-categorizing)");
-            const auto = autoCategorizeFlatSkills(flatSkills as string[]);
-            // Only set fields that are empty
-            Object.keys(auto).forEach((k) => {
-              const key = k as keyof typeof convertedSkills;
-              if (!convertedSkills[key] || convertedSkills[key].trim() === "") convertedSkills[key] = auto[key];
-            });
-          }
-        }
-        // // console.log("Converted skills:", convertedSkills);
-        setFormData({
-          categorizedSkills: convertedSkills
-        });
-        break;
-
-      case "Languages":
-        // Convert categorizedSkills from arrays to comma-separated strings (normalize keys like in Skills case)
-        const rawSkills2 = resumeData.categorizedSkills || {};
-        const getVal2 = (obj: any, ...keys: string[]) => {
-          for (const k of keys) {
-            if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
-          }
-          return undefined;
-        };
-
-        const skillsData2 = {
-          languages: getVal2(rawSkills2, "languages", "programming_languages"),
-          frameworks: getVal2(rawSkills2, "frameworks", "frameworks_list"),
-          libraries: getVal2(rawSkills2, "libraries", "library"),
-          databases: getVal2(rawSkills2, "databases", "database"),
-          technologies: getVal2(rawSkills2, "technologies", "tech"),
-          tools: getVal2(rawSkills2, "tools", "toolset"),
-          cloudPlatforms: getVal2(rawSkills2, "cloudPlatforms", "cloud_platforms"),
-          softSkills: getVal2(rawSkills2, "softSkills", "soft_skills"),
-        } as Record<string, any>;
-
-        const convertedSkills2 = {
-          languages: Array.isArray(skillsData2.languages) ? skillsData2.languages.join(", ") : (skillsData2.languages || ""),
-          frameworks: Array.isArray(skillsData2.frameworks) ? skillsData2.frameworks.join(", ") : (skillsData2.frameworks || ""),
-          libraries: Array.isArray(skillsData2.libraries) ? skillsData2.libraries.join(", ") : (skillsData2.libraries || ""),
-          databases: Array.isArray(skillsData2.databases) ? skillsData2.databases.join(", ") : (skillsData2.databases || ""),
-          technologies: Array.isArray(skillsData2.technologies) ? skillsData2.technologies.join(", ") : (skillsData2.technologies || ""),
-          tools: Array.isArray(skillsData2.tools) ? skillsData2.tools.join(", ") : (skillsData2.tools || ""),
-          cloudPlatforms: Array.isArray(skillsData2.cloudPlatforms) ? skillsData2.cloudPlatforms.join(", ") : (skillsData2.cloudPlatforms || ""),
-          softSkills: Array.isArray(skillsData2.softSkills) ? skillsData2.softSkills.join(", ") : (skillsData2.softSkills || "")
-        };
-        // Fallback as above for Languages case
-        if (
-          (!convertedSkills2.languages || convertedSkills2.languages.trim() === "") &&
-          (!convertedSkills2.frameworks || convertedSkills2.frameworks.trim() === "") &&
-          (!convertedSkills2.libraries || convertedSkills2.libraries.trim() === "") &&
-          (!convertedSkills2.databases || convertedSkills2.databases.trim() === "") &&
-          (!convertedSkills2.technologies || convertedSkills2.technologies.trim() === "") &&
-          (!convertedSkills2.tools || convertedSkills2.tools.trim() === "") &&
-          (!convertedSkills2.cloudPlatforms || convertedSkills2.cloudPlatforms.trim() === "") &&
-          (!convertedSkills2.softSkills || convertedSkills2.softSkills.trim() === "")
-        ) {
-          const flatSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
-          if (flatSkills.length > 0) {
-            // // console.log("Using flat resumeData.skills as fallback for Languages modal (auto-categorizing)");
-            const auto2 = autoCategorizeFlatSkills(flatSkills as string[]);
-            Object.keys(auto2).forEach((k) => {
-              const key = k as keyof typeof convertedSkills2;
-              if (!convertedSkills2[key] || convertedSkills2[key].trim() === "") convertedSkills2[key] = auto2[key];
-            });
-          }
-        }
-        // Prepare languages array for LanguagesEditor: prefer explicit `resumeData.languages`,
-        // otherwise derive from categorized skills (comma-separated string) or flat `resumeData.skills`.
-        const derivedLanguages = (() => {
-          if (Array.isArray(resumeData.languages) && resumeData.languages.length > 0) return resumeData.languages;
-          if (convertedSkills2.languages && typeof convertedSkills2.languages === 'string' && convertedSkills2.languages.trim() !== "") {
-            return convertedSkills2.languages.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
-          }
-          return [];
-        })();
-
-        setFormData({
-          // Provide both shapes: `languages` (array) for LanguagesEditor and `categorizedSkills` for saving
-          languages: derivedLanguages,
-          categorizedSkills: convertedSkills2,
-        });
-        break;
-
-      case "Hobbies":
-        setFormData({
-          items:
-            (resumeData.hobbies?.length ?? 0) > 0
-              ? resumeData.hobbies
-              : [
-                  {
-                    name: "",
-                    proficiencyLevel: "",
-                    achievement: "",
-                    description: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Certificates":
-        setFormData({ certificates: resumeData.certifications || [] });
-        break;
-
-      case "Awards":
-        setFormData({
-          items:
-            (resumeData.awards?.length ?? 0) > 0
-              ? resumeData.awards
-              : [
-                  {
-                    title: "",
-                    issuedBy: "",
-                    year: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Achievements":
-        setFormData({
-          items:
-            (resumeData.achievements?.length ?? 0) > 0
-              ? resumeData.achievements
-              : [
-                  {
-                    title: "",
-                    date: "",
-                    description: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Volunteering":
-        setFormData({
-          items:
-            (resumeData.volunteering?.length ?? 0) > 0
-              ? resumeData.volunteering
-              : [
-                  {
-                    organization: "",
-                    role: "",
-                    startDate: "",
-                    endDate: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Interests":
-        setFormData({
-          items:
-            (resumeData.interests?.length ?? 0) > 0
-              ? resumeData.interests
-              : [
-                  {
-                    name: "",
-                    category: "",
-                    description: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "Publications":
-        setFormData({
-          items:
-            (resumeData.publications?.length ?? 0) > 0
-              ? resumeData.publications
-              : [
-                  {
-                    title: "",
-                    authors: "",
-                    publicationName: "",
-                    date: "",
-                    url: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      case "References":
-        setFormData({
-          items:
-            (resumeData.references?.length ?? 0) > 0
-              ? resumeData.references
-              : [
-                  {
-                    name: "",
-                    relation: "",
-                    contact: "",
-                  },
-                ],
-          activeIndex: 0,
-        });
-        break;
-
-      default:
-        setFormData({});
-    }
-  }, [isOpen, resumeData, activeSection]);
-
-  if (!isOpen || !formData) return null;
-
-  /* ================= SAVE ================= */
-  const handleSave = async () => {
-    if (!resumeData || !activeSection) return;
-
-    const updated: any = { ...resumeData };
-
-    switch (activeSection) {
-      case "PersonalInfo":
-        // // console.log("=== SAVING PersonalInfo ===");
-        // // console.log("Current formData:", formData);
-        // // console.log("linkedinUrl from form:", formData.linkedinUrl);
-        // // console.log("githubUrl from form:", formData.githubUrl);
-        // // console.log("portfolioUrl from form:", formData.portfolioUrl);
-
-        const newPersonalInfo = {
-          fullName: `${formData.firstName || ""} ${formData.lastName || ""}`.trim(),
-          email: formData.email || "",
-          phone: formData.phone || "",
-          location: formData.location || "",
-          linkedinUrl: formData.linkedinUrl || "",
-          githubUrl: formData.githubUrl || "",
-          portifolioUrl: formData.portfolioUrl || "",
-        };
-
-        // // console.log("New personalInfo object:", newPersonalInfo);
-        updated.personalInfo = newPersonalInfo;
-        // // console.log("Full updated resume data:", updated);
-        break;
-
-      case "Summary":
-        updated.professionalSummary = formData.summary;
-        break;
-
-      case "Experience":
-        updated.workExperience = formData.items || [];
-        break;
-
-      case "Education":
-        updated.education = formData.items || [];
-        break;
-
-      case "Internships":
-        updated.internships = formData.items || [];
-        break;
-
-      case "Projects":
-        updated.projects = formData.items || [];
-        break;
-
-      case "Skills":
-        updated.categorizedSkills = formData.categorizedSkills || {
-          languages: "",
-          frameworks: "",
-          libraries: "",
-          databases: "",
-          technologies: "",
-          tools: "",
-          cloudPlatforms: "",
-          softSkills: ""
-        };
-        break;
-
-      case "Languages":
-        // Update categorizedSkills.languages
-        updated.categorizedSkills = formData.categorizedSkills || {
-          languages: "",
-          frameworks: "",
-          libraries: "",
-          databases: "",
-          technologies: "",
-          tools: "",
-          cloudPlatforms: "",
-          softSkills: ""
-        };
-        break;
-
-      case "Hobbies":
-        updated.hobbies = formData.items || [];
-        break;
-
-      case "Certificates":
-        updated.certifications = formData.certificates || [];
-        break;
-
-      case "Awards":
-        updated.awards = formData.items || [];
-        break;
-
-      case "Achievements":
-        updated.achievements = formData.items || [];
-        break;
-
-      case "Volunteering":
-        updated.volunteering = formData.items || [];
-        break;
-
-      case "Interests":
-        updated.interests = formData.items || [];
-        break;
-
-      case "Publications":
-        updated.publications = formData.items || [];
-        break;
-
-      case "References":
-        updated.references = formData.items || [];
-        break;
-    }
-
-    // Update React state for preview
-    setResumeData(updated);
-
-    // Save to backend database (transform frontend format to backend format)
-    try {
-      const enhancedId = sessionStorage.getItem("enhanced_id");
-      if (enhancedId) {
-        // // console.log("💾 Saving changes to backend...");
-
-        // Transform frontend data structure to backend format
-        const backendPayload = transformToBackendFormat(updated);
-
-        await updateEnhancedResume(enhancedId, {
-          enhanced_sections: backendPayload
-        });
-
-        // // console.log("✅ Successfully saved to backend!");
-      }
-    } catch (error) {
-      // // console.error("❌ Failed to save to backend:", error);
-      // Still close modal - changes are saved in React state for preview
-    }
-
-    onClose();
-  };
-
-  /* ================= TRANSFORM CATEGORIZED SKILLS ================= */
-  const transformCategorizedSkills = (categorizedSkills: Record<string, string | string[]> | undefined): string[] => {
-    const skills: string[] = [];
-
-    if (!categorizedSkills || typeof categorizedSkills !== 'object') {
-      return skills;
-    }
-
-    Object.entries(categorizedSkills).forEach(([, skillsValue]) => {
-      if (!skillsValue) return;
-
-      // Handle both string and array formats
-      let skillsList: string[] = [];
-
-      if (typeof skillsValue === 'string') {
-        skillsList = skillsValue
-          .split(',')
-          .map(s => s.trim())
-          .filter(s => s.length > 0);
-      } else if (Array.isArray(skillsValue)) {
-        skillsList = skillsValue
-          .map(s => String(s).trim())
-          .filter(s => s.length > 0);
-      }
-
-      skills.push(...skillsList);
-    });
-
-    return skills;
-  };
 
   /* ================= AUTO-CATEGORIZE FLAT SKILLS ================= */
   const autoCategorizeFlatSkills = (flatSkills: string[] = []) => {
@@ -662,6 +132,587 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } as Record<string, string>;
   };
 
+  /* ================= INIT FORM DATA ================= */
+  useEffect(() => {
+    if (!isOpen || !resumeData || !activeSection) return;
+
+    switch (activeSection) {
+      case "PersonalInfo": {
+        const parts = resumeData.personalInfo.fullName?.split(" ") || [];
+        const pInfo = resumeData.personalInfo;
+        
+        console.log("=== LOADING PersonalInfo ===");
+        console.log("Full personalInfo object:", pInfo);
+        console.log("linkedinUrl:", pInfo.linkedinUrl);
+        console.log("githubUrl:", pInfo.githubUrl);
+        console.log("portifolioUrl:", pInfo.portifolioUrl);
+        
+        const loadedData = {
+          firstName: parts[0] || "",
+          lastName: parts.slice(1).join(" ") || "",
+          email: pInfo.email || "",
+          phone: pInfo.phone || "",
+          location: pInfo.location || "",
+          linkedinUrl: pInfo.linkedinUrl || "",
+          githubUrl: pInfo.githubUrl || "",
+          portfolioUrl: pInfo.portifolioUrl || "",
+        };
+        
+        console.log("Loaded formData:", loadedData);
+        setFormData(loadedData);
+        break;
+      }
+
+      case "Summary":
+        setFormData({ summary: resumeData.professionalSummary || "" });
+        break;
+
+      case "Experience":
+        setFormData({
+          items:
+            resumeData.workExperience?.length > 0
+              ? resumeData.workExperience
+              : [
+                  {
+                    company: "",
+                    role: "",
+                    location: "",
+                    client: "",
+                    years: "",
+                    skills: "",
+                    startDate: "",
+                    endDate: "",
+                    description: "",
+                    currentlyWorking: false,
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Education":
+        setFormData({
+          items:
+            resumeData.education?.length > 0
+              ? resumeData.education
+              : [
+                  {
+                    college: "",
+                    degree: "",
+                    branch: "",
+                    duration: "",
+                    grade: "",
+                    gradeType: "",
+                    achievements: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Internships":
+        setFormData({
+          items:
+            (resumeData.internships?.length ?? 0) > 0
+              ? resumeData.internships
+              : [
+                  {
+                    company: "",
+                    role: "",
+                    duration: "",
+                    location: "",
+                    description: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Projects":
+        setFormData({
+          items:
+            resumeData.projects?.length > 0
+              ? resumeData.projects
+              : [
+                  {
+                    title: "",
+                    link: "",
+                    client: "",
+                    startDate: "",
+                    endDate: "",
+                    description: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Skills":
+        // Convert categorizedSkills from arrays to comma-separated strings
+        console.log("=== LOADING SKILLS ===");
+        console.log("Full resumeData:", resumeData);
+        console.log("categorizedSkills in resumeData:", resumeData.categorizedSkills);
+
+        // Normalize keys: backend/local data may use snake_case (programming_languages, cloud_platforms, soft_skills)
+        const rawSkills = resumeData.categorizedSkills || {};
+        const getVal = (obj: any, ...keys: string[]) => {
+          for (const k of keys) {
+            if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
+          }
+          return undefined;
+        };
+
+        const skillsData = {
+          languages: getVal(rawSkills, "languages", "programming_languages", "programmingLanguages", "programming_languages"),
+          frameworks: getVal(rawSkills, "frameworks", "frameworks_list"),
+          libraries: getVal(rawSkills, "libraries", "library"),
+          databases: getVal(rawSkills, "databases", "database"),
+          technologies: getVal(rawSkills, "technologies", "tech", "technology"),
+          tools: getVal(rawSkills, "tools", "toolset"),
+          cloudPlatforms: getVal(rawSkills, "cloudPlatforms", "cloud_platforms", "cloudPlatformsList"),
+          softSkills: getVal(rawSkills, "softSkills", "soft_skills", "softSkillsList"),
+        } as Record<string, any>;
+
+        console.log("Normalized skills data:", skillsData);
+
+        const convertedSkills = {
+          languages: Array.isArray(skillsData.languages) ? skillsData.languages.join(", ") : (skillsData.languages || ""),
+          frameworks: Array.isArray(skillsData.frameworks) ? skillsData.frameworks.join(", ") : (skillsData.frameworks || ""),
+          libraries: Array.isArray(skillsData.libraries) ? skillsData.libraries.join(", ") : (skillsData.libraries || ""),
+          databases: Array.isArray(skillsData.databases) ? skillsData.databases.join(", ") : (skillsData.databases || ""),
+          technologies: Array.isArray(skillsData.technologies) ? skillsData.technologies.join(", ") : (skillsData.technologies || ""),
+          tools: Array.isArray(skillsData.tools) ? skillsData.tools.join(", ") : (skillsData.tools || ""),
+          cloudPlatforms: Array.isArray(skillsData.cloudPlatforms) ? skillsData.cloudPlatforms.join(", ") : (skillsData.cloudPlatforms || ""),
+          softSkills: Array.isArray(skillsData.softSkills) ? skillsData.softSkills.join(", ") : (skillsData.softSkills || "")
+        };
+        // Fallback: if categorized fields are empty but there is a flat `resumeData.skills` array,
+        // show those in the Languages field so users see their existing skills in the modal.
+        if (
+          (!convertedSkills.languages || convertedSkills.languages.trim() === "") &&
+          (!convertedSkills.frameworks || convertedSkills.frameworks.trim() === "") &&
+          (!convertedSkills.libraries || convertedSkills.libraries.trim() === "") &&
+          (!convertedSkills.databases || convertedSkills.databases.trim() === "") &&
+          (!convertedSkills.technologies || convertedSkills.technologies.trim() === "") &&
+          (!convertedSkills.tools || convertedSkills.tools.trim() === "") &&
+          (!convertedSkills.cloudPlatforms || convertedSkills.cloudPlatforms.trim() === "") &&
+          (!convertedSkills.softSkills || convertedSkills.softSkills.trim() === "")
+        ) {
+          const flatSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
+          if (flatSkills.length > 0) {
+            console.log("Using flat resumeData.skills as fallback for Skills modal (auto-categorizing)");
+            const auto = autoCategorizeFlatSkills(flatSkills as string[]);
+            // Only set fields that are empty
+            Object.keys(auto).forEach((k) => {
+              const key = k as keyof typeof convertedSkills;
+              if (!convertedSkills[key] || convertedSkills[key].trim() === "") convertedSkills[key] = auto[key];
+            });
+          }
+        }
+        console.log("Converted skills:", convertedSkills);
+        setFormData({
+          categorizedSkills: convertedSkills
+        });
+        break;
+
+      case "Languages":
+        // Convert categorizedSkills from arrays to comma-separated strings (normalize keys like in Skills case)
+        const rawSkills2 = resumeData.categorizedSkills || {};
+        const getVal2 = (obj: any, ...keys: string[]) => {
+          for (const k of keys) {
+            if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
+          }
+          return undefined;
+        };
+
+        const skillsData2 = {
+          languages: getVal2(rawSkills2, "languages", "programming_languages"),
+          frameworks: getVal2(rawSkills2, "frameworks", "frameworks_list"),
+          libraries: getVal2(rawSkills2, "libraries", "library"),
+          databases: getVal2(rawSkills2, "databases", "database"),
+          technologies: getVal2(rawSkills2, "technologies", "tech"),
+          tools: getVal2(rawSkills2, "tools", "toolset"),
+          cloudPlatforms: getVal2(rawSkills2, "cloudPlatforms", "cloud_platforms"),
+          softSkills: getVal2(rawSkills2, "softSkills", "soft_skills"),
+        } as Record<string, any>;
+
+        const convertedSkills2 = {
+          languages: Array.isArray(skillsData2.languages) ? skillsData2.languages.join(", ") : (skillsData2.languages || ""),
+          frameworks: Array.isArray(skillsData2.frameworks) ? skillsData2.frameworks.join(", ") : (skillsData2.frameworks || ""),
+          libraries: Array.isArray(skillsData2.libraries) ? skillsData2.libraries.join(", ") : (skillsData2.libraries || ""),
+          databases: Array.isArray(skillsData2.databases) ? skillsData2.databases.join(", ") : (skillsData2.databases || ""),
+          technologies: Array.isArray(skillsData2.technologies) ? skillsData2.technologies.join(", ") : (skillsData2.technologies || ""),
+          tools: Array.isArray(skillsData2.tools) ? skillsData2.tools.join(", ") : (skillsData2.tools || ""),
+          cloudPlatforms: Array.isArray(skillsData2.cloudPlatforms) ? skillsData2.cloudPlatforms.join(", ") : (skillsData2.cloudPlatforms || ""),
+          softSkills: Array.isArray(skillsData2.softSkills) ? skillsData2.softSkills.join(", ") : (skillsData2.softSkills || "")
+        };
+        // Fallback as above for Languages case
+        if (
+          (!convertedSkills2.languages || convertedSkills2.languages.trim() === "") &&
+          (!convertedSkills2.frameworks || convertedSkills2.frameworks.trim() === "") &&
+          (!convertedSkills2.libraries || convertedSkills2.libraries.trim() === "") &&
+          (!convertedSkills2.databases || convertedSkills2.databases.trim() === "") &&
+          (!convertedSkills2.technologies || convertedSkills2.technologies.trim() === "") &&
+          (!convertedSkills2.tools || convertedSkills2.tools.trim() === "") &&
+          (!convertedSkills2.cloudPlatforms || convertedSkills2.cloudPlatforms.trim() === "") &&
+          (!convertedSkills2.softSkills || convertedSkills2.softSkills.trim() === "")
+        ) {
+          const flatSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
+          if (flatSkills.length > 0) {
+            console.log("Using flat resumeData.skills as fallback for Languages modal (auto-categorizing)");
+            const auto2 = autoCategorizeFlatSkills(flatSkills as string[]);
+            Object.keys(auto2).forEach((k) => {
+              const key = k as keyof typeof convertedSkills2;
+              if (!convertedSkills2[key] || convertedSkills2[key].trim() === "") convertedSkills2[key] = auto2[key];
+            });
+          }
+        }
+        // Prepare languages array for LanguagesEditor: prefer explicit `resumeData.languages`,
+        // otherwise derive from categorized skills (comma-separated string) or flat `resumeData.skills`.
+        const derivedLanguages = (() => {
+          if (Array.isArray(resumeData.languages) && resumeData.languages.length > 0) return resumeData.languages;
+          if (convertedSkills2.languages && typeof convertedSkills2.languages === 'string' && convertedSkills2.languages.trim() !== "") {
+            return convertedSkills2.languages.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+          }
+          return [];
+        })();
+
+        setFormData({
+          // Provide both shapes: `languages` (array) for LanguagesEditor and `categorizedSkills` for saving
+          languages: derivedLanguages,
+          categorizedSkills: convertedSkills2,
+        });
+        break;
+
+      case "Hobbies":
+        setFormData({
+          items:
+            (resumeData.hobbies?.length ?? 0) > 0
+              ? resumeData.hobbies
+              : [
+                  {
+                    name: "",
+                    proficiencyLevel: "",
+                    achievement: "",
+                    description: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Certificates":
+        setFormData({ certificates: resumeData.certifications || [] });
+        break;
+
+      case "Awards":
+        setFormData({
+          items:
+            (resumeData.awards?.length ?? 0) > 0
+              ? resumeData.awards
+              : [
+                  {
+                    title: "",
+                    issuedBy: "",
+                    year: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Achievements":
+        setFormData({
+          items:
+            (resumeData.achievements?.length ?? 0) > 0
+              ? resumeData.achievements
+              : [
+                  {
+                    title: "",
+                    date: "",
+                    description: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Volunteering":
+        setFormData({
+          items:
+            (resumeData.volunteering?.length ?? 0) > 0
+              ? resumeData.volunteering
+              : [
+                  {
+                    organization: "",
+                    role: "",
+                    duration: "",
+                    description: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Interests":
+        setFormData({
+          items:
+            (resumeData.interests?.length ?? 0) > 0
+              ? resumeData.interests
+              : [
+                  {
+                    name: "",
+                    category: "",
+                    description: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "Publications":
+        setFormData({
+          items:
+            (resumeData.publications?.length ?? 0) > 0
+              ? resumeData.publications
+              : [
+                  {
+                    title: "",
+                    authors: "",
+                    publicationName: "",
+                    date: "",
+                    url: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      case "References":
+        setFormData({
+          items:
+            (resumeData.references?.length ?? 0) > 0
+              ? resumeData.references
+              : [
+                  {
+                    name: "",
+                    relation: "",
+                    contact: "",
+                  },
+                ],
+          activeIndex: 0,
+        });
+        break;
+
+      default:
+        setFormData({});
+    }
+  }, [isOpen, resumeData, activeSection]);
+
+  if (!isOpen || !formData) return null;
+
+  /* ================= SAVE ================= */
+  const handleSave = async () => {
+    if (!resumeData || !activeSection) return;
+
+    const updated: any = { ...resumeData };
+    let didChange = false;
+    let changedFieldNames: string[] = [];
+    // Helper to extract plain field names from "idx.field" keys
+    const plainFields = (keys: string[]) => keys.map(k => k.includes('.') ? k.split('.').slice(1).join('.') : k);
+
+    switch (activeSection) {
+      case "PersonalInfo": {
+        const orig = resumeData.personalInfo || {};
+        const newPersonalInfo = {
+          fullName: `${formData.firstName || ""} ${formData.lastName || ""}`.trim(),
+          email: formData.email || "",
+          phone: formData.phone || "",
+          location: formData.location || "",
+          linkedinUrl: formData.linkedinUrl || "",
+          githubUrl: formData.githubUrl || "",
+          portifolioUrl: formData.portfolioUrl || "",
+        };
+
+        // Detect fields that were empty before and now have a value
+        const newlyAdded: string[] = [];
+        if (!orig.email && newPersonalInfo.email) newlyAdded.push("email");
+        if (!orig.phone && newPersonalInfo.phone) newlyAdded.push("phone");
+        if (!orig.location && newPersonalInfo.location) newlyAdded.push("location");
+        if (!orig.linkedinUrl && newPersonalInfo.linkedinUrl) newlyAdded.push("linkedinUrl");
+        if (!orig.githubUrl && newPersonalInfo.githubUrl) newlyAdded.push("githubUrl");
+        if (!orig.portifolioUrl && newPersonalInfo.portifolioUrl) newlyAdded.push("portifolioUrl");
+        if (newlyAdded.length) { addAddedFields("PersonalInfo", newlyAdded); didChange = true; changedFieldNames = newlyAdded; }
+
+        updated.personalInfo = newPersonalInfo;
+        break;
+      }
+
+      case "Summary": {
+        const oldSummary = resumeData.professionalSummary || "";
+        updated.professionalSummary = formData.summary;
+        if (!oldSummary && formData.summary) { addAddedFields("Summary", ["0.text"]); didChange = true; changedFieldNames = ["summary"]; }
+        break;
+      }
+
+      case "Experience": {
+        const keys = getAddedFieldKeys(resumeData.workExperience || [], formData.items || []);
+        updated.workExperience = formData.items || [];
+        if (keys.length) { addAddedFields("Experience", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Education": {
+        const keys = getAddedFieldKeys(resumeData.education || [], formData.items || []);
+        updated.education = formData.items || [];
+        if (keys.length) { addAddedFields("Education", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Internships": {
+        const keys = getAddedFieldKeys(resumeData.internships || [], formData.items || []);
+        updated.internships = formData.items || [];
+        if (keys.length) { addAddedFields("Internships", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Projects": {
+        const keys = getAddedFieldKeys(resumeData.projects || [], formData.items || []);
+        updated.projects = formData.items || [];
+        if (keys.length) { addAddedFields("Projects", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Skills": {
+        const oldSkills = JSON.stringify(resumeData.categorizedSkills || {});
+        const newSkillsData = formData.categorizedSkills || { languages: "", frameworks: "", libraries: "", databases: "", technologies: "", tools: "", cloudPlatforms: "", softSkills: "" };
+        updated.categorizedSkills = newSkillsData;
+        if (JSON.stringify(newSkillsData).length > oldSkills.length) { addAddedFields("Skills", ["0.skills"]); didChange = true; changedFieldNames = ["skills"]; }
+        break;
+      }
+
+      case "Languages": {
+        const keys = getAddedFieldKeys(resumeData.languages || [], formData.languages || []);
+        updated.languages = formData.languages || [];
+        if (formData.categorizedSkills) updated.categorizedSkills = formData.categorizedSkills;
+        if (keys.length) { addAddedFields("Languages", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Hobbies": {
+        const keys = getAddedFieldKeys(resumeData.hobbies || [], formData.items || []);
+        updated.hobbies = formData.items || [];
+        if (keys.length) { addAddedFields("Hobbies", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Certificates": {
+        const keys = getAddedFieldKeys(resumeData.certifications || [], formData.certificates || []);
+        updated.certifications = formData.certificates || [];
+        if (keys.length) { addAddedFields("Certificates", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Awards": {
+        const keys = getAddedFieldKeys(resumeData.awards || [], formData.items || []);
+        updated.awards = formData.items || [];
+        if (keys.length) { addAddedFields("Awards", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Achievements": {
+        const keys = getAddedFieldKeys(resumeData.achievements || [], formData.items || []);
+        updated.achievements = formData.items || [];
+        if (keys.length) { addAddedFields("Achievements", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Volunteering": {
+        const keys = getAddedFieldKeys(resumeData.volunteering || [], formData.items || []);
+        updated.volunteering = formData.items || [];
+        if (keys.length) { addAddedFields("Volunteering", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Interests": {
+        const keys = getAddedFieldKeys(resumeData.interests || [], formData.items || []);
+        updated.interests = formData.items || [];
+        if (keys.length) { addAddedFields("Interests", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "Publications": {
+        const keys = getAddedFieldKeys(resumeData.publications || [], formData.items || []);
+        updated.publications = formData.items || [];
+        if (keys.length) { addAddedFields("Publications", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+
+      case "References": {
+        const keys = getAddedFieldKeys(resumeData.references || [], formData.items || []);
+        updated.references = formData.items || [];
+        if (keys.length) { addAddedFields("References", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        break;
+      }
+    }
+
+    // Update React state for preview
+    setResumeData(updated);
+
+    // Save to backend database (transform frontend format to backend format)
+    try {
+      const enhancedId = sessionStorage.getItem("enhanced_id");
+      if (enhancedId) {
+        console.log("💾 Saving changes to backend...");
+
+        // Transform frontend data structure to backend format
+        const backendPayload = transformToBackendFormat(updated);
+
+        await updateEnhancedResume(enhancedId, {
+          enhanced_sections: backendPayload
+        });
+
+        console.log("✅ Successfully saved to backend!");
+      }
+    } catch (error) {
+      console.error("❌ Failed to save to backend:", error);
+      // Still close modal - changes are saved in React state for preview
+    }
+
+    onSave?.(didChange, activeSection || '', changedFieldNames);
+    onClose();
+  };
+
+  /* ================= TRANSFORM CATEGORIZED SKILLS ================= */
+  const transformCategorizedSkills = (categorizedSkills: Record<string, string | string[]> | undefined): string[] => {
+    const skills: string[] = [];
+
+    if (!categorizedSkills || typeof categorizedSkills !== 'object') {
+      return skills;
+    }
+
+    Object.entries(categorizedSkills).forEach(([, skillsValue]) => {
+      if (!skillsValue) return;
+
+      // Handle both string and array formats
+      let skillsList: string[] = [];
+
+      if (typeof skillsValue === 'string') {
+        skillsList = skillsValue
+          .split(',')
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+      } else if (Array.isArray(skillsValue)) {
+        skillsList = skillsValue
+          .map(s => String(s).trim())
+          .filter(s => s.length > 0);
+      }
+
+      skills.push(...skillsList);
+    });
+
+    return skills;
+  };
+
   /* ================= TRANSFORM TO BACKEND FORMAT ================= */
   const transformToBackendFormat = (frontendData: Record<string, unknown>) => {
     // Backend expects this structure:
@@ -725,6 +776,12 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
         achievements: (edu.achievements as string) || null,
       })),
       skills: transformCategorizedSkills(frontendData.categorizedSkills as Record<string, string>),
+      languages: ((frontendData.languages as Array<string | Record<string, unknown>>) || []).map((lang: string | Record<string, unknown>) => {
+        if (typeof lang === 'string') return lang;
+        const language = (lang as Record<string, unknown>).language as string || "";
+        const proficiency = (lang as Record<string, unknown>).proficiency as string || "";
+        return proficiency ? `${language} - ${proficiency}` : language;
+      }),
       certifications: ((frontendData.certifications as Array<string | Record<string, unknown>>) || []).map((cert: string | Record<string, unknown>) =>
         typeof cert === 'string' ? cert : ((cert as Record<string, unknown>).name as string) || ""
       ),
@@ -742,6 +799,61 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
           ? [(intern.description as string)]
           : [],
       })),
+      publications: ((frontendData.publications as Array<string | Record<string, unknown>>) || []).map((pub: string | Record<string, unknown>) => {
+        if (typeof pub === 'string') return pub;
+
+        // Send as object with all fields for backend PDF generation
+        return {
+          title: ((pub as Record<string, unknown>).title as string) || "",
+          authors: ((pub as Record<string, unknown>).authors as string) || "",
+          publication_name: ((pub as Record<string, unknown>).publicationName as string) || "",
+          date: ((pub as Record<string, unknown>).date as string) || "",
+          url: ((pub as Record<string, unknown>).url as string) || "",
+        };
+      }),
+      interests: (frontendData.interests as string[]) || [],
+      hobbies: (frontendData.hobbies as string[]) || [],
+      awards: ((frontendData.awards as Array<string | Record<string, unknown>>) || []).map((award: string | Record<string, unknown>) => {
+        if (typeof award === 'string') return award;
+
+        const title = ((award as Record<string, unknown>).title as string) || "";
+        const issuedBy = ((award as Record<string, unknown>).issuedBy as string) || "";
+        const year = ((award as Record<string, unknown>).year as string) || "";
+
+        // Combine: "Title - Organization (Year)" or "Title (Year)" or just "Title"
+        let result = title;
+        if (issuedBy && year) {
+          result = `${title} - ${issuedBy} (${year})`;
+        } else if (year) {
+          result = `${title} (${year})`;
+        } else if (issuedBy) {
+          result = `${title} - ${issuedBy}`;
+        }
+
+        return result;
+      }),
+      volunteering: ((frontendData.volunteering as Array<string | Record<string, unknown>>) || []).map((vol: string | Record<string, unknown>) => {
+        if (typeof vol === 'string') return vol;
+
+        // Send as object with all fields for backend PDF generation
+        return {
+          role: ((vol as Record<string, unknown>).role as string) || "",
+          organization: ((vol as Record<string, unknown>).organization as string) || "",
+          duration: ((vol as Record<string, unknown>).duration as string) || "",
+          description: ((vol as Record<string, unknown>).description as string) || "",
+        };
+      }),
+      references: ((frontendData.references as Array<string | Record<string, unknown>>) || []).map((ref: string | Record<string, unknown>) => {
+        if (typeof ref === 'string') return ref;
+
+        // Send as object with all fields for backend PDF generation
+        return {
+          name: ((ref as Record<string, unknown>).name as string) || "",
+          relation: ((ref as Record<string, unknown>).relation as string) || "",
+          contact: ((ref as Record<string, unknown>).contact as string) || "",
+        };
+      }),
+      achievements: (frontendData.achievements as string[]) || [],
       llm_data: {
         experience: ((frontendData.workExperience as Array<Record<string, unknown>>) || []).map((exp: Record<string, unknown>) => {
           // Split description into bullet points (split by newlines and filter empty)
@@ -782,17 +894,66 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
           grade_percentage: null
         })),
         additional: {
-          languages: ((frontendData.languages as Array<string | Record<string, unknown>>) || []).map((lang: string | Record<string, unknown>) =>
-            typeof lang === 'string' ? lang : ((lang as Record<string, unknown>).language as string) || ""
-          ),
+          languages: ((frontendData.languages as Array<string | Record<string, unknown>>) || []).map((lang: string | Record<string, unknown>) => {
+            if (typeof lang === 'string') return lang;
+            const language = (lang as Record<string, unknown>).language as string || "";
+            const proficiency = (lang as Record<string, unknown>).proficiency as string || "";
+            return proficiency ? `${language} - ${proficiency}` : language;
+          }),
           hobbies: (frontendData.hobbies as string[]) || [],
-          awards: ((frontendData.awards as Array<string | Record<string, unknown>>) || []).map((award: string | Record<string, unknown>) =>
-            typeof award === 'string' ? award : ((award as Record<string, unknown>).title as string) || ""
-          ),
-          references: [],
+          awards: ((frontendData.awards as Array<string | Record<string, unknown>>) || []).map((award: string | Record<string, unknown>) => {
+            if (typeof award === 'string') return award;
+
+            const title = ((award as Record<string, unknown>).title as string) || "";
+            const issuedBy = ((award as Record<string, unknown>).issuedBy as string) || "";
+            const year = ((award as Record<string, unknown>).year as string) || "";
+
+            // Combine: "Title - Organization (Year)" or "Title (Year)" or just "Title"
+            let result = title;
+            if (issuedBy && year) {
+              result = `${title} - ${issuedBy} (${year})`;
+            } else if (year) {
+              result = `${title} (${year})`;
+            } else if (issuedBy) {
+              result = `${title} - ${issuedBy}`;
+            }
+
+            return result;
+          }),
+          references: ((frontendData.references as Array<string | Record<string, unknown>>) || []).map((ref: string | Record<string, unknown>) => {
+            if (typeof ref === 'string') return ref;
+
+            // Send as object with all fields
+            return {
+              name: ((ref as Record<string, unknown>).name as string) || "",
+              relation: ((ref as Record<string, unknown>).relation as string) || "",
+              contact: ((ref as Record<string, unknown>).contact as string) || "",
+            };
+          }),
           interests: (frontendData.hobbies as string[]) || [],
-          publications: [],
-          volunteering: [],
+          publications: ((frontendData.publications as Array<string | Record<string, unknown>>) || []).map((pub: string | Record<string, unknown>) => {
+            if (typeof pub === 'string') return pub;
+
+            // Send as object with all fields
+            return {
+              title: ((pub as Record<string, unknown>).title as string) || "",
+              authors: ((pub as Record<string, unknown>).authors as string) || "",
+              publication_name: ((pub as Record<string, unknown>).publicationName as string) || "",
+              date: ((pub as Record<string, unknown>).date as string) || "",
+              url: ((pub as Record<string, unknown>).url as string) || "",
+            };
+          }),
+          volunteering: ((frontendData.volunteering as Array<string | Record<string, unknown>>) || []).map((vol: string | Record<string, unknown>) => {
+            if (typeof vol === 'string') return vol;
+
+            // Send as object with all fields
+            return {
+              role: ((vol as Record<string, unknown>).role as string) || "",
+              organization: ((vol as Record<string, unknown>).organization as string) || "",
+              duration: ((vol as Record<string, unknown>).duration as string) || "",
+              description: ((vol as Record<string, unknown>).description as string) || "",
+            };
+          }),
           categorizedSkills: (frontendData.categorizedSkills as Record<string, string>) || {}
         }
       }
@@ -809,23 +970,17 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
       return;
 
     const items = formData.items || [];
-    const activeIndex = formData.activeIndex ?? 0;
-
-    if (activeIndex < items.length - 1) {
-      setFormData({ ...formData, activeIndex: activeIndex + 1 });
-      return;
-    }
 
     let blank: any;
 
     if (activeSection === "Education") {
       blank = {
-        school: "",
+        college: "",
         degree: "",
-        location: "",
-        startDate: "",
-        endDate: "",
-        achievements: "",
+        branch: "",
+        duration: "",
+        grade: "",
+        gradeType: "",
       };
     } else if (activeSection === "Internships") {
       blank = {
@@ -959,24 +1114,39 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
   /* ================= MODAL ================= */
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" onClick={onClose} />
 
       <div className="fixed inset-0 z-50 flex items-center justify-center px-6">
         <div className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
           {/* HEADER */}
-          <div className="flex justify-between items-center px-10 py-6 border-b flex-shrink-0">
-            <h2 className="text-xl font-bold">{activeSection}</h2>
-            <X className="cursor-pointer text-gray-500" onClick={onClose} />
+          <div className="flex justify-between items-center px-8 py-5 border-b border-gray-100 flex-shrink-0 bg-gradient-to-r from-[#f0f5ff] to-white">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-[#2557a7] flex items-center justify-center shadow-sm">
+                <span className="text-white text-xs font-bold">{activeSection?.charAt(0)}</span>
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {activeSection?.replace(/([A-Z])/g, ' $1').trim()}
+                </h2>
+                <p className="text-xs text-gray-500">Edit your resume section</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4 text-gray-600" />
+            </button>
           </div>
 
           {/* BODY - Scrollable */}
-          <div className="px-10 py-8 overflow-y-auto flex-1">
+          <div className="px-8 py-7 overflow-y-auto flex-1 bg-white">
             {renderEditor()}
           </div>
 
           {/* FOOTER */}
-          <div className="flex items-center justify-between px-10 py-6 border-t bg-gray-50 rounded-b-3xl flex-shrink-0">
-            <div>
+          <div className="flex items-center justify-between px-8 py-5 border-t border-gray-100 bg-gray-50/80 rounded-b-3xl flex-shrink-0">
+            <div className="flex items-center gap-3">
               {(activeSection === "Experience" ||
                 activeSection === "Education" ||
                 activeSection === "Internships" ||
@@ -988,25 +1158,56 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 activeSection === "Interests" ||
                 activeSection === "Publications" ||
                 activeSection === "References") && (
-                <button
-                  onClick={handleAddAdditional}
-                  className="px-4 py-2 rounded-full border text-sm hover:bg-white transition-colors"
-                >
-                  ＋ Add Additional
-                </button>
+                <>
+                  <button
+                    onClick={handleAddAdditional}
+                    className="px-4 py-2 rounded-xl border border-[#2557a7]/30 text-[#2557a7] text-sm font-medium hover:bg-[#e8eff9] transition-colors"
+                  >
+                    + Add Additional
+                  </button>
+                  {formData?.items?.length > 1 && (
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <button
+                        onClick={() => setFormData({ ...formData, activeIndex: Math.max(0, (formData.activeIndex ?? 0) - 1) })}
+                        disabled={(formData.activeIndex ?? 0) === 0}
+                        className="w-7 h-7 rounded-full border flex items-center justify-center hover:bg-white disabled:opacity-30 transition-colors"
+                      >
+                        ‹
+                      </button>
+                      <span className="text-xs font-medium text-gray-600">{(formData.activeIndex ?? 0) + 1} / {formData.items.length}</span>
+                      <button
+                        onClick={() => setFormData({ ...formData, activeIndex: Math.min(formData.items.length - 1, (formData.activeIndex ?? 0) + 1) })}
+                        disabled={(formData.activeIndex ?? 0) === formData.items.length - 1}
+                        className="w-7 h-7 rounded-full border flex items-center justify-center hover:bg-white disabled:opacity-30 transition-colors"
+                      >
+                        ›
+                      </button>
+                      <button
+                        onClick={() => {
+                          const idx = formData.activeIndex ?? 0;
+                          const nextItems = formData.items.filter((_: any, i: number) => i !== idx);
+                          setFormData({ ...formData, items: nextItems, activeIndex: Math.min(idx, nextItems.length - 1) });
+                        }}
+                        className="ml-1 px-3 py-1.5 rounded-xl border border-red-200 text-red-500 text-xs font-medium hover:bg-red-50 transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <button
                 onClick={onClose}
-                className="px-6 py-2 rounded-lg border bg-white text-sm hover:bg-gray-50 transition-colors"
+                className="px-6 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className="px-6 py-2 rounded-lg bg-blue-700 text-white text-sm hover:bg-blue-800 transition-colors"
+                className="px-6 py-2.5 rounded-xl bg-[#2557a7] hover:bg-[#1a4a8f] text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
               >
                 Save
               </button>

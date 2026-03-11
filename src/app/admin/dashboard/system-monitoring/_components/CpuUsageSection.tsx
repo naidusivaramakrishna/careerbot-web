@@ -31,7 +31,7 @@ export const CpuUsageSection = memo(({
                 minute: '2-digit',
                 hour12: false
             })
-            const data: any = { time, cpu: point.value }
+            const data: { time: string; cpu: number; previous?: number } = { time, cpu: point.value }
 
             if (showComparison && metrics.comparison?.enabled && metrics.comparison.previous_period?.data_points[index]) {
                 data.previous = metrics.comparison.previous_period.data_points[index].value

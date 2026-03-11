@@ -1,18 +1,11 @@
 "use client";
-import "../../../globals.css";
 import { ResumeProvider } from "./_context/ResumeContext";
 import { ScoreProvider } from "./_context/ScoreContext";
 import Sidebar from "../../../../components/layout/Sidebar";
 import Header from "../../../../components/layout/Header";
-import { Montserrat } from "next/font/google";
 import { useParams, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "700", "900"],
-});
+import { DashboardProvider } from "@/contexts/DashboardContext";
 
 export default function RootLayout({
   children,
@@ -40,18 +33,16 @@ export default function RootLayout({
   }, [params, pathname]);
 
   return (
-    <html lang="en">
-      <body className={`${montserrat.variable} antialiased font-montserrat`}>
-        <ResumeProvider resumeId={resumeId}>
-          <ScoreProvider>
-            <Header />
-            <div className="flex pt-13 bg-blue-100 ">
-              <Sidebar />
-              <div className="flex-1 ml-20 overflow-auto">{children}</div>
-            </div>
-          </ScoreProvider>
-        </ResumeProvider>
-      </body>
-    </html>
+    <DashboardProvider>
+      <ResumeProvider resumeId={resumeId}>
+        <ScoreProvider>
+          <Header />
+          <div className="flex pt-14 bg-blue-100 ">
+            <Sidebar />
+            <div className="flex-1 overflow-auto" style={{ marginLeft: "var(--sidebar-width, 64px)", transition: "margin 300ms" }}>{children}</div>
+          </div>
+        </ScoreProvider>
+      </ResumeProvider>
+    </DashboardProvider>
   );
 }

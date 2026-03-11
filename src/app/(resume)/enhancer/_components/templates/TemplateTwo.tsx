@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ResumeData, ResumeStyle, useResume } from "../ResumeContext";
 import AutoPaginator from "../AutoPaginator";
+import { cleanResumeContent } from "../../_utils/cleanResumeData";
 
 type SectionName =
   | "Summary"
@@ -30,7 +31,7 @@ type SectionName =
 
 interface Props {
   data: ResumeData;
-  style: ResumeStyle;
+  style?: ResumeStyle;
   onPageCountChange?: (count: number) => void;
   enabledSections?: string[];
 }
@@ -47,6 +48,7 @@ const TemplateTwo: React.FC<Props> = ({
     setActiveSection,
     setSectionOrder,
     setEnabledSections,
+    addedFields,
   } = useResume();
 
   const activeEnabledSections = enabledSections || contextEnabledSections;
@@ -100,6 +102,8 @@ const TemplateTwo: React.FC<Props> = ({
     fontWeight: 400,
     fontStyle: resumeStyle.italic ? "italic" : "normal",
     color: "#111827",
+    overflowWrap: "break-word",
+    wordBreak: "break-word",
   };
 
   const headingStyle: React.CSSProperties = {
@@ -146,6 +150,13 @@ const TemplateTwo: React.FC<Props> = ({
     fontStyle: "italic",
   };
 
+  /* ---------- Field-level highlight helpers ---------- */
+  const hlStyle: React.CSSProperties = { backgroundColor: "rgba(34,197,94,0.25)", borderRadius: "3px", padding: "0 2px" };
+  const isFieldAdded = (section: string, itemIdx: number, field: string) =>
+    (addedFields[section] || []).includes(`${itemIdx}.${field}`);
+  const hl = (section: string, itemIdx: number, field: string, value: React.ReactNode) =>
+    isFieldAdded(section, itemIdx, field) ? <span style={hlStyle}>{value}</span> : <>{value}</>;
+
   const SectionWrapper: React.FC<{
     name: SectionName | "PersonalInfo";
     children: React.ReactNode;
@@ -160,7 +171,6 @@ const TemplateTwo: React.FC<Props> = ({
     const canMoveUp = isRealSection && idx > 0;
     const canMoveDown =
       isRealSection && idx >= 0 && idx < sectionOrder.length - 1;
-
     return (
       <section className="relative group mb-4 page-break-inside-avoid">
         <div className="absolute inset-0 rounded-md border border-dashed border-gray-300 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity" />
@@ -250,16 +260,21 @@ const TemplateTwo: React.FC<Props> = ({
 
     switch (section as SectionName) {
       case "Summary":
+        // Clean summary to remove JSON formatting like {"summary": "text"}
+        const cleanSummary = professionalSummary
+          ? cleanResumeContent(professionalSummary).cleanContent
+          : "";
+
         return (
           <SectionWrapper name="Summary">
-            <h3 className="mb-3.5 border-b border-gray-500" style={headingStyle}>
-              SUMMARY
+            <h3 className="mb-3.5 border-b border-gray-800" style={headingStyle}>
+              PROFESSIONAL SUMMARY
             </h3>
-            {professionalSummary ? (
+            {cleanSummary ? (
               <div
                 className="text-justify resume-description"
                 style={baseTextStyle}
-                dangerouslySetInnerHTML={{ __html: professionalSummary }}
+                dangerouslySetInnerHTML={{ __html: cleanSummary }}
               />
             ) : (
               <p style={placeholderStyle}>Add your professional summary here</p>
@@ -270,8 +285,8 @@ const TemplateTwo: React.FC<Props> = ({
       case "Experience":
         return (
           <SectionWrapper name="Experience">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
-              WORK EXPERIENCE
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
+              PROFESSIONAL EXPERIENCE
             </h3>
             {workExperience.length > 0 ? (
               workExperience.map((exp, idx) => (
@@ -279,25 +294,30 @@ const TemplateTwo: React.FC<Props> = ({
                   <div className="flex justify-between items-start mb-1">
                     <div>
                       <div className="font-bold mb-0.5" style={titleStyle}>
-                        {exp.role}
+                        {hl("Experience", idx, "role", exp.role)}
                       </div>
                       <div className="text-sm font-medium mb-0.5" style={baseTextStyle}>
-                        {exp.company}
+                        {hl("Experience", idx, "company", exp.company)}
                       </div>
                       {exp.location && (
                         <div className="text-sm" style={baseTextStyle}>
-                          {exp.location}
+                          {hl("Experience", idx, "location", exp.location)}
+                        </div>
+                      )}
+                      {exp.client && (
+                        <div className="text-sm" style={baseTextStyle}>
+                          Client: {hl("Experience", idx, "client", exp.client)}
                         </div>
                       )}
                     </div>
                     <div className="text-sm text-right whitespace-nowrap" style={baseTextStyle}>
-                      {exp.duration || "– Present"}
+                      {hl("Experience", idx, "duration", exp.duration || "– Present")}
                     </div>
                   </div>
                   {exp.description && (
                     <div
                       className="mt-2 resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Experience", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{ __html: exp.description }}
                     />
                   )}
@@ -312,7 +332,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Education":
         return (
           <SectionWrapper name="Education">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               EDUCATION
             </h3>
             {education.length > 0 ? (
@@ -321,20 +341,20 @@ const TemplateTwo: React.FC<Props> = ({
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-bold mb-0.5" style={titleStyle}>
-                        {edu.degree}
+                        {hl("Education", idx, "degree", edu.degree)}
                       </div>
                       <div className="text-sm" style={baseTextStyle}>
-                        {edu.college}
-                        {edu.branch && ` • ${edu.branch}`}
+                        {hl("Education", idx, "college", edu.college)}
+                        {edu.branch && <> • {hl("Education", idx, "branch", edu.branch)}</>}
                       </div>
                       {edu.grade && (
                         <div className="text-sm" style={baseTextStyle}>
-                          <span className="font-medium">{edu.gradeType || "Grade"}:</span> {edu.grade}
+                          <span className="font-medium">{hl("Education", idx, "gradeType", edu.gradeType || "Grade")}:</span> {hl("Education", idx, "grade", edu.grade)}
                         </div>
                       )}
                     </div>
                     <div className="text-sm whitespace-nowrap" style={baseTextStyle}>
-                      {edu.duration}
+                      {hl("Education", idx, "duration", edu.duration)}
                     </div>
                   </div>
                 </div>
@@ -348,7 +368,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Projects":
         return (
           <SectionWrapper name="Projects">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               PROJECTS
             </h3>
             {projects.length > 0 ? (
@@ -356,16 +376,9 @@ const TemplateTwo: React.FC<Props> = ({
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-start mb-1">
                     <div className="font-bold flex items-center" style={titleStyle}>
-                      <span>{proj.title}</span>
+                      <span>{hl("Projects", idx, "title", proj.title)}</span>
                       {proj.link && (
-                        <a
-                          href={proj.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={linkIconStyle}
-                          className="hover:opacity-70"
-                          title={proj.link}
-                        >
+                        <a href={proj.link} target="_blank" rel="noopener noreferrer" style={linkIconStyle} className="hover:opacity-70" title={proj.link}>
                           <ExternalLink size={14} />
                         </a>
                       )}
@@ -377,14 +390,14 @@ const TemplateTwo: React.FC<Props> = ({
                     )}
                     {proj.client && (
                       <div className="text-sm" style={baseTextStyle}>
-                        Client: {proj.client}
+                        Client: {hl("Projects", idx, "client", proj.client)}
                       </div>
                     )}
                   </div>
                   {proj.description && (
                     <div
                       className="mb-2 resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Projects", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{ __html: proj.description }}
                     />
                   )}
@@ -420,8 +433,8 @@ const TemplateTwo: React.FC<Props> = ({
 
         return (
           <SectionWrapper name="Skills">
-            <h3 className="mb-3.5 border-b border-gray-500" style={headingStyle}>
-              SKILLS
+            <h3 className="mb-3.5 border-b border-gray-800" style={headingStyle}>
+              TECHNICAL SKILLS
             </h3>
             {Object.keys(categorizedSkills).length > 0 ? (
               <div className="space-y-1" style={baseTextStyle}>
@@ -457,7 +470,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Internships":
         return (
           <SectionWrapper name="Internships">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               INTERNSHIPS
             </h3>
             {internships.length > 0 ? (
@@ -466,27 +479,27 @@ const TemplateTwo: React.FC<Props> = ({
                   <div className="flex justify-between items-start mb-1">
                     <div>
                       <div className="font-bold" style={baseTextStyle}>
-                        {intern.company}
+                        {hl("Internships", idx, "company", intern.company)}
                       </div>
                       <div className="text-sm font-medium" style={titleStyle}>
-                        {intern.role}
+                        {hl("Internships", idx, "role", intern.role)}
                       </div>
                       {intern.location && (
                         <div className="text-sm" style={baseTextStyle}>
-                          {intern.location}
+                          {hl("Internships", idx, "location", intern.location)}
                         </div>
                       )}
                     </div>
                     {intern.duration && (
                       <div className="text-sm text-right whitespace-nowrap" style={baseTextStyle}>
-                        {intern.duration}
+                        {hl("Internships", idx, "duration", intern.duration)}
                       </div>
                     )}
                   </div>
                   {intern.description && (
                     <div
                       className="mt-2 resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Internships", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{ __html: intern.description }}
                     />
                   )}
@@ -501,7 +514,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Certificates":
         return (
           <SectionWrapper name="Certificates">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               CERTIFICATIONS
             </h3>
             {certifications.length > 0 ? (
@@ -512,19 +525,19 @@ const TemplateTwo: React.FC<Props> = ({
                     <div style={baseTextStyle}>
                       <div>
                         <span className="font-medium" style={titleStyle}>
-                          {cert.name}
+                          {hl("Certificates", idx, "name", cert.name)}
                         </span>
-                        <span style={baseTextStyle}>{cert.issuedBy ? ', ' + cert.issuedBy : ''}</span>
+                        {cert.issuedBy && <span style={baseTextStyle}>{', '}{hl("Certificates", idx, "issuedBy", cert.issuedBy)}</span>}
                       </div>
                       <div className="text-xs mt-1">
-                        {cert.year && <span>{cert.year}</span>}
+                        {cert.year && <span>{hl("Certificates", idx, "year", cert.year)}</span>}
                         {cert.expiryDate && (
-                          <span className="ml-3">Expires: {cert.expiryDate}</span>
+                          <span className="ml-3">Expires: {hl("Certificates", idx, "expiryDate", cert.expiryDate)}</span>
                         )}
                       </div>
                       {cert.credentialId && (
                         <div className="text-xs mt-1">
-                          Credential ID: {cert.credentialId}
+                          Credential ID: {hl("Certificates", idx, "credentialId", cert.credentialId)}
                         </div>
                       )}
                     </div>
@@ -540,7 +553,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Achievements":
         return (
           <SectionWrapper name="Achievements">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               ACHIEVEMENTS
             </h3>
             {achievements.length > 0 ? (
@@ -548,18 +561,18 @@ const TemplateTwo: React.FC<Props> = ({
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-start mb-1">
                     <span className="font-semibold" style={titleStyle}>
-                      {achievement.title}
+                      {hl("Achievements", idx, "title", achievement.title)}
                     </span>
                     {achievement.date && (
                       <span className="text-sm whitespace-nowrap" style={baseTextStyle}>
-                        {formatDate(achievement.date)}
+                        {hl("Achievements", idx, "date", formatDate(achievement.date))}
                       </span>
                     )}
                   </div>
                   {achievement.description && (
                     <div
                       className="text-sm resume-description"
-                      style={baseTextStyle}
+                      style={isFieldAdded("Achievements", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
                       dangerouslySetInnerHTML={{ __html: achievement.description }}
                     />
                   )}
@@ -574,7 +587,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Awards":
         return (
           <SectionWrapper name="Awards">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               AWARDS
             </h3>
             {awards.length > 0 ? (
@@ -583,11 +596,11 @@ const TemplateTwo: React.FC<Props> = ({
                   <span className="mr-2">•</span>
                   <div>
                     <span className="font-semibold" style={titleStyle}>
-                      {award.title}
+                      {hl("Awards", idx, "title", award.title)}
                     </span>
                     <span style={baseTextStyle}>
-                      {award.issuedBy && <> — {award.issuedBy}</>}
-                      {award.year && <> ({award.year})</>}
+                      {award.issuedBy && <> — {hl("Awards", idx, "issuedBy", award.issuedBy)}</>}
+                      {award.year && <> ({hl("Awards", idx, "year", award.year)})</>}
                     </span>
                   </div>
                 </div>
@@ -601,7 +614,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Volunteering":
         return (
           <SectionWrapper name="Volunteering">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               VOLUNTEERING
             </h3>
             {volunteering.length > 0 ? (
@@ -610,16 +623,25 @@ const TemplateTwo: React.FC<Props> = ({
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-bold" style={titleStyle}>
-                        {vol.role}
+                        {hl("Volunteering", idx, "role", vol.role)}
                       </div>
                       <div className="text-sm" style={baseTextStyle}>
-                        {vol.organization}
+                        {hl("Volunteering", idx, "organization", vol.organization)}
                       </div>
                     </div>
-                    <div className="text-sm whitespace-nowrap" style={baseTextStyle}>
-                      {formatDate(vol.startDate)} – {formatDate(vol.endDate)}
-                    </div>
+                    {vol.duration && (
+                      <div className="text-sm whitespace-nowrap" style={baseTextStyle}>
+                        {hl("Volunteering", idx, "duration", vol.duration)}
+                      </div>
+                    )}
                   </div>
+                  {vol.description && (
+                    <div
+                      className="text-sm mt-1"
+                      style={isFieldAdded("Volunteering", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
+                      dangerouslySetInnerHTML={{ __html: vol.description }}
+                    />
+                  )}
                 </div>
               ))
             ) : (
@@ -631,19 +653,19 @@ const TemplateTwo: React.FC<Props> = ({
       case "Hobbies":
         return (
           <SectionWrapper name="Hobbies">
-            <h3 className="mb-3.5 border-b border-gray-500" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800" style={headingStyle}>
               HOBBIES
             </h3>
             {hobbies.length > 0 ? (
               hobbies.map((hobby, idx) => (
                 <div key={idx} className="mb-2">
                   <span className="font-semibold" style={titleStyle}>
-                    {hobby.name}
+                    {hl("Hobbies", idx, "name", hobby.name)}
                   </span>
                   {hobby.description && (
                     <span
                       className="resume-description"
-                      style={baseTextStyle}
+                      style={isFieldAdded("Hobbies", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
                       dangerouslySetInnerHTML={{ __html: ` — ${hobby.description}` }}
                     />
                   )}
@@ -663,24 +685,24 @@ const TemplateTwo: React.FC<Props> = ({
       case "Interests":
         return (
           <SectionWrapper name="Interests">
-            <h3 className="mb-3.5 border-b border-gray-500" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800" style={headingStyle}>
               INTERESTS
             </h3>
             {interests.length > 0 ? (
               interests.map((interest, idx) => (
                 <div key={idx} className="mb-2">
                   <span className="font-semibold" style={titleStyle}>
-                    {interest.name}
+                    {hl("Interests", idx, "name", interest.name)}
                   </span>
                   {interest.category && (
                     <span className="text-sm" style={baseTextStyle}>
-                      {" "}({interest.category})
+                      {" "}({hl("Interests", idx, "category", interest.category)})
                     </span>
                   )}
                   {interest.description && (
                     <span
                       className="resume-description"
-                      style={baseTextStyle}
+                      style={isFieldAdded("Interests", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
                       dangerouslySetInnerHTML={{ __html: ` — ${interest.description}` }}
                     />
                   )}
@@ -695,7 +717,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Languages":
         return (
           <SectionWrapper name="Languages">
-            <h3 className="mb-3.5 border-b border-gray-500" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800" style={headingStyle}>
               LANGUAGES
             </h3>
             {languages.length > 0 ? (
@@ -723,7 +745,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "Publications":
         return (
           <SectionWrapper name="Publications">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               PUBLICATIONS
             </h3>
             {publications.length > 0 ? (
@@ -760,7 +782,7 @@ const TemplateTwo: React.FC<Props> = ({
       case "References":
         return (
           <SectionWrapper name="References">
-            <h3 className="mb-3.5 border-b border-gray-500 page-break-after-avoid" style={headingStyle}>
+            <h3 className="mb-3.5 border-b border-gray-800 page-break-after-avoid" style={headingStyle}>
               REFERENCES
             </h3>
             {references.length > 0 ? (
@@ -825,60 +847,36 @@ const TemplateTwo: React.FC<Props> = ({
       <div className="flex justify-center bg-transparent py-6">
         <div className="bg-white rounded-lg w-[800px] px-10">
           <SectionWrapper name="PersonalInfo">
-            <div className="text-center mb-6 page-break-inside-avoid">
+            <div className="mb-4 page-break-inside-avoid">
               <h1 className="uppercase font-bold mb-1" style={nameStyle}>
                 {personalInfo.fullName || "Full Name"}
               </h1>
               <div
-                className="flex items-center justify-center flex-wrap gap-2 text-xs"
+                className="flex items-center flex-wrap gap-x-2 text-xs mb-2"
                 style={baseTextStyle}
               >
-                {[
-                  personalInfo.email && personalInfo.email,
-                  personalInfo.phone && personalInfo.phone,
-                  personalInfo.location && personalInfo.location,
-                  personalInfo.linkedinUrl && (
-                    <a
-                      href={personalInfo.linkedinUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={linkStyle}
-                      className="hover:underline"
-                    >
-                      {personalInfo.linkedinUrl.replace(/^https?:\/\//, "").replace(/^www\./, "")}
-                    </a>
-                  ),
-                  personalInfo.githubUrl && (
-                    <a
-                      href={personalInfo.githubUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={linkStyle}
-                      className="hover:underline"
-                    >
-                      {personalInfo.githubUrl.replace(/^https?:\/\//, "").replace(/^www\./, "")}
-                    </a>
-                  ),
-                  personalInfo.portifolioUrl && (
-                    <a
-                      href={personalInfo.portifolioUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={linkStyle}
-                      className="hover:underline"
-                    >
-                      {personalInfo.portifolioUrl.replace(/^https?:\/\//, "").replace(/^www\./, "")}
-                    </a>
-                  ),
-                ]
-                  .filter(Boolean)
-                  .map((item, index, array) => (
-                    <React.Fragment key={index}>
+                {(() => {
+                  const addedPI = addedFields["PersonalInfo"] || [];
+                  const hl = (v: React.ReactNode) => (
+                    <span style={{ backgroundColor: "rgba(34,197,94,0.25)", borderRadius: "3px", padding: "0 2px" }}>{v}</span>
+                  );
+                  const items: React.ReactNode[] = [
+                    personalInfo.email && (addedPI.includes("email") ? hl(personalInfo.email) : personalInfo.email),
+                    personalInfo.phone && (addedPI.includes("phone") ? hl(personalInfo.phone) : personalInfo.phone),
+                    personalInfo.location && (addedPI.includes("location") ? hl(personalInfo.location) : personalInfo.location),
+                    personalInfo.linkedinUrl && (addedPI.includes("linkedinUrl") ? hl(<a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">LinkedIn</a>) : <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">LinkedIn</a>),
+                    personalInfo.githubUrl && (addedPI.includes("githubUrl") ? hl(<a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">GitHub</a>) : <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">GitHub</a>),
+                    personalInfo.portifolioUrl && (addedPI.includes("portifolioUrl") ? hl(<a href={personalInfo.portifolioUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">Portfolio</a>) : <a href={personalInfo.portifolioUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">Portfolio</a>),
+                  ].filter(Boolean);
+                  return items.map((item, i) => (
+                    <React.Fragment key={i}>
                       {item}
-                      {index < array.length - 1 && <span>|</span>}
+                      {i < items.length - 1 && <span> | </span>}
                     </React.Fragment>
-                  ))}
+                  ));
+                })()}
               </div>
+              <hr className="border-t-2 border-gray-800" />
             </div>
           </SectionWrapper>
 

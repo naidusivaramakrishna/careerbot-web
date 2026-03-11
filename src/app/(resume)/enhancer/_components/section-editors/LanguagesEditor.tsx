@@ -42,10 +42,16 @@ const LanguagesEditor: React.FC<Props> = ({ formData, setFormData }) => {
 
   const addLanguage = (langName: string) => {
     if (!langName.trim()) return;
-    // Check if already exists
-    if (languagesList.some(item => item.language === langName)) return;
 
-    const updatedList = [...languagesList, { language: langName, proficiency: "" }];
+    // Parse "Language - Proficiency" format
+    const parts = langName.split(/\s*[-–—]\s*/); // Support different dash types
+    const language = parts[0].trim();
+    const proficiency = parts.length > 1 ? parts[1].trim() : "";
+
+    // Check if already exists
+    if (languagesList.some(item => item.language === language)) return;
+
+    const updatedList = [...languagesList, { language, proficiency }];
 
     setFormData({
       ...formData,

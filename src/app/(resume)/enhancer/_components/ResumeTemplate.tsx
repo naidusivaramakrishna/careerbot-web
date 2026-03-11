@@ -9,6 +9,7 @@ import TemplateOne from "./templates/TemplateOne";
 import TemplateTwo from "./templates/TemplateTwo";
 import TemplateThree from "./templates/TemplateThree";
 import TemplateFour from "./templates/TemplateFour";
+import TemplateFive from "./templates/TemplateFive";
 
 interface ResumeTemplateProps {
   data: ResumeData;
@@ -79,6 +80,8 @@ const ResumeTemplate: React.FC<ResumeTemplateProps> = ({
       return <TemplateThree {...commonProps} />;
     case "tempe":
       return <TemplateFour {...commonProps} />;
+    case "classic_professional":
+      return <TemplateFive data={data} enabledSections={enabledSections} />;
     default:
       return <TemplateOne {...commonProps} />;
   }

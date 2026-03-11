@@ -24,5 +24,4 @@ export type JobFormData = {
     experienceMax: string
     logo?: string | null
     logoFile?: File | null
-    companyLogoUrl?: string
 }

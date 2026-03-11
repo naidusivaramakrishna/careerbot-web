@@ -70,7 +70,7 @@ export const useUserManagement = () => {
     // Fetch users when dependencies change
     useEffect(() => {
         fetchUsers()
-    }, [currentPage, pageSize, filters.role, filters.subscription, filters.status])
+    }, [currentPage, pageSize, filters.role, filters.subscription, filters.status, filters.created_from, filters.created_to, filters.sort_by, filters.sort_order])
 
     // Handle search with debounce
     useEffect(() => {

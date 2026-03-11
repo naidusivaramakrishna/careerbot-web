@@ -15,7 +15,7 @@ interface AutocompleteInputProps {
 
 
 const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
-  value,
+  value: valueProp,
   onChange,
   onBlur,
   placeholder,
@@ -25,6 +25,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   error,
   className = "",
 }) => {
+  const value = valueProp ?? "";
   const [isOpen, setIsOpen] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -36,12 +37,25 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   // Filter suggestions based on input value - ONLY ITEMS THAT START WITH THE INPUT
   useEffect(() => {
     if (value.trim() && !justSelected) {
+      // ✅ FIXED: Check if value exactly matches a suggestion (already selected)
+      const isExactMatch = suggestions.some(item =>
+        item.toLowerCase() === value.toLowerCase()
+      );
+
+      // If exact match (value already selected), don't show dropdown
+      if (isExactMatch) {
+        setFilteredSuggestions([]);
+        setIsOpen(false);
+        return;
+      }
+
       const filtered = suggestions.filter((item) =>
         item.toLowerCase().startsWith(value.toLowerCase())
       );
       setFilteredSuggestions(filtered);
       setHighlightedIndex(-1);
-      setIsOpen(filtered.length > 0);
+      // Only open dropdown if there are suggestions AND user is actively typing (has partial match)
+      setIsOpen(filtered.length > 0 && filtered.length < suggestions.length);
     } else {
       setFilteredSuggestions([]);
       if (justSelected) {
@@ -122,9 +136,21 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     if (justSelected) {
       setJustSelected(false);
     }
-    
-    // Only show dropdown if there's text and there are matching suggestions
+
+    // ✅ FIXED: Don't show dropdown if value exactly matches a suggestion (already selected)
+    // Only show suggestions when actively filtering
     if (value.trim()) {
+      const isExactMatch = suggestions.some(item =>
+        item.toLowerCase() === value.toLowerCase()
+      );
+
+      // If it's an exact match (already selected), don't show dropdown
+      if (isExactMatch) {
+        setIsOpen(false);
+        return;
+      }
+
+      // Otherwise, show filtered suggestions (user is typing)
       const filtered = suggestions.filter((item) =>
         item.toLowerCase().startsWith(value.toLowerCase())
       );

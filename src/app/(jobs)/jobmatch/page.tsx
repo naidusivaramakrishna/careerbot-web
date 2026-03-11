@@ -1,10 +1,14 @@
 import React from "react";
-import Overview from "./_components/Overview";
+import OverviewClient from "./_components/OverviewClient";
 
-export default function JobMatchPage() {
+export default function JobMatchPage({
+  searchParams,
+}: {
+  searchParams: { session?: string };
+}) {
   return (
     <div className="w-full">
-      <Overview />
+      <OverviewClient sessionId={searchParams.session} />
     </div>
   );
 }

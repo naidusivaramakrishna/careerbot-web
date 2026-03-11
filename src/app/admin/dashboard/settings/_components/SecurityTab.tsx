@@ -1,5 +1,6 @@
 "use client";
 import React, { memo, useEffect, useCallback, ChangeEvent } from 'react';
+import Image from 'next/image';
 import LoadingSpinner from './LoadingSpinner';
 import SectionHeader from './SectionHeader';
 import { sanitizeNumericInput } from '../utils';
@@ -125,11 +126,12 @@ const SetupQRCode = memo<SetupQRCodeProps>(({
                 </p>
 
                 <div className="flex justify-center my-6">
-                    <img
+                    <Image
                         src={qrCodeUrl}
                         alt="2FA QR Code"
+                        width={250}
+                        height={250}
                         className="border-4 border-gray-300 rounded-lg"
-                        style={{ width: '250px', height: '250px' }}
                     />
                 </div>
 
@@ -214,7 +216,7 @@ const DisableSection = memo<DisableSectionProps>(({
         <div>
             <InfoBox variant="green">
                 <p className="text-sm text-green-800">
-                    ✓ Your account is protected with two-factor authentication. You'll need to enter a code from your authenticator app when logging in.
+                    ✓ Your account is protected with two-factor authentication. You&apos;ll need to enter a code from your authenticator app when logging in.
                 </p>
             </InfoBox>
 

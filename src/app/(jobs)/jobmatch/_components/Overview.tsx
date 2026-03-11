@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Upload,
@@ -15,6 +15,7 @@ import Card from "./ui/Card";
 import Tab from "./ui/Tab";
 import AnalysisContent from "./analysis/AnalysisContent";
 import LoadingAnimation from "./ui/LoadingAnimation";
+import ErrorPopupModal from "@/components/ErrorPopupModal";
 
 import {
   parseResume,
@@ -25,6 +26,7 @@ import {
   getResume,
   getMatchAnalytics,
 } from "@/api/parserApi";
+import { getExtensionSession } from "@/api/extensionApi";
 
 // Add this function if it's missing in your parserApi
 async function getMatchByIds(resume_id: string, jd_id: string) {
@@ -34,31 +36,85 @@ async function getMatchByIds(resume_id: string, jd_id: string) {
   return response.json();
 }
 
-const Overview = () => {
+const Overview = ({ sessionId }: { sessionId?: string }) => {
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [jdText, setJdText] = useState("");
+  const [sessionResumeId, setSessionResumeId] = useState<string | null>(null);
+  const [sessionResumeName, setSessionResumeName] = useState<string | null>(null);
   const [jdFile, setJdFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<{
+    error_code?: string;
+    credits_required?: number;
+    credits_remaining?: number;
+  }>({});
 
   const [processingStage, setProcessingStage] = useState<
     "parsing" | "extracting" | "matching" | "scoring" | "generating"
   >("parsing");
 
-  const [activeTab, setActiveTab] = useState<
-    "upload" | "analysis" | "chat"
-  >("upload");
+  // Lazy initializers read sessionStorage on first render (no flash)
+  const [matchResults, setMatchResults] = useState<any>(() => {
+    try {
+      const mr = sessionStorage.getItem('jm_matchResults');
+      return mr ? JSON.parse(mr) : null;
+    } catch { return null; }
+  });
 
-  const [parsedResumeData, setParsedResumeData] = useState<any>(null);
-  const [parsedJDData, setParsedJDData] = useState<any>(null);
-  const [matchResults, setMatchResults] = useState<any>(null);
+  const [parsedResumeData, setParsedResumeData] = useState<any>(() => {
+    try {
+      const prd = sessionStorage.getItem('jm_parsedResumeData');
+      return prd ? JSON.parse(prd) : null;
+    } catch { return null; }
+  });
+
+  const [parsedJDData, setParsedJDData] = useState<any>(() => {
+    try {
+      const pjd = sessionStorage.getItem('jm_parsedJDData');
+      return pjd ? JSON.parse(pjd) : null;
+    } catch { return null; }
+  });
+
+  const [jdText, setJdText] = useState<string>(() => {
+    if (sessionId) return ''; // Extension will set its own jdText
+    try { return sessionStorage.getItem('jm_jdText') || ''; } catch { return ''; }
+  });
+
+  const [activeTab, setActiveTab] = useState<"upload" | "analysis" | "chat">(() => {
+    try {
+      if (sessionStorage.getItem('jm_matchResults')) return 'analysis';
+    } catch {}
+    return 'upload';
+  });
+
   const [error, setError] = useState<string | null>(null);
 
   const resumeInputRef = useRef<HTMLInputElement>(null);
   const jdUploadRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Load extension session when redirected from Chrome extension
+  useEffect(() => {
+    if (!sessionId) return;
+    getExtensionSession(sessionId)
+      .then((session) => {
+        if (session.job_description) setJdText(session.job_description);
+        if (session.resume_id) {
+          // Set resume ID immediately so Analyze button enables right away
+          setSessionResumeId(session.resume_id);
+          setSessionResumeName("Resume from extension");
+          // Fetch actual filename in background (non-blocking)
+          getResume(session.resume_id)
+            .then((resumeData) => {
+              if (resumeData?.file_name) setSessionResumeName(resumeData.file_name);
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [sessionId]);
 
   const handleNavigate = (href: string) => {
     if (href === "/ats") {
@@ -96,7 +152,7 @@ const Overview = () => {
   const analyzeMatch = async () => {
     setError(null);
 
-    if (!uploadedFile) return setError("Please upload a resume.");
+    if (!uploadedFile && !sessionResumeId) return setError("Please upload a resume.");
     if (!jdFile && !jdText.trim())
       return setError("Please upload a JD file or paste JD text.");
 
@@ -104,24 +160,35 @@ const Overview = () => {
     setProcessingStage("parsing");
 
     try {
-      // Step 1: Parse Resume
-      const resumeParsed = await parseResume(uploadedFile);
-      const resume_id =
-        resumeParsed?.resume_id ??
-        resumeParsed?.id ??
-        resumeParsed?._id ??
-        null;
+      // Step 1: Parse Resume (skip if resume_id already provided by extension session)
+      let resume_id = sessionResumeId;
+      let fullResumeData: any = null;
 
-      if (!resume_id)
-        throw new Error("Resume parsing failed — no resume_id returned.");
+      if (!resume_id) {
+        const resumeParsed = await parseResume(uploadedFile!);
+        resume_id =
+          resumeParsed?.resume_id ??
+          (resumeParsed as any)?.id ??
+          (resumeParsed as any)?._id ??
+          null;
 
-      setProcessingStage("extracting");
+        if (!resume_id)
+          throw new Error("Resume parsing failed — no resume_id returned.");
 
-      let fullResumeData;
-      try {
-        fullResumeData = await getResume(resume_id);
-      } catch {
-        fullResumeData = resumeParsed;
+        setProcessingStage("extracting");
+
+        try {
+          fullResumeData = await getResume(resume_id);
+        } catch {
+          fullResumeData = resumeParsed;
+        }
+      } else {
+        setProcessingStage("extracting");
+        try {
+          fullResumeData = await getResume(resume_id);
+        } catch {
+          fullResumeData = null;
+        }
       }
 
       setProcessingStage("matching");
@@ -154,7 +221,7 @@ const Overview = () => {
       setProcessingStage("scoring");
 
       // Step 3: Match Resume and JD (with retry for backend errors)
-      let matchResp;
+      let matchResp: any;
       let retryCount = 0;
       const maxRetries = 2;
 
@@ -207,15 +274,24 @@ const Overview = () => {
           finalMatchData = { ...finalMatchData, analytics };
       } catch {}
 
-      setMatchResults({ 
+      const newMatchResults = {
         data: finalMatchData,
         match_id: matchResp.match_id || finalMatchData?.match_id,
         jd_id: jd_id,
         duplicate: matchResp.duplicate
-      });
+      };
 
+      setMatchResults(newMatchResults);
       setParsedResumeData(fullResumeData);
       setParsedJDData(jdParsed);
+
+      // Persist to sessionStorage so page reload stays on analysis tab
+      try {
+        sessionStorage.setItem('jm_matchResults', JSON.stringify(newMatchResults));
+        sessionStorage.setItem('jm_parsedResumeData', JSON.stringify(fullResumeData));
+        sessionStorage.setItem('jm_parsedJDData', JSON.stringify(jdParsed));
+        sessionStorage.setItem('jm_jdText', jdText);
+      } catch {}
 
       setTimeout(() => {
         setIsProcessing(false);
@@ -233,19 +309,40 @@ const Overview = () => {
     } catch (err: any) {
       // Parse error message from API response
       let errorMessage = "Something went wrong.";
+      let details: any = {};
 
       if (err?.__raw) {
         // Handle error from safePost/safeGet helpers
         const raw = err.__raw;
         if (typeof raw === 'object') {
-          const msg = raw.message || raw.error || raw.detail;
+          const msg = raw.message || raw.error?.message || raw.error || raw.detail;
           // Ensure we have a string, not an object
           errorMessage = typeof msg === 'string' ? msg : JSON.stringify(raw);
+
+          // Extract error details
+          details.error_code = raw.error_code || raw.error?.error_code;
+          if (raw.details) {
+            details.credits_required = raw.details.credits_required;
+            details.credits_remaining = raw.details.credits_remaining;
+          } else if (raw.error?.details) {
+            details.credits_required = raw.error.details.credits_required;
+            details.credits_remaining = raw.error.details.credits_remaining;
+          }
         } else if (typeof raw === 'string') {
           try {
             const parsed = JSON.parse(raw);
-            const msg = parsed.message || parsed.error || parsed.detail;
+            const msg = parsed.message || parsed.error?.message || parsed.error || parsed.detail;
             errorMessage = typeof msg === 'string' ? msg : raw;
+
+            // Extract error details
+            details.error_code = parsed.error_code || parsed.error?.error_code;
+            if (parsed.details) {
+              details.credits_required = parsed.details.credits_required;
+              details.credits_remaining = parsed.details.credits_remaining;
+            } else if (parsed.error?.details) {
+              details.credits_required = parsed.error.details.credits_required;
+              details.credits_remaining = parsed.error.details.credits_remaining;
+            }
           } catch {
             errorMessage = raw;
           }
@@ -254,29 +351,33 @@ const Overview = () => {
         // Try to parse JSON from error message
         try {
           const parsed = JSON.parse(err.message);
-          const msg = parsed.message || parsed.error || parsed.detail;
+          const msg = parsed.message || parsed.error?.message || parsed.error || parsed.detail;
           errorMessage = typeof msg === 'string' ? msg : err.message;
+
+          // Extract error details
+          details.error_code = parsed.error_code || parsed.error?.error_code;
+          if (parsed.details) {
+            details.credits_required = parsed.details.credits_required;
+            details.credits_remaining = parsed.details.credits_remaining;
+          } else if (parsed.error?.details) {
+            details.credits_required = parsed.error.details.credits_required;
+            details.credits_remaining = parsed.error.details.credits_remaining;
+          }
         } catch {
           errorMessage = err.message;
         }
       }
 
       setError(errorMessage);
+      setErrorDetails(details);
       setIsProcessing(false);
     }
   };
 
   return (
     <>
-      {/* Clean header without bottom border */}
-      <header className="fixed top-0 left-20 right-0 h-16 bg-white z-40">
-        <div className="flex items-center h-full px-8">
-          <h2 className="text-3xl pt-5.5 -translate-x-6 font-bold text-gray-800">CareerBot</h2>
-        </div>
-      </header>
-
       <main
-        className={` min-h-1/2 pt-27 bg-white transition-all duration-200  ${
+        className={`min-h-1/2 pt-6 bg-white transition-all duration-200 ${
           leaving ? "opacity-0 translate-x-2" : "opacity-100 translate-x-0"
         }`}
       >
@@ -285,7 +386,7 @@ const Overview = () => {
             <LoadingAnimation stage={processingStage} />
           ) : (
             <>
-              {/* Gray-100 rounded container - moved down and left */}
+              {/* Gray-100 rounded container */}
               <div className="bg-gray-100 rounded-3xl p-8">
                 <div
                   ref={containerRef}
@@ -300,15 +401,6 @@ const Overview = () => {
                     </p>
                   </div>
 
-                  {error && (
-                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex gap-3">
-                      <X className="text-red-500" />
-                      <p className="text-sm text-red-800">{error}</p>
-                      <button onClick={() => setError(null)} className="ml-auto text-red-500">
-                        <X />
-                      </button>
-                    </div>
-                  )}
 
                   <div className="flex justify-center mb-8">
                     <div className="flex gap-2 px-2 py-1.5 border rounded-xl bg-gray-50 shadow-sm">
@@ -342,22 +434,35 @@ const Overview = () => {
                           }
                         />
 
-                        {uploadedFile ? (
+                        {uploadedFile || sessionResumeId ? (
                           <div className="h-[320px] bg-[#ecfdf5] border-2 border-dashed border-green-300 rounded-xl flex flex-col items-center justify-center gap-6">
                             <div className="flex gap-2 items-center">
                               <CheckCircle className="text-green-600 w-6 h-6" />
-                              <p className="font-medium text-gray-900">Resume uploaded successfully</p>
+                              <p className="font-medium text-gray-900">
+                                {sessionResumeId && !uploadedFile ? "Resume loaded from extension" : "Resume uploaded successfully"}
+                              </p>
                             </div>
 
                             <div className="bg-white border p-4 rounded-xl shadow flex items-center gap-4">
                               <FileText className="w-6 h-6 text-gray-600" />
                               <div>
-                                <p className="font-bold truncate">{uploadedFile.name}</p>
-                                <p className="text-sm text-gray-600">
-                                  {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                                <p className="font-bold truncate">
+                                  {uploadedFile ? uploadedFile.name : sessionResumeName}
                                 </p>
+                                {uploadedFile && (
+                                  <p className="text-sm text-gray-600">
+                                    {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                                  </p>
+                                )}
                               </div>
-                              <button onClick={() => setUploadedFile(null)} className="text-gray-500 hover:text-red-600">
+                              <button
+                                onClick={() => {
+                                  setUploadedFile(null);
+                                  setSessionResumeId(null);
+                                  setSessionResumeName(null);
+                                }}
+                                className="text-gray-500 hover:text-red-600"
+                              >
                                 <X className="w-6 h-6" />
                               </button>
                             </div>
@@ -409,19 +514,19 @@ const Overview = () => {
                           className="w-full h-[200px] border border-gray-300 rounded-xl p-3 bg-[#f9fafb] text-sm focus:ring-2 focus:ring-[#2557a7] focus:border-transparent"
                         />
 
-                        <div className="bg-[#F3E8FF] p-3 rounded-lg mt-4 flex gap-3">
-                          <Lightbulb className="text-[#A78BFA] w-4 h-4 mt-0.5" />
+                        <div className="bg-[#e8eff9] p-3 rounded-lg mt-4 flex gap-3">
+                          <Lightbulb className="text-[#2557a7] w-4 h-4 mt-0.5" />
                           <p className="text-xs text-gray-700">Paste job description text, URL, or upload a file</p>
                         </div>
 
                         <div className="flex justify-end mt-4">
                           <button
                             onClick={analyzeMatch}
-                            disabled={!uploadedFile || (!jdFile && !jdText.trim())}
+                            disabled={(!uploadedFile && !sessionResumeId) || (!jdFile && !jdText.trim())}
                             className={`px-6 py-2 rounded-xl text-white font-medium ${
-                              !uploadedFile || (!jdFile && !jdText.trim())
+                              (!uploadedFile && !sessionResumeId) || (!jdFile && !jdText.trim())
                                 ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-[#8B5CF6] hover:bg-[#7C3AED]"
+                                : "bg-[#2557a7] hover:bg-[#1a4a8f]"
                             }`}
                           >
                             Analyze Match
@@ -431,7 +536,21 @@ const Overview = () => {
                     </div>
                   )}
 
-                  {activeTab === "analysis" && (
+                  {activeTab === "analysis" && !matchResults && (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <RefreshCcw className="w-14 h-14 text-gray-300 mb-4" />
+                      <p className="text-lg font-semibold text-gray-700">No analysis yet</p>
+                      <p className="text-sm text-gray-500 mt-1 mb-6">Upload your resume and job description, then click Analyze Match.</p>
+                      <button
+                        onClick={() => setActiveTab("upload")}
+                        className="px-5 py-2 bg-[#2557a7] text-white text-sm rounded-xl hover:bg-[#1a4a8f]"
+                      >
+                        Go to Upload
+                      </button>
+                    </div>
+                  )}
+
+                  {activeTab === "analysis" && matchResults && (
                     <AnalysisContent
                       jdText={jdText}
                       parsedResumeData={parsedResumeData}
@@ -451,6 +570,21 @@ const Overview = () => {
           )}
         </div>
       </main>
+
+      {/* Error Popup Modal */}
+      <ErrorPopupModal
+        error={error}
+        onRetry={() => {
+          setError(null);
+          setErrorDetails({});
+          // The user would need to try the action again
+        }}
+        onClose={() => {
+          setError(null);
+          setErrorDetails({});
+        }}
+        details={errorDetails}
+      />
     </>
   );
 };

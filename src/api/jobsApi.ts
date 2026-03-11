@@ -130,12 +130,26 @@ export const createJob = async (jobData: Job): Promise<ApiResponse<Job>> => {
  
 /**
  * Search for jobs with filters
- * GET /api/v1/jobs/search
+ * GET /api/v1/jobs/all
  */
 export const searchJobs = async (params: JobSearchParams): Promise<ApiResponse<Job[]>> => {
   try {
-    const response = await httpClient.get<ApiResponse<Job[]>>('/jobs/search', {
-      params,
+    // Map frontend params to backend params
+    const backendParams: Record<string, any> = {
+      skip: params.skip || 0,
+      limit: params.limit || 20,
+      sort_by: params.sort_by || 'created_at',
+      sort_order: -1, // descending (newest first)
+    };
+ 
+    // Add optional filters that backend supports
+    if (params.query) backendParams.q = params.query;
+    if (params.location) backendParams.location = params.location;
+    if (params.job_type) backendParams.job_type = params.job_type;
+    // Note: experience_level and salary filters are not supported by /jobs/all endpoint
+ 
+    const response = await httpClient.get<ApiResponse<Job[]>>('/jobs/all', {
+      params: backendParams,
       ...getRequestConfig(),
     });
     return response.data;
@@ -262,14 +276,14 @@ export const runJobAggregator = async (): Promise<ApiResponse<{ job_count: numbe
 };
  
 /**
- * Get cleaned/processed jobs from aggregator
- * GET /api/v1/jobs/aggregator/jobs/cleaned
+ * Get all jobs (public endpoint - no auth required)
+ * GET /api/v1/jobs/all
  *
  * @param skip - Number of records to skip (default: 0)
  * @param limit - Max records to return (default: 20)
  * @param source - Filter by source (indeed, linkedin, etc.)
  */
-export const getCleanedJobs = async (
+export const getAllJobs = async (
   skip: number = 0,
   limit: number = 20,
   source?: string
@@ -279,7 +293,7 @@ export const getCleanedJobs = async (
     if (source) params.source = source;
  
     const response = await httpClient.get<ApiResponse<CleanedJob[]>>(
-      '/jobs/aggregator/jobs/cleaned',
+      '/jobs/all',
       {
         params,
         ...getRequestConfig(),
@@ -332,6 +346,66 @@ export const getMatchedJobs = async (
   }
 };
  
+/**
+ * Get cleaned jobs from aggregator
+ * GET /api/v1/jobs/aggregator/jobs/cleaned
+ */
+export const getCleanedJobs = async (
+  skip: number = 0,
+  limit: number = 20
+): Promise<ApiResponse<CleanedJob[]>> => {
+  try {
+    const response = await httpClient.get<ApiResponse<CleanedJob[]>>(
+      '/jobs/aggregator/jobs/cleaned',
+      {
+        params: { skip, limit },
+        ...getRequestConfig(),
+      }
+    );
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+ 
+/**
+ * Get recruiter posted jobs
+ * GET /api/v1/recruiters/jobs
+ */
+export const getRecruiterJobs = async (
+  skip: number = 0,
+  limit: number = 20
+): Promise<ApiResponse<Job[]>> => {
+  try {
+    const response = await httpClient.get<ApiResponse<Job[]>>(
+      '/recruiters/jobs',
+      {
+        params: { skip, limit },
+        ...getRequestConfig(),
+      }
+    );
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+ 
+/**
+ * Get a single job by ID
+ * GET /api/v1/jobs/{job_id}
+ */
+export const getJobById = async (jobId: string): Promise<ApiResponse<any>> => {
+  try {
+    const response = await httpClient.get<ApiResponse<any>>(
+      `/jobs/${jobId}`,
+      getRequestConfig()
+    );
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+ 
 const jobsApi = {
   createJob,
   searchJobs,
@@ -342,9 +416,11 @@ const jobsApi = {
   clearJobCaches,
   jobsHealthCheck,
   runJobAggregator,
-  getCleanedJobs,
+  getAllJobs,
   matchProfileWithJobs,
   getMatchedJobs,
+  getCleanedJobs,
+  getRecruiterJobs,
 };
-
+ 
 export default jobsApi;

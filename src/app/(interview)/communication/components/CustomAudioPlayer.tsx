@@ -38,7 +38,7 @@ export default function CustomAudioPlayer({ src }: { src: string }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    analyser.getByteFrequencyData(dataArray);
+    analyser.getByteFrequencyData(dataArray as Uint8Array<ArrayBuffer>);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const barWidth = 4;

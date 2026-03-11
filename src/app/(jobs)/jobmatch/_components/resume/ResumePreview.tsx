@@ -79,7 +79,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // Force cleanup and reload when pdfBlobUrl changes
   useEffect(() => {
     if (pdfBlobUrl) {
-      // // console.log("🔄 PDF blob URL changed, forcing iframe reload");
+      console.log("🔄 PDF blob URL changed, forcing iframe reload");
       reloadCounter++;
       setIframeKey(reloadCounter);
 
@@ -93,7 +93,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     }
     return () => {
       if (pdfBlobUrl) {
-        // // console.log("🧹 Cleaning up old PDF blob URL:", pdfBlobUrl);
+        console.log("🧹 Cleaning up old PDF blob URL:", pdfBlobUrl);
         URL.revokeObjectURL(pdfBlobUrl);
       }
     };
@@ -139,7 +139,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // Priority 2: Show DOCX preview if available
   // Priority 3: Show "No preview available" message
   return (
-    <div className="relative h-[600px] bg-white rounded-lg overflow-hidden border border-gray-200">
+    <div className="relative h-[600px] bg-gradient-to-br from-white to-[#f9fbff] rounded-lg overflow-hidden border border-[#e0eaf5]">
       {isUpdating && (
         <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-3">
@@ -165,8 +165,8 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         // Priority 1: Show backend PDF (ALWAYS prefer backend)
         <iframe
           key={`pdf-preview-${iframeKey}`}
-          // Enable PDF toolbar so the browser's download button is available (toolbar=1)
-          src={`${displayUrl}#toolbar=1&navpanes=0&scrollbar=0&view=FitH`}
+          // Disable PDF toolbar to show only custom download button (toolbar=0)
+          src={`${displayUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
           className="w-full h-full border-none"
           title="Resume PDF Preview"
         />

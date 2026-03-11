@@ -10,6 +10,7 @@ import {
   uploadAudio,
   evaluateAudio,
   completeSession,
+  evaluateMcq,
 } from '@/api/communicationApi';
 import type { CurrentQuestionResponse } from '@/api/communicationApi';
 import logger from '@/lib/logger';
@@ -19,6 +20,7 @@ const AudioRecorder = dynamic(() => import('../components/AudioRecorder'), { loa
 const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="w-64 bg-gray-100 animate-pulse" /> });
 const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), { loading: () => null });
 const AssessmentSummaryPanel = dynamic(() => import('../components/AssessmentSummaryPanel'), { loading: () => null, ssr: false });
+const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200 h-20 animate-pulse" /> });
 
 export default function SituationExplainingPage() {
   const router = useRouter();
@@ -26,11 +28,11 @@ export default function SituationExplainingPage() {
   const [currentQuestion, setCurrentQuestion] = useState<CurrentQuestionResponse | null>(null);
   const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [validationWarning, setValidationWarning] = useState('');
+  const [, setValidationWarning] = useState('');
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const { stopRecording, isRecording: isVideoRecording } = useVideoRecording();
+  const { stopRecording } = useVideoRecording();
 
   // ✅ Track section-specific question number for display only (1 of 1 for "Situation Explaining")
   // Note: currentQuestion.question_number remains global for backend upload API
@@ -209,6 +211,62 @@ export default function SituationExplainingPage() {
         logger.warn('⚠️ Continuing despite complete session error...');
       }
 
+      // ==================== STEP 1.5: MCQ Evaluation ====================
+      logger.info('📊 STEP 1.5: Evaluating MCQ answers (Jumbled Sentences, Sentence Completion, Story Listen Facts)...');
+
+      try {
+        // Collect MCQ answers from sessionStorage
+        const textAnswersStr = sessionStorage.getItem('text_answers');
+
+        if (textAnswersStr) {
+          const textAnswers = JSON.parse(textAnswersStr);
+          const totalAnswers = Object.keys(textAnswers).length;
+
+          logger.info(`📝 Found ${totalAnswers} MCQ answers in sessionStorage`);
+
+          // Filter to only include JUM, SCM, and SLF sections
+          const mcqAnswers: { [key: string]: string } = {};
+          Object.entries(textAnswers).forEach(([questionId, answer]) => {
+            // Check if question ID contains JUM, SCM, or SLF section codes
+            if (questionId.includes('-JUM-') || questionId.includes('-SCM-') || questionId.includes('-SLF-')) {
+              mcqAnswers[questionId] = answer as string;
+            }
+          });
+
+          const mcqCount = Object.keys(mcqAnswers).length;
+          logger.info(`📝 Filtered ${mcqCount} MCQ answers for evaluation (JUM + SCM + SLF)`);
+
+          if (mcqCount > 0) {
+            // Call MCQ evaluation API
+            const mcqEvalResponse = await evaluateMcq({
+              test_id: testId,
+              email_id: emailId,
+              answers: mcqAnswers,
+            });
+
+            logger.info('✅ STEP 1.5 Complete: MCQ evaluation successful:', mcqEvalResponse);
+
+            // ✅ Store the mcq_evaluation_id
+            if (mcqEvalResponse.mcq_evaluation_id) {
+              localStorage.setItem('mcq_evaluation_id', mcqEvalResponse.mcq_evaluation_id);
+              logger.info('✅ Stored mcq_evaluation_id:', mcqEvalResponse.mcq_evaluation_id);
+            }
+
+            // ✅ Store the full MCQ evaluation response for final report
+            localStorage.setItem('mcq_evaluation_data', JSON.stringify(mcqEvalResponse));
+            logger.info('✅ Stored full MCQ evaluation data');
+          } else {
+            logger.warn('⚠️ No MCQ answers found for JUM, SCM, or SLF sections');
+          }
+        } else {
+          logger.warn('⚠️ No text_answers found in sessionStorage');
+        }
+      } catch (mcqError) {
+        logger.error('❌ STEP 1.5 Failed: MCQ evaluation error:', mcqError);
+        // MCQ evaluation failure should not block the rest of the flow
+        logger.warn('⚠️ Continuing despite MCQ evaluation error...');
+      }
+
       // ==================== Prepare Video Blob ====================
       logger.info('🎥 Stopping video recording...');
       const videoBlob = await stopRecording();
@@ -243,20 +301,25 @@ export default function SituationExplainingPage() {
             logger.warn(`⚠️ Partial evaluation: ${audioEvalResponse.missing_sections?.join(', ')}`);
           }
 
-          // ✅ Only store the evaluation ID (backend will retrieve full data using this ID)
+          // ✅ Store the evaluation ID
           if (audioEvalResponse.audio_evaluation_id) {
             localStorage.setItem('audio_evaluation_id', audioEvalResponse.audio_evaluation_id);
             logger.info('✅ Stored audio_evaluation_id:', audioEvalResponse.audio_evaluation_id);
           }
 
+          // ✅ Store the full audio evaluation response for final report
+          localStorage.setItem('audio_evaluation_data', JSON.stringify(audioEvalResponse));
+          logger.info('✅ Stored full audio evaluation data');
+
           return { type: 'audio', success: true, data: audioEvalResponse };
         })
-        .catch((audioError: any) => {
+        .catch((audioError: unknown) => {
           logger.error('❌ Audio evaluation failed:', audioError);
 
           // Check for incomplete submission error
-          if (audioError?.response?.data?.error === 'Incomplete submission') {
-            const errorData = audioError.response.data;
+          const error = audioError as { response?: { data?: { error?: string; missing_sections?: string[]; missing_count?: number; completed?: number; total_required?: number } }; message?: string };
+          if (error?.response?.data?.error === 'Incomplete submission') {
+            const errorData = error.response?.data || {};
             const missing = errorData.missing_sections || [];
             const message = `⏳ Transcriptions Still Processing!\n\n` +
               `The backend is still processing ${errorData.missing_count || 9} audio transcriptions.\n\n` +
@@ -267,7 +330,7 @@ export default function SituationExplainingPage() {
             throw new Error(message);
           }
 
-          return { type: 'audio', success: false, error: audioError.message || 'Audio evaluation failed' };
+          return { type: 'audio', success: false, error: error.message || 'Audio evaluation failed' };
         });
 
       evaluationPromises.push(audioEvalPromise);
@@ -282,11 +345,15 @@ export default function SituationExplainingPage() {
           .then((videoEvalResponse) => {
             logger.info('✅ Video evaluation completed');
 
-            // ✅ Only store the evaluation ID (backend will retrieve full data using this ID)
-            if (videoEvalResponse.evaluation_id) {
-              localStorage.setItem('video_evaluation_id', videoEvalResponse.evaluation_id);
-              logger.info('✅ Stored video_evaluation_id:', videoEvalResponse.evaluation_id);
+            // ✅ Store the evaluation ID (from nested data structure)
+            if (videoEvalResponse.data?.video_evaluation_id) {
+              localStorage.setItem('video_evaluation_id', videoEvalResponse.data.video_evaluation_id);
+              logger.info('✅ Stored video_evaluation_id:', videoEvalResponse.data.video_evaluation_id);
             }
+
+            // ✅ Store the full video evaluation response for final report
+            localStorage.setItem('video_evaluation_data', JSON.stringify(videoEvalResponse));
+            logger.info('✅ Stored full video evaluation data');
 
             return { type: 'video', success: true, data: videoEvalResponse };
           })
@@ -308,7 +375,8 @@ export default function SituationExplainingPage() {
         // Check if audio evaluation failed critically
         const audioResult = results.find(r => r.type === 'audio');
         if (audioResult && !audioResult.success) {
-          alert(audioResult.error || 'Audio evaluation failed');
+          const errorMsg = 'error' in audioResult ? audioResult.error : 'Audio evaluation failed';
+          alert(errorMsg);
           setIsSubmitting(false);
           return;
         }
@@ -316,7 +384,8 @@ export default function SituationExplainingPage() {
         // Video failure is non-critical
         const videoResult = results.find(r => r.type === 'video');
         if (videoResult && !videoResult.success) {
-          logger.warn('⚠️ Video evaluation failed but continuing:', videoResult.error);
+          const errorMsg = 'error' in videoResult ? videoResult.error : 'Video evaluation failed';
+          logger.warn('⚠️ Video evaluation failed but continuing:', errorMsg);
         }
 
       } catch (evalError) {
@@ -394,22 +463,11 @@ export default function SituationExplainingPage() {
             </div>
 
             {/* Progress Bar */}
-            <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">
-                  Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
-                </span>
-                <span className="text-sm font-semibold text-indigo-600">
-                  100%
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%` }}
-                />
-              </div>
-            </div>
+            <QuestionProgressBar
+              currentQuestion={sectionQuestionNumber}
+              totalQuestions={SECTION_TOTAL_QUESTIONS}
+              className="mb-6"
+            />
 
             {error ? (
               <div className="text-center py-12">

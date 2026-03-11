@@ -129,7 +129,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               <div className="space-y-0.5">
                 {personalInfo.phone && (
                   <div className="flex items-center gap-2">
-                    <span>{personalInfo.phone}</span>
+                    <span>{personalInfo.countryCode}{personalInfo.phone}</span>
                   </div>
                 )}
                 {personalInfo.linkedinUrl && (
@@ -247,13 +247,18 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               {education.map((edu, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline">
-                    <div>
+                    <div className="flex-1">
                       <div className="font-bold" style={titleStyle}>
                         {edu.degree}
                       </div>
                       <div className="text-sm" style={baseTextStyle}>
                         {edu.school}
                       </div>
+                      {edu.scoreType && edu.scoreValue && (
+                        <div className="text-xs mt-1" style={baseTextStyle}>
+                          {edu.scoreType}: {edu.scoreValue}{edu.scoreType === "Percentage" ? "%" : ""}
+                        </div>
+                      )}
                     </div>
                     <div className="text-sm whitespace-nowrap ml-4" style={baseTextStyle}>
                       {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
@@ -710,9 +715,6 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
 
                   return (
                     <div key={field.id} className="mb-2">
-                      <div className="font-semibold mb-1" style={titleStyle}>
-                        {field.fieldName}:
-                      </div>
                       {field.fieldType === "list" ? (
                         <ul className="list-disc pl-5" style={baseTextStyle}>
                           {(field.value as string[])

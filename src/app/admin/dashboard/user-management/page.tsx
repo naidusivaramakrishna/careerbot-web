@@ -9,8 +9,11 @@ import { UsersTable } from './_components/user-management/UsersTable'
 import { UsersPagination } from './_components/user-management/UsersPagination'
 import { UserDetailsModal } from './_components/user-details'
 import { logger } from '@/lib/logger'
+import { useAdminAccess } from '../../_hooks/useAdminAccess'
+import { LockedPageOverlay } from '../../_components/LockedPageOverlay'
 
 const UserManagement = () => {
+  const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('user-management');
   const {
     users,
     loading,
@@ -60,6 +63,20 @@ const UserManagement = () => {
       handleExport('xlsx')
     }
   }, [handleExport])
+
+  // Block render until access check completes
+  if (accessLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Check access
+  if (!hasAccess) {
+    return <LockedPageOverlay requiredRoles={requiredRoles} pageName="User Management" />;
+  }
 
   return (
     <div>

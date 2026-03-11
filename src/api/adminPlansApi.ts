@@ -6,9 +6,9 @@ import logger from '@/lib/logger';
 export interface CreatePlanRequest {
     name: string;
     price: number;
-    resume_scan_limit: number;
-    job_application_limit: number;
-    ai_credits: number;
+    resume_scan_limit: number | string;
+    job_application_limit: number | string;
+    ai_credits: number | string;
     templates: 'limited' | 'premium' | 'unlimited';
     features: string[];
     is_popular?: boolean;
@@ -28,9 +28,9 @@ export interface PlanItem {
     id: string;
     name: string;
     price: number;
-    resume_scan_limit: number;
-    job_application_limit: number;
-    ai_credits: number;
+    resume_scan_limit: number | string;
+    job_application_limit: number | string;
+    ai_credits: number | string;
     templates: string;
     features: string[];
     is_popular: boolean;
@@ -49,9 +49,9 @@ export interface PlanDetailsResponse {
     id: string;
     name: string;
     price: number;
-    resume_scan_limit: number;
-    job_application_limit: number;
-    ai_credits: number;
+    resume_scan_limit: number | string;
+    job_application_limit: number | string;
+    ai_credits: number | string;
     templates: string;
     features: string[];
     is_popular: boolean;
@@ -64,9 +64,9 @@ export interface PlanDetailsResponse {
 export interface UpdatePlanRequest {
     name?: string;
     price?: number;
-    resume_scan_limit?: number;
-    job_application_limit?: number;
-    ai_credits?: number;
+    resume_scan_limit?: number | string;
+    job_application_limit?: number | string;
+    ai_credits?: number | string;
     templates?: 'limited' | 'premium' | 'unlimited';
     features?: string[];
     is_popular?: boolean;

@@ -7,6 +7,7 @@ export interface ContactInfo {
     email: string;
     phone: string;
     location: string;
+    link_warnings?: string[];
 }
 
 // ========== EDUCATION ==========
@@ -60,18 +61,25 @@ export interface LLMData {
     overall_experience: OverallExperience;
     projects: ProjectItem[];
     soft_skills: string[];
+    technical_skills: TechnicalSkill[];
 }
 
 // ========== TECH SKILLS ==========
 export interface TechnicalSkill {
     skill: string;
+    category: string;
     count: number;
 }
 
 // ========== SOCIAL LINKS ==========
 export interface SocialLinks {
-    linkedIn?: string;
+    linkedin?: string;
     github?: string;
+    hackerrank?: string | null;
+    hackerearth?: string | null;
+    codechef?: string | null;
+    portfolio?: string[];
+    leetcode?: string | null;
 }
 
 // ========== FORMATTING ==========
@@ -110,6 +118,52 @@ export interface StructureScore {
     };
 }
 
+// ========== FORMAT ANALYSIS ==========
+export interface FormatAnalysis {
+    score: number;
+    max_score: number;
+    percentage: number;
+    formatting: {
+        issues: string[];
+        details: {
+            mixed_fonts: boolean;
+            font_families_count: number;
+            inconsistent_heading_sizes: boolean;
+            heading_sizes_found: number[];
+            body_font: string;
+            is_multi_column: boolean;
+            has_repeating_headers: boolean;
+            has_excessive_decorations: boolean;
+            line_count: number;
+            rect_count: number;
+            non_standard_headings: string[];
+        };
+    };
+    structure: {
+        details: {
+            sections_found: string[];
+            sections_missing: string[];
+            section_order: string;
+            section_order_deduction: number;
+            date_format: string;
+            repeated_sections: string[];
+            has_duplicate_content: boolean;
+            duplicate_lines_count: number;
+            duplicate_lines: string[];
+            has_symbols: boolean;
+            symbol_count: number;
+        };
+    };
+    length: {
+        word_count: number;
+        optimal_range: string;
+        page_count: number;
+        years_of_experience_estimated: number;
+        recommended_pages: number[];
+        file: string;
+    };
+}
+
 // ========== MAIN API RESPONSE ==========
 export interface ResumeExtractResponse {
     message: string;
@@ -117,18 +171,49 @@ export interface ResumeExtractResponse {
     file_name: string;
     parsing_method: string;
     cache_hit: boolean;
+    correlation_id?: string;
+    trace_id?: string;
 
     parsed_data: {
+        image_warning?: boolean;
+        image_message?: string | null;
         achievements: string[];
+        awards?: string[];
         certifications: string[];
+        languages?: string[];
+        declaration?: string[];
+        personal_details?: string[];
+        strengths?: string[];
+        hobbies_and_interests?: string[];
+        volunteering?: string[];
+        workshops?: string[];
+        publications?: string[];
+        references?: string[];
         llm_data: LLMData;
-        technical_skills: TechnicalSkill[];
-        summary: string;
+        summary: string | string[];
         contact: ContactInfo;
         social_links: SocialLinks;
-        formatting: FormattingInfo;
-        length_score: LengthScore;
-        structure_score: StructureScore;
+        soft_skills?: string[];
+        formatting?: FormattingInfo;
+        format_analysis?: FormatAnalysis;
+        length_score?: LengthScore;
+        structure_score?: StructureScore;
+        tokens_used?: {
+            total: number;
+            prompt: number;
+            completion: number;
+            cost_inr: number;
+            cost_usd: number;
+            time_stamp: string;
+            section: string;
+            user_id: string;
+            correlation_id: string;
+            trace_id: string;
+            from_cache: boolean;
+        };
+        strategy_used?: string;
+        user_id?: string;
+        _ai_response_headers?: Record<string, string>;
     };
 }
 

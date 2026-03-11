@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import RichTextEditorField from "./RichTextEditorField";
 
 interface InternshipItemForm {
   company: string;
@@ -99,18 +100,13 @@ const InternshipsEditor: React.FC<Props> = ({ formData, setFormData }) => {
         </div>
 
         {/* Description */}
-        <div>
-          <label className="block text-sm font-semibold mb-2">
-            Internship description at the company
-          </label>
-          <textarea
-            value={internship.description}
-            onChange={(e) => update("description", e.target.value)}
-            placeholder="Describe what you did, key contributions, and what you learned. Use bullet points for multiple achievements."
-            rows={6}
-            className="w-full px-4 py-3 rounded-xl bg-gray-100 border border-transparent focus:border-blue-700 outline-none resize-none"
-          />
-        </div>
+        <RichTextEditorField
+          label="Internship description at the company"
+          value={internship.description}
+          onChange={(val) => update("description", val)}
+          placeholder="Describe what you did, key contributions, and what you learned. Use bullet points for multiple achievements."
+          minHeight="160px"
+        />
       </div>
 
       {/* RIGHT SIDE – TIPS */}

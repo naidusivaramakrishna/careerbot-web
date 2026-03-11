@@ -1,45 +1,71 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { Users, Zap, Database, Gauge } from 'lucide-react';
 import RealtimeStatsCard from './RealtimestatsCard';
+import Switch from '@/components/common/Switch';
+import { toggleAutoRefresh } from '@/api/adminDashboardOverviewApi';
+import { logger } from '@/lib/logger';
 
 interface RealtimeStatsData {
-    users_online: number;
-    active_sessions: number;
-    api_requests_per_minute: number;
-    db_queries_per_second: number;
+    active_users_now: number;
+    api_requests_per_min: number;
+    db_queries_per_sec: number;
     cache_hit_rate: number;
+    error_rate: number;
+    timestamp: string;
 }
 
 interface RealtimeStatsProps {
-    data: RealtimeStatsData;
+    data: RealtimeStatsData | null;
     autoRefresh?: boolean;
     refreshInterval?: number;
+    onAutoRefreshChange?: (enabled: boolean) => void;
 }
 
 const RealtimeStatsComponent: React.FC<RealtimeStatsProps> = ({
     data,
-    autoRefresh = true,
-    refreshInterval = 30
+    autoRefresh = false,
+    refreshInterval = 30,
+    onAutoRefreshChange
 }) => {
+    const [isToggling, setIsToggling] = useState(false);
+
+    // Handle auto-refresh toggle
+    const handleAutoRefreshToggle = async () => {
+        try {
+            setIsToggling(true);
+            await toggleAutoRefresh(!autoRefresh);
+            onAutoRefreshChange?.(!autoRefresh);
+            logger.debug(`Auto-refresh toggled to: ${!autoRefresh}`);
+        } catch (error) {
+            logger.error('Error toggling auto-refresh:', error);
+        } finally {
+            setIsToggling(false);
+        }
+    };
+
     // Memoize stats configuration to prevent recreation on every render
-    const stats = useMemo(() => [
+    const stats = useMemo(() => {
+        if (!data) {
+            return [];
+        }
+        return [
         {
             icon: Users,
-            value: data.users_online,
-            label: 'Users Online',
+            value: data.active_users_now,
+            label: 'Active Users',
             bgColor: 'bg-[#DBEAFE]',
             iconColor: 'text-[#155DFC]'
         },
         {
             icon: Zap,
-            value: data.api_requests_per_minute,
+            value: data.api_requests_per_min,
             label: 'API Requests/min',
             bgColor: 'bg-[#F3E8FF]',
             iconColor: 'text-[#9810FA]'
         },
         {
             icon: Database,
-            value: data.db_queries_per_second.toFixed(2),
+            value: data.db_queries_per_sec.toFixed(2),
             label: 'DB Queries/sec',
             bgColor: 'bg-[#FCE7F3]',
             iconColor: 'text-[#E60076]'
@@ -51,12 +77,19 @@ const RealtimeStatsComponent: React.FC<RealtimeStatsProps> = ({
             bgColor: 'bg-[#DCFCE7]',
             iconColor: 'text-[#00A63E]'
         }
-    ], [
-        data.users_online,
-        data.api_requests_per_minute,
-        data.db_queries_per_second,
-        data.cache_hit_rate
-    ]);
+        ];
+    }, [data]);
+
+    // Show loading state when data is null
+    if (!data) {
+        return (
+            <div className='bg-white p-6 my-4 rounded-lg shadow-sm border border-gray-100'>
+                <div className='text-center py-8 text-gray-500'>
+                    <p>Loading real-time statistics...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className='bg-white p-6 my-4 rounded-lg shadow-sm border border-gray-100'>
@@ -65,21 +98,19 @@ const RealtimeStatsComponent: React.FC<RealtimeStatsProps> = ({
                     <h1 className='font-semibold text-lg text-gray-900'>Real-Time Statistics</h1>
                     <p className='text-[#6A7282] text-sm mt-0.5'>Live system metrics</p>
                 </div>
-
-                <div className='flex items-center gap-4'>
-                    <div className='rounded-lg border border-[#00C950] bg-green-50 px-3 py-1.5 flex items-center gap-2'>
-                        <span className='relative flex h-2 w-2'>
-                            <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00C950] opacity-75'></span>
-                            <span className='relative inline-flex rounded-full h-2 w-2 bg-[#00C950]'></span>
-                        </span>
-                        <span className='text-[#00A63E] font-semibold text-sm'>Live</span>
-                    </div>
-
-                    {autoRefresh && (
-                        <div className='text-sm font-medium text-[#4A5565] hidden sm:block'>
-                            <span className='text-gray-400'>Auto-refresh:</span> {refreshInterval}s
-                        </div>
-                    )}
+                <div className='rounded-lg border border-[#00C950] bg-green-50 px-3 py-1.5 flex items-center gap-2'>
+                    <span className='relative flex h-2 w-2'>
+                        <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00C950] opacity-75'></span>
+                        <span className='relative inline-flex rounded-full h-2 w-2 bg-[#00C950]'></span>
+                    </span>
+                    <span className='text-[#00A63E] font-semibold text-sm'>Live</span>
+                </div>
+                <div className='flex items-center gap-3'>
+                    <span className='text-sm font-medium text-gray-400 hidden sm:inline'>Auto-refresh ({refreshInterval}s)</span>
+                    <Switch
+                        checked={autoRefresh}
+                        onChange={handleAutoRefreshToggle}
+                    />
                 </div>
             </div>
 

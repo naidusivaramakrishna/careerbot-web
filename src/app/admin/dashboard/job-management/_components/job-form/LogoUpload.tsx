@@ -1,22 +1,53 @@
-import React, { memo, ChangeEvent } from 'react'
-import { Upload } from 'lucide-react'
+import React, { memo, ChangeEvent, useState } from 'react'
+import { Upload, X } from 'lucide-react'
 import { JobFormData } from '../../_types/jobFormTypes'
 
 interface LogoUploadProps {
     logo: string | null | undefined
-    companyLogoUrl: string | undefined
     onLogoChange: (e: ChangeEvent<HTMLInputElement>) => void
     onUpdate: <K extends keyof JobFormData>(key: K, value: JobFormData[K]) => void
+    onLogoFileSelected: (file: File) => void
 }
 
 export const LogoUpload = memo(({
     logo,
-    companyLogoUrl,
     onLogoChange,
-    onUpdate
+    onUpdate,
+    onLogoFileSelected
 }: LogoUploadProps) => {
+    const [isDragging, setIsDragging] = useState(false)
+
     const openFilePicker = () => {
         document.getElementById("logoInput")?.click()
+    }
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+    }
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+
+        const files = e.dataTransfer.files
+        if (files.length > 0) {
+            onLogoFileSelected(files[0])
+        }
+    }
+
+    const handleRemoveLogo = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        onUpdate("logo", null)
+        onUpdate("logoFile", null)
     }
 
     return (
@@ -29,14 +60,30 @@ export const LogoUpload = memo(({
             {/* Upload Area */}
             <div
                 onClick={openFilePicker}
-                className="border-dashed cursor-pointer border-2 border-gray-300 rounded-md p-3 flex items-center justify-center hover:border-gray-400 transition-colors"
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-dashed cursor-pointer border-2 rounded-md p-3 flex items-center justify-center transition-colors ${
+                    isDragging
+                        ? 'border-blue-400 bg-blue-50'
+                        : 'border-gray-300 hover:border-gray-400'
+                }`}
             >
                 {logo ? (
-                    <img
-                        src={logo}
-                        alt="Company logo"
-                        className="w-24 h-24 object-cover rounded"
-                    />
+                    <div className="relative">
+                        <img
+                            src={logo}
+                            alt="Company logo"
+                            className="w-24 h-24 object-cover rounded"
+                        />
+                        <button
+                            onClick={handleRemoveLogo}
+                            className="absolute -top-2 -right-2 bg-gray-500 text-white rounded-full p-1 hover:bg-gray-600 transition-colors"
+                            title="Remove logo"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
                 ) : (
                     <div className="flex flex-col gap-2 items-center py-6">
                         <Upload className="w-8 h-8 text-gray-400" />
@@ -52,18 +99,6 @@ export const LogoUpload = memo(({
                         />
                     </div>
                 )}
-            </div>
-
-            {/* URL Input */}
-            <div>
-                <label className="text-sm font-semibold">Or provide logo URL</label>
-                <input
-                    type="url"
-                    value={companyLogoUrl}
-                    onChange={(e) => onUpdate("companyLogoUrl", e.target.value)}
-                    placeholder="https://example.com/logo.png"
-                    className="w-full p-2 outline-none rounded-lg bg-[#F3F3F5] text-sm mt-2"
-                />
             </div>
         </div>
     )

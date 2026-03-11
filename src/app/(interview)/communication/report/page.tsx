@@ -276,7 +276,7 @@ export default function ReportPage() {
             </h2>
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
+                <div className="shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
                   <span className="text-indigo-700 font-bold text-xs">1</span>
                 </div>
                 <p className="text-gray-700">
@@ -284,7 +284,7 @@ export default function ReportPage() {
                 </p>
               </li>
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
+                <div className="shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
                   <span className="text-indigo-700 font-bold text-xs">2</span>
                 </div>
                 <p className="text-gray-700">
@@ -292,7 +292,7 @@ export default function ReportPage() {
                 </p>
               </li>
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
+                <div className="shrink-0 w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center mt-0.5">
                   <span className="text-indigo-700 font-bold text-xs">3</span>
                 </div>
                 <p className="text-gray-700">

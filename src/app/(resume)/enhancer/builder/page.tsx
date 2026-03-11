@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Check, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import ResumeTemplate from "../_components/ResumeTemplate";
 import SectionEditorModal from "../_components/SectionEditorModal";
 import ExportModal from "../_components/ExportModal";
-import type { Improvement } from "@/api/enhancerApi";
+import TemplateSelectionModal from "../_components/TemplateSelectionModal";
+import type { Improvement } from "@/types/api.types";
 import { updateEnhancedResume } from "@/api/enhancerApi";
 
 import {
@@ -21,7 +22,17 @@ const SIDE_TEMPLATES = [
   { id: "apollo", name: "Modern" },
   { id: "terra", name: "Minimal" },
   { id: "tempe", name: "Creative" },
+  { id: "classic_professional", name: "Executive" },
 ] as const;
+
+// Maps frontend template IDs → backend template slugs stored on the document
+const BACKEND_TEMPLATE_MAP: Record<string, string> = {
+  apollo: "compact_professional",     // Modern (teal preview) → teal backend
+  atlas: "professional_classic",      // Classic (serif, traditional)
+  terra: "minimalist_classic",        // Minimal (centered name) → minimalist centered
+  tempe: "clean_simple",              // Creative (clean, simple)
+  classic_professional: "classic_professional", // Executive (serif, labeled groups)
+};
 
 export default function BuilderPage() {
   const router = useRouter();
@@ -32,25 +43,29 @@ export default function BuilderPage() {
     setEnabledSections,
     activeSection,
     setActiveSection,
+    addEditedSection,
     selectedTemplate,
     setSelectedTemplate,
+    isLoaded,
   } = useResume();
 
   const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"templates" | "sections" | "ai">(
     "ai"
   );
   const [enhancedId, setEnhancedId] = useState<string | null>(null);
   const [atsScore, setAtsScore] = useState<{ total_score?: number; score_improvement?: number } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [pendingAcceptId, setPendingAcceptId] = useState<string | null>(null);
 
   // Load real AI improvements from session storage (generated during upload)
   const [improvements, setImprovements] = useState<Improvement[]>([]);
 
   useEffect(() => {
-    if (!resumeData) router.push("/enhancer");
-  }, [resumeData, router]);
+    if (isLoaded && !resumeData) router.push("/enhancer");
+  }, [isLoaded, resumeData, router]);
 
   useEffect(() => {
     if (activeSection) setIsEditorModalOpen(true);
@@ -70,7 +85,7 @@ export default function BuilderPage() {
         const parsed = JSON.parse(storedAtsScore);
         setAtsScore(parsed);
       } catch (err) {
-        // // console.error('Failed to parse ATS score:', err);
+        console.error('Failed to parse ATS score:', err);
       }
     }
 
@@ -81,7 +96,7 @@ export default function BuilderPage() {
         const parsed = JSON.parse(stored);
         setImprovements(parsed);
       } catch (err) {
-        // // console.error('Failed to parse improvements:', err);
+        console.error('Failed to parse improvements:', err);
         setImprovements([]);
       }
     }
@@ -98,8 +113,6 @@ export default function BuilderPage() {
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId as typeof SIDE_TEMPLATES[number]['id']);
   };
-
-  // Download handlers removed - now using backend endpoints via ExportModal
 
   // Map improvement category/section to SectionName for editor
   const mapSuggestionToSection = (suggestion: typeof improvements[0]): SectionName | null => {
@@ -181,6 +194,27 @@ export default function BuilderPage() {
     if (title.includes('award')) {
       return 'Awards';
     }
+    if (title.includes('internship')) {
+      return 'Internships';
+    }
+    if (title.includes('volunteer')) {
+      return 'Volunteering';
+    }
+    if (title.includes('language')) {
+      return 'Languages';
+    }
+    if (title.includes('hobby') || title.includes('hobbies')) {
+      return 'Hobbies';
+    }
+    if (title.includes('interest')) {
+      return 'Interests';
+    }
+    if (title.includes('publication')) {
+      return 'Publications';
+    }
+    if (title.includes('reference')) {
+      return 'References';
+    }
 
     return null;
   };
@@ -188,30 +222,29 @@ export default function BuilderPage() {
   const handleAcceptSuggestion = (suggestion: typeof improvements[0]) => {
     const section = mapSuggestionToSection(suggestion);
 
+    // Track which suggestion is being accepted so we can remove it on modal close
+    setPendingAcceptId(suggestion.id);
+
     // Check if this is a LinkedIn or GitHub suggestion
     const title = suggestion.title?.toLowerCase() || '';
 
     if (title.includes('linkedin') || title.includes('github')) {
-      // Open PersonalInfo editor for LinkedIn/GitHub suggestions
       setActiveSection('PersonalInfo');
       return;
     }
 
     if (section) {
-      // Enable the section if it's not already enabled
       if (!enabledSections.includes(section)) {
         setEnabledSections(prev => [...prev, section]);
       }
-
-      // Open the section editor
       setActiveSection(section);
-
-      // Switch to sections tab to show the change
       setActiveTab('sections');
     } else {
-      // If we can't map to a specific section, just show a message
-      // // console.log('Cannot determine which section to edit for:', suggestion.title);
-      alert('Please manually edit the relevant section to apply this suggestion.');
+      // Can't map to section — just remove the suggestion
+      setPendingAcceptId(null);
+      setImprovements(prev => prev.filter(imp => imp.id !== suggestion.id));
+      const updated = improvements.filter(imp => imp.id !== suggestion.id);
+      sessionStorage.setItem('improvements', JSON.stringify(updated));
     }
   };
 
@@ -247,8 +280,11 @@ export default function BuilderPage() {
       // Save all resume edits to backend before export
       // Update BOTH llm_data.experience AND top-level experience
       // Backend merges enhanced_sections into enhanced_data
+      const backendTemplateId = BACKEND_TEMPLATE_MAP[selectedTemplate] ?? "professional_classic";
+
       await updateEnhancedResume(enhancedId, {
         enhanced_sections: {
+          template_id: backendTemplateId,
           llm_data: {
             experience: experienceData,
           },
@@ -256,10 +292,10 @@ export default function BuilderPage() {
         }
       });
 
-      // // console.log('✅ Resume saved to backend before export');
+      console.log('✅ Resume saved to backend before export');
       setIsExportModalOpen(true);
     } catch (error) {
-      // // console.error('Failed to save resume:', error);
+      console.error('Failed to save resume:', error);
       alert('Failed to save your changes. Please try again.');
     } finally {
       setIsSaving(false);
@@ -268,8 +304,8 @@ export default function BuilderPage() {
 
   if (!resumeData) return null;
 
-  // Format improvements for display (convert to suggestion format)
-  const suggestions = improvements.slice(0, 10).map((imp) => ({
+  // Format improvements for display — show all backend suggestions as-is
+  const suggestions = improvements.map((imp) => ({
     id: imp.id,
     original: imp.before || 'Current text',
     improved: imp.after || 'Improved text',
@@ -281,85 +317,80 @@ export default function BuilderPage() {
   }));
 
   /* ================= TEMPLATE PREVIEWS ================= */
+  // apollo → TemplateOne (compact_professional): Teal accent, LEFT name, contact below pipe-separated
   const ApolloPreview = () => (
-    <div className="aspect-[8.5/11] bg-white p-4 text-[6px] leading-tight">
-      <div className="flex justify-between items-start mb-1.5">
-        <div className="font-bold text-[10px]">YOUR NAME</div>
-        <div className="text-right text-[5px] space-y-0.5">
-          <div>+1 234 567 8900</div>
-          <div>email@example.com</div>
-          <div>City, State</div>
-          <div className="text-blue-600">LinkedIn</div>
-        </div>
-      </div>
-      <div className="border-t-2 border-gray-800 mb-1.5"></div>
+    <div className="aspect-[8.5/11] bg-white p-4 text-[6px] leading-tight text-left">
       <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-1">SUMMARY</div>
+        <div className="font-bold text-[9px] mb-0.5" style={{ color: "#0D9488" }}>YOUR NAME</div>
+        <div className="flex flex-wrap gap-x-0.5 mb-1" style={{ fontSize: "4.5px", color: "#374151" }}>
+          <span>email@example.com</span><span className="mx-0.5">|</span>
+          <span>+1 234 567 8900</span><span className="mx-0.5">|</span>
+          <span style={{ color: "#1d4ed8" }}>LinkedIn</span>
+        </div>
+        <div style={{ borderTop: "1.5px solid #374151" }} />
+      </div>
+      <div className="mb-1.5">
+        <div className="font-bold text-[7px] mb-0.5 pb-0.5" style={{ color: "#0D9488", borderBottom: "1.5px solid #0D9488" }}>SUMMARY</div>
         <div className="space-y-0.5">
-          <div className="h-0.5 bg-gray-300 rounded"></div>
-          <div className="h-0.5 bg-gray-300 rounded w-11/12"></div>
+          <div className="h-0.5 bg-gray-300 rounded" />
+          <div className="h-0.5 bg-gray-300 rounded w-11/12" />
         </div>
       </div>
       <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-1">SKILLS</div>
-        <div className="grid grid-cols-3 gap-x-1 gap-y-0.5">
-          {[...Array(9)].map((_, i) => (
-            <div key={i} className="flex items-center">
-              <div className="w-0.5 h-0.5 bg-gray-600 rounded-full mr-0.5" />
-              <div className="h-0.5 bg-gray-300 rounded flex-1" />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-1">EXPERIENCE</div>
+        <div className="font-bold text-[7px] mb-0.5 pb-0.5" style={{ color: "#0D9488", borderBottom: "1.5px solid #0D9488" }}>EXPERIENCE</div>
         <div>
           <div className="flex justify-between mb-0.5">
             <div className="h-1 bg-gray-400 rounded w-1/3" />
-            <div className="h-0.5 bg-gray-300 rounded w-1/6" />
+            <div className="h-0.5 rounded w-1/6" style={{ background: "#0D9488" }} />
           </div>
-          <div className="h-0.5 bg-gray-300 rounded w-1/4 mb-0.5" />
           <div className="space-y-0.5">
             <div className="h-0.5 bg-gray-200 rounded" />
             <div className="h-0.5 bg-gray-200 rounded w-5/6" />
           </div>
         </div>
       </div>
+      <div className="mb-1.5">
+        <div className="font-bold text-[7px] mb-0.5 pb-0.5" style={{ color: "#0D9488", borderBottom: "1.5px solid #0D9488" }}>SKILLS</div>
+        <div className="grid grid-cols-3 gap-x-1 gap-y-0.5">
+          {[...Array(9)].map((_, i) => (
+            <div key={i} className="flex items-center">
+              <div className="w-0.5 h-0.5 rounded-full mr-0.5" style={{ background: "#0D9488" }} />
+              <div className="h-0.5 bg-gray-300 rounded flex-1" />
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="mb-1">
-        <div className="font-bold text-[7px] mb-1">EDUCATION</div>
+        <div className="font-bold text-[7px] mb-0.5 pb-0.5" style={{ color: "#0D9488", borderBottom: "1.5px solid #0D9488" }}>EDUCATION</div>
         <div className="flex justify-between">
           <div className="h-1 bg-gray-400 rounded w-20" />
-          <div className="h-0.5 bg-gray-300 rounded w-10" />
+          <div className="h-0.5 rounded w-10" style={{ background: "#0D9488" }} />
         </div>
       </div>
     </div>
   );
 
+  // atlas → TemplateTwo (professional_classic): Black, LEFT name, pipe contact, verbose section labels
   const AtlasPreview = () => (
-    <div className="aspect-[8.5/11] bg-white p-4 text-[6px] leading-tight">
-      <div className="text-center mb-1.5">
-        <div className="font-bold text-[10px] mb-0.5">YOUR NAME</div>
-        <div className="text-[5px] flex items-center justify-center flex-wrap gap-x-0.5">
-          <span>email@example.com</span>
-          <span>|</span>
-          <span>+1 234 567 8900</span>
-          <span>|</span>
-          <span className="text-blue-600">LinkedIn</span>
+    <div className="aspect-[8.5/11] bg-white p-4 text-[6px] leading-tight text-left">
+      <div className="mb-1.5">
+        <div className="font-bold text-[9px] mb-0.5 uppercase tracking-wide">YOUR NAME</div>
+        <div className="text-[5px] flex flex-wrap gap-x-0.5 text-gray-700 mb-1">
+          <span>email@example.com</span><span className="mx-0.5">|</span>
+          <span>+1 234 567 8900</span><span className="mx-0.5">|</span>
+          <span style={{ color: "#1d4ed8" }}>LinkedIn</span>
         </div>
+        <div style={{ borderTop: "2px solid #111827" }} />
       </div>
       <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-0.5 border-b border-gray-500 pb-0.5">
-          SUMMARY
-        </div>
+        <div className="font-bold text-[6px] mb-0.5 border-b border-gray-800 pb-0.5 uppercase">PROFESSIONAL SUMMARY</div>
         <div className="space-y-0.5">
-          <div className="h-0.5 bg-gray-300 rounded"></div>
-          <div className="h-0.5 bg-gray-300 rounded w-11/12"></div>
+          <div className="h-0.5 bg-gray-300 rounded" />
+          <div className="h-0.5 bg-gray-300 rounded w-11/12" />
         </div>
       </div>
       <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-0.5 border-b border-gray-500 pb-0.5">
-          EXPERIENCE
-        </div>
+        <div className="font-bold text-[6px] mb-0.5 border-b border-gray-800 pb-0.5 uppercase">PROFESSIONAL EXPERIENCE</div>
         <div>
           <div className="flex justify-between mb-0.5">
             <div className="h-1 bg-gray-400 rounded w-16" />
@@ -372,46 +403,38 @@ export default function BuilderPage() {
         </div>
       </div>
       <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-0.5 border-b border-gray-500 pb-0.5">
-          EDUCATION
-        </div>
+        <div className="font-bold text-[6px] mb-0.5 border-b border-gray-800 pb-0.5 uppercase">EDUCATION</div>
         <div className="flex justify-between">
           <div className="h-1 bg-gray-400 rounded w-20" />
           <div className="h-0.5 bg-gray-300 rounded w-10" />
         </div>
       </div>
       <div className="mb-1">
-        <div className="font-bold text-[7px] mb-0.5 border-b border-gray-500 pb-0.5">
-          SKILLS
-        </div>
-        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="flex items-center">
-              <div className="w-0.5 h-0.5 bg-gray-600 rounded-full mr-0.5" />
-              <div className="h-0.5 bg-gray-300 rounded flex-1" />
-            </div>
-          ))}
+        <div className="font-bold text-[6px] mb-0.5 border-b border-gray-800 pb-0.5 uppercase">TECHNICAL SKILLS</div>
+        <div className="space-y-0.5">
+          <div className="h-0.5 bg-gray-300 rounded" />
+          <div className="h-0.5 bg-gray-300 rounded w-10/12" />
         </div>
       </div>
     </div>
   );
 
+  // terra → TemplateThree (minimalist_classic): centered name, bullet separator, line-decorated headings
   const TerraPreview = () => (
     <div className="aspect-[8.5/11] bg-white p-4 text-[6px] leading-tight">
-      <div className="mb-1.5">
-        <div className="font-bold text-[10px] mb-0.5">YOUR NAME</div>
-        <div className="text-[5px] flex flex-wrap gap-x-0.5">
-          <span>email@example.com</span>
-          <span>|</span>
-          <span>+1 234 567 8900</span>
-          <span>|</span>
-          <span className="text-blue-600">linkedin.com/in/you</span>
+      <div className="text-center mb-1.5">
+        <div className="font-bold text-[10px] mb-0.5 uppercase">YOUR NAME</div>
+        <div className="text-[5px] flex items-center justify-center flex-wrap gap-x-0.5 text-gray-700 mb-1">
+          <span>email@example.com</span><span className="mx-0.5">•</span>
+          <span>+1 234 567 8900</span><span className="mx-0.5">•</span>
+          <span style={{ color: "#1d4ed8" }}>LinkedIn</span>
         </div>
+        <div style={{ borderTop: "1px solid #9ca3af" }} />
       </div>
       <div className="mb-1.5">
         <div className="flex items-center mb-0.5">
-          <div className="font-bold text-[7px]">SUMMARY</div>
-          <div className="flex-1 border-t border-gray-400 ml-1" />
+          <div className="font-bold text-[7px] uppercase mr-1">SUMMARY</div>
+          <div className="flex-1" style={{ borderTop: "1px solid #808080" }} />
         </div>
         <div className="space-y-0.5">
           <div className="h-0.5 bg-gray-300 rounded" />
@@ -420,72 +443,9 @@ export default function BuilderPage() {
       </div>
       <div className="mb-1.5">
         <div className="flex items-center mb-0.5">
-          <div className="font-bold text-[7px]">SKILLS</div>
-          <div className="flex-1 border-t border-gray-400 ml-1" />
+          <div className="font-bold text-[7px] uppercase mr-1">WORK EXPERIENCE</div>
+          <div className="flex-1" style={{ borderTop: "1px solid #808080" }} />
         </div>
-        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="flex items-center">
-              <div className="w-0.5 h-0.5 bg-gray-600 rounded-full mr-0.5" />
-              <div className="h-0.5 bg-gray-300 rounded flex-1" />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="mb-1.5">
-        <div className="flex items-center mb-0.5">
-          <div className="font-bold text-[7px]">EXPERIENCE</div>
-          <div className="flex-1 border-t border-gray-400 ml-1" />
-        </div>
-        <div>
-          <div className="flex justify-between mb-0.5">
-            <div className="h-1 bg-gray-400 rounded w-1/4" />
-            <div className="h-0.5 bg-gray-300 rounded w-1/5" />
-          </div>
-          <div className="space-y-0.5">
-            <div className="h-0.5 bg-gray-200 rounded" />
-            <div className="h-0.5 bg-gray-200 rounded w-5/6" />
-          </div>
-        </div>
-      </div>
-      <div className="mb-1">
-        <div className="flex items-center mb-0.5">
-          <div className="font-bold text-[7px]">EDUCATION</div>
-          <div className="flex-1 border-t border-gray-400 ml-1" />
-        </div>
-        <div className="flex justify-between">
-          <div className="h-1 bg-gray-400 rounded w-20" />
-          <div className="h-0.5 bg-gray-300 rounded w-10" />
-        </div>
-      </div>
-    </div>
-  );
-
-  const TempePreview = () => (
-    <div className="aspect-[8.5/11] bg-white p-4 text-[6px] leading-tight">
-      <div className="mb-1.5">
-        <div className="font-bold text-[10px] mb-0.5">YOUR NAME</div>
-        <div className="text-[5px] grid grid-cols-2 gap-x-2">
-          <div className="space-y-0.5">
-            <div>email@example.com</div>
-            <div>City, State</div>
-          </div>
-          <div className="space-y-0.5">
-            <div>+1 234 567 8900</div>
-            <div className="text-blue-600">LinkedIn</div>
-          </div>
-        </div>
-      </div>
-      <div className="border-t-2 border-gray-800 mb-1.5" />
-      <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-0.5">SUMMARY</div>
-        <div className="space-y-0.5">
-          <div className="h-0.5 bg-gray-300 rounded" />
-          <div className="h-0.5 bg-gray-300 rounded w-11/12" />
-        </div>
-      </div>
-      <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-0.5">EXPERIENCE</div>
         <div>
           <div className="flex justify-between mb-0.5">
             <div className="h-1 bg-gray-400 rounded w-1/3" />
@@ -498,18 +458,133 @@ export default function BuilderPage() {
         </div>
       </div>
       <div className="mb-1.5">
-        <div className="font-bold text-[7px] mb-0.5">EDUCATION</div>
+        <div className="flex items-center mb-0.5">
+          <div className="font-bold text-[7px] uppercase mr-1">EDUCATION</div>
+          <div className="flex-1" style={{ borderTop: "1px solid #808080" }} />
+        </div>
         <div className="flex justify-between">
           <div className="h-1 bg-gray-400 rounded w-20" />
           <div className="h-0.5 bg-gray-300 rounded w-10" />
         </div>
       </div>
       <div className="mb-1">
-        <div className="font-bold text-[7px] mb-0.5">SKILLS</div>
+        <div className="flex items-center mb-0.5">
+          <div className="font-bold text-[7px] uppercase mr-1">SKILLS</div>
+          <div className="flex-1" style={{ borderTop: "1px solid #808080" }} />
+        </div>
+        <div className="flex flex-wrap gap-0.5">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="px-1 py-0.5 rounded" style={{ background: "#f3f4f6", fontSize: "4px" }}>
+              <div className="h-0.5 bg-gray-400 rounded w-4" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // classic_professional → TemplateFive: LEFT name, pipe contact below, plain uppercase headings with border-b
+  const TemplateFivePreview = () => (
+    <div className="aspect-[8.5/11] bg-white p-4 text-[6px] leading-tight text-left">
+      <div className="mb-1.5">
+        <div className="font-bold text-[9px] uppercase tracking-wide mb-0.5">YOUR NAME</div>
+        <div className="text-[5px] flex flex-wrap gap-x-0.5 text-gray-700 mb-1">
+          <span>email@example.com</span><span className="mx-0.5">|</span>
+          <span>+1 234 567 8900</span><span className="mx-0.5">|</span>
+          <span style={{ color: "#1d4ed8" }}>LinkedIn</span>
+        </div>
+        <div style={{ borderTop: "2px solid #111827" }} />
+      </div>
+      <div className="mb-1.5">
+        <div className="font-bold text-[7px] mb-0.5 pb-0.5 uppercase" style={{ borderBottom: "1px solid #374151" }}>SUMMARY</div>
+        <div className="space-y-0.5">
+          <div className="h-0.5 bg-gray-300 rounded" />
+          <div className="h-0.5 bg-gray-300 rounded w-11/12" />
+        </div>
+      </div>
+      <div className="mb-1.5">
+        <div className="font-bold text-[7px] mb-0.5 pb-0.5 uppercase" style={{ borderBottom: "1px solid #374151" }}>EXPERIENCE</div>
+        <div>
+          <div className="flex justify-between mb-0.5">
+            <div className="h-1 bg-gray-400 rounded w-1/3" />
+            <div className="h-0.5 bg-gray-300 rounded w-1/6" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="h-0.5 bg-gray-200 rounded" />
+            <div className="h-0.5 bg-gray-200 rounded w-5/6" />
+          </div>
+        </div>
+      </div>
+      <div className="mb-1.5">
+        <div className="font-bold text-[7px] mb-0.5 pb-0.5 uppercase" style={{ borderBottom: "1px solid #374151" }}>EDUCATION</div>
+        <div className="flex justify-between">
+          <div className="h-1 bg-gray-400 rounded w-20" />
+          <div className="h-0.5 bg-gray-300 rounded w-10" />
+        </div>
+      </div>
+      <div className="mb-1">
+        <div className="font-bold text-[7px] mb-0.5 pb-0.5 uppercase" style={{ borderBottom: "1px solid #374151" }}>SKILLS</div>
+        <div className="space-y-0.5">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex items-center gap-0.5">
+              <div className="h-0.5 bg-gray-500 rounded w-8" />
+              <span style={{ fontSize: "4px", color: "#374151" }}>:</span>
+              <div className="h-0.5 bg-gray-300 rounded flex-1" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // tempe → TemplateFour (clean_simple): centered name, pipe contact, "WORK EXPERIENCE"
+  const TempePreview = () => (
+    <div className="aspect-[8.5/11] bg-white p-4 text-[6px] leading-tight">
+      <div className="text-center mb-1.5">
+        <div className="font-bold text-[9px] uppercase mb-0.5">YOUR NAME</div>
+        <div className="text-[5px] flex items-center justify-center flex-wrap gap-x-0.5 text-gray-700 mb-1">
+          <span>email@example.com</span><span className="mx-0.5">|</span>
+          <span>+1 234 567 8900</span><span className="mx-0.5">|</span>
+          <span style={{ color: "#1d4ed8" }}>LinkedIn</span>
+        </div>
+        <div style={{ borderTop: "2px solid #111827" }} />
+      </div>
+      <div className="mb-1.5">
+        <div className="font-bold text-[7px] mb-0.5 uppercase">SUMMARY</div>
+        <div className="space-y-0.5">
+          <div className="h-0.5 bg-gray-300 rounded" />
+          <div className="h-0.5 bg-gray-300 rounded w-11/12" />
+        </div>
+        <div className="border-t border-gray-500 mt-1" />
+      </div>
+      <div className="mb-1.5">
+        <div className="font-bold text-[7px] mb-0.5 uppercase">WORK EXPERIENCE</div>
+        <div>
+          <div className="flex justify-between mb-0.5">
+            <div className="h-1 bg-gray-400 rounded w-1/3" />
+            <div className="h-0.5 bg-gray-300 rounded w-1/6" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="h-0.5 bg-gray-200 rounded" />
+            <div className="h-0.5 bg-gray-200 rounded w-5/6" />
+          </div>
+        </div>
+        <div className="border-t border-gray-500 mt-1" />
+      </div>
+      <div className="mb-1.5">
+        <div className="font-bold text-[7px] mb-0.5 uppercase">EDUCATION</div>
+        <div className="flex justify-between">
+          <div className="h-1 bg-gray-400 rounded w-20" />
+          <div className="h-0.5 bg-gray-300 rounded w-10" />
+        </div>
+        <div className="border-t border-gray-500 mt-1" />
+      </div>
+      <div className="mb-1">
+        <div className="font-bold text-[7px] mb-0.5 uppercase">SKILLS</div>
         <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="flex items-center">
-              <div className="w-0.5 h-0.5 bg-gray-600 rounded-full mr-0.5" />
+              <div className="w-0.5 h-0.5 bg-gray-700 rounded-full mr-0.5" />
               <div className="h-0.5 bg-gray-300 rounded flex-1" />
             </div>
           ))}
@@ -520,14 +595,8 @@ export default function BuilderPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="bg-white">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <h1 className="text-3xl font-bold pt-3">CareerBot</h1>
-        </div>
-      </header>
-
       <main className="pt-3 pb-6 px-6">
-        <div className="bg-gray-100 rounded-3xl p-6 grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] gap-6">
+        <div className="bg-gray-100 rounded-3xl p-6 grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] gap-6 min-h-[calc(100vh-120px)]">
           {/* LEFT: RESUME PREVIEW */}
           <div className="flex flex-col">
             <div className="bg-white rounded-2xl px-5 py-3 shadow-sm mb-3">
@@ -535,7 +604,7 @@ export default function BuilderPage() {
                 <h3 className="text-sm font-semibold text-gray-900">
                   Live Preview
                 </h3>
-                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[11px] font-semibold rounded-md">
+                <span className="px-2.5 py-1 bg-[#e8eff9] text-[#2557a7] text-[11px] font-semibold rounded-md">
                   {SIDE_TEMPLATES.find((t) => t.id === selectedTemplate)?.name ??
                     "Modern"}{" "}
                   Template
@@ -546,7 +615,7 @@ export default function BuilderPage() {
               </p>
             </div>
 
-            <div className="bg-gray-50 rounded-2xl p-6 flex justify-center flex-1 overflow-auto">
+            <div className="bg-gray-50 rounded-2xl p-6 flex justify-center overflow-auto">
               <div
                 className="bg-white rounded-xl shadow-sm border border-gray-200 w-full max-w-[780px]"
                 style={{ minHeight: "1020px" }}
@@ -554,7 +623,6 @@ export default function BuilderPage() {
                 <ResumeTemplate
                   data={resumeData}
                   enabledSections={enabledSections}
-                  editable
                 />
               </div>
             </div>
@@ -569,7 +637,7 @@ export default function BuilderPage() {
                   onClick={() => setActiveTab("templates")}
                   className={`flex-1 py-3 px-4 text-sm font-semibold rounded-xl transition-all ${
                     activeTab === "templates"
-                      ? "bg-gray-200 text-gray-900 shadow-md"
+                      ? "bg-[#2557a7] text-white shadow-sm"
                       : "bg-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
@@ -579,7 +647,7 @@ export default function BuilderPage() {
                   onClick={() => setActiveTab("sections")}
                   className={`flex-1 py-3 px-4 text-sm font-semibold rounded-xl transition-all ${
                     activeTab === "sections"
-                      ? "bg-gray-200 text-gray-900 shadow-md"
+                      ? "bg-[#2557a7] text-white shadow-sm"
                       : "bg-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
@@ -589,14 +657,14 @@ export default function BuilderPage() {
                   onClick={() => setActiveTab("ai")}
                   className={`relative flex-1 py-3 px-4 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
                     activeTab === "ai"
-                      ? "bg-gray-200 text-gray-900 shadow-md"
+                      ? "bg-[#2557a7] text-white shadow-sm"
                       : "bg-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
                   AI
-                  {improvements.length > 0 && (
-                    <span className="bg-emerald-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
-                      {improvements.length}
+                  {suggestions.length > 0 && (
+                    <span className="bg-[#2557a7] text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                      {suggestions.length}
                     </span>
                   )}
                 </button>
@@ -605,12 +673,20 @@ export default function BuilderPage() {
 
             {/* CONTENT CARD */}
             <div className="bg-white rounded-3xl shadow-md overflow-hidden">
-              <div className="p-6 max-h-[calc(120vh-220px)] overflow-y-auto">
+              <div className="p-6 max-h-[800px] overflow-y-auto">
                 {activeTab === "templates" && (
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-2">
-                      Choose Template
-                    </h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-bold text-gray-900">
+                        Choose Template
+                      </h3>
+                      <button
+                        onClick={() => setIsTemplateModalOpen(true)}
+                        className="px-4 py-2 text-sm font-semibold text-[#2557a7] bg-[#e8eff9] hover:bg-[#d0dfef] rounded-xl transition-all"
+                      >
+                        Browse All
+                      </button>
+                    </div>
                     <p className="text-sm text-gray-600 mb-6">
                       Select a professional template optimized for ATS systems.
                     </p>
@@ -623,8 +699,8 @@ export default function BuilderPage() {
                             onClick={() => handleTemplateSelect(template.id)}
                             className={`relative group transition-all duration-300 rounded-lg overflow-hidden ${
                               isSelected
-                                ? "ring-2 ring-blue-500 shadow-lg scale-[1.02]"
-                                : "hover:scale-[1.01] hover:shadow-md ring-1 ring-gray-200 hover:ring-blue-300"
+                                ? "ring-2 ring-[#2557a7] shadow-lg scale-[1.02]"
+                                : "hover:scale-[1.01] hover:shadow-md ring-1 ring-gray-200 hover:ring-[#2557a7]/50"
                             }`}
                           >
                             <div className="bg-white border border-gray-100">
@@ -632,9 +708,10 @@ export default function BuilderPage() {
                               {template.id === "atlas" && <AtlasPreview />}
                               {template.id === "terra" && <TerraPreview />}
                               {template.id === "tempe" && <TempePreview />}
+                              {template.id === "classic_professional" && <TemplateFivePreview />}
                             </div>
                             {isSelected && (
-                              <div className="absolute top-1.5 right-1.5 bg-blue-600 rounded-full p-1 shadow-lg">
+                              <div className="absolute top-1.5 right-1.5 bg-[#2557a7] rounded-full p-1 shadow-lg">
                                 <Check
                                   className="w-3 h-3 text-white"
                                   strokeWidth={3}
@@ -675,13 +752,13 @@ export default function BuilderPage() {
                             key={section}
                             className={`border-2 rounded-2xl p-5 shadow-md transition-all ${
                               enabled
-                                ? "border-emerald-200 bg-emerald-50/80 backdrop-blur-sm"
+                                ? "border-[#2557a7]/20 bg-[#e8eff9]/40 backdrop-blur-sm"
                                 : "border-gray-200 bg-white hover:border-gray-300"
                             }`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <Sparkles className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                                <Sparkles className="w-5 h-5 text-[#2557a7] flex-shrink-0" />
                                 <span className="text-base font-semibold text-gray-900 capitalize">
                                   {sectionName}
                                 </span>
@@ -689,7 +766,7 @@ export default function BuilderPage() {
                               <button
                                 onClick={() => handleToggleSection(section)}
                                 className={`relative w-14 h-8 rounded-full transition-all shadow-sm ${
-                                  enabled ? "bg-emerald-500" : "bg-gray-300"
+                                  enabled ? "bg-[#2557a7]" : "bg-gray-300"
                                 }`}
                               >
                                 <span
@@ -725,12 +802,12 @@ export default function BuilderPage() {
                       suggestions.map((s, i) => (
                         <div
                           key={s.id || i}
-                          className="border-2 border-blue-200 bg-emerald-50/80 backdrop-blur-sm rounded-xl p-3 shadow-sm"
+                          className="border border-[#2557a7]/15 bg-[#e8eff9]/20 backdrop-blur-sm rounded-xl p-3 shadow-sm"
                         >
                           <div className="flex items-start justify-between gap-2 mb-1.5">
                             <div className="flex gap-2 flex-1">
-                              <Sparkles className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                              <p className="text-xs text-blue-700 font-medium leading-snug">
+                              <Sparkles className="w-4 h-4 text-[#2557a7] flex-shrink-0 mt-0.5" />
+                              <p className="text-xs text-[#2557a7] font-medium leading-snug">
                                 {s.reason}
                               </p>
                             </div>
@@ -740,7 +817,7 @@ export default function BuilderPage() {
                                   ? 'bg-red-100 text-red-700'
                                   : s.impact === 'medium'
                                   ? 'bg-orange-100 text-orange-700'
-                                  : 'bg-blue-100 text-blue-700'
+                                  : 'bg-[#e8eff9] text-[#2557a7]'
                               }`}>
                                 +{s.impact_points} pts
                               </span>
@@ -767,7 +844,7 @@ export default function BuilderPage() {
                             </button>
                             <button
                               onClick={() => handleAcceptSuggestion(s._original)}
-                              className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold transition-all shadow-sm hover:shadow-md"
+                              className="flex-1 py-1.5 bg-[#2557a7] hover:bg-[#1a4a8f] text-white rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold transition-all shadow-sm hover:shadow-md"
                             >
                               <Check className="w-3.5 h-3.5" />
                               Accept
@@ -780,7 +857,7 @@ export default function BuilderPage() {
                     <button
                       onClick={handleContinueToExport}
                       disabled={isSaving}
-                      className="w-full mt-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl font-semibold text-base hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full mt-4 py-3 bg-[#2557a7] hover:bg-[#1a4a8f] text-white rounded-2xl font-semibold text-base transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isSaving ? 'Saving...' : 'Continue to Export'}
                     </button>
@@ -794,8 +871,54 @@ export default function BuilderPage() {
         <SectionEditorModal
           isOpen={isEditorModalOpen}
           onClose={() => {
+            if (activeSection) {
+              addEditedSection(activeSection);
+            }
             setIsEditorModalOpen(false);
             setActiveSection(null);
+            setPendingAcceptId(null);
+          }}
+          onSave={(didChange, section, changedFieldNames) => {
+            if (!didChange) return;
+
+            // Map field names to keywords that may appear in suggestion titles
+            const fieldKeywords: Record<string, string[]> = {
+              phone: ['phone'],
+              location: ['location'],
+              linkedinUrl: ['linkedin'],
+              githubUrl: ['github'],
+              email: ['email'],
+              portifolioUrl: ['portfolio'],
+              duration: ['date', 'start', 'end'],
+              grade: ['gpa', 'grade', 'graduation'],
+              summary: ['summary', 'objective'],
+            };
+
+            const toRemove = new Set<string>();
+
+            // Remove the explicitly accepted suggestion (if any)
+            if (pendingAcceptId) toRemove.add(pendingAcceptId);
+
+            // Auto-remove suggestions whose suggested field is now filled
+            if (changedFieldNames.length > 0 && section) {
+              improvements.forEach(imp => {
+                if (mapSuggestionToSection(imp) !== section) return;
+                const titleLower = (imp.title || '').toLowerCase();
+                for (const field of changedFieldNames) {
+                  const keywords = fieldKeywords[field] || [field.toLowerCase()];
+                  if (keywords.some(kw => titleLower.includes(kw))) {
+                    toRemove.add(imp.id);
+                    break;
+                  }
+                }
+              });
+            }
+
+            if (toRemove.size > 0) {
+              setImprovements(prev => prev.filter(imp => !toRemove.has(imp.id)));
+              const updated = improvements.filter(imp => !toRemove.has(imp.id));
+              sessionStorage.setItem('improvements', JSON.stringify(updated));
+            }
           }}
         />
 
@@ -805,6 +928,14 @@ export default function BuilderPage() {
           enhancedId={enhancedId || undefined}
           improvements={improvements}
           atsScore={atsScore || undefined}
+          selectedTemplate={selectedTemplate}
+        />
+
+        <TemplateSelectionModal
+          isOpen={isTemplateModalOpen}
+          onClose={() => setIsTemplateModalOpen(false)}
+          onSelectTemplate={handleTemplateSelect}
+          currentTemplate={selectedTemplate}
         />
       </main>
     </div>

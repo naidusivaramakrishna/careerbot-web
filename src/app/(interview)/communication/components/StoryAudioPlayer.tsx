@@ -21,7 +21,7 @@ export default function StoryAudioPlayer({ onFirstPlay }: Props) {
     if (!audioRef.current || audioCtxRef.current) return;
 
     const AudioCtx =
-      window.AudioContext || (window as any).webkitAudioContext;
+      window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
 
     const audioCtx = new AudioCtx();
     await audioCtx.resume();

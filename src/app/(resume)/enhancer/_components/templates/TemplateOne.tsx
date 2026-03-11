@@ -31,9 +31,29 @@ type SectionName =
 
 interface Props {
   data: ResumeData;
-  style: ResumeStyle;
+  style?: ResumeStyle;
   onPageCountChange?: (count: number) => void;
   enabledSections?: string[];
+}
+
+/* ================= HELPER FUNCTION ================= */
+function extractSummaryText(rawSummary: string): string {
+  try {
+    // Remove trailing period if present
+    const cleaned = rawSummary.trim().replace(/\.$/, '');
+
+    // Try to parse as JSON
+    const parsed = JSON.parse(cleaned);
+    if (parsed && parsed.summary) {
+      return parsed.summary;
+    }
+
+    // If parsing fails or no summary field, return original
+    return cleaned;
+  } catch {
+    // If JSON parsing fails, return as-is
+    return rawSummary.trim();
+  }
 }
 
 const TemplateOne: React.FC<Props> = ({
@@ -48,6 +68,7 @@ const TemplateOne: React.FC<Props> = ({
     setActiveSection,
     setSectionOrder,
     setEnabledSections,
+    addedFields,
   } = useResume();
 
   const enabledSections = propEnabledSections || contextEnabledSections;
@@ -99,21 +120,25 @@ const TemplateOne: React.FC<Props> = ({
     fontWeight: 400,
     fontStyle: resumeStyle.italic ? "italic" : "normal",
     color: "#111827",
+    overflowWrap: "break-word",
+    wordBreak: "break-word",
   };
 
   const headingStyle: React.CSSProperties = {
-    color: "#111827",
+    color: "#0D9488",
     fontSize: "13px",
     fontWeight: 700,
     textTransform: "uppercase",
     letterSpacing: "0.06em",
     marginBottom: "0.5rem",
+    borderBottom: "1.5px solid #0D9488",
+    paddingBottom: "0.25rem",
   };
 
   const nameStyle: React.CSSProperties = {
     fontSize: resumeStyle.nameFontSize || "26px",
     fontWeight: 800,
-    color: "#111827",
+    color: "#0D9488",
   };
 
   const linkStyle: React.CSSProperties = {
@@ -144,6 +169,13 @@ const TemplateOne: React.FC<Props> = ({
     fontStyle: "italic",
   };
 
+  /* ---------- Field-level highlight helpers ---------- */
+  const hlStyle: React.CSSProperties = { backgroundColor: "rgba(34,197,94,0.25)", borderRadius: "3px", padding: "0 2px" };
+  const isFieldAdded = (section: string, itemIdx: number, field: string) =>
+    (addedFields[section] || []).includes(`${itemIdx}.${field}`);
+  const hl = (section: string, itemIdx: number, field: string, value: React.ReactNode) =>
+    isFieldAdded(section, itemIdx, field) ? <span style={hlStyle}>{value}</span> : <>{value}</>;
+
   /* ---------- SectionWrapper with clickable links fix ---------- */
   const SectionWrapper: React.FC<{
     name: SectionName;
@@ -154,7 +186,6 @@ const TemplateOne: React.FC<Props> = ({
     const idx = sectionOrder.indexOf(name as SectionName);
     const canMoveUp = idx > 0;
     const canMoveDown = idx >= 0 && idx < sectionOrder.length - 1;
-
     return (
       <section className="relative group mb-3 page-break-inside-avoid">
         {/* Hover dotted border */}
@@ -247,86 +278,50 @@ const TemplateOne: React.FC<Props> = ({
       case "PersonalInfo":
         return (
           <SectionWrapper name="PersonalInfo">
-            <div className="flex justify-between items-start">
+            <div>
               <h1 className="uppercase" style={nameStyle}>
                 {personalInfo.fullName || "Full Name"}
               </h1>
-              <div className="text-right flex flex-col gap-0.5">
-                {personalInfo.phone && (
-                  <div style={baseTextStyle}>
-                    <span>{personalInfo.phone}</span>
-                  </div>
-                )}
-                {personalInfo.email && (
-                  <div style={baseTextStyle}>
-                    <span>{personalInfo.email}</span>
-                  </div>
-                )}
-                {personalInfo.location && (
-                  <div style={baseTextStyle}>
-                    <span>{personalInfo.location}</span>
-                  </div>
-                )}
-                {personalInfo.linkedinUrl && (
-                  <div style={baseTextStyle}>
-                    <a
-                      href={personalInfo.linkedinUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={linkStyle}
-                      className="hover:underline"
-                    >
-                      {personalInfo.linkedinUrl
-                        .replace(/^https?:\/\//, "")
-                        .replace(/^www\./, "")}
-                    </a>
-                  </div>
-                )}
-                {personalInfo.githubUrl && (
-                  <div style={baseTextStyle}>
-                    <a
-                      href={personalInfo.githubUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={linkStyle}
-                      className="hover:underline"
-                    >
-                      {personalInfo.githubUrl
-                        .replace(/^https?:\/\//, "")
-                        .replace(/^www\./, "")}
-                    </a>
-                  </div>
-                )}
-                {personalInfo.portifolioUrl && (
-                  <div style={baseTextStyle}>
-                    <a
-                      href={personalInfo.portifolioUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={linkStyle}
-                      className="hover:underline"
-                    >
-                      {personalInfo.portifolioUrl
-                        .replace(/^https?:\/\//, "")
-                        .replace(/^www\./, "")}
-                    </a>
-                  </div>
-                )}
+              <div
+                className="flex items-center flex-wrap gap-x-1 text-xs mt-1 mb-2"
+                style={baseTextStyle}
+              >
+                {(() => {
+                  const addedPI = addedFields["PersonalInfo"] || [];
+                  const hl = (v: React.ReactNode) => (
+                    <span style={{ backgroundColor: "rgba(34,197,94,0.25)", borderRadius: "3px", padding: "0 2px" }}>{v}</span>
+                  );
+                  const items: React.ReactNode[] = [
+                    personalInfo.email && (addedPI.includes("email") ? hl(personalInfo.email) : personalInfo.email),
+                    personalInfo.phone && (addedPI.includes("phone") ? hl(personalInfo.phone) : personalInfo.phone),
+                    personalInfo.location && (addedPI.includes("location") ? hl(personalInfo.location) : personalInfo.location),
+                    personalInfo.linkedinUrl && (addedPI.includes("linkedinUrl") ? hl(<a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">LinkedIn</a>) : <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">LinkedIn</a>),
+                    personalInfo.githubUrl && (addedPI.includes("githubUrl") ? hl(<a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">GitHub</a>) : <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">GitHub</a>),
+                    personalInfo.portifolioUrl && (addedPI.includes("portifolioUrl") ? hl(<a href={personalInfo.portifolioUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">Portfolio</a>) : <a href={personalInfo.portifolioUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">Portfolio</a>),
+                  ].filter(Boolean);
+                  return items.map((item, i) => (
+                    <React.Fragment key={i}>
+                      {item}
+                      {i < items.length - 1 && <span className="mx-1">|</span>}
+                    </React.Fragment>
+                  ));
+                })()}
               </div>
             </div>
-            <hr className="border-t-2 border-gray-700 mt-3" />
+            <hr className="border-t-2 border-gray-700" />
           </SectionWrapper>
         );
 
       case "Summary":
+        const cleanSummary = professionalSummary ? extractSummaryText(professionalSummary) : "";
         return (
           <SectionWrapper name="Summary">
             <h2 style={headingStyle}>Summary</h2>
-            {professionalSummary ? (
+            {cleanSummary ? (
               <div
                 className="text-justify resume-description"
                 style={baseTextStyle}
-                dangerouslySetInnerHTML={{ __html: professionalSummary }}
+                dangerouslySetInnerHTML={{ __html: cleanSummary }}
               />
             ) : (
               <p style={placeholderStyle}>
@@ -407,25 +402,27 @@ const TemplateOne: React.FC<Props> = ({
                 <div key={idx} className="mb-3">
                   <div className="flex justify-between items-baseline mb-0.5">
                     <h3 className="flex items-center" style={titleStyle}>
-                      {exp.role}
+                      {hl("Experience", idx, "role", exp.role)}
                     </h3>
                     <span className="text-sm" style={baseTextStyle}>
-                      {exp.duration || "– Present"}
+                      {hl("Experience", idx, "duration", exp.duration || "– Present")}
                     </span>
                   </div>
-                  <div
-                    className="mb-1 flex items-center"
-                    style={baseTextStyle}
-                  >
-                    <span className="font-medium">{exp.company}</span>
+                  <div className="mb-1 flex items-center" style={baseTextStyle}>
+                    <span className="font-medium">{hl("Experience", idx, "company", exp.company)}</span>
                     {exp.location && (
-                      <span className="text-sm"> • {exp.location}</span>
+                      <span className="text-sm"> • {hl("Experience", idx, "location", exp.location)}</span>
                     )}
                   </div>
+                  {exp.client && (
+                    <div className="mb-1 text-sm" style={baseTextStyle}>
+                      Client: {hl("Experience", idx, "client", exp.client)}
+                    </div>
+                  )}
                   {exp.description && (
                     <div
                       className="resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Experience", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{ __html: exp.description }}
                     />
                   )}
@@ -447,11 +444,11 @@ const TemplateOne: React.FC<Props> = ({
                 <div key={idx} className="mb-3">
                   <div className="flex justify-between items-baseline mb-0.5">
                     <h3 className="flex items-center" style={titleStyle}>
-                      {intern.role}
+                      {hl("Internships", idx, "role", intern.role)}
                     </h3>
                     {intern.duration && (
                       <span className="text-sm" style={baseTextStyle}>
-                        {intern.duration}
+                        {hl("Internships", idx, "duration", intern.duration)}
                       </span>
                     )}
                   </div>
@@ -459,15 +456,15 @@ const TemplateOne: React.FC<Props> = ({
                     className="mb-1 flex items-center"
                     style={baseTextStyle}
                   >
-                    <span className="font-medium">{intern.company}</span>
+                    <span className="font-medium">{hl("Internships", idx, "company", intern.company)}</span>
                     {intern.location && (
-                      <span className="text-sm"> • {intern.location}</span>
+                      <span className="text-sm"> • {hl("Internships", idx, "location", intern.location)}</span>
                     )}
                   </div>
                   {intern.description && (
                     <div
                       className="resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Internships", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{ __html: intern.description }}
                     />
                   )}
@@ -490,28 +487,28 @@ const TemplateOne: React.FC<Props> = ({
                   <div className="flex justify-between items-baseline">
                     <div>
                       <h3 className="font-semibold" style={titleStyle}>
-                        {edu.degree}
+                        {hl("Education", idx, "degree", edu.degree)}
                       </h3>
                       <p className="text-sm" style={baseTextStyle}>
-                        {edu.college}
-                        {edu.branch && ` • ${edu.branch}`}
+                        {hl("Education", idx, "college", edu.college)}
+                        {edu.branch && <> • {hl("Education", idx, "branch", edu.branch)}</>}
                       </p>
                     </div>
                     <span className="text-sm" style={baseTextStyle}>
-                      {edu.duration}
+                      {hl("Education", idx, "duration", edu.duration)}
                     </span>
                   </div>
 
                   {edu.grade && (
                     <p className="text-sm" style={baseTextStyle}>
-                      <span className="font-medium">{edu.gradeType || "Grade"}:</span> {edu.grade}
+                      <span className="font-medium">{hl("Education", idx, "gradeType", edu.gradeType || "Grade")}:</span> {hl("Education", idx, "grade", edu.grade)}
                     </p>
                   )}
 
                   {edu.achievements && (
                     <div
                       className="text-sm resume-description mt-1"
-                      style={baseTextStyle}
+                      style={isFieldAdded("Education", idx, "achievements") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
                       dangerouslySetInnerHTML={{ __html: edu.achievements }}
                     />
                   )}
@@ -533,36 +530,28 @@ const TemplateOne: React.FC<Props> = ({
                 <div key={idx} className="mb-3">
                   <div className="flex justify-between items-baseline mb-0.5">
                     <h3 className="flex items-center" style={titleStyle}>
-                      <span>{proj.title}</span>
+                      <span>{hl("Projects", idx, "title", proj.title)}</span>
                       {proj.link && (
-                        <a
-                          href={proj.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={linkIconStyle}
-                          className="hover:opacity-70"
-                          title={proj.link}
-                        >
+                        <a href={proj.link} target="_blank" rel="noopener noreferrer" style={linkIconStyle} className="hover:opacity-70" title={proj.link}>
                           <ExternalLink size={14} />
                         </a>
                       )}
                     </h3>
                     {(proj.startDate || proj.endDate) && (
                       <span className="text-sm" style={baseTextStyle}>
-                        {formatDate(proj.startDate)} –{" "}
-                        {formatDate(proj.endDate)}
+                        {formatDate(proj.startDate)} – {formatDate(proj.endDate)}
                       </span>
                     )}
                     {proj.client && (
                       <span className="text-sm" style={baseTextStyle}>
-                        Client: {proj.client}
+                        Client: {hl("Projects", idx, "client", proj.client)}
                       </span>
                     )}
                   </div>
                   {proj.description && (
                     <div
                       className="mb-1.5 resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Projects", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{ __html: proj.description }}
                     />
                   )}
@@ -580,29 +569,29 @@ const TemplateOne: React.FC<Props> = ({
           <SectionWrapper name="Certificates">
             <h2 style={headingStyle}>Certificates</h2>
             {certifications.length > 0 ? (
-              certifications.map((cert: any, idx) => (
+              certifications.map((cert: { name?: string; issuedBy?: string; year?: string; expiryDate?: string; credentialId?: string }, idx) => (
                 <div key={idx} className="mb-2 flex items-start">
                   <span className="mr-2" style={baseTextStyle}>
                     •
                   </span>
                   <div style={baseTextStyle}>
                     <span className="font-medium" style={titleStyle}>
-                      {cert.name}
+                      {hl("Certificates", idx, "name", cert.name)}
                     </span>
-                    {cert.issuedBy && <span>{', ' + cert.issuedBy}</span>}
+                    {cert.issuedBy && <span>{', '}{hl("Certificates", idx, "issuedBy", cert.issuedBy)}</span>}
                     {(cert.year || cert.expiryDate) && (
                       <div className="text-xs mt-0.5">
-                        {cert.year && <span>{cert.year}</span>}
+                        {cert.year && <span>{hl("Certificates", idx, "year", cert.year)}</span>}
                         {cert.expiryDate && (
                           <span className="ml-3">
-                            Expires: {cert.expiryDate}
+                            Expires: {hl("Certificates", idx, "expiryDate", cert.expiryDate)}
                           </span>
                         )}
                       </div>
                     )}
                     {cert.credentialId && (
                       <div className="text-xs mt-0.5">
-                        Credential ID: {cert.credentialId}
+                        Credential ID: {hl("Certificates", idx, "credentialId", cert.credentialId)}
                       </div>
                     )}
                   </div>
@@ -627,11 +616,11 @@ const TemplateOne: React.FC<Props> = ({
                   </span>
                   <div style={baseTextStyle}>
                     <span className="font-medium" style={titleStyle}>
-                      {award.title}
+                      {hl("Awards", idx, "title", award.title)}
                     </span>
                     <span>
-                      {award.issuedBy && ` — ${award.issuedBy}`}
-                      {award.year && ` (${award.year})`}
+                      {award.issuedBy && <> — {hl("Awards", idx, "issuedBy", award.issuedBy)}</>}
+                      {award.year && <> ({hl("Awards", idx, "year", award.year)})</>}
                     </span>
                   </div>
                 </div>
@@ -652,18 +641,18 @@ const TemplateOne: React.FC<Props> = ({
                 <div key={idx} className="mb-2">
                   <div className="flex justify-between items-baseline mb-0.5">
                     <h3 className="font-semibold" style={titleStyle}>
-                      {achievement.title}
+                      {hl("Achievements", idx, "title", achievement.title)}
                     </h3>
                     {achievement.date && (
                       <span className="text-sm" style={baseTextStyle}>
-                        {formatDate(achievement.date)}
+                        {hl("Achievements", idx, "date", formatDate(achievement.date))}
                       </span>
                     )}
                   </div>
                   {achievement.description && (
                     <div
                       className="resume-description"
-                      style={baseTextStyle}
+                      style={isFieldAdded("Achievements", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
                       dangerouslySetInnerHTML={{
                         __html: achievement.description,
                       }}
@@ -722,7 +711,7 @@ const TemplateOne: React.FC<Props> = ({
             <h2 style={headingStyle}>Languages</h2>
             {languages.length > 0 ? (
               <div className="grid grid-cols-2 gap-y-1 gap-x-6">
-                {languages.map((lang: any, idx) => {
+                {languages.map((lang: { language?: string; proficiency?: string } | string, idx) => {
                   const name =
                     typeof lang === "string" ? lang : lang.language;
                   const proficiency =
@@ -758,10 +747,10 @@ const TemplateOne: React.FC<Props> = ({
               hobbies.map((hobby, idx) => (
                 <div key={idx} className="mb-1.5">
                   <span className="font-medium" style={titleStyle}>
-                    {hobby.name}
+                    {hl("Hobbies", idx, "name", hobby.name)}
                   </span>
                   {hobby.description && (
-                    <span style={baseTextStyle}> — {hobby.description}</span>
+                    <span style={baseTextStyle}> — {hl("Hobbies", idx, "description", hobby.description)}</span>
                   )}
                 </div>
               ))
@@ -787,18 +776,18 @@ const TemplateOne: React.FC<Props> = ({
                     <span className="mr-2">•</span>
                     <div>
                       <span className="font-medium" style={titleStyle}>
-                        {interest.name}
+                        {hl("Interests", idx, "name", interest.name)}
                       </span>
                       {interest.category && (
                         <span className="text-sm" style={baseTextStyle}>
                           {" "}
-                          ({interest.category})
+                          ({hl("Interests", idx, "category", interest.category)})
                         </span>
                       )}
                       {interest.description && (
                         <div
                           className="text-sm resume-description"
-                          style={baseTextStyle}
+                          style={isFieldAdded("Interests", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
                           dangerouslySetInnerHTML={{
                             __html: interest.description,
                           }}
@@ -821,21 +810,29 @@ const TemplateOne: React.FC<Props> = ({
             <h2 style={headingStyle}>Volunteering</h2>
             {volunteering.length > 0 ? (
               volunteering.map((vol, idx) => (
-                <div key={idx} className="mb-2">
+                <div key={idx} className="mb-3">
                   <div className="flex justify-between items-baseline">
                     <div>
                       <h3 className="font-semibold" style={titleStyle}>
-                        {vol.role}
+                        {hl("Volunteering", idx, "role", vol.role)}
                       </h3>
                       <p className="text-sm" style={baseTextStyle}>
-                        {vol.organization}
+                        {hl("Volunteering", idx, "organization", vol.organization)}
                       </p>
                     </div>
-                    <span className="text-sm" style={baseTextStyle}>
-                      {formatDate(vol.startDate)} –{" "}
-                      {formatDate(vol.endDate)}
-                    </span>
+                    {vol.duration && (
+                      <span className="text-sm" style={baseTextStyle}>
+                        {hl("Volunteering", idx, "duration", vol.duration)}
+                      </span>
+                    )}
                   </div>
+                  {vol.description && (
+                    <div
+                      className="text-sm mt-1"
+                      style={isFieldAdded("Volunteering", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
+                      dangerouslySetInnerHTML={{ __html: vol.description }}
+                    />
+                  )}
                 </div>
               ))
             ) : (

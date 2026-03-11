@@ -111,7 +111,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
               <div className="text-right flex flex-col gap-1">
                 {personalInfo.phone && (
                   <div className="flex items-center justify-end text-sm" style={baseTextStyle}>
-                    <span>{personalInfo.phone}</span>
+                    <span>{personalInfo.countryCode}{personalInfo.phone}</span>
                   </div>
                 )}
                 {personalInfo.email && (
@@ -349,15 +349,20 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
               {education.map((edu, idx) => (
                 <div key={idx} className="mb-3">
                   <div className="flex justify-between items-baseline">
-                    <div>
+                    <div className="flex-1">
                       <h3 className="font-semibold" style={titleStyle}>
                         {edu.degree}
                       </h3>
                       <p className="text-sm" style={baseTextStyle}>
                         {edu.school}
                       </p>
+                      {edu.scoreType && edu.scoreValue && (
+                        <p className="text-xs mt-1" style={baseTextStyle}>
+                          {edu.scoreType}: {edu.scoreValue}{edu.scoreType === "Percentage" ? "%" : ""}
+                        </p>
+                      )}
                     </div>
-                    <span className="text-sm" style={baseTextStyle}>
+                    <span className="text-sm text-right ml-4" style={baseTextStyle}>
                       {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
                     </span>
                   </div>
@@ -675,9 +680,6 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
 
                   return (
                     <div key={field.id} className="mb-2">
-                      <div className="font-semibold mb-1" style={titleStyle}>
-                        {field.fieldName}:
-                      </div>
                       {field.fieldType === "list" ? (
                         <ul className="list-disc pl-5" style={baseTextStyle}>
                           {(field.value as string[])

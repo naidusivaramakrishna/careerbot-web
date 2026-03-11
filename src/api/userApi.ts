@@ -98,6 +98,48 @@ export interface ApiResponse<T> {
     status?: number;
 }
 
+// Auto-fill request types (all fields optional)
+export interface EducationAutoFillRequest {
+    degree?: string;
+    institution?: string;
+    stream?: string;
+    cgpa?: number;
+    start_date?: string;
+    end_date?: string;
+}
+
+export interface ExperienceAutoFillRequest {
+    job_title?: string;
+    company?: string;
+    job_type?: string;
+    location?: string;
+    start_date?: string;
+    end_date?: string;
+    description?: string;
+}
+
+export interface SkillAutoFillRequest {
+    name?: string;
+}
+
+export interface CertificationAutoFillRequest {
+    certification_name?: string;
+    issuer?: string;
+    start_date?: string;
+    end_date?: string;
+    credential_id?: string;
+}
+
+export interface ProjectAutoFillRequest {
+    project_name?: string;
+    role?: string;
+    technologies?: string;
+    start_date?: string;
+    end_date?: string;
+    project_link?: string;
+    description?: string;
+}
+
 // ==================== PROFILE API FUNCTIONS ====================
 
 /**
@@ -617,8 +659,11 @@ export const getProfilePicture = async (): Promise<ProfilePictureResponse> => {
     try {
         const response = await httpClient.get<ProfilePictureResponse>("/profile/picture");
         return response.data;
-    } catch (error) {
-        logger.error("Error fetching profile picture:", error);
+    } catch (error: unknown) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError?.response?.status !== 404) {
+            logger.error("Error fetching profile picture:", error);
+        }
         throw error;
     }
 };
@@ -634,4 +679,93 @@ export const deleteProfilePicture = async (): Promise<{ message: string }> => {
         logger.error("Error deleting profile picture:", error);
         throw error;
     }
-}
+};
+
+// ==================== AUTO-FILL API FUNCTIONS ====================
+
+/**
+ * Add education from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addEducationAutoFill = async (educationData: EducationAutoFillRequest): Promise<Education> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Education>>(
+            '/profile/education/auto-fill',
+            educationData as unknown as Record<string, unknown>
+        );
+        return response.data.data || response.data as unknown as Education;
+    } catch (error) {
+        logger.error('Error adding education via auto-fill:', error);
+        throw error;
+    }
+};
+
+/**
+ * Add experience from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addExperienceAutoFill = async (experienceData: ExperienceAutoFillRequest): Promise<Experience> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Experience>>(
+            '/profile/experience/auto-fill',
+            experienceData as unknown as Record<string, unknown>
+        );
+        return response.data.data || response.data as unknown as Experience;
+    } catch (error) {
+        logger.error('Error adding experience via auto-fill:', error);
+        throw error;
+    }
+};
+
+/**
+ * Add skill from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addSkillAutoFill = async (skillData: SkillAutoFillRequest): Promise<Skill> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Skill>>(
+            '/profile/skills/auto-fill',
+            skillData as unknown as Record<string, unknown>
+        );
+        return response.data.data || response.data as unknown as Skill;
+    } catch (error) {
+        logger.error('Error adding skill via auto-fill:', error);
+        throw error;
+    }
+};
+
+/**
+ * Add certification from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addCertificationAutoFill = async (certificationData: CertificationAutoFillRequest): Promise<Certification> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Certification>>(
+            '/profile/certifications/auto-fill',
+            certificationData as unknown as Record<string, unknown>
+        );
+        return response.data.data || response.data as unknown as Certification;
+    } catch (error) {
+        logger.error('Error adding certification via auto-fill:', error);
+        throw error;
+    }
+};
+
+/**
+ * Add project from auto-fill (resume/LinkedIn import)
+ * All fields are optional
+ */
+export const addProjectAutoFill = async (projectData: ProjectAutoFillRequest): Promise<Projects> => {
+    try {
+        const response = await httpClient.post<ApiResponse<Projects>>(
+            '/profile/projects/auto-fill',
+            projectData as unknown as Record<string, unknown>
+        );
+        return response.data.data || response.data as unknown as Projects;
+    } catch (error) {
+        logger.error('Error adding project via auto-fill:', error);
+        throw error;
+    }
+};
+
+

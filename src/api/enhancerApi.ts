@@ -94,6 +94,7 @@ async function safeDelete<T = unknown>(url: string, config?: AxiosRequestConfig)
 
 export interface EnhanceResumeRequest {
   resume_id?: string;
+  ats_breakdown?: string;
   resume?: Record<string, unknown>;
   target_jd?: string | string[];
   job_description?: string;
@@ -270,10 +271,17 @@ export async function getEnhancementHistory(limit: number = 20): Promise<Enhance
  */
 export async function downloadEnhancedResume(
   enhanced_id: string,
-  format: "pdf" | "docx" = "pdf"
+  format: "pdf" | "docx" = "pdf",
+  template?: string
 ): Promise<Blob> {
   try {
-    const response = await httpClient.get<Blob>(`/resume/enhance/${enhanced_id}/download?format=${format}`, {
+    // When a template is selected, set preserve_template=false so backend uses the chosen template
+    const preserveTemplate = template ? "false" : "true";
+    const params = new URLSearchParams({ format, preserve_template: preserveTemplate });
+    if (template) {
+      params.set("template_id", template);
+    }
+    const response = await httpClient.get<Blob>(`/resume/enhance/${enhanced_id}/download?${params.toString()}`, {
       responseType: 'blob',
     });
     return response.data as Blob;

@@ -88,44 +88,14 @@
 
 "use client";
 
-import { useEffect, useRef } from "react";
 import JobCard from "../job-cards/JobCard";
 
 type JobListProps = {
   jobs: any[];
   onBotClick: (job: any) => void;
-  fetchMoreJobs: () => void;   // 👈 pagination function
-  hasMore: boolean;           // 👈 more data available or not
-  loading: boolean;           // 👈 loading state
 };
 
-export default function JobList({
-  jobs,
-  onBotClick,
-  fetchMoreJobs,
-  hasMore,
-  loading,
-}: JobListProps) {
-  const observerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!hasMore || loading) return;
-    if (!observerRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          fetchMoreJobs(); // 🔥 infinite scroll trigger
-        }
-      },
-      { threshold: 1 }
-    );
-
-    observer.observe(observerRef.current);
-
-    return () => observer.disconnect();
-  }, [fetchMoreJobs, hasMore, loading]);
-
+export default function JobList({ jobs, onBotClick }: JobListProps) {
   return (
     <div className="space-y-4">
       {jobs.map((job) => (
@@ -135,16 +105,6 @@ export default function JobList({
           onBotClick={() => onBotClick(job)}
         />
       ))}
-
-      {/* 👇 Scroll trigger (UI change kaadu, invisible) */}
-      <div ref={observerRef} />
-
-      {/* 👇 Bottom loader (optional, minimal UI impact) */}
-      {loading && (
-        <p className="text-center text-sm text-gray-500">
-          Loading more jobs...
-        </p>
-      )}
     </div>
   );
 }

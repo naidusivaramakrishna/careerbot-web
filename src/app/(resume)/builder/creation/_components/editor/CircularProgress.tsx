@@ -3,25 +3,22 @@ import React from "react";
 
 interface CircularProgressProps {
   percentage: number;
+  totalSections?: number;
   size?: number;
   strokeWidth?: number;
-  totalSections?: number; // ✅ Add prop for total sections count
-  completedSections?: number; // ✅ Add prop for completed sections count
 }
 
 const CircularProgress: React.FC<CircularProgressProps> = ({
   percentage,
+  totalSections = 16,
   size = 56,
-  strokeWidth = 4,
-  totalSections = 16, // ✅ Default to 16 for backward compatibility
-  completedSections: completedSectionsProp
+  strokeWidth = 4
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-  // ✅ Use provided completedSections or calculate from percentage
-  const completedSections = completedSectionsProp ?? Math.round((percentage / 100) * totalSections);
+  const completedSections = Math.round((percentage / 100) * totalSections);
 
   return (
     <div className="flex items-center justify-center">

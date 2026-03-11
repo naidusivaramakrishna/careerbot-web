@@ -1,8 +1,10 @@
 import { useState, useCallback, ChangeEvent } from 'react'
 import { toast } from 'sonner'
-import { createJob, uploadJobLogo, type CreateJobRequest } from '@/api/adminJobsApi'
+import { createJob, updateJob, uploadJobLogo, type CreateJobRequest, type UpdateJobRequest } from '@/api/adminJobsApi'
 import type { JobFormData } from '../_types/jobFormTypes'
 import { logger } from '@/lib/logger'
+
+type ErrorResponse = { response?: { data?: { error?: { details?: { validation_errors?: Array<{ field: string; message: string }> }; message?: string } } } }
 
 const defaultForm: JobFormData = {
     jobTitle: "",
@@ -26,16 +28,22 @@ const defaultForm: JobFormData = {
     experienceMax: "5",
     logo: null,
     logoFile: null,
-    companyLogoUrl: "",
 }
 
-export const useJobForm = (initialData?: Partial<JobFormData>) => {
+interface UseJobFormProps {
+    initialData?: Partial<JobFormData>
+    isEdit?: boolean
+    jobId?: string
+}
+
+export const useJobForm = ({ initialData, isEdit = false, jobId }: UseJobFormProps = {}) => {
     const [form, setForm] = useState<JobFormData>({
         ...defaultForm,
         ...initialData,
     })
     const [skillInput, setSkillInput] = useState("")
     const [publishing, setPublishing] = useState(false)
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
     const updateField = useCallback(<K extends keyof JobFormData>(
         key: K,
@@ -44,10 +52,7 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
         setForm((prev) => ({ ...prev, [key]: value }))
     }, [])
 
-    const handleLogoChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
-
+    const processLogoFile = useCallback((file: File) => {
         if (!file.type.startsWith('image/')) {
             toast.error('Please upload an image file')
             return
@@ -67,6 +72,12 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
         reader.readAsDataURL(file)
     }, [updateField])
 
+    const handleLogoChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        processLogoFile(file)
+    }, [processLogoFile])
+
     const addSkill = useCallback(() => {
         const value = skillInput.trim()
         if (!value) return
@@ -84,55 +95,25 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
         updateField("skills", newSkills)
     }, [form.skills, updateField])
 
-    const validateForm = useCallback((): boolean => {
-        if (!form.jobTitle.trim()) {
-            toast.error('Job title is required')
-            return false
-        }
-        if (!form.company.trim()) {
-            toast.error('Company name is required')
-            return false
-        }
-        if (!form.location.trim()) {
-            toast.error('Location is required')
-            return false
-        }
-        if (!form.salaryMin || !form.salaryMax) {
-            toast.error('Salary range is required')
-            return false
-        }
-        if (Number(form.salaryMin) >= Number(form.salaryMax)) {
-            toast.error('Maximum salary must be greater than minimum salary')
-            return false
-        }
-        if (!form.jobDescription.trim()) {
-            toast.error('Job description is required')
-            return false
-        }
-        return true
-    }, [form])
-
     const uploadLogoIfNeeded = useCallback(async (): Promise<string | undefined> => {
-        let logoUrl = form.companyLogoUrl || undefined
-
         if (form.logoFile) {
-            toast.loading('Uploading company logo...')
-            logoUrl = await uploadJobLogo(form.logoFile)
-            toast.dismiss()
-            toast.success('Logo uploaded successfully')
+            return await uploadJobLogo(form.logoFile)
         }
 
-        return logoUrl
-    }, [form.companyLogoUrl, form.logoFile])
+        return undefined
+    }, [form.logoFile])
 
-    const buildJobData = useCallback((logoUrl: string | undefined, status: 'active' | 'draft'): CreateJobRequest => {
-        return {
+    const buildJobData = useCallback((logoUrl: string | undefined, status: 'active' | 'draft'): CreateJobRequest | UpdateJobRequest => {
+        const salaryMinNum = form.salaryMin ? Number(form.salaryMin) : undefined
+        const salaryMaxNum = form.salaryMax ? Number(form.salaryMax) : undefined
+
+        const jobData: CreateJobRequest = {
             job_title: form.jobTitle,
             company: form.company,
             location: form.location || (status === 'draft' ? 'TBD' : form.location),
             work_mode: form.workMode,
-            salary_min: Number(form.salaryMin) || 0,
-            salary_max: Number(form.salaryMax) || 0,
+            salary_min: salaryMinNum,
+            salary_max: salaryMaxNum,
             job_type: form.jobType,
             number_of_openings: Number(form.openings),
             job_description: form.jobDescription || (status === 'draft' ? 'To be updated' : form.jobDescription),
@@ -146,53 +127,88 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
             experience_max: Number(form.experienceMax) || undefined,
             company_logo_url: logoUrl,
         }
+        return jobData
     }, [form])
 
     const publishJob = useCallback(async (onSuccess: () => void) => {
-        if (!validateForm()) return
-
         try {
             setPublishing(true)
+            setFieldErrors({})
             const logoUrl = await uploadLogoIfNeeded()
             const jobData = buildJobData(logoUrl, 'active')
 
             toast.loading('Publishing job...')
-            await createJob(jobData)
+
+            if (isEdit && jobId) {
+                await updateJob(jobId, jobData as UpdateJobRequest)
+                logger.info(`Job updated successfully: ${jobId}`)
+            } else {
+                await createJob(jobData as CreateJobRequest)
+                logger.info('Job created successfully')
+            }
+
             toast.dismiss()
-            toast.success('Job published successfully!')
+            toast.success(`Job ${isEdit ? 'updated' : 'published'} successfully!`)
             onSuccess()
         } catch (error: unknown) {
             logger.error('Error publishing job:', error)
             toast.dismiss()
-            const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to publish job'
-            toast.error(errorMessage)
+
+            const errorData = (error as ErrorResponse)?.response?.data?.error
+            if (errorData?.details?.validation_errors) {
+                const errors: Record<string, string> = {}
+                errorData.details.validation_errors.forEach((err: { field: string; message: string }) => {
+                    errors[err.field] = err.message
+                })
+                setFieldErrors(errors)
+            } else {
+                const errorMessage = errorData?.message || 'Failed to publish job'
+                toast.error(errorMessage)
+            }
         } finally {
             setPublishing(false)
         }
-    }, [validateForm, uploadLogoIfNeeded, buildJobData])
+    }, [uploadLogoIfNeeded, buildJobData, isEdit, jobId])
 
     const saveDraft = useCallback(async (onSuccess: () => void) => {
-        if (!form.jobTitle.trim() || !form.company.trim()) {
-            toast.error('Job title and company name are required')
-            return
-        }
-
         try {
             setPublishing(true)
+            setFieldErrors({})
             const logoUrl = await uploadLogoIfNeeded()
             const jobData = buildJobData(logoUrl, 'draft')
 
-            await createJob(jobData)
-            toast.success('Job saved as draft')
+            if (isEdit && jobId) {
+                await updateJob(jobId, jobData as UpdateJobRequest)
+                logger.info(`Job draft updated successfully: ${jobId}`)
+            } else {
+                await createJob(jobData as CreateJobRequest)
+                logger.info('Job draft created successfully')
+            }
+
+            toast.success(`Job ${isEdit ? 'updated' : 'saved'} as draft`)
             onSuccess()
         } catch (error: unknown) {
             logger.error('Error saving draft:', error)
-            const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to save draft'
-            toast.error(errorMessage)
+
+            const errorData = (error as ErrorResponse)?.response?.data?.error
+            if (errorData?.details?.validation_errors) {
+                const errors: Record<string, string> = {}
+                errorData.details.validation_errors.forEach((err: { field: string; message: string }) => {
+                    errors[err.field] = err.message
+                })
+                setFieldErrors(errors)
+            } else {
+                const errorMessage = errorData?.message || 'Failed to save draft'
+                toast.error(errorMessage)
+            }
         } finally {
             setPublishing(false)
         }
-    }, [form.jobTitle, form.company, uploadLogoIfNeeded, buildJobData])
+    }, [uploadLogoIfNeeded, buildJobData, isEdit, jobId])
+
+    const getFieldError = (field: string): string | undefined => {
+        return fieldErrors[field]
+    }
 
     return {
         form,
@@ -201,9 +217,13 @@ export const useJobForm = (initialData?: Partial<JobFormData>) => {
         publishing,
         updateField,
         handleLogoChange,
+        processLogoFile,
         addSkill,
         removeSkill,
         publishJob,
-        saveDraft
+        saveDraft,
+        fieldErrors,
+        setFieldErrors,
+        getFieldError
     }
 }

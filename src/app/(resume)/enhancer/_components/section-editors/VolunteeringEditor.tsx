@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
+import RichTextEditorField from "./RichTextEditorField";
 
 interface VolunteeringItemForm {
   organization: string;
   role: string;
-  startDate: string;
-  endDate: string;
+  duration: string;
+  description: string;
 }
 
 interface Props {
@@ -20,8 +21,8 @@ interface Props {
 const emptyItem: VolunteeringItemForm = {
   organization: "",
   role: "",
-  startDate: "",
-  endDate: "",
+  duration: "",
+  description: "",
 };
 
 export default function VolunteeringEditor({ formData, setFormData }: Props) {
@@ -33,7 +34,7 @@ export default function VolunteeringEditor({ formData, setFormData }: Props) {
   const activeIndex = formData?.activeIndex ?? 0;
   const current: VolunteeringItemForm = items[activeIndex] || emptyItem;
 
-  const { organization, role, startDate, endDate } = current;
+  const { organization, role, duration, description } = current;
 
   /* ================= HELPERS ================= */
   const updateCurrent = (patch: Partial<VolunteeringItemForm>) => {
@@ -44,28 +45,6 @@ export default function VolunteeringEditor({ formData, setFormData }: Props) {
       items: nextItems,
       activeIndex,
     });
-  };
-
-  const formatDateToDisplay = (date: string): string => {
-    if (!date) return "";
-    // Handle YYYY-MM format and convert to MM/YY
-    if (date.includes("-")) {
-      const [year, month] = date.split("-");
-      return `${month}/${year.slice(-2)}`;
-    }
-    return date;
-  };
-
-  const parseDisplayDate = (displayDate: string): string => {
-    if (!displayDate) return "";
-    // Handle MM/YY format and convert to YYYY-MM
-    const parts = displayDate.split("/");
-    if (parts.length === 2) {
-      const month = parts[0].padStart(2, "0");
-      const year = parts[1].length === 2 ? `20${parts[1]}` : parts[1];
-      return `${year}-${month}`;
-    }
-    return displayDate;
   };
 
   return (
@@ -98,36 +77,28 @@ export default function VolunteeringEditor({ formData, setFormData }: Props) {
           />
         </div>
 
-        {/* Start Date & End Date */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-semibold mb-2 text-gray-700">
-              Start date
-            </label>
-            <input
-              type="month"
-              value={startDate}
-              onChange={(e) => updateCurrent({ startDate: e.target.value })}
-              placeholder="MM/YY"
-              className="w-full px-4 py-3 rounded-xl bg-gray-100 border border-transparent focus:border-blue-700 outline-none transition-colors"
-            />
-            <p className="text-xs text-gray-500 mt-1">MM/YY</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold mb-2 text-gray-700">
-              End date
-            </label>
-            <input
-              type="month"
-              value={endDate}
-              onChange={(e) => updateCurrent({ endDate: e.target.value })}
-              placeholder="MM/YY"
-              className="w-full px-4 py-3 rounded-xl bg-gray-100 border border-transparent focus:border-blue-700 outline-none transition-colors"
-            />
-            <p className="text-xs text-gray-500 mt-1">MM/YY</p>
-          </div>
+        {/* Duration */}
+        <div>
+          <label className="block text-sm font-semibold mb-2 text-gray-700">
+            Duration
+          </label>
+          <input
+            value={duration}
+            onChange={(e) => updateCurrent({ duration: e.target.value })}
+            placeholder="e.g., 2023 – Present or 2022 - 2023"
+            className="w-full px-4 py-3 rounded-xl bg-gray-100 border border-transparent focus:border-blue-700 outline-none transition-colors"
+          />
+          <p className="text-xs text-gray-500 mt-1">e.g., 2023 – Present</p>
         </div>
+
+        {/* Description */}
+        <RichTextEditorField
+          label="Description"
+          value={description}
+          onChange={(val) => updateCurrent({ description: val })}
+          placeholder="Describe your volunteer experience, responsibilities, and impact..."
+          minHeight="140px"
+        />
       </div>
 
       {/* ================= RIGHT SIDE - TIPS ================= */}

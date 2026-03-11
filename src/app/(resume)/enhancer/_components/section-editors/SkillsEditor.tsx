@@ -11,7 +11,7 @@ interface SkillsEditorProps {
 const skillInput =
   "w-full px-4 py-1.5 rounded-xl bg-gray-100 text-gray-900 placeholder-gray-400 " +
   "border border-transparent " +
-  "focus:outline-none focus:ring-0 transition-colors text-sm";
+  "focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors text-sm";
 
 const SkillsEditor: React.FC<SkillsEditorProps> = ({ formData, setFormData }) => {
   const categorizedSkills = formData.categorizedSkills || {

@@ -4,10 +4,24 @@ import { X } from "lucide-react";
 import Dropdown from "@/components/common/CustomDropdown";
 import { JobListQueryParams } from "@/api/adminJobsApi";
 
+type ErrorResponse = {
+    response?: {
+        data?: {
+            error?: {
+                message?: string
+                details?: {
+                    validation_errors?: Array<{ field?: string; message?: string }>
+                }
+            }
+            detail?: string
+        }
+    }
+}
+
 interface FilterModalProps {
     open: boolean;
     onClose: () => void;
-    onApply: (filters: JobListQueryParams) => void;
+    onApply: (filters: JobListQueryParams) => Promise<void>;
     onReset: () => void;
 }
 
@@ -27,8 +41,13 @@ const FilterModal: React.FC<FilterModalProps> = ({
         posted_from: undefined,
         posted_to: undefined,
     });
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
     if (!open) return null;
+
+    const getFieldError = (field: string): string | undefined => {
+        return fieldErrors[field];
+    };
 
     const handleWorkModeChange = (value: string) => {
         if (value === 'Work Mode' || value === 'All') {
@@ -52,8 +71,51 @@ const FilterModal: React.FC<FilterModalProps> = ({
         }
     };
 
-    const handleApply = () => {
-        onApply(filters);
+    const handleApply = async () => {
+        setFieldErrors({});
+        try {
+            // Call onApply - this will close the modal only if successful
+            await onApply(filters);
+        } catch (error: unknown) {
+            const err = error as ErrorResponse;
+            const validationErrors = err?.response?.data?.error?.details?.validation_errors;
+
+            if (validationErrors && Array.isArray(validationErrors)) {
+                const errors: Record<string, string> = {};
+                validationErrors.forEach((validation: { field?: string; message?: string }) => {
+                    // Extract field name from "query → salary_min" format
+                    let fieldName = validation.field?.split('→').pop()?.trim() || validation.field;
+
+                    // Map backend field names to frontend field names
+                    if (fieldName === 'minimum_views') fieldName = 'min_views';
+                    if (fieldName === 'minimum_applications') fieldName = 'min_applications';
+
+                    if (fieldName && validation.message) {
+                        errors[fieldName] = validation.message;
+                    }
+                });
+                setFieldErrors(errors);
+                // Don't re-throw - just keep modal open with errors displayed
+                return;
+            } else {
+                // Fallback to detail message
+                const errorDetail = err?.response?.data?.detail;
+                if (errorDetail && typeof errorDetail === 'string') {
+                    const fieldMatch = errorDetail.match(/^(\w+)\s/);
+                    if (fieldMatch) {
+                        const fieldName = fieldMatch[1];
+                        setFieldErrors(prev => ({
+                            ...prev,
+                            [fieldName]: errorDetail
+                        }));
+                    }
+                    // Don't re-throw - keep modal open
+                    return;
+                }
+            }
+            // If we couldn't handle the error, re-throw
+            throw error;
+        }
     };
 
     const handleReset = () => {
@@ -67,6 +129,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
             posted_from: undefined,
             posted_to: undefined,
         });
+        setFieldErrors({});
         onReset();
     };
 
@@ -131,14 +194,17 @@ const FilterModal: React.FC<FilterModalProps> = ({
                             <div>
                                 <input
                                     type="number"
-                                    value={filters.salary_min || ''}
+                                    value={filters.salary_min ?? ''}
                                     onChange={(e) => setFilters(prev => ({
                                         ...prev,
-                                        salary_min: e.target.value ? Number(e.target.value) : undefined
+                                        salary_min: e.target.value !== '' ? Number(e.target.value) : undefined
                                     }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm pr-10"
+                                    className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm pr-10 ${getFieldError('salary_min') ? 'border-2 border-red-500' : ''}`}
                                     placeholder="0"
                                 />
+                                {getFieldError('salary_min') && (
+                                    <p className="text-xs text-red-600 mt-1">{getFieldError('salary_min')}</p>
+                                )}
                             </div>
                         </div>
 
@@ -151,14 +217,17 @@ const FilterModal: React.FC<FilterModalProps> = ({
                             <div>
                                 <input
                                     type="number"
-                                    value={filters.salary_max || ''}
+                                    value={filters.salary_max ?? ''}
                                     onChange={(e) => setFilters(prev => ({
                                         ...prev,
-                                        salary_max: e.target.value ? Number(e.target.value) : undefined
+                                        salary_max: e.target.value !== '' ? Number(e.target.value) : undefined
                                     }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm pr-10"
+                                    className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm pr-10 ${getFieldError('salary_max') ? 'border-2 border-red-500' : ''}`}
                                     placeholder="0"
                                 />
+                                {getFieldError('salary_max') && (
+                                    <p className="text-xs text-red-600 mt-1">{getFieldError('salary_max')}</p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -166,31 +235,41 @@ const FilterModal: React.FC<FilterModalProps> = ({
                     {/* Min Views */}
                     <div className="flex flex-col gap-2">
                         <label className="text-lg font-semibold">Minimum Views</label>
-                        <input
-                            type="number"
-                            value={filters.min_views || ''}
-                            onChange={(e) => setFilters(prev => ({
-                                ...prev,
-                                min_views: e.target.value ? Number(e.target.value) : undefined
-                            }))}
-                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                            placeholder="0"
-                        />
+                        <div>
+                            <input
+                                type="number"
+                                value={filters.min_views ?? ''}
+                                onChange={(e) => setFilters(prev => ({
+                                    ...prev,
+                                    min_views: e.target.value !== '' ? Number(e.target.value) : undefined
+                                }))}
+                                className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('min_views') ? 'border-2 border-red-500' : ''}`}
+                                placeholder="0"
+                            />
+                            {getFieldError('min_views') && (
+                                <p className="text-xs text-red-600 mt-1">{getFieldError('min_views')}</p>
+                            )}
+                        </div>
                     </div>
 
                     {/* Min Applications */}
                     <div className="flex flex-col gap-2">
                         <label className="text-lg font-semibold">Minimum Applications</label>
-                        <input
-                            type="number"
-                            value={filters.min_applications || ''}
-                            onChange={(e) => setFilters(prev => ({
-                                ...prev,
-                                min_applications: e.target.value ? Number(e.target.value) : undefined
-                            }))}
-                            className="w-full p-2 bg-gray-100 rounded-md outline-none text-sm"
-                            placeholder="0"
-                        />
+                        <div>
+                            <input
+                                type="number"
+                                value={filters.min_applications ?? ''}
+                                onChange={(e) => setFilters(prev => ({
+                                    ...prev,
+                                    min_applications: e.target.value !== '' ? Number(e.target.value) : undefined
+                                }))}
+                                className={`w-full p-2 bg-gray-100 rounded-md outline-none text-sm ${getFieldError('min_applications') ? 'border-2 border-red-500' : ''}`}
+                                placeholder="0"
+                            />
+                            {getFieldError('min_applications') && (
+                                <p className="text-xs text-red-600 mt-1">{getFieldError('min_applications')}</p>
+                            )}
+                        </div>
                     </div>
 
                     {/* Date Range */}
@@ -208,8 +287,11 @@ const FilterModal: React.FC<FilterModalProps> = ({
                                         ...prev,
                                         posted_from: e.target.value
                                     }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md text-sm outline-none"
+                                    className={`w-full p-2 bg-gray-100 rounded-md text-sm outline-none ${getFieldError('posted_from') ? 'border-2 border-red-500' : ''}`}
                                 />
+                                {getFieldError('posted_from') && (
+                                    <p className="text-xs text-red-600 mt-1">{getFieldError('posted_from')}</p>
+                                )}
                             </div>
                         </div>
                         <div className="flex flex-col gap-2">
@@ -225,8 +307,11 @@ const FilterModal: React.FC<FilterModalProps> = ({
                                         ...prev,
                                         posted_to: e.target.value
                                     }))}
-                                    className="w-full p-2 bg-gray-100 rounded-md text-sm outline-none"
+                                    className={`w-full p-2 bg-gray-100 rounded-md text-sm outline-none ${getFieldError('posted_to') ? 'border-2 border-red-500' : ''}`}
                                 />
+                                {getFieldError('posted_to') && (
+                                    <p className="text-xs text-red-600 mt-1">{getFieldError('posted_to')}</p>
+                                )}
                             </div>
                         </div>
                     </div>

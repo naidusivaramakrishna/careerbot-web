@@ -3,11 +3,11 @@
  */
 
 // Cache for prefetched question data
-const questionCache = new Map<string, any>();
+const questionCache = new Map<string, CachedQuestion>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export interface CachedQuestion {
-  data: any;
+  data: Record<string, unknown>;
   timestamp: number;
   sectionName: string;
 }
@@ -18,7 +18,7 @@ export interface CachedQuestion {
 export async function prefetchNextSection(
   currentSectionName: string,
   sessionId: string,
-  fetchFunction: (sessionId: string) => Promise<any>
+  fetchFunction: (sessionId: string) => Promise<Record<string, unknown>>
 ): Promise<void> {
   try {
     const cacheKey = `${sessionId}_next_${currentSectionName}`;
@@ -34,13 +34,12 @@ export async function prefetchNextSection(
     questionCache.set(cacheKey, {
       data,
       timestamp: Date.now(),
-      sectionName: data.section_name,
+      sectionName: (data.section_name as string) || '',
     });
 
     // // console.log('✅ Prefetched next section data:', data.section_name);
-  } catch (error) {
+  } catch {
     // Silent fail for prefetch - don't block current page
-    // // console.warn('Prefetch failed:', error);
   }
 }
 
@@ -50,7 +49,7 @@ export async function prefetchNextSection(
 export function getCachedQuestion(
   sessionId: string,
   sectionName: string
-): any | null {
+): Record<string, unknown> | null {
   const cacheKey = `${sessionId}_${sectionName}`;
   const cached = questionCache.get(cacheKey);
 
@@ -71,7 +70,7 @@ export function getCachedQuestion(
 export function cacheCurrentQuestion(
   sessionId: string,
   sectionName: string,
-  data: any
+  data: Record<string, unknown>
 ): void {
   const cacheKey = `${sessionId}_${sectionName}`;
   questionCache.set(cacheKey, {
@@ -92,7 +91,7 @@ export function clearQuestionCache(): void {
  * Optimize router push with transition hints
  */
 export function optimizedRouterPush(
-  router: any,
+  router: { push: (path: string, options?: { prefetch?: boolean }) => void },
   path: string,
   options?: { prefetch?: boolean }
 ): void {
@@ -103,7 +102,7 @@ export function optimizedRouterPush(
 /**
  * Debounce function to prevent rapid repeated calls
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {

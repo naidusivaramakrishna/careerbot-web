@@ -1,0 +1,1016 @@
+================================================================================
+  CAREERBOT — BACKEND API SPECIFICATION
+  Dashboard, Subscription, Credits & Notifications
+  Generated: 2026-02-23  |  Version: 1.0
+================================================================================
+
+TABLE OF CONTENTS
+─────────────────
+  1.  General Conventions
+  2.  Authentication
+  3.  Dashboard Summary API
+  4.  Subscription / Plan APIs
+  5.  Credits & Quota APIs
+  6.  Billing & Invoice APIs
+  7.  Notification APIs
+  8.  Profile Completeness Logic  (Backend Computation)
+  9.  Recommended Step Priority Logic  (Backend Computation)
+  10. Credit Cost Reference Table
+  11. Credit Confirmation Modal Logic  (Frontend Reference)
+  12. Plan Tier Definitions
+  13. Error Response Format
+  14. Rate Limiting & Security Notes
+  15. Summary of All Endpoints
+
+
+================================================================================
+  1. GENERAL CONVENTIONS
+================================================================================
+
+  Base URL:        https://api.careerbot.in/api/v1
+  Content-Type:    application/json
+  Date format:     ISO 8601  (e.g.  2026-01-15T10:30:00.000Z)
+  Currency:        INR (Indian Rupee)
+  Auth header:     Authorization: Bearer <access_token>
+
+  All successful responses use HTTP 200 (or 201 for creation).
+  All error responses follow the unified error schema in Section 13.
+
+  Pagination default: page=1, limit=20
+
+
+================================================================================
+  2. AUTHENTICATION
+================================================================================
+
+  All endpoints listed in this document require a valid JWT Bearer token.
+  The token is obtained via the existing Auth APIs (login / Google OAuth).
+
+  Token expiry: 24 hours (access), 30 days (refresh)
+  Refresh endpoint: POST /api/v1/auth/refresh   (existing, not documented here)
+
+  If the token is expired or invalid, all endpoints return:
+    HTTP 401  { "error": "UNAUTHORIZED", "message": "Token expired or invalid" }
+
+
+================================================================================
+  3. DASHBOARD SUMMARY API
+================================================================================
+
+  This is the SINGLE API call the dashboard page makes on load.
+  It returns everything needed to render both the First-Time Dashboard and
+  the Full Analytics Dashboard.
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/dashboard/summary
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Returns the aggregated dashboard state for the authenticated user.
+    The frontend uses  progress.resume_uploaded  to decide which dashboard
+    variant to render.
+
+  Request:
+    Headers:
+      Authorization: Bearer <token>
+
+  Response Body (HTTP 200):
+  {
+    "user": {
+      "id":                  "string   — internal user UUID",
+      "name":                "string   — display name (first + last)",
+      "email":               "string   — primary email",
+      "profile_picture_url": "string?  — full URL or relative path (optional)"
+    },
+
+    "plan": {
+      "plan_id":            "string   — 'FREE' | 'PRO' | 'MAX'",
+      "plan_name":          "string   — 'Free' | 'Pro' | 'Max'",
+      "credits_total":      "number   — total credits allocated for current period",
+      "credits_remaining":  "number   — credits not yet consumed",
+      "plan_expires_at":    "string?  — ISO date; null for FREE (never expires)"
+    },
+
+    "profile": {
+      "completeness":    "number   — integer 0-100 (backend-computed, see Section 8)",
+      "missing_fields":  "string[] — human-readable list of incomplete fields"
+    },
+
+    "recommended_step": {
+      "step_number":    "number   — 0-5 (0 = upgrade prompt, 1-5 = career steps)",
+      "step_name":      "string   — short label (e.g. 'ATS Scan')",
+      "title":          "string   — card heading shown to user",
+      "description":    "string   — one-line explanation",
+      "credit_cost":    "number   — credits this action costs (0 = FREE)",
+      "estimated_time": "string?  — e.g. '~15 seconds' (optional)",
+      "cta_text":       "string   — button label",
+      "cta_path":       "string   — relative frontend route",
+      "icon":           "string?  — Lucide icon name hint (optional)"
+    },
+
+    "progress": {
+      "resume_uploaded":   "boolean — true if user has parsed/uploaded >= 1 resume",
+      "profile_completed": "boolean — true if completeness >= 60",
+      "ats_scan_done":     "boolean — true if user ran >= 1 ATS scan",
+      "resume_enhanced":   "boolean — true if user ran >= 1 enhancement",
+      "job_applied":       "boolean — true if user submitted >= 1 job application"
+    },
+
+    "usage_counts": {
+      "resumes_created":    "number — total resumes created (builder)",
+      "resumes_parsed":     "number — total resume parse operations",
+      "ats_scans":          "number — total ATS scans run",
+      "resumes_enhanced":   "number — total enhancement operations",
+      "job_matches":        "number — total job match analyses",
+      "job_applications":   "number — total applications submitted",
+      "assessments_taken":  "number — total communication assessments completed"
+    },
+
+    "best_scores": {
+      "ats_score":       "number? — highest ATS score achieved (0-100), null if never run",
+      "job_match_score": "number? — highest job match score (0-100), null if never run",
+      "interview_score": "number? — highest communication/interview score (0-100), null if never run"
+    },
+
+    "recent_activity": [
+      {
+        "id":              "string — unique activity log ID",
+        "feature":         "string — feature key (see Credit Cost table, Section 10)",
+        "feature_label":   "string — human-readable label (e.g. 'ATS Scan Completed')",
+        "credits_used":    "number — credits consumed (0 for free actions)",
+        "timestamp":       "string — ISO date of action",
+        "result_summary":  "string? — short result text (e.g. 'Score: 72/100') (optional)"
+      }
+    ]
+    // recent_activity: max 10 items, sorted descending by timestamp
+  }
+
+  Notes:
+    • recent_activity.feature values:
+        "resume_parse" | "ats_scan" | "enhancement" | "job_match" |
+        "english_assessment" | "profile_update" | "resume_create" |
+        "job_application" | "jd_parse" | "ai_review"
+
+    • If the user is brand new (no activity), return empty arrays and
+      null scores. The frontend handles graceful empty states.
+
+    • credits_remaining can be 0 but never negative on this endpoint.
+
+  Errors:
+    401 — Unauthorized (token missing / expired)
+    500 — Internal server error (return generic message, log details)
+
+
+================================================================================
+  4. SUBSCRIPTION / PLAN APIs
+================================================================================
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/subscription/plans
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Returns all available subscription plans for display on the pricing page.
+    No authentication required (public endpoint).
+
+  Response Body (HTTP 200):
+  {
+    "plans": [
+      {
+        "plan_id":       "string   — 'FREE' | 'PRO' | 'MAX'",
+        "plan_name":     "string   — display name",
+        "price_inr":     "number   — monthly price in INR (0 for FREE)",
+        "price_display": "string   — formatted string (e.g. 'Rs.999/mo')",
+        "credits":       "number   — credits granted per billing period",
+        "popular":       "boolean? — show 'POPULAR' badge",
+        "recommended":   "boolean? — show 'RECOMMENDED' badge",
+        "features": {
+          "resumes_limit":      "number | 'unlimited'",
+          "exports_limit":      "number | 'unlimited'",
+          "ats_scans_limit":    "number | 'unlimited'",
+          "job_matches_limit":  "number | 'unlimited'",
+          "assessments_limit":  "number | 'unlimited'",
+          "ai_features":        "'limited' | 'basic' | 'full' | 'full+api'",
+          "support":            "'community' | 'email' | 'priority' | 'dedicated'",
+          "additional":         "string[]? — extra feature bullet points"
+        }
+      }
+    ]
+  }
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/subscription/current
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Returns the authenticated user's active subscription details.
+    Used by plan settings page and upgrade flow.
+
+  Response Body (HTTP 200):
+  {
+    "plan_id":           "string  — current plan ID",
+    "plan_name":         "string  — current plan name",
+    "status":            "string  — 'active' | 'cancelled' | 'expired' | 'trial'",
+    "billing_cycle":     "string? — 'monthly' | 'yearly' (null for FREE)",
+    "started_at":        "string  — ISO date subscription started",
+    "expires_at":        "string? — ISO date; null for FREE plan",
+    "auto_renew":        "boolean — whether auto-renewal is enabled",
+    "cancelled_at":      "string? — ISO date if cancelled; null if not cancelled",
+    "credits_total":     "number  — credits allocated in current billing period",
+    "credits_used":      "number  — credits consumed in current billing period",
+    "credits_remaining": "number  — credits still available",
+    "next_reset_at":     "string? — ISO date of next credit reset (null for FREE)"
+  }
+
+  Subscription status rules:
+    'active'    — plan is active and within expiry date
+    'cancelled' — user cancelled; still active until expires_at
+    'expired'   — plan past expires_at; downgrade to FREE behavior
+    'trial'     — user is on a trial period (if offered)
+
+  ────────────────────────────────────────────────────────────────────────────
+  POST  /api/v1/subscription/upgrade
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Initiates an upgrade to a paid plan. Returns a Razorpay checkout URL.
+    The frontend redirects the user to complete payment on Razorpay.
+
+  Request Body:
+  {
+    "plan_id":       "string  — 'PRO' | 'MAX'",
+    "billing_cycle": "string? — 'monthly' (default) | 'yearly'"
+  }
+
+  Response Body (HTTP 200):
+  {
+    "success":      true,
+    "checkout_url": "string  — Razorpay checkout URL",
+    "order_id":     "string  — Razorpay order ID (for post-payment verification)"
+  }
+
+  Errors:
+    400 — Invalid plan_id or already on this plan
+    402 — Payment initiation failed on Razorpay
+
+  ────────────────────────────────────────────────────────────────────────────
+  POST  /api/v1/subscription/cancel
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Cancels the user's subscription at end of current billing period.
+    Access and credits remain until expires_at.
+
+  Request Body:
+  {
+    "reason": "string? — cancellation reason (optional, for internal analytics)"
+  }
+
+  Response Body (HTTP 200):
+  {
+    "success":    true,
+    "expires_at": "string  — ISO date when plan access ends",
+    "message":    "string  — user-facing confirmation message"
+  }
+
+  ────────────────────────────────────────────────────────────────────────────
+  POST  /api/v1/subscription/webhook   (Razorpay Webhook)
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Receives Razorpay payment events. Backend MUST verify HMAC-SHA256
+    signature before processing. Used to activate upgrades after payment.
+
+  Headers:
+    X-Razorpay-Signature: <hmac_sha256_signature>
+
+  Request Body: Standard Razorpay webhook payload
+
+  Supported events:
+    payment.captured  — Payment succeeded → activate plan + credit account
+    payment.failed    — Payment failed → send notification to user
+    subscription.cancelled — Razorpay-initiated cancel
+
+  Response: HTTP 200  { "status": "ok" }
+
+  Behaviour on payment.captured:
+    1. Verify signature; reject (HTTP 400) if invalid
+    2. Look up order_id → user
+    3. Update user plan: plan_id, credits_total, credits_remaining, expires_at
+    4. Set started_at, auto_renew = true
+    5. Create notification (type: 'credit', title: 'Plan Activated')
+    6. Return { "status": "ok" }
+
+  Notes:
+    • Idempotent — processing the same order_id twice must not double-credit
+    • Log all webhook payloads for audit trail
+
+
+================================================================================
+  5. CREDITS & QUOTA APIs
+================================================================================
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/credits/balance
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Returns current credit balance only. Lightweight — no history.
+    Used by the Header credit badge. Recommended to cache 30s server-side.
+
+  Response Body (HTTP 200):
+  {
+    "credits_remaining":  "number  — credits available to spend now",
+    "credits_total":      "number  — credits allocated for this billing period",
+    "plan_id":            "string  — 'FREE' | 'PRO' | 'MAX'",
+    "plan_name":          "string  — human-readable plan name",
+    "plan_expires_at":    "string? — ISO date; null for FREE"
+  }
+
+  Notes:
+    The frontend Header also listens for the custom DOM event 'credits-updated'
+    (dispatched after each feature use) so the badge stays live without polling.
+    Structure of event detail: { remaining: number, total: number }
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/credits/usage
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Returns paginated credit usage history for the user.
+    Used on the Credits / Usage History settings page.
+
+  Query Parameters:
+    page     integer   default: 1
+    limit    integer   default: 20  (max: 100)
+    feature  string?   filter by feature key (optional)
+    from     string?   ISO date — start of date range (optional)
+    to       string?   ISO date — end of date range (optional)
+
+  Response Body (HTTP 200):
+  {
+    "total": "number — total log entries matching filters",
+    "items": [
+      {
+        "id":             "string  — unique log entry ID",
+        "user_id":        "string  — user UUID",
+        "feature":        "string  — feature key (see Section 10)",
+        "feature_label":  "string  — human-readable name (e.g. 'ATS Scan')",
+        "credits_used":   "number  — credits deducted",
+        "tokens_used":    "number  — LLM tokens consumed (INTERNAL ONLY)",
+        "cost_inr":       "number  — platform cost in INR (INTERNAL ONLY)",
+        "timestamp":      "string  — ISO date of usage",
+        "from_cache":     "boolean — true if served from cache (no AI cost incurred)",
+        "details":        "object? — feature-specific metadata (optional)"
+      }
+    ],
+    "pagination": {
+      "page":        "number",
+      "limit":       "number",
+      "total_pages": "number",
+      "has_next":    "boolean",
+      "has_prev":    "boolean"
+    }
+  }
+
+  IMPORTANT:
+    tokens_used and cost_inr are INTERNAL platform metrics.
+    Do NOT expose them in any user-facing UI or public API response.
+    They are included here for admin analytics only.
+
+  ────────────────────────────────────────────────────────────────────────────
+  POST  /api/v1/credits/deduct
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Internal service-to-service endpoint. Called by backend feature services
+    after a billable AI action completes successfully.
+    NOT accessible by the user's frontend JWT — requires service account auth.
+
+  Request Body:
+  {
+    "user_id":     "string  — user UUID",
+    "feature":     "string  — feature key from CREDIT_COSTS table (Section 10)",
+    "tokens_used": "number  — LLM tokens consumed",
+    "cost_inr":    "number  — actual INR cost to platform",
+    "from_cache":  "boolean — was result served from cache?",
+    "details":     "object? — feature-specific metadata for usage log"
+  }
+
+  Response Body (HTTP 200):
+  {
+    "success":           true,
+    "credits_deducted":  "number — credits that were deducted",
+    "credits_remaining": "number — user balance after deduction",
+    "log_id":            "string — ID of the created usage log entry"
+  }
+
+  Deduction rules:
+    • Credits are deducted AFTER a successful AI operation, never before.
+    • If AI operation fails, do NOT call this endpoint.
+    • Cached results (from_cache: true) still deduct credits — cache is
+      transparent to the user. Platform just had $0 AI cost.
+
+  Errors:
+    402 — Insufficient credits:
+          {
+            "error":             "INSUFFICIENT_CREDITS",
+            "credits_required":  10,
+            "credits_remaining": 3
+          }
+    400 — Unknown feature key
+
+  ────────────────────────────────────────────────────────────────────────────
+  POST  /api/v1/credits/check
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Pre-checks if the authenticated user has enough credits for a feature.
+    Called by the frontend credit confirmation modal before showing it.
+
+  Request Body:
+  {
+    "feature": "string — feature key (see Section 10)"
+  }
+
+  Response Body (HTTP 200):
+  {
+    "can_proceed":       "boolean — true if credits_remaining >= credit_cost",
+    "credit_cost":       "number  — cost of this feature in credits",
+    "credits_remaining": "number  — user's current balance",
+    "balance_after":     "number  — remaining credits if action proceeds",
+    "is_low_balance":    "boolean — true if balance_after < (credit_cost * 2)"
+  }
+
+
+================================================================================
+  6. BILLING & INVOICE APIs
+================================================================================
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/billing/history
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Returns the user's payment history and invoices.
+    Used on the Billing section of user settings.
+
+  Query Parameters:
+    page    integer  default: 1
+    limit   integer  default: 10
+
+  Response Body (HTTP 200):
+  {
+    "invoices": [
+      {
+        "id":              "string  — invoice UUID",
+        "invoice_number":  "string  — human-readable (e.g. 'INV-2026-0042')",
+        "plan_name":       "string  — plan purchased",
+        "amount_inr":      "number  — amount paid",
+        "status":          "string  — 'paid' | 'pending' | 'failed' | 'refunded'",
+        "payment_date":    "string  — ISO date of payment",
+        "payment_method":  "string? — e.g. 'Razorpay', 'Card ending 4242'",
+        "invoice_pdf_url": "string? — URL to download PDF invoice"
+      }
+    ],
+    "pagination": {
+      "page":        "number",
+      "limit":       "number",
+      "total_pages": "number"
+    }
+  }
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/billing/invoice/:invoice_id/download
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Returns a signed URL to download the invoice PDF.
+    URL expires in 15 minutes.
+
+  Response Body (HTTP 200):
+  {
+    "download_url": "string  — pre-signed S3 / cloud storage URL",
+    "expires_at":   "string  — ISO date when download URL expires"
+  }
+
+
+================================================================================
+  7. NOTIFICATION APIs
+================================================================================
+
+  Notification types (matches frontend Header.tsx):
+    'ats'     — ATS scan results
+    'resume'  — Resume enhancement / build completion
+    'job'     — New job match or application status update
+    'profile' — Profile completion prompts
+    'credit'  — Low balance warnings, plan expiry, payment alerts
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/notifications
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Returns user's notifications sorted by timestamp descending.
+    Used by Header bell dropdown and the Notifications Center page.
+
+  Query Parameters:
+    page    integer   default: 1
+    limit   integer   default: 20  (max: 50)
+    unread  boolean?  if true, return only unread notifications
+    type    string?   filter by type: 'ats'|'resume'|'job'|'profile'|'credit'
+
+  Response Body (HTTP 200):
+  {
+    "unread_count": "number — total unread across ALL pages (for badge)",
+    "notifications": [
+      {
+        "id":          "string  — unique notification UUID",
+        "type":        "string  — 'ats' | 'resume' | 'job' | 'profile' | 'credit'",
+        "title":       "string  — short heading (max 60 chars)",
+        "body":        "string  — detail text (max 120 chars)",
+        "action_url":  "string? — relative frontend route on click (optional)",
+        "timestamp":   "string  — ISO date notification was created",
+        "read":        "boolean — whether user has seen this notification",
+        "metadata":    "object? — optional extra data (e.g. ats_score, job_id)"
+      }
+    ],
+    "pagination": {
+      "page":        "number",
+      "limit":       "number",
+      "total_pages": "number",
+      "has_next":    "boolean",
+      "has_prev":    "boolean"
+    }
+  }
+
+  Notification body copy examples (use these for consistency):
+    ats:     "Your resume scored 82/100. See the detailed report."
+    resume:  "AI boosted 5 bullet points in your Work Experience section."
+    job:     "3 new roles match your profile — Software Engineer at TechCorp."
+    profile: "Add your skills to unlock Job Match and Interview Prep."
+    credit:  "You have 12 credits left. Upgrade your plan to keep going."
+
+  ────────────────────────────────────────────────────────────────────────────
+  GET  /api/v1/notifications/count
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Lightweight poll endpoint — returns only the unread count.
+    Used by Header to refresh the badge without fetching the full list.
+    Recommended polling interval: 60 seconds.
+
+  Response Body (HTTP 200):
+  {
+    "unread_count": "number"
+  }
+
+  ────────────────────────────────────────────────────────────────────────────
+  PATCH  /api/v1/notifications/:id/read
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Marks a single notification as read.
+
+  Response Body (HTTP 200):
+  {
+    "success": true,
+    "id":      "string — notification ID updated"
+  }
+
+  ────────────────────────────────────────────────────────────────────────────
+  POST  /api/v1/notifications/read-all
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Marks ALL of the user's notifications as read.
+    Called when user clicks "Mark all read" in the Header dropdown.
+
+  Response Body (HTTP 200):
+  {
+    "success":       true,
+    "updated_count": "number — how many notifications were marked read"
+  }
+
+  ────────────────────────────────────────────────────────────────────────────
+  DELETE  /api/v1/notifications/:id
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Permanently deletes a single notification.
+
+  Response Body (HTTP 200):
+  {
+    "success": true,
+    "id":      "string — notification ID deleted"
+  }
+
+  ────────────────────────────────────────────────────────────────────────────
+  DELETE  /api/v1/notifications
+  ────────────────────────────────────────────────────────────────────────────
+
+  Description:
+    Permanently deletes ALL notifications for the authenticated user.
+
+  Response Body (HTTP 200):
+  {
+    "success":       true,
+    "deleted_count": "number"
+  }
+
+  ────────────────────────────────────────────────────────────────────────────
+  BACKEND — Notification Trigger Rules
+  ────────────────────────────────────────────────────────────────────────────
+
+  When to create a notification (backend triggers):
+
+  Event                                    | type      | title
+  ─────────────────────────────────────────|───────────|──────────────────────────────
+  ATS scan completes                       | ats       | "ATS Scan Complete"
+  Resume enhancement completes             | resume    | "Resume Enhanced"
+  Resume build / export completed          | resume    | "Resume Ready"
+  New job matches user profile             | job       | "New Job Match Found"
+  Job application status changes           | job       | "Application Status Update"
+  Profile completeness drops below 60%     | profile   | "Complete Your Profile"
+  User adds missing fields (completeness+) | profile   | "Profile Updated"
+  credits_remaining drops below 20         | credit    | "Credits Running Low"
+  credits_remaining drops to 0             | credit    | "Out of Credits"
+  Plan expires in 7 days                   | credit    | "Subscription Expiring Soon"
+  Plan expires in 1 day                    | credit    | "Subscription Expires Tomorrow"
+  Plan successfully renewed via webhook    | credit    | "Plan Renewed Successfully"
+  Payment fails on Razorpay                | credit    | "Payment Failed"
+  Upgrade successful                       | credit    | "Plan Upgraded Successfully"
+
+
+================================================================================
+  8. PROFILE COMPLETENESS LOGIC  (Backend Computation)
+================================================================================
+
+  The profile.completeness field in the dashboard summary is computed by the
+  backend only — the frontend displays it, never calculates it.
+
+  Field weighting:
+
+  Field                      | Weight
+  ───────────────────────────|────────
+  Full Name                  |  10%
+  Email (verified)           |   5%
+  Phone number               |   5%
+  Location (city / country)  |   5%
+  Profile picture uploaded   |   5%
+  LinkedIn URL               |   5%
+  Professional summary       |  10%
+  Skills (>= 3 skills added) |  15%
+  Work experience (>= 1 job) |  15%
+  Education (>= 1 degree)    |  10%
+  Projects (>= 1 project)    |   5%
+  Certifications (>= 1)      |   5%
+  ───────────────────────────|────────
+  TOTAL                      | 100%
+
+  Computation rules:
+    • completeness is an integer 0–100
+    • profile_completed (in progress flags) = true when completeness >= 60
+    • missing_fields array must contain human-readable names of incomplete
+      fields only (e.g. "LinkedIn URL", "Skills", "Work Experience")
+    • Empty string values count as missing.
+    • Whitespace-only string values count as missing.
+    • Skills threshold: fewer than 3 skills = field counts as missing.
+
+  Example when completeness = 75:
+    missing_fields: ["LinkedIn URL", "Certifications", "Projects"]
+
+
+================================================================================
+  9. RECOMMENDED STEP PRIORITY LOGIC  (Backend Computation)
+================================================================================
+
+  Backend evaluates progress flags in this order and returns the first
+  incomplete step. Steps are numbered 1–5. Step 0 = special upgrade prompt.
+
+  Priority order:
+
+  Priority | Condition check                        | step_number | step_name
+  ─────────|────────────────────────────────────────|─────────────|──────────────────
+  0 (HIGH) | credits_remaining < 6                  | 0           | "Upgrade Plan"
+           | (less than 2x lowest credit cost of 5) |             |
+  1        | resume_uploaded == false               | 1           | "Upload Resume"
+  2        | profile_completed == false             | 2           | "Complete Profile"
+  3        | ats_scan_done == false                 | 3           | "ATS Scan"
+  4        | resume_enhanced == false               | 4           | "Enhance Resume"
+  5        | job_applied == false                   | 5           | "Browse & Apply"
+  5 (DONE) | all steps complete                     | 5           | "Browse & Apply"
+
+  Standard step objects to return:
+
+  Step 1 — Upload Resume:
+    title:          "Upload & Parse Your Resume"
+    description:    "Upload your resume to auto-fill your profile and save time."
+    credit_cost:    5
+    estimated_time: "~15 seconds"
+    cta_text:       "Upload Resume"
+    cta_path:       "/parser"
+    icon:           "Upload"
+
+  Step 2 — Complete Profile:
+    title:          "Complete Your Profile"
+    description:    "A complete profile improves your job matches by up to 40%."
+    credit_cost:    0
+    estimated_time: "~5 minutes"
+    cta_text:       "Complete Profile"
+    cta_path:       "/profile"
+    icon:           "User"
+
+  Step 3 — ATS Scan:
+    title:          "Check Your ATS Score"
+    description:    "Find out how well your resume matches ATS systems and get optimization suggestions."
+    credit_cost:    5
+    estimated_time: "~15 seconds"
+    cta_text:       "Start ATS Scan"
+    cta_path:       "/ats"
+    icon:           "Search"
+
+  Step 4 — Enhance Resume:
+    title:          "Enhance Your Resume with AI"
+    description:    "Let AI rewrite and optimize your resume for maximum impact."
+    credit_cost:    10
+    estimated_time: "~30 seconds"
+    cta_text:       "Enhance Resume"
+    cta_path:       "/enhancer"
+    icon:           "Sparkles"
+
+  Step 5 — Browse & Apply:
+    title:          "Browse & Apply to Jobs"
+    description:    "Your resume is optimized! Start applying to jobs that match your profile."
+    credit_cost:    0
+    estimated_time: "FREE"
+    cta_text:       "Browse Jobs"
+    cta_path:       "/jobs"
+    icon:           "Briefcase"
+
+  Step 0 — Upgrade Plan (low credits override):
+    title:          "Upgrade for More Credits"
+    description:    "You're running low on credits. Upgrade to continue using premium features."
+    credit_cost:    0
+    estimated_time: null
+    cta_text:       "View Plans"
+    cta_path:       "/pricing"
+    icon:           "Crown"
+
+
+================================================================================
+  10. CREDIT COST REFERENCE TABLE
+================================================================================
+
+  Single source of truth for all credit deduction logic.
+  Frontend and backend must agree on these values.
+
+  Feature Key            | Credits | Description
+  ───────────────────────|─────────|──────────────────────────────────────────
+  resume_parse           |   5     | Parse / extract data from uploaded resume
+  ats_scan               |   5     | ATS compatibility analysis
+  enhancement            |  10     | AI-powered resume enhancement
+  job_match              |   8     | Match resume against a job description
+  jd_parse               |   3     | Parse a job description
+  ai_review              |   5     | AI section review within resume builder
+  english_assessment     |  15     | Full communication / English assessment
+  ───────────────────────|─────────|──────────────────────────────────────────
+  resume_create          |   0     | Create a new resume (builder) — FREE
+  resume_export          |   0     | Export / download a resume — FREE
+  job_browse             |   0     | Browse job listings — FREE
+  application_track      |   0     | Track job applications — FREE
+  profile_update         |   0     | Update user profile — FREE
+
+  Lowest credit cost:  5 (used for low-balance threshold = 5 * 2 = 10)
+  Highest credit cost: 15 (english_assessment)
+
+
+================================================================================
+  11. CREDIT CONFIRMATION MODAL LOGIC  (Frontend Reference for Backend)
+================================================================================
+
+  Before running a credit-costing feature, the frontend calls
+  POST /api/v1/credits/check and then applies this logic to decide
+  whether to show a confirmation dialog:
+
+  Show modal IF any of:
+    1. First time user is using any credit-costing feature (localStorage check)
+    2. Action costs >= 10 credits
+    3. credits_remaining < (credit_cost * 2)  — low balance warning
+    4. Action costs 5–9 credits AND user preference != 'high_cost_only'
+
+  Skip modal IF:
+    Action costs < 5 credits (show inline note only)
+
+  This logic is frontend-only. The backend enforces actual credit availability
+  at deduction time via the /credits/deduct endpoint.
+
+
+================================================================================
+  12. PLAN TIER DEFINITIONS  (Full Detail)
+================================================================================
+
+  Plan ID   : FREE
+  Plan Name : Free
+  Price     : Rs.0 / month (no billing)
+  Credits   : 50 total (given at signup; NO monthly reset — one-time only)
+  Expires   : Never (FREE plan does not expire)
+
+  Limits:
+    Resumes            : 3
+    Exports            : 1
+    ATS Scans          : 5
+    Job Matches        : 5
+    Assessments        : 1
+    AI Features        : limited
+    Support            : community
+
+  ──────────────────────────────────────────────────────────────────────────
+
+  Plan ID   : PRO
+  Plan Name : Pro
+  Price     : Rs.999 / month
+  Credits   : 500 / billing period (reset on renewal; unused credits expire)
+  Expires   : 30 days from activation (monthly renewal)
+  Badges    : POPULAR, RECOMMENDED
+
+  Limits:
+    Resumes            : unlimited
+    Exports            : unlimited
+    ATS Scans          : unlimited
+    Job Matches        : unlimited
+    Assessments        : unlimited
+    AI Features        : full
+    Support            : priority
+  Additional:
+    - Priority queue (faster AI processing)
+    - Advanced analytics
+    - Interview scheduling
+
+  ──────────────────────────────────────────────────────────────────────────
+
+  Plan ID   : MAX
+  Plan Name : Max
+  Price     : Rs.2,499 / month
+  Credits   : 2000 / billing period (reset on renewal; unused credits expire)
+  Expires   : 30 days from activation (monthly renewal)
+
+  Limits:
+    Resumes            : unlimited
+    Exports            : unlimited
+    ATS Scans          : unlimited
+    Job Matches        : unlimited
+    Assessments        : unlimited
+    AI Features        : full + API access
+    Support            : dedicated account manager
+  Additional:
+    - API access
+    - Custom integrations
+    - Dedicated account manager
+    - SLA guarantee
+    - White-label option
+
+  ──────────────────────────────────────────────────────────────────────────
+
+  Credit reset policy summary:
+    FREE : Credits DO NOT reset. User gets 50 credits once at signup.
+           To get more credits they must upgrade to PRO or MAX.
+    PRO  : Credits reset to 500 on each monthly renewal.
+           Unused credits from previous period are forfeited.
+    MAX  : Credits reset to 2000 on each monthly renewal.
+           Unused credits from previous period are forfeited.
+
+
+================================================================================
+  13. ERROR RESPONSE FORMAT
+================================================================================
+
+  All API errors return a consistent JSON body:
+
+  {
+    "error":   "string  — machine-readable error code (SCREAMING_SNAKE_CASE)",
+    "message": "string  — human-readable message (safe to display to user)",
+    "details": "object? — additional context (validation errors, field names, etc.)"
+  }
+
+  Standard error codes:
+
+  HTTP | Error Code                 | When
+  ─────|────────────────────────────|────────────────────────────────────────────
+  400  | INVALID_REQUEST            | Malformed request body or params
+  400  | UNKNOWN_FEATURE            | Unknown feature key in credit operations
+  401  | UNAUTHORIZED               | Missing, expired, or invalid JWT token
+  402  | INSUFFICIENT_CREDITS       | Not enough credits for the requested action
+  403  | FORBIDDEN                  | Valid token but no permission for resource
+  404  | NOT_FOUND                  | Resource not found (notification, invoice)
+  409  | ALREADY_ON_PLAN            | User trying to upgrade to current plan
+  422  | VALIDATION_ERROR           | Field-level validation failure
+  429  | RATE_LIMIT_EXCEEDED        | Too many requests from this user
+  500  | INTERNAL_ERROR             | Unexpected server error (log, don't expose)
+
+  INSUFFICIENT_CREDITS — extended fields:
+  {
+    "error":             "INSUFFICIENT_CREDITS",
+    "message":           "Not enough credits to run this feature.",
+    "credits_required":  10,
+    "credits_remaining": 3,
+    "upgrade_url":       "/pricing"
+  }
+
+  VALIDATION_ERROR — extended fields:
+  {
+    "error":   "VALIDATION_ERROR",
+    "message": "Validation failed.",
+    "details": {
+      "fields": [
+        { "field": "plan_id", "message": "Invalid plan ID." }
+      ]
+    }
+  }
+
+
+================================================================================
+  14. RATE LIMITING & SECURITY NOTES
+================================================================================
+
+  Recommended rate limits (per authenticated user, per minute):
+
+  Endpoint                                 | Limit
+  ─────────────────────────────────────────|────────
+  GET  /api/v1/dashboard/summary           | 60/min
+  GET  /api/v1/credits/balance             | 120/min  (cached 30s)
+  GET  /api/v1/notifications/count         | 60/min   (poll endpoint)
+  GET  /api/v1/notifications               | 60/min
+  POST /api/v1/credits/check               | 60/min
+  POST /api/v1/credits/deduct              | 30/min   (service account only)
+  POST /api/v1/subscription/upgrade        | 5/min
+  POST /api/v1/subscription/cancel         | 5/min
+  PATCH /api/v1/notifications/:id/read     | 120/min
+  POST  /api/v1/notifications/read-all     | 20/min
+
+  Security requirements:
+    1. POST /api/v1/credits/deduct is BACKEND-to-BACKEND only.
+       Must require a service account token, NOT the user's JWT.
+       Never expose this endpoint to the browser/frontend directly.
+
+    2. POST /api/v1/subscription/webhook must verify HMAC-SHA256 signature
+       from Razorpay before any processing. Reject unverified requests with
+       HTTP 400. Never trust webhook payload without signature check.
+
+    3. Invoice PDF download URLs must be pre-signed with a 15-minute TTL.
+       Do not expose permanent S3 URLs.
+
+    4. Never expose tokens_used or cost_inr fields in user-facing API
+       responses. These are strictly internal / admin-only metrics.
+
+    5. All responses must include security headers:
+         Content-Security-Policy
+         X-Content-Type-Options: nosniff
+         X-Frame-Options: DENY
+
+    6. credits_remaining must never go negative. If a race condition would
+       cause credits to go below 0, reject the deduction with 402.
+
+
+================================================================================
+  15. SUMMARY OF ALL ENDPOINTS
+================================================================================
+
+  Method  | Path                                       | Auth | Description
+  ─────────|────────────────────────────────────────── |──────|──────────────────────────────────
+  GET      | /api/v1/dashboard/summary                 | JWT  | Full dashboard data (single call)
+  ─────────|────────────────────────────────────────── |──────|──────────────────────────────────
+  GET      | /api/v1/subscription/plans                | None | All available plan tiers
+  GET      | /api/v1/subscription/current              | JWT  | User's active subscription
+  POST     | /api/v1/subscription/upgrade              | JWT  | Initiate Razorpay upgrade
+  POST     | /api/v1/subscription/cancel               | JWT  | Cancel subscription
+  POST     | /api/v1/subscription/webhook              | HMAC | Razorpay payment webhook
+  ─────────|────────────────────────────────────────── |──────|──────────────────────────────────
+  GET      | /api/v1/credits/balance                   | JWT  | Current credit balance
+  GET      | /api/v1/credits/usage                     | JWT  | Paginated usage history
+  POST     | /api/v1/credits/deduct                    | SVC  | Deduct credits (backend-internal)
+  POST     | /api/v1/credits/check                     | JWT  | Pre-check credit availability
+  ─────────|────────────────────────────────────────── |──────|──────────────────────────────────
+  GET      | /api/v1/billing/history                   | JWT  | Invoice / payment history
+  GET      | /api/v1/billing/invoice/:id/download      | JWT  | Signed invoice PDF URL
+  ─────────|────────────────────────────────────────── |──────|──────────────────────────────────
+  GET      | /api/v1/notifications                     | JWT  | List notifications (paginated)
+  GET      | /api/v1/notifications/count               | JWT  | Unread count only (poll)
+  PATCH    | /api/v1/notifications/:id/read            | JWT  | Mark one notification read
+  POST     | /api/v1/notifications/read-all            | JWT  | Mark all notifications read
+  DELETE   | /api/v1/notifications/:id                 | JWT  | Delete one notification
+  DELETE   | /api/v1/notifications                     | JWT  | Delete all notifications
+
+  Total endpoints : 19
+  Auth types:
+    JWT  — User's Bearer token (standard)
+    HMAC — Razorpay webhook signature verification
+    SVC  — Internal service account (not accessible from browser)
+    None — Public endpoint (no auth required)
+
+
+================================================================================
+  END OF DOCUMENT
+  Covers: Dashboard · Subscription · Credits · Billing · Notifications
+  Version: 1.0  |  Date: 2026-02-23
+================================================================================

@@ -22,10 +22,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    if (process.env.NODE_ENV === "development") {
-      // // console.error("ErrorBoundary caught an error:", error, errorInfo);
-    }
+  componentDidCatch(): void {
+    // Error logging can be added here if needed
   }
 
   handleReset = (): void => {

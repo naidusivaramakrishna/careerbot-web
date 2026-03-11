@@ -1,197 +1,14 @@
 
-
-// "use client";
-
-// import { Search, MapPin, ChevronDown } from "lucide-react";
-
-// export default function SearchBar() {
-//   return (
-//     <div className="mt-6">
-//       <div
-//         className="
-//           flex items-center
-//           h-[56px]
-//           w-full
-//           rounded-full
-//           bg-white
-//           px-6
-//           shadow-sm
-//           border
-//         "
-//       >
-//         {/* LEFT SEARCH */}
-//         <div className="flex items-center gap-3 flex-1">
-//           <Search size={18} className="text-gray-400" />
-//           <input
-//             placeholder="Search jobs, companies, or skills..."
-//             className="w-full text-sm outline-none placeholder-gray-400"
-//           />
-//         </div>
-
-//         {/* DIVIDER */}
-//         <div className="mx-4 h-6 w-px bg-gray-300" />
-
-//         {/* LOCATION */}
-//         <div className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-//           <MapPin size={16} className="text-gray-400" />
-//           <span>Hyderabad, India</span>
-//           <ChevronDown size={16} className="text-gray-400" />
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
-
-// "use client";
-
-// import { useState, useRef, useEffect } from "react";
-// import { Search, MapPin, ChevronDown, Check } from "lucide-react";
-
-// const locations = [
-//   "Hyderabad, India",
-//   "Bangalore, India",
-//   "Chennai, India",
-//   "Pune, India",
-//   "Mumbai, India",
-//   "Remote",
-// ];
-
-// const searchSuggestions = [
-//   "UI/UX Designer",
-//   "Product Designer",
-//   "Frontend Developer",
-//   "React Developer",
-//   "UX Researcher",
-// ];
-
-// export default function SearchBar() {
-//   const [locationOpen, setLocationOpen] = useState(false);
-//   const [searchOpen, setSearchOpen] = useState(false);
-//   const [selectedLocation, setSelectedLocation] =
-//     useState("Hyderabad, India");
-
-//   const searchRef = useRef<HTMLDivElement>(null);
-
-//   // close search dropdown on outside click
-//   useEffect(() => {
-//     function handleClickOutside(e: MouseEvent) {
-//       if (
-//         searchRef.current &&
-//         !searchRef.current.contains(e.target as Node)
-//       ) {
-//         setSearchOpen(false);
-//       }
-//     }
-//     document.addEventListener("mousedown", handleClickOutside);
-//     return () =>
-//       document.removeEventListener("mousedown", handleClickOutside);
-//   }, []);
-
-//   return (
-//     <div className="mt-6 relative">
-//       <div
-//         className="
-//           flex items-center
-//           h-[56px]
-//           w-full
-//           rounded-full
-//           bg-white
-//           px-6
-//           shadow-sm
-//           border
-//         "
-//       >
-//         {/* LEFT SEARCH */}
-//         <div
-//           ref={searchRef}
-//           className="flex items-center gap-3 flex-1 relative"
-//         >
-//           <Search size={18} className="text-gray-400" />
-
-//           <input
-//             onFocus={() => setSearchOpen(true)}
-//             placeholder="Search jobs, companies, or skills..."
-//             className="w-full text-sm outline-none placeholder-gray-400"
-//           />
-
-//           {/* GOOGLE-LIKE SEARCH DROPDOWN */}
-//           {searchOpen && (
-//             <div className="absolute top-12 left-0 w-full bg-white border rounded-xl shadow-lg z-50">
-//               {searchSuggestions.map((item) => (
-//                 <div
-//                   key={item}
-//                   className="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
-//                   onClick={() => setSearchOpen(false)}
-//                 >
-//                   🔍 {item}
-//                 </div>
-//               ))}
-//             </div>
-//           )}
-//         </div>
-
-//         {/* DIVIDER */}
-//         <div className="mx-4 h-6 w-px bg-gray-300" />
-
-//         {/* LOCATION DROPDOWN */}
-//         <div
-//           onClick={() => setLocationOpen(!locationOpen)}
-//           className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"
-//         >
-//           <MapPin size={16} className="text-gray-400" />
-//           <span>{selectedLocation}</span>
-//           <ChevronDown size={16} className="text-gray-400" />
-//         </div>
-//       </div>
-
-//       {/* LOCATION MENU */}
-//       {locationOpen && (
-//         <div className="absolute right-0 mt-2 w-56 bg-white border rounded-xl shadow-lg z-50">
-//           {locations.map((location) => (
-//             <div
-//               key={location}
-//               onClick={() => {
-//                 setSelectedLocation(location);
-//                 setLocationOpen(false);
-//               }}
-//               className="flex items-center justify-between px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
-//             >
-//               <span>{location}</span>
-//               {selectedLocation === location && (
-//                 <Check size={14} className="text-indigo-600" />
-//               )}
-//             </div>
-//           ))}
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
-
-
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Search, MapPin, ChevronDown, Check } from "lucide-react";
-import { searchJobs, Job } from "@/api/jobsApi";
+import { Search, MapPin, ChevronDown, Check, Star } from "lucide-react";
+
+const filterOptions = [
+  { id: "recommended", label: "Recommended" },
+  { id: "top-matched", label: "Top Matched" },
+  { id: "most-recent", label: "Most Recent" },
+];
 
 const locations = [
   "Hyderabad, India",
@@ -300,10 +117,10 @@ const locations = [
   "Remote",
 ];
 
-// 🔹 MIXED SEARCH DATA
+// 🔹 SEARCH DATA - Companies and Titles
 const searchData = {
-  skills: ["React", "Figma", "JavaScript", "UX Research"],
-  companies: ["Google", "Microsoft", "Card", "Swiggy"],
+  companies: ["Google", "Microsoft", "Amazon", "Apple", "Meta", "Netflix", "Tesla", "Stripe", "Cognizant", "Deloitte", "Infosys"],
+  titles: ["Software Engineer", "Product Manager", "UI Designer", "Data Scientist", "DevOps Engineer", "Full Stack Developer", "Senior Developer", "UX Researcher"],
 };
 
 interface SearchBarProps {
@@ -313,6 +130,8 @@ interface SearchBarProps {
   onLocationChange?: (location: string) => void;
 }
 
+type SortFilter = "recommended" | "top-matched" | "most-recent";
+
 export default function SearchBar({
   searchQuery,
   onSearchChange,
@@ -321,10 +140,12 @@ export default function SearchBar({
 }: SearchBarProps) {
   const [locationOpen, setLocationOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
-  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [sortFilter, setSortFilter] = useState<SortFilter>("recommended");
 
   const searchRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const locationRef = useRef<HTMLDivElement>(null);
 
   // close dropdown on outside click
   useEffect(() => {
@@ -335,49 +156,78 @@ export default function SearchBar({
       ) {
         setSearchOpen(false);
       }
+      if (
+        filterRef.current &&
+        !filterRef.current.contains(e.target as Node)
+      ) {
+        setFilterOpen(false);
+      }
+      if (
+        locationRef.current &&
+        !locationRef.current.contains(e.target as Node)
+      ) {
+        setLocationOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () =>
       document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch jobs when searchQuery changes
-  useEffect(() => {
-    if (searchQuery.length > 0) {
-      setIsLoadingJobs(true);
-      searchJobs({ query: searchQuery, limit: 20 })
-        .then(response => {
-          if (response.success && response.data) {
-            setFilteredJobs(response.data);
-          } else {
-            setFilteredJobs([]);
-          }
-        })
-        .catch(() => setFilteredJobs([]))
-        .finally(() => setIsLoadingJobs(false));
-    } else {
-      setFilteredJobs([]);
-    }
-  }, [searchQuery]);
 
-  // 🔍 FILTER LOGIC for skills and companies
+  // 🔍 FILTER LOGIC for companies and titles
   const filterItems = (items: string[]) =>
     items.filter((item) =>
       item.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-  const filteredSkills = filterItems(searchData.skills);
-  const filteredCompanies = filterItems(searchData.companies);
+  const allItems = [...searchData.companies, ...searchData.titles];
+  const filteredItems = filterItems(allItems);
 
   return (
     <div className="mt-6 relative">
-      <div className="flex items-center h-[56px] w-full rounded-full bg-white px-6 shadow-sm border">
+      <div className="flex items-center h-[56px] w-full rounded-full bg-white px-6 shadow-sm border border-gray-300 focus-within:border-blue-500 focus-within:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus-within:outline-none transition-[border,box-shadow] duration-200 ease-out">
+        {/* FILTER DROPDOWN */}
+        <div className="relative" ref={filterRef}>
+          <button
+            type="button"
+            onClick={() => setFilterOpen(!filterOpen)}
+            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-50"
+          >
+            {sortFilter === "recommended" && <Star size={14} className="text-yellow-500 fill-yellow-500" />}
+            <span className="text-xs uppercase tracking-wide">{filterOptions.find(f => f.id === sortFilter)?.label}</span>
+            <ChevronDown size={14} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* FILTER MENU */}
+          {filterOpen && (
+            <div className="absolute left-0 top-12 w-40 bg-white rounded-lg shadow-lg z-50">
+              {filterOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setSortFilter(option.id as SortFilter);
+                    setFilterOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-100 hover:text-blue-600 transition-all`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* DIVIDER */}
+        <div className="mx-4 h-6 w-px bg-gray-300" />
+
         {/* SEARCH */}
         <div
           ref={searchRef}
           className="flex items-center gap-3 flex-1 relative"
         >
-          <Search size={18} className="text-gray-400" />
+          <Search size={20} className="text-blue-600" />
 
           <input
             value={searchQuery}
@@ -386,127 +236,63 @@ export default function SearchBar({
               setSearchOpen(true);
             }}
             onFocus={() => setSearchOpen(true)}
-            placeholder="Search jobs, skills, or companies..."
+            placeholder="Search jobs, skills, companies…"
             className="w-full text-sm outline-none placeholder-gray-400"
           />
 
-          {/* 🔽 SEARCH DROPDOWN */}
-          {searchOpen && (
-            <div className="absolute top-12 left-0 w-full bg-white border rounded-xl shadow-lg z-50 max-h-72 overflow-y-auto">
-              {/* JOBS */}
-              {(filteredJobs.length > 0 || isLoadingJobs) && (
-                <>
-                  <p className="px-4 py-2 text-xs font-semibold text-gray-500">
-                    Jobs
-                  </p>
-                  {isLoadingJobs ? (
-                    <p className="px-4 py-2 text-sm text-gray-400">Loading...</p>
-                  ) : (
-                    filteredJobs.map((job) => (
-                      <div
-                        key={job.id}
-                        onClick={() => {
-                          onSearchChange(job.title);
-                          setSearchOpen(false);
-                        }}
-                        className="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
-                      >
-                        {job.title}
-                      </div>
-                    ))
-                  )}
-                </>
-              )}
-
-              {/* SKILLS */}
-              {filteredSkills.length > 0 && (
-                <>
-                  <p className="px-4 py-2 text-xs font-semibold text-gray-500">
-                    Skills
-                  </p>
-                  {filteredSkills.map((item) => (
-                    <div
-                      key={item}
-                      onClick={() => {
-                        onSearchChange(item);
-                        setSearchOpen(false);
-                      }}
-                      className="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
-                    >
-                       {item}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* COMPANIES */}
-              {filteredCompanies.length > 0 && (
-                <>
-                  <p className="px-4 py-2 text-xs font-semibold text-gray-500">
-                    Companies
-                  </p>
-                  {filteredCompanies.map((item) => (
-                    <div
-                      key={item}
-                      onClick={() => {
-                        onSearchChange(item);
-                        setSearchOpen(false);
-                      }}
-                      className="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
-                    >
-                       {item}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* NO RESULTS */}
-              {filteredJobs.length === 0 &&
-                !isLoadingJobs &&
-                filteredSkills.length === 0 &&
-                filteredCompanies.length === 0 && (
-                  <p className="px-4 py-3 text-sm text-gray-400">
-                    No results found
-                  </p>
-                )}
+          {/* 🔽 SEARCH DROPDOWN - Company and title suggestions */}
+          {searchOpen && filteredItems.length > 0 && (
+            <div className="absolute top-12 left-0 w-48 bg-white rounded-lg shadow-lg z-50 max-h-32 overflow-y-auto">
+              {filteredItems.map((item) => (
+                <div
+                  key={item}
+                  onClick={() => {
+                    onSearchChange(item);
+                    setSearchOpen(false);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100"
+                >
+                  <Search size={14} className="text-gray-400 flex-shrink-0" />
+                  <span>{item}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        {/* DIVIDER */}
-        <div className="mx-4 h-6 w-px bg-gray-300" />
-
         {/* LOCATION */}
-        <div
-          onClick={() => setLocationOpen(!locationOpen)}
-          className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"
-        >
-          <MapPin size={16} className="text-gray-400" />
-          <span>{selectedLocation}</span>
-          <ChevronDown size={16} className="text-gray-400" />
+        <div ref={locationRef} className="relative">
+          <div
+            onClick={() => setLocationOpen(!locationOpen)}
+            className="flex items-center gap-2 text-sm text-black font-semibold cursor-pointer"
+          >
+            <MapPin size={16} className="text-red-600" />
+            <span>{selectedLocation}</span>
+            <ChevronDown size={16} className="text-gray-400" />
+          </div>
+
+          {/* LOCATION MENU */}
+          {locationOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto scrollbar-thin">
+              {locations.map((location) => (
+                <div
+                  key={location}
+                  onClick={() => {
+                    onLocationChange?.(location);
+                    setLocationOpen(false);
+                  }}
+                  className="flex items-center justify-between px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100"
+                >
+                  <span>{location}</span>
+                  {selectedLocation === location && (
+                    <Check size={12} className="text-indigo-600" />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* LOCATION MENU */}
-      {locationOpen && (
-        <div className="absolute right-0 mt-2 w-56 bg-white border rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto scrollbar-thin">
-          {locations.map((location) => (
-            <div
-              key={location}
-              onClick={() => {
-                onLocationChange?.(location);
-                setLocationOpen(false);
-              }}
-              className="flex items-center justify-between px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
-            >
-              <span>{location}</span>
-              {selectedLocation === location && (
-                <Check size={14} className="text-indigo-600" />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

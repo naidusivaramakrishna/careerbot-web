@@ -13,30 +13,37 @@ interface TemplateSelectionModalProps {
 const templates = [
   {
     id: "apollo",
-    name: "Classic",
+    name: "Modern",
     component: "TemplateOne",
-    description: "Clean and professional with clear section divisions",
+    description: "Teal accent headers, left-aligned with pipe-separated contact",
     badge: null,
   },
   {
     id: "atlas",
-    name: "Atlas",
+    name: "Classic",
     component: "TemplateTwo",
-    description: "Centered design with elegant borders",
+    description: "Traditional serif style with verbose professional labels",
     badge: "Popular",
   },
   {
     id: "terra",
-    name: "Terra",
+    name: "Minimal",
     component: "TemplateThree",
-    description: "Modern with emphasis on experience",
-    badge: "Modern",
+    description: "Centered elegant layout with bullet-separated contact",
+    badge: null,
   },
   {
     id: "tempe",
-    name: "Tempe",
+    name: "Creative",
     component: "TemplateFour",
-    description: "Elegant format with strong hierarchy",
+    description: "Centered clean design with clear section divisions",
+    badge: "Modern",
+  },
+  {
+    id: "classic_professional",
+    name: "Executive",
+    component: "TemplateFive",
+    description: "Left-aligned executive style with labeled skill groups",
     badge: null,
   },
 ];
@@ -65,64 +72,57 @@ export default function TemplateSelectionModal({
     onClose();
   };
 
-  // Apollo Template Preview (TemplateOne)
+  // Apollo (Modern) - compact_professional: teal, LEFT name, contact below pipe-separated
   const ApolloPreview = () => (
-    <div className="aspect-[8.5/11] bg-white p-6 text-[8px] leading-tight">
-      <div className="flex justify-between items-start mb-2">
-        <div className="font-bold text-[14px]">YOUR NAME</div>
-        <div className="text-right text-[7px] space-y-0.5">
-          <div>+1 234 567 8900</div>
-          <div>your.email@example.com</div>
-          <div>City, State</div>
-          <div className="text-blue-600">LinkedIn</div>
-          <div className="text-blue-600">Portfolio</div>
+    <div className="aspect-[8.5/11] bg-white p-6 text-[8px] leading-tight text-left">
+      <div className="mb-2">
+        <div className="font-bold text-[14px] mb-1" style={{ color: "#0D9488" }}>YOUR NAME</div>
+        <div className="text-[7px] flex flex-wrap gap-x-1 mb-2" style={{ color: "#374151" }}>
+          <span>your.email@example.com</span><span>|</span>
+          <span>+1 234 567 8900</span><span>|</span>
+          <span>City, State</span><span>|</span>
+          <span className="text-blue-600">LinkedIn</span>
         </div>
+        <div className="border-t-2 border-gray-700" />
       </div>
-      <div className="border-t-2 border-gray-800 mb-2"></div>
 
       <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1">SUMMARY</div>
+        <div className="font-bold text-[9px] mb-1 pb-0.5" style={{ color: "#0D9488", borderBottom: "1.5px solid #0D9488" }}>SUMMARY</div>
         <div className="space-y-0.5">
-          <div className="h-1 bg-gray-300 rounded"></div>
-          <div className="h-1 bg-gray-300 rounded w-11/12"></div>
+          <div className="h-1 bg-gray-300 rounded" />
+          <div className="h-1 bg-gray-300 rounded w-11/12" />
         </div>
       </div>
-      <div className="border-t border-gray-400 mb-2"></div>
 
       <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1 border-b border-gray-300 pb-0.5">
-          SKILLS
+        <div className="font-bold text-[9px] mb-1 pb-0.5" style={{ color: "#0D9488", borderBottom: "1.5px solid #0D9488" }}>EXPERIENCE</div>
+        <div>
+          <div className="flex justify-between mb-0.5">
+            <div className="h-1.5 bg-gray-400 rounded w-1/3" />
+            <div className="h-1 bg-gray-300 rounded w-1/6" />
+          </div>
+          <div className="h-1 bg-gray-300 rounded w-1/4 mb-0.5" />
+          <div className="space-y-0.5">
+            <div className="h-1 bg-gray-200 rounded" />
+            <div className="h-1 bg-gray-200 rounded w-5/6" />
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-x-2 gap-y-0.5 mt-1">
+      </div>
+
+      <div className="mb-2">
+        <div className="font-bold text-[9px] mb-1 pb-0.5" style={{ color: "#0D9488", borderBottom: "1.5px solid #0D9488" }}>SKILLS</div>
+        <div className="grid grid-cols-3 gap-x-2 gap-y-0.5">
           {[...Array(9)].map((_, i) => (
             <div key={i} className="flex items-center">
-              <div className="w-1 h-1 bg-gray-600 rounded-full mr-1" />
+              <div className="w-1 h-1 rounded-full mr-1" style={{ background: "#0D9488" }} />
               <div className="h-1 bg-gray-300 rounded flex-1" />
             </div>
           ))}
         </div>
       </div>
 
-      <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1">EXPERIENCE</div>
-        <div className="space-y-1.5">
-          <div>
-            <div className="flex justify-between mb-0.5">
-              <div className="h-1.5 bg-gray-400 rounded w-1/3" />
-              <div className="h-1 bg-gray-300 rounded w-1/6" />
-            </div>
-            <div className="h-1 bg-gray-300 rounded w-1/4 mb-0.5" />
-            <div className="space-y-0.5">
-              <div className="h-1 bg-gray-200 rounded" />
-              <div className="h-1 bg-gray-200 rounded w-5/6" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="border-t border-gray-400 mb-2"></div>
-
       <div className="mb-1.5">
-        <div className="font-bold text-[9px] mb-1">EDUCATION</div>
+        <div className="font-bold text-[9px] mb-1 pb-0.5" style={{ color: "#0D9488", borderBottom: "1.5px solid #0D9488" }}>EDUCATION</div>
         <div className="flex justify-between">
           <div>
             <div className="h-1.5 bg-gray-400 rounded w-24 mb-0.5" />
@@ -134,63 +134,46 @@ export default function TemplateSelectionModal({
     </div>
   );
 
-  // Atlas Template Preview (TemplateTwo)
+  // Atlas (Classic) - professional_classic: LEFT name, border-b headings, verbose labels
   const AtlasPreview = () => (
-    <div className="aspect-[8.5/11] bg-white p-6 text-[8px] leading-tight">
-      {/* Centered Header */}
-      <div className="text-center mb-2">
-        <div className="font-bold text-[14px] mb-1">YOUR NAME</div>
-        <div className="text-[7px] flex items-center justify-center flex-wrap gap-x-1">
-          <span>your.email@example.com</span>
-          <span>|</span>
-          <span>+1 234 567 8900</span>
-          <span>|</span>
-          <span>City, State</span>
-          <span>|</span>
+    <div className="aspect-[8.5/11] bg-white p-6 text-[8px] leading-tight text-left">
+      <div className="mb-2">
+        <div className="font-bold text-[14px] mb-1 uppercase tracking-wide">YOUR NAME</div>
+        <div className="text-[7px] flex flex-wrap gap-x-1 mb-2" style={{ color: "#374151" }}>
+          <span>your.email@example.com</span><span>|</span>
+          <span>+1 234 567 8900</span><span>|</span>
           <span className="text-blue-600">LinkedIn</span>
-          <span>|</span>
-          <span className="text-blue-600">Portfolio</span>
         </div>
+        <div className="border-t-2 border-gray-900" />
       </div>
 
-      {/* Summary */}
       <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1 border-b border-gray-500 pb-0.5">
-          SUMMARY
-        </div>
+        <div className="font-bold text-[8px] mb-1 border-b border-gray-800 pb-0.5 uppercase">PROFESSIONAL SUMMARY</div>
         <div className="space-y-0.5">
-          <div className="h-1 bg-gray-300 rounded"></div>
-          <div className="h-1 bg-gray-300 rounded w-11/12"></div>
+          <div className="h-1 bg-gray-300 rounded" />
+          <div className="h-1 bg-gray-300 rounded w-11/12" />
         </div>
       </div>
 
-      {/* Work Experience */}
       <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1 border-b border-gray-500 pb-0.5">
-          WORK EXPERIENCE
-        </div>
-        <div className="space-y-1.5">
-          <div>
-            <div className="flex justify-between mb-0.5">
-              <div>
-                <div className="h-1.5 bg-gray-400 rounded w-20 mb-0.5" />
-                <div className="h-1 bg-gray-300 rounded w-16" />
-              </div>
-              <div className="h-1 bg-gray-300 rounded w-12" />
+        <div className="font-bold text-[8px] mb-1 border-b border-gray-800 pb-0.5 uppercase">PROFESSIONAL EXPERIENCE</div>
+        <div>
+          <div className="flex justify-between mb-0.5">
+            <div>
+              <div className="h-1.5 bg-gray-400 rounded w-20 mb-0.5" />
+              <div className="h-1 bg-gray-300 rounded w-16" />
             </div>
-            <div className="space-y-0.5 mt-1">
-              <div className="h-1 bg-gray-200 rounded" />
-              <div className="h-1 bg-gray-200 rounded w-5/6" />
-            </div>
+            <div className="h-1 bg-gray-300 rounded w-12" />
+          </div>
+          <div className="space-y-0.5 mt-1">
+            <div className="h-1 bg-gray-200 rounded" />
+            <div className="h-1 bg-gray-200 rounded w-5/6" />
           </div>
         </div>
       </div>
 
-      {/* Education */}
       <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1 border-b border-gray-500 pb-0.5">
-          EDUCATION
-        </div>
+        <div className="font-bold text-[8px] mb-1 border-b border-gray-800 pb-0.5 uppercase">EDUCATION</div>
         <div className="flex justify-between">
           <div>
             <div className="h-1.5 bg-gray-400 rounded w-24 mb-0.5" />
@@ -200,45 +183,33 @@ export default function TemplateSelectionModal({
         </div>
       </div>
 
-      {/* Skills */}
       <div className="mb-1.5">
-        <div className="font-bold text-[9px] mb-1 border-b border-gray-500 pb-0.5">
-          SKILLS
-        </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1">
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="flex items-center">
-              <div className="w-1 h-1 bg-gray-600 rounded-full mr-1" />
-              <div className="h-1 bg-gray-300 rounded flex-1" />
-            </div>
-          ))}
+        <div className="font-bold text-[8px] mb-1 border-b border-gray-800 pb-0.5 uppercase">TECHNICAL SKILLS</div>
+        <div className="space-y-0.5">
+          <div className="h-1 bg-gray-300 rounded" />
+          <div className="h-1 bg-gray-300 rounded w-10/12" />
         </div>
       </div>
     </div>
   );
 
-  // Terra Template Preview (TemplateThree)
+  // Terra (Minimal) - minimalist_classic: CENTERED name, bullet separator, line-decorated headings
   const TerraPreview = () => (
     <div className="aspect-[8.5/11] bg-white p-6 text-[8px] leading-tight">
-      <div className="mb-2">
-        <div className="font-bold text-[14px] mb-1">YOUR NAME</div>
-        <div className="text-[7px] flex flex-wrap gap-x-1">
-          <span>your.email@example.com</span>
-          <span>|</span>
-          <span>+1 234 567 8900</span>
-          <span>|</span>
-          <span>City, State</span>
-          <span>|</span>
-          <span className="text-blue-600">linkedin.com/in/yourprofile</span>
-          <span>|</span>
-          <span className="text-blue-600">yourportfolio.com</span>
+      <div className="text-center mb-2">
+        <div className="font-bold text-[14px] mb-1 uppercase">YOUR NAME</div>
+        <div className="text-[7px] flex items-center justify-center flex-wrap gap-x-1 mb-2" style={{ color: "#374151" }}>
+          <span>your.email@example.com</span><span>•</span>
+          <span>+1 234 567 8900</span><span>•</span>
+          <span className="text-blue-600">LinkedIn</span>
         </div>
+        <div className="border-t border-gray-400" />
       </div>
 
       <div className="mb-2">
         <div className="flex items-center mb-1">
-          <div className="font-bold text-[9px]">SUMMARY</div>
-          <div className="flex-1 border-t border-gray-400 ml-2" />
+          <div className="font-bold text-[9px] uppercase mr-2">SUMMARY</div>
+          <div className="flex-1 border-t border-gray-400" />
         </div>
         <div className="space-y-0.5">
           <div className="h-1 bg-gray-300 rounded" />
@@ -248,11 +219,106 @@ export default function TemplateSelectionModal({
 
       <div className="mb-2">
         <div className="flex items-center mb-1">
-          <div className="font-bold text-[9px]">SKILLS</div>
-          <div className="flex-1 border-t border-gray-400 ml-2" />
+          <div className="font-bold text-[9px] uppercase mr-2">WORK EXPERIENCE</div>
+          <div className="flex-1 border-t border-gray-400" />
         </div>
+        <div>
+          <div className="flex justify-between mb-0.5">
+            <div className="h-1.5 bg-gray-400 rounded w-1/4" />
+            <div className="h-1 bg-gray-300 rounded w-1/5" />
+          </div>
+          <div className="h-1.5 bg-gray-400 rounded w-1/3 mb-0.5" />
+          <div className="space-y-0.5">
+            <div className="h-1 bg-gray-200 rounded" />
+            <div className="h-1 bg-gray-200 rounded w-5/6" />
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-2">
+        <div className="flex items-center mb-1">
+          <div className="font-bold text-[9px] uppercase mr-2">EDUCATION</div>
+          <div className="flex-1 border-t border-gray-400" />
+        </div>
+        <div className="flex justify-between">
+          <div>
+            <div className="h-1.5 bg-gray-400 rounded w-24 mb-0.5" />
+            <div className="h-1 bg-gray-300 rounded w-20" />
+          </div>
+          <div className="h-1 bg-gray-300 rounded w-14" />
+        </div>
+      </div>
+
+      <div className="mb-1.5">
+        <div className="flex items-center mb-1">
+          <div className="font-bold text-[9px] uppercase mr-2">SKILLS</div>
+          <div className="flex-1 border-t border-gray-400" />
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[6px]">
+              <div className="h-1 bg-gray-400 rounded w-8" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Tempe (Creative) - clean_simple: CENTERED name, pipe separator
+  const TempePreview = () => (
+    <div className="aspect-[8.5/11] bg-white p-6 text-[8px] leading-tight">
+      <div className="text-center mb-2">
+        <div className="font-bold text-[14px] mb-1 uppercase">YOUR NAME</div>
+        <div className="text-[7px] flex items-center justify-center flex-wrap gap-x-1 mb-2" style={{ color: "#374151" }}>
+          <span>your.email@example.com</span><span>|</span>
+          <span>+1 234 567 8900</span><span>|</span>
+          <span className="text-blue-600">LinkedIn</span>
+        </div>
+        <div className="border-t-2 border-gray-800" />
+      </div>
+
+      <div className="mb-2">
+        <div className="font-bold text-[9px] mb-1 uppercase">SUMMARY</div>
+        <div className="space-y-0.5">
+          <div className="h-1 bg-gray-300 rounded" />
+          <div className="h-1 bg-gray-300 rounded w-11/12" />
+        </div>
+        <div className="border-t border-gray-400 mt-1.5" />
+      </div>
+
+      <div className="mb-2">
+        <div className="font-bold text-[9px] mb-1 uppercase">WORK EXPERIENCE</div>
+        <div>
+          <div className="flex justify-between mb-0.5">
+            <div className="h-1.5 bg-gray-400 rounded w-1/3" />
+            <div className="h-1 bg-gray-300 rounded w-1/6" />
+          </div>
+          <div className="h-1.5 bg-gray-400 rounded w-1/4 mb-0.5" />
+          <div className="space-y-0.5">
+            <div className="h-1 bg-gray-200 rounded" />
+            <div className="h-1 bg-gray-200 rounded w-5/6" />
+          </div>
+        </div>
+        <div className="border-t border-gray-400 mt-1.5" />
+      </div>
+
+      <div className="mb-2">
+        <div className="font-bold text-[9px] mb-1 uppercase">EDUCATION</div>
+        <div className="flex justify-between">
+          <div>
+            <div className="h-1.5 bg-gray-400 rounded w-24 mb-0.5" />
+            <div className="h-1 bg-gray-300 rounded w-20" />
+          </div>
+          <div className="h-1 bg-gray-300 rounded w-14" />
+        </div>
+        <div className="border-t border-gray-400 mt-1.5" />
+      </div>
+
+      <div className="mb-1.5">
+        <div className="font-bold text-[9px] mb-1 uppercase">SKILLS</div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-          {[...Array(8)].map((_, i) => (
+          {[...Array(6)].map((_, i) => (
             <div key={i} className="flex items-center">
               <div className="w-1 h-1 bg-gray-600 rounded-full mr-1" />
               <div className="h-1 bg-gray-300 rounded flex-1" />
@@ -260,113 +326,47 @@ export default function TemplateSelectionModal({
           ))}
         </div>
       </div>
-
-      <div className="mb-2">
-        <div className="flex items-center mb-1">
-          <div className="font-bold text-[9px]">EXPERIENCE</div>
-          <div className="flex-1 border-t border-gray-400 ml-2" />
-        </div>
-        <div className="space-y-1.5">
-          <div>
-            <div className="flex justify-between mb-0.5">
-              <div className="h-1.5 bg-gray-400 rounded w-1/4" />
-              <div className="h-1 bg-gray-300 rounded w-1/5" />
-            </div>
-            <div className="h-1.5 bg-gray-400 rounded w-1/3 mb-0.5" />
-            <div className="space-y-0.5">
-              <div className="h-1 bg-gray-200 rounded" />
-              <div className="h-1 bg-gray-200 rounded w-5/6" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-2">
-        <div className="flex items-center mb-1">
-          <div className="font-bold text-[9px]">EDUCATION</div>
-          <div className="flex-1 border-t border-gray-400 ml-2" />
-        </div>
-        <div className="flex justify-between">
-          <div>
-            <div className="h-1.5 bg-gray-400 rounded w-24 mb-0.5" />
-            <div className="h-1 bg-gray-300 rounded w-20" />
-          </div>
-          <div className="h-1 bg-gray-300 rounded w-14" />
-        </div>
-      </div>
-
-      <div className="mb-1.5">
-        <div className="flex items-center mb-1">
-          <div className="font-bold text-[9px]">PROJECTS</div>
-          <div className="flex-1 border-t border-gray-400 ml-2" />
-        </div>
-        <div className="space-y-0.5">
-          <div>
-            <div className="flex justify-between mb-0.5">
-              <div className="h-1.5 bg-gray-400 rounded w-1/3" />
-              <div className="h-1 bg-gray-300 rounded w-1/6" />
-            </div>
-            <div className="space-y-0.5">
-              <div className="h-1 bg-gray-200 rounded" />
-              <div className="h-1 bg-gray-200 rounded w-4/5" />
-            </div>
-            <div className="h-1 bg-gray-300 rounded w-2/3 mt-0.5" />
-          </div>
-        </div>
-      </div>
     </div>
   );
 
-  // Tempe Template Preview (TemplateFour)
-  const TempePreview = () => (
-    <div className="aspect-[8.5/11] bg-white p-6 text-[8px] leading-tight">
+  // Classic Professional (Executive) - classic_professional: LEFT name, pipe contact, labeled skill groups
+  const ExecutivePreview = () => (
+    <div className="aspect-[8.5/11] bg-white p-6 text-[8px] leading-tight text-left">
       <div className="mb-2">
-        <div className="font-bold text-[14px] mb-1">YOUR NAME</div>
-        <div className="text-[7px] grid grid-cols-2 gap-x-4 mb-1">
-          <div className="space-y-0.5">
-            <div>your.email@example.com</div>
-            <div>City, State</div>
-          </div>
-          <div className="space-y-0.5">
-            <div>+1 234 567 8900</div>
-            <div className="text-blue-600">linkedin.com/in/yourprofile</div>
-          </div>
-          <div className="space-y-0.5">
-            <div className="text-blue-600">yourportfolio.com</div>
-          </div>
+        <div className="font-bold text-[14px] mb-1 uppercase tracking-wide">YOUR NAME</div>
+        <div className="text-[7px] flex flex-wrap gap-x-1 mb-2" style={{ color: "#374151" }}>
+          <span>your.email@example.com</span><span>|</span>
+          <span>+1 234 567 8900</span><span>|</span>
+          <span className="text-blue-600">LinkedIn</span>
         </div>
+        <div className="border-t-2 border-gray-900" />
       </div>
-      <div className="border-t-2 border-gray-800 mb-2" />
 
       <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1">SUMMARY</div>
+        <div className="font-bold text-[9px] mb-1 pb-0.5 uppercase border-b border-gray-600">SUMMARY</div>
         <div className="space-y-0.5">
           <div className="h-1 bg-gray-300 rounded" />
           <div className="h-1 bg-gray-300 rounded w-11/12" />
         </div>
       </div>
-      <div className="border-t border-gray-400 mb-2" />
 
       <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1">EXPERIENCE</div>
-        <div className="space-y-1.5">
-          <div>
-            <div className="flex justify-between mb-0.5">
-              <div className="h-1.5 bg-gray-400 rounded w-1/3" />
-              <div className="h-1 bg-gray-300 rounded w-1/6" />
-            </div>
-            <div className="h-1.5 bg-gray-400 rounded w-1/4 mb-0.5" />
-            <div className="space-y-0.5">
-              <div className="h-1 bg-gray-200 rounded" />
-              <div className="h-1 bg-gray-200 rounded w-5/6" />
-            </div>
+        <div className="font-bold text-[9px] mb-1 pb-0.5 uppercase border-b border-gray-600">EXPERIENCE</div>
+        <div>
+          <div className="flex justify-between mb-0.5">
+            <div className="h-1.5 bg-gray-400 rounded w-1/3" />
+            <div className="h-1 bg-gray-300 rounded w-1/6" />
+          </div>
+          <div className="h-1 bg-gray-300 rounded w-1/4 mb-0.5" />
+          <div className="space-y-0.5">
+            <div className="h-1 bg-gray-200 rounded" />
+            <div className="h-1 bg-gray-200 rounded w-5/6" />
           </div>
         </div>
       </div>
-      <div className="border-t border-gray-400 mb-2" />
 
       <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1">EDUCATION</div>
+        <div className="font-bold text-[9px] mb-1 pb-0.5 uppercase border-b border-gray-600">EDUCATION</div>
         <div className="flex justify-between">
           <div>
             <div className="h-1.5 bg-gray-400 rounded w-24 mb-0.5" />
@@ -375,32 +375,14 @@ export default function TemplateSelectionModal({
           <div className="h-1 bg-gray-300 rounded w-14" />
         </div>
       </div>
-      <div className="border-t border-gray-400 mb-2" />
-
-      <div className="mb-2">
-        <div className="font-bold text-[9px] mb-1">PROJECTS</div>
-        <div className="space-y-0.5">
-          <div>
-            <div className="flex justify-between mb-0.5">
-              <div className="h-1.5 bg-gray-400 rounded w-1/3" />
-              <div className="h-1 bg-gray-300 rounded w-1/6" />
-            </div>
-            <div className="space-y-0.5">
-              <div className="h-1 bg-gray-200 rounded" />
-              <div className="h-1 bg-gray-200 rounded w-4/5" />
-            </div>
-            <div className="h-1 bg-gray-300 rounded w-2/3 mt-0.5" />
-          </div>
-        </div>
-      </div>
-      <div className="border-t border-gray-400 mb-2" />
 
       <div className="mb-1.5">
-        <div className="font-bold text-[9px] mb-1">SKILLS</div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="flex items-center">
-              <div className="w-1 h-1 bg-gray-600 rounded-full mr-1" />
+        <div className="font-bold text-[9px] mb-1 pb-0.5 uppercase border-b border-gray-600">SKILLS</div>
+        <div className="space-y-0.5">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <div className="h-1 bg-gray-500 rounded w-10" />
+              <span style={{ fontSize: "6px" }}>:</span>
               <div className="h-1 bg-gray-300 rounded flex-1" />
             </div>
           ))}
@@ -446,6 +428,7 @@ export default function TemplateSelectionModal({
               {template.id === "atlas" && <AtlasPreview />}
               {template.id === "terra" && <TerraPreview />}
               {template.id === "tempe" && <TempePreview />}
+              {template.id === "classic_professional" && <ExecutivePreview />}
             </div>
 
             {/* Selection Checkmark */}
@@ -507,8 +490,13 @@ export default function TemplateSelectionModal({
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-10 py-8">
-            <div className="grid grid-cols-2 gap-8 mb-12">
-              {templates.map((template) => (
+            <div className="grid grid-cols-3 gap-8 mb-8">
+              {templates.slice(0, 3).map((template) => (
+                <TemplatePreview key={template.id} template={template} />
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-8 max-w-2xl mx-auto mb-12">
+              {templates.slice(3).map((template) => (
                 <TemplatePreview key={template.id} template={template} />
               ))}
             </div>

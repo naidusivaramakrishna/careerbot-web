@@ -6,16 +6,16 @@ import dynamic from 'next/dynamic';
 import {
   getCurrentQuestion,
   getNextQuestion,
-  uploadAudio,
   CurrentQuestionResponse,
 } from '@/api/communicationApi';
-import { saveTextAnswer, textToSpeechAndRecord, validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audioUtils';
+import { saveTextAnswer } from '@/utils/audioUtils';
 import { getSectionRoute } from '@/utils/sectionRouter';
 import logger from '@/lib/logger';
 
 const TextToSpeechPlayer = dynamic(() => import('../components/TextToSpeechPlayer'), { loading: () => <div className="animate-pulse p-4">Loading...</div>, ssr: false });
 const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="w-64 bg-gray-100 animate-pulse" /> });
 const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), { loading: () => null });
+const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200 h-20 animate-pulse" /> });
 
 // Option type for MCQ questions
 interface Option {
@@ -31,9 +31,8 @@ export default function StoryListenFactsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [isConvertingAudio, setIsConvertingAudio] = useState(false);
-  const [audioSaved, setAudioSaved] = useState(false);
-  const [audioRecordings, setAudioRecordings] = useState<{ [questionId: string]: Blob }>({});
+  const [answerSaved, setAnswerSaved] = useState(false);
+  const [audioCompleted, setAudioCompleted] = useState(false); // Track if audio has finished playing
 
   // Track which story has been played (by story text content)
   const [playedStories, setPlayedStories] = useState<Set<string>>(new Set());
@@ -69,283 +68,15 @@ export default function StoryListenFactsPage() {
     return result;
   })();
 
-  // Generate options based on expected_text and question context
-  const getOptionsForQuestion = (): Option[] => {
-    // If backend provides options array, use them
+  // Get options from backend only
+  const getOptionsFromBackend = (): Option[] => {
     if (currentQuestion?.options && currentQuestion.options.length > 0) {
-      const optionIds = ['A', 'B', 'C', 'D', 'E', 'F'];
       return currentQuestion.options.map((optionText, index) => ({
-        id: optionIds[index] || String.fromCharCode(65 + index),
+        id: String.fromCharCode(65 + index), // A, B, C, D, etc.
         text: optionText,
       }));
     }
-
-    // If backend provides expected_text, use it as the correct answer and generate 3 distractors
-    if (currentQuestion?.expected_text) {
-      const expectedAnswer = currentQuestion.expected_text; // Keep exactly as-is
-      const expectedLower = expectedAnswer.toLowerCase();
-      const questionText = currentQuestion.question_text?.toLowerCase() || '';
-
-      // Generate 3 plausible distractors that follow the same pattern as expected_text
-      let distractors: string[] = [];
-
-      // Analyze expected_text pattern and generate similar distractors
-      // Check for name patterns first (e.g., "Tom and Alex", "Sarah", "Mike")
-      const isNamePattern = /^[A-Z][a-z]+(\s+(and|&)\s+[A-Z][a-z]+)?$/.test(expectedAnswer);
-
-      if (isNamePattern || (questionText.includes('who') && !expectedLower.startsWith('the ') && !expectedLower.startsWith('a '))) {
-        // Name pattern: "Tom and Alex", "Sarah", "Mike and Emma"
-        if (expectedAnswer.includes(' and ') || expectedAnswer.includes(' & ')) {
-          // Two names pattern
-          distractors = [
-            'Sarah and Mike',
-            'John and Mary',
-            'Emma and David',
-            'Lisa and Peter',
-            'Anna and James',
-            'Kate and Robert',
-            'Nina and Chris',
-            'Rachel and Ben',
-            'Sophie and Mark',
-            'Laura and Steven'
-          ];
-        } else {
-          // Single name pattern
-          distractors = [
-            'Sarah',
-            'Michael',
-            'Emma',
-            'David',
-            'Lisa',
-            'Peter',
-            'Anna',
-            'James',
-            'Rachel',
-            'Mark'
-          ];
-        }
-      } else if (expectedLower.startsWith('at the ') || expectedLower.startsWith('at ')) {
-        // Location pattern: "At the coffee shop", "At home"
-        distractors = [
-          'At the park',
-          'At home',
-          'At the office',
-          'At the store',
-          'At the beach',
-          'At the restaurant',
-          'At school',
-          'At the library',
-          'At the hospital',
-          'At the market',
-          'At the station',
-          'At the hotel'
-        ];
-      } else if (expectedLower.startsWith('in the ') || expectedLower.startsWith('in ')) {
-        // Time or location pattern: "In the morning", "In the garden"
-        if (questionText.includes('when') || questionText.includes('time')) {
-          distractors = [
-            'In the morning',
-            'In the afternoon',
-            'In the evening',
-            'In the night',
-            'In the early hours',
-            'In the late afternoon',
-            'In the midday',
-            'In the dawn'
-          ];
-        } else {
-          distractors = [
-            'In the garden',
-            'In the house',
-            'In the classroom',
-            'In the kitchen',
-            'In the bedroom',
-            'In the hall',
-            'In the lobby',
-            'In the basement'
-          ];
-        }
-      } else if (expectedLower.startsWith('to ')) {
-        // Purpose/reason pattern: "To help someone", "To buy groceries"
-        distractors = [
-          'To help someone',
-          'To complete a task',
-          'To solve a problem',
-          'To meet a friend',
-          'To save time',
-          'To earn money',
-          'To learn something',
-          'To avoid trouble',
-          'To finish work',
-          'To make plans'
-        ];
-      } else if (expectedLower.startsWith('the ')) {
-        // Definite noun pattern: "The main character", "The manager"
-        if (questionText.includes('who')) {
-          distractors = [
-            'The main character',
-            'The friend',
-            'The family member',
-            'The colleague',
-            'The neighbor',
-            'The teacher',
-            'The manager',
-            'The stranger',
-            'The customer',
-            'The assistant'
-          ];
-        } else {
-          distractors = [
-            'The first option',
-            'The best choice',
-            'The right answer',
-            'The correct solution',
-            'The main point',
-            'The key detail',
-            'The important fact',
-            'The central idea'
-          ];
-        }
-      } else if (expectedLower.startsWith('a ') || expectedLower.startsWith('an ')) {
-        // Indefinite noun pattern: "A friend", "An important event"
-        distractors = [
-          'A friend',
-          'A family member',
-          'A colleague',
-          'A neighbor',
-          'A stranger',
-          'A teacher',
-          'A customer',
-          'A helper',
-          'A visitor',
-          'A partner'
-        ];
-      } else if (questionText.includes('when') || questionText.includes('time')) {
-        // Time-related answers
-        distractors = [
-          'In the morning',
-          'In the afternoon',
-          'In the evening',
-          'At night',
-          'Yesterday',
-          'Last week',
-          'Tomorrow',
-          'Next month',
-          'Today',
-          'Last year'
-        ];
-      } else if (questionText.includes('how') || questionText.includes('feel')) {
-        // Emotion/feeling pattern
-        distractors = [
-          'Happy and excited',
-          'Sad and disappointed',
-          'Worried and nervous',
-          'Calm and relaxed',
-          'Angry and frustrated',
-          'Surprised and amazed',
-          'Tired and exhausted',
-          'Curious and interested',
-          'Confident and proud',
-          'Anxious and scared'
-        ];
-      } else if (questionText.includes('what')) {
-        // Event/thing pattern
-        distractors = [
-          'A special event',
-          'An important decision',
-          'A challenging situation',
-          'A helpful suggestion',
-          'A surprising discovery',
-          'A difficult problem',
-          'A wonderful opportunity',
-          'A valuable lesson',
-          'A simple task',
-          'A great achievement'
-        ];
-      } else {
-        // Generic distractors for other patterns
-        distractors = [
-          'The first alternative',
-          'The second option',
-          'Another possibility',
-          'A different answer',
-          'An alternative choice',
-          'Something else entirely',
-          'A contrasting view',
-          'The opposite outcome',
-          'A similar situation',
-          'The main reason'
-        ];
-      }
-
-      // Filter out the expected answer from distractors (case-insensitive)
-      distractors = distractors.filter(d => d.toLowerCase() !== expectedLower);
-
-      // Select 3 random distractors
-      const selectedDistractors = distractors
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3);
-
-      // Combine expected answer (EXACTLY as-is) with distractors
-      const allOptions = [expectedAnswer, ...selectedDistractors];
-
-      // Shuffle to randomize correct answer position
-      const shuffledOptions = allOptions.sort(() => Math.random() - 0.5);
-
-      // Assign A, B, C, D labels
-      return shuffledOptions.map((optionText, index) => ({
-        id: String.fromCharCode(65 + index), // A, B, C, D
-        text: optionText,
-      }));
-    }
-
-    // Fallback: Generate generic contextual options
-    const questionText = currentQuestion?.question_text?.toLowerCase() || '';
-
-    if (questionText.includes('where') || questionText.includes('location')) {
-      return [
-        { id: 'A', text: 'At the park' },
-        { id: 'B', text: 'At home' },
-        { id: 'C', text: 'At the office' },
-        { id: 'D', text: 'At the store' },
-      ];
-    } else if (questionText.includes('when') || questionText.includes('time')) {
-      return [
-        { id: 'A', text: 'In the morning' },
-        { id: 'B', text: 'In the afternoon' },
-        { id: 'C', text: 'In the evening' },
-        { id: 'D', text: 'At night' },
-      ];
-    } else if (questionText.includes('who')) {
-      return [
-        { id: 'A', text: 'The main character' },
-        { id: 'B', text: 'A friend' },
-        { id: 'C', text: 'A family member' },
-        { id: 'D', text: 'A stranger' },
-      ];
-    } else if (questionText.includes('why') || questionText.includes('reason')) {
-      return [
-        { id: 'A', text: 'To help someone' },
-        { id: 'B', text: 'To complete a task' },
-        { id: 'C', text: 'To solve a problem' },
-        { id: 'D', text: 'To learn something new' },
-      ];
-    } else if (questionText.includes('how') || questionText.includes('feel')) {
-      return [
-        { id: 'A', text: 'Happy and excited' },
-        { id: 'B', text: 'Sad and disappointed' },
-        { id: 'C', text: 'Worried and nervous' },
-        { id: 'D', text: 'Calm and relaxed' },
-      ];
-    } else {
-      // Default generic options for comprehension questions
-      return [
-        { id: 'A', text: 'The first option' },
-        { id: 'B', text: 'The second option' },
-        { id: 'C', text: 'The third option' },
-        { id: 'D', text: 'The fourth option' },
-      ];
-    }
+    return [];
   };
 
   // Fetch current question from API
@@ -364,13 +95,13 @@ export default function StoryListenFactsPage() {
         section_name: 'Story Listen Facts', // Backend uses this name
       });
       setSelectedAnswer(null);
-      setAudioSaved(false);
-      setIsConvertingAudio(false);
+      setAnswerSaved(false);
 
       logger.info('Story Listening - Now showing question:', response.question_id);
       logger.info('Has story_text:', !!response.story_text);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch question');
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to fetch question');
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -379,70 +110,31 @@ export default function StoryListenFactsPage() {
   const handleStartSection = async () => {
     setShowModal(false);
     setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
+    setAudioCompleted(false); // Reset audio completion state
     await fetchCurrentQuestion();
   };
 
+  // Handler for when audio finishes playing
+  const handleAudioEnd = () => {
+    setAudioCompleted(true);
+    logger.info('✅ Story audio playback completed - Start Questions button now enabled');
+  };
+
   // Handle option selection for MCQ
-  const handleOptionSelect = async (optionText: string) => {
+  const handleOptionSelect = (optionText: string) => {
     if (!currentQuestion?.question_id) return;
+    if (answerSaved) return; // Prevent re-selection after answer is saved
+
     setSelectedAnswer(optionText);
-    setAudioSaved(false);
 
-    // Save text answer immediately
+    // Save the selected option directly to sessionStorage
     saveTextAnswer(currentQuestion.question_id, optionText);
-    logger.info('Selected answer:', optionText);
 
-    // Convert selected answer to audio blob (muted, not audible)
-    setIsConvertingAudio(true);
+    logger.info('✅ Selected answer:', optionText);
+    logger.info('✅ Saved answer as-is');
 
-    try {
-      // Convert text to speech and record as audio blob with volume 0 (muted)
-      const audioBlob = await textToSpeechAndRecord(optionText, {
-        rate: 0.85,
-        pitch: 1.0,
-        volume: 0, // Muted - no sound will play
-        lang: 'en-GB',
-      });
-
-      logger.info('Audio blob created (muted), size:', audioBlob.size);
-
-      // ✅ Validate synthetic audio before saving
-      logger.info('🔍 Validating synthetic audio...');
-      const validation = await validateAudioBlob(audioBlob);
-
-      logger.info('📊 Synthetic audio validation result:', {
-        isValid: validation.isValid,
-        duration: formatDuration(validation.duration),
-        hasSound: validation.hasSound,
-        size: formatFileSize(audioBlob.size),
-        error: validation.error,
-        warning: validation.warning,
-      });
-
-      if (!validation.isValid) {
-        const errorMsg = `Generated audio is invalid: ${validation.error}`;
-        logger.error('❌', errorMsg);
-        // Don't throw - text answer is still saved, audio generation can be retried
-        logger.warn('⚠️ Continuing with text answer, audio validation failed');
-      }
-
-      // IMPORTANT: Don't save to sessionStorage to avoid quota exceeded error
-      // Generated audio files are large (~282KB) and will fill up sessionStorage quickly
-      // We only need to keep in state for immediate upload via progressive API
-      setAudioRecordings((prev) => ({
-        ...prev,
-        [currentQuestion.question_id]: audioBlob,
-      }));
-
-      setAudioSaved(true);
-
-      logger.info(`✅ Synthetic audio saved (${formatDuration(validation.duration)}, ${formatFileSize(audioBlob.size)})`);
-    } catch (err) {
-      logger.error('Error converting to audio:', err);
-      // Don't set error - text answer is still saved, audio is optional
-    } finally {
-      setIsConvertingAudio(false);
-    }
+    // Mark as saved immediately
+    setAnswerSaved(true);
   };
 
   // Handle "Start Questions" button after story audio
@@ -469,181 +161,87 @@ export default function StoryListenFactsPage() {
 
     try {
       const sessionId = localStorage.getItem('session_id');
-      const testId = localStorage.getItem('test_id');
 
       if (!sessionId) throw new Error('Session ID not found');
-      if (!testId) throw new Error('Test ID not found');
-
-      // Get the audio blob for current question
-      const audioBlob = audioRecordings[currentQuestion.question_id];
-      logger.info('Audio blob check for question:', currentQuestion.question_id, {
-        hasBlob: !!audioBlob,
-        blobSize: audioBlob?.size,
-        blobType: audioBlob?.type,
-        allQuestionIds: Object.keys(audioRecordings),
-      });
-
-      if (!audioBlob) {
-        const errorMsg = `No audio recording found for question ${currentQuestion.question_id}. Please try selecting your answer again.`;
-        logger.error(errorMsg);
-        alert(errorMsg);
-        throw new Error(errorMsg);
-      }
-
-      if (audioBlob.size === 0 || audioBlob.size < 100) {
-        const errorMsg = `Audio recording is empty or too small (${audioBlob.size} bytes). Please try again.`;
-        logger.error(errorMsg);
-        alert(errorMsg);
-        throw new Error(errorMsg);
-      }
-
-      // ✅ STEP 1: Upload audio first
-      // ✅ Upload audio with return_next_question=true
-      logger.info('Uploading audio with return_next_question=true for question:', currentQuestion.question_id);
-      logger.info('Audio details:', {
-        size: `${(audioBlob.size / 1024).toFixed(2)} KB`,
-        type: audioBlob.type,
-      });
-
-      const uploadResponse = await uploadAudio({
-        session_id: sessionId,
-        question_id: currentQuestion.question_id,
-        test_id: testId,
-        audio_file: audioBlob,
-        return_next_question: true, // ✅ Request next question in response
-        question_number: currentQuestion.question_number, // ✅ Global question number
-      });
-      logger.info('Audio uploaded successfully for', currentQuestion.question_id, ':', uploadResponse);
-
-      // Verify upload was successful - backend returns success:true and status:"completed"
-      if (!uploadResponse || !uploadResponse.success) {
-        const errorMsg = `Audio upload failed for question ${currentQuestion.question_id}. Response: ${JSON.stringify(uploadResponse)}`;
-        logger.error(errorMsg);
-        alert(errorMsg);
-        throw new Error(errorMsg);
-      }
 
       // ✅ Mark question as completed in sessionStorage for Assessment Summary Panel
-      // Using lightweight marker (just "true" string, not the audio blob)
       if (currentQuestion.question_number) {
         sessionStorage.setItem(`q_${currentQuestion.question_number}_completed`, 'true');
         logger.info(`✅ Marked question ${currentQuestion.question_number} as completed`);
       }
 
-      // ✅ Check if next question was included in upload response
-      if (uploadResponse.next_question) {
-        logger.info('Next question received from upload response:', uploadResponse.next_question.question.question_id);
+      // Fetch next question directly (no audio upload for story listen facts)
+      logger.info('📬 Fetching next question for:', currentQuestion.question_id);
+      const response = await getNextQuestion({
+        session_id: sessionId,
+        question_id: currentQuestion.question_id,
+      });
 
-        const nextQuestion = uploadResponse.next_question.question;
+      logger.info('===== [Story Listening] NEXT QUESTION API RESPONSE =====');
+      logger.info('completed:', response.completed);
+      logger.info('section_name:', response.section_name);
+      logger.info('question_id:', response.question_id);
+      logger.info('question_number:', response.question_number);
+      logger.info('total_questions:', response.total_questions);
+      logger.info('is_last_question:', response.is_last_question);
+      logger.info('is_last_section:', response.is_last_section);
+      logger.info('==========================================================');
 
-        // Check if section changed to next section
-        if (nextQuestion.section_name !== currentQuestion.section_name) {
-          logger.info('Section changed from', currentQuestion.section_name, 'to:', nextQuestion.section_name);
-
-          // Get the route for the new section dynamically
-          const nextRoute = getSectionRoute(nextQuestion.section_name);
-
-          if (nextRoute) {
-            logger.info('Routing to next section page:', nextRoute);
-            logger.info('Current URL before routing:', window.location.pathname);
-
-            router.push(nextRoute);
-          } else {
-            logger.error('Unknown section name from backend:', nextQuestion.section_name);
-            setError(`Unknown section: ${nextQuestion.section_name}. Please contact support.`);
-          }
-          return;
-        }
-
-        logger.info('Staying in Story Listen Facts section, showing next question');
-        // Update current question with the next question from upload response
-        setCurrentQuestion({
-          question_id: nextQuestion.question_id,
-          question_text: nextQuestion.question_text,
-          question_type: nextQuestion.question_type || 'MCQ',
-          section_name: 'Story Listen Facts', // ✅ Use backend section name
-          section_id: undefined,
-          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1, // ✅ Keep global for backend
-          total_questions: uploadResponse.next_question.section.total_questions,
-          options: nextQuestion.options,
-          audio_url: nextQuestion.audio_url,
-          time_limit: nextQuestion.time_limit,
-          is_last_question: nextQuestion.is_last_question,
-          is_last_section: nextQuestion.is_last_section,
-          story_text: nextQuestion.story_text,
-          expected_text: nextQuestion.expected_text,
-        });
-        setSelectedAnswer(null);
-
-        // ✅ Increment section-specific question number for display
-        setSectionQuestionNumber((prev) => prev + 1);
-      } else {
-        // Fallback: If next_question not in response, fetch it separately
-        logger.warn('Next question not in upload response, fetching separately...');
-        const response = await getNextQuestion({
-          session_id: sessionId,
-          question_id: currentQuestion.question_id,
-        });
-
-        logger.info('===== [Story Listening] NEXT QUESTION API RESPONSE =====');
-        logger.info('completed:', response.completed);
-        logger.info('section_name:', response.section_name);
-        logger.info('question_id:', response.question_id);
-        logger.info('question_number:', response.question_number);
-        logger.info('total_questions:', response.total_questions);
-        logger.info('is_last_question:', response.is_last_question);
-        logger.info('is_last_section:', response.is_last_section);
-        logger.info('==========================================================');
-
-        if (response.completed) {
-          logger.info('Assessment completed, routing to feedback');
-          router.push('/communication/feedback');
-          return;
-        }
-
-        // Check if section changed to next section
-        if (response.section_name !== currentQuestion.section_name) {
-          logger.info('Section changed from', currentQuestion.section_name, 'to:', response.section_name);
-
-          // Get the route for the new section dynamically
-          const nextRoute = getSectionRoute(response.section_name);
-
-          if (nextRoute) {
-            logger.info('Routing to next section page:', nextRoute);
-            logger.info('Current URL before routing:', window.location.pathname);
-
-            router.push(nextRoute);
-          } else {
-            logger.error('Unknown section name from backend:', response.section_name);
-            setError(`Unknown section: ${response.section_name}. Please contact support.`);
-          }
-          return;
-        }
-
-        logger.info('Staying in Story Listen Facts section, showing next question');
-        // Update to the next question with normalized section name
-        setCurrentQuestion({
-          ...response,
-          section_name: 'Story Listen Facts', // ✅ Normalize to match backend
-        });
-        setSelectedAnswer(null);
-
-        // ✅ Increment section-specific question number for display
-        setSectionQuestionNumber((prev) => prev + 1);
+      if (response.completed) {
+        logger.info('✅ Assessment completed, routing to feedback');
+        router.push('/communication/feedback');
+        return;
       }
+
+      // Check if section changed to next section
+      if (response.section_name !== currentQuestion.section_name) {
+        logger.info('✅ Section changed from', currentQuestion.section_name, 'to:', response.section_name);
+
+        // Get the route for the new section dynamically
+        const nextRoute = getSectionRoute(response.section_name);
+
+        if (nextRoute) {
+          logger.info('🚀 Routing to next section page:', nextRoute);
+          logger.info('Current URL before routing:', window.location.pathname);
+
+          router.push(nextRoute);
+        } else {
+          logger.error('Unknown section name from backend:', response.section_name);
+          setError(`Unknown section: ${response.section_name}. Please contact support.`);
+        }
+        return;
+      }
+
+      logger.info('➡️ Staying in Story Listen Facts section, showing next question');
+      // Update to the next question with normalized section name
+      setCurrentQuestion({
+        ...response,
+        section_name: 'Story Listen Facts', // ✅ Normalize to match backend
+      });
+      setSelectedAnswer(null);
+      setAnswerSaved(false); // Reset answer saved state
+
+      // Reset audio completion for new story (if it has story_text and hasn't been played)
+      if (response.story_text && !playedStories.has(response.story_text)) {
+        setAudioCompleted(false);
+      }
+
+      // ✅ Increment section-specific question number for display
+      setSectionQuestionNumber((prev) => prev + 1);
 
       // Note: playedStories Set is preserved
       // shouldShowStoryAudio will check if this new question's story has been played
-    } catch (err: any) {
-      logger.error('Error uploading audio or fetching next question:', err);
-      setError(err.message || 'Failed to upload audio or fetch next question');
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to fetch next question');
+      logger.error('❌ Error fetching next question:', err);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Get hardcoded options for MCQ
-  const options = getOptionsForQuestion();
+  // Get options from backend
+  const options = getOptionsFromBackend();
 
   return (
     <>
@@ -681,22 +279,11 @@ export default function StoryListenFactsPage() {
             </div>
 
             {/* PROGRESS */}
-            <div className="bg-white rounded-lg p-5 mb-6">
-              <div className="flex justify-between items-center mb-2">
-                <p className="text-sm text-gray-600">
-                  {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS} Questions
-                </p>
-              </div>
-
-              <div className="w-full bg-gray-200 h-1 rounded-full">
-                <div
-                  className="bg-green-500 h-1 rounded-full transition-all"
-                  style={{
-                    width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
+            <QuestionProgressBar
+              currentQuestion={sectionQuestionNumber}
+              totalQuestions={SECTION_TOTAL_QUESTIONS}
+              className="mb-6"
+            />
 
             {error ? (
               <div className="text-center py-12">
@@ -735,6 +322,7 @@ export default function StoryListenFactsPage() {
                           <TextToSpeechPlayer
                             text={currentQuestion.story_text}
                             autoPlay={false}
+                            onAudioEnd={handleAudioEnd}
                           />
                         )}
 
@@ -761,11 +349,28 @@ export default function StoryListenFactsPage() {
                       </div>
                     </div>
 
+                    {/* Info message when audio hasn't completed */}
+                    {!audioCompleted && (
+                      <div className="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
+                        <p className="text-sm text-blue-700 flex items-start gap-2">
+                          <span className="text-blue-600">ℹ️</span>
+                          <span className="font-medium">
+                            Please play and listen to the story first before you can start the questions.
+                          </span>
+                        </p>
+                      </div>
+                    )}
+
                     {/* Start Questions Button */}
                     <div className="flex justify-end">
                       <button
                         onClick={handleStartQuestions}
-                        className="px-8 py-3 rounded-lg font-semibold flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg transition"
+                        disabled={!audioCompleted}
+                        className={`px-8 py-3 rounded-lg font-semibold flex items-center gap-2 shadow-md hover:shadow-lg transition ${
+                          audioCompleted
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
                       >
                         Start Questions →
                       </button>
@@ -901,9 +506,9 @@ export default function StoryListenFactsPage() {
 
                       <button
                         onClick={handleNext}
-                        disabled={!audioSaved || loading}
+                        disabled={!answerSaved || loading}
                         className={`px-8 py-3 rounded-lg font-semibold flex items-center gap-2 transition ${
-                          audioSaved && !loading
+                          answerSaved && !loading
                             ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
                             : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         }`}

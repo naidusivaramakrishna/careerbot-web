@@ -276,14 +276,13 @@ export async function convertDocxHeaderToParagraphs(docxBlob: Blob): Promise<Blo
 
     if (process.env.NODE_ENV === 'development') {
       // // console.log("✅ SUCCESS! Header:", {
-        fullName: nameParts.join(" "),
-        contact: contactParts.join(" | ")
-      });
+      //   fullName: nameParts.join(" "),
+      //   contact: contactParts.join(" | ")
+      // });
     }
 
     return updatedBlob;
-  } catch (e) {
-    // // console.error("convertDocxHeaderToParagraphs error:", e instanceof Error ? e.message : String(e));
+  } catch {
     return docxBlob;
   }
 }

@@ -52,53 +52,60 @@ const ResumePage = () => {
     checkForResumes();
   }, [checkForResumes]);
 
-  if (loading) {
-    return (
-      <div>
-        <h1 className="text-2xl font-bold">RESUME</h1>
-        <div className="min-h-screen bg-gray-200 px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
-          <main className="flex-1 p-8">
-            <div className="rounded-2xl relative">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <span className="text-2xl font-bold">Resume Management</span>
-                  <p className="text-sm text-gray-600">
-                    Manage, analyze and optimize your resumes with AI
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white w-full rounded-2xl border border-gray-200 p-8 text-center">
-                <div className="flex items-center justify-center gap-2">
-                  <div className="w-4 h-4 border-4 border-[#2200ff] border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-gray-600">Loading...</span>
-                </div>
-              </div>
-            </div>
-          </main>
+  const PageShell = ({ children }: { children: React.ReactNode }) => (
+    <div className="min-h-screen bg-gray-50">
+      {/* Page header */}
+      <div className="px-6 pt-6 pb-2">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)" }}
+          >
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 leading-tight">Resume Management</h1>
+            <p className="text-xs text-gray-500">Manage, analyze and optimize your resumes with AI</p>
+          </div>
         </div>
       </div>
+
+      {/* Divider */}
+      <div className="mx-6 mt-4 border-t border-gray-200" />
+
+      {children}
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <PageShell>
+        <div className="flex items-center justify-center py-32">
+          <div className="flex flex-col items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg,rgba(88,150,215,0.15),rgba(31,78,152,0.15))" }}
+            >
+              <div className="w-5 h-5 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+            </div>
+            <span className="text-sm text-gray-400">Loading your resumes…</span>
+          </div>
+        </div>
+      </PageShell>
     );
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold">RESUME</h1>
-      <div className="min-h-screen bg-gray-200 px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
-        <main className="flex-1 p-8">
-          <div className="rounded-2xl relative">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <span className="text-2xl font-bold">Resume Management</span>
-                <p className="text-sm text-gray-600">
-                  Manage, analyze and optimize your resumes with AI
-                </p>
-              </div>
-            </div>
-            <EmptyState selected={selected} onSelect={setSelected} />
-          </div>
-        </main>
+    <PageShell>
+      {/* Subtle intro text */}
+      <div className="px-6 pt-6 pb-2 text-center">
+        <p className="text-sm text-gray-400">Choose how you&apos;d like to get started</p>
       </div>
-    </div>
+      <EmptyState selected={selected} onSelect={setSelected} />
+    </PageShell>
   );
 };
 

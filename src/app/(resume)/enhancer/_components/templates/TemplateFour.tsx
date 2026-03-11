@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ResumeData, ResumeStyle, useResume } from "../ResumeContext";
 import AutoPaginator from "../AutoPaginator";
+import { cleanResumeContent } from "../../_utils/cleanResumeData";
 
 type SectionName =
   | "Summary"
@@ -30,7 +31,7 @@ type SectionName =
 
 interface Props {
   data: ResumeData;
-  style: ResumeStyle;
+  style?: ResumeStyle;
   onPageCountChange?: (count: number) => void;
   enabledSections?: string[];
 }
@@ -47,6 +48,7 @@ const TemplateFour: React.FC<Props> = ({
     setActiveSection,
     setSectionOrder,
     setEnabledSections,
+    addedFields,
   } = useResume();
 
   const activeEnabledSections = enabledSections || contextEnabledSections;
@@ -111,6 +113,8 @@ const TemplateFour: React.FC<Props> = ({
     fontWeight: 400,
     fontStyle: resumeStyle.italic ? "italic" : "normal",
     color: "#111827",
+    overflowWrap: "break-word",
+    wordBreak: "break-word",
   };
 
   const headingStyle: React.CSSProperties = {
@@ -157,6 +161,13 @@ const TemplateFour: React.FC<Props> = ({
     fontStyle: "italic",
   };
 
+  /* ---------- Field-level highlight helpers ---------- */
+  const hlStyle: React.CSSProperties = { backgroundColor: "rgba(34,197,94,0.25)", borderRadius: "3px", padding: "0 2px" };
+  const isFieldAdded = (section: string, itemIdx: number, field: string) =>
+    (addedFields[section] || []).includes(`${itemIdx}.${field}`);
+  const hl = (section: string, itemIdx: number, field: string, value: React.ReactNode) =>
+    isFieldAdded(section, itemIdx, field) ? <span style={hlStyle}>{value}</span> : <>{value}</>;
+
   /* ---------- COMPLETE SectionWrapper from TemplateOne ---------- */
   const SectionWrapper: React.FC<{
     name: SectionName | "PersonalInfo";
@@ -172,7 +183,6 @@ const TemplateFour: React.FC<Props> = ({
     const canMoveUp = isRealSection && idx > 0;
     const canMoveDown =
       isRealSection && idx >= 0 && idx < sectionOrder.length - 1;
-
     return (
       <section className="relative group mb-4 page-break-inside-avoid">
         {/* Hover dotted border */}
@@ -264,16 +274,21 @@ const TemplateFour: React.FC<Props> = ({
 
     switch (section as SectionName) {
       case "Summary":
+        // Clean summary to remove JSON formatting like {"summary": "text"}
+        const cleanSummary = professionalSummary
+          ? cleanResumeContent(professionalSummary).cleanContent
+          : "";
+
         return (
           <SectionWrapper name="Summary">
             <h2 className="mb-2" style={headingStyle}>
               Summary
             </h2>
-            {professionalSummary ? (
+            {cleanSummary ? (
               <div
                 className="text-justify resume-description"
                 style={baseTextStyle}
-                dangerouslySetInnerHTML={{ __html: professionalSummary }}
+                dangerouslySetInnerHTML={{ __html: cleanSummary }}
               />
             ) : (
               <p style={placeholderStyle}>
@@ -288,31 +303,37 @@ const TemplateFour: React.FC<Props> = ({
         return (
           <SectionWrapper name="Experience">
             <h2 className="mb-2 page-break-after-avoid" style={headingStyle}>
-              Experience
+              Work Experience
             </h2>
             {workExperience.length > 0 ? (
               workExperience.map((exp, idx) => (
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline mb-0.5">
                     <h3 className="font-bold" style={titleStyle}>
-                      {exp.role}
+                      {hl("Experience", idx, "role", exp.role)}
                     </h3>
                     <span
                       className="text-sm whitespace-nowrap ml-4"
                       style={baseTextStyle}
                     >
-                      {exp.duration || "– Present"}
+                      {hl("Experience", idx, "duration", exp.duration || "– Present")}
                     </span>
                   </div>
                   <div className="mb-1">
                     <div className="font-semibold" style={baseTextStyle}>
-                      {exp.company}
+                      {hl("Experience", idx, "company", exp.company)}
+                      {exp.location && <span className="text-sm font-normal"> • {hl("Experience", idx, "location", exp.location)}</span>}
                     </div>
+                    {exp.client && (
+                      <div className="text-sm" style={baseTextStyle}>
+                        Client: {hl("Experience", idx, "client", exp.client)}
+                      </div>
+                    )}
                   </div>
                   {exp.description && (
                     <div
                       className="resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Experience", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{ __html: exp.description }}
                     />
                   )}
@@ -337,15 +358,15 @@ const TemplateFour: React.FC<Props> = ({
                   <div className="flex justify-between items-baseline">
                     <div>
                       <div className="font-bold" style={titleStyle}>
-                        {edu.degree}
+                        {hl("Education", idx, "degree", edu.degree)}
                       </div>
                       <div className="text-sm" style={baseTextStyle}>
-                        {edu.college}
-                        {edu.branch && ` • ${edu.branch}`}
+                        {hl("Education", idx, "college", edu.college)}
+                        {edu.branch && <> • {hl("Education", idx, "branch", edu.branch)}</>}
                       </div>
                       {edu.grade && (
                         <div className="text-sm" style={baseTextStyle}>
-                          <span className="font-medium">{edu.gradeType || "Grade"}:</span> {edu.grade}
+                          <span className="font-medium">{hl("Education", idx, "gradeType", edu.gradeType || "Grade")}:</span> {hl("Education", idx, "grade", edu.grade)}
                         </div>
                       )}
                     </div>
@@ -353,7 +374,7 @@ const TemplateFour: React.FC<Props> = ({
                       className="text-sm whitespace-nowrap ml-4"
                       style={baseTextStyle}
                     >
-                      {edu.duration}
+                      {hl("Education", idx, "duration", edu.duration)}
                     </div>
                   </div>
                 </div>
@@ -379,7 +400,7 @@ const TemplateFour: React.FC<Props> = ({
                       className="font-bold flex items-center"
                       style={titleStyle}
                     >
-                      <span>{proj.title}</span>
+                      <span>{hl("Projects", idx, "title", proj.title)}</span>
                       {proj.link && (
                         <a
                           href={proj.link}
@@ -404,14 +425,14 @@ const TemplateFour: React.FC<Props> = ({
                     )}
                     {proj.client && (
                       <div className="text-sm ml-4" style={baseTextStyle}>
-                        Client: {proj.client}
+                        Client: {hl("Projects", idx, "client", proj.client)}
                       </div>
                     )}
                   </div>
                   {proj.description && (
                     <div
                       className="mb-1.5 resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Projects", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{ __html: proj.description }}
                     />
                   )}
@@ -494,26 +515,26 @@ const TemplateFour: React.FC<Props> = ({
                 <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline mb-0.5">
                     <h3 className="font-bold" style={titleStyle}>
-                      {intern.role}
+                      {hl("Internships", idx, "role", intern.role)}
                     </h3>
                     {intern.duration && (
                       <span
                         className="text-sm whitespace-nowrap ml-4"
                         style={baseTextStyle}
                       >
-                        {intern.duration}
+                        {hl("Internships", idx, "duration", intern.duration)}
                       </span>
                     )}
                   </div>
                   <div className="mb-1">
                     <div className="font-semibold" style={baseTextStyle}>
-                      {intern.company}
+                      {hl("Internships", idx, "company", intern.company)}
                     </div>
                   </div>
                   {intern.description && (
                     <div
                       className="resume-description"
-                      style={descriptionStyle}
+                      style={isFieldAdded("Internships", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
                       dangerouslySetInnerHTML={{
                         __html: intern.description,
                       }}
@@ -543,21 +564,21 @@ const TemplateFour: React.FC<Props> = ({
                   <div style={baseTextStyle}>
                     <div>
                       <span className="font-medium" style={titleStyle}>
-                        {cert.name}
+                        {hl("Certificates", idx, "name", cert.name)}
                       </span>
-                      <span>{cert.issuedBy ? ', ' + cert.issuedBy : ''}</span>
+                      {cert.issuedBy && <span>{', '}{hl("Certificates", idx, "issuedBy", cert.issuedBy)}</span>}
                     </div>
                     <div className="text-xs mt-0.5">
-                      {cert.year && <span>{cert.year}</span>}
+                      {cert.year && <span>{hl("Certificates", idx, "year", cert.year)}</span>}
                       {cert.expiryDate && (
                         <span className="ml-3">
-                          Expires: {cert.expiryDate}
+                          Expires: {hl("Certificates", idx, "expiryDate", cert.expiryDate)}
                         </span>
                       )}
                     </div>
                     {cert.credentialId && (
                       <div className="text-xs mt-0.5">
-                        Credential ID: {cert.credentialId}
+                        Credential ID: {hl("Certificates", idx, "credentialId", cert.credentialId)}
                       </div>
                     )}
                   </div>
@@ -581,21 +602,21 @@ const TemplateFour: React.FC<Props> = ({
                 <div key={idx} className="mb-2 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline mb-0.5">
                     <span className="font-semibold" style={titleStyle}>
-                      {achievement.title}
+                      {hl("Achievements", idx, "title", achievement.title)}
                     </span>
                     {achievement.date && (
                       <span
                         className="text-sm whitespace-nowrap ml-4"
                         style={baseTextStyle}
                       >
-                        {formatDate(achievement.date)}
+                        {hl("Achievements", idx, "date", formatDate(achievement.date))}
                       </span>
                     )}
                   </div>
                   {achievement.description && (
                     <div
                       className="resume-description"
-                      style={baseTextStyle}
+                      style={isFieldAdded("Achievements", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
                       dangerouslySetInnerHTML={{
                         __html: achievement.description,
                       }}
@@ -626,11 +647,11 @@ const TemplateFour: React.FC<Props> = ({
                   <span className="mr-2">•</span>
                   <div>
                     <span className="font-semibold" style={titleStyle}>
-                      {award.title}
+                      {hl("Awards", idx, "title", award.title)}
                     </span>
                     <span>
-                      {award.issuedBy && ` — ${award.issuedBy}`}
-                      {award.year && ` (${award.year})`}
+                      {award.issuedBy && <> — {hl("Awards", idx, "issuedBy", award.issuedBy)}</>}
+                      {award.year && <> ({hl("Awards", idx, "year", award.year)})</>}
                     </span>
                   </div>
                 </div>
@@ -650,24 +671,32 @@ const TemplateFour: React.FC<Props> = ({
             </h2>
             {volunteering.length > 0 ? (
               volunteering.map((vol, idx) => (
-                <div key={idx} className="mb-2 page-break-inside-avoid">
+                <div key={idx} className="mb-3 page-break-inside-avoid">
                   <div className="flex justify-between items-baseline">
                     <div>
                       <div className="font-bold" style={titleStyle}>
-                        {vol.role}
+                        {hl("Volunteering", idx, "role", vol.role)}
                       </div>
                       <div className="text-sm" style={baseTextStyle}>
-                        {vol.organization}
+                        {hl("Volunteering", idx, "organization", vol.organization)}
                       </div>
                     </div>
-                    <div
-                      className="text-sm whitespace-nowrap ml-4"
-                      style={baseTextStyle}
-                    >
-                      {formatDate(vol.startDate)} –{" "}
-                      {formatDate(vol.endDate)}
-                    </div>
+                    {vol.duration && (
+                      <div
+                        className="text-sm whitespace-nowrap ml-4"
+                        style={baseTextStyle}
+                      >
+                        {hl("Volunteering", idx, "duration", vol.duration)}
+                      </div>
+                    )}
                   </div>
+                  {vol.description && (
+                    <div
+                      className="text-sm mt-1"
+                      style={isFieldAdded("Volunteering", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
+                      dangerouslySetInnerHTML={{ __html: vol.description }}
+                    />
+                  )}
                 </div>
               ))
             ) : (
@@ -689,21 +718,15 @@ const TemplateFour: React.FC<Props> = ({
               hobbies.map((hobby, idx) => (
                 <div key={idx} className="mb-1.5">
                   <span className="font-semibold" style={titleStyle}>
-                    {hobby.name}
+                    {hl("Hobbies", idx, "name", hobby.name)}
                   </span>
                   {hobby.description && (
-                    <span
-                      className="resume-description"
-                      style={baseTextStyle}
-                      dangerouslySetInnerHTML={{
-                        __html: ` — ${hobby.description}`,
-                      }}
-                    />
+                    <span style={baseTextStyle}> — {hl("Hobbies", idx, "description", hobby.description)}</span>
                   )}
                   {hobby.proficiencyLevel && (
                     <span className="text-sm" style={baseTextStyle}>
                       {" "}
-                      ({hobby.proficiencyLevel})
+                      ({hl("Hobbies", idx, "proficiencyLevel", hobby.proficiencyLevel)})
                     </span>
                   )}
                 </div>
@@ -725,22 +748,16 @@ const TemplateFour: React.FC<Props> = ({
               interests.map((interest, idx) => (
                 <div key={idx} className="mb-1.5">
                   <span className="font-semibold" style={titleStyle}>
-                    {interest.name}
+                    {hl("Interests", idx, "name", interest.name)}
                   </span>
                   {interest.category && (
                     <span className="text-sm" style={baseTextStyle}>
                       {" "}
-                      ({interest.category})
+                      ({hl("Interests", idx, "category", interest.category)})
                     </span>
                   )}
                   {interest.description && (
-                    <span
-                      className="resume-description"
-                      style={baseTextStyle}
-                      dangerouslySetInnerHTML={{
-                        __html: ` — ${interest.description}`,
-                      }}
-                    />
+                    <span style={baseTextStyle}> — {hl("Interests", idx, "description", interest.description)}</span>
                   )}
                 </div>
               ))
@@ -903,72 +920,57 @@ const TemplateFour: React.FC<Props> = ({
               </div>
 
               {/* Contact details below name: left and right aligned */}
-              <div className="flex items-start justify-between mb-2 text-xs" style={baseTextStyle}>
-                {/* Left side */}
-                <div className="flex flex-col text-left space-y-0.5">
-                  {personalInfo.email && (
-                    <div>{personalInfo.email}</div>
-                  )}
-                  {personalInfo.location && (
-                    <div>{personalInfo.location}</div>
-                  )}
-                </div>
+              {(() => {
+                const addedPI = addedFields["PersonalInfo"] || [];
+                const hlStyle = { backgroundColor: "rgba(34,197,94,0.25)", borderRadius: "3px", padding: "0 2px" } as React.CSSProperties;
+                return (
+                  <div className="flex items-start justify-between mb-2 text-xs" style={baseTextStyle}>
+                    {/* Left side */}
+                    <div className="flex flex-col text-left space-y-0.5">
+                      {personalInfo.email && (
+                        <div><span style={addedPI.includes("email") ? hlStyle : {}}>{personalInfo.email}</span></div>
+                      )}
+                      {personalInfo.location && (
+                        <div><span style={addedPI.includes("location") ? hlStyle : {}}>{personalInfo.location}</span></div>
+                      )}
+                    </div>
 
-                {/* Right side */}
-                <div className="flex flex-col text-right space-y-0.5">
-                  {personalInfo.phone && (
-                    <div>{personalInfo.phone}</div>
-                  )}
-                  {personalInfo.linkedinUrl && (
-                    <div>
-                      <a
-                        href={personalInfo.linkedinUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={linkStyle}
-                        className="hover:underline"
-                      >
-                        {personalInfo.linkedinUrl
-                          .replace("https://", "")
-                          .replace("http://", "")
-                          .replace("www.", "")}
-                      </a>
+                    {/* Right side */}
+                    <div className="flex flex-col text-right space-y-0.5">
+                      {personalInfo.phone && (
+                        <div><span style={addedPI.includes("phone") ? hlStyle : {}}>{personalInfo.phone}</span></div>
+                      )}
+                      {personalInfo.linkedinUrl && (
+                        <div>
+                          <span style={addedPI.includes("linkedinUrl") ? hlStyle : {}}>
+                            <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">
+                              {personalInfo.linkedinUrl.replace("https://", "").replace("http://", "").replace("www.", "")}
+                            </a>
+                          </span>
+                        </div>
+                      )}
+                      {personalInfo.githubUrl && (
+                        <div>
+                          <span style={addedPI.includes("githubUrl") ? hlStyle : {}}>
+                            <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">
+                              {personalInfo.githubUrl.replace("https://", "").replace("http://", "").replace("www.", "")}
+                            </a>
+                          </span>
+                        </div>
+                      )}
+                      {personalInfo.portifolioUrl && (
+                        <div>
+                          <span style={addedPI.includes("portifolioUrl") ? hlStyle : {}}>
+                            <a href={personalInfo.portifolioUrl} target="_blank" rel="noopener noreferrer" style={linkStyle} className="hover:underline">
+                              {personalInfo.portifolioUrl.replace("https://", "").replace("http://", "").replace("www.", "")}
+                            </a>
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {personalInfo.githubUrl && (
-                    <div>
-                      <a
-                        href={personalInfo.githubUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={linkStyle}
-                        className="hover:underline"
-                      >
-                        {personalInfo.githubUrl
-                          .replace("https://", "")
-                          .replace("http://", "")
-                          .replace("www.", "")}
-                      </a>
-                    </div>
-                  )}
-                  {personalInfo.portifolioUrl && (
-                    <div>
-                      <a
-                        href={personalInfo.portifolioUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={linkStyle}
-                        className="hover:underline"
-                      >
-                        {personalInfo.portifolioUrl
-                          .replace("https://", "")
-                          .replace("http://", "")
-                          .replace("www.", "")}
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                );
+              })()}
 
               <hr className="border-t-2 border-gray-700" />
             </div>

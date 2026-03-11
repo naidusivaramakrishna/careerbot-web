@@ -76,18 +76,21 @@ export async function injectDocxHeaderIntoBody(docxBlob: Blob): Promise<Blob> {
       }
     ];
 
-    const bodyParagraphs = Array.isArray(documentJson["w:document"]["w:body"]["w:p"])
-      ? documentJson["w:document"]["w:body"]["w:p"]
-      : [documentJson["w:document"]["w:body"]["w:p"] || {}];
+    const doc = documentJson as Record<string, Record<string, Record<string, unknown>>>;
+    const wDocument = doc["w:document"] as Record<string, Record<string, unknown>>;
+    const wBody = wDocument["w:body"] as Record<string, unknown>;
+    const wP = wBody["w:p"];
 
-    const doc = documentJson as Record<string, Record<string, Record<string, Record<string, unknown>>>>;
-    doc["w:document"]["w:body"]["w:p"] = [...headerParagraphs, ...bodyParagraphs];
+    const bodyParagraphs = Array.isArray(wP)
+      ? wP
+      : [wP || {}];
+
+    wBody["w:p"] = [...headerParagraphs, ...bodyParagraphs] as unknown as Record<string, unknown>;
     const newDocumentXml = builder.build(documentJson);
     zip.file("word/document.xml", newDocumentXml);
 
     return await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-  } catch (e) {
-    // // console.error("injectDocxHeaderIntoBody error:", e instanceof Error ? e.message : String(e));
+  } catch {
     return docxBlob;
   }
 }

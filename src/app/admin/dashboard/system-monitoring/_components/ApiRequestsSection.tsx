@@ -40,7 +40,7 @@ export const ApiRequestsSection = memo(({
                 minute: '2-digit',
                 hour12: false
             })
-            const data: any = { time, value: point.value }
+            const data: { time: string; value: number; previous?: number } = { time, value: point.value }
 
             if (showComparison && metrics.comparison?.enabled && metrics.comparison.previous_period?.data_points[index]) {
                 data.previous = metrics.comparison.previous_period.data_points[index].value
