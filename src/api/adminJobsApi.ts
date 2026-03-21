@@ -540,20 +540,30 @@ export const downloadJobsCSV = async (
 
 /**
  * Upload company logo
- * 
- * Uploads a logo file and returns the URL to use in job creation/update
- * 
+ *
+ * Uploads a logo file and returns the URL to use in job creation/update.
+ *
+ * Workflow:
+ * 1. Upload logo → get logo_url
+ * 2. Use logo_url in createJob() or updateJob() with company_logo_url field
+ * 3. Retrieve logo later using getJobLogo(jobId)
+ *
  * @param file - The logo file to upload (image file)
  * @returns Promise with the uploaded logo URL
- * 
+ *
  * Example usage:
  * ```typescript
+ * // Step 1: Upload logo
  * const logoUrl = await uploadJobLogo(selectedFile);
- * // Use logoUrl in createJob or updateJob
+ *
+ * // Step 2: Create job with logo URL
  * await createJob({
  *   ...jobData,
  *   company_logo_url: logoUrl
  * });
+ *
+ * // Step 3: Later, retrieve logo by job_id
+ * const logoResponse = await getJobLogo(jobId);
  * ```
  */
 export const uploadJobLogo = async (file: File): Promise<string> => {

@@ -105,27 +105,31 @@ export const addProjectItem = async (
  * Checks if data has required fields for regular endpoint
  * Returns true if data can be used with regular endpoint, false if auto-fill is needed
  */
-export const canUseRegularEndpoint = (data: any, type: "education" | "experience" | "certification" | "project" | "skill"): boolean => {
+export const canUseRegularEndpoint = (data: unknown, type: "education" | "experience" | "certification" | "project" | "skill"): boolean => {
+    if (typeof data !== "object" || data === null) return false;
+
+    const obj = data as Record<string, unknown>;
+
     switch (type) {
         case "education":
             // Education requires: institution, degree, stream, start_date
-            return !!(data.institution && data.degree && data.stream && data.start_date);
+            return !!(obj.institution && obj.degree && obj.stream && obj.start_date);
 
         case "experience":
             // Experience requires: job_title, company, job_type, location, start_date
-            return !!(data.job_title && data.company && data.job_type && data.location && data.start_date);
+            return !!(obj.job_title && obj.company && obj.job_type && obj.location && obj.start_date);
 
         case "certification":
             // Certification requires: certification_name, issuer, start_date, credential_id
-            return !!(data.certification_name && data.issuer && data.start_date && data.credential_id);
+            return !!(obj.certification_name && obj.issuer && obj.start_date && obj.credential_id);
 
         case "project":
             // Project requires: project_name, start_date
-            return !!(data.project_name && data.start_date);
+            return !!(obj.project_name && obj.start_date);
 
         case "skill":
             // Skill requires: name
-            return !!data.name;
+            return !!obj.name;
 
         default:
             return false;

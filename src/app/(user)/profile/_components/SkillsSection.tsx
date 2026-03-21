@@ -5,6 +5,7 @@ import { getSkills, deleteSkill, Skill } from '@/api/userApi';
 import { addSkillItem } from '../_utils/autoFillHelper';
 import { toast } from "sonner";
 import { useProfileContext } from '../context/ProfileContext';
+import { useDashboard } from '@/contexts/DashboardContext';
 import { ProfileData } from '../_types/ProfileData';
 import logger from '@/lib/logger';
 import { suggestedSkills } from '../_utils/skillsData';
@@ -17,6 +18,7 @@ interface SkillsSectionProps {
 
 const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: SkillsSectionProps) => {
     const { setProfileData } = useProfileContext();
+    const { refreshDashboard } = useDashboard();
     const [newSkill, setNewSkill] = useState<string>("");
     const [skills, setSkills] = useState<Skill[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -76,6 +78,11 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
                 return newProfile;
             });
 
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
+
             toast.success('Skill removed');
         } catch (error) {
             logger.error('Failed to delete skill:', error);
@@ -112,6 +119,11 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
                 const newProfile = { ...prev, skills: updatedSkillNames };
                 return newProfile;
             });
+
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
 
             setNewSkill(""); // clear input after adding
             setIsFocused(false);

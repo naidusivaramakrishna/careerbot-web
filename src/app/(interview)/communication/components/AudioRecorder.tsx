@@ -300,15 +300,24 @@ export default function AudioRecorder({
             Record your response:
           </h3>
 
-          <div className="mb-6"> <div className="w-40 h-40 rounded-full border-4 border-blue-500 flex items-center justify-center"> <div className="w-24 h-24 rounded-full bg-blue-500 flex items-center justify-center"> <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24"> <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3z" /> <path d="M5 11a7 7 0 0014 0h-2a5 5 0 01-10 0H5z" /> </svg> </div> </div> </div>
+          <div className="mb-6">
+            <div className="w-36 h-36 rounded-full border-4 border-[#2557a7]/25 flex items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-[#2557a7]/8 flex items-center justify-center">
+                <svg className="w-9 h-9 text-[#2557a7]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3z" />
+                  <path d="M5 11a7 7 0 0014 0h-2a5 5 0 01-10 0H5z" />
+                </svg>
+              </div>
+            </div>
+          </div>
 
           <button
             onClick={startRecording}
             disabled={disabled}
-            className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+            className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-all ${
               disabled
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
             }`}
           >
             Start Recording
@@ -323,8 +332,8 @@ export default function AudioRecorder({
           </h3>
 
           <div className="mb-6">
-            <div className="w-40 h-40 rounded-full border-4 border-blue-500 flex items-center justify-center">
-              <div className="w-24 h-24 rounded-full bg-blue-500 flex items-center justify-center overflow-hidden">
+            <div className="w-36 h-36 rounded-full border-4 border-red-400/40 flex items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center overflow-hidden">
                 {/* Animated Waveform Bars */}
                 <div className="flex items-center justify-center gap-0.5 h-full">
                   {[...Array(12)].map((_, i) => (
@@ -343,19 +352,19 @@ export default function AudioRecorder({
             </div>
           </div>
 
-          <p className="text-red-500 text-sm mb-4">
-            Recording in progress...
+          <p className="text-sm text-gray-500 mb-4">
+            Recording in progress…
           </p>
 
           <button
             onClick={stopRecording}
-            className="flex items-center gap-3 px-6 py-3 bg-red-500 text-white rounded-lg"
+            className="flex items-center gap-2 px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold text-sm transition-colors"
           >
-            <span className="w-3 h-3 bg-white rounded-sm"></span>
+            <span className="w-2.5 h-2.5 bg-white rounded-sm"></span>
             Stop Recording
           </button>
 
-          <p className="text-red-500 text-sm mt-3">
+          <p className="text-xs text-gray-400 mt-3 tabular-nums">
             {timeLeft}s remaining
           </p>
         </>

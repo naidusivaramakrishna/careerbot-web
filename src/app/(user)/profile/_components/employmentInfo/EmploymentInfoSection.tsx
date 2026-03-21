@@ -103,8 +103,9 @@ export default function EmploymentInfoSection({
 
             toast.success("Employment information saved");
             closeModal();
-        } catch (error: any) {
-            setValidationErrors(error?.errors || []);
+        } catch (error: unknown) {
+            const err = error as { errors?: ValidationError[] } | null;
+            setValidationErrors(err?.errors || []);
             toast.error("Failed to save employment information");
         } finally {
             setLoading(false);

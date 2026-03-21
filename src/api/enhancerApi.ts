@@ -53,15 +53,16 @@ async function safeGet<T = unknown>(url: string, config?: AxiosRequestConfig): P
   }
 }
 
-async function safePatch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+
+async function safePut<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   try {
-    logApiRequest('PATCH', url, data);
+    logApiRequest('PUT', url, data);
     const typedData = data as Record<string, unknown> | undefined;
-    const response = await httpClient.patch<T>(url, typedData, config);
-    logApiResponse('PATCH', url, response.status, response.headers['x-trace-id']);
+    const response = await httpClient.put<T>(url, typedData, config);
+    logApiResponse('PUT', url, response.status, response.headers['x-trace-id']);
     return response.data;
   } catch (err: unknown) {
-    logApiError('PATCH', url, err);
+    logApiError('PUT', url, err);
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data ?? err.message;
       const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
@@ -231,7 +232,8 @@ export async function updateEnhancedResume(
   enhanced_id: string,
   request: UpdateEnhancedResumeRequest
 ): Promise<EnhanceResumeResponse> {
-  const response = await safePatch<EnhanceResumeResponse>(`/resume/enhance/${enhanced_id}`, request);
+  // Backend supports PUT (not PATCH) on this endpoint
+  const response = await safePut<EnhanceResumeResponse>(`/resume/enhance/${enhanced_id}`, request);
   return response;
 }
 
@@ -355,15 +357,40 @@ export async function previewEnhancedResumePDFOnly(enhanced_id: string): Promise
   }
 }
 
+/* ========== APPLY FIX ========== */
+
+export interface ApplyFixRequest {
+  enhancer_state: string; // enhanced_resume_id — the backend uses this to look up current state
+  suggestion_id: string;
+  fix_type?: 'auto' | 'manual' | 'info';
+  value?: string; // required for manual fixes (e.g. the phone number / email the user typed)
+}
+
+/**
+ * Apply a suggestion fix to an enhanced resume.
+ * POST /api/v1/resume/enhance/apply
+ *
+ * @param request - { enhancer_state, suggestion_id, fix_type, value }
+ * @returns Updated enhancer response with fix applied and refreshed ATS score
+ */
+export async function applyFix(request: ApplyFixRequest): Promise<EnhanceResumeResponse> {
+  logger.api.request('POST', '/resume/enhance/apply', {
+    suggestion_id: request.suggestion_id,
+    fix_type: request.fix_type,
+  });
+  const response = await safePost<EnhanceResumeResponse>('/resume/enhance/apply', request);
+  logger.debug('Fix applied', { suggestion_id: request.suggestion_id });
+  return response;
+}
+
 /* ========== COMPLETE WORKFLOW HELPER ========== */
 
 /**
  * Complete Enhancement Workflow
  *
- * This helper function combines all steps:
- * 1. Parse the resume file
- * 2. Enhance the resume with AI
- * 3. Return the enhanced data
+ * Two-step: parse file → POST /api/v1/resume/enhance with resume_id
+ * Used by both Resume Enhancer and ATS Scan flows.
+ * Normalises the response so downstream code using `enhanced_resume` still works.
  *
  * @param file - Resume file to enhance
  * @param jobDescription - Optional job description for tailoring
@@ -377,35 +404,32 @@ export async function processResumeEnhancement(
   parseResult: ParseResumeResponse;
   enhanceResult: EnhanceResumeResponse;
 }> {
-  try {
-    // Step 1: Parse Resume
-    const parseResult = await parseResumeForEnhancer(file);
-    const resumeId = parseResult.resume_id;
-
-    if (!resumeId) {
-      throw new Error("Failed to parse resume: No resume_id returned");
-    }
-
-    // Step 2: Enhance Resume
-    const enhanceRequest: EnhanceResumeRequest = {
-      resume_id: resumeId,
-      region,
-    };
-
-    // Add job description if provided
-    if (jobDescription) {
-      enhanceRequest.job_description = jobDescription;
-    }
-
-    const enhanceResult = await enhanceResume(enhanceRequest);
-
-    return {
-      parseResult,
-      enhanceResult,
-    };
-  } catch (error: unknown) {
-    throw error;
+  // Step 1: Parse Resume
+  const parseResult = await parseResumeForEnhancer(file);
+  const resumeId = parseResult.resume_id;
+  if (!resumeId) {
+    throw new Error("Failed to parse resume: No resume_id returned");
   }
+
+  // Step 2: Enhance (also computes ATS breakdown)
+  const enhanceRequest: EnhanceResumeRequest = { resume_id: resumeId, region };
+  if (jobDescription) enhanceRequest.job_description = jobDescription;
+
+  const enhanceResult = await enhanceResume(enhanceRequest);
+
+  // Normalise new response shape → backward-compat with EnhancerPage
+  // enhancer_state.resume replaces the old enhanced_resume field
+  const resumeData = enhanceResult.enhancer_state?.resume;
+  if (resumeData && !enhanceResult.enhanced_resume) {
+    (enhanceResult as unknown as Record<string, unknown>).enhanced_resume = resumeData;
+  }
+
+  // Set parsed_data from enhancer_state.resume if not already present
+  if (resumeData && !parseResult.parsed_data) {
+    parseResult.parsed_data = resumeData as import('@/types/api.types').ResumeData;
+  }
+
+  return { parseResult, enhanceResult };
 }
 
 /* ========== EXPORT ========== */
@@ -413,13 +437,13 @@ export const enhancerApi = {
   // Core enhancement functions
   parseResumeForEnhancer,
   enhanceResume,
+  applyFix,
   getEnhancedResume,
   updateEnhancedResume,
   deleteEnhancedResume,
   getEnhancementHistory,
   downloadEnhancedResume,
-  previewEnhancedResume, // Returns full data + PDF
-  previewEnhancedResumePDFOnly, // Legacy: PDF only
+  previewEnhancedResume,
 
   // Helper workflow
   processResumeEnhancement,

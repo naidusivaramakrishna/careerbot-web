@@ -67,19 +67,15 @@ export const useUserManagement = () => {
         }
     }, [currentPage, pageSize, filters])
 
-    // Fetch users when dependencies change
+    // Fetch users when page or filters change
     useEffect(() => {
         fetchUsers()
-    }, [currentPage, pageSize, filters.role, filters.subscription, filters.status, filters.created_from, filters.created_to, filters.sort_by, filters.sort_order])
+    }, [currentPage, pageSize, filters.role, filters.subscription, filters.status, filters.created_from, filters.created_to, filters.sort_by, filters.sort_order, fetchUsers])
 
-    // Handle search with debounce
+    // Handle search with debounce and reset to page 1
     useEffect(() => {
         const debounceTimer = setTimeout(() => {
-            if (currentPage === 1) {
-                fetchUsers()
-            } else {
-                setCurrentPage(1)
-            }
+            setCurrentPage(1)
         }, 500)
 
         return () => clearTimeout(debounceTimer)
@@ -122,7 +118,7 @@ export const useUserManagement = () => {
         try {
             toast.loading('Preparing export...')
 
-            const exportParams: any = {
+            const exportParams: Record<string, unknown> = {
                 page: 1,
                 page_size: 10000,
             }

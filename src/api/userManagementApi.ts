@@ -99,8 +99,9 @@ export interface UnsuspendUserResponse {
 
 export interface Resume {
     id: string;
-    title?: string;
+    title: string;
     updated_at: string;
+    download_url: string;
 }
 
 export interface Payment {

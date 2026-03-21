@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useResume } from "./ResumeContext";
-import { updateEnhancedResume } from "@/api/enhancerApi";
 
 /* ===== EDITORS ===== */
 import PersonalInfoEditor from "./section-editors/PersonalInfoEditor";
@@ -26,7 +25,7 @@ import ReferencesEditor from "./section-editors/ReferencesEditor";
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  onSave?: (didChange: boolean, section: string, changedFieldNames: string[]) => void;
+  onSave?: (didChange: boolean, section: string, changedFieldNames: string[], changedFieldValues?: Record<string, string>) => void;
 };
 
 /** Returns "idx.fieldName" keys for fields that changed (any edit, not just empty→filled) */
@@ -517,6 +516,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
     const updated: any = { ...resumeData };
     let didChange = false;
     let changedFieldNames: string[] = [];
+    let changedFieldValues: Record<string, string> = {};
     // Helper to extract plain field names from "idx.field" keys
     const plainFields = (keys: string[]) => keys.map(k => k.includes('.') ? k.split('.').slice(1).join('.') : k);
 
@@ -541,7 +541,15 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
         if (!orig.linkedinUrl && newPersonalInfo.linkedinUrl) newlyAdded.push("linkedinUrl");
         if (!orig.githubUrl && newPersonalInfo.githubUrl) newlyAdded.push("githubUrl");
         if (!orig.portifolioUrl && newPersonalInfo.portifolioUrl) newlyAdded.push("portifolioUrl");
-        if (newlyAdded.length) { addAddedFields("PersonalInfo", newlyAdded); didChange = true; changedFieldNames = newlyAdded; }
+        if (newlyAdded.length) {
+          addAddedFields("PersonalInfo", newlyAdded);
+          didChange = true;
+          changedFieldNames = newlyAdded;
+          // Capture actual values so builder can pass them to applyFix without stale closure
+          changedFieldValues = Object.fromEntries(
+            newlyAdded.map(f => [f, (newPersonalInfo as Record<string, string>)[f] || ''])
+          );
+        }
 
         updated.personalInfo = newPersonalInfo;
         break;
@@ -564,7 +572,20 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
       case "Education": {
         const keys = getAddedFieldKeys(resumeData.education || [], formData.items || []);
         updated.education = formData.items || [];
-        if (keys.length) { addAddedFields("Education", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        if (keys.length) {
+          addAddedFields("Education", keys);
+          didChange = true;
+          changedFieldNames = plainFields(keys);
+          // Extract actual new values so applyFix can send them to the backend
+          keys.forEach(key => {
+            const [idxStr, ...fieldParts] = key.split('.');
+            const idx = parseInt(idxStr, 10);
+            const fieldName = fieldParts.join('.');
+            const item = (formData.items?.[idx] || {}) as Record<string, unknown>;
+            const val = item[fieldName];
+            if (val != null && String(val).trim()) changedFieldValues[fieldName] = String(val);
+          });
+        }
         break;
       }
 
@@ -578,7 +599,24 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
       case "Projects": {
         const keys = getAddedFieldKeys(resumeData.projects || [], formData.items || []);
         updated.projects = formData.items || [];
-        if (keys.length) { addAddedFields("Projects", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        if (keys.length) {
+          addAddedFields("Projects", keys);
+          didChange = true;
+          changedFieldNames = plainFields(keys);
+          // Extract values for applyFix (contributions are arrays → join as text)
+          keys.forEach(key => {
+            const [idxStr, ...fieldParts] = key.split('.');
+            const idx = parseInt(idxStr, 10);
+            const fieldName = fieldParts.join('.');
+            const item = (formData.items?.[idx] || {}) as Record<string, unknown>;
+            const val = item[fieldName];
+            if (val != null) {
+              changedFieldValues[fieldName] = Array.isArray(val)
+                ? (val as string[]).filter(Boolean).join('; ')
+                : String(val).trim();
+            }
+          });
+        }
         break;
       }
 
@@ -586,7 +624,18 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
         const oldSkills = JSON.stringify(resumeData.categorizedSkills || {});
         const newSkillsData = formData.categorizedSkills || { languages: "", frameworks: "", libraries: "", databases: "", technologies: "", tools: "", cloudPlatforms: "", softSkills: "" };
         updated.categorizedSkills = newSkillsData;
-        if (JSON.stringify(newSkillsData).length > oldSkills.length) { addAddedFields("Skills", ["0.skills"]); didChange = true; changedFieldNames = ["skills"]; }
+        if (JSON.stringify(newSkillsData).length > oldSkills.length) {
+          addAddedFields("Skills", ["0.skills"]);
+          didChange = true;
+          changedFieldNames = ["skills"];
+          // Extract soft skills value for applyFix
+          const softSkills = typeof newSkillsData.softSkills === 'string'
+            ? newSkillsData.softSkills
+            : Array.isArray(newSkillsData.softSkills)
+              ? (newSkillsData.softSkills as string[]).join(', ')
+              : '';
+          if (softSkills.trim()) changedFieldValues = { skills: softSkills.trim() };
+        }
         break;
       }
 
@@ -594,7 +643,20 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
         const keys = getAddedFieldKeys(resumeData.languages || [], formData.languages || []);
         updated.languages = formData.languages || [];
         if (formData.categorizedSkills) updated.categorizedSkills = formData.categorizedSkills;
-        if (keys.length) { addAddedFields("Languages", keys); didChange = true; changedFieldNames = plainFields(keys); }
+        if (keys.length) {
+          addAddedFields("Languages", keys);
+          didChange = true;
+          changedFieldNames = plainFields(keys);
+          // Extract proficiency values so applyFix can send them to the backend
+          keys.forEach(key => {
+            const [idxStr, ...fieldParts] = key.split('.');
+            const idx = parseInt(idxStr, 10);
+            const fieldName = fieldParts.join('.');
+            const item = (formData.languages?.[idx] || {}) as Record<string, unknown>;
+            const val = item[fieldName];
+            if (val != null && String(val).trim()) changedFieldValues[fieldName] = String(val);
+          });
+        }
         break;
       }
 
@@ -656,29 +718,11 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
     }
 
     // Update React state for preview
+    // Note: no backend save endpoint exists for partial edits.
+    // Score refresh is handled via applyFix in the builder after this modal closes.
     setResumeData(updated);
 
-    // Save to backend database (transform frontend format to backend format)
-    try {
-      const enhancedId = sessionStorage.getItem("enhanced_id");
-      if (enhancedId) {
-        console.log("💾 Saving changes to backend...");
-
-        // Transform frontend data structure to backend format
-        const backendPayload = transformToBackendFormat(updated);
-
-        await updateEnhancedResume(enhancedId, {
-          enhanced_sections: backendPayload
-        });
-
-        console.log("✅ Successfully saved to backend!");
-      }
-    } catch (error) {
-      console.error("❌ Failed to save to backend:", error);
-      // Still close modal - changes are saved in React state for preview
-    }
-
-    onSave?.(didChange, activeSection || '', changedFieldNames);
+    onSave?.(didChange, activeSection || '', changedFieldNames, changedFieldValues);
     onClose();
   };
 

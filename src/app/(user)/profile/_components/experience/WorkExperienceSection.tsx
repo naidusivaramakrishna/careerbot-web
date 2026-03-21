@@ -8,6 +8,7 @@ import ExperienceForm from "./ExperienceForm";
 import ExperienceList from "./ExperienceList";
 import { ExperienceSectionProps, ValidationError } from "../../_types/experience-types";
 import { useProfileContext } from "../../context/ProfileContext";
+import { useDashboard } from "@/contexts/DashboardContext";
 import ExperienceEmptyState from "./ExperienceEmptyState";
 import Modal from "@/components/common/Modal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
@@ -23,6 +24,7 @@ export default function WorkExperienceSection({
     isAutoFill = false,
 }: WorkExperienceSectionProps) {
     const { setProfileData } = useProfileContext();
+    const { refreshDashboard } = useDashboard();
     const [editingIndex, setEditingIndex] = useState<number | null>(0);
     const [experienceForm, setExperienceForm] = useState<Partial<Experience>>({});
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -81,14 +83,20 @@ export default function WorkExperienceSection({
             setTempProfile((prev) => ({ ...prev, workExperience: updatedList }));
             setProfileData((prev) => ({ ...prev, workExperience: updatedList }));
 
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
+
             setIsModalOpen(false);
             setExperienceForm({});
-        } catch (err: any) {
-            if (err?.response?.data?.error?.details?.validation_errors) {
-                setValidationErrors(err.response.data.error.details.validation_errors);
+        } catch (err: unknown) {
+            const error = err as { response?: { data?: { error?: { details?: { validation_errors?: ValidationError[] }, message?: string } } } } | null;
+            if (error?.response?.data?.error?.details?.validation_errors) {
+                setValidationErrors(error.response.data.error.details.validation_errors);
             } else {
                 // Parse simple error message and map to the relevant field
-                const errorMessage = err?.response?.data?.error?.message || '';
+                const errorMessage = error?.response?.data?.error?.message || '';
                 const errors: ValidationError[] = [];
                 const msg = errorMessage.toLowerCase();
 
@@ -139,6 +147,12 @@ export default function WorkExperienceSection({
                 logger.info('✅ Updated profile data after delete:', newProfile);
                 return newProfile;
             });
+
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
+
             toast.success("Experience deleted");
             if (updated.length === 0) setEditingIndex(0);
         } catch {

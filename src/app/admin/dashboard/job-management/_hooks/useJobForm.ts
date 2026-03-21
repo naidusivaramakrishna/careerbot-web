@@ -43,6 +43,7 @@ export const useJobForm = ({ initialData, isEdit = false, jobId }: UseJobFormPro
     })
     const [skillInput, setSkillInput] = useState("")
     const [publishing, setPublishing] = useState(false)
+    const [uploading, setUploading] = useState(false)
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
     const updateField = useCallback(<K extends keyof JobFormData>(
@@ -52,7 +53,7 @@ export const useJobForm = ({ initialData, isEdit = false, jobId }: UseJobFormPro
         setForm((prev) => ({ ...prev, [key]: value }))
     }, [])
 
-    const processLogoFile = useCallback((file: File) => {
+    const processLogoFile = useCallback(async (file: File) => {
         if (!file.type.startsWith('image/')) {
             toast.error('Please upload an image file')
             return
@@ -63,13 +64,29 @@ export const useJobForm = ({ initialData, isEdit = false, jobId }: UseJobFormPro
             return
         }
 
-        updateField("logoFile", file)
+        try {
+            setUploading(true)
 
-        const reader = new FileReader()
-        reader.onload = () => {
-            updateField("logo", reader.result as string)
+            // Show preview immediately
+            const reader = new FileReader()
+            reader.onload = () => {
+                updateField("logo", reader.result as string)
+            }
+            reader.readAsDataURL(file)
+
+            // Upload to server immediately
+            const logoUrl = await uploadJobLogo(file)
+            // Store the uploaded URL and clear the file reference to prevent re-upload
+            updateField("logo", logoUrl)
+            updateField("logoFile", null)
+        } catch (error) {
+            logger.error('Error uploading logo:', error)
+            toast.error('Failed to upload logo')
+            updateField("logo", null)
+            updateField("logoFile", null)
+        } finally {
+            setUploading(false)
         }
-        reader.readAsDataURL(file)
     }, [updateField])
 
     const handleLogoChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
@@ -125,7 +142,7 @@ export const useJobForm = ({ initialData, isEdit = false, jobId }: UseJobFormPro
             status,
             experience_min: Number(form.experienceMin) || undefined,
             experience_max: Number(form.experienceMax) || undefined,
-            company_logo_url: logoUrl,
+            company_logo_url: logoUrl || (form.logo || undefined),
         }
         return jobData
     }, [form])
@@ -215,6 +232,7 @@ export const useJobForm = ({ initialData, isEdit = false, jobId }: UseJobFormPro
         skillInput,
         setSkillInput,
         publishing,
+        uploading,
         updateField,
         handleLogoChange,
         processLogoFile,

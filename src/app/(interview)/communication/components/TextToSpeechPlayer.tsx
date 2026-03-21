@@ -92,17 +92,17 @@ export default function TextToSpeechPlayer({
   return (
     <div className="w-full">
       {/* Audio Player Card */}
-      <div className="bg-gradient-to-br from-indigo-50 via-blue-50 to-purple-50 rounded-2xl p-6 border border-indigo-100 shadow-sm">
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
         {/* Waveform Animation (when playing) */}
         {isPlaying && (
-          <div className="flex items-center justify-center gap-1 mb-4">
-            {[...Array(20)].map((_, i) => (
+          <div className="flex items-center justify-center gap-1 mb-4 h-8">
+            {[...Array(16)].map((_, i) => (
               <div
                 key={i}
-                className="w-1 bg-indigo-500 rounded-full animate-pulse"
+                className="w-1 bg-[#2557a7] rounded-full animate-pulse"
                 style={{
-                  height: `${Math.random() * 40 + 10}px`,
-                  animationDelay: `${i * 0.1}s`,
+                  height: `${Math.random() * 24 + 8}px`,
+                  animationDelay: `${i * 0.08}s`,
                 }}
               />
             ))}
@@ -114,51 +114,33 @@ export default function TextToSpeechPlayer({
           <button
             onClick={handlePlay}
             disabled={!text || hasPlayedOnce || isPlaying}
-            className={`group flex items-center gap-3 px-6 py-3 rounded-full font-semibold shadow-md transition-all ${
+            className={`flex items-center gap-2.5 px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
               hasPlayedOnce
-                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : isPlaying
-                  ? 'bg-indigo-500 text-white cursor-not-allowed opacity-75'
-                  : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg'
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  ? 'bg-[#2557a7]/80 text-white cursor-not-allowed'
+                  : 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
+            } disabled:cursor-not-allowed`}
           >
-            <Play className="w-5 h-5 fill-white" />
+            <Play className="w-4 h-4 fill-current" />
             <span>
               {hasPlayedOnce
                 ? 'Audio Already Played'
                 : isPlaying
-                  ? 'Playing Audio...'
+                  ? 'Playing Audio…'
                   : 'Play Audio'
               }
             </span>
           </button>
-
-          {/* Volume Indicator */}
-          {/* <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm">
-            <Volume2 className="w-5 h-5 text-indigo-600" />
-            <span className="text-sm font-medium text-gray-700">
-              {selectedVoice ? selectedVoice.name.split(' ')[0] : 'Default'}
-            </span>
-          </div> */}
         </div>
 
-        {/* Voice Info */}
-        {/* {selectedVoice && (
-          <div className="mt-4 text-center">
-            <p className="text-xs text-gray-500">
-              Voice: {selectedVoice.name} ({selectedVoice.lang})
-            </p>
-          </div>
-        )} */}
-        <div className="mt-4 text-center">
-            <p className="text-xs text-gray-500">
-              Click the button to play audio. It can only be played once.
-            </p>
-          </div>
+        <p className="text-xs text-gray-400 text-center mt-4">
+          Click the button to play audio. It can only be played once.
+        </p>
 
         {/* Error Message */}
         {error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="mt-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl">
             <p className="text-sm text-red-600 text-center">{error}</p>
           </div>
         )}

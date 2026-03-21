@@ -6,6 +6,7 @@ import { getEmploymentInfo, updateEmploymentInfo } from "@/api/userApi";
 import { toast } from "sonner";
 import MultiSelectAutocomplete from "@/components/common/MultiSelectAutocomplete";
 import { useProfileContext } from "../context/ProfileContext";
+import { useDashboard } from "@/contexts/DashboardContext";
 import { ProfileData } from "../_types/ProfileData";
 import logger from "@/lib/logger";
 import { industries, roles, locations, jobTypes, noticePeriod } from "../_utils/employmentData";
@@ -19,6 +20,7 @@ export default function EmploymentInfoSection({
     setTempProfile,
 }: EmploymentInfoSectionProps) {
     const { setProfileData } = useProfileContext(); // ✅ Get context setter
+    const { refreshDashboard } = useDashboard();
     const [loading, setLoading] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
 
@@ -69,6 +71,11 @@ export default function EmploymentInfoSection({
                 logger.info('✅ Updated profile data after saving employment info:', newProfile);
                 return newProfile;
             });
+
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
 
             toast.success("Employment information updated successfully");
             setHasChanges(false);

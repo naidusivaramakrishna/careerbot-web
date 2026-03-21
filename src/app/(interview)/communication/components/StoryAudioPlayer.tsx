@@ -229,7 +229,7 @@ export default function StoryAudioPlayer({ onFirstPlay }: Props) {
   }, []);
 
   return (
-    <div className="bg-white border border-indigo-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <audio ref={audioRef} preload="auto">
         <source src="/at-the-coffee-shop.mp3" type="audio/mpeg" />
       </audio>
@@ -238,30 +238,33 @@ export default function StoryAudioPlayer({ onFirstPlay }: Props) {
         <button
           onClick={play}
           disabled={playedOnce}
-          className={`w-12 h-12 rounded-full flex items-center justify-center ${
+          className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-colors ${
             playedOnce
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-orange-500 hover:bg-orange-600'
+              ? 'bg-gray-100 cursor-not-allowed'
+              : 'bg-[#2557a7] hover:bg-[#1e4a94]'
           }`}
+          aria-label="Play audio"
         >
-          ▶
+          <svg className={`w-5 h-5 ${playedOnce ? 'text-gray-400' : 'text-white'}`} fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
         </button>
 
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-700">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-700 truncate">
             Listen carefully – audio plays once
           </p>
 
-          <div className="w-full h-1 bg-gray-200 rounded mt-2 overflow-hidden">
+          <div className="w-full h-1 bg-gray-100 rounded-full mt-2 overflow-hidden">
             <div
-              className="h-1 bg-orange-500 rounded transition-[width] duration-150 ease-linear"
+              className="h-1 bg-[#2557a7] rounded-full transition-[width] duration-150 ease-linear"
               style={{ width: `${progress * 100}%` }}
             />
           </div>
         </div>
       </div>
 
-      <canvas ref={canvasRef} width={300} height={60} className="w-full" />
+      <canvas ref={canvasRef} width={300} height={48} className="w-full" />
     </div>
   );
 }

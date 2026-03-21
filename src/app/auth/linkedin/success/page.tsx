@@ -3,11 +3,6 @@ import React, { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
-/**
- * LinkedIn OAuth Success Page
- * ✅ Backend now sets httpOnly cookies automatically
- * ❌ No need to manually handle tokens or store them
- */
 const LinkedInSuccessContent = () => {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -24,11 +19,11 @@ const LinkedInSuccessContent = () => {
 
                 // Redirect to dashboard after a brief moment
                 setTimeout(() => {
-                    router.push('/dashboard/profile')
+                    router.push('/profile')
                 }, 1000)
 
-            } catch (error: any) {
-                // // console.error('❌ Error:', error)
+            } catch (error: unknown) {
+                console.error('Sign in error:', error)
                 setStatus('error')
                 toast.error('Failed to complete sign in')
 
@@ -43,7 +38,7 @@ const LinkedInSuccessContent = () => {
     }, [searchParams, router])
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100">
             <div className="bg-white p-10 rounded-2xl shadow-xl max-w-md w-full text-center">
                 {status === 'processing' && (
                     <>
@@ -95,7 +90,7 @@ const LinkedInSuccessContent = () => {
 }
 
 const LinkedInSuccessPage = () => (
-  <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+  <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600" /></div>}>
     <LinkedInSuccessContent />
   </Suspense>
 )

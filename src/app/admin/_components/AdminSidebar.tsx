@@ -27,8 +27,7 @@ const AdminSidebar = () => {
         try {
             await adminLogout();
             // The adminLogout function already handles redirect to /admin/login
-        } catch (error) {
-            // // console.error('Logout error:', error);
+        } catch {
             // Even if the API call fails, still clear local data and redirect
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('admin_access_token');

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 type LoadingStage = "parsing" | "extracting" | "matching" | "scoring" | "generating";
 
@@ -8,241 +9,198 @@ interface LoadingAnimationProps {
   stage: LoadingStage;
 }
 
-const stageMessages: Record<LoadingStage, string> = {
-  parsing: "Parsing your resume...",
-  extracting: "Extracting skills...",
-  matching: "Matching requirements...",
-  scoring: "Calculating score...",
-  generating: "Generating report..."
-};
+const steps: { key: LoadingStage; label: string; sub: string }[] = [
+  { key: "parsing",    label: "Parsing Resume",         sub: "Reading your document structure" },
+  { key: "extracting", label: "Extracting Skills",       sub: "Identifying key competencies" },
+  { key: "matching",   label: "Matching Requirements",   sub: "Comparing with job description" },
+  { key: "scoring",    label: "Calculating Score",       sub: "Running compatibility analysis" },
+  { key: "generating", label: "Generating Report",       sub: "Building your match insights" },
+];
+
+const stageIndex = (stage: LoadingStage) => steps.findIndex((s) => s.key === stage);
+
+/* SVG circle spinner radius */
+const R = 44;
+const CIRC = 2 * Math.PI * R;
 
 const LoadingAnimation: React.FC<LoadingAnimationProps> = ({ stage }) => {
-  const [progress, setProgress] = useState(24);
-  const [phase, setPhase] = useState<"setup" | "merge">("setup");
+  const [progress, setProgress] = useState(0);
+  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
 
+  useEffect(() => { setPortalTarget(document.body); }, []);
+
+  /* Lock body scroll */
   useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = orig; };
   }, []);
 
+  /* Animate progress continuously across all stages.
+     Each of the 5 stages owns a 20% band (0-20, 20-40, ..., 80-100). */
   useEffect(() => {
-    if (phase === "setup") {
-      const interval = setInterval(() => {
-        setProgress((p) => {
-          const newProgress = Math.min(p + Math.random() * 15, 100);
-          if (newProgress >= 100) {
-            setPhase("merge");
-            return 100;
-          }
-          return newProgress;
-        });
-      }, 300);
-      return () => clearInterval(interval);
-    }
-  }, [phase]);
+    const idx = stageIndex(stage);
+    const bandStart = idx * 20;
+    const bandEnd   = bandStart + 20;
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%)',
-        backdropFilter: 'blur(0px)',
-        WebkitBackdropFilter: 'blur(0px)',
-      }}
-    >
+    setProgress((prev) => {
+      // Never go backwards — jump to band start if we're somehow behind
+      return Math.max(prev, bandStart);
+    });
+
+    const interval = setInterval(() => {
+      setProgress((p) => {
+        const next = p + Math.random() * 2 + 0.5;
+        if (next >= bandEnd) { clearInterval(interval); return bandEnd; }
+        return next;
+      });
+    }, 80);
+    return () => clearInterval(interval);
+  }, [stage]);
+
+  const pct = Math.round(Math.min(progress, 100));
+  const dashOffset = CIRC - (CIRC * pct) / 100;
+  const activeIdx = stageIndex(stage);
+
+  if (!portalTarget) return null;
+
+  const content = (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 backdrop-blur-sm">
       <style>{`
-        @keyframes pulse-cube {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.15); }
+        @keyframes spin-slow { to { transform: rotate(360deg); } }
+        @keyframes spin-rev  { to { transform: rotate(-360deg); } }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes float-cube {
-          0%, 100% { transform: translate(0, 0) rotateY(0deg); opacity: 0; }
-          10% { opacity: 1; }
-          50% { transform: translate(var(--tx), var(--ty)) rotateY(180deg); }
-          90% { opacity: 1; }
-          100% { transform: translate(0, 0) rotateY(360deg); opacity: 0; }
-        }
-        @keyframes merge-cube {
-          0% { transform: scale(0.3) rotateX(0deg) rotateY(0deg); opacity: 0; }
-          50% { opacity: 1; }
-          100% { transform: scale(1) rotateX(360deg) rotateY(360deg); opacity: 1; }
-        }
-        @keyframes shimmer-reflection {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 0.8; }
-        }
-        .pulse-cube { animation: pulse-cube 2s ease-in-out infinite; }
-        .float-cube { animation: float-cube 3s ease-in-out infinite; }
-        .merge-cube { animation: merge-cube 1.5s ease-out forwards; }
-        .shimmer-reflection { animation: shimmer-reflection 2s ease-in-out infinite; }
+        .spin-slow { animation: spin-slow 3s linear infinite; }
+        .spin-rev  { animation: spin-rev  2s linear infinite; }
+        .fade-up   { animation: fadeUp 0.4s ease forwards; }
       `}</style>
 
-      <div className="text-center relative" style={{ marginRight: '150px' }}>
-        {/* Setup Phase */}
-        {phase === "setup" && (
-          <div className="space-y-8">
-            {/* Small Pulsing Cube */}
-            <div className="flex justify-center" style={{ perspective: '1000px' }}>
-              <div
-                className="pulse-cube"
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  background: 'linear-gradient(135deg, #2557a7 0%, #1a3a7a 100%)',
-                  borderRadius: '8px',
-                  transformStyle: 'preserve-3d',
-                  boxShadow: '0 8px 30px rgba(37, 87, 167, 0.2)',
-                }}
-              />
-            </div>
+      <div className="flex flex-col items-center gap-10 px-6 w-full max-w-sm">
 
-            {/* Progress Section */}
-            <div className="space-y-5">
-              <p className="text-6xl font-bold text-gray-900 tracking-wider">
-                {Math.round(progress)}%
-              </p>
-              <p className="text-lg text-gray-700 font-medium tracking-wide">
-                {stageMessages[stage]}
-              </p>
+        {/* ── Circular progress spinner ── */}
+        <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
+          {/* Outer decorative ring */}
+          <svg className="absolute inset-0 spin-slow" width="160" height="160" viewBox="0 0 160 160">
+            <circle cx="80" cy="80" r="76" fill="none" stroke="#e5e7eb" strokeWidth="2" strokeDasharray="6 6" />
+          </svg>
 
-              {/* Progress Bar */}
-              <div className="w-72 h-2.5 bg-gray-300 rounded-full overflow-hidden shadow-sm">
-                <div
-                  className="h-full bg-gradient-to-r from-[#2557a7] to-[#1a3a7a] transition-all duration-300"
-                  style={{ width: `${Math.min(progress, 100)}%` }}
-                />
-              </div>
-            </div>
+          {/* Inner decorative ring */}
+          <svg className="absolute spin-rev" width="130" height="130" viewBox="0 0 130 130" style={{ top: 15, left: 15 }}>
+            <circle cx="65" cy="65" r="61" fill="none" stroke="#dbeafe" strokeWidth="1.5" strokeDasharray="4 8" />
+          </svg>
+
+          {/* Progress track */}
+          <svg width="160" height="160" viewBox="0 0 100 100" style={{ transform: "rotate(-90deg)" }}>
+            <circle cx="50" cy="50" r={R} fill="none" stroke="#e5e7eb" strokeWidth="8" />
+            <circle
+              cx="50" cy="50" r={R}
+              fill="none"
+              stroke="url(#progressGrad)"
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={CIRC}
+              strokeDashoffset={dashOffset}
+              style={{ transition: "stroke-dashoffset 0.12s linear" }}
+            />
+            <defs>
+              <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#2557a7" />
+                <stop offset="100%" stopColor="#4f8ef7" />
+              </linearGradient>
+            </defs>
+          </svg>
+
+          {/* Center content */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-3xl font-bold text-gray-900 leading-none">{pct}%</span>
+            <span className="text-xs text-gray-400 mt-1 font-medium">analyzing</span>
           </div>
-        )}
+        </div>
 
-        {/* Merge Phase */}
-        {phase === "merge" && (
-          <div className="space-y-16" style={{ perspective: '1200px' }}>
-            {/* Floating Cubes Container */}
-            <div
-              style={{
-                width: '300px',
-                height: '300px',
-                position: 'relative',
-              }}
-            >
-              {/* Center Merging Cube */}
+        {/* ── Title ── */}
+        <div className="text-center -mt-4">
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Analyzing Your Match</h2>
+          <p className="text-sm text-gray-400 mt-1">AI is comparing your resume with the job description</p>
+        </div>
+
+        {/* ── Steps ── */}
+        <div className="w-full space-y-2">
+          {steps.map((step, i) => {
+            const isDone   = i < activeIdx;
+            const isActive = i === activeIdx;
+            const isPending = !isDone && !isActive;
+            return (
               <div
-                className="merge-cube"
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: '100px',
-                  height: '100px',
-                  background: 'linear-gradient(135deg, #2557a7 0%, #1a3a7a 100%)',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 40px rgba(37, 87, 167, 0.3)',
-                }}
-              />
-
-              {/* Orbiting Cubes */}
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="float-cube"
-                  style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    width: '50px',
-                    height: '50px',
-                    background: 'linear-gradient(135deg, #2557a7 0%, #1a3a7a 100%)',
-                    borderRadius: '8px',
-                    boxShadow: '0 6px 20px rgba(37, 87, 167, 0.25)',
-                    '--tx': `${Math.cos((i * Math.PI * 2) / 3) * 120}px`,
-                    '--ty': `${Math.sin((i * Math.PI * 2) / 3) * 120}px`,
-                  } as React.CSSProperties}
-                />
-              ))}
-            </div>
-
-            {/* Reflection */}
-            <div className="flex justify-center">
-              <div
-                className="shimmer-reflection"
-                style={{
-                  width: '150px',
-                  height: '50px',
-                  background: 'radial-gradient(ellipse at center, rgba(37, 87, 167, 0.3) 0%, transparent 70%)',
-                  borderRadius: '50%',
-                  filter: 'blur(20px)',
-                }}
-              />
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <p className="text-2xl text-gray-900 font-bold tracking-tight mb-2">
-                  Processing Your Application
-                </p>
-                <p className="text-base text-gray-700 tracking-wide">
-                  {stageMessages[stage]}
-                </p>
-              </div>
-
-              {/* Process Steps with Progress */}
-              <div className="space-y-3 max-w-xs">
-                {['parsing', 'extracting', 'matching', 'scoring', 'generating'].map((step, index) => {
-                  const stepLabels: Record<string, string> = {
-                    parsing: 'Parsing Resume',
-                    extracting: 'Extracting Skills',
-                    matching: 'Matching Requirements',
-                    scoring: 'Calculating Score',
-                    generating: 'Finalizing Report',
-                  };
-
-                  const isActive = stage === step;
-                  const isComplete = ['parsing', 'extracting', 'matching', 'scoring'].indexOf(stage) > index;
-
-                  return (
-                    <div key={step} className="flex items-center gap-3">
-                      <div
-                        style={{
-                          width: '24px',
-                          height: '24px',
-                          borderRadius: '50%',
-                          backgroundColor: isComplete ? '#10b981' : isActive ? '#2557a7' : '#d1d5db',
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                        }}
-                      >
-                        {isComplete ? '✓' : index + 1}
-                      </div>
-                      <p
-                        style={{
-                          fontSize: '14px',
-                          color: isActive ? '#2557a7' : isComplete ? '#10b981' : '#6b7280',
-                          fontWeight: isActive ? '600' : '400',
-                        }}
-                      >
-                        {stepLabels[step]}
-                      </p>
+                key={step.key}
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all duration-300 ${
+                  isActive
+                    ? "bg-blue-50 border-blue-200 shadow-sm fade-up"
+                    : isDone
+                    ? "bg-green-50/60 border-green-100"
+                    : "bg-gray-50 border-gray-100"
+                }`}
+              >
+                {/* Step number / icon */}
+                <div className="shrink-0">
+                  {isDone ? (
+                    <div className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center shadow-sm">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
                     </div>
-                  );
-                })}
+                  ) : isActive ? (
+                    <div className="w-9 h-9 rounded-full bg-[#2557a7] flex items-center justify-center shadow-md">
+                      <svg className="w-5 h-5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    </div>
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center">
+                      <span className="text-xs font-bold text-gray-400">{i + 1}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Text */}
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold leading-tight ${
+                    isDone ? "text-green-700 line-through decoration-green-400" : isActive ? "text-[#2557a7]" : "text-gray-400"
+                  }`}>
+                    {step.label}
+                  </p>
+                  {isActive  && <p className="text-xs text-blue-400 mt-0.5 font-medium">{step.sub}</p>}
+                  {isDone    && <p className="text-xs text-green-500 mt-0.5 font-medium">Completed</p>}
+                  {isPending && <p className="text-xs text-gray-300 mt-0.5">Waiting...</p>}
+                </div>
+
+                {/* Right pill */}
+                {isDone   && (
+                  <span className="shrink-0 text-xs text-green-600 bg-green-100 px-2.5 py-1 rounded-full font-semibold">✓ Done</span>
+                )}
+                {isActive && (
+                  <span className="shrink-0 text-xs text-[#2557a7] bg-blue-100 px-2.5 py-1 rounded-full font-semibold animate-pulse">Running</span>
+                )}
               </div>
-            </div>
-          </div>
-        )}
+            );
+          })}
+        </div>
+
+        {/* ── Bottom note ── */}
+        <div className="flex items-center gap-1.5 -mt-4">
+          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-xs text-gray-400">This usually takes 15–30 seconds</p>
+        </div>
       </div>
     </div>
   );
+
+  return createPortal(content, portalTarget);
 };
 
 export default LoadingAnimation;

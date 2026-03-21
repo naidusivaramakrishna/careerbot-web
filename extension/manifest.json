@@ -1,0 +1,68 @@
+{
+  "manifest_version": 3,
+  "name": "CareerBot - Resume Tailor",
+  "version": "1.0.0",
+  "description": "Auto-detect job descriptions from LinkedIn, Naukri, Indeed and tailor your resume in 1 click.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "CareerBot"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/jobs/*",
+        "https://linkedin.com/jobs/*"
+      ],
+      "js": ["content-scripts/linkedin-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.naukri.com/*"
+      ],
+      "js": ["content-scripts/naukri-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.indeed.co.in/*",
+        "https://in.indeed.com/*"
+      ],
+      "js": ["content-scripts/indeed-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "http://localhost:3000/*",
+    "https://www.linkedin.com/*",
+    "https://www.naukri.com/*",
+    "https://www.indeed.co.in/*",
+    "https://in.indeed.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

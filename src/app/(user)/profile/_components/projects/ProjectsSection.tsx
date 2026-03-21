@@ -5,6 +5,7 @@ import { Projects, deleteProject, getProjects, updateProjects } from "@/api/user
 import { addProjectItem } from "../../_utils/autoFillHelper";
 import { ExperienceSectionProps, ValidationError } from "../../_types/experience-types";
 import { useProfileContext } from "../../context/ProfileContext";
+import { useDashboard } from "@/contexts/DashboardContext";
 import Modal from "@/components/common/Modal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import ProjectsEmptyState from "./ProjectsEmptyState";
@@ -21,6 +22,7 @@ export default function ProjectsSection({
     isAutoFill = false,
 }: ProjectsSectionProps) {
     const { setProfileData } = useProfileContext();
+    const { refreshDashboard } = useDashboard();
     const [editingIndex, setEditingIndex] = useState<number | null>(0);
     const [projectsForm, setProjectsForm] = useState<Partial<Projects>>({});
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -79,13 +81,19 @@ export default function ProjectsSection({
             setTempProfile((prev) => ({ ...prev, projects: updatedList }));
             setProfileData((prev) => ({ ...prev, projects: updatedList }));
 
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
+
             setIsModalOpen(false);
             setProjectsForm({});
-        } catch (err: any) {
-            if (err?.response?.data?.error?.details?.validation_errors) {
-                setValidationErrors(err.response.data.error.details.validation_errors);
+        } catch (err: unknown) {
+            const error = err as { response?: { data?: { error?: { details?: { validation_errors?: ValidationError[] }, message?: string } } } } | null;
+            if (error?.response?.data?.error?.details?.validation_errors) {
+                setValidationErrors(error.response.data.error.details.validation_errors);
             } else {
-                const errorMessage = err?.response?.data?.error?.message || '';
+                const errorMessage = error?.response?.data?.error?.message || '';
                 const errors: ValidationError[] = [];
                 const msg = errorMessage.toLowerCase();
 
@@ -135,6 +143,12 @@ export default function ProjectsSection({
                 const newProfile = { ...prev, projects: updated };
                 return newProfile;
             });
+
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
+
             toast.success("Projects deleted");
             if (updated.length === 0) setEditingIndex(0);
         } catch {

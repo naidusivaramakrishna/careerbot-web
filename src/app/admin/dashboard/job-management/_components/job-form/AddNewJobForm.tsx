@@ -117,6 +117,7 @@ export const AddNewJobForm = memo(({
         skillInput,
         setSkillInput,
         publishing,
+        uploading,
         updateField,
         handleLogoChange,
         processLogoFile,
@@ -124,7 +125,6 @@ export const AddNewJobForm = memo(({
         removeSkill,
         publishJob,
         saveDraft,
-        fieldErrors,
         getFieldError
     } = useJobForm({ initialData, isEdit, jobId })
 
@@ -185,6 +185,8 @@ export const AddNewJobForm = memo(({
                         onLogoChange={handleLogoChange}
                         onUpdate={updateField}
                         onLogoFileSelected={processLogoFile}
+                        jobId={jobId}
+                        uploading={uploading}
                     />
 
                     {/* Application Settings */}

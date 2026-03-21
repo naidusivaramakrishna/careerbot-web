@@ -52,7 +52,7 @@ export const useAdminAccess = (pageKey: AdminPageKey): UseAdminAccessReturn => {
           setError('Unable to determine admin role');
           setUserRole(null);
         }
-      } catch (err) {
+      } catch {
         logger.error('Error checking admin access');
         setError('Failed to verify admin permissions');
         setUserRole(null);

@@ -188,18 +188,6 @@ export default function ExperienceEditor({ formData, setFormData }: Props) {
             />
           </div>
 
-          <div>
-            <label className="text-sm font-semibold mb-1.5 block text-gray-700">
-              Years of experience
-            </label>
-            <input
-              type="number"
-              value={years}
-              onChange={(e) => updateCurrent({ years: e.target.value })}
-              placeholder="e.g., 2, 3.5"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-100 text-gray-900 border border-transparent focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors"
-            />
-          </div>
         </div>
 
         {/* Duration */}

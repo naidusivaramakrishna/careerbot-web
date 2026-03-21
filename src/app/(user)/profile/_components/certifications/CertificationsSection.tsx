@@ -11,6 +11,7 @@ import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import Modal from "@/components/common/Modal";
 import CertificationEmptyState from "./CertificationEmptyState";
 import { useProfileContext } from "../../context/ProfileContext";
+import { useDashboard } from "@/contexts/DashboardContext";
 
 interface CertificationsSectionProps extends CertificationSectionProps {
     isAutoFill?: boolean; // Flag to indicate if data is from resume/LinkedIn import
@@ -22,6 +23,7 @@ export default function CertificationsSection({
     isAutoFill = false,
 }: CertificationsSectionProps) {
     const { setProfileData } = useProfileContext(); //  Get setProfileData from context
+    const { refreshDashboard } = useDashboard();
     const [editingIndex, setEditingIndex] = useState<number | null>(0);
     const [certificationForm, setCertificationForm] = useState<Partial<Certification>>({});
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -79,13 +81,19 @@ export default function CertificationsSection({
             setTempProfile((prev) => ({ ...prev, certifications: updatedList }));
             setProfileData((prev) => ({ ...prev, certifications: updatedList }));
 
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
+
             setIsModalOpen(false);
             setCertificationForm({});
-        } catch (err: any) {
-            if (err?.response?.data?.error?.details?.validation_errors) {
-                setValidationErrors(err.response.data.error.details.validation_errors);
+        } catch (err: unknown) {
+            const error = err as { response?: { data?: { error?: { details?: { validation_errors?: ValidationError[] }, message?: string } } } } | null;
+            if (error?.response?.data?.error?.details?.validation_errors) {
+                setValidationErrors(error.response.data.error.details.validation_errors);
             } else {
-                const errorMessage = err?.response?.data?.error?.message || '';
+                const errorMessage = error?.response?.data?.error?.message || '';
                 const errors: ValidationError[] = [];
                 const msg = errorMessage.toLowerCase();
 
@@ -129,6 +137,11 @@ export default function CertificationsSection({
                 // // console.log('✅ Updated profile data after delete:', newProfile);
                 return newProfile;
             });
+
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
 
             toast.success("Certification deleted");
             if (updated.length === 0) setEditingIndex(0);

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, Suspense } from "react";
+import React, { useEffect, useState, useMemo, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -12,7 +12,6 @@ import {
   Target,
   Sparkles,
   Lightbulb,
-  ShieldCheck,
   RefreshCw,
   User,
   GraduationCap,
@@ -26,6 +25,8 @@ import {
   ArrowRight,
   WrenchIcon,
   XCircle,
+  ChevronDown,
+  MousePointerClick,
 } from "lucide-react";
 
 /* ─── TYPES ───────────────────────────────────────────── */
@@ -35,7 +36,7 @@ interface BreakdownItem {
   max?: number;
   max_score?: number;
   max_raw_score?: number;
-  deductions?: string[];
+  deductions?: unknown[];
   percentage?: number;
   Percentage?: number;
   details?: Record<string, unknown>;
@@ -134,7 +135,7 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
       Keywords:         getSection(["Keywords",         "keywords"],                       numericKeyword, 30),
       LengthScore:      getSection(["LengthScore",      "length_score"],                   0,             10),
       StructureScore:   getSection(["StructureScore",   "structure_score"],                0,             20),
-      Suggestions:      (atsScore?.Suggestions as string[]) || (numericBreakdown.Suggestions as string[]) || [],
+      Suggestions:      (atsScore?.Suggestions as unknown[]) || (numericBreakdown.Suggestions as unknown[]) || [],
     },
     Fresher: (raw?.Fresher as boolean) ?? (atsScore?.Fresher as boolean) ?? true,
     Domain:  (raw?.Domain as string)  || (atsScore?.Domain as string) || "General",
@@ -161,15 +162,19 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
                     : 100;
     const display   = section.replace(/Enhanced$/, "");
 
-    (item.deductions || []).forEach((d: string) => {
-      const key = `${display}:${d}`;
+    (item.deductions || []).forEach((d: unknown) => {
+      const dStr = typeof d === "string" ? d
+        : typeof d === "object" && d !== null && "message" in d ? String((d as Record<string, unknown>).message)
+        : typeof d === "object" && d !== null ? JSON.stringify(d)
+        : String(d);
+      const key = `${display}:${dStr}`;
       if (seen.has(key)) return;
       seen.add(key);
       cards.push({
         id:          `i-${id++}`,
         priority:    pct === 0 || section === "Experience" ? "critical" : pct < 80 ? "urgent" : "optional",
         section:     display,
-        description: d,
+        description: dStr,
         suggestion:  `Review and improve the ${display} section to increase your ATS score.`,
       });
     });
@@ -193,13 +198,28 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
     }
   });
 
-  const suggestions = breakdown.Suggestions as string[] | undefined;
+  const suggestions = breakdown.Suggestions as unknown[] | undefined;
   if (Array.isArray(suggestions)) {
-    suggestions.forEach((s: string) => {
-      const colonIdx    = s.indexOf(":");
-      const sectionName = colonIdx > 0 ? s.slice(0, colonIdx).trim() : "General";
-      const description = colonIdx > 0 ? s.slice(colonIdx + 1).trim() : s;
-      const key         = `${sectionName}:${description}`;
+    suggestions.forEach((s: unknown) => {
+      // Suggestion items are objects { id, section, message, fix_type }
+      const isObj = typeof s === "object" && s !== null;
+      const suggId = isObj && "id" in (s as Record<string, unknown>)
+        ? String((s as Record<string, unknown>).id)
+        : "";
+
+      // Skip AI-generated enhancement suggestions (not actionable issues)
+      if (
+        suggId.startsWith("suggested_summary_") ||
+        /_suggested_contribution_\d+$/.test(suggId)
+      ) return;
+
+      const description = isObj && "message" in (s as Record<string, unknown>)
+        ? String((s as Record<string, unknown>).message)
+        : typeof s === "string" ? s : String(s);
+      const sectionName = isObj && "section" in (s as Record<string, unknown>)
+        ? String((s as Record<string, unknown>).section)
+        : "General";
+      const key = `${sectionName}:${description}`;
       if (seen.has(key)) return;
       seen.add(key);
       cards.push({ id: `i-${id++}`, priority: "optional", section: sectionName, description, suggestion: `Address this suggestion in ${sectionName} to strengthen your resume.` });
@@ -212,34 +232,43 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
 /* ─── PRIORITY META ───────────────────────────────────── */
 const PRIORITY_META = {
   critical: {
-    borderColor: "border-red-100",
-    badge:       "text-red-600 bg-red-50 border border-red-100",
+    borderColor: "border-red-200",
+    leftBorder:  "border-l-red-500",
+    cardBg:      "bg-red-50/40",
+    badge:       "text-red-600 bg-red-50 border border-red-200",
     icon:        AlertTriangle,
     label:       "Critical Fix",
     chipActive:  "text-red-500",
     bgColor:     "bg-red-50/50",
     hoverBg:     "hover:bg-red-50",
     dot:         "bg-red-500",
+    iconBg:      "bg-red-100",
   },
   urgent: {
-    borderColor: "border-orange-100",
-    badge:       "text-orange-600 bg-orange-50 border border-orange-100",
+    borderColor: "border-yellow-200",
+    leftBorder:  "border-l-yellow-400",
+    cardBg:      "bg-yellow-50/40",
+    badge:       "text-yellow-700 bg-yellow-50 border border-yellow-200",
     icon:        AlertCircle,
     label:       "Urgent Fix",
-    chipActive:  "text-orange-500",
-    bgColor:     "bg-orange-50/50",
-    hoverBg:     "hover:bg-orange-50",
-    dot:         "bg-orange-400",
+    chipActive:  "text-yellow-600",
+    bgColor:     "bg-yellow-50/50",
+    hoverBg:     "hover:bg-yellow-50",
+    dot:         "bg-yellow-400",
+    iconBg:      "bg-yellow-100",
   },
   optional: {
     borderColor: "border-gray-200",
+    leftBorder:  "border-l-gray-300",
+    cardBg:      "bg-gray-50/30",
     badge:       "text-gray-600 bg-gray-100 border border-gray-200",
     icon:        Info,
-    label:       "Optional Fix",
+    label:       "Optional",
     chipActive:  "text-gray-500",
     bgColor:     "bg-gray-50/50",
     hoverBg:     "hover:bg-gray-50",
     dot:         "bg-gray-400",
+    iconBg:      "bg-gray-100",
   },
 };
 
@@ -263,7 +292,7 @@ const SECTION_META: Record<string, { icon: React.ElementType; color: string; bar
 };
 
 /* ─── CIRCULAR GAUGE ──────────────────────────────────── */
-function CircularGauge({ score }: { score: number }) {
+function CircularGauge({ score, totalIssues }: { score: number; totalIssues: number }) {
   const [animated, setAnimated] = useState(0);
   const pct = Math.min(100, Math.max(0, score));
 
@@ -275,50 +304,50 @@ function CircularGauge({ score }: { score: number }) {
   const color    = pct >= 80 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#ef4444";
   const gradient = pct >= 80 ? "from-emerald-400 to-emerald-500" : pct >= 50 ? "from-amber-400 to-amber-500" : "from-red-400 to-red-500";
   const label    = pct >= 80 ? "Excellent" : pct >= 50 ? "Good" : "Needs Work";
+  const confidence = pct >= 90 ? 5 : pct >= 75 ? 4 : pct >= 60 ? 3 : pct >= 45 ? 2 : 1;
 
-  const radius       = 85;
+  const radius       = 88;
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <div className="flex flex-col items-center justify-center py-8">
-      <div className="relative" style={{ width: 240, height: 240 }}>
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full blur-xl opacity-30" />
-        <svg className="-rotate-90 relative z-10" width="240" height="240" viewBox="0 0 240 240">
-          <circle cx="120" cy="120" r={radius} fill="none" stroke="#f3f4f6" strokeWidth="12" />
+    <div className="flex flex-col items-center px-6 pt-5 pb-4">
+      {/* Ring */}
+      <div className="relative mb-5" style={{ width: 220, height: 220 }}>
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full blur-2xl opacity-30" />
+        <svg className="-rotate-90 relative z-10" width="220" height="220" viewBox="0 0 220 220">
+          <circle cx="110" cy="110" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="10" />
           <circle
-            cx="120" cy="120" r={radius}
-            fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
+            cx="110" cy="110" r={radius}
+            fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
             strokeDasharray={`${(animated / 100) * circumference} ${circumference}`}
-            style={{ transition: "stroke-dasharray 1s ease-in-out, stroke 0.5s ease", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.05))" }}
+            style={{ transition: "stroke-dasharray 1.2s ease-in-out, stroke 0.5s ease", filter: `drop-shadow(0 0 6px ${color}66)` }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className={`text-6xl font-extrabold bg-gradient-to-br ${gradient} bg-clip-text text-transparent drop-shadow-sm`}>
+          <div className={`text-6xl font-black bg-gradient-to-br ${gradient} bg-clip-text text-transparent leading-none`}>
             {animated}
           </div>
-          <div className="text-xs font-bold text-gray-400 mt-2 tracking-widest uppercase">ATS Score</div>
-          <div className="mt-3 px-4 py-1.5 bg-gray-50 rounded-full border border-gray-100">
-            <span className="text-xs font-semibold text-gray-600">{label}</span>
+          <div className="text-[10px] font-medium text-gray-400 mt-1 tracking-widest uppercase">ATS Score</div>
+          {/* Risk badge directly under score */}
+          <div className={`mt-2.5 px-3 py-1 rounded-full text-[10px] font-bold border ${
+            pct >= 80 ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+            : pct >= 50 ? "bg-amber-50 border-amber-200 text-amber-700"
+            : "bg-red-50 border-red-200 text-red-600"
+          }`}>
+            {label}
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-/* ─── STAT CARD ───────────────────────────────────────── */
-function StatCard({ icon: Icon, label, value, iconColor, iconBg }: {
-  icon: React.ElementType; label: string; value: string | number; iconColor: string; iconBg: string;
-}) {
-  return (
-    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
-          <p className="text-3xl font-extrabold text-gray-800">{value}</p>
+      {/* Two mini stat cards under circle */}
+      <div className="grid grid-cols-2 gap-3 w-full">
+        <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-center">
+          <p className="text-xl font-extrabold text-gray-800 leading-none">{confidence}/5</p>
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mt-1">Confidence</p>
         </div>
-        <div className={`w-12 h-12 ${iconBg} rounded-xl flex items-center justify-center`}>
-          <Icon className={`w-6 h-6 ${iconColor}`} />
+        <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-center">
+          <p className={`text-xl font-extrabold leading-none ${totalIssues > 0 ? "text-red-500" : "text-emerald-600"}`}>{totalIssues}</p>
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mt-1">Issues</p>
         </div>
       </div>
     </div>
@@ -326,26 +355,67 @@ function StatCard({ icon: Icon, label, value, iconColor, iconBg }: {
 }
 
 /* ─── SECTION BAR ─────────────────────────────────────── */
-function SectionBar({ name, score }: { name: string; score: number }) {
+function SectionBar({ name, score, index, issueCount, onClick }: {
+  name: string; score: number; index: number; issueCount: number; onClick?: () => void;
+}) {
+  const [width, setWidth] = useState(0);
   const meta  = SECTION_META[name] || { icon: FileText, color: "text-gray-600", bar: "bg-gradient-to-r from-gray-300 to-gray-500" };
   const Icon  = meta.icon;
   const label = name.replace(/Enhanced$/, "").replace(/([A-Z])/g, " $1").trim();
 
+  // Score-based color overrides
+  const scoreColor = score >= 70 ? "text-emerald-600" : score >= 40 ? "text-yellow-600" : score > 0 ? "text-orange-600" : "text-red-500";
+  const barClass   = score >= 70 ? meta.bar
+    : score >= 40 ? "bg-gradient-to-r from-yellow-300 to-yellow-500"
+    : score >  0  ? "bg-gradient-to-r from-orange-300 to-orange-500"
+    : "bg-gradient-to-r from-red-400 to-red-500";
+  const statusText = score === 0 ? "Missing section"
+    : score < 40   ? "Needs attention"
+    : score < 70   ? "Could improve"
+    : null;
+
+  useEffect(() => {
+    const t = setTimeout(() => setWidth(score), 120 + index * 60);
+    return () => clearTimeout(t);
+  }, [score, index]);
+
   return (
-    <div className="group">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center group-hover:scale-110 transition-transform">
-            <Icon className={`w-5 h-5 ${meta.color}`} />
+    <div
+      className={`group rounded-lg p-2 -mx-2 transition-all duration-200 ${onClick ? "cursor-pointer hover:bg-blue-50/60" : ""}`}
+      onClick={onClick}
+      title={onClick ? `Click to jump to ${label} issues` : undefined}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <Icon className={`w-4 h-4 ${meta.color}`} />
           </div>
-          <p className="text-sm font-bold text-gray-700">{label}</p>
+          <div>
+            <p className="text-sm font-semibold text-gray-700 leading-none">{label}</p>
+            {statusText && (
+              <p className={`text-[10px] font-medium mt-0.5 flex items-center gap-1 ${score === 0 ? "text-red-500" : score < 40 ? "text-orange-500" : "text-yellow-600"}`}>
+                <AlertTriangle className="w-2.5 h-2.5" />
+                {statusText}
+              </p>
+            )}
+          </div>
         </div>
-        <p className="text-base font-extrabold text-gray-800">{score}%</p>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {issueCount > 0 && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${score === 0 ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600"}`}>
+              {issueCount} issue{issueCount > 1 ? "s" : ""}
+            </span>
+          )}
+          <p className={`text-sm font-extrabold ${scoreColor} w-9 text-right`}>{score}%</p>
+          {onClick && issueCount > 0 && (
+            <MousePointerClick className="w-3.5 h-3.5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+          )}
+        </div>
       </div>
-      <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden">
+      <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
         <div
-          className={`h-full ${meta.bar} transition-all duration-700 ease-out rounded-full`}
-          style={{ width: `${score}%` }}
+          className={`h-full ${barClass} rounded-full transition-all duration-700 ease-out`}
+          style={{ width: `${width}%` }}
         />
       </div>
     </div>
@@ -358,50 +428,43 @@ function IssueCard({ issue, onFix, onDismiss }: { issue: IssueCard; onFix: () =>
   const Icon = meta.icon;
 
   return (
-    <div className={`rounded-xl border bg-white shadow-sm transition-all hover:shadow-md ${meta.borderColor}`}>
-      <div className="p-4">
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-start gap-3">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-              issue.priority === "critical" ? "bg-red-50" :
-              issue.priority === "urgent" ? "bg-orange-50" : "bg-gray-100"
-            }`}>
-              <Icon className={`w-4 h-4 ${meta.chipActive}`} />
+    <div className={`rounded-lg border ${meta.cardBg} ${meta.borderColor} shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}>
+      <div className="px-4 py-3">
+        {/* Two-line header: section + badge on line 1, description on line 2 */}
+        <div className="flex items-start gap-2.5 mb-2">
+          <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${meta.chipActive}`} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <p className="font-semibold text-xs text-gray-800">{issue.section}</p>
+              <span className={`text-[9px] px-1.5 py-0.5 font-bold rounded-full uppercase tracking-wide ${meta.badge}`}>
+                {meta.label}
+              </span>
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-bold text-sm text-gray-900">{issue.section}</p>
-                <span className={`text-[10px] px-2 py-0.5 font-bold rounded-full uppercase tracking-wide ${meta.badge}`}>
-                  {meta.label}
-                </span>
-              </div>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed">{issue.description}</p>
-            </div>
+            <p className="text-xs text-gray-500 truncate">{issue.description}</p>
           </div>
         </div>
 
-        {/* Suggestion */}
-        <div className="flex items-start gap-2 bg-[#f8faff] border border-[#dce8f8] rounded-lg p-3 mb-3">
-          <Sparkles className="w-3.5 h-3.5 text-[#2557a7] flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-gray-700 leading-relaxed">{issue.suggestion}</p>
+        {/* Suggestion — borderless subtle bg */}
+        <div className="flex items-start gap-1.5 bg-gray-50 rounded-md px-2.5 py-1.5 mb-2.5">
+          <Sparkles className="w-3 h-3 text-blue-400 flex-shrink-0 mt-0.5" />
+          <p className="text-[11px] text-gray-500 leading-snug">{issue.suggestion}</p>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex items-center justify-between gap-2">
           <button
             onClick={onDismiss}
-            className="px-3 py-2 border border-gray-200 text-gray-500 font-medium text-xs rounded-lg hover:bg-gray-50 transition-all"
+            className="text-xs text-gray-400 hover:text-gray-700 font-medium transition-colors"
           >
-            Ignore
+            Dismiss
           </button>
           <button
             onClick={onFix}
-            className="flex-1 px-4 py-2 rounded-lg text-xs font-bold text-white bg-[#2557a7] hover:bg-[#1a4a8f] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+            className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md hover:scale-[1.02] transition-all flex items-center gap-1.5"
           >
-            <WrenchIcon className="w-3.5 h-3.5" />
-            Fix Now with AI
-            <ArrowRight className="w-3.5 h-3.5" />
+            <WrenchIcon className="w-3 h-3" />
+            Fix with AI
+            <ArrowRight className="w-3 h-3" />
           </button>
         </div>
       </div>
@@ -416,6 +479,7 @@ function ATSLoginReport() {
   const [loading,   setLoading]   = useState(true);
   const [filter,       setFilter]       = useState<"critical" | "urgent" | "optional">("critical");
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -488,8 +552,36 @@ function ATSLoginReport() {
 
   const pct = scoreData ? Math.min(100, Math.round(scoreData.FinalWeightedScore)) : 0;
 
-  const getConfidence = (s: number) =>
-    s >= 90 ? 5 : s >= 75 ? 4 : s >= 60 ? 3 : s >= 45 ? 2 : 1;
+  // Issue count per section name (for breakdown badges)
+  const sectionIssueCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    issues.forEach(i => { map[i.section] = (map[i.section] ?? 0) + 1; });
+    return map;
+  }, [issues]);
+
+  // Click a breakdown bar → switch to its priority filter + scroll to its group
+  const scrollToSection = useCallback((sectionName: string) => {
+    const inCritical = grouped.critical.some(i => i.section === sectionName);
+    const inUrgent   = grouped.urgent.some(i => i.section === sectionName);
+    const inOptional = grouped.optional.some(i => i.section === sectionName);
+    const target = inCritical ? "critical" : inUrgent ? "urgent" : inOptional ? "optional" : null;
+    if (!target) return;
+    setFilter(target);
+    // Expand the section if it was collapsed
+    setCollapsedSections(prev => { const n = new Set(prev); n.delete(sectionName); return n; });
+    setTimeout(() => {
+      document.getElementById(`issue-section-${sectionName}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }, [grouped]);
+
+  const toggleSection = useCallback((section: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      next.has(section) ? next.delete(section) : next.add(section);
+      return next;
+    });
+  }, []);
+
 
   const handleFixNow = () => {
     try {
@@ -545,12 +637,10 @@ function ATSLoginReport() {
     <div className="w-full bg-gradient-to-br from-gray-50 via-white to-gray-50 min-h-screen">
 
       {/* ── Page Header ─────────────────────────────────── */}
-      <div className="w-full bg-white px-6 pt-4 pb-6">
-        <div className="max-w-[1650px] mx-auto flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-5">
-            <div>
-              <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">ATS Resume Analysis Report</h1>
-            </div>
+      <div className="w-full bg-white border-b border-gray-100 px-6 pt-5 pb-5">
+        <div className="max-w-[1650px] mx-auto">
+          <div className="flex flex-wrap items-center gap-3 mb-5">
+            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">ATS Resume Analysis Report</h1>
           </div>
 
         </div>
@@ -587,7 +677,7 @@ function ATSLoginReport() {
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
 
                 {/* Issues Header */}
-                <div className="px-6 py-5 bg-gray-50 border-b border-gray-200">
+                <div className="px-6 pt-5 pb-5 bg-gray-50 border-b-2 border-gray-200">
                   <div className="flex flex-wrap gap-4 items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className={`w-14 h-14 rounded-xl flex items-center justify-center border ${issues.length === 0 ? "bg-blue-100 border-blue-200" : "bg-gray-100 border-gray-300"}`}>
@@ -659,10 +749,46 @@ function ATSLoginReport() {
                       <p className="text-sm text-gray-600 mt-1">Great job on this category!</p>
                     </div>
                   ) : (
-                    <div className="space-y-3 max-h-[900px] overflow-y-auto pr-1 custom-scrollbar">
-                      {grouped[filter].map(issue => (
-                        <IssueCard key={issue.id} issue={issue} onFix={handleFixNow} onDismiss={() => setDismissedIds(prev => new Set([...prev, issue.id]))} />
-                      ))}
+                    <div className="max-h-[720px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth"
+                         style={{ maskImage: "linear-gradient(to bottom, black calc(100% - 32px), transparent 100%)" }}>
+                      {/* Group by section with dividers */}
+                      {(() => {
+                        const sectionGroups: Record<string, IssueCard[]> = {};
+                        grouped[filter].forEach(issue => {
+                          if (!sectionGroups[issue.section]) sectionGroups[issue.section] = [];
+                          sectionGroups[issue.section].push(issue);
+                        });
+                        return Object.entries(sectionGroups).map(([section, sectionIssues], gIdx) => {
+                          const isCollapsed = collapsedSections.has(section);
+                          return (
+                            <div key={section} id={`issue-section-${section}`} className={gIdx > 0 ? "mt-5" : ""}>
+                              {/* Collapsible section header */}
+                              <button
+                                onClick={() => toggleSection(section)}
+                                className="flex items-center gap-2 mb-2 w-full text-left group/hdr hover:bg-gray-50 rounded-lg px-2 py-1.5 -mx-2 transition-colors"
+                              >
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">{section}</span>
+                                <div className="flex-1 h-px bg-gray-200" />
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  filter === "critical" ? "bg-red-100 text-red-600"
+                                  : filter === "urgent" ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-gray-100 text-gray-500"
+                                }`}>
+                                  {sectionIssues.length} issue{sectionIssues.length > 1 ? "s" : ""}
+                                </span>
+                                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`} />
+                              </button>
+                              {!isCollapsed && (
+                                <div className="space-y-2.5">
+                                  {sectionIssues.map(issue => (
+                                    <IssueCard key={issue.id} issue={issue} onFix={handleFixNow} onDismiss={() => setDismissedIds(prev => new Set([...prev, issue.id]))} />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   )}
                 </div>
@@ -671,53 +797,54 @@ function ATSLoginReport() {
             </div>
 
             {/* ── RIGHT: Score + Breakdown (4 cols) ───── */}
-            <div className="lg:col-span-4 space-y-6">
+            <div className="lg:col-span-4 space-y-5">
 
               {/* Overall Score Card */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
-                <div className="px-6 py-5 bg-[#2557a7] flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">Overall Score</h2>
-                  <div className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full">
-                    <ShieldCheck className="w-5 h-5 text-white" />
-                    <span className="text-sm font-bold text-white">ATS Ready</span>
+                <div className="px-6 py-4 bg-[#2557a7]">
+                  <h2 className="text-base font-bold text-white">Overall Score</h2>
+                </div>
+
+                <CircularGauge score={pct} totalIssues={issues.length} />
+
+                {/* Estimated score after fix */}
+                {issues.length > 0 && pct < 95 && (
+                  <div className="mx-5 mb-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+                    <p className="text-[10px] font-semibold text-emerald-600 mb-3 flex items-center gap-1.5 uppercase tracking-widest">
+                      <TrendingUp className="w-3 h-3" />
+                      Estimated Score After Fixes
+                    </p>
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="text-center">
+                        <p className="text-3xl font-black text-gray-400 leading-none">{pct}</p>
+                        <p className="text-[9px] text-gray-400 font-medium mt-1 uppercase tracking-wide">Current</p>
+                      </div>
+                      <ArrowRight className="w-7 h-7 text-emerald-400 flex-shrink-0" strokeWidth={2} />
+                      <div className="text-center">
+                        <p className="text-3xl font-black text-emerald-600 leading-none">
+                          ~{Math.min(100, pct + Math.min(100 - pct, grouped.critical.length * 4 + grouped.urgent.length * 2))}
+                        </p>
+                        <p className="text-[9px] text-emerald-600 font-medium mt-1 uppercase tracking-wide">Potential</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-
-                <CircularGauge score={pct} />
-
-                {/* Stat Cards */}
-                <div className="grid grid-cols-2 gap-4 px-6 pb-6">
-                  <StatCard
-                    icon={TrendingUp}
-                    label="Confidence"
-                    value={`${getConfidence(pct)}/5`}
-                    iconColor="text-emerald-500"
-                    iconBg="bg-emerald-50"
-                  />
-                  <StatCard
-                    icon={AlertCircle}
-                    label="Issues"
-                    value={issues.length}
-                    iconColor="text-purple-500"
-                    iconBg="bg-purple-50"
-                  />
-                </div>
+                )}
 
                 {/* Action Buttons */}
-                <div className="px-6 pb-6 space-y-3">
+                <div className="px-6 pb-6 flex gap-3">
                   <button
                     onClick={handleFixNow}
-                    className="w-full px-6 py-3.5 bg-[#2557a7] text-white rounded-xl font-bold hover:bg-[#1a4a8f] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-3 group"
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center gap-2 group text-sm"
                   >
-                    <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                    <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
                     Fix with AI Enhancer
                   </button>
                   <button
                     onClick={() => router.push("/atslogin")}
-                    className="w-full py-2 text-gray-500 font-semibold text-sm hover:text-indigo-600 transition-colors flex items-center justify-center gap-2 group"
+                    className="px-4 py-3 text-gray-500 font-semibold text-sm border border-gray-200 rounded-xl hover:text-indigo-600 hover:border-indigo-300 transition-all flex items-center justify-center gap-2 group"
                   >
                     <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-                    Rescan Resume
+                    Rescan
                   </button>
                 </div>
               </div>
@@ -732,9 +859,19 @@ function ATSLoginReport() {
                 </div>
 
                 <div className="px-6 py-6 space-y-5 max-h-[600px] overflow-y-auto custom-scrollbar">
-                  {allScoreItems.map(item => (
-                    <SectionBar key={item.name} name={item.name} score={item.score} />
-                  ))}
+                  {allScoreItems.map((item, idx) => {
+                    const count = sectionIssueCounts[item.name] ?? 0;
+                    return (
+                      <SectionBar
+                        key={item.name}
+                        name={item.name}
+                        score={item.score}
+                        index={idx}
+                        issueCount={count}
+                        onClick={count > 0 ? () => scrollToSection(item.name) : undefined}
+                      />
+                    );
+                  })}
                 </div>
               </div>
 

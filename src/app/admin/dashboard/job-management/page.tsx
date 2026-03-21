@@ -6,7 +6,7 @@ import FilterModal from '../../_components/FilterModal'
 import JobDetailsModal from '../../_components/jobDetailsModal'
 import AddNewJobForm from './_components/job-form/AddNewJobForm'
 import ConfirmDeleteModal from '@/app/(user)/profile/_components/ConfirmDeleteModal'
-import type { JobListItem, JobDetailsResponse } from '@/api/adminJobsApi'
+import type { JobListItem, JobDetailsResponse, JobListQueryParams } from '@/api/adminJobsApi'
 import type { JobFormData } from './_types/jobFormTypes'
 import { JobListControls, JobsPagination, JobsTable } from './_components/job-management'
 import { PreviewJobPage } from './_components/job-form'
@@ -16,7 +16,6 @@ import { useAdminAccess } from '../../_hooks/useAdminAccess'
 import { LockedPageOverlay } from '../../_components/LockedPageOverlay'
 
 type PageState = "list" | "add" | "edit" | "preview"
-type AdvancedFilters = Record<string, unknown>
 
 const JobManagement = () => {
   const { hasAccess, requiredRoles, loading: accessLoading } = useAdminAccess('job-management');
@@ -45,7 +44,7 @@ const JobManagement = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [jobToDelete, setJobToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [formData, setFormData] = useState<Partial<JobFormData> | null>(null)
+  const [formData, setFormData] = useState<JobFormData | null>(null)
   const [editingJobDetails, setEditingJobDetails] = useState<JobDetailsResponse | null>(null)
   const [loadingJobDetails, setLoadingJobDetails] = useState(false)
 
@@ -58,9 +57,9 @@ const JobManagement = () => {
     setFilterModalOpen(false)
   }, [])
 
-  const handleApplyFiltersAndClose = useCallback(async (advancedFilters: AdvancedFilters) => {
+  const handleApplyFiltersAndClose = useCallback(async (filters: JobListQueryParams) => {
     try {
-      await handleApplyFilters(advancedFilters)
+      await handleApplyFilters(filters)
       // Only close modal if filters were successfully applied
       setFilterModalOpen(false)
     } catch (error) {
@@ -142,7 +141,7 @@ const JobManagement = () => {
     setPageState("add")
   }, [])
 
-  const handlePreview = useCallback((data: Partial<JobFormData>) => {
+  const handlePreview = useCallback((data: JobFormData) => {
     setFormData(data)
     setPageState("preview")
   }, [])

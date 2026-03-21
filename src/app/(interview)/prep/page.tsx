@@ -15,7 +15,7 @@ export default function InterviewPrepHub() {
       description: "Practice communication skills with AI-powered exercises and get real-time feedback.",
       icon: MessageSquare,
       href: "/communication",
-      gradient: "linear-gradient(135deg, #72b880, #5ca189, #3c8d8f)",
+      gradient: "linear-gradient(135deg, #4e80c4, #2557a7, #1a3f80)",
       badge: "Recommended",
     },
     {
@@ -23,8 +23,8 @@ export default function InterviewPrepHub() {
       title: "Mock Interview",
       description: "Participate in AI-powered mock interviews and receive comprehensive performance analysis.",
       icon: Briefcase,
-      href: "/mock",
-      gradient: "linear-gradient(135deg, #72b880, #5ca189, #3c8d8f)",
+      href: "/mock-interview",
+      gradient: "linear-gradient(135deg, #4e80c4, #2557a7, #1a3f80)",
       badge: "Advanced",
     },
   ];
@@ -81,8 +81,8 @@ export default function InterviewPrepHub() {
                     <div
                       className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                       style={{
-                        background: "rgba(114, 184, 128, 0.1)",
-                        color: "#72b880",
+                        background: "rgba(37, 87, 167, 0.1)",
+                        color: "#2557a7",
                       }}
                     >
                       <span>✓</span>
@@ -111,7 +111,7 @@ export default function InterviewPrepHub() {
                   </div>
 
                   {/* CTA */}
-                  <div className="flex items-center gap-2 text-sm font-semibold text-white pt-4 border-t border-gray-100 group-hover:gap-3 transition-all">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[#2557a7] pt-4 border-t border-gray-100 group-hover:gap-3 transition-all">
                     <span>Get Started</span>
                     <ChevronRight
                       size={16}
@@ -142,7 +142,7 @@ export default function InterviewPrepHub() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                <MessageSquare size={16} className="text-[#72b880]" />
+                <MessageSquare size={16} className="text-[#2557a7]" />
                 Communication Assessment
               </h4>
               <p className="text-sm text-gray-600">
@@ -151,7 +151,7 @@ export default function InterviewPrepHub() {
             </div>
             <div>
               <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                <Briefcase size={16} className="text-[#72b880]" />
+                <Briefcase size={16} className="text-[#2557a7]" />
                 Mock Interview
               </h4>
               <p className="text-sm text-gray-600">

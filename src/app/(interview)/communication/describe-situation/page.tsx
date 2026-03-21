@@ -446,172 +446,97 @@ export default function SituationExplainingPage() {
       />
 
       <div className="min-h-screen bg-gray-50 flex">
-        {/* LEFT SIDEBAR */}
         <AssessmentSidebar currentSectionId={7} />
 
-        {/* MAIN CONTENT */}
-        <main className="flex-1">
-          <div className="max-w-7xl mx-auto px-6 py-8">
-            {/* Header Section */}
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                {currentQuestion?.section_name || 'Situation Explaining'}
-              </h1>
-              <p className="text-gray-600 text-sm">
-                Explain the given situation clearly and comprehensively
-              </p>
-            </div>
+        <main className="flex-1 px-8 py-7 min-w-0">
 
-            {/* Progress Bar */}
-            <QuestionProgressBar
-              currentQuestion={sectionQuestionNumber}
-              totalQuestions={SECTION_TOTAL_QUESTIONS}
-              className="mb-6"
-            />
-
-            {error ? (
-              <div className="text-center py-12">
-                <p className="text-red-600">{error}</p>
-              </div>
-            ) : (
-              <>
-                {/* Main Content Area */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  {/* Left Side - Situation */}
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <div className="mb-4">
-                      <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded">
-                        Situation Question
-                      </span>
-                    </div>
-
-                    <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                      {currentQuestion?.question_text ||
-                        'Imagine you are at a job interview and the interviewer asks you to describe a challenging situation you faced at work or school and how you handled it.'}
-                    </h2>
-
-                    {/* Guidelines */}
-                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100 mb-6">
-                      <h3 className="text-sm font-bold text-gray-800 mb-3">
-                        Guidelines for Your Response:
-                      </h3>
-                      <ul className="space-y-2">
-                        {guidelines.map((point, index) => (
-                          <li
-                            key={index}
-                            className="flex items-start gap-2 text-sm text-gray-700"
-                          >
-                            <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                              {index + 1}
-                            </span>
-                            <span>{point}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Time Info */}
-                    {/* <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded mb-4">
-                      <p className="text-sm font-semibold text-amber-900">
-                        ⏱️ You have {currentQuestion?.time_limit || 60} seconds to record your response
-                      </p>
-                    </div> */}
-
-                    {/* <div className="bg-blue-50 border-l-4 border-indigo-600 p-4 rounded">
-                      <p className="text-sm text-gray-700">
-                        💡 Think carefully about your response before recording.
-                      </p>
-                    </div> */}
-
-                    {/* Recording Status - Commented out */}
-                    {/* {recordedAudio && (
-                      <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded flex items-center gap-2">
-                        <svg
-                          className="w-5 h-5 text-green-600"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                        <span className="text-sm font-medium text-green-800">
-                          Recording Saved - Ready to Finish
-                        </span>
-                      </div>
-                    )} */}
-                  </div>
-
-                  {/* Right Side - Recorder */}
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex items-center justify-center">
-                    <AudioRecorder
-                      onRecordingComplete={handleRecordingComplete}
-                      maxDuration={currentQuestion?.time_limit || 60}
-                    />
-                  </div>
-                </div>
-
-                {/* Finish Assessment Button */}
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleUploadCurrentAudio}
-                    disabled={!recordedAudio || isSubmitting}
-                    className={`px-10 py-4 rounded-lg font-semibold text-lg transition-all flex items-center gap-2 ${
-                      recordedAudio && !isSubmitting
-                        ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <svg
-                          className="animate-spin h-5 w-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
-                        </svg>
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <span>Finish Assessment</span>
-                        <svg
-                          className="w-6 h-6"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
-            )}
+          {/* Section Header */}
+          <div className="mb-5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 7 of 7</p>
+            <h1 className="text-lg font-bold text-gray-900">
+              {currentQuestion?.section_name || 'Describe Situation'}
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Explain the given situation clearly and comprehensively.
+            </p>
           </div>
+
+          <QuestionProgressBar
+            currentQuestion={sectionQuestionNumber}
+            totalQuestions={SECTION_TOTAL_QUESTIONS}
+            className="mb-6"
+          />
+
+          {error ? (
+            <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              {error}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+                {/* Situation Card */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Situation</p>
+                    <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
+                      1 / 1
+                    </span>
+                  </div>
+
+                  <p className="text-base font-medium text-gray-900 leading-relaxed mb-5">
+                    {currentQuestion?.question_text ||
+                      'Imagine you are at a job interview and the interviewer asks you to describe a challenging situation you faced at work or school and how you handled it.'}
+                  </p>
+
+                  <div className="bg-[#2557a7]/4 border border-[#2557a7]/15 rounded-xl p-4">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2.5">Response Guidelines</p>
+                    <ul className="space-y-2">
+                      {guidelines.map((point, index) => (
+                        <li key={index} className="flex items-start gap-2.5 text-sm text-gray-700">
+                          <span className="w-4 h-4 bg-[#2557a7] text-white rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                            {index + 1}
+                          </span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Recorder Card */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-center">
+                  <AudioRecorder
+                    onRecordingComplete={handleRecordingComplete}
+                    maxDuration={currentQuestion?.time_limit || 60}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleUploadCurrentAudio}
+                  disabled={!recordedAudio || isSubmitting}
+                  className={`px-8 py-3 rounded-xl font-semibold text-sm transition-colors flex items-center gap-2 ${
+                    recordedAudio && !isSubmitting
+                      ? 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Uploading…
+                    </>
+                  ) : (
+                    'Finish Assessment →'
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </main>
       </div>
 

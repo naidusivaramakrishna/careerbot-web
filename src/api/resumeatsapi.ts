@@ -1,8 +1,9 @@
 import { isAuthenticated } from "./authApi";
 import { getCorrelationId } from "@/lib/correlationId";
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
+import { enhanceResume } from "./enhancerApi";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
 /* ------------------------------------------------------
    STEP 1 — Upload + Parse Resume
@@ -120,75 +121,45 @@ export const fetchAtsScore = async (resumeId: string) => {
 
 /* ------------------------------------------------------
    STEP 4 — Complete Resume → ATS Flow
-   (WITH FAILSAFE DETECTION FOR SCANNED PDF)
+   Step 1: POST /parser/parse_resume/ → resume_id + parsed_data
+   Step 2: POST /resume/enhance       → enhancer_state.ats_breakdown (ATS score)
 ------------------------------------------------------ */
 export const processResumeComplete = async (file: File) => {
   try {
-    /* -------------------------------
-       STEP 1: Parse Resume
-    ------------------------------- */
+    // Step 1: Parse Resume
     const parsed = await parseResume(file);
     const resumeId = parsed.resume_id;
-
-    // Detect scanned PDFs or OCR errors
     const parsedData = parsed?.parsed_data ?? {};
-    const isScannedPdf =
-      parsedData?.ocr_needed === true ||
-      parsedData?.error?.includes("no selectable text");
 
-    /* -------------------------------
-       STEP 2: ATS Calculation
-       Skip ATS if parsed text missing
-    ------------------------------- */
-    let atsResult = null;
-    let finalScore = 0;
+    // Step 2: Enhance — now also returns the ATS breakdown
+    const enhanceResult = await enhanceResume({ resume_id: resumeId });
+    const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown ?? {};
 
-    if (isScannedPdf) {
-      // Prevent backend ATS crash
-      atsResult = {
-        ats_score: {
-          final_score: 0,
-          reason: "Scanned PDF detected - OCR required",
-        },
-        missing_fields: [],
-      };
-    } else {
-      // Safe ATS scoring
-      atsResult = await fetchAtsScore(resumeId);
+    // Extract final score from ats_breakdown (try all known field names)
+    const finalScore: number = Number(
+      (atsBreakdown as Record<string, unknown>).FinalScore ??
+      (atsBreakdown as Record<string, unknown>).Percentage ??
+      (atsBreakdown as Record<string, unknown>).overall_score ??
+      (atsBreakdown as Record<string, unknown>).final_score ??
+      (atsBreakdown as Record<string, unknown>).percentage ??
+      (atsBreakdown as Record<string, unknown>).score ??
+      (atsBreakdown as Record<string, unknown>).TotalScore ??
+      0
+    );
 
-      // Extract score safely — try every known field name the backend may use
-      finalScore =
-        atsResult?.ats_score?.overall_score ??
-        atsResult?.ats_score?.FinalScore ??
-        atsResult?.ats_score?.final_score ??
-        atsResult?.ats_score?.Percentage ??
-        atsResult?.ats_score?.percentage ??
-        atsResult?.ats_score?.score ??
-        atsResult?.ats_score?.TotalScore ??
-        atsResult?.ats_score?.breakdown?.FinalWeighted?.score ??
-        atsResult?.ats_score?.SectionBreakdown?.FinalWeighted?.score ??
-        0;
-    }
-
-    /* -------------------------------
-       STEP 3: Save to LocalStorage
-    ------------------------------- */
     const payload = {
       resume_id: resumeId,
-      ats_breakdown_id: atsResult?.ats_id ?? null,
+      ats_breakdown_id: null, // not needed in new flow
       parsed_data: parsedData,
-      ats_score: atsResult?.ats_score ?? null,
+      ats_score: atsBreakdown, // SectionBreakdown, Suggestions, FinalScore, etc.
       finalWeightedScore: finalScore,
-      missingFields: atsResult?.missing_fields ?? [],
-      scanned_pdf: isScannedPdf,
+      missingFields: [],
+      scanned_pdf: false,
     };
 
     localStorage.setItem("atsAnalysisData", JSON.stringify(payload));
 
-    return {
-      success: true,
-      ...payload,
-    };
+    return { success: true, ...payload };
   } catch (err: unknown) {
     const message = (err as { message?: string })?.message ?? String(err);
     return { success: false, error: message };

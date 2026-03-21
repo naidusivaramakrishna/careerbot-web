@@ -4,18 +4,11 @@ import React, { useState, useCallback, useMemo } from 'react'
 import { X } from 'lucide-react'
 import { useUserDetails } from '../../_hooks/useUserDetails'
 import { UserProfileSection } from './UserProfileSection'
-import { UserEditForm } from './UserEditForm'
+import { UserEditForm, type EditFormData } from './UserEditForm'
 import { UserDetailsTabs } from './UserDetailsTabs'
 import { ActivityTab, PaymentsTab, ResumesTab, SubscriptionTab } from './TabContents'
 import { UserActionButtons } from './UserActionButtons'
 import { DeleteDialog, SuspendDialog } from './ActionDialogs'
-
-interface UserEditData {
-    email: string
-    full_name: string
-    role: string
-    subscription_plan: string
-}
 
 interface Props {
     userId: string
@@ -53,19 +46,6 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
         }
     }, [])
 
-    const formatDateTime = useMemo(() => {
-        return (dateString: string) => {
-            const date = new Date(dateString)
-            return date.toLocaleString('en-GB', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            })
-        }
-    }, [])
-
     // Handlers
     const handleEdit = useCallback(() => {
         setIsEditing(true)
@@ -75,7 +55,7 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
         setIsEditing(false)
     }, [])
 
-    const handleSaveEdit = useCallback(async (data: UserEditData) => {
+    const handleSaveEdit = useCallback(async (data: EditFormData) => {
         const success = await handleUpdateUser(data)
         if (success) {
             setIsEditing(false)

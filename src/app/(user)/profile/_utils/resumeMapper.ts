@@ -124,10 +124,13 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     }
 
     // -------------------------
-    // WORK EXPERIENCE
+    // WORK EXPERIENCE + INTERNSHIPS
     // -------------------------
+    const allWorkExperience = [];
+
+    // Add work experience
     if (llm.experience?.length > 0) {
-        profileData.workExperience = llm.experience
+        const experience = llm.experience
             .filter((exp) => exp.company || exp.role)
             .map((exp) => {
                 const { start, end } = splitResumeDateRange(exp.duration || '');
@@ -141,14 +144,12 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                     currently_working: !end,
                 };
             });
+        allWorkExperience.push(...experience);
     }
 
-    // -------------------------
-    // INTERNSHIPS → WORK EXPERIENCE
-    // -------------------------
-    if ((!profileData.workExperience || profileData.workExperience.length === 0)
-        && llm.internships?.length > 0) {
-        profileData.workExperience = llm.internships.map((intern) => {
+    // Add internships
+    if (llm.internships?.length > 0) {
+        const internships = llm.internships.map((intern) => {
             const { start, end } = splitResumeDateRange(intern.duration || '');
             return {
                 company: intern.company || '',
@@ -160,6 +161,17 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                 currently_working: false,
             };
         });
+        allWorkExperience.push(...internships);
+    }
+
+    // Sort by end_date (most recent first, with empty dates at the top for ongoing)
+    if (allWorkExperience.length > 0) {
+        allWorkExperience.sort((a, b) => {
+            if (!a.end_date) return -1; // Currently working goes first
+            if (!b.end_date) return 1;
+            return b.end_date.localeCompare(a.end_date);
+        });
+        profileData.workExperience = allWorkExperience;
     }
 
     // -------------------------

@@ -71,16 +71,12 @@ export const useAdminManagement = () => {
   // Fetch admins on mount and when dependencies change
   useEffect(() => {
     fetchAdmins();
-  }, [currentPage, pageSize, filters.role, filters.status, filters.created_from, filters.created_to, filters.sort_by, filters.sort_order]);
+  }, [currentPage, pageSize, filters.role, filters.status, filters.created_from, filters.created_to, filters.sort_by, filters.sort_order, fetchAdmins]);
 
-  // Handle search with debounce
+  // Handle search with debounce and reset to page 1
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      if (currentPage === 1) {
-        fetchAdmins();
-      } else {
-        setCurrentPage(1);
-      }
+      setCurrentPage(1);
     }, 500);
 
     return () => clearTimeout(debounceTimer);

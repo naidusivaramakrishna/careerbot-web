@@ -740,7 +740,11 @@ const EnhancerPage: React.FC = () => {
       console.log("Total suggestions:", allImprovements.length);
       console.log("Suggestions:", allImprovements);
 
-      // Store enhancement report and improvements
+      // Always save all backend suggestions — never skip any
+      sessionStorage.setItem("improvements", JSON.stringify(allImprovements));
+      sessionStorage.setItem("all_improvements", JSON.stringify(allImprovements));
+
+      // Store ATS score and enhancement report if available
       if (enhanceResult.enhancement_report) {
         sessionStorage.setItem("ats_score", JSON.stringify({
           total_score: enhanceResult.enhancement_report.details?.validation_results?.total_issues || 0,
@@ -748,7 +752,6 @@ const EnhancerPage: React.FC = () => {
           warning_count: enhanceResult.enhancement_report.details?.validation_results?.warning_count || 0,
           info_count: enhanceResult.enhancement_report.details?.validation_results?.info_count || 0,
         }));
-        sessionStorage.setItem("improvements", JSON.stringify(allImprovements));
         sessionStorage.setItem("enhancement_report", JSON.stringify(enhanceResult.enhancement_report));
       }
 

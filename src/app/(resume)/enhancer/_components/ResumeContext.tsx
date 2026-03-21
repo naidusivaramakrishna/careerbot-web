@@ -223,6 +223,13 @@ export function ResumeProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  // Reset addedFields whenever a new resume is loaded (resumeData set to null = new upload)
+  useEffect(() => {
+    if (resumeData === null) {
+      setAddedFields({});
+    }
+  }, [resumeData]);
+
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Restore state from sessionStorage on mount (handles page reload)

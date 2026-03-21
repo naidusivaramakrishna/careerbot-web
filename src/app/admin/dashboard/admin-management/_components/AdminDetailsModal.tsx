@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { X, Shield, Mail, Calendar, Activity, Edit2, Ban, Key } from "lucide-react";
+import { X, Shield, Calendar, Activity, Edit2, Ban, Key, Lock } from "lucide-react";
 import Dropdown from "@/components/common/CustomDropdown";
 import {
     getAdminDetails,
@@ -38,7 +38,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
     // Dialogs state
     const [showRoleDialog, setShowRoleDialog] = useState(false);
     const [showStatusDialog, setShowStatusDialog] = useState(false);
-    const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+    const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false);
 
     // Form state
     const [roleForm, setRoleForm] = useState({ role: "", reason: "" });
@@ -89,7 +89,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
         } finally {
             setActionLoading(false);
         }
-    }, [adminId, roleForm]);
+    }, [adminId, roleForm, fetchAdminDetails]);
 
     const handleUpdateStatus = useCallback(async () => {
         if (!statusForm.reason || statusForm.reason.length < 10) {
@@ -115,7 +115,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
         } finally {
             setActionLoading(false);
         }
-    }, [adminId, statusForm]);
+    }, [adminId, statusForm, fetchAdminDetails]);
 
     const handleResetPassword = useCallback(async () => {
         if (!passwordForm.new_password || passwordForm.new_password.length < 8) {
@@ -130,11 +130,15 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
 
         try {
             setActionLoading(true);
-            await resetAdminPassword(adminId, passwordForm);
+            await resetAdminPassword(adminId, {
+                new_password: passwordForm.new_password,
+                reason: passwordForm.reason,
+            });
 
-            toast.success("Password reset successfully");
-            setShowPasswordDialog(false);
+            toast.success("Admin password reset successfully");
+            setShowResetPasswordDialog(false);
             setPasswordForm({ new_password: "", reason: "" });
+            await fetchAdminDetails();
         } catch (error: unknown) {
             logger.error("Error resetting password:", error);
             const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to reset password";
@@ -142,7 +146,7 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
         } finally {
             setActionLoading(false);
         }
-    }, [adminId, passwordForm]);
+    }, [adminId, passwordForm, fetchAdminDetails]);
 
     const formatDate = useCallback((dateString: string | null) => {
         if (!dateString) return "Never";
@@ -274,10 +278,10 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                         Change Status
                     </button>
                     <button
-                        onClick={() => setShowPasswordDialog(true)}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                        onClick={() => setShowResetPasswordDialog(true)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                     >
-                        <Key className="w-4 h-4" />
+                        <Lock className="w-4 h-4" />
                         Reset Password
                     </button>
                 </div>
@@ -310,17 +314,18 @@ const AdminDetailsModal: React.FC<Props> = ({ adminId, onClose }) => {
                     />
                 )}
 
-                {/* Password Dialog */}
-                {showPasswordDialog && (
-                    <PasswordDialog
+                {/* Reset Password Dialog */}
+                {showResetPasswordDialog && (
+                    <ResetPasswordDialog
                         passwordForm={passwordForm}
                         setPasswordForm={setPasswordForm}
                         actionLoading={actionLoading}
                         onUpdate={handleResetPassword}
                         onClose={() => {
-                            setShowPasswordDialog(false);
+                            setShowResetPasswordDialog(false);
                             setPasswordForm({ new_password: "", reason: "" });
                         }}
+                        adminName={admin.full_name}
                     />
                 )}
             </div>
@@ -442,17 +447,19 @@ const StatusDialog: React.FC<{
     </div>
 );
 
-// Password Dialog Component
-const PasswordDialog: React.FC<{
+// Reset Password Dialog Component
+const ResetPasswordDialog: React.FC<{
     passwordForm: { new_password: string; reason: string };
     setPasswordForm: React.Dispatch<React.SetStateAction<{ new_password: string; reason: string }>>;
     actionLoading: boolean;
     onUpdate: () => void;
     onClose: () => void;
-}> = ({ passwordForm, setPasswordForm, actionLoading, onUpdate, onClose }) => (
+    adminName: string;
+}> = ({ passwordForm, setPasswordForm, actionLoading, onUpdate, onClose, adminName }) => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Reset Admin Password</h3>
+            <h3 className="text-lg font-semibold mb-2">Reset Admin Password</h3>
+            <p className="text-sm text-gray-600 mb-4">Resetting password for {adminName}</p>
             <div className="space-y-4">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -462,7 +469,7 @@ const PasswordDialog: React.FC<{
                         type="password"
                         value={passwordForm.new_password}
                         onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                         placeholder="Enter new password..."
                     />
                 </div>
@@ -473,9 +480,9 @@ const PasswordDialog: React.FC<{
                     <textarea
                         value={passwordForm.reason}
                         onChange={(e) => setPasswordForm({ ...passwordForm, reason: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                         rows={3}
-                        placeholder="Explain why you're resetting this password..."
+                        placeholder="Explain why you're resetting this admin's password..."
                     />
                 </div>
             </div>
@@ -483,7 +490,7 @@ const PasswordDialog: React.FC<{
                 <button
                     onClick={onUpdate}
                     disabled={actionLoading}
-                    className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
+                    className="flex-1 bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
                 >
                     {actionLoading ? "Resetting..." : "Reset Password"}
                 </button>

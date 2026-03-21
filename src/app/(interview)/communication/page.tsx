@@ -8,7 +8,13 @@ import { clearAllAudioRecordings } from '@/utils/audioUtils';
 import { useVideoRecording } from '@/contexts/VideoRecordingContext';
 import logger from '@/lib/logger';
 
-export default function LoginPage() {
+const difficulties = [
+  { key: 'easy',   label: 'Easy',   meta: 'Basic vocabulary' },
+  { key: 'medium', label: 'Medium', meta: 'Intermediate level' },
+  { key: 'hard',   label: 'Hard',   meta: 'Advanced language' },
+];
+
+export default function CommunicationEntryPage() {
   const [email, setEmail] = useState('');
   const [mode, setMode] = useState('easy');
   const [loading, setLoading] = useState(false);
@@ -17,16 +23,13 @@ export default function LoginPage() {
   const router = useRouter();
   const { clearRecordedVideo } = useVideoRecording();
 
-  // ✅ Auto-fill email from profile API (always fetch fresh data)
   useEffect(() => {
     const fetchEmail = async () => {
       try {
         logger.info('Fetching user email from profile API...');
         const profile = await getProfile();
-
         if (profile.email) {
           setEmail(profile.email);
-          // Update localStorage with fresh data
           localStorage.setItem('user_email', profile.email);
           logger.info('Email fetched and updated:', profile.email);
         } else {
@@ -34,8 +37,6 @@ export default function LoginPage() {
         }
       } catch (err) {
         logger.error('Failed to fetch profile:', err);
-
-        // ✅ Only fallback to localStorage if API fails
         const cachedEmail = localStorage.getItem('user_email');
         if (cachedEmail) {
           setEmail(cachedEmail);
@@ -45,7 +46,6 @@ export default function LoginPage() {
         setLoadingEmail(false);
       }
     };
-
     fetchEmail();
   }, []);
 
@@ -55,101 +55,132 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Store email and mode in localStorage
       localStorage.setItem('userEmail', email);
       localStorage.setItem('userMode', mode);
 
-      // Call the generate test API
       const response = await generateTest({
         email_id: email,
         difficulty: mode,
-        do_not_repeat_list: [], // Add logic to fetch previously attempted questions if needed
+        do_not_repeat_list: [],
       });
 
       logger.info('Test generated successfully:', response);
 
-      // Store test_id in localStorage for later use
       if (response.test_id) {
         localStorage.setItem('test_id', response.test_id);
       }
 
-      // ✅ OPTIMISTIC NAVIGATION: Navigate immediately for better UX
       logger.info('🚀 Navigating to sections page immediately...');
       router.push('/communication/sections');
 
-      // ✅ Run cleanup in background (fire-and-forget)
-      // Clear all previous audio recordings, video recordings, and text answers
-      // This ensures only current test's files are attached to the APIs
       Promise.resolve().then(() => {
         clearAllAudioRecordings();
         clearRecordedVideo();
         sessionStorage.removeItem('text_answers');
-        logger.info('✅ Background cleanup completed: audio recordings, video recording, and text answers cleared');
+        logger.info('✅ Background cleanup completed');
       });
-
-    } catch (err: any) {
+    } catch (err) {
       logger.error('Error generating test:', err);
-      setError(err?.response?.data?.message || 'Failed to generate test. Please try again.');
+      const error = err as { response?: { data?: { message?: string } } };
+      setError(error?.response?.data?.message || 'Failed to generate test. Please try again.');
       setLoading(false);
     }
-    // Note: Don't setLoading(false) on success since we're navigating away
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white p-10 rounded-xl shadow-lg max-w-md w-full">
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Communication Assessment</h1>
-        <form onSubmit={handleSubmit}>
-          <div className="mb-6">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={loadingEmail ? '' : email}
-              readOnly
-              required
-              className="w-full px-4 py-3 border text-gray-700 bg-gray-100 border-gray-300 rounded-lg cursor-not-allowed"
-              placeholder={loadingEmail ? "Loading email..." : "Email not found"}
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Email is auto-filled from your account
-            </p>
-          </div>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Mode</label>
-            <div className="flex space-x-4">
-              {['easy', 'medium', 'hard'].map((m) => (
-                <label key={m} className="flex items-center">
-                  <input
-                    type="radio"
-                    name="mode"
-                    value={m}
-                    checked={mode === m}
-                    onChange={() => setMode(m)}
-                    className="mr-2"
-                  />
-                  <span className="text-gray-700 capitalize">{m}</span>
-                </label>
-              ))}
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-[400px]">
+
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <h1 className="text-[26px] font-bold text-gray-900 leading-tight tracking-tight">
+            Communication Assessment
+          </h1>
+          <p className="text-sm text-gray-500 mt-2">
+            Evaluate your English communication skills across 7 sections
+          </p>
+        </div>
+
+        {/* Card */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+
+          {/* Blue top bar */}
+          <div className="h-[3px] bg-[#2557a7] rounded-t-2xl" />
+
+          <form onSubmit={handleSubmit} className="px-7 py-7 space-y-6">
+
+            {/* Email */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                Account Email
+              </label>
+              <input
+                type="email"
+                value={loadingEmail ? '' : email}
+                readOnly
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm cursor-not-allowed focus:outline-none"
+                placeholder={loadingEmail ? 'Fetching your email…' : 'Email not available'}
+              />
+              <p className="mt-1.5 text-xs text-gray-400">
+                {loadingEmail ? 'Loading from your profile…' : 'Auto-filled from your CareerBot account'}
+              </p>
             </div>
-          </div>
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-              {error}
+
+            {/* Difficulty */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                Difficulty Level
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {difficulties.map((d) => (
+                  <button
+                    key={d.key}
+                    type="button"
+                    onClick={() => setMode(d.key)}
+                    className={`flex flex-col items-center gap-1 py-4 px-2 rounded-xl border-2 font-medium text-sm transition-all ${
+                      mode === d.key
+                        ? 'border-[#2557a7] bg-[#2557a7]/5 text-[#2557a7]'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="font-semibold">{d.label}</span>
+                    <span className="text-[10px] font-normal opacity-70">{d.meta}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
-          <button
-            type="submit"
-            disabled={loading || loadingEmail || !email}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition duration-200 disabled:bg-blue-400 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Generating Test...' : loadingEmail ? 'Loading...' : 'Continue'}
-          </button>
-        </form>
+
+            {/* Error */}
+            {error && (
+              <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading || loadingEmail || !email}
+              className="w-full bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-semibold text-sm transition-colors"
+            >
+              {loading
+                ? 'Generating Test…'
+                : loadingEmail
+                ? 'Loading…'
+                : 'Continue to Assessment →'}
+            </button>
+
+          </form>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-5 flex justify-center divide-x divide-gray-200 text-xs text-gray-400">
+          <span className="px-3">7 sections</span>
+          <span className="px-3">45 questions</span>
+          <span className="px-3">~30 minutes</span>
+        </div>
+
       </div>
     </div>
   );
 }
-

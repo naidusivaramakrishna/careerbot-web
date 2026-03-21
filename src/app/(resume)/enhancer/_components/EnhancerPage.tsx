@@ -751,67 +751,74 @@ const EnhancerPage: React.FC = () => {
       }
 
       // Extract improvements from backend response (SOURCE OF TRUTH)
+      // suggestions is now an array of objects: { id, section, message, fix_type }
+      type BackendSuggestion = { id: string; section: string; message: string; fix_type: string };
+      const rawSuggestions = (enhanceResult.suggestions || []) as (BackendSuggestion | string)[];
 
-      // Parse ONLY the backend suggestions array
-      const backendSuggestions: string[] = enhanceResult.suggestions || [];
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log("=== BACKEND SUGGESTIONS (RAW) ===");
-        console.log("Suggestions array:", backendSuggestions);
-      }
+      const backendSuggestions = rawSuggestions;
 
       // Transform backend suggestions to improvement format
       const allImprovements = backendSuggestions.map((suggestion, index) => {
-        // Determine impact and category based on keywords in the suggestion
-        let impact: 'high' | 'medium' | 'low' = 'medium';
-        let impact_points = 8;
-        let category = 'content';
-        let section: string | null = null;
+        // Handle both object and legacy string formats
+        const isObj = typeof suggestion === 'object' && suggestion !== null;
+        const message = isObj ? (suggestion as BackendSuggestion).message : suggestion as string;
+        const suggSection = isObj ? (suggestion as BackendSuggestion).section : null;
+        const fixType = isObj ? (suggestion as BackendSuggestion).fix_type : 'manual';
+        const suggId = isObj ? (suggestion as BackendSuggestion).id : `suggestion_${index}`;
 
-        const lowerSuggestion = suggestion.toLowerCase();
+        const lowerMsg = message.toLowerCase();
 
-        // High priority suggestions (missing without optional)
-        if (lowerSuggestion.includes('missing') && !lowerSuggestion.includes('optional')) {
+        // Determine impact — auto fixes are higher priority
+        let impact: 'high' | 'medium' | 'low' = fixType === 'auto' ? 'high' : 'medium';
+        let impact_points = fixType === 'auto' ? 12 : 8;
+
+        if (lowerMsg.includes('missing') && !lowerMsg.includes('optional')) {
           impact = 'high';
           impact_points = 12;
         }
-
-        // Determine section - Check experience/education FIRST before contact
-        if (lowerSuggestion.includes('experience #') || lowerSuggestion.includes('experience:')) {
-          section = 'experience';
-          category = 'content';
-        } else if (lowerSuggestion.includes('education #') || lowerSuggestion.includes('education:')) {
-          section = 'education';
-          category = 'content';
-        } else if (lowerSuggestion.includes('contact name') || lowerSuggestion.includes('contact') || lowerSuggestion.includes('email') || lowerSuggestion.includes('phone')) {
-          section = 'contact';
-          category = 'sections';
-        } else if (lowerSuggestion.includes('achievement')) {
-          section = 'achievements';
-          category = 'sections';
-        }
-
-        // Optional suggestions have lower impact
-        if (lowerSuggestion.includes('optional') || lowerSuggestion.includes('recommended')) {
+        if (lowerMsg.includes('optional') || lowerMsg.includes('recommended')) {
           impact = 'medium';
           impact_points = 6;
         }
 
-        // Split suggestion into title and description
-        const parts = suggestion.split(' - ');
-        const title = parts[0] || suggestion;
-        const description = parts.length > 1 ? parts.slice(1).join(' - ') : suggestion;
+        // Map section from object or fallback to message-based detection
+        let section: string | null = suggSection?.toLowerCase() || null;
+        const category = 'content';
+
+        if (!section) {
+          if (lowerMsg.includes('experience')) section = 'experience';
+          else if (lowerMsg.includes('education')) section = 'education';
+          else if (lowerMsg.includes('contact') || lowerMsg.includes('email') || lowerMsg.includes('phone')) section = 'contact';
+          else if (lowerMsg.includes('achievement')) section = 'achievements';
+        }
+
+        // Split on ' - ' to separate the label from the replacement text
+        const parts = message.split(' - ');
+        const title = parts[0] || message;
+        const description = parts.length > 1 ? parts.slice(1).join(' - ') : message;
+
+        // For replacement suggestions, extract before/after from the message
+        // Pattern: Replace "X" with "Y" — extract X as before, Y as after
+        let before = '';
+        let after = description;
+        const replaceMatch = message.match(/^Replace\s+"([^"]+)"\s+with\s+"([^"]+)"/i);
+        if (replaceMatch) {
+          before = replaceMatch[1];
+          after = replaceMatch[2];
+        }
 
         return {
-          id: `backend_suggestion_${index}_${Date.now()}`,
+          id: `${suggId}_${Date.now()}`,
+          original_suggestion_id: suggId,
+          fix_type: fixType,
           category,
           section,
           title,
           description,
           impact,
           impact_points,
-          before: '',
-          after: description,
+          before,
+          after,
           action_type: 'add_field',
           replacement_text: null,
         };
@@ -820,23 +827,23 @@ const EnhancerPage: React.FC = () => {
       // Sort by impact points (highest first)
       allImprovements.sort((a, b) => b.impact_points - a.impact_points);
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log("=== AI SUGGESTIONS ===");
-        console.log("Total suggestions:", allImprovements.length);
-        console.log("Suggestions:", allImprovements);
+      // Save improvements
+      sessionStorage.setItem("improvements", JSON.stringify(allImprovements));
+      sessionStorage.setItem("all_improvements", JSON.stringify(allImprovements));
+
+      // Store ATS score from enhancer_state.ats_breakdown
+      const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown as Record<string, unknown> | undefined;
+      if (atsBreakdown) {
+        sessionStorage.setItem("ats_score", JSON.stringify({
+          final_score: atsBreakdown.FinalScore ?? atsBreakdown.Percentage ?? 0,
+          max_score: atsBreakdown.MaxScore ?? 100,
+          profile: atsBreakdown.Profile ?? 'General',
+          domain: atsBreakdown.Domain ?? '',
+          section_breakdown: atsBreakdown.SectionBreakdown ?? {},
+        }));
       }
 
-      // Store enhancement report and improvements
-      if (enhanceResult.enhancement_report) {
-        sessionStorage.setItem("ats_score", JSON.stringify({
-          total_score: enhanceResult.enhancement_report.details?.validation_results?.total_issues || 0,
-          critical_count: enhanceResult.enhancement_report.details?.validation_results?.critical_count || 0,
-          warning_count: enhanceResult.enhancement_report.details?.validation_results?.warning_count || 0,
-          info_count: enhanceResult.enhancement_report.details?.validation_results?.info_count || 0,
-        }));
-        sessionStorage.setItem("improvements", JSON.stringify(allImprovements));
-        sessionStorage.setItem("enhancement_report", JSON.stringify(enhanceResult.enhancement_report));
-      }
+      // enhanced_id is already stored above — applyFix uses it directly
 
       // Set the resume data in context
       if (process.env.NODE_ENV === 'development') {

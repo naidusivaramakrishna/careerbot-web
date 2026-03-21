@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 
 // Define protected routes that require authentication
 const protectedRoutes = [
+    '/dashboard',
     '/profile',
     '/builder/start',
     '/atslogin',

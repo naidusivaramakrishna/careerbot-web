@@ -10,6 +10,7 @@ import DeleteConfirmModal from '../_components/DeleteConfirmModal';
 import DownloadModal from '../_components/DownloadModal';
 import ResumeTableRow from '../_components/ResumeTableRow';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import logger from "@/lib/logger";
 
 export interface Resume {
@@ -25,7 +26,7 @@ export interface Resume {
   primary: boolean;
 }
 
-const ResumeListPage = () => {
+const ResumeListPageContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
@@ -338,5 +339,11 @@ const ResumeListPage = () => {
     </div>
   );
 };
+
+const ResumeListPage = () => (
+  <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600" /></div>}>
+    <ResumeListPageContent />
+  </Suspense>
+);
 
 export default ResumeListPage;

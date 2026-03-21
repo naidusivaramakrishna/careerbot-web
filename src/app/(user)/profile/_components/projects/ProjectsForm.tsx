@@ -142,7 +142,7 @@ export default function ProjectsForm({
                         <input
                             type="date"
                             name={field}
-                            value={(projectsForm as any)[field] || ""}
+                            value={String((projectsForm as Record<string, unknown>)[field] || "")}
                             onChange={handleChange}
                             className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
                                 getFieldError(field)

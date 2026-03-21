@@ -13,7 +13,7 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
     () => highlightJD(text, matchedSkills, missingSkills),
     [text, matchedSkills, missingSkills]
   );
-  
+
   return (
     <div className="text-sm leading-relaxed text-slate-700 space-y-2">
       {spans.map((s, i) =>
@@ -21,10 +21,10 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
           <span
             key={i}
             className={[
-              "inline-flex items-center px-3 py-1.5 mx-0.5 my-1 rounded-lg font-semibold shadow-md animate-in fade-in duration-300 transition-all hover:shadow-lg",
-              s.matchType === 'matched'
-                ? "bg-gradient-to-r from-[#dbeafe] to-[#bfdbfe] text-[#2557a7] border border-[#bfdbfe] hover:from-[#bfdbfe] hover:to-[#a5cff5]"
-                : "bg-gradient-to-r from-[#eff6ff] to-[#e5eef9] text-[#2557a7] border border-[#bfdbfe] opacity-70 hover:opacity-100"
+              "inline-flex items-center px-2.5 py-1 mx-0.5 my-0.5 rounded-md text-xs font-semibold transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-default",
+              s.matchType === "matched"
+                ? "bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200"
+                : "bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200",
             ].join(" ")}
           >
             {s.text}

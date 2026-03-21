@@ -1,4 +1,5 @@
 import React, { memo, ChangeEvent, useState } from 'react'
+import Image from 'next/image'
 import { Upload, X } from 'lucide-react'
 import { JobFormData } from '../../_types/jobFormTypes'
 
@@ -7,13 +8,17 @@ interface LogoUploadProps {
     onLogoChange: (e: ChangeEvent<HTMLInputElement>) => void
     onUpdate: <K extends keyof JobFormData>(key: K, value: JobFormData[K]) => void
     onLogoFileSelected: (file: File) => void
+    jobId?: string
+    uploading?: boolean
 }
 
 export const LogoUpload = memo(({
     logo,
     onLogoChange,
     onUpdate,
-    onLogoFileSelected
+    onLogoFileSelected,
+    jobId,
+    uploading = false
 }: LogoUploadProps) => {
     const [isDragging, setIsDragging] = useState(false)
 
@@ -59,23 +64,56 @@ export const LogoUpload = memo(({
 
             {/* Upload Area */}
             <div
-                onClick={openFilePicker}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`border-dashed cursor-pointer border-2 rounded-md p-3 flex items-center justify-center transition-colors ${
-                    isDragging
-                        ? 'border-blue-400 bg-blue-50'
-                        : 'border-gray-300 hover:border-gray-400'
+                onClick={!uploading ? openFilePicker : undefined}
+                onDragOver={!uploading ? handleDragOver : undefined}
+                onDragLeave={!uploading ? handleDragLeave : undefined}
+                onDrop={!uploading ? handleDrop : undefined}
+                className={`border-dashed border-2 rounded-md p-3 flex items-center justify-center transition-colors ${
+                    uploading
+                        ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
+                        : isDragging
+                        ? 'border-blue-400 bg-blue-50 cursor-pointer'
+                        : 'border-gray-300 hover:border-gray-400 cursor-pointer'
                 }`}
             >
-                {logo ? (
+                {uploading ? (
+                    <div className="flex flex-col gap-2 items-center py-6">
+                        <div className="animate-spin">
+                            <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.25" />
+                                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                        </div>
+                        <p className="text-sm text-gray-500">Uploading logo...</p>
+                    </div>
+                ) : logo || jobId ? (
                     <div className="relative">
-                        <img
-                            src={logo}
-                            alt="Company logo"
-                            className="w-24 h-24 object-cover rounded"
-                        />
+                        {logo?.startsWith('data:') ? (
+                            // For newly uploaded files (data URLs)
+                            <Image
+                                src={logo}
+                                alt="Company logo"
+                                width={96}
+                                height={96}
+                                className="w-24 h-24 object-cover rounded"
+                                priority
+                            />
+                        ) : (
+                            // For server-hosted logos
+                            <img
+                                src={
+                                    jobId
+                                            ? `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}/api/v1/admin/jobs/${jobId}/logo`
+                                        : logo || ''
+                                }
+                                alt="Company logo"
+                                className="w-24 h-24 object-cover rounded"
+                                onError={(e) => {
+                                    // If image fails to load, hide it
+                                    e.currentTarget.style.display = 'none'
+                                }}
+                            />
+                        )}
                         <button
                             onClick={handleRemoveLogo}
                             className="absolute -top-2 -right-2 bg-gray-500 text-white rounded-full p-1 hover:bg-gray-600 transition-colors"

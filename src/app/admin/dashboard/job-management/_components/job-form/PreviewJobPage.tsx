@@ -26,7 +26,7 @@ const JobPreviewHeader = memo(({ title, company, logo }: {
         </div>
         <div className="ml-6">
             {logo ? (
-                <img src={logo} alt={company} className="w-16 h-16 rounded object-cover" />
+                <img src={logo} alt={company} className="w-16 h-16 rounded object-cover" style={{ width: '64px', height: '64px' }} />
             ) : (
                 <div className="w-16 h-16 bg-[#D9D9D9] rounded flex items-center justify-center font-semibold text-xl">
                     {company ? company.charAt(0).toUpperCase() : "C"}

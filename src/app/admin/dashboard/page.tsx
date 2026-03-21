@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useState, useMemo, useCallback, lazy, Suspense } from 'react'
+import React, { useEffect, useState, useMemo, useCallback, Suspense } from 'react'
 import { CreditCard, FileText, IndianRupee, ScanLine, TrendingUp, Users } from 'lucide-react'
 import dynamic from 'next/dynamic';
 import Dropdown from '@/components/common/CustomDropdown';

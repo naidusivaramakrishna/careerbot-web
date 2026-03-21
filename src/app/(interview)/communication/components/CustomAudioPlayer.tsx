@@ -83,7 +83,7 @@ export default function CustomAudioPlayer({ src }: { src: string }) {
   }, []);
 
   return (
-    <div className="bg-white border border-indigo-200 rounded-xl p-4">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5">
       <audio ref={audioRef} src={src} preload="auto" />
 
       {/* Top Row */}
@@ -91,23 +91,26 @@ export default function CustomAudioPlayer({ src }: { src: string }) {
         <button
           onClick={playAudio}
           disabled={hasPlayed}
-          className={`w-12 h-12 rounded-full flex items-center justify-center ${
+          className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-colors ${
             hasPlayed
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-orange-500 hover:bg-orange-600'
+              ? 'bg-gray-100 cursor-not-allowed'
+              : 'bg-[#2557a7] hover:bg-[#1e4a94]'
           }`}
+          aria-label="Play audio"
         >
-          ▶
+          <svg className={`w-5 h-5 ${hasPlayed ? 'text-gray-400' : 'text-white'}`} fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
         </button>
 
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-700">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-700 truncate">
             Listen carefully – audio plays once
           </p>
 
-          <div className="w-full h-1 bg-gray-200 rounded mt-2">
+          <div className="w-full h-1 bg-gray-100 rounded-full mt-2">
             {isPlaying && (
-              <div className="h-1 bg-orange-500 rounded animate-pulse w-1/2" />
+              <div className="h-1 bg-[#2557a7] rounded-full animate-pulse w-1/2" />
             )}
           </div>
         </div>
@@ -117,7 +120,7 @@ export default function CustomAudioPlayer({ src }: { src: string }) {
       <canvas
         ref={canvasRef}
         width={300}
-        height={60}
+        height={48}
         className="w-full"
       />
     </div>

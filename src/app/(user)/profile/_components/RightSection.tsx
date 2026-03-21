@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { toast } from "sonner";
 import { mapResumeToProfile } from "../_utils/resumeMapper";
 import { logger } from "@/lib/logger";
@@ -26,94 +26,69 @@ import {
 
 import { useProfileContext } from '../context/ProfileContext'
 import { ResumeExtractResponse, extractResume } from "@/api/resumeParsingApi";
-import { Crown, MessageSquare, Upload } from "lucide-react";
-import { ProfileData } from "../_types/ProfileData";
+import { useDashboard } from "@/contexts/DashboardContext";
+import { Crown, MessageSquare, Upload, User, CheckCircle } from "lucide-react";
 import { importLinkedInProfile } from "@/api/linkedinParsingApi";
 import { mapLinkedinToProfile } from "../_utils/linkedinMapper";
 import LinkedinImportModal from "./LinkedinImportModal";
 
 const RightSection = () => {
-    const { profileData, setProfileData } = useProfileContext();
-    const [completionPercentage, setCompletionPercentage] = useState(0)
+    const { setProfileData } = useProfileContext();
+    const { data: dashboardData, refreshDashboard } = useDashboard();
+    const completionPercentage = dashboardData?.profile?.completeness ?? 0;
+    const missingFields = dashboardData?.profile?.missing_fields ?? [];
     const [uploading, setUploading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [linkedinModalOpen, setLinkedinModalOpen] = useState(false);
 
-    // Calculate profile completion percentage
-    const calculateCompletion = (profile: ProfileData): number => {
-        if (!profile) return 0
-
-        let filledSections = 0
-        const totalSections = 5
-
-        if (profile?.personalInformation) {
-            const { fullName, phone, location, summary } = profile.personalInformation
-            if (fullName && phone && location && summary) {
-                filledSections++
-            }
+    // Determine status based on completeness
+    const getStatus = () => {
+        if (completionPercentage === 100) {
+            return {
+                label: 'Complete!',
+                color: 'text-green-600',
+                ringColor: 'stroke-green-500',
+                bgColor: 'bg-green-50',
+                icon: <CheckCircle className="w-5 h-5 text-green-600" />,
+            };
         }
-
-        if (profile?.education && profile.education.length > 0) {
-            const hasValidEducation = profile.education.some(
-                edu => edu.institution && edu.degree
-            )
-            if (hasValidEducation) {
-                filledSections++
-            }
+        if (completionPercentage >= 80) {
+            return {
+                label: 'Almost There!',
+                color: 'text-blue-600',
+                ringColor: 'stroke-blue-500',
+                bgColor: 'bg-blue-50',
+                icon: <User className="w-5 h-5 text-blue-600" />,
+            };
         }
-
-        if (profile?.workExperience && profile.workExperience.length > 0) {
-            const hasValidExperience = profile.workExperience.some(
-                exp => exp.company && exp.job_title
-            )
-            if (hasValidExperience) {
-                filledSections++
-            }
+        if (completionPercentage >= 60) {
+            return {
+                label: 'Good Progress',
+                color: 'text-yellow-600',
+                ringColor: 'stroke-yellow-500',
+                bgColor: 'bg-yellow-50',
+                icon: <User className="w-5 h-5 text-yellow-600" />,
+            };
         }
-
-        if (profile?.skills && profile.skills.length > 0) {
-            filledSections++
+        if (completionPercentage >= 30) {
+            return {
+                label: 'Getting Started',
+                color: 'text-orange-600',
+                ringColor: 'stroke-orange-500',
+                bgColor: 'bg-orange-50',
+                icon: <User className="w-5 h-5 text-orange-600" />,
+            };
         }
+        return {
+            label: 'Just Started',
+            color: 'text-gray-600',
+            ringColor: 'stroke-gray-400',
+            bgColor: 'bg-gray-50',
+            icon: <User className="w-5 h-5 text-gray-600" />,
+        };
+    };
 
-        if (profile?.employmentInfo) {
-            const {
-                authorized_to_work,
-                disability_status,
-                gender,
-                willing_to_relocate,
-                employment_status,
-                work_mode,
-                preferred_job_type,
-                notice_period_days,
-                preferred_industries,
-                preferred_roles,
-                preferred_locations
-            } = profile.employmentInfo
-
-            if (authorized_to_work !== undefined ||
-                disability_status ||
-                gender ||
-                willing_to_relocate !== undefined ||
-                employment_status ||
-                work_mode ||
-                preferred_job_type ||
-                notice_period_days ||
-                (preferred_industries && preferred_industries.length > 0) ||
-                (preferred_roles && preferred_roles.length > 0) ||
-                (preferred_locations && preferred_locations.length > 0)) {
-                filledSections++
-            }
-        }
-
-        const percentage = Math.round((filledSections / totalSections) * 100)
-        return percentage
-    }
-
-    // Update completion percentage whenever any part of the profile changes
-    useEffect(() => {
-        const newPercentage = calculateCompletion(profileData)
-        setCompletionPercentage(newPercentage)
-    }, [profileData])
+    const status = getStatus();
 
     const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -300,11 +275,15 @@ const RightSection = () => {
                 getCertification(),
             ]);
 
+            // ✅ FIRST: Update profile context with all new data BEFORE refreshing dashboard
+            // This prevents multiple re-renders and toast notifications
+
             // ✅ PRESERVE EDUCATION ORDER FROM RESUME
             // Map fetched education by institution to maintain resume order
             const educationMap = new Map(fetchedEducation.map(edu => [edu.institution, edu]));
             const updatedEducation = mapped.education
-                ?.map(resumeEdu => educationMap.get(resumeEdu.institution))
+                ?.filter((resumeEdu) => resumeEdu.institution !== undefined)
+                .map(resumeEdu => educationMap.get(resumeEdu.institution as string))
                 .filter((edu): edu is typeof fetchedEducation[0] => edu !== undefined) || fetchedEducation;
 
             // ---------------------------------------
@@ -333,6 +312,12 @@ const RightSection = () => {
             }));
 
             toast.success("Resume imported successfully!", { id: "resume-upload" });
+
+            // ✅ FINAL: Refresh dashboard AFTER all profile updates complete
+            // Use setTimeout to ensure profile context has updated first
+            setTimeout(() => {
+                refreshDashboard();
+            }, 100);
         } catch (err) {
             logger.error("Error during resume import:", err);
             toast.error("Failed to extract resume", { id: "resume-upload" });
@@ -506,6 +491,12 @@ const RightSection = () => {
 
             toast.success("LinkedIn imported successfully!", { id: "linkedin-import" });
 
+            // ✅ FINAL: Refresh dashboard AFTER all profile updates complete
+            // Use setTimeout to ensure profile context has updated first
+            setTimeout(() => {
+                refreshDashboard();
+            }, 100);
+
         } catch (error) {
             logger.error("Error during LinkedIn import:", error);
             toast.error("Failed to import LinkedIn data", { id: "linkedin-import" });
@@ -558,53 +549,79 @@ const RightSection = () => {
                         </div>
                     </div> */}
                 </div>
-                {/* Profile Completion - Circular Progress */}
-                <div className="bg-white p-4 rounded-xl my-3 shadow-md border border-[#86EFAC] overflow-hidden relative">
-                    <h1 className='mb-3 font-bold text-base text-gray-800 text-center relative z-10'>Profile Completion</h1>
+                {/* Profile Completion Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow my-3">
+                    {/* Header */}
+                    <div className="flex flex-col items-center justify-between mb-4">
+                        <p className="text-sm font-semibold">Profile Completeness</p>
+                        <span className={`text-xs font-semibold ${status.color} my-2 px-2 py-1 ${status.bgColor} rounded-full`}>
+                            {status.label}
+                        </span>
+                    </div>
 
-                    <div className="relative w-32 h-32 flex items-center justify-center mx-auto">
-                        <svg width="120" height="120" viewBox="0 0 120 120" className="transform -rotate-90">
-                            <defs>
-                                <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stopColor="#22C55E" />
-                                    <stop offset="100%" stopColor="#16A34A" />
-                                </linearGradient>
-                            </defs>
-
-                            {/* Background circle */}
-                            <circle
-                                cx="60"
-                                cy="60"
-                                r="50"
-                                fill="none"
-                                stroke="#666666"
-                                strokeWidth="8"
-                                opacity="0.4"
-                            />
-
-                            {/* Progress circle */}
-                            <circle
-                                cx="60"
-                                cy="60"
-                                r="50"
-                                fill="none"
-                                stroke="url(#progressGradient)"
-                                strokeWidth="7"
-                                strokeDasharray={`${(completionPercentage / 100) * 2 * Math.PI * 50} ${2 * Math.PI * 50}`}
-                                strokeLinecap="round"
-                                className="transition-all duration-700"
-                            />
-                        </svg>
-
-                        {/* Centered content */}
-                        <div className="absolute flex flex-col items-center">
-                            <div className="relative">
-                                <span className="text-3xl font-bold bg-linear-to-r from-[#22C55E] to-[#16A34A] bg-clip-text text-transparent">
-                                    {completionPercentage}
-                                </span>
-                                <span className="absolute -top-1 -right-2 text-xs text-[#16A34A]">%</span>
+                    {/* Progress Circle and Missing Fields */}
+                    <div className="flex flex-col items-center gap-6">
+                        {/* Circular Progress */}
+                        <div className="relative shrink-0">
+                            <svg className="w-20 h-20 transform -rotate-90">
+                                {/* Background circle */}
+                                <circle
+                                    cx="40"
+                                    cy="40"
+                                    r="32"
+                                    stroke="currentColor"
+                                    strokeWidth="6"
+                                    fill="none"
+                                    className="text-gray-200"
+                                />
+                                {/* Progress circle */}
+                                <circle
+                                    cx="40"
+                                    cy="40"
+                                    r="32"
+                                    stroke="currentColor"
+                                    strokeWidth="6"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    className={status.ringColor}
+                                    style={{
+                                        strokeDasharray: `${2 * Math.PI * 32}`,
+                                        strokeDashoffset: `${2 * Math.PI * 32 * (1 - completionPercentage / 100)}`,
+                                        transition: 'stroke-dashoffset 0.5s ease-out',
+                                    }}
+                                />
+                            </svg>
+                            {/* Percentage */}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-xl font-bold text-gray-900">{completionPercentage}%</span>
                             </div>
-                            <span className="text-xs font-semibold text-[#16A34A] mt-1">Complete</span>
+                        </div>
+
+                        {/* Missing Fields */}
+                        <div className="flex-1">
+                            {missingFields.length > 0 ? (
+                                <>
+                                    <p className="text-xs text-gray-500 mb-2">Still missing:</p>
+                                    <ul className="space-y-1">
+                                        {missingFields.slice(0, 3).map((field) => (
+                                            <li key={field} className="text-sm text-gray-700 flex items-center gap-1">
+                                                <span className="w-1 h-1 bg-gray-400 rounded-full"></span>
+                                                {field}
+                                            </li>
+                                        ))}
+                                        {missingFields.length > 3 && (
+                                            <li className="text-xs text-gray-500">
+                                                +{missingFields.length - 3} more
+                                            </li>
+                                        )}
+                                    </ul>
+                                </>
+                            ) : (
+                                <div className="flex items-center gap-2 text-green-600">
+                                    <CheckCircle className="w-5 h-5" />
+                                    <p className="text-sm font-medium">All fields complete!</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -193,14 +193,14 @@ export const httpClient = {
 
   post: <T = unknown>(
     url: string,
-    data?: Record<string, unknown>,
+    data?: object,
     config?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> =>
     client.post<T>(url, data, config),
 
   put: <T = unknown>(
     url: string,
-    data?: Record<string, unknown>,
+    data?: object,
     config?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> =>
     client.put<T>(url, data, config),

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { updateProfile } from '@/api/userApi';
 import { ProfileData } from '../_types/ProfileData';
 import { useProfileContext } from '../context/ProfileContext';
+import { useDashboard } from '@/contexts/DashboardContext';
 import { useAIGeneration } from '@/hooks/useAIDescriptionGenerator';
 import { logger } from '@/lib/logger';
 import { formatPhoneNumber } from '../_utils/resumeMapper';
@@ -28,6 +29,7 @@ interface PersonalInfoSectionProps {
 
 const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfile }: PersonalInfoSectionProps, ref) => {
     const { setProfileData } = useProfileContext(); // ✅ Get context setter
+    const { refreshDashboard } = useDashboard();
     const linkedinRef = useRef<HTMLInputElement | null>(null);
     const githubRef = useRef<HTMLInputElement | null>(null);
     const [saving, setSaving] = useState(false);
@@ -97,6 +99,11 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
             });
 
             toast.success('Profile updated successfully!');
+
+            // Refresh dashboard with delay to batch updates and prevent multiple toasts
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
         } catch (err: unknown) {
             logger.error('Error updating profile:', err);
 
@@ -236,7 +243,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                 {renderInputField('LinkedIn', 'linkedin', tempProfile.personalInformation?.linkedin || '', 'https://linkedin.com/in/johndoe', 'text', linkedinRef)}
                 {renderInputField('GitHub', 'github', tempProfile.personalInformation?.github || '', 'https://github.com/johndoe', 'text', githubRef)}
             </div>
-            <div className='flex flex-col gap-3'>
+            <div className='flex flex-col gap-3 mt-4'>
                 <label className="text-sm font-medium">Professional Summary</label>
                 <div className="relative w-full">
                     <textarea

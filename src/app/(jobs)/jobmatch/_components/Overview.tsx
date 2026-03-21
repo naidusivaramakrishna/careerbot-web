@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
   Upload,
   RefreshCcw,
@@ -10,9 +9,11 @@ import {
   X,
   FileText,
   CheckCircle,
+  Sparkles,
+  Target,
+  Zap,
+  ArrowRight,
 } from "lucide-react";
-import Card from "./ui/Card";
-import Tab from "./ui/Tab";
 import AnalysisContent from "./analysis/AnalysisContent";
 import LoadingAnimation from "./ui/LoadingAnimation";
 import ErrorPopupModal from "@/components/ErrorPopupModal";
@@ -37,8 +38,7 @@ async function getMatchByIds(resume_id: string, jd_id: string) {
 }
 
 const Overview = ({ sessionId }: { sessionId?: string }) => {
-  const router = useRouter();
-  const [leaving, setLeaving] = useState(false);
+  const leaving = false;
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [sessionResumeId, setSessionResumeId] = useState<string | null>(null);
@@ -70,12 +70,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     } catch { return null; }
   });
 
-  const [parsedJDData, setParsedJDData] = useState<any>(() => {
-    try {
-      const pjd = sessionStorage.getItem('jm_parsedJDData');
-      return pjd ? JSON.parse(pjd) : null;
-    } catch { return null; }
-  });
+  const [_parsedJDData, setParsedJDData] = useState<any>(null);
 
   const [jdText, setJdText] = useState<string>(() => {
     if (sessionId) return ''; // Extension will set its own jdText
@@ -116,14 +111,6 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       .catch(() => {});
   }, [sessionId]);
 
-  const handleNavigate = (href: string) => {
-    if (href === "/ats") {
-      setLeaving(true);
-      setTimeout(() => router.push(href), 220);
-    } else {
-      router.push(href);
-    }
-  };
 
   const handleResumeUpload = (file: File) => {
     if (!file) return;
@@ -392,148 +379,217 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
                   ref={containerRef}
                   className="bg-white rounded-2xl px-8 pt-6 pb-14"
                 >
-                  <div className="mb-8">
+                  {/* Header */}
+                  <div className="mb-6">
                     <h2 className="text-[26px] font-bold flex items-center gap-2">
                       Resume <span className="text-[#BDBDBD]">↔</span> Job Match
                     </h2>
-                    <p className="text-[15px] text-gray-600">
-                      Upload your resume and provide a job description (text, URL, or file) to get a full match analysis.
+                    <p className="text-[15px] text-gray-500">
+                      Upload your resume and a job description to get an instant AI-powered match analysis.
                     </p>
                   </div>
 
+                  {/* Feature strip */}
+                  <div className="grid grid-cols-3 gap-3 mb-8">
+                    {[
+                      { icon: Target,   color: "text-blue-600",   bg: "bg-blue-50",   title: "Skills Match",     desc: "Compare your skills with job requirements" },
+                      { icon: Zap,      color: "text-amber-600",  bg: "bg-amber-50",  title: "Missing Keywords", desc: "Find keywords missing from your resume" },
+                      { icon: Sparkles, color: "text-violet-600", bg: "bg-violet-50", title: "Match Score",      desc: "See how well your resume fits the role" },
+                    ].map(({ icon: Icon, color, bg, title, desc }) => (
+                      <div key={title} className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200 cursor-default">
+                        <div className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                          <Icon className={`w-4 h-4 ${color}`} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{title}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 leading-snug">{desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
 
-                  <div className="flex justify-center mb-8">
-                    <div className="flex gap-2 px-2 py-1.5 border rounded-xl bg-gray-50 shadow-sm">
-                      <Tab label="Upload" icon={<Upload className="w-4 h-4" />} active={activeTab === "upload"} onClick={() => setActiveTab("upload")} />
-                      <Tab label="Analysis" icon={<RefreshCcw className="w-4 h-4" />} active={activeTab === "analysis"} onClick={() => setActiveTab("analysis")} />
-                      <Tab label="AI Chat" icon={<MessageSquare className="w-4 h-4" />} active={activeTab === "chat"} onClick={() => setActiveTab("chat")} />
-                    </div>
+                  {/* Tabs */}
+                  <div className="flex border-b border-gray-200 mb-8">
+                    {([
+                      { key: "upload",   label: "Upload",   icon: <Upload className="w-4 h-4" /> },
+                      { key: "analysis", label: "Analysis", icon: <RefreshCcw className="w-4 h-4" /> },
+                      { key: "chat",     label: "AI Chat",  icon: <MessageSquare className="w-4 h-4" /> },
+                    ] as const).map(({ key, label, icon }) => (
+                      <button
+                        key={key}
+                        onClick={() => setActiveTab(key)}
+                        className={`flex items-center gap-1.5 px-5 py-3 text-sm border-b-2 transition-all -mb-px ${
+                          activeTab === key
+                            ? "border-[#2557a7] text-[#2557a7] font-semibold"
+                            : "border-transparent text-gray-500 font-medium hover:text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        {icon}{label}
+                      </button>
+                    ))}
                   </div>
 
                   {activeTab === "upload" && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <Card
-                        title="Upload your resume"
-                        action={
-                          <button
-                            onClick={() => resumeInputRef.current?.click()}
-                            className="h-10 px-4 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-                          >
-                            <Upload className="w-4 h-4 inline-block mr-1" />
-                            Upload Resume
-                          </button>
-                        }
-                      >
-                        <input
-                          ref={resumeInputRef}
-                          type="file"
-                          accept=".pdf,.doc,.docx,.txt"
-                          className="hidden"
-                          onChange={(e) =>
-                            e.target.files?.[0] && handleResumeUpload(e.target.files[0])
-                          }
-                        />
+                    <>
+                      {/* Two upload panels + arrow connector */}
+                      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4 items-start">
 
-                        {uploadedFile || sessionResumeId ? (
-                          <div className="h-[320px] bg-[#ecfdf5] border-2 border-dashed border-green-300 rounded-xl flex flex-col items-center justify-center gap-6">
-                            <div className="flex gap-2 items-center">
-                              <CheckCircle className="text-green-600 w-6 h-6" />
-                              <p className="font-medium text-gray-900">
-                                {sessionResumeId && !uploadedFile ? "Resume loaded from extension" : "Resume uploaded successfully"}
-                              </p>
-                            </div>
-
-                            <div className="bg-white border p-4 rounded-xl shadow flex items-center gap-4">
-                              <FileText className="w-6 h-6 text-gray-600" />
-                              <div>
-                                <p className="font-bold truncate">
-                                  {uploadedFile ? uploadedFile.name : sessionResumeName}
+                        {/* Resume panel */}
+                        <div className="bg-white border border-gray-300 rounded-2xl p-5 shadow-sm">
+                          <div className="flex items-center justify-between mb-4">
+                            <p className="text-sm font-semibold text-gray-700">Your Resume</p>
+                            {!uploadedFile && !sessionResumeId && (
+                              <button
+                                onClick={() => resumeInputRef.current?.click()}
+                                className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors"
+                              >
+                                Browse
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            ref={resumeInputRef}
+                            type="file"
+                            accept=".pdf,.doc,.docx,.txt"
+                            className="hidden"
+                            onChange={(e) => e.target.files?.[0] && handleResumeUpload(e.target.files[0])}
+                          />
+                          {uploadedFile || sessionResumeId ? (
+                            <div className="h-65 bg-emerald-50 border-2 border-dashed border-emerald-200 rounded-xl flex flex-col items-center justify-center gap-3">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="text-emerald-500 w-5 h-5" />
+                                <p className="text-sm font-semibold text-emerald-700">
+                                  {sessionResumeId && !uploadedFile ? "Resume from Extension" : "Resume Uploaded"}
                                 </p>
-                                {uploadedFile && (
-                                  <p className="text-sm text-gray-600">
-                                    {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                              </div>
+                              <div className="bg-white border border-gray-100 px-4 py-3 rounded-xl shadow-sm flex items-center gap-3 max-w-55 w-full mx-6">
+                                <FileText className="w-5 h-5 text-blue-500 shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-semibold text-gray-800 truncate">
+                                    {uploadedFile ? uploadedFile.name : sessionResumeName}
                                   </p>
-                                )}
+                                  <p className="text-[10px] text-gray-400 mt-0.5">
+                                    {uploadedFile ? `${(uploadedFile.size / 1024 / 1024).toFixed(2)} MB` : "From extension"}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => { setUploadedFile(null); setSessionResumeId(null); setSessionResumeName(null); }}
+                                  className="text-gray-300 hover:text-red-500 transition-colors"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
                               </div>
                               <button
-                                onClick={() => {
-                                  setUploadedFile(null);
-                                  setSessionResumeId(null);
-                                  setSessionResumeName(null);
-                                }}
-                                className="text-gray-500 hover:text-red-600"
+                                onClick={() => resumeInputRef.current?.click()}
+                                className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 transition-colors"
                               >
-                                <X className="w-6 h-6" />
+                                <RefreshCcw className="w-3 h-3" /> Replace Resume
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => resumeInputRef.current?.click()}
+                              className="h-65 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-all duration-200 group"
+                            >
+                              <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
+                                <Upload className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-sm font-medium text-gray-700">
+                                  <span className="text-[#2557a7]">Click to upload</span> or drag & drop
+                                </p>
+                                <p className="text-xs text-gray-400 mt-1">PDF · DOC · TXT — up to 10 MB</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Center arrow — AI Match Engine indicator */}
+                        <div className="hidden lg:flex flex-col items-center justify-center pt-32.5 gap-2">
+                          <div className="w-11 h-11 rounded-full bg-blue-100 border border-blue-200 shadow-md shadow-blue-100 flex items-center justify-center ring-4 ring-blue-50">
+                            <ArrowRight className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <p className="text-[9px] text-blue-500 font-bold uppercase tracking-widest text-center leading-tight">AI<br/>Match<br/>Engine</p>
+                        </div>
+
+                        {/* JD panel */}
+                        <div className="bg-white border border-gray-300 rounded-2xl p-5 shadow-sm">
+                          <div className="flex items-center justify-between mb-4">
+                            <p className="text-sm font-semibold text-gray-700">Job Description</p>
+                            <div className="flex gap-2">
+                              <input ref={jdUploadRef} type="file" accept=".txt,.pdf,.doc,.docx" className="hidden" onChange={(e) => e.target.files?.[0] && handleJDFileUpload(e.target.files[0])} />
+                              <button onClick={() => jdUploadRef.current?.click()} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors flex items-center gap-1">
+                                <Upload className="w-3 h-3" /> Upload file
                               </button>
                             </div>
                           </div>
-                        ) : (
-                          <div
-                            onClick={() => resumeInputRef.current?.click()}
-                            className="h-[320px] border-2 border-dashed border-gray-300 rounded-xl bg-[#f9fafb] flex flex-col items-center justify-center cursor-pointer hover:border-[#2557a7]"
-                          >
-                            <Upload className="w-10 h-10 text-gray-400" />
-                            <p className="text-sm text-gray-700 mt-3">
-                              <span className="text-[#2557a7] font-medium">Click to upload</span> or drag and drop
-                            </p>
-                            <p className="text-xs text-gray-500">PDF / DOC / TXT (Max 10MB)</p>
-                          </div>
-                        )}
-                      </Card>
 
-                      <Card
-                        title="Job Description"
-                        action={
-                          <>
-                            <input
-                              ref={jdUploadRef}
-                              type="file"
-                              accept=".txt,.pdf,.doc,.docx"
-                              className="hidden"
-                              onChange={(e) =>
-                                e.target.files?.[0] && handleJDFileUpload(e.target.files[0])
-                              }
+                          {!jdFile && (
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <Sparkles className="w-3 h-3 text-violet-500" />
+                              <p className="text-[11px] text-violet-600 font-medium">AI will analyze this job description</p>
+                            </div>
+                          )}
+
+                          {jdFile ? (
+                            <div className="h-50 bg-emerald-50 border-2 border-dashed border-emerald-200 rounded-xl flex flex-col items-center justify-center gap-3">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="text-emerald-500 w-5 h-5" />
+                                <p className="text-sm font-semibold text-emerald-700">JD Uploaded</p>
+                              </div>
+                              <div className="flex items-center gap-2 bg-white border px-3 py-2 rounded-lg text-xs shadow-sm">
+                                <FileText className="w-4 h-4 text-blue-500" />
+                                <span className="font-medium text-gray-700 max-w-40 truncate">{jdFile.name}</span>
+                                <button onClick={() => setJdFile(null)} className="text-gray-300 hover:text-red-500 ml-1"><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </div>
+                          ) : (
+                            <textarea
+                              value={jdText}
+                              onChange={(e) => { setJdText(e.target.value); setJdFile(null); }}
+                              placeholder={"Paste job description text or URL…\n\nExample:\nAI Developer — Python, ML, FastAPI\nhttps://linkedin.com/jobs/view/…"}
+                              className="w-full h-50 border border-gray-200 rounded-xl p-3 bg-gray-50/50 text-sm text-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-200 focus:border-blue-300 focus:bg-white resize-none transition-all"
                             />
-                            <button
-                              onClick={() => jdUploadRef.current?.click()}
-                              className="h-10 px-4 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-                            >
-                              <Upload className="w-4 h-4 inline-block mr-1" />
-                              Upload JD File
-                            </button>
-                          </>
-                        }
-                      >
-                        <textarea
-                          value={jdText}
-                          onChange={(e) => {
-                            setJdText(e.target.value);
-                            setJdFile(null);
-                          }}
-                          placeholder="Paste job description text or URL here..."
-                          className="w-full h-[200px] border border-gray-300 rounded-xl p-3 bg-[#f9fafb] text-sm focus:ring-2 focus:ring-[#2557a7] focus:border-transparent"
-                        />
+                          )}
 
-                        <div className="bg-[#e8eff9] p-3 rounded-lg mt-4 flex gap-3">
-                          <Lightbulb className="text-[#2557a7] w-4 h-4 mt-0.5" />
-                          <p className="text-xs text-gray-700">Paste job description text, URL, or upload a file</p>
+                          <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mt-3">
+                            <Lightbulb className="text-blue-500 w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <p className="text-xs text-blue-700">Paste job description text, a job posting URL, or upload a file</p>
+                          </div>
                         </div>
+                      </div>
 
-                        <div className="flex justify-end mt-4">
-                          <button
-                            onClick={analyzeMatch}
-                            disabled={(!uploadedFile && !sessionResumeId) || (!jdFile && !jdText.trim())}
-                            className={`px-6 py-2 rounded-xl text-white font-medium ${
-                              (!uploadedFile && !sessionResumeId) || (!jdFile && !jdText.trim())
-                                ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-[#2557a7] hover:bg-[#1a4a8f]"
-                            }`}
-                          >
-                            Analyze Match
-                          </button>
-                        </div>
-                      </Card>
-                    </div>
+                      {/* Primary CTA */}
+                      <div className="mt-6 flex justify-end">
+                        <button
+                          onClick={analyzeMatch}
+                          disabled={isProcessing || (!uploadedFile && !sessionResumeId) || (!jdFile && !jdText.trim())}
+                          className={`px-6 py-2.5 rounded-xl text-white font-semibold text-sm flex items-center gap-2 transition-all shadow-sm ${
+                            isProcessing
+                              ? "bg-blue-400 cursor-not-allowed"
+                              : (!uploadedFile && !sessionResumeId) || (!jdFile && !jdText.trim())
+                              ? "bg-gray-300 cursor-not-allowed shadow-none"
+                              : "bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:shadow-md hover:scale-[1.01]"
+                          }`}
+                        >
+                          {isProcessing ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              Analyzing…
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4" />
+                              Analyze Match
+                              <ArrowRight className="w-4 h-4" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </>
                   )}
 
                   {activeTab === "analysis" && !matchResults && (

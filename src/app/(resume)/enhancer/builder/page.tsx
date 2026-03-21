@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { X, Check, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import ResumeTemplate from "../_components/ResumeTemplate";
 import SectionEditorModal from "../_components/SectionEditorModal";
 import ExportModal from "../_components/ExportModal";
 import TemplateSelectionModal from "../_components/TemplateSelectionModal";
 import type { Improvement } from "@/types/api.types";
-import { updateEnhancedResume } from "@/api/enhancerApi";
+import { applyFix, getEnhancedResume } from "@/api/enhancerApi";
 
 import {
   useResume,
@@ -39,6 +40,7 @@ export default function BuilderPage() {
 
   const {
     resumeData,
+    setResumeData,
     enabledSections,
     setEnabledSections,
     activeSection,
@@ -56,12 +58,26 @@ export default function BuilderPage() {
     "ai"
   );
   const [enhancedId, setEnhancedId] = useState<string | null>(null);
-  const [atsScore, setAtsScore] = useState<{ total_score?: number; score_improvement?: number } | null>(null);
+  type AtsScore = { final_score?: number; max_score?: number; profile?: string; domain?: string; total_score?: number; score_improvement?: number };
+  const [atsScore, setAtsScore] = useState<AtsScore | null>(null);
+
+  const buildAtsScore = (bd: Record<string, unknown>): AtsScore => ({
+    final_score: Number(bd.FinalScore ?? bd.Percentage ?? bd.final_score ?? bd.total_score ?? 0),
+    max_score: Number(bd.MaxScore ?? bd.max_score ?? 100),
+    profile: String(bd.Profile ?? bd.profile ?? 'General'),
+    domain: String(bd.Domain ?? bd.domain ?? ''),
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [pendingAcceptId, setPendingAcceptId] = useState<string | null>(null);
+  const [applyingFixId, setApplyingFixId] = useState<string | null>(null);
 
   // Load real AI improvements from session storage (generated during upload)
   const [improvements, setImprovements] = useState<Improvement[]>([]);
+
+  // Keep the original full list so we can restore suggestions when fields are removed
+  const allImprovementsRef = useRef<Improvement[]>([]);
+  // Track permanently ignored suggestions (user clicked "Ignore") — never restore these
+  const [ignoredIds, setIgnoredIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (isLoaded && !resumeData) router.push("/enhancer");
@@ -100,7 +116,204 @@ export default function BuilderPage() {
         setImprovements([]);
       }
     }
+
+    // Load or initialise the permanent backup of all improvements
+    const allStored = sessionStorage.getItem('all_improvements');
+    if (allStored) {
+      try {
+        allImprovementsRef.current = JSON.parse(allStored);
+      } catch { /* ignore */ }
+    } else if (stored) {
+      // First visit — create backup from current improvements
+      sessionStorage.setItem('all_improvements', stored);
+      try {
+        allImprovementsRef.current = JSON.parse(stored);
+      } catch { /* ignore */ }
+    }
   }, []);
+
+  // Returns:
+  //   true  — field is definitely filled (suggestion condition met → hide it)
+  //   false — field is definitely empty  (suggestion should be visible)
+  //   null  — cannot determine (content-quality suggestion; leave as-is)
+  const isSuggestionConditionMet = useCallback((imp: Improvement): boolean | null => {
+    if (!resumeData) return false;
+    const title = (imp.title || '').toLowerCase();
+    const section = mapSuggestionToSection(imp);
+
+    // ── Section-level "Add X section" suggestions ──────────────────
+    const addMatch = title.match(/add (\w+) section/i);
+    if (addMatch) {
+      const sName = addMatch[1].toLowerCase();
+      const sectionArrays: Record<string, unknown[] | undefined> = {
+        achievements:   resumeData.achievements,
+        certifications: resumeData.certifications,
+        certificates:   resumeData.certifications,
+        awards:         resumeData.awards,
+        internships:    resumeData.internships,
+        volunteering:   resumeData.volunteering,
+        hobbies:        resumeData.hobbies,
+        interests:      resumeData.interests,
+        languages:      resumeData.languages,
+        publications:   resumeData.publications,
+        references:     resumeData.references,
+        projects:       resumeData.projects,
+        skills:         resumeData.skills,
+      };
+      if (sName in sectionArrays) return (sectionArrays[sName]?.length ?? 0) > 0;
+    }
+
+    // ── PersonalInfo ────────────────────────────────────────────────
+    if (section === 'PersonalInfo' || !section) {
+      if (title.includes('phone'))     return !!resumeData.personalInfo?.phone?.trim();
+      if (title.includes('linkedin'))  return !!resumeData.personalInfo?.linkedinUrl?.trim();
+      if (title.includes('github'))    return !!resumeData.personalInfo?.githubUrl?.trim();
+      if (title.includes('email'))     return !!resumeData.personalInfo?.email?.trim();
+      if (title.includes('portfolio')) return !!resumeData.personalInfo?.portifolioUrl?.trim();
+      if (title.includes('location') && section === 'PersonalInfo') return !!resumeData.personalInfo?.location?.trim();
+    }
+
+    // ── Summary ─────────────────────────────────────────────────────
+    if (section === 'Summary' || title.includes('summary') || title.includes('objective')) {
+      const s = resumeData.professionalSummary;
+      return typeof s === 'string' ? !!s.trim() : !!(s as unknown as { summary?: string })?.summary?.trim();
+    }
+
+    // ── Experience ──────────────────────────────────────────────────
+    if (section === 'Experience') {
+      const exp: any[] = resumeData.workExperience || [];
+      if (exp.length === 0) return false;
+      if (title.includes('location'))                                        return exp.every(e => !!e.location?.trim());
+      if (title.includes('start') || title.includes('end') || title.includes('date') || title.includes('duration'))
+                                                                             return exp.every(e => e.startDate && e.endDate);
+      if (title.includes('description') || title.includes('responsibilit') || title.includes('bullet'))
+                                                                             return exp.every(e => !!e.description?.trim());
+    }
+
+    // ── Education ───────────────────────────────────────────────────
+    if (section === 'Education') {
+      const edu: any[] = resumeData.education || [];
+      if (edu.length === 0) return false;
+      if (title.includes('graduation') || title.includes('gpa') || title.includes('grade'))
+                                  return edu.every(e => e.endDate || e.grade);
+      if (title.includes('start') || title.includes('end') || title.includes('date'))
+                                  return edu.every(e => e.startDate && e.endDate);
+      if (title.includes('location')) return edu.every(e => !!e.location?.trim());
+    }
+
+    // ── Projects ────────────────────────────────────────────────────
+    if (section === 'Projects') {
+      const projects: any[] = resumeData.projects || [];
+      if (projects.length === 0) return false;
+      if (title.includes('link') || title.includes('url') || title.includes('github'))
+                                   return projects.every(p => !!p.link?.trim());
+      if (title.includes('date') || title.includes('start') || title.includes('end'))
+                                   return projects.every(p => p.startDate && p.endDate);
+      if (title.includes('description') || title.includes('technolog'))
+                                   return projects.every(p => !!p.description?.trim());
+    }
+
+    // ── Skills ──────────────────────────────────────────────────────
+    if (section === 'Skills') {
+      return (resumeData.skills?.length ?? 0) > 0;
+    }
+
+    // ── Certificates ────────────────────────────────────────────────
+    if (section === 'Certificates') {
+      const certs: any[] = resumeData.certifications || [];
+      if (certs.length === 0) return false;
+      if (title.includes('date') || title.includes('year') || title.includes('expir'))
+                               return certs.every(c => c.year || c.date || c.expiryDate);
+      if (title.includes('issu') || title.includes('organization') || title.includes('provider'))
+                               return certs.every(c => c.issuedBy || c.organization);
+    }
+
+    // ── Achievements ─────────────────────────────────────────────────
+    if (section === 'Achievements') {
+      const ach: any[] = resumeData.achievements || [];
+      if (ach.length === 0) return false;
+      if (title.includes('date') || title.includes('year')) return ach.every(a => a.date || a.year);
+      if (title.includes('description'))                     return ach.every(a => !!a.description?.trim());
+    }
+
+    // ── Awards ───────────────────────────────────────────────────────
+    if (section === 'Awards') {
+      const awards: any[] = resumeData.awards || [];
+      if (awards.length === 0) return false;
+      if (title.includes('date') || title.includes('year')) return awards.every(a => a.date || a.year);
+      if (title.includes('issu') || title.includes('organization')) return awards.every(a => a.issuedBy || a.organization);
+    }
+
+    // ── Internships ──────────────────────────────────────────────────
+    if (section === 'Internships') {
+      const interns: any[] = resumeData.internships || [];
+      if (interns.length === 0) return false;
+      if (title.includes('location'))  return interns.every(i => !!i.location?.trim());
+      if (title.includes('date') || title.includes('start') || title.includes('end') || title.includes('duration'))
+                                       return interns.every(i => i.startDate && i.endDate);
+      if (title.includes('description') || title.includes('responsibilit'))
+                                       return interns.every(i => !!i.description?.trim());
+    }
+
+    // ── Volunteering ─────────────────────────────────────────────────
+    if (section === 'Volunteering') {
+      const vol: any[] = resumeData.volunteering || [];
+      if (vol.length === 0) return false;
+      if (title.includes('date') || title.includes('start') || title.includes('end'))
+                             return vol.every(v => v.startDate && v.endDate);
+      if (title.includes('description')) return vol.every(v => !!v.description?.trim());
+    }
+
+    // ── Languages ───────────────────────────────────────────────────
+    if (section === 'Languages') {
+      const langs: any[] = resumeData.languages || [];
+      if (langs.length === 0) return false;
+      if (title.includes('proficien') || title.includes('level'))
+                              return langs.every(l => !!l.proficiency?.trim());
+    }
+
+    // ── Publications ─────────────────────────────────────────────────
+    if (section === 'Publications') {
+      const pubs: any[] = resumeData.publications || [];
+      if (pubs.length === 0) return false;
+      if (title.includes('date') || title.includes('year')) return pubs.every(p => p.date || p.year);
+      if (title.includes('link') || title.includes('url'))  return pubs.every(p => !!p.link?.trim());
+    }
+
+    // ── References ──────────────────────────────────────────────────
+    if (section === 'References') {
+      const refs: any[] = resumeData.references || [];
+      if (refs.length === 0) return false;
+      if (title.includes('email'))   return refs.every(r => !!r.email?.trim());
+      if (title.includes('phone'))   return refs.every(r => !!r.phone?.trim());
+      if (title.includes('company') || title.includes('organization')) return refs.every(r => !!r.company?.trim());
+    }
+
+    // ── Hobbies / Interests ──────────────────────────────────────────
+    if (section === 'Hobbies')   return (resumeData.hobbies?.length ?? 0) > 0;
+    if (section === 'Interests') return (resumeData.interests?.length ?? 0) > 0;
+
+    // Cannot determine for content-quality suggestions (e.g. "add metrics") — leave as-is
+    return null;
+  }, [resumeData]);
+
+  // Restore suggestions when resumeData changes and a previously-accepted
+  // suggestion's field is removed again (e.g. user clears phone number).
+  // Backend suggestions are never proactively removed — they stay until the
+  // user explicitly accepts or ignores them.
+  useEffect(() => {
+    if (!resumeData || allImprovementsRef.current.length === 0) return;
+    setImprovements(prev => {
+      const currentIds = new Set(prev.map(imp => imp.id));
+      const toRestore = allImprovementsRef.current.filter(imp => {
+        if (currentIds.has(imp.id)) return false;   // Already visible
+        if (ignoredIds.has(imp.id)) return false;   // Permanently ignored
+        return isSuggestionConditionMet(imp) === false; // Restore only when field is empty
+      });
+      if (toRestore.length === 0) return prev;
+      return [...prev, ...toRestore];
+    });
+  }, [resumeData, ignoredIds, isSuggestionConditionMet]);
 
   const handleToggleSection = (section: SectionName) => {
     setEnabledSections((prev) =>
@@ -123,8 +336,10 @@ export default function BuilderPage() {
         'summary': 'Summary',
         'experience': 'Experience',
         'skills': 'Skills',
+        'keywords': 'Skills',
         'education': 'Education',
         'projects': 'Projects',
+        'contentquality': 'Projects',
         'certifications': 'Certificates',
         'certificates': 'Certificates',
         'achievements': 'Achievements',
@@ -136,8 +351,20 @@ export default function BuilderPage() {
         'languages': 'Languages',
         'publications': 'Publications',
         'references': 'References',
+        'formatting': 'PersonalInfo',
+        'atscompatibility': 'PersonalInfo',
       };
-      return sectionMap[suggestion.section.toLowerCase()] || null;
+      const mapped = sectionMap[suggestion.section.toLowerCase()];
+      if (mapped) return mapped;
+
+      // IntelligencePenalty: route based on title content
+      if (suggestion.section.toLowerCase() === 'intelligencepenalty') {
+        const t = (suggestion.title || '').toLowerCase();
+        if (t.includes('language') || t.includes('proficien')) return 'Languages';
+        return 'PersonalInfo';
+      }
+
+      return null;
     }
 
     // Fallback: try to infer from category or title
@@ -219,15 +446,140 @@ export default function BuilderPage() {
     return null;
   };
 
-  const handleAcceptSuggestion = (suggestion: typeof improvements[0]) => {
-    const section = mapSuggestionToSection(suggestion);
+  const handleAcceptSuggestion = async (suggestion: typeof improvements[0]) => {
+    const fixType = suggestion.fix_type;
+    const originalSuggestionId = suggestion.original_suggestion_id;
 
-    // Track which suggestion is being accepted so we can remove it on modal close
+    // AUTO fix: call applyFix API → updates resume + refreshes ATS score
+    if (fixType === 'auto' && originalSuggestionId) {
+      setApplyingFixId(suggestion.id);
+      let applied = false;
+      try {
+        const enhancedId = sessionStorage.getItem('enhanced_id');
+
+        if (enhancedId) {
+          const result = await applyFix({
+            enhancer_state: enhancedId,
+            suggestion_id: originalSuggestionId,
+            fix_type: 'auto',
+          });
+
+          // Update ATS score from the refreshed ats_breakdown
+          const newBreakdown = result.enhancer_state?.ats_breakdown as Record<string, unknown> | undefined;
+          if (newBreakdown) {
+            const newScore = buildAtsScore(newBreakdown);
+            sessionStorage.setItem('ats_score', JSON.stringify(newScore));
+            setAtsScore(newScore);
+          }
+
+          // Sync preview with the updated backend state
+          try {
+            // applyFix response has the live state used to generate the PDF — use it first
+            const liveResume = result.enhancer_state?.resume as any;
+            // getEnhancedResume gives the persisted DB record as fallback
+            const historyItem = await getEnhancedResume(enhancedId);
+            const dbData = historyItem.enhanced_data as any;
+
+            const formatBullets = (contribs: unknown): string => {
+              if (Array.isArray(contribs))
+                return (contribs as string[]).filter(Boolean).map(c => `• ${String(c).trim()}`).join('\n');
+              return typeof contribs === 'string' ? contribs : '';
+            };
+
+            // Helper: pick first non-empty array from multiple candidate paths
+            const firstArr = (...candidates: any[]): any[] => {
+              for (const c of candidates) {
+                if (Array.isArray(c) && c.length > 0) return c;
+              }
+              return [];
+            };
+
+            const patch: Partial<typeof resumeData> = {};
+
+            // ── Experience ────────────────────────────────────────────
+            const expArr = firstArr(
+              liveResume?.experience, liveResume?.work_experience,
+              dbData?.experience, dbData?.work_experience, dbData?.workExperience,
+              dbData?.llm_data?.experience,
+            );
+            if (expArr.length > 0) {
+              const mappedExp = expArr.map((exp: any) => {
+                const dur = exp.duration as string | undefined;
+                const startDate = exp.start_date || exp.from || dur?.split(/\s[-–]\s/)[0] || '';
+                const endDate = exp.end_date || exp.to || dur?.split(/\s[-–]\s/)[1] || 'Present';
+                return {
+                  role: String(exp.role || exp.title || exp.position || ''),
+                  company: String(exp.company || exp.organization || ''),
+                  location: String(exp.location || ''),
+                  startDate, endDate,
+                  duration: dur || '',
+                  description: formatBullets(exp.key_contributions || exp.contributions || exp.responsibilities) || String(exp.description || ''),
+                  currentlyWorking: exp.is_current || exp.currently_working || !dur || dur.toLowerCase().includes('present'),
+                };
+              }).filter((e: any) => e.company || e.role);
+              if (mappedExp.length > 0) patch.workExperience = mappedExp;
+            }
+
+            // ── Projects ──────────────────────────────────────────────
+            const projArr = firstArr(
+              liveResume?.projects, liveResume?.project_details,
+              dbData?.projects, dbData?.project_details,
+              dbData?.llm_data?.projects, dbData?.llm_data?.project_details,
+            );
+            if (projArr.length > 0) {
+              const mappedProj = projArr.map((proj: any) => ({
+                title: String(proj.title || proj.name || proj.project_name || proj.projectName || ''),
+                link: String(proj.url || proj.link || proj.github || ''),
+                description: formatBullets(proj.key_contributions || proj.contributions || proj.responsibilities) || String(proj.description || proj.summary || ''),
+                technologies: Array.isArray(proj.technologies || proj.techStack) ? (proj.technologies || proj.techStack) : [],
+                startDate: String(proj.start_date || proj.date || ''),
+                endDate: String(proj.end_date || ''),
+                client: String(proj.client || ''),
+              })).filter((p: any) => p.title);
+              if (mappedProj.length > 0) patch.projects = mappedProj;
+            }
+
+            // ── Summary ───────────────────────────────────────────────
+            const summary = liveResume?.summary || dbData?.summary || dbData?.professional_summary || dbData?.professionalSummary;
+            if (summary && typeof summary === 'string') patch.professionalSummary = summary;
+
+            if (Object.keys(patch).length > 0 && resumeData) {
+              setResumeData({ ...resumeData, ...patch });
+            }
+          } catch (syncErr) {
+            console.error('Preview sync failed:', syncErr);
+          }
+
+          applied = true;
+        }
+      } catch (err: unknown) {
+        const raw = (err as { __raw?: Record<string, unknown> })?.__raw;
+        const errDetails = (raw as any)?.error?.details;
+        if (errDetails?.error === 'INSUFFICIENT_CREDITS') {
+          toast.error(
+            `Not enough credits (need ${errDetails.credits_required ?? 10}, have ${errDetails.credits_remaining ?? 0}). Upgrade your plan to apply this fix.`
+          );
+        } else {
+          console.error('Failed to apply fix:', err);
+        }
+      } finally {
+        setApplyingFixId(null);
+      }
+
+      // Only remove suggestion from list if fix was successfully applied
+      if (applied) {
+        setImprovements(prev => prev.filter(imp => imp.id !== suggestion.id));
+        const updated = improvements.filter(imp => imp.id !== suggestion.id);
+        sessionStorage.setItem('improvements', JSON.stringify(updated));
+      }
+      return;
+    }
+
+    // MANUAL fix: open section editor as before
+    const section = mapSuggestionToSection(suggestion);
     setPendingAcceptId(suggestion.id);
 
-    // Check if this is a LinkedIn or GitHub suggestion
     const title = suggestion.title?.toLowerCase() || '';
-
     if (title.includes('linkedin') || title.includes('github')) {
       setActiveSection('PersonalInfo');
       return;
@@ -240,7 +592,6 @@ export default function BuilderPage() {
       setActiveSection(section);
       setActiveTab('sections');
     } else {
-      // Can't map to section — just remove the suggestion
       setPendingAcceptId(null);
       setImprovements(prev => prev.filter(imp => imp.id !== suggestion.id));
       const updated = improvements.filter(imp => imp.id !== suggestion.id);
@@ -249,6 +600,9 @@ export default function BuilderPage() {
   };
 
   const handleIgnoreSuggestion = (suggestionId: string) => {
+    // Mark as permanently ignored so it never comes back even if the field is removed
+    setIgnoredIds(prev => new Set([...prev, suggestionId]));
+
     // Remove from improvements list
     setImprovements(prev => prev.filter(imp => imp.id !== suggestionId));
 
@@ -266,37 +620,10 @@ export default function BuilderPage() {
     setIsSaving(true);
 
     try {
-      // Map frontend workExperience to backend experience format
-      const experienceData = (resumeData.workExperience || []).map((exp) => ({
-        company: exp.company,
-        role: exp.role,
-        duration: exp.duration,
-        years: exp.years || 0,
-        location: exp.location,
-        client: exp.client,
-        key_contributions: exp.description ? exp.description.split('\n').filter((line: string) => line.trim()) : [],
-      }));
-
-      // Save all resume edits to backend before export
-      // Update BOTH llm_data.experience AND top-level experience
-      // Backend merges enhanced_sections into enhanced_data
-      const backendTemplateId = BACKEND_TEMPLATE_MAP[selectedTemplate] ?? "professional_classic";
-
-      await updateEnhancedResume(enhancedId, {
-        enhanced_sections: {
-          template_id: backendTemplateId,
-          llm_data: {
-            experience: experienceData,
-          },
-          experience: experienceData, // Also update top-level for export
-        }
-      });
-
-      console.log('✅ Resume saved to backend before export');
       setIsExportModalOpen(true);
     } catch (error) {
-      console.error('Failed to save resume:', error);
-      alert('Failed to save your changes. Please try again.');
+      console.error('Failed to prepare export:', error);
+      alert('Failed to prepare your resume for export. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -307,9 +634,9 @@ export default function BuilderPage() {
   // Format improvements for display — show all backend suggestions as-is
   const suggestions = improvements.map((imp) => ({
     id: imp.id,
-    original: imp.before || 'Current text',
-    improved: imp.after || 'Improved text',
-    reason: imp.description || imp.title,
+    original: imp.before || null,
+    improved: imp.after || imp.title,
+    reason: imp.title,
     impact: imp.impact,
     impact_points: imp.impact_points,
     // Keep original for mapping
@@ -788,6 +1115,41 @@ export default function BuilderPage() {
                     <h3 className="text-lg font-bold text-gray-900 mb-1.5">
                       AI Suggestions
                     </h3>
+
+                    {/* ATS Score Badge */}
+                    {atsScore?.final_score !== undefined && (
+                      <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-4 mb-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-0.5">ATS Score</p>
+                            {atsScore.profile && (
+                              <p className="text-[11px] text-gray-500">{atsScore.profile}{atsScore.domain ? ` · ${atsScore.domain}` : ''}</p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-3xl font-black leading-none ${
+                              (atsScore.final_score ?? 0) >= 80 ? 'text-emerald-600'
+                              : (atsScore.final_score ?? 0) >= 50 ? 'text-amber-500'
+                              : 'text-red-500'
+                            }`}>
+                              {Math.round(atsScore.final_score ?? 0)}
+                            </p>
+                            <p className="text-[10px] text-gray-400 font-medium">/ {atsScore.max_score ?? 100}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 h-2 bg-white/60 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              (atsScore.final_score ?? 0) >= 80 ? 'bg-emerald-500'
+                              : (atsScore.final_score ?? 0) >= 50 ? 'bg-amber-400'
+                              : 'bg-red-400'
+                            }`}
+                            style={{ width: `${Math.min(100, Math.round(atsScore.final_score ?? 0))}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     <p className="text-sm text-gray-600 mb-3">
                       Review and apply AI-powered improvements to boost your resume.
                     </p>
@@ -824,9 +1186,11 @@ export default function BuilderPage() {
                             )}
                           </div>
 
-                          <p className="text-xs text-gray-500 line-through mb-1.5 px-1 italic">
-                            {s.original}
-                          </p>
+                          {s.original && (
+                            <p className="text-xs text-gray-500 line-through mb-1.5 px-1 italic">
+                              {s.original}
+                            </p>
+                          )}
 
                           <div className="bg-white border border-gray-200 rounded-lg p-2.5 mb-2.5 shadow-xs">
                             <p className="text-sm font-semibold text-gray-900 leading-snug">
@@ -844,10 +1208,20 @@ export default function BuilderPage() {
                             </button>
                             <button
                               onClick={() => handleAcceptSuggestion(s._original)}
-                              className="flex-1 py-1.5 bg-[#2557a7] hover:bg-[#1a4a8f] text-white rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold transition-all shadow-sm hover:shadow-md"
+                              disabled={applyingFixId === s.id}
+                              className="flex-1 py-1.5 bg-[#2557a7] hover:bg-[#1a4a8f] text-white rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                              <Check className="w-3.5 h-3.5" />
-                              Accept
+                              {applyingFixId === s.id ? (
+                                <>
+                                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  Applying…
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  Accept
+                                </>
+                              )}
                             </button>
                           </div>
                         </div>
@@ -878,7 +1252,7 @@ export default function BuilderPage() {
             setActiveSection(null);
             setPendingAcceptId(null);
           }}
-          onSave={(didChange, section, changedFieldNames) => {
+          onSave={(didChange, section, changedFieldNames, changedFieldValues) => {
             if (!didChange) return;
 
             // Map field names to keywords that may appear in suggestion titles
@@ -889,8 +1263,10 @@ export default function BuilderPage() {
               githubUrl: ['github'],
               email: ['email'],
               portifolioUrl: ['portfolio'],
-              duration: ['date', 'start', 'end'],
-              grade: ['gpa', 'grade', 'graduation'],
+              duration: ['date', 'start', 'end', 'passed_out', 'year', 'graduation'],
+              grade: ['gpa', 'grade', 'percentage'],
+              gradeType: ['grade', 'gpa'],
+              skills: ['soft skill', 'softskill', 'skills'],
               summary: ['summary', 'objective'],
             };
 
@@ -918,6 +1294,61 @@ export default function BuilderPage() {
               setImprovements(prev => prev.filter(imp => !toRemove.has(imp.id)));
               const updated = improvements.filter(imp => !toRemove.has(imp.id));
               sessionStorage.setItem('improvements', JSON.stringify(updated));
+            }
+
+            // Call applyFix to refresh ATS score from backend
+            const enhancedId = sessionStorage.getItem('enhanced_id');
+            if (enhancedId) {
+              // Use values passed directly from the modal (fresh, not stale closure)
+              const fieldValueMap: Record<string, string> = changedFieldValues || {};
+
+              const handleFixResult = (result: Awaited<ReturnType<typeof applyFix>>) => {
+                const newBreakdown = result.enhancer_state?.ats_breakdown as Record<string, unknown> | undefined;
+                if (newBreakdown) {
+                  const newScore = buildAtsScore(newBreakdown);
+                  sessionStorage.setItem('ats_score', JSON.stringify(newScore));
+                  setAtsScore(newScore);
+                }
+              };
+
+              if (pendingAcceptId) {
+                // User clicked Accept on a specific suggestion
+                const acceptedImp = improvements.find(imp => imp.id === pendingAcceptId);
+                const originalId = acceptedImp?.original_suggestion_id;
+                if (originalId) {
+                  const value = changedFieldNames.length > 0
+                    ? (fieldValueMap[changedFieldNames[0]] || undefined)
+                    : undefined;
+                  applyFix({
+                    enhancer_state: enhancedId,
+                    suggestion_id: originalId,
+                    fix_type: 'manual',
+                    value,
+                  }).then(handleFixResult).catch(() => { /* best-effort */ });
+                }
+              } else if (changedFieldNames.length > 0) {
+                // User directly edited sections — apply fix for each matched suggestion
+                const matchedImps = improvements.filter(imp => toRemove.has(imp.id));
+                matchedImps.forEach(imp => {
+                  const originalId = imp.original_suggestion_id;
+                  if (!originalId) return;
+                  const titleLower = (imp.title || '').toLowerCase();
+                  let value: string | undefined;
+                  for (const field of changedFieldNames) {
+                    const keywords = fieldKeywords[field] || [field.toLowerCase()];
+                    if (keywords.some(kw => titleLower.includes(kw))) {
+                      value = fieldValueMap[field] || undefined;
+                      break;
+                    }
+                  }
+                  applyFix({
+                    enhancer_state: enhancedId,
+                    suggestion_id: originalId,
+                    fix_type: 'manual',
+                    value,
+                  }).then(handleFixResult).catch(() => { /* best-effort */ });
+                });
+              }
             }
           }}
         />

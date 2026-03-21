@@ -1,8 +1,6 @@
 "use client";
 import { getCurrentAdmin } from '@/api/adminAuthApi';
-import { Bell } from 'lucide-react'
-import Image from 'next/image'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { logger } from '@/lib/logger'
 
 interface AdminInfo {
@@ -39,7 +37,7 @@ const AdminHeader = () => {
     }
   };
   // Fetch current admin details from API
-  const fetchAdminDetails = async () => {
+  const fetchAdminDetails = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -69,7 +67,7 @@ const AdminHeader = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAdminDetails();
@@ -85,17 +83,7 @@ const AdminHeader = () => {
     return () => {
       window.removeEventListener('adminTokenUpdated', handleTokenUpdate);
     };
-  }, []);
-
-  // Get initials for avatar fallback
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  }, [fetchAdminDetails]);
 
   return (
     <div className='border-b py-2 border-[#E5E7EB]'>

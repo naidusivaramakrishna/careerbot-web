@@ -145,7 +145,7 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
                 setFieldErrors(errors);
             }
         }
-    }, [onApply]);
+    }, [onApply, formData]);
 
     if (!open) return null;
 

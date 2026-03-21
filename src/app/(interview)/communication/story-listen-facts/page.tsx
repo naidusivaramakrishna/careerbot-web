@@ -261,266 +261,162 @@ export default function StoryListenFactsPage() {
         ]}
       />
 
-      <div className="min-h-screen bg-[#F4F6FB] flex">
-        {/* LEFT SIDEBAR */}
+      <div className="min-h-screen bg-gray-50 flex">
         <AssessmentSidebar currentSectionId={6} />
 
-        {/* MAIN CONTENT */}
-        <main className="flex-1 px-8 py-6">
-          <div className="max-w-7xl mx-auto">
-            {/* HEADER */}
-            <div className="mb-4">
-              <h1 className="text-lg font-semibold text-gray-900">
-                {currentQuestion?.section_name || 'Story Listen Facts'}
-              </h1>
-              <p className="text-sm text-gray-500">
-                Listen to stories and answer comprehension questions
-              </p>
+        <main className="flex-1 px-8 py-7 min-w-0">
+
+          {/* Section Header */}
+          <div className="mb-5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 6 of 7</p>
+            <h1 className="text-lg font-bold text-gray-900">
+              {currentQuestion?.section_name || 'Story Listen Facts'}
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Listen to the story and answer comprehension questions.
+            </p>
+          </div>
+
+          <QuestionProgressBar
+            currentQuestion={sectionQuestionNumber}
+            totalQuestions={SECTION_TOTAL_QUESTIONS}
+            className="mb-6"
+          />
+
+          {error ? (
+            <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              {error}
             </div>
-
-            {/* PROGRESS */}
-            <QuestionProgressBar
-              currentQuestion={sectionQuestionNumber}
-              totalQuestions={SECTION_TOTAL_QUESTIONS}
-              className="mb-6"
-            />
-
-            {error ? (
-              <div className="text-center py-12">
-                <p className="text-red-600">{error}</p>
-              </div>
-            ) : currentQuestion ? (
-              <>
-                {/* STORY AUDIO PAGE - Show this only for first question of story before audio is played */}
-                {shouldShowStoryAudio ? (
-                  <>
-                    {/* Story Audio Page */}
-                    <div className="bg-white rounded-xl p-8 shadow-sm border mb-6">
-                      <div className="max-w-3xl mx-auto">
-                        {/* Story Title/Header */}
-                        <div className="text-center mb-6">
-                          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full mb-4">
-                            <svg
-                              className="w-8 h-8 text-white"
-                              fill="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                            </svg>
-                          </div>
-                          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                            Listen to the Story
-                          </h2>
-                          <p className="text-gray-600">
-                            Listen carefully to the audio. You will answer questions about it
-                            next.
-                          </p>
-                        </div>
-
-                        {/* Text-to-Speech Player for Story */}
-                        {currentQuestion.story_text && (
-                          <TextToSpeechPlayer
-                            text={currentQuestion.story_text}
-                            autoPlay={false}
-                            onAudioEnd={handleAudioEnd}
-                          />
-                        )}
-
-                        {/* Warning */}
-                        <div className="mt-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded">
-                          <p className="text-sm text-amber-900 flex items-start gap-2 font-semibold">
-                            <svg
-                              className="w-5 h-5 text-amber-600 shrink-0 mt-0.5"
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                            <span>
-                              Important: You can only listen to this story ONCE. Listen
-                              carefully before proceeding to questions.
-                            </span>
-                          </p>
-                        </div>
-                      </div>
+          ) : currentQuestion ? (
+            <>
+              {shouldShowStoryAudio ? (
+                <>
+                  {/* Story Audio Card */}
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-7 mb-5 max-w-2xl">
+                    <div className="mb-5">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Story</p>
+                      <h2 className="text-lg font-bold text-gray-900">Listen to the Story</h2>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        Listen carefully. You will answer questions about it next.
+                      </p>
                     </div>
 
-                    {/* Info message when audio hasn't completed */}
-                    {!audioCompleted && (
-                      <div className="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
-                        <p className="text-sm text-blue-700 flex items-start gap-2">
-                          <span className="text-blue-600">ℹ️</span>
-                          <span className="font-medium">
-                            Please play and listen to the story first before you can start the questions.
-                          </span>
-                        </p>
-                      </div>
+                    {currentQuestion.story_text && (
+                      <TextToSpeechPlayer
+                        text={currentQuestion.story_text}
+                        autoPlay={false}
+                        onAudioEnd={handleAudioEnd}
+                      />
                     )}
 
-                    {/* Start Questions Button */}
-                    <div className="flex justify-end">
-                      <button
-                        onClick={handleStartQuestions}
-                        disabled={!audioCompleted}
-                        className={`px-8 py-3 rounded-lg font-semibold flex items-center gap-2 shadow-md hover:shadow-lg transition ${
-                          audioCompleted
-                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        Start Questions →
-                      </button>
+                    <div className="mt-4 px-4 py-3 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
+                      <p className="text-sm font-semibold text-amber-900">
+                        You can only listen to this story once — listen carefully before proceeding.
+                      </p>
                     </div>
-                  </>
-                ) : (
-                  <>
-                    {/* QUESTION PAGE - Show questions with MCQ options */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                      {/* LEFT CARD - Question */}
-                      <div className="bg-white rounded-xl p-6 shadow-sm border">
-                        <div className="mb-6">
-                          <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded">
-                            Question {currentQuestion.question_number}
-                          </span>
-                        </div>
+                  </div>
 
-                        <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                          {currentQuestion.question_text}
-                        </h2>
+                  {!audioCompleted && (
+                    <div className="mb-4 px-4 py-3 bg-[#2557a7]/5 border-l-4 border-[#2557a7] rounded-r-xl max-w-2xl">
+                      <p className="text-sm font-medium text-[#2557a7]">
+                        Play and listen to the story first before starting questions.
+                      </p>
+                    </div>
+                  )}
 
-                        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center shrink-0">
-                              <svg
-                                className="w-5 h-5 text-white"
-                                fill="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                              </svg>
+                  <div className="flex justify-end max-w-2xl">
+                    <button
+                      onClick={handleStartQuestions}
+                      disabled={!audioCompleted}
+                      className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
+                        audioCompleted
+                          ? 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
+                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      Start Questions →
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* MCQ Question */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+                    {/* Question Card */}
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question</p>
+                        <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
+                          {sectionQuestionNumber} / {SECTION_TOTAL_QUESTIONS}
+                        </span>
+                      </div>
+
+                      <h2 className="text-base font-semibold text-gray-900 mb-4 leading-relaxed">
+                        {currentQuestion.question_text}
+                      </h2>
+
+                      <div className="px-4 py-3 bg-[#2557a7]/5 border border-[#2557a7]/15 rounded-xl">
+                        <p className="text-xs font-medium text-[#2557a7]">
+                          Select the correct answer based on the story you heard.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Options Card */}
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Select Your Answer</p>
+
+                      <div className="space-y-2.5">
+                        {options.map((option) => (
+                          <div
+                            key={option.id}
+                            onClick={() => handleOptionSelect(option.text)}
+                            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border cursor-pointer transition-all ${
+                              selectedAnswer === option.text
+                                ? 'border-[#2557a7] bg-[#2557a7]/5'
+                                : 'border-gray-200 hover:border-[#2557a7]/40 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                              selectedAnswer === option.text
+                                ? 'bg-[#2557a7] text-white'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {option.id}
                             </div>
-                            <p className="text-sm font-semibold text-gray-800">
-                              Based on the story you heard
-                            </p>
-                          </div>
-                          <p className="text-sm text-gray-600">
-                            Select the correct answer from the options on the right.
-                          </p>
-                        </div>
-
-                        {/* Selection Status - Commented out */}
-                        {/* {selectedAnswer && (
-                          <div className={`mt-4 flex items-center gap-2 p-3 rounded ${
-                            isConvertingAudio
-                              ? 'bg-blue-50 border border-blue-200'
-                              : audioSaved
-                                ? 'bg-green-50 border border-green-200'
-                                : 'bg-yellow-50 border border-yellow-200'
-                          }`}>
-                            {isConvertingAudio ? (
-                              <>
-                                <svg className="animate-spin w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                <span className="text-sm font-medium text-blue-800">Converting to audio...</span>
-                              </>
-                            ) : audioSaved ? (
-                              <>
-                                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span className="text-sm font-medium text-green-800">Answer Selected & Audio Saved</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-5 h-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span className="text-sm font-medium text-yellow-800">Answer Selected</span>
-                              </>
+                            <p className="text-sm font-medium text-gray-900 flex-1">{option.text}</p>
+                            {selectedAnswer === option.text && (
+                              <svg className="w-5 h-5 text-[#2557a7] shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
                             )}
                           </div>
-                        )} */}
-                      </div>
-
-                      {/* RIGHT CARD - Options */}
-                      <div className="bg-white rounded-xl p-6 shadow-sm border">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                          Select Your Answer
-                        </h3>
-
-                        <div className="space-y-3">
-                          {options.map((option) => (
-                            <div
-                              key={option.id}
-                              onClick={() => handleOptionSelect(option.text)}
-                              className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                selectedAnswer === option.text
-                                  ? 'border-indigo-600 bg-indigo-50'
-                                  : 'border-gray-200 hover:border-indigo-300 bg-white'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm ${
-                                    selectedAnswer === option.text
-                                      ? 'border-indigo-600 bg-indigo-600 text-white'
-                                      : 'border-gray-300 text-gray-600'
-                                  }`}
-                                >
-                                  {option.id}
-                                </div>
-                                <p className="text-base font-medium text-gray-900 flex-1">
-                                  {option.text}
-                                </p>
-                                {selectedAnswer === option.text && (
-                                  <svg
-                                    className="w-6 h-6 text-indigo-600 shrink-0"
-                                    fill="currentColor"
-                                    viewBox="0 0 20 20"
-                                  >
-                                    <path
-                                      fillRule="evenodd"
-                                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                      clipRule="evenodd"
-                                    />
-                                  </svg>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                        ))}
                       </div>
                     </div>
+                  </div>
 
-                    {/* FOOTER */}
-                    <div className="flex justify-between items-center mt-8">
-                      <p className="text-sm text-gray-500">
-                        Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
-                      </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-400">
+                      Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
+                    </p>
 
-                      <button
-                        onClick={handleNext}
-                        disabled={!answerSaved || loading}
-                        className={`px-8 py-3 rounded-lg font-semibold flex items-center gap-2 transition ${
-                          answerSaved && !loading
-                            ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        Next Question →
-                      </button>
-                    </div>
-                  </>
-                )}
-              </>
-            ) : null}
-          </div>
+                    <button
+                      onClick={handleNext}
+                      disabled={!answerSaved || loading}
+                      className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
+                        answerSaved && !loading
+                          ? 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
+                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {loading ? 'Loading…' : 'Next Question →'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          ) : null}
         </main>
       </div>
     </>

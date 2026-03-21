@@ -14,37 +14,39 @@ import { validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audio
 
 // ✅ Lazy load heavy components for faster route transitions
 const AudioRecorder = dynamic(() => import('../components/AudioRecorder'), {
-  loading: () => <div className="flex items-center justify-center p-8"><div className="animate-pulse">Loading...</div></div>,
+  loading: () => (
+    <div className="flex items-center justify-center p-8">
+      <div className="w-5 h-5 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
   ssr: false,
 });
 
 const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), {
-  loading: () => <div className="w-64 bg-gray-100 animate-pulse" />,
+  loading: () => <div className="w-65 bg-white border-r border-gray-200 shrink-0 animate-pulse" />,
 });
 
 const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), {
   loading: () => null,
 });
 
+const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), {
+  loading: () => <div className="h-14 bg-white rounded-xl border border-gray-200 mb-6 animate-pulse" />,
+});
+
 export default function AssessmentMain() {
   const router = useRouter();
 
   const [showModal, setShowModal] = useState(true);
-  const [currentQuestion, setCurrentQuestion] =
-    useState<CurrentQuestionResponse | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<CurrentQuestionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [validationWarning, setValidationWarning] = useState('');
+  const [, setValidationWarning] = useState('');
 
-  // ✅ Track section-specific question number for display only (1-8 for "See and Repeat")
-  // Note: currentQuestion.question_number remains global for backend upload API
   const [sectionQuestionNumber, setSectionQuestionNumber] = useState(1);
-  const SECTION_TOTAL_QUESTIONS = 8; // Total questions in this section
+  const SECTION_TOTAL_QUESTIONS = 8;
 
-  // ✅ recordings mapped by question_id
-  const [audioRecordings, setAudioRecordings] = useState<{
-    [questionId: string]: Blob;
-  }>({});
+  const [audioRecordings, setAudioRecordings] = useState<{ [questionId: string]: Blob }>({});
 
   // ================= FIRST QUESTION =================
   const fetchCurrentQuestion = async () => {
@@ -58,8 +60,9 @@ export default function AssessmentMain() {
       const response = await getCurrentQuestion(sessionId);
       setCurrentQuestion(response);
       logger.info('➡️ Now showing question:', response.question_id);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch question');
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to fetch question');
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -67,7 +70,7 @@ export default function AssessmentMain() {
 
   const handleStartSection = async () => {
     setShowModal(false);
-    setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
+    setSectionQuestionNumber(1);
     await fetchCurrentQuestion();
   };
 
@@ -75,7 +78,6 @@ export default function AssessmentMain() {
   const handleRecordingComplete = async (blob: Blob) => {
     if (!currentQuestion?.question_id) return;
 
-    // ✅ Validate audio before saving
     logger.info('🔍 Validating audio recording...');
     const validation = await validateAudioBlob(blob);
 
@@ -88,15 +90,13 @@ export default function AssessmentMain() {
       warning: validation.warning,
     });
 
-    // Show error if audio is invalid
     if (!validation.isValid) {
       setError(validation.error || 'Invalid audio recording');
       setValidationWarning('');
       alert(`⚠️ Invalid Recording!\n\n${validation.error}\n\nPlease record again.`);
-      return; // Don't save invalid audio
+      return;
     }
 
-    // Show warning if audio is valid but concerning
     if (validation.warning) {
       setValidationWarning(validation.warning);
       logger.warn('⚠️', validation.warning);
@@ -104,17 +104,12 @@ export default function AssessmentMain() {
       setValidationWarning('');
     }
 
-    // Clear any previous errors
     setError('');
-
     setAudioRecordings((prev) => ({
       ...prev,
       [currentQuestion.question_id]: blob,
     }));
 
-    // IMPORTANT: Don't save to sessionStorage to avoid quota exceeded error
-    // Real audio recordings are large (~88KB WebM) and will fill up sessionStorage quickly
-    // We only need to keep in state for immediate upload via progressive API
     logger.info(`✅ Valid audio saved (${formatDuration(validation.duration)}, ${formatFileSize(blob.size)})`);
   };
 
@@ -132,75 +127,59 @@ export default function AssessmentMain() {
       const sessionId = localStorage.getItem('session_id');
       const testId = localStorage.getItem('test_id');
 
-      // ✅ Log all parameters before calling API
       logger.info('🔍 ===== Preparing to upload audio =====');
       logger.info('  📋 session_id:', sessionId || 'MISSING');
       logger.info('  📋 test_id:', testId || 'MISSING');
       logger.info('  📋 question_id:', currentQuestion.question_id);
       logger.info('  📋 question_number:', currentQuestion.question_number || 'MISSING');
 
-      if (!sessionId) {
-        logger.error('❌ Session ID not found in localStorage');
-        throw new Error('Session ID not found. Please restart the assessment.');
-      }
-      if (!testId) {
-        logger.error('❌ Test ID not found in localStorage');
-        throw new Error('Test ID not found. Please restart the assessment.');
-      }
+      if (!sessionId) throw new Error('Session ID not found. Please restart the assessment.');
+      if (!testId) throw new Error('Test ID not found. Please restart the assessment.');
 
-      // Get the audio blob for current question
       const audioBlob = audioRecordings[currentQuestion.question_id];
 
       if (!audioBlob) {
         logger.error('❌ No audio recording found for question:', currentQuestion.question_id);
-        logger.error('  📋 Available recordings:', Object.keys(audioRecordings));
         throw new Error('No audio recording found. Please record your answer first.');
       }
 
       logger.info('  📋 audio_file size:', `${(audioBlob.size / 1024).toFixed(2)} KB`);
       logger.info('  📋 audio_file type:', audioBlob.type);
-      logger.info('  📋 return_next_question: true');
       logger.info('🔍 ===== All parameters validated, calling API =====');
 
-      // ✅ Upload audio with return_next_question=true
-      logger.info('📤 Uploading audio with return_next_question=true for question:', currentQuestion.question_id);
       const uploadResponse = await uploadAudio({
         session_id: sessionId,
         question_id: currentQuestion.question_id,
         test_id: testId,
         audio_file: audioBlob,
-        return_next_question: true, // ✅ Request next question in response
-        question_number: currentQuestion.question_number, // ✅ Global question number
+        return_next_question: true,
+        question_number: currentQuestion.question_number,
       });
       logger.info('✅ Audio uploaded successfully:', uploadResponse);
 
-      // ✅ Mark question as completed in sessionStorage for Assessment Summary Panel
       if (currentQuestion.question_number) {
         sessionStorage.setItem(`q_${currentQuestion.question_number}_completed`, 'true');
         logger.info(`✅ Marked question ${currentQuestion.question_number} as completed`);
       }
 
-      // ✅ Check if next question was included in upload response
       if (uploadResponse.next_question) {
         logger.info('📬 Next question received from upload response:', uploadResponse.next_question.question.question_id);
 
         const nextQuestion = uploadResponse.next_question.question;
 
-        // Check if section changed to next section
         if (nextQuestion.section_name !== currentQuestion.section_name) {
           logger.info('✅ Section changed from', currentQuestion.section_name, 'to:', nextQuestion.section_name);
           router.push('/communication/listen-and-repeat');
           return;
         }
 
-        // Update current question with the next question from upload response
         setCurrentQuestion({
           question_id: nextQuestion.question_id,
           question_text: nextQuestion.question_text,
           question_type: nextQuestion.question_type || 'VOICE',
           section_name: nextQuestion.section_name,
-          section_id: undefined, // Backend returns string, frontend expects number - omit for now
-          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1, // ✅ Keep global for backend
+          section_id: undefined,
+          question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : 1,
           total_questions: uploadResponse.next_question.section.total_questions,
           options: nextQuestion.options,
           audio_url: nextQuestion.audio_url,
@@ -211,10 +190,8 @@ export default function AssessmentMain() {
           expected_text: nextQuestion.expected_text,
         });
 
-        // ✅ Increment section-specific question number for display
         setSectionQuestionNumber((prev) => prev + 1);
       } else {
-        // Fallback: If next_question not in response, fetch it separately
         logger.warn('⚠️ Next question not in upload response, fetching separately...');
         const response = await getNextQuestion({
           session_id: sessionId,
@@ -226,7 +203,6 @@ export default function AssessmentMain() {
           return;
         }
 
-        // Check if section changed to next section
         if (response.section_name !== currentQuestion.section_name) {
           logger.info('✅ Section changed from', currentQuestion.section_name, 'to:', response.section_name);
           router.push('/communication/listen-and-repeat');
@@ -234,22 +210,17 @@ export default function AssessmentMain() {
         }
 
         setCurrentQuestion(response);
-
-        // ✅ Increment section-specific question number for display
         setSectionQuestionNumber((prev) => prev + 1);
       }
-    } catch (err: any) {
+    } catch (err) {
       logger.error('❌ Error in handleNext:', err);
-      logger.error('  Error message:', err.message);
-      logger.error('  Error response:', err.response);
-      logger.error('  Error response data:', err.response?.data);
-      logger.error('  Error response status:', err.response?.status);
+      const error = err as { message?: string; response?: { data?: { message?: string; error?: string }; status?: number } };
 
-      // Show detailed error message from backend if available
-      const errorMessage = err.response?.data?.message ||
-                          err.response?.data?.error ||
-                          err.message ||
-                          'Failed to upload audio or fetch next question';
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to upload audio or fetch next question';
 
       setError(errorMessage);
       logger.error('❌ Showing error to user:', errorMessage);
@@ -259,8 +230,7 @@ export default function AssessmentMain() {
   };
 
   const hasRecording =
-    currentQuestion?.question_id &&
-    audioRecordings[currentQuestion.question_id];
+    currentQuestion?.question_id && audioRecordings[currentQuestion.question_id];
 
   return (
     <>
@@ -268,10 +238,10 @@ export default function AssessmentMain() {
         open={showModal}
         onStart={handleStartSection}
         title="Section 1: See and Repeat"
-        subtitle="Read the sentences and pronounce the highlighted word clearly"
+        subtitle="Read the sentence and pronounce the highlighted word clearly"
         questions={8}
         instructions={[
-          'Read the sentence displayed on screen',
+          'Read the full sentence displayed on screen',
           'Focus on the highlighted word',
           'Click "Start Recording" when ready',
           'Pronounce the highlighted word clearly',
@@ -279,81 +249,89 @@ export default function AssessmentMain() {
         ]}
       />
 
-      <div className="min-h-screen bg-[#F4F6FB] flex">
+      <div className="min-h-screen bg-gray-50 flex">
         <AssessmentSidebar currentSectionId={1} />
 
-        <main className="flex-1 px-8 py-6">
-          <div className="bg-white rounded-lg p-5 mb-6">
-            <div className="flex justify-between items-center mb-2">
-              <div>
-                <h1 className="text-lg text-black font-semibold">
-                  {currentQuestion?.section_name}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  Read the sentence and pronounce the highlighted word clearly.
-                </p>
-              </div>
-              <p className="text-sm text-gray-600">
-                {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS} Questions
-              </p>
-            </div>
+        <main className="flex-1 px-8 py-7 min-w-0">
 
-            <div className="w-full bg-gray-200 h-1 rounded-full">
-              <div
-                className="bg-green-500 h-1 rounded-full transition-all"
-                style={{
-                  width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%`,
-                }}
-              />
-            </div>
+          {/* Section Header */}
+          <div className="mb-5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 1 of 7</p>
+            <h1 className="text-lg font-bold text-gray-900">
+              {currentQuestion?.section_name || 'See & Repeat'}
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Read the sentence and pronounce the highlighted word clearly.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl p-6 shadow-sm">
-              {error ? (
-                <p className="text-red-600">{error}</p>
+          {/* Progress Bar */}
+          <QuestionProgressBar
+            currentQuestion={sectionQuestionNumber}
+            totalQuestions={SECTION_TOTAL_QUESTIONS}
+            className="mb-6"
+          />
+
+          {/* Content Cards */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+            {/* Question Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question</p>
+                <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
+                  {sectionQuestionNumber} / {SECTION_TOTAL_QUESTIONS}
+                </span>
+              </div>
+
+              {loading && !currentQuestion ? (
+                <div className="space-y-2.5">
+                  <div className="h-4 bg-gray-100 rounded animate-pulse w-3/4" />
+                  <div className="h-4 bg-gray-100 rounded animate-pulse w-full" />
+                  <div className="h-4 bg-gray-100 rounded animate-pulse w-1/2" />
+                </div>
+              ) : error ? (
+                <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  {error}
+                </div>
               ) : (
-                <p className="text-lg text-black">{currentQuestion?.question_text}</p>
+                <p className="text-base text-gray-900 leading-relaxed font-medium">
+                  {currentQuestion?.question_text}
+                </p>
               )}
             </div>
 
-            <div className="bg-white rounded-xl p-6 shadow-sm flex flex-col items-center">
+            {/* Recorder Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col items-center justify-center">
               <AudioRecorder
                 key={currentQuestion?.question_id}
                 maxDuration={15}
                 onRecordingComplete={handleRecordingComplete}
               />
-              {/* {hasRecording && (
-                <p className="text-green-600 text-sm mt-3">
-                  ✔ Recording saved
-                </p>
-              )} */}
             </div>
           </div>
 
-          <div className="flex justify-between items-center mt-6">
-            <p className="text-sm text-gray-500">
+          {/* Footer: nav */}
+          <div className="flex items-center justify-between mt-6">
+            <p className="text-xs text-gray-400">
               Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
             </p>
 
             <button
               onClick={handleNext}
               disabled={!hasRecording || loading}
-              className={`px-6 py-3 rounded-lg font-semibold transition ${
+              className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
                 hasRecording && !loading
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ? 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
             >
-              Next Question →
+              {loading ? 'Uploading…' : 'Next Question →'}
             </button>
           </div>
+
         </main>
       </div>
     </>
   );
 }
-
-
-
-

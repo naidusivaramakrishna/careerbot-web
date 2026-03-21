@@ -616,11 +616,32 @@ export const evaluateAudio = async (data: AudioEvaluationRequest): Promise<Audio
  * @param testId - The test ID to download the report for
  * @returns Blob of the PDF file
  */
+export interface EvaluateMcqRequest {
+  test_id: string;
+  email_id: string;
+  answers: Record<string, string>;
+}
+
+export interface EvaluateMcqResponse {
+  mcq_evaluation_id?: string;
+  [key: string]: unknown;
+}
+
+export const evaluateMcq = async (data: EvaluateMcqRequest): Promise<EvaluateMcqResponse> => {
+  try {
+    const response = await httpClient.post<EvaluateMcqResponse>('/ai-assessment/evaluate-mcq', data);
+    return response.data;
+  } catch (error) {
+    logger.error('❌ Error evaluating MCQ:', error);
+    throw error;
+  }
+};
+
 export const downloadReportPdf = async (testId: string): Promise<Blob> => {
   try {
     logger.debug('📥 Downloading PDF report for test_id:', testId);
 
-    const response = await httpClient.get(`/ai-assessment/reports/${testId}/download-pdf`, {
+    const response = await httpClient.get<Blob>(`/ai-assessment/reports/${testId}/download-pdf`, {
       responseType: 'blob',
     });
 

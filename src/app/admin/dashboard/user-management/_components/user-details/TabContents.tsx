@@ -1,12 +1,7 @@
-import React, { memo } from 'react'
-import { FileText, CreditCard, Activity } from 'lucide-react'
-import type { UserDetailsResponse, UserActivityLog } from '@/api/userManagementApi'
-
-interface Resume {
-    id: string
-    title?: string
-    updated_at: string
-}
+import React, { memo, useCallback } from 'react'
+import { FileText, CreditCard, Download } from 'lucide-react'
+import { toast } from 'sonner'
+import type { UserDetailsResponse, UserActivityLog, Resume } from '@/api/userManagementApi'
 
 interface Payment {
     id: string
@@ -49,6 +44,25 @@ interface ResumesTabProps {
 }
 
 export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
+    const handleDownloadResume = useCallback(async (resume: Resume) => {
+        try {
+            const backendUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'
+            const fullUrl = `${backendUrl}${resume.download_url}`
+            const response = await fetch(fullUrl)
+            if (!response.ok) throw new Error('Download failed')
+
+            const blob = await response.blob()
+            const url = window.URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `${resume.title}.pdf`
+            link.click()
+            window.URL.revokeObjectURL(url)
+        } catch {
+            toast.error('Failed to download resume')
+        }
+    }, [])
+
     return (
         <div className="border border-[#00000033]/40 bg-gray-50 p-4 rounded-lg text-sm">
             <h4 className="font-semibold mb-3 flex items-center gap-2">
@@ -59,14 +73,19 @@ export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
                     {resumes.map((resume) => (
                         <div key={resume.id} className="py-2 flex justify-between items-center">
                             <div>
-                                <p className="font-semibold text-black">{resume.title || 'Untitled Resume'}</p>
+                                <p className="font-semibold text-black">{resume.title}</p>
                                 <p className="text-gray-500 text-xs">
                                     Last updated: {formatDate(resume.updated_at)}
                                 </p>
                             </div>
-                            <span className="cursor-pointer font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+                            <button
+                                onClick={() => handleDownloadResume(resume)}
+                                className="cursor-pointer font-semibold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1 hover:underline"
+                                title={`Download ${resume.title}`}
+                            >
+                                <Download size={14} />
                                 Download
-                            </span>
+                            </button>
                         </div>
                     ))}
                 </div>

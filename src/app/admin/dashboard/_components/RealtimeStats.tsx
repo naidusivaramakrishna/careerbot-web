@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Users, Zap, Database, Gauge } from 'lucide-react';
 import RealtimeStatsCard from './RealtimestatsCard';
 import Switch from '@/components/common/Switch';
@@ -27,19 +27,14 @@ const RealtimeStatsComponent: React.FC<RealtimeStatsProps> = ({
     refreshInterval = 30,
     onAutoRefreshChange
 }) => {
-    const [isToggling, setIsToggling] = useState(false);
-
     // Handle auto-refresh toggle
     const handleAutoRefreshToggle = async () => {
         try {
-            setIsToggling(true);
             await toggleAutoRefresh(!autoRefresh);
             onAutoRefreshChange?.(!autoRefresh);
             logger.debug(`Auto-refresh toggled to: ${!autoRefresh}`);
         } catch (error) {
             logger.error('Error toggling auto-refresh:', error);
-        } finally {
-            setIsToggling(false);
         }
     };
 

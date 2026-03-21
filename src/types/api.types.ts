@@ -267,6 +267,8 @@ export interface ATSBreakdown {
 // ============ ENHANCEMENT TYPES ============
 export interface Improvement {
   id: string;
+  original_suggestion_id?: string;
+  fix_type?: string;
   category: string;
   section?: string | null;
   title: string;
@@ -319,14 +321,27 @@ export interface EnhanceResumeResponse {
   enhanced_resume_id: string;
   resume_id: string;
   success: boolean;
+  mode?: string;
+  // New response shape (POST /api/v1/resume/enhance)
+  enhancer_state?: {
+    resume?: Record<string, unknown>;
+    ats_breakdown?: Record<string, unknown>;
+  };
+  suggestions?: Array<{
+    id: string;
+    section: string;
+    message: string;
+    fix_type: string;
+    value?: string;
+  }>;
+  // Legacy/compat fields
   from_cache?: boolean;
-  enhanced_resume: ResumeData;
-  enhancement_report: EnhancementReport;
+  enhanced_resume?: ResumeData;
+  enhancement_report?: EnhancementReport;
   user_id?: string;
   correlation_id?: string;
   trace_id?: string;
   Tokens_Used?: unknown;
-  suggestions?: string[];
 }
 
 export interface UpdateEnhancedResumeRequest {

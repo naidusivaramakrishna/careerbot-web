@@ -8,6 +8,7 @@ import EducationList from "./EducationList";
 import EducationForm from "./EducationForm";
 import { EducationSectionProps, ValidationError } from "../../_types/education-types";
 import { useProfileContext } from "../../context/ProfileContext";
+import { useDashboard } from "@/contexts/DashboardContext";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import Modal from "@/components/common/Modal";
 import EducationEmptyState from "./EducationEmptyState";
@@ -22,6 +23,7 @@ export default function EducationSection({
     isAutoFill = false,
 }: EducationSectionPropsWithAutoFill) {
     const { setProfileData } = useProfileContext(); //  Get setProfileData from context
+    const { refreshDashboard } = useDashboard();
     const [editingIndex, setEditingIndex] = useState<number | null>(0);
     const [educationForm, setEducationForm] = useState<Partial<Education>>({});
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -80,13 +82,19 @@ export default function EducationSection({
             setTempProfile((prev) => ({ ...prev, education: updatedList }));
             setProfileData((prev) => ({ ...prev, education: updatedList }));
 
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
+
             setIsModalOpen(false);
             setEducationForm({});
-        } catch (err: any) {
-            if (err?.response?.data?.error?.details?.validation_errors) {
-                setValidationErrors(err.response.data.error.details.validation_errors);
+        } catch (err: unknown) {
+            const error = err as { response?: { data?: { error?: { details?: { validation_errors?: ValidationError[] }, message?: string } } } } | null;
+            if (error?.response?.data?.error?.details?.validation_errors) {
+                setValidationErrors(error.response.data.error.details.validation_errors);
             } else {
-                const errorMessage = err?.response?.data?.error?.message || '';
+                const errorMessage = error?.response?.data?.error?.message || '';
                 const errors: ValidationError[] = [];
                 const msg = errorMessage.toLowerCase();
 
@@ -135,6 +143,11 @@ export default function EducationSection({
                 logger.info('✅ Updated profile data after delete:', newProfile);
                 return newProfile;
             });
+
+            // Refresh dashboard with delay to prevent multiple toast notifications
+            setTimeout(() => {
+                refreshDashboard();
+            }, 300);
 
             toast.success("Education deleted");
             if (updated.length === 0) setEditingIndex(0);

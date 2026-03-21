@@ -6,7 +6,6 @@ interface SectionStartModalProps {
   title: string;
   subtitle: string;
   questions: number;
-//   duration: string;
   instructions: string[];
 }
 
@@ -16,66 +15,55 @@ export default function SectionStartModal({
   title,
   subtitle,
   questions,
-//   duration,
   instructions,
 }: SectionStartModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/40">
-      <div className="bg-white w-full max-w-lg rounded-xl shadow-xl p-6">
-        {/* TITLE */}
-        <h2 className="text-xl font-semibold text-gray-900 text-center">
-          {title}
-        </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
 
-        <p className="text-sm text-gray-500 text-center mt-1">
-          {subtitle}
-        </p>
-
-        {/* META */}
-        <div className="flex justify-center gap-6 text-sm text-gray-500 mt-4">
-          <span className="flex items-center gap-1">
-            📄 {questions} Questions
-          </span>
-          {/* <span className="flex items-center gap-1">
-            ⏱ {duration}
-          </span> */}
+        {/* Header */}
+        <div className="bg-[#2557a7] px-6 py-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-white leading-snug">{title}</h2>
+              <p className="text-sm text-white/70 mt-1">{subtitle}</p>
+            </div>
+            <span className="shrink-0 bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">
+              {questions}Q
+            </span>
+          </div>
         </div>
 
-        <hr className="my-4" />
-
-        {/* INSTRUCTIONS */}
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">
-            Instructions
-          </h3>
-
-          <ul className="space-y-2">
+        {/* Instructions */}
+        <div className="px-6 py-5">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Instructions</p>
+          <ul className="space-y-2.5">
             {instructions.map((item, index) => (
-              <li
-                key={index}
-                className="flex items-start gap-2 text-sm text-gray-600"
-              >
-                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-blue-100 text-blue-600 text-xs font-semibold">
+              <li key={index} className="flex items-start gap-3 text-sm text-gray-700">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-[#2557a7]/10 text-[#2557a7] text-xs font-bold flex items-center justify-center mt-0.5">
                   {index + 1}
                 </span>
-                <span>{item}</span>
+                <span className="leading-relaxed">{item}</span>
               </li>
             ))}
           </ul>
         </div>
 
-        {/* ACTION */}
-        <div className="flex justify-center mt-6">
+        {/* Divider */}
+        <div className="h-px bg-gray-100 mx-6" />
+
+        {/* Action */}
+        <div className="px-6 py-5">
           <button
             onClick={onStart}
-            className="bg-black text-white px-6 py-2 rounded-lg font-medium hover:bg-gray-900 transition flex items-center gap-2"
+            className="w-full bg-[#2557a7] hover:bg-[#1e4a94] text-white py-3 rounded-xl font-semibold text-sm transition-colors"
           >
-            Start section
-            <span>▶</span>
+            Start Section →
           </button>
         </div>
+
       </div>
     </div>
   );

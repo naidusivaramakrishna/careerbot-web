@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Banknote, Briefcase, CirclePlay, ExternalLink, MapPin, X } from "lucide-react";
 import { IoHourglassOutline } from "react-icons/io5";
 import { getJobDetails, closeJob, JobDetailsResponse } from "@/api/adminJobsApi";
@@ -17,23 +17,24 @@ const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate, onEdit }) =>
     const [closing, setClosing] = useState(false);
     const [jobDetails, setJobDetails] = useState<JobDetailsResponse | null>(null);
 
-    useEffect(() => {
-        if (job?.id) {
-            fetchJobDetails();
-        }
-    }, [job?.id]);
-
-    const fetchJobDetails = async () => {
+    const fetchJobDetails = useCallback(async () => {
+        if (!job?.id) return;
         try {
             setLoading(true);
-            const details = await getJobDetails(job!.id);
+            const details = await getJobDetails(job.id);
             setJobDetails(details);
-        } catch (error) {
+        } catch {
             toast.error('Failed to load job details');
         } finally {
             setLoading(false);
         }
-    };
+    }, [job]);
+
+    useEffect(() => {
+        if (job?.id) {
+            fetchJobDetails();
+        }
+    }, [job?.id, fetchJobDetails]);
 
     const handleCloseJob = async () => {
         try {
@@ -42,7 +43,7 @@ const JobDetailsModal: React.FC<Props> = ({ job, onClose, onUpdate, onEdit }) =>
             toast.success('Job closed successfully');
             if (onUpdate) onUpdate();
             onClose();
-        } catch (error) {
+        } catch {
             toast.error('Failed to close job');
         } finally {
             setClosing(false);

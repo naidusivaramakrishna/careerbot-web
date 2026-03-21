@@ -122,10 +122,10 @@ export default function AssessmentSummaryPanel({
 
   return (
     <>
-      {/* Backdrop with Blur */}
+      {/* Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 backdrop-blur-md bg-white/10 z-40 transition-all duration-300"
+          className="fixed inset-0 backdrop-blur-sm bg-black/20 z-40 transition-all duration-300"
           onClick={onClose}
         />
       )}
@@ -137,87 +137,73 @@ export default function AssessmentSummaryPanel({
         }`}
       >
         <div className="h-full flex flex-col">
+
           {/* Header */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Assessment Summary</h2>
+          <div className="px-6 pt-6 pb-5 border-b border-gray-200 shrink-0">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Overview</p>
+                <h2 className="text-base font-bold text-gray-900">Assessment Summary</h2>
+              </div>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
                 aria-label="Close panel"
               >
-                <svg
-                  className="w-6 h-6 text-gray-500"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
             {/* Circular Progress */}
-            <div className="flex flex-col items-center justify-center">
-              <div className="relative w-32 h-32">
-                {/* Background Circle */}
-                <svg className="w-32 h-32 transform -rotate-90">
+            <div className="flex items-center gap-5">
+              <div className="relative w-20 h-20 shrink-0">
+                <svg className="w-20 h-20 transform -rotate-90">
+                  <circle cx="40" cy="40" r="34" stroke="#F3F4F6" strokeWidth="6" fill="none" />
                   <circle
-                    cx="64"
-                    cy="64"
-                    r="56"
-                    stroke="#E5E7EB"
-                    strokeWidth="8"
+                    cx="40"
+                    cy="40"
+                    r="34"
+                    stroke="#2557a7"
+                    strokeWidth="6"
                     fill="none"
-                  />
-                  {/* Progress Circle */}
-                  <circle
-                    cx="64"
-                    cy="64"
-                    r="56"
-                    stroke="#4F46E5"
-                    strokeWidth="8"
-                    fill="none"
-                    strokeDasharray={`${2 * Math.PI * 56}`}
-                    strokeDashoffset={`${2 * Math.PI * 56 * (1 - progressPercentage / 100)}`}
+                    strokeDasharray={`${2 * Math.PI * 34}`}
+                    strokeDashoffset={`${2 * Math.PI * 34 * (1 - progressPercentage / 100)}`}
                     strokeLinecap="round"
                     className="transition-all duration-500"
                   />
                 </svg>
-                {/* Center Text */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-3xl font-bold text-gray-900">{completedCount}</span>
-                  <span className="text-sm text-gray-500">of 44</span>
+                  <span className="text-xl font-bold text-gray-900 leading-none">{completedCount}</span>
+                  <span className="text-[10px] text-gray-400 mt-0.5">of 44</span>
                 </div>
               </div>
-              <p className="mt-3 text-sm font-medium text-gray-600">
-                {progressPercentage.toFixed(0)}% Complete
-              </p>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{progressPercentage.toFixed(0)}%</p>
+                <p className="text-sm text-gray-500 mt-0.5">Questions answered</p>
+                {completedCount < 44 && (
+                  <p className="text-xs text-amber-600 font-medium mt-1">
+                    {44 - completedCount} remaining
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Question Grid */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Question Status</h3>
-            <div className="grid grid-cols-8 gap-2">
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Question Status</p>
+            <div className="grid grid-cols-8 gap-1.5">
               {questionStatuses.map((status) => (
                 <div
                   key={status.questionNumber}
-                  className={`
-                    aspect-square flex items-center justify-center rounded-lg text-xs font-semibold
-                    transition-all duration-200
-                    ${
-                      status.isCompleted
-                        ? 'bg-indigo-600 text-white shadow-md'
-                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                    }
-                  `}
-                  title={`Question ${status.questionNumber} - ${status.isCompleted ? 'Completed' : 'Not completed'}`}
+                  title={`Question ${status.questionNumber} — ${status.isCompleted ? 'Answered' : 'Pending'}`}
+                  className={`aspect-square flex items-center justify-center rounded-md text-[11px] font-semibold transition-all duration-200 ${
+                    status.isCompleted
+                      ? 'bg-[#2557a7] text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
                 >
                   {status.questionNumber}
                 </div>
@@ -225,121 +211,64 @@ export default function AssessmentSummaryPanel({
             </div>
 
             {/* Legend */}
-            <div className="mt-6 flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-indigo-600"></div>
-                <span className="text-gray-600">Completed</span>
+            <div className="mt-5 flex items-center gap-4 text-xs text-gray-500">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded bg-[#2557a7]" />
+                <span>Answered</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-gray-200"></div>
-                <span className="text-gray-600">Pending</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded bg-gray-200" />
+                <span>Pending</span>
               </div>
             </div>
           </div>
 
-          {/* Footer with Finish Button */}
-          <div className="p-6 border-t border-gray-200">
-            {/* Transcription Status Warning */}
+          {/* Footer */}
+          <div className="px-6 pb-6 pt-4 border-t border-gray-100 shrink-0">
+            {/* Transcription warning */}
             {!isTranscriptionReady && !isSubmitting && waitingTimeLeft > 0 && (
-              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <svg className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  <div>
-                    <p className="text-sm font-semibold text-amber-800">Processing Audio Transcriptions</p>
-                    <p className="text-xs text-amber-700 mt-1">
-                      {waitingTimeLeft} transcription{waitingTimeLeft !== 1 ? 's' : ''} remaining. Please wait...
-                    </p>
-                  </div>
-                </div>
+              <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-xs font-semibold text-amber-800">Processing Audio</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  {waitingTimeLeft} transcription{waitingTimeLeft !== 1 ? 's' : ''} remaining — please wait…
+                </p>
               </div>
             )}
 
             <button
-              onClick={onFinish}
+              onClick={() => {
+                localStorage.setItem('assessment_end_time', new Date().toISOString());
+                onFinish();
+              }}
               disabled={isSubmitting || !isTranscriptionReady}
-              className={`
-                w-full py-4 rounded-lg font-semibold text-lg transition-all flex items-center justify-center gap-2
-                ${
-                  isSubmitting || !isTranscriptionReady
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl'
-                }
-              `}
+              className={`w-full py-3.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+                isSubmitting || !isTranscriptionReady
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-[#2557a7] hover:bg-[#1e4a94] text-white shadow-sm'
+              }`}
             >
               {isSubmitting ? (
                 <>
-                  <svg
-                    className="animate-spin h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Submitting...
+                  Submitting…
                 </>
               ) : !isTranscriptionReady ? (
                 <>
-                  <svg
-                    className="animate-spin h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Processing Transcriptions...
+                  Processing Transcriptions…
                 </>
               ) : (
-                <>
-                  <span>Finish Assessment</span>
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </>
+                'Finish Assessment →'
               )}
             </button>
-
-            {completedCount < 44 && (
-              <p className="mt-3 text-xs text-center text-amber-600">
-                ⚠️ You have {44 - completedCount} unanswered question(s)
-              </p>
-            )}
           </div>
+
         </div>
       </div>
     </>

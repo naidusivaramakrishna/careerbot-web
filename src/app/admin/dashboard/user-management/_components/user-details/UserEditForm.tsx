@@ -8,7 +8,10 @@ interface EditFormData {
     full_name: string
     role: string
     subscription_plan: string
+    [key: string]: string
 }
+
+export type { EditFormData }
 
 interface UserEditFormProps {
     user: UserDetailsResponse

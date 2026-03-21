@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
@@ -31,6 +31,8 @@ const SectionStartModal = dynamic(() => import('../components/SectionStartModal'
   loading: () => null,
 });
 
+const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200 h-20 animate-pulse" /> });
+
 export default function ListenAndRepeatPage() {
   const router = useRouter();
   const [showModal, setShowModal] = useState(true);
@@ -39,6 +41,7 @@ export default function ListenAndRepeatPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [validationWarning, setValidationWarning] = useState('');
+  const [audioCompleted, setAudioCompleted] = useState(false); // Track if audio has finished playing
 
   // ✅ Track section-specific question number for display only (1-8 for "Listen and Repeat")
   // Note: currentQuestion.question_number remains global for backend upload API
@@ -62,8 +65,9 @@ export default function ListenAndRepeatPage() {
       const response = await getCurrentQuestion(sessionId);
       setCurrentQuestion(response);
       logger.info('➡️ Now showing question:', response.question_id);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch question');
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to fetch question');
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -72,7 +76,14 @@ export default function ListenAndRepeatPage() {
   const handleStartSection = async () => {
     setShowModal(false);
     setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
+    setAudioCompleted(false); // Reset audio completion state
     await fetchCurrentQuestion();
+  };
+
+  // Handler for when audio finishes playing
+  const handleAudioEnd = () => {
+    setAudioCompleted(true);
+    logger.info('✅ Audio playback completed - recording now enabled');
   };
 
   // Record audio
@@ -208,6 +219,9 @@ export default function ListenAndRepeatPage() {
 
         // ✅ Increment section-specific question number for display
         setSectionQuestionNumber((prev) => prev + 1);
+
+        // Reset audio completion for new question
+        setAudioCompleted(false);
       } else {
         // Fallback: If next_question not in response, fetch it separately
         logger.warn('⚠️ Next question not in upload response, fetching separately...');
@@ -232,9 +246,13 @@ export default function ListenAndRepeatPage() {
 
         // ✅ Increment section-specific question number for display
         setSectionQuestionNumber((prev) => prev + 1);
+
+        // Reset audio completion for new question
+        setAudioCompleted(false);
       }
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to upload audio or fetch next question';
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to upload audio or fetch next question');
+      const errorMessage = error.message;
       logger.error('❌ Error in handleSubmit:', errorMessage);
       logger.error('❌ Full error:', err);
 
@@ -267,125 +285,103 @@ export default function ListenAndRepeatPage() {
         ]}
       />
 
-      <div className="min-h-screen bg-[#F4F6FB] flex">
+      <div className="min-h-screen bg-gray-50 flex">
         <AssessmentSidebar currentSectionId={2} />
 
-        <main className="flex-1 px-8 py-6">
-          <div className="bg-white rounded-lg p-5 mb-6">
-            <div className="flex justify-between items-center mb-2">
-              <div>
-                <h1 className="text-lg text-black font-semibold">
-                  {currentQuestion?.section_name || 'Listen and Repeat'}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  Listen carefully and repeat what you hear
-                </p>
-              </div>
-              <p className="text-sm text-gray-600">
-                {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS} Questions
-              </p>
-            </div>
+        <main className="flex-1 px-8 py-7 min-w-0">
 
-            <div className="w-full bg-gray-200 h-1 rounded-full">
-              <div
-                className="bg-green-500 h-1 rounded-full transition-all"
-                style={{
-                  width: `${(sectionQuestionNumber / SECTION_TOTAL_QUESTIONS) * 100}%`,
-                }}
-              />
-            </div>
+          {/* Section Header */}
+          <div className="mb-5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 2 of 7</p>
+            <h1 className="text-lg font-bold text-gray-900">
+              {currentQuestion?.section_name || 'Listen & Repeat'}
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Listen carefully and repeat what you hear.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl p-6 shadow-sm">
+          <QuestionProgressBar
+            currentQuestion={sectionQuestionNumber}
+            totalQuestions={SECTION_TOTAL_QUESTIONS}
+            className="mb-6"
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Audio Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Listen</p>
+                <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
+                  {sectionQuestionNumber} / {SECTION_TOTAL_QUESTIONS}
+                </span>
+              </div>
+
               {error ? (
-                <p className="text-red-600">{error}</p>
+                <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  {error}
+                </div>
               ) : (
                 <>
-                  <div className="mb-6">
-                    <span className="inline-block bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded">
-                      Question {sectionQuestionNumber}
-                    </span>
-                  </div>
-
                   {currentQuestion?.question_text && (
                     <TextToSpeechPlayer
                       text={currentQuestion.question_text}
                       autoPlay={true}
+                      onAudioEnd={handleAudioEnd}
                     />
                   )}
 
-                  {/* Show validation warning if exists */}
                   {validationWarning && hasRecording && (
-                    <div className="mt-6 flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                      <svg
-                        className="w-5 h-5 text-yellow-600"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                        />
-                      </svg>
-                      <span className="text-sm font-medium text-yellow-800">
-                        {validationWarning}
-                      </span>
+                    <div className="mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-medium text-amber-800">
+                      {validationWarning}
                     </div>
                   )}
 
-                  {/* Show success indicator when valid recording exists */}
                   {hasRecording && !validationWarning && (
-                    <div className="mt-6 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded">
-                      <svg
-                        className="w-5 h-5 text-green-600"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
+                    <div className="mt-4 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-xl">
+                      <svg className="w-4 h-4 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
-                      <span className="text-sm font-medium text-green-800">
-                        Valid Recording Saved
-                      </span>
+                      <span className="text-sm font-medium text-green-800">Valid Recording Saved</span>
                     </div>
                   )}
                 </>
               )}
             </div>
 
-            <div className="bg-white rounded-xl p-6 shadow-sm flex flex-col items-center">
+            {/* Recorder Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col items-center justify-center">
+              {!audioCompleted && (
+                <div className="mb-5 px-4 py-3 bg-[#2557a7]/5 border-l-4 border-[#2557a7] rounded-r-xl w-full">
+                  <p className="text-sm font-medium text-[#2557a7]">
+                    Play and listen to the audio first before recording.
+                  </p>
+                </div>
+              )}
               <AudioRecorder
                 key={currentQuestion?.question_id}
                 maxDuration={15}
                 onRecordingComplete={handleRecordingComplete}
+                disabled={!audioCompleted}
               />
             </div>
           </div>
 
-          <div className="flex justify-between items-center mt-6">
-            <p className="text-sm text-gray-500">
+          <div className="flex items-center justify-between mt-6">
+            <p className="text-xs text-gray-400">
               Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
             </p>
 
             <button
               onClick={handleNext}
               disabled={!hasRecording || loading}
-              className={`px-6 py-3 rounded-lg font-semibold transition ${
+              className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
                 hasRecording && !loading
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ? 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
             >
-              Next Question →
+              {loading ? 'Uploading…' : 'Next Question →'}
             </button>
           </div>
         </main>

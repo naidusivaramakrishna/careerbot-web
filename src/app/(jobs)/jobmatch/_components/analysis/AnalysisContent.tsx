@@ -14,6 +14,7 @@ import { useResumePDF } from "../_hooks/useResumePDF";
 import { useSkillUpdate } from "../_hooks/useSkillUpdate";
 import { AnalysisContentProps } from "../_types";
 import httpClient from "@/lib/http";
+import { Sparkles, FileText, Briefcase, ArrowRight } from "lucide-react";
 
 const AnalysisContent: React.FC<AnalysisContentProps> = ({
   jdText,
@@ -298,38 +299,28 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
   }, [resumeId]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f8fafb] via-white to-[#f0f6ff] p-4 md:p-8">
-      <div className="max-w-[1600px] mx-auto space-y-12">
+    <div className="bg-gray-50/50 p-4 md:p-6">
+      <div className="max-w-400 mx-auto space-y-8">
+
         {/* Section 1: Match Score Overview */}
-        <div className="animate-fadeIn">
-          <TopAnalysisBar
-            matchScore={score}
-            missingCriticalCount={missingCriticalCount}
-            missingImportantCount={missingImportantCount}
-            missingNiceToHaveCount={missingNiceToHaveCount}
-            missingSoftSkillsCount={missingSoftSkillsCount}
-          />
-        </div>
+        <TopAnalysisBar
+          matchScore={score}
+          missingCriticalCount={missingCriticalCount}
+          missingImportantCount={missingImportantCount}
+          missingNiceToHaveCount={missingNiceToHaveCount}
+          missingSoftSkillsCount={missingSoftSkillsCount}
+        />
 
         {/* Section 2: Missing Requirements */}
-        <div className="space-y-6 animate-fadeIn">
-          <div className="space-y-3">
-            <div className="flex items-center gap-4">
-              <div className="w-2 h-12 bg-gradient-to-b from-[#2557a7] to-[#1a4a8f] rounded-full shadow-md"></div>
-              <div>
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-                  Missing Requirements
-                </h2>
-                <p className="text-sm md:text-base text-gray-600 mt-2">
-                  Click on skills to add them to your resume and boost your match score
-                </p>
-              </div>
-            </div>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Missing Requirements</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Click skills to add them to your resume and boost your match score
+            </p>
           </div>
 
-          {/* Skills Cards Grid - Reorganized */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Technical Skills Card - Spans 2 columns */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
               <MissingTechnicalSkillsCard
                 criticalSkills={missingCriticalSkills}
@@ -339,8 +330,6 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
                 onRemoveSkill={handleRemoveTechnicalSkill}
               />
             </div>
-
-            {/* Soft Skills Card - Spans 1 column */}
             <div className="lg:col-span-1">
               <MissingSoftSkillsCard
                 softSkills={missingSoftSkills}
@@ -352,41 +341,47 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
         </div>
 
         {/* Section 3: Resume & Job Description Comparison */}
-        <div className="space-y-6 animate-fadeIn">
-          <div className="space-y-3">
-            <div className="flex items-center gap-4">
-              <div className="w-2 h-12 bg-gradient-to-b from-[#2557a7] to-[#1a4a8f] rounded-full shadow-md"></div>
-              <div>
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-                  Match Details
-                </h2>
-                <p className="text-sm md:text-base text-gray-600 mt-2">
-                  Review your resume and job description to see what matches and what's missing
-                </p>
-              </div>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-lg font-bold text-gray-900">Match Details</h2>
+          </div>
+
+          {/* AI Match Engine flow visual */}
+          <div className="flex items-center justify-center gap-3 py-3 px-4 bg-white border border-gray-200 rounded-xl shadow-sm">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+              <FileText className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-xs font-semibold text-gray-700">Your Resume</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-gray-300 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg ring-2 ring-blue-100">
+              <Sparkles className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+              <span className="text-xs font-bold text-blue-700">AI Match Engine</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-gray-300 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+              <Briefcase className="w-3.5 h-3.5 text-violet-500" />
+              <span className="text-xs font-semibold text-gray-700">Job Description</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {/* Resume Preview Column */}
             <div className="flex flex-col">
-              <div className="bg-gradient-to-br from-white to-[#f8fbff] rounded-3xl border border-[#e0eaf5] overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all duration-200">
                 <ResumeHeader
                   onDownload={handleDownload}
                   isDownloading={isDownloading}
+                  pdfBlobUrl={pdfBlobUrl}
                 />
-                <div className="relative h-[600px] bg-gradient-to-b from-[#f9fbff] to-[#f0f6ff]">
+                <div className="relative h-150 bg-gray-50">
                   {isUpdating && (
                     <div className="absolute inset-0 bg-white/95 flex items-center justify-center z-50 backdrop-blur-sm">
                       <div className="flex flex-col items-center gap-3">
-                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#2557a7] border-t-transparent" />
-                        <p className="text-sm font-semibold text-slate-600">
-                          Updating resume...
-                        </p>
+                        <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#2557a7] border-t-transparent" />
+                        <p className="text-sm font-semibold text-slate-600">Updating resume…</p>
                       </div>
                     </div>
                   )}
-
                   {pdfError ? (
                     <div className="h-full flex items-center justify-center">
                       <PDFPreviewError error={pdfError} />
@@ -409,9 +404,9 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
             {/* Job Description Column */}
             <div className="flex flex-col">
-              <div className="bg-gradient-to-br from-white to-[#f8fbff] rounded-3xl border border-[#e0eaf5] overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all duration-200">
                 <JDHeader />
-                <div className="p-6 overflow-y-auto h-[600px] bg-gradient-to-b from-[#f9fbff] to-[#f0f6ff]">
+                <div className="p-5 overflow-y-auto h-150 bg-white">
                   <JDHighlighter
                     text={jdText}
                     matchedSkills={allMatchedSkills}
@@ -422,6 +417,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );

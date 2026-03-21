@@ -149,7 +149,7 @@ export interface ProjectAutoFillRequest {
 export const getProfile = async (): Promise<UserProfile> => {
     try {
         // ✅ httpOnly cookies sent automatically by httpClient with withCredentials
-        const response = await httpClient.get<ApiResponse<UserProfile>>('/profile');
+        const response = await httpClient.get<ApiResponse<UserProfile>>('/profile/');
 
         let profileData: UserProfile;
 

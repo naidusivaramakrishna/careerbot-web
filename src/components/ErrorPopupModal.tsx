@@ -68,14 +68,14 @@ export default function ErrorPopupModal({
   } = { label: "", onClick: () => {}, show: false };
 
   if (isCreditsError) {
-    bgColor = "from-amber-50/95 to-orange-50/95";
-    borderColor = "border-amber-300/50";
-    iconBg = "from-amber-500 to-orange-600";
-    titleColor = "text-amber-900";
-    textColor = "text-amber-800";
+    bgColor = "from-blue-50/95 to-indigo-50/95";
+    borderColor = "border-blue-200/60";
+    iconBg = "from-[#2557a7] to-[#1a3f82]";
+    titleColor = "text-blue-900";
+    textColor = "text-blue-800";
     buttonColor =
-      "from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-amber-600/40 hover:shadow-amber-600/50";
-    iconShadow = "shadow-amber-500/30";
+      "from-[#2557a7] to-[#1a3f82] hover:from-[#1e4d96] hover:to-[#152e60] shadow-blue-600/40 hover:shadow-blue-600/50";
+    iconShadow = "shadow-blue-500/30";
     title = "Insufficient Credits";
     icon = Zap;
     message = error;
