@@ -951,170 +951,221 @@ const EnhancerPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: "linear-gradient(160deg, #f0f4ff 0%, #fafafa 40%, #f5f0ff 100%)" }}>
       {uploading && <LoadingModal />}
 
-      <main className="px-6 py-8 max-w-7xl mx-auto">
+      <main className="px-8 py-10 max-w-6xl mx-auto">
 
-        {/* Page Title */}
-        <div className="mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#e8eff9] border border-[#c3d4ef] mb-3">
+        {/* ══════════════════════════════════════════
+            HERO
+        ══════════════════════════════════════════ */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 border border-[#dde8fb] shadow-sm backdrop-blur mb-6">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <Sparkles className="w-3.5 h-3.5 text-[#2557a7]" />
-            <span className="text-xs font-semibold text-[#2557a7]">AI-Powered Enhancement</span>
+            <span className="text-xs font-semibold text-[#2557a7] tracking-wide">AI Resume Optimizer · GPT-4 Powered</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Enhance Your Resume</h1>
-          <p className="text-sm text-gray-500">Upload your resume and let AI optimize it for ATS systems and recruiters.</p>
+          <h1 className="text-[2.75rem] font-black text-gray-900 leading-[1.1] tracking-tight mb-4">
+            Beat the ATS.{" "}
+            <span style={{ background: "linear-gradient(135deg, #2557a7 0%, #7c3aed 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              Get Hired Faster.
+            </span>
+          </h1>
+          <p className="text-[15px] text-gray-500 max-w-xl mx-auto leading-relaxed">
+            Upload your resume once. Our AI detects every gap, rewrites weak bullets, and returns a polished, ATS-ready document in seconds.
+          </p>
         </div>
 
-        {/* Two-column layout */}
-        <div className="grid grid-cols-[1fr_380px] gap-6">
+        {/* ══════════════════════════════════════════
+            MAIN LAYOUT
+        ══════════════════════════════════════════ */}
+        <div className="grid grid-cols-[1fr_340px] gap-6 items-start">
 
-          {/* LEFT: Upload */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Upload zone */}
-            <div
-              className={`m-6 border-2 border-dashed rounded-xl transition-all duration-200 flex flex-col items-center justify-center py-16 px-8 ${
-                dragActive
-                  ? "border-[#2557a7] bg-[#e8eff9]"
-                  : uploadedFileName
-                  ? "border-green-400 bg-green-50"
-                  : "border-gray-300 bg-gray-50 hover:border-[#2557a7] hover:bg-[#e8eff9]/40"
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              {uploadedFileName ? (
-                <>
-                  <div className="w-16 h-16 rounded-2xl bg-green-100 flex items-center justify-center mb-4">
-                    <Check className="w-8 h-8 text-green-600" />
+          {/* ── LEFT: Upload + Stats ── */}
+          <div className="flex flex-col gap-5">
+
+            {/* Upload Card */}
+            <div className="bg-white/90 backdrop-blur rounded-3xl border border-white shadow-xl shadow-gray-200/60 overflow-hidden">
+
+
+              {/* Drop Zone */}
+              <div
+                className={`m-6 rounded-2xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center py-16 px-10 cursor-pointer select-none ${
+                  dragActive
+                    ? "border-[#2557a7] bg-[#eef3ff]"
+                    : uploadedFileName
+                    ? "border-emerald-400 bg-emerald-50/60"
+                    : "border-gray-200 bg-gray-50/80 hover:border-[#2557a7]/50 hover:bg-[#f4f7ff]"
+                }`}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+              >
+                {uploadedFileName ? (
+                  <div className="text-center">
+                    <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-100">
+                      <Check className="w-9 h-9 text-emerald-600" />
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 mb-1">{uploadedFileName}</p>
+                    <p className="text-sm text-emerald-600 font-semibold">Uploaded · AI is analyzing your resume…</p>
                   </div>
-                  <p className="text-base font-semibold text-gray-900 mb-1">{uploadedFileName}</p>
-                  <p className="text-sm text-green-600 font-medium">File ready — processing...</p>
-                </>
-              ) : (
-                <>
-                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-5 transition-all duration-200 ${
-                    dragActive ? "bg-[#2557a7] scale-110" : "bg-[#e8eff9]"
-                  }`}>
-                    <Upload className={`w-7 h-7 transition-colors ${dragActive ? "text-white" : "text-[#2557a7]"}`} />
+                ) : (
+                  <div className="text-center">
+                    {/* Icon cluster */}
+                    <div className={`relative mx-auto mb-6 w-20 h-20 transition-transform duration-300 ${dragActive ? "scale-110" : "hover:scale-105"}`}>
+                      <div className="absolute inset-0 rounded-2xl rotate-6 opacity-20" style={{ background: "linear-gradient(135deg, #2557a7, #7c3aed)" }} />
+                      <div className="absolute inset-0 rounded-2xl -rotate-3 opacity-10" style={{ background: "linear-gradient(135deg, #7c3aed, #0891b2)" }} />
+                      <div className="absolute inset-0 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #eef3ff, #f3eeff)" }}>
+                        <Upload className="w-9 h-9 text-[#2557a7]" />
+                      </div>
+                    </div>
+
+                    <h3 className="text-xl font-black text-gray-900 mb-1.5">
+                      {dragActive ? "Release to upload" : "Drop your resume here"}
+                    </h3>
+                    <p className="text-sm text-gray-400 mb-7">PDF or DOCX · Instant AI analysis · 100% private</p>
+
+                    <label className="cursor-pointer group">
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.doc,.html,.rtf,.txt"
+                        className="hidden"
+                        onChange={handleFileSelect}
+                        disabled={uploading}
+                      />
+                      <span className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-2xl font-bold text-white text-sm shadow-lg shadow-blue-900/20 transition-all duration-200 group-hover:shadow-xl group-hover:shadow-blue-900/30 group-hover:-translate-y-0.5"
+                        style={{ background: "linear-gradient(135deg, #2557a7 0%, #7c3aed 100%)" }}>
+                        <FileText className="w-4 h-4" />
+                        Choose File to Upload
+                      </span>
+                    </label>
                   </div>
+                )}
+              </div>
 
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    {dragActive ? "Drop your resume here" : "Drag & drop your resume"}
-                  </h3>
-                  <p className="text-sm text-gray-500 mb-7">or click the button below to browse files</p>
-
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      accept=".pdf,.docx,.doc,.html,.rtf,.txt"
-                      className="hidden"
-                      onChange={handleFileSelect}
-                      disabled={uploading}
-                    />
-                    <span className="inline-flex items-center gap-2.5 px-7 py-3 bg-[#2557a7] hover:bg-[#1a4a8f] text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg text-sm">
-                      <FileText className="w-4 h-4" />
-                      Browse Files
-                    </span>
-                  </label>
-
-                  <p className="text-xs text-gray-400 mt-5">PDF, DOCX supported</p>
-                </>
-              )}
+              {/* Trust Row */}
+              <div className="mx-6 mb-6 grid grid-cols-3 divide-x divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden bg-gray-50/60">
+                {[
+                  { icon: "🔐", label: "256-bit SSL", sub: "Bank-grade security" },
+                  { icon: "⚡", label: "~20 Seconds", sub: "Instant analysis" },
+                  { icon: "🧠", label: "GPT-4 AI", sub: "State-of-the-art" },
+                ].map((item) => (
+                  <div key={item.label} className="flex flex-col items-center gap-1 px-4 py-3.5 text-center">
+                    <span className="text-lg leading-none mb-0.5">{item.icon}</span>
+                    <p className="text-[11px] font-bold text-gray-800">{item.label}</p>
+                    <p className="text-[10px] text-gray-400">{item.sub}</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Trust indicators */}
-            <div className="mx-6 mb-6 grid grid-cols-3 gap-3">
+            {/* Stats Row */}
+            <div className="grid grid-cols-3 gap-4">
               {[
-                { icon: "🔒", label: "Secure Upload", sub: "256-bit encrypted" },
-                { icon: "⚡", label: "Instant Results", sub: "Under 30 seconds" },
-                { icon: "🤖", label: "AI Powered", sub: "GPT-4 analysis" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                  <span className="text-lg">{item.icon}</span>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-800">{item.label}</p>
-                    <p className="text-[11px] text-gray-400">{item.sub}</p>
-                  </div>
+                { value: "10,000+", label: "Resumes optimized", color: "#2557a7" },
+                { value: "+38%", label: "Avg. ATS score boost", color: "#7c3aed" },
+                { value: "94%", label: "Report better results", color: "#059669" },
+              ].map((s) => (
+                <div key={s.label} className="bg-white/90 backdrop-blur rounded-2xl border border-white shadow-md shadow-gray-200/50 px-5 py-4 text-center">
+                  <p className="text-2xl font-black leading-none mb-1" style={{ color: s.color }}>{s.value}</p>
+                  <p className="text-[11px] text-gray-400 font-medium leading-tight">{s.label}</p>
                 </div>
               ))}
             </div>
 
-            {/* Social proof */}
-            <div className="mx-6 mb-6 flex items-center gap-3 p-4 rounded-xl bg-[#e8eff9]/50 border border-[#c3d4ef]">
-              <div className="flex -space-x-2 shrink-0">
-                {["#4f46e5","#0891b2","#059669","#d97706"].map((color, i) => (
-                  <div key={i} className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-white" style={{ background: color }}>
-                    {String.fromCharCode(65 + i)}
-                  </div>
-                ))}
+            {/* Social Proof */}
+            <div className="flex items-center justify-between px-5 py-4 rounded-2xl bg-white/80 border border-white shadow-sm backdrop-blur">
+              <div className="flex items-center gap-3">
+                <div className="flex -space-x-2.5">
+                  {["#2557a7","#7c3aed","#059669","#d97706","#dc2626"].map((c, i) => (
+                    <div key={i} className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-black text-white shadow-sm" style={{ background: c }}>
+                      {String.fromCharCode(65 + i)}
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-xs font-black text-gray-900">Join 10,000+ professionals</p>
+                  <p className="text-[10px] text-gray-400">who boosted their interviews this month</p>
+                </div>
               </div>
-              <p className="text-xs text-gray-600">
-                <span className="font-bold text-gray-900">10,000+</span> professionals enhanced their resumes this month
-              </p>
+              <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-xl">
+                {[...Array(5)].map((_, i) => (
+                  <svg key={i} className="w-3 h-3 fill-amber-400" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                ))}
+                <span className="text-[10px] font-bold text-amber-700 ml-0.5">4.9</span>
+              </div>
             </div>
           </div>
 
-          {/* RIGHT: How it works + features */}
-          <div className="flex flex-col gap-5">
+          {/* ── RIGHT: Steps + Improvements + Score ── */}
+          <div className="flex flex-col gap-4 sticky top-6">
 
             {/* How it works */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-sm font-bold text-gray-900 mb-4">How it works</h3>
-              <div className="space-y-4">
+            <div className="bg-white/90 backdrop-blur rounded-3xl border border-white shadow-xl shadow-gray-200/50 p-6 overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-28 h-28 rounded-full opacity-5 -translate-y-8 translate-x-8" style={{ background: "linear-gradient(135deg, #2557a7, #7c3aed)" }} />
+              <p className="text-[10px] font-black text-[#2557a7] uppercase tracking-[0.15em] mb-5">How it works</p>
+              <div className="space-y-1">
                 {[
-                  { step: "1", title: "Upload Resume", desc: "PDF, DOCX or any common format", color: "#2557a7" },
-                  { step: "2", title: "AI Analysis", desc: "Our AI scans for ATS issues and gaps", color: "#7c3aed" },
-                  { step: "3", title: "Review Suggestions", desc: "Accept or skip AI improvements", color: "#0891b2" },
-                  { step: "4", title: "Export & Apply", desc: "Download a polished, ATS-ready resume", color: "#059669" },
-                ].map((item) => (
-                  <div key={item.step} className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5" style={{ background: item.color }}>
-                      {item.step}
+                  { n: "1", title: "Upload Resume", desc: "PDF or DOCX, any format", grad: "from-[#2557a7] to-[#1a3f7a]" },
+                  { n: "2", title: "AI Deep Scan", desc: "Detects every ATS gap instantly", grad: "from-[#7c3aed] to-[#5b21b6]" },
+                  { n: "3", title: "Review & Apply", desc: "One-click per improvement", grad: "from-[#0891b2] to-[#0e7490]" },
+                  { n: "4", title: "Export & Apply", desc: "Download recruiter-ready PDF", grad: "from-[#059669] to-[#047857]" },
+                ].map((item, idx) => (
+                  <div key={item.n} className="flex items-start gap-3.5 relative">
+                    {idx < 3 && <div className="absolute left-[17px] top-[36px] w-px h-6 bg-gray-100 z-0" />}
+                    <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${item.grad} flex items-center justify-center text-white text-xs font-black shrink-0 z-10 shadow-sm`}>
+                      {item.n}
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{item.title}</p>
-                      <p className="text-xs text-gray-500">{item.desc}</p>
+                    <div className="py-1.5 pb-4 last:pb-0">
+                      <p className="text-sm font-bold text-gray-900 leading-tight">{item.title}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{item.desc}</p>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* What gets improved */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-sm font-bold text-gray-900 mb-4">What gets improved</h3>
-              <div className="space-y-2.5">
+            {/* What AI fixes */}
+            <div className="bg-white/90 backdrop-blur rounded-3xl border border-white shadow-xl shadow-gray-200/50 p-6">
+              <p className="text-[10px] font-black text-[#2557a7] uppercase tracking-[0.15em] mb-4">What AI fixes</p>
+              <div className="space-y-2">
                 {[
-                  { icon: "📌", label: "ATS Keyword Optimization" },
-                  { icon: "✏️", label: "Bullet Point Rewriting" },
+                  { icon: "🎯", label: "ATS Keyword Gaps" },
+                  { icon: "✍️", label: "Weak Bullet Points" },
                   { icon: "📐", label: "Format & Structure" },
-                  { icon: "💼", label: "Professional Language" },
-                  { icon: "📊", label: "Impact & Metrics" },
-                  { icon: "🎯", label: "Role-Specific Tailoring" },
+                  { icon: "📊", label: "Missing Metrics" },
+                  { icon: "💼", label: "Professional Tone" },
+                  { icon: "🔍", label: "Role Alignment" },
                 ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-2.5">
-                    <span className="text-sm">{item.icon}</span>
-                    <span className="text-sm text-gray-700">{item.label}</span>
-                    <Sparkles className="w-3 h-3 text-[#2557a7] ml-auto" />
+                  <div key={item.label} className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f4f7ff] transition-colors group cursor-default">
+                    <span className="text-base leading-none">{item.icon}</span>
+                    <span className="text-xs font-semibold text-gray-700 flex-1">{item.label}</span>
+                    <Check className="w-3.5 h-3.5 text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Score preview */}
-            <div className="bg-gradient-to-br from-[#2557a7] to-[#1a3f7a] rounded-2xl p-5 text-white">
-              <p className="text-xs font-semibold text-blue-200 mb-1">Average result</p>
-              <div className="flex items-end gap-2 mb-3">
-                <span className="text-4xl font-bold">+38%</span>
-                <span className="text-sm text-blue-200 mb-1">ATS score improvement</span>
+            {/* Score Card */}
+            <div className="rounded-3xl p-6 text-white relative overflow-hidden shadow-xl"
+              style={{ background: "linear-gradient(135deg, #0f2a5e 0%, #2557a7 55%, #6d28d9 100%)" }}>
+              <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-white/10" />
+              <div className="absolute -bottom-4 -left-4 w-20 h-20 rounded-full bg-white/5" />
+              <div className="relative">
+                <p className="text-[10px] font-bold text-blue-300 uppercase tracking-[0.15em] mb-1">Average result</p>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-5xl font-black leading-none">+38%</span>
+                </div>
+                <p className="text-sm text-blue-200 mb-4">ATS score improvement</p>
+                <div className="h-1.5 rounded-full bg-white/20 mb-1.5 overflow-hidden">
+                  <div className="h-full rounded-full bg-white" style={{ width: "78%" }} />
+                </div>
+                <div className="flex justify-between">
+                  <p className="text-[10px] text-blue-300">Before upload</p>
+                  <p className="text-[10px] text-blue-300">After AI enhancement</p>
+                </div>
               </div>
-              <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-                <div className="h-full bg-white rounded-full" style={{ width: "78%" }} />
-              </div>
-              <p className="text-xs text-blue-200 mt-2">Based on 10,000+ resumes enhanced</p>
             </div>
 
           </div>

@@ -10,7 +10,7 @@ import SectionEditorModal from "../_components/SectionEditorModal";
 import ExportModal from "../_components/ExportModal";
 import TemplateSelectionModal from "../_components/TemplateSelectionModal";
 import type { Improvement } from "@/types/api.types";
-import { applyFix, getEnhancedResume } from "@/api/enhancerApi";
+import { applyFix, deleteFix, getEnhancedResume, enhanceResume } from "@/api/enhancerApi";
 
 import {
   useResume,
@@ -78,6 +78,8 @@ export default function BuilderPage() {
   const allImprovementsRef = useRef<Improvement[]>([]);
   // Track permanently ignored suggestions (user clicked "Ignore") — never restore these
   const [ignoredIds, setIgnoredIds] = useState<Set<string>>(new Set());
+  // Track applied fixes: field name → original suggestion_id (e.g. { email: 'contact_issue_0' })
+  const appliedFixesRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     if (isLoaded && !resumeData) router.push("/enhancer");
@@ -1117,38 +1119,46 @@ export default function BuilderPage() {
                     </h3>
 
                     {/* ATS Score Badge */}
-                    {atsScore?.final_score !== undefined && (
-                      <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-4 mb-2">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-0.5">ATS Score</p>
-                            {atsScore.profile && (
-                              <p className="text-[11px] text-gray-500">{atsScore.profile}{atsScore.domain ? ` · ${atsScore.domain}` : ''}</p>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-3xl font-black leading-none ${
-                              (atsScore.final_score ?? 0) >= 80 ? 'text-emerald-600'
-                              : (atsScore.final_score ?? 0) >= 50 ? 'text-amber-500'
-                              : 'text-red-500'
-                            }`}>
-                              {Math.round(atsScore.final_score ?? 0)}
-                            </p>
-                            <p className="text-[10px] text-gray-400 font-medium">/ {atsScore.max_score ?? 100}</p>
+                    {atsScore?.final_score !== undefined && (() => {
+                      const score = Math.round(atsScore.final_score ?? 0);
+                      const maxScore = atsScore.max_score ?? 100;
+                      const radius = 54;
+                      const circumference = 2 * Math.PI * radius;
+                      const offset = circumference - (score / maxScore) * circumference;
+                      const scoreColor = score >= 80 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
+                      return (
+                        <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-4 mb-2">
+                          <div className="flex items-center gap-5">
+                            {/* Circular progress */}
+                            <div className="flex-shrink-0">
+                              <svg width="128" height="128" viewBox="0 0 128 128">
+                                <circle cx="64" cy="64" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="10" />
+                                <circle
+                                  cx="64" cy="64" r={radius}
+                                  fill="none"
+                                  stroke={scoreColor}
+                                  strokeWidth="10"
+                                  strokeLinecap="round"
+                                  strokeDasharray={circumference}
+                                  strokeDashoffset={offset}
+                                  transform="rotate(-90 64 64)"
+                                  style={{ transition: 'stroke-dashoffset 0.7s ease' }}
+                                />
+                                <text x="64" y="58" textAnchor="middle" dominantBaseline="middle" fontSize="28" fontWeight="900" fill={scoreColor}>{score}</text>
+                                <text x="64" y="80" textAnchor="middle" dominantBaseline="middle" fontSize="12" fill="#9ca3af">/ {maxScore}</text>
+                              </svg>
+                            </div>
+                            {/* Labels */}
+                            <div>
+                              <p className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-1">ATS Score</p>
+                              {atsScore.profile && (
+                                <p className="text-xs text-gray-500">{atsScore.profile}{atsScore.domain ? ` · ${atsScore.domain}` : ''}</p>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div className="mt-3 h-2 bg-white/60 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-700 ${
-                              (atsScore.final_score ?? 0) >= 80 ? 'bg-emerald-500'
-                              : (atsScore.final_score ?? 0) >= 50 ? 'bg-amber-400'
-                              : 'bg-red-400'
-                            }`}
-                            style={{ width: `${Math.min(100, Math.round(atsScore.final_score ?? 0))}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     <p className="text-sm text-gray-600 mb-3">
                       Review and apply AI-powered improvements to boost your resume.
@@ -1173,17 +1183,6 @@ export default function BuilderPage() {
                                 {s.reason}
                               </p>
                             </div>
-                            {s.impact_points && (
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
-                                s.impact === 'high'
-                                  ? 'bg-red-100 text-red-700'
-                                  : s.impact === 'medium'
-                                  ? 'bg-orange-100 text-orange-700'
-                                  : 'bg-[#e8eff9] text-[#2557a7]'
-                              }`}>
-                                +{s.impact_points} pts
-                              </span>
-                            )}
                           </div>
 
                           {s.original && (
@@ -1319,6 +1318,10 @@ export default function BuilderPage() {
                   const value = changedFieldNames.length > 0
                     ? (fieldValueMap[changedFieldNames[0]] || undefined)
                     : undefined;
+                  // Record which field this fix was applied to (for later deletion)
+                  if (changedFieldNames.length > 0) {
+                    appliedFixesRef.current[changedFieldNames[0]] = originalId;
+                  }
                   applyFix({
                     enhancer_state: enhancedId,
                     suggestion_id: originalId,
@@ -1327,6 +1330,32 @@ export default function BuilderPage() {
                   }).then(handleFixResult).catch(() => { /* best-effort */ });
                 }
               } else if (changedFieldNames.length > 0) {
+                // Detect cleared fields → call deleteFix to reverse the score + restore suggestion
+                for (const field of changedFieldNames) {
+                  const clearedValue = (fieldValueMap[field] ?? '').trim() === '';
+                  const appliedSuggestionId = appliedFixesRef.current[field];
+                  if (clearedValue && appliedSuggestionId) {
+                    deleteFix({ enhancer_state: enhancedId, suggestion_id: appliedSuggestionId })
+                      .then(result => {
+                        delete appliedFixesRef.current[field];
+                        handleFixResult(result);
+                        // Restore the suggestion back to the list from the backup
+                        const restored = allImprovementsRef.current.find(
+                          imp => imp.original_suggestion_id === appliedSuggestionId
+                        );
+                        if (restored && !ignoredIds.has(restored.id)) {
+                          setImprovements(prev => {
+                            if (prev.some(imp => imp.id === restored.id)) return prev;
+                            const updated = [...prev, restored];
+                            sessionStorage.setItem('improvements', JSON.stringify(updated));
+                            return updated;
+                          });
+                        }
+                      })
+                      .catch(() => { /* best-effort */ });
+                  }
+                }
+
                 // User directly edited sections — apply fix for each matched suggestion
                 const matchedImps = improvements.filter(imp => toRemove.has(imp.id));
                 matchedImps.forEach(imp => {
@@ -1334,12 +1363,18 @@ export default function BuilderPage() {
                   if (!originalId) return;
                   const titleLower = (imp.title || '').toLowerCase();
                   let value: string | undefined;
+                  let matchedField: string | undefined;
                   for (const field of changedFieldNames) {
                     const keywords = fieldKeywords[field] || [field.toLowerCase()];
                     if (keywords.some(kw => titleLower.includes(kw))) {
                       value = fieldValueMap[field] || undefined;
+                      matchedField = field;
                       break;
                     }
+                  }
+                  // Record applied fix for future deletion
+                  if (matchedField) {
+                    appliedFixesRef.current[matchedField] = originalId;
                   }
                   applyFix({
                     enhancer_state: enhancedId,
@@ -1348,6 +1383,28 @@ export default function BuilderPage() {
                     value,
                   }).then(handleFixResult).catch(() => { /* best-effort */ });
                 });
+
+                // If no suggestion was matched but skills changed (e.g. user removed a skill),
+                // call POST /resume/enhance to recalculate the ATS score
+                const skillFields = Object.keys(fieldKeywords).filter(f =>
+                  (fieldKeywords[f] ?? []).some((kw: string) => kw.includes('skill'))
+                );
+                const skillChanged = changedFieldNames.some(f => skillFields.includes(f));
+                if (matchedImps.length === 0 && skillChanged) {
+                  const originalResumeId = sessionStorage.getItem('original_resume_id') || sessionStorage.getItem('resume_id');
+                  if (originalResumeId) {
+                    enhanceResume({ resume_id: originalResumeId })
+                      .then(result => {
+                        const newBreakdown = result.enhancer_state?.ats_breakdown as Record<string, unknown> | undefined;
+                        if (newBreakdown) {
+                          const newScore = buildAtsScore(newBreakdown);
+                          sessionStorage.setItem('ats_score', JSON.stringify(newScore));
+                          setAtsScore(newScore);
+                        }
+                      })
+                      .catch(() => { /* best-effort */ });
+                  }
+                }
               }
             }
           }}

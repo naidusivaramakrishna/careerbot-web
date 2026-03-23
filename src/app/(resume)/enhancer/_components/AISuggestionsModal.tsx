@@ -140,17 +140,6 @@ export default function AISuggestionsModal({
                           </p>
                         </div>
                       </div>
-                      <span
-                        className={`ml-3 px-2.5 py-1 rounded-full text-xs font-medium ${
-                          improvement.impact === "high"
-                            ? "bg-red-100 text-red-700"
-                            : improvement.impact === "medium"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        +{improvement.impact_points} pts
-                      </span>
                     </div>
 
                     {/* Before/After */}

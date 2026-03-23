@@ -383,6 +383,29 @@ export async function applyFix(request: ApplyFixRequest): Promise<EnhanceResumeR
   return response;
 }
 
+/* ========== DELETE FIX ========== */
+
+export interface DeleteFixRequest {
+  enhancer_state: string; // enhanced_resume_id
+  suggestion_id: string;
+}
+
+/**
+ * Undo a previously applied fix (e.g. user clears an added field).
+ * POST /api/v1/resume/enhance/delete-fix
+ *
+ * @param request - { enhancer_state, suggestion_id }
+ * @returns Updated enhancer response with fix removed and refreshed ATS score
+ */
+export async function deleteFix(request: DeleteFixRequest): Promise<EnhanceResumeResponse> {
+  logger.api.request('POST', '/resume/enhance/delete-fix', {
+    suggestion_id: request.suggestion_id,
+  });
+  const response = await safePost<EnhanceResumeResponse>('/resume/enhance/delete-fix', request);
+  logger.debug('Fix deleted', { suggestion_id: request.suggestion_id });
+  return response;
+}
+
 /* ========== COMPLETE WORKFLOW HELPER ========== */
 
 /**
@@ -438,6 +461,7 @@ export const enhancerApi = {
   parseResumeForEnhancer,
   enhanceResume,
   applyFix,
+  deleteFix,
   getEnhancedResume,
   updateEnhancedResume,
   deleteEnhancedResume,

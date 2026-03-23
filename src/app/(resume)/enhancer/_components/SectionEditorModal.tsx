@@ -533,21 +533,24 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
           portifolioUrl: formData.portfolioUrl || "",
         };
 
-        // Detect fields that were empty before and now have a value
+        // Detect fields that changed (added or cleared)
         const newlyAdded: string[] = [];
-        if (!orig.email && newPersonalInfo.email) newlyAdded.push("email");
-        if (!orig.phone && newPersonalInfo.phone) newlyAdded.push("phone");
-        if (!orig.location && newPersonalInfo.location) newlyAdded.push("location");
-        if (!orig.linkedinUrl && newPersonalInfo.linkedinUrl) newlyAdded.push("linkedinUrl");
-        if (!orig.githubUrl && newPersonalInfo.githubUrl) newlyAdded.push("githubUrl");
-        if (!orig.portifolioUrl && newPersonalInfo.portifolioUrl) newlyAdded.push("portifolioUrl");
-        if (newlyAdded.length) {
-          addAddedFields("PersonalInfo", newlyAdded);
+        const cleared: string[] = [];
+        const contactFields = ["email", "phone", "location", "linkedinUrl", "githubUrl", "portifolioUrl"] as const;
+        for (const f of contactFields) {
+          const oldVal = (orig as Record<string, string>)[f] || "";
+          const newVal = (newPersonalInfo as Record<string, string>)[f] || "";
+          if (!oldVal && newVal) newlyAdded.push(f);
+          else if (oldVal && !newVal) cleared.push(f);
+        }
+        const allChanged = [...newlyAdded, ...cleared];
+        if (allChanged.length) {
+          if (newlyAdded.length) addAddedFields("PersonalInfo", newlyAdded);
           didChange = true;
-          changedFieldNames = newlyAdded;
-          // Capture actual values so builder can pass them to applyFix without stale closure
+          changedFieldNames = allChanged;
+          // Capture actual values (empty string for cleared fields)
           changedFieldValues = Object.fromEntries(
-            newlyAdded.map(f => [f, (newPersonalInfo as Record<string, string>)[f] || ''])
+            allChanged.map(f => [f, (newPersonalInfo as Record<string, string>)[f] || ''])
           );
         }
 
