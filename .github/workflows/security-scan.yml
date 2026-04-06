@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [master, develop2]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   npm-audit:
     name: npm audit

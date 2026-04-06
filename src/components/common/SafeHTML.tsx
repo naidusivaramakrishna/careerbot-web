@@ -1,6 +1,5 @@
 "use client";
-
-import DOMPurify from "dompurify";
+import { useEffect, useState } from "react";
 
 interface SafeHTMLProps {
   content: string;
@@ -13,10 +12,18 @@ export default function SafeHTML({
   className,
   as: Tag = "div",
 }: SafeHTMLProps) {
+  const [sanitized, setSanitized] = useState(content);
+
+  useEffect(() => {
+    import("dompurify").then((mod) => {
+      setSanitized(mod.default.sanitize(content));
+    });
+  }, [content]);
+
   return (
     <Tag
       className={className}
-      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
+      dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   );
 }
