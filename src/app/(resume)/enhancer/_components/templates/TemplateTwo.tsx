@@ -11,6 +11,7 @@ import {
 import { ResumeData, ResumeStyle, useResume } from "../ResumeContext";
 import AutoPaginator from "../AutoPaginator";
 import { cleanResumeContent } from "../../_utils/cleanResumeData";
+import SafeHTML from "@/components/common/SafeHTML";
 
 type SectionName =
   | "Summary"
@@ -271,11 +272,7 @@ const TemplateTwo: React.FC<Props> = ({
               PROFESSIONAL SUMMARY
             </h3>
             {cleanSummary ? (
-              <div
-                className="text-justify resume-description"
-                style={baseTextStyle}
-                dangerouslySetInnerHTML={{ __html: cleanSummary }}
-              />
+              <SafeHTML content={cleanSummary} className="text-justify resume-description" />
             ) : (
               <p style={placeholderStyle}>Add your professional summary here</p>
             )}
@@ -315,11 +312,7 @@ const TemplateTwo: React.FC<Props> = ({
                     </div>
                   </div>
                   {exp.description && (
-                    <div
-                      className="mt-2 resume-description"
-                      style={isFieldAdded("Experience", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: exp.description }}
-                    />
+                    <SafeHTML content={exp.description} className="mt-2 resume-description" />
                   )}
                 </div>
               ))
@@ -395,11 +388,7 @@ const TemplateTwo: React.FC<Props> = ({
                     )}
                   </div>
                   {proj.description && (
-                    <div
-                      className="mb-2 resume-description"
-                      style={isFieldAdded("Projects", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: proj.description }}
-                    />
+                    <SafeHTML content={proj.description} className="mb-2 resume-description" />
                   )}
                 </div>
               ))
@@ -497,11 +486,7 @@ const TemplateTwo: React.FC<Props> = ({
                     )}
                   </div>
                   {intern.description && (
-                    <div
-                      className="mt-2 resume-description"
-                      style={isFieldAdded("Internships", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: intern.description }}
-                    />
+                    <SafeHTML content={intern.description} className="mt-2 resume-description" />
                   )}
                 </div>
               ))
@@ -570,11 +555,7 @@ const TemplateTwo: React.FC<Props> = ({
                     )}
                   </div>
                   {achievement.description && (
-                    <div
-                      className="text-sm resume-description"
-                      style={isFieldAdded("Achievements", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: achievement.description }}
-                    />
+                    <SafeHTML content={achievement.description} className="text-sm resume-description" />
                   )}
                 </div>
               ))
@@ -636,11 +617,7 @@ const TemplateTwo: React.FC<Props> = ({
                     )}
                   </div>
                   {vol.description && (
-                    <div
-                      className="text-sm mt-1"
-                      style={isFieldAdded("Volunteering", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: vol.description }}
-                    />
+                    <SafeHTML content={vol.description} className="text-sm mt-1" />
                   )}
                 </div>
               ))
@@ -663,11 +640,7 @@ const TemplateTwo: React.FC<Props> = ({
                     {hl("Hobbies", idx, "name", hobby.name)}
                   </span>
                   {hobby.description && (
-                    <span
-                      className="resume-description"
-                      style={isFieldAdded("Hobbies", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: ` — ${hobby.description}` }}
-                    />
+                    <SafeHTML content={` — ${hobby.description}`} className="resume-description" as="span" />
                   )}
                   {hobby.proficiencyLevel && (
                     <span className="text-sm" style={baseTextStyle}>
@@ -700,11 +673,7 @@ const TemplateTwo: React.FC<Props> = ({
                     </span>
                   )}
                   {interest.description && (
-                    <span
-                      className="resume-description"
-                      style={isFieldAdded("Interests", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: ` — ${interest.description}` }}
-                    />
+                    <SafeHTML content={` — ${interest.description}`} className="resume-description" as="span" />
                   )}
                 </div>
               ))

@@ -1,60 +1,49 @@
-
-// "use client";
-
-// export default function CareerTip() {
-//   return (
-//     <div className="bg-white rounded-xl  p-4 space-y-5">
-//       <h3 className="font-semibold">Career Tips</h3>
-
-//       <div className="border  rounded-lg p-3">
-//         <p className="text-sm font-medium text-indigo-600">
-//           Improve Skill
-//         </p>
-//         <p className="text-sm text-gray-500">
-//           Adding “Figma Prototyping” could increase your match by 15%.
-//         </p>
-//       </div>
-
-//       <div className="border rounded-lg p-4">
-//         <p className="text-sm font-medium text-green-600">
-//           Market Trend
-//         </p>
-//         <p className="text-sm text-gray-500">
-//           Fintech companies are hiring 20% more designers this month.
-//         </p>
-//       </div>
-//     </div>
-//   );
-// }
-
-
 "use client";
+import { Lightbulb, TrendingUp } from "lucide-react";
 
-import { Lightbulb, BarChart3 } from "lucide-react";
+const tips = [
+  {
+    icon: Lightbulb,
+    iconBg: "bg-amber-50",
+    iconColor: "text-amber-500",
+    label: "Skill Tip",
+    labelColor: "text-amber-700",
+    text: 'Adding "Figma Prototyping" could increase your match rate by 15%.',
+  },
+  {
+    icon: TrendingUp,
+    iconBg: "bg-emerald-50",
+    iconColor: "text-emerald-500",
+    label: "Market Trend",
+    labelColor: "text-emerald-700",
+    text: "Fintech companies are hiring 20% more designers this quarter.",
+  },
+];
 
 export default function CareerTip() {
   return (
-    <div className="bg-white rounded-xl border p-4 space-y-3">
-      <h3 className="font-semibold">Career Tips</h3>
-
-      <div className="border rounded-lg p-3">
-        <p className="flex items-center gap-2 text-sm font-medium text-indigo-600">
-          <Lightbulb size={14} />
-          Improve Skill
-        </p>
-        <p className="text-sm text-gray-500">
-          Adding “Figma Prototyping” could increase your match by 15%.
-        </p>
-      </div>
-
-      <div className="border rounded-lg p-3">
-        <p className="flex items-center gap-2 text-sm font-medium text-green-600">
-          <BarChart3 size={14} />
-          Market Trend
-        </p>
-        <p className="text-sm text-gray-500">
-          Fintech companies are hiring 20% more designers this month.
-        </p>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <h3 className="text-sm font-semibold text-gray-900 mb-4">Career Insights</h3>
+      <div className="space-y-3">
+        {tips.map((tip) => {
+          const Icon = tip.icon;
+          return (
+            <div
+              key={tip.label}
+              className="flex gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100"
+            >
+              <div
+                className={`w-7 h-7 rounded-lg ${tip.iconBg} flex items-center justify-center flex-shrink-0 mt-0.5`}
+              >
+                <Icon size={13} className={tip.iconColor} />
+              </div>
+              <div>
+                <p className={`text-xs font-semibold mb-0.5 ${tip.labelColor}`}>{tip.label}</p>
+                <p className="text-xs text-gray-500 leading-relaxed">{tip.text}</p>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

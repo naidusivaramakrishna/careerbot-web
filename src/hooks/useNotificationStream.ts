@@ -25,6 +25,7 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
   const [isConnected, setIsConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
 
   // Connect to notification stream
   const connect = useCallback(() => {
@@ -40,14 +41,24 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
           onNotification?.(notification);
         },
         () => {
+          // Close and clear the dead connection so the next connect() call works
+          eventSourceRef.current?.close();
+          eventSourceRef.current = null;
           setIsConnected(false);
-          // Attempt to reconnect after 5 seconds
+
+          // Exponential backoff: 5s, 10s, 20s, capped at 30s
+          const delay = Math.min(5000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+          reconnectAttemptsRef.current += 1;
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, 5000);
-        }
+          }, delay);
+        },
+        () => {
+          // Successfully opened — reset backoff counter
+          reconnectAttemptsRef.current = 0;
+          setIsConnected(true);
+        },
       );
-      setIsConnected(true);
     } catch (err) {
       console.error('Failed to connect to notification stream:', err);
       setIsConnected(false);

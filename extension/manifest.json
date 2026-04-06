@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "CareerBot - Resume Tailor",
-  "version": "1.0.0",
-  "description": "Auto-detect job descriptions from LinkedIn, Naukri, Indeed and tailor your resume in 1 click.",
+  "version": "1.1.0",
+  "description": "Auto-detect job descriptions from LinkedIn, Naukri, Indeed, Glassdoor, Shine, TimesJobs, Internshala, Foundit, ZipRecruiter, Wellfound, Greenhouse, Lever and tailor your resume in 1 click.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -39,9 +39,91 @@
     {
       "matches": [
         "https://www.indeed.co.in/*",
-        "https://in.indeed.com/*"
+        "https://in.indeed.com/*",
+        "https://www.indeed.com/*"
       ],
       "js": ["content-scripts/indeed-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.glassdoor.com/*",
+        "https://glassdoor.com/*",
+        "https://www.glassdoor.co.in/*",
+        "https://glassdoor.co.in/*"
+      ],
+      "js": ["content-scripts/glassdoor-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.shine.com/*",
+        "https://shine.com/*"
+      ],
+      "js": ["content-scripts/shine-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.timesjobs.com/*"
+      ],
+      "js": ["content-scripts/timesjobs-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://internshala.com/*"
+      ],
+      "js": ["content-scripts/internshala-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.foundit.in/*",
+        "https://www.foundit.sg/*",
+        "https://www.foundit.my/*",
+        "https://www.foundit.ph/*"
+      ],
+      "js": ["content-scripts/foundit-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.ziprecruiter.com/*"
+      ],
+      "js": ["content-scripts/ziprecruiter-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://wellfound.com/*",
+        "https://angel.co/*"
+      ],
+      "js": ["content-scripts/wellfound-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*"
+      ],
+      "js": ["content-scripts/greenhouse-scraper.js"],
+      "css": ["content-scripts/banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://jobs.lever.co/*"
+      ],
+      "js": ["content-scripts/lever-scraper.js"],
       "css": ["content-scripts/banner.css"],
       "run_at": "document_idle"
     }
@@ -54,14 +136,36 @@
   "host_permissions": [
     "http://localhost:8000/*",
     "http://localhost:3000/*",
+    "https://autocomplete.clearbit.com/*",
+    "https://logo.clearbit.com/*",
+    "https://www.google.com/s2/favicons*",
     "https://www.linkedin.com/*",
     "https://www.naukri.com/*",
     "https://www.indeed.co.in/*",
-    "https://in.indeed.com/*"
+    "https://in.indeed.com/*",
+    "https://www.indeed.com/*",
+    "https://www.glassdoor.com/*",
+    "https://glassdoor.com/*",
+    "https://www.glassdoor.co.in/*",
+    "https://glassdoor.co.in/*",
+    "https://www.shine.com/*",
+    "https://shine.com/*",
+    "https://www.timesjobs.com/*",
+    "https://internshala.com/*",
+    "https://www.foundit.in/*",
+    "https://www.foundit.sg/*",
+    "https://www.foundit.my/*",
+    "https://www.foundit.ph/*",
+    "https://www.ziprecruiter.com/*",
+    "https://wellfound.com/*",
+    "https://angel.co/*",
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://jobs.lever.co/*"
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/*"],
+      "resources": ["icons/*", "popup/popup.html", "popup/popup.css", "popup/popup.js"],
       "matches": ["<all_urls>"]
     }
   ]

@@ -52,8 +52,11 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
 
 export const signOut = async () => {
   await httpClient.post("/auth/signout").catch(() => {});
-  // ✅ Backend clears httpOnly cookies automatically
-  // ❌ No manual cleanup needed
+  // Clear user-specific data cached in sessionStorage so the next user
+  // (or the same user after re-login) starts with a clean slate
+  ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText'].forEach(
+    (key) => sessionStorage.removeItem(key)
+  );
   window.location.href = "/";
 };
 

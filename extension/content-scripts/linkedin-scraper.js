@@ -109,84 +109,182 @@
     injectBanner(meta, jd);
   }
 
-  function applyBannerStyles(banner) {
-    banner.style.cssText = `
-      position: fixed !important;
-      bottom: 24px !important;
-      right: 24px !important;
-      top: auto !important;
-      left: auto !important;
-      width: auto !important;
-      height: auto !important;
-      z-index: 2147483647 !important;
-      display: flex !important;
-      flex-direction: column !important;
-      align-items: flex-end !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      border: none !important;
-      box-shadow: none !important;
-      background: transparent !important;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      transform: none !important;
-      pointer-events: auto !important;
-      inset: auto 24px 24px auto !important;
-    `;
+  function injectBanner(meta, jd) {
+    if (document.getElementById('cb-shadow-host')) return;
+
+    const host = document.createElement('div');
+    host.id = 'cb-shadow-host';
+    host.style.cssText = 'position:fixed!important;bottom:24px!important;right:24px!important;top:auto!important;left:auto!important;z-index:2147483647!important;pointer-events:auto!important;margin:0!important;padding:0!important;border:none!important;background:transparent!important;';
+
+    const shadow = host.attachShadow({ mode: 'open' });
+
+    const style = document.createElement('style');
+    style.textContent = `
+  :host {
+    position: fixed !important;
+    bottom: 24px !important;
+    right: 24px !important;
+    top: auto !important;
+    left: auto !important;
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
   }
 
-  function injectBanner(meta, jd) {
-    if (document.getElementById('careerbot-banner')) return;
+  @keyframes cb-in {
+    from { transform: translateY(20px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
 
-    const banner = document.createElement('div');
-    banner.id = 'careerbot-banner';
-    applyBannerStyles(banner);
+  .cb-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #ffffff;
+    border: 1.5px solid #ede9fe;
+    border-left: 5px solid #7c3aed;
+    border-radius: 14px;
+    padding: 13px 16px 13px 14px;
+    box-shadow: 0 4px 24px rgba(109,40,217,0.18), 0 1px 4px rgba(0,0,0,0.08);
+    width: 340px;
+    max-width: calc(100vw - 48px);
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    animation: cb-in 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  }
 
-    banner.innerHTML = `
-      <div class="cb-banner-inner">
-        <span class="cb-spark">✨</span>
-        <div class="cb-meta">
-          <strong>${meta.title || 'Job Detected'}</strong>
-          <span>${meta.company || ''}</span>
-        </div>
-        <button class="cb-btn" id="cb-tailor-btn">Tailor Resume</button>
-        <button class="cb-close" id="cb-close-btn">✕</button>
+  .cb-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+    border: 1px solid #ddd6fe;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+  }
+
+  .cb-meta {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cb-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: #111827;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+
+  .cb-company {
+    display: block;
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cb-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    color: #7c3aed;
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .cb-btn {
+    flex-shrink: 0;
+    padding: 9px 15px;
+    background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+  }
+
+  .cb-btn:hover {
+    background: linear-gradient(135deg, #6d28d9, #7c3aed);
+    box-shadow: 0 4px 16px rgba(124,58,237,0.5);
+    transform: translateY(-1px);
+  }
+
+  .cb-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(124,58,237,0.3);
+  }
+
+  .cb-close {
+    flex-shrink: 0;
+    width: 25px;
+    height: 25px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    color: #9ca3af;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    font-family: inherit;
+  }
+
+  .cb-close:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #ef4444;
+  }
+`;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cb-wrap';
+    wrap.innerHTML = `
+      <div class="cb-icon">✨</div>
+      <div class="cb-meta">
+        <span class="cb-title">${meta.title || 'Job Detected'}</span>
+        ${meta.company ? `<span class="cb-company">${meta.company}</span>` : ''}
+        <span class="cb-badge">${meta.source || 'careerbot'}</span>
       </div>
+      <button class="cb-btn" id="cb-tailor-btn">✦ Tailor Resume</button>
+      <button class="cb-close" id="cb-close-btn">✕</button>
     `;
-    document.body.appendChild(banner);
 
-    let isActive = true;
+    shadow.appendChild(style);
+    shadow.appendChild(wrap);
+    document.body.appendChild(host);
 
-    // Continuous position monitor - re-apply every 100ms as a safeguard
-    const positionCheckInterval = setInterval(() => {
-      if (!isActive) return;
-      const banner = document.getElementById('careerbot-banner');
-      if (banner) {
-        applyBannerStyles(banner);
-      } else {
-        isActive = false;
-        clearInterval(positionCheckInterval);
-      }
-    }, 100);
-
-    // Monitor for style changes and re-apply if needed
-    const observer = new MutationObserver(() => {
-      const banner = document.getElementById('careerbot-banner');
-      if (banner) applyBannerStyles(banner);
+    shadow.getElementById('cb-tailor-btn').addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'JD_TAILOR_NOW', data: { jd, meta } });
+      host.remove();
     });
-    observer.observe(banner, { attributes: true, attributeFilter: ['style'] });
 
-    document.getElementById('cb-tailor-btn').addEventListener('click', () => {
-      chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } });
-      isActive = false;
-      banner.remove();
-      observer.disconnect();
-      clearInterval(positionCheckInterval);
-    });
-    document.getElementById('cb-close-btn').addEventListener('click', () => {
-      isActive = false;
-      banner.remove();
-      observer.disconnect();
-      clearInterval(positionCheckInterval);
+    shadow.getElementById('cb-close-btn').addEventListener('click', () => {
+      host.remove();
     });
   }
 

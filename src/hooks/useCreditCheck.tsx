@@ -98,7 +98,7 @@ export const useCreditCheck = (currentBalance: number) => {
             }
 
             // Check if modal should be shown
-            const shouldShow = shouldShowCreditModal(featureId, result.credit_cost, Number(result.credits_remaining));
+            const shouldShow = shouldShowCreditModal(result.credit_cost, isFirstTimeUsingFeature(featureId), Number(result.credits_remaining));
 
             if (!shouldShow) {
               logger.info('Skipping credit modal (user preference or low cost)');

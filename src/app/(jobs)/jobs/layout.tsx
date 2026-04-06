@@ -29,10 +29,8 @@
 
 
 
-"use client";
-
 import Sidebar from "@/components/layout/Sidebar";
-import { DashboardProvider } from "@/contexts/DashboardContext";
+import Header from "@/components/layout/Header";
 
 export default function JobsLayout({
   children,
@@ -40,16 +38,20 @@ export default function JobsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <DashboardProvider>
-      <div className="flex min-h-screen bg-[#f5f6fa]">
-        {/* LEFT SIDEBAR */}
-        <aside className="w-[80px] bg-white border-r">
-          <Sidebar />
-        </aside>
+    <div className="flex min-h-screen bg-[#f5f6fa]">
+      {/* LEFT SIDEBAR */}
+      <aside
+        className="shrink-0 bg-white transition-[width] duration-300"
+        style={{ width: "var(--sidebar-width, 64px)" }}
+      >
+        <Sidebar />
+      </aside>
 
-        {/* PAGE CONTENT */}
-        <main className="flex-1">{children}</main>
+      {/* PAGE CONTENT */}
+      <div className="flex-1 flex flex-col">
+        <Header />
+        <main className="flex-1 pt-14">{children}</main>
       </div>
-    </DashboardProvider>
+    </div>
   );
 }

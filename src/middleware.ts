@@ -1,17 +1,16 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Define protected routes that require authentication
-const protectedRoutes = [
-    '/dashboard',
-    '/profile',
-    '/builder/start',
-    '/atslogin',
-    '/enhancer',
-    '/jobmatch',
-    '/jobs',
-    '/communication',
-    '/settings'
+// Public routes that do NOT require authentication.
+// Everything else is protected by default (denylist approach).
+const publicRoutes = [
+    '/',
+    '/admin/login',
+    '/recruiter/auth',
+    '/verify-email',
+    '/reset-password',
+    '/forgot-password',
+    '/resend-verification',
 ];
 
 export function middleware(request: NextRequest) {
@@ -21,25 +20,22 @@ export function middleware(request: NextRequest) {
     const accessToken = request.cookies.get('access_token')?.value;
     const refreshToken = request.cookies.get('refresh_token')?.value;
 
-    // Check if the current route is protected
-    const isProtectedRoute = protectedRoutes.some((route) =>
-        pathname.startsWith(route)
+    // Allow public routes without authentication
+    const isPublicRoute = publicRoutes.some((route) =>
+        pathname === route || pathname.startsWith(route + '/')
     );
 
-    // If user is not logged in and trying to access protected route
-    // Check for both access_token AND refresh_token
-    // - If access_token exists, allow (fresh session)
-    // - If no access_token but refresh_token exists, allow (let interceptor refresh)
-    // - If neither exists, redirect to home page (not authenticated)
-    if (isProtectedRoute && !accessToken && !refreshToken) {
-        return NextResponse.redirect(new URL('/', request.url));
+    if (isPublicRoute) {
+        return NextResponse.next();
     }
 
-    // TODO: Re-enable automatic redirect to dashboard for logged-in users
-    // Disabled temporarily due to issues with login flows
-    // if (pathname === '/' && token && !searchParams.has('showLogin')) {
-    //     return NextResponse.redirect(new URL('/profile', request.url));
-    // }
+    // All other routes require authentication.
+    // - If access_token exists, allow (fresh session)
+    // - If no access_token but refresh_token exists, allow (interceptor will refresh)
+    // - If neither exists, redirect to home page
+    if (!accessToken && !refreshToken) {
+        return NextResponse.redirect(new URL('/', request.url));
+    }
 
     return NextResponse.next();
 }

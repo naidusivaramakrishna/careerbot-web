@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
+import SafeHTML from "@/components/common/SafeHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import MonthYearPicker from "../MonthYearPicker";
@@ -376,9 +377,9 @@ Spearheaded migration of legacy monolithic application to microservices architec
                   )}
                   
                   {work.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: work.description }} 
+                    <SafeHTML
+                      content={work.description}
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
                     />
                   )}
                 </div>

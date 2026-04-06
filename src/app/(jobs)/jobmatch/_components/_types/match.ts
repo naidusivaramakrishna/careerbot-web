@@ -4,6 +4,7 @@ export interface AnalysisContentProps {
   jdText: string;
   matchResults: any;
   parsedResumeData?: any;
+  onBackToUpload?: () => void;
 }
 
 export interface MatchedMap {

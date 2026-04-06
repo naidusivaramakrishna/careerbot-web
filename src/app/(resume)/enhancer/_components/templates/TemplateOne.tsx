@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ResumeData, ResumeStyle, useResume } from "../ResumeContext";
 import AutoPaginator from "../AutoPaginator";
+import SafeHTML from "@/components/common/SafeHTML";
 
 type SectionName =
   | "Summary"
@@ -318,11 +319,7 @@ const TemplateOne: React.FC<Props> = ({
           <SectionWrapper name="Summary">
             <h2 style={headingStyle}>Summary</h2>
             {cleanSummary ? (
-              <div
-                className="text-justify resume-description"
-                style={baseTextStyle}
-                dangerouslySetInnerHTML={{ __html: cleanSummary }}
-              />
+              <SafeHTML content={cleanSummary} className="text-justify resume-description" />
             ) : (
               <p style={placeholderStyle}>
                 Add your professional summary here
@@ -420,11 +417,7 @@ const TemplateOne: React.FC<Props> = ({
                     </div>
                   )}
                   {exp.description && (
-                    <div
-                      className="resume-description"
-                      style={isFieldAdded("Experience", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: exp.description }}
-                    />
+                    <SafeHTML content={exp.description} className="resume-description" />
                   )}
                 </div>
               ))
@@ -462,11 +455,7 @@ const TemplateOne: React.FC<Props> = ({
                     )}
                   </div>
                   {intern.description && (
-                    <div
-                      className="resume-description"
-                      style={isFieldAdded("Internships", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: intern.description }}
-                    />
+                    <SafeHTML content={intern.description} className="resume-description" />
                   )}
                 </div>
               ))
@@ -506,11 +495,7 @@ const TemplateOne: React.FC<Props> = ({
                   )}
 
                   {edu.achievements && (
-                    <div
-                      className="text-sm resume-description mt-1"
-                      style={isFieldAdded("Education", idx, "achievements") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: edu.achievements }}
-                    />
+                    <SafeHTML content={edu.achievements} className="text-sm resume-description mt-1" />
                   )}
                 </div>
               ))
@@ -549,11 +534,7 @@ const TemplateOne: React.FC<Props> = ({
                     )}
                   </div>
                   {proj.description && (
-                    <div
-                      className="mb-1.5 resume-description"
-                      style={isFieldAdded("Projects", idx, "description") ? { ...descriptionStyle, ...hlStyle } : descriptionStyle}
-                      dangerouslySetInnerHTML={{ __html: proj.description }}
-                    />
+                    <SafeHTML content={proj.description} className="mb-1.5 resume-description" />
                   )}
                 </div>
               ))
@@ -650,13 +631,7 @@ const TemplateOne: React.FC<Props> = ({
                     )}
                   </div>
                   {achievement.description && (
-                    <div
-                      className="resume-description"
-                      style={isFieldAdded("Achievements", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
-                      dangerouslySetInnerHTML={{
-                        __html: achievement.description,
-                      }}
-                    />
+                    <SafeHTML content={achievement.description} className="resume-description" />
                   )}
                 </div>
               ))
@@ -785,13 +760,7 @@ const TemplateOne: React.FC<Props> = ({
                         </span>
                       )}
                       {interest.description && (
-                        <div
-                          className="text-sm resume-description"
-                          style={isFieldAdded("Interests", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
-                          dangerouslySetInnerHTML={{
-                            __html: interest.description,
-                          }}
-                        />
+                        <SafeHTML content={interest.description} className="text-sm resume-description" />
                       )}
                     </div>
                   </div>
@@ -827,11 +796,7 @@ const TemplateOne: React.FC<Props> = ({
                     )}
                   </div>
                   {vol.description && (
-                    <div
-                      className="text-sm mt-1"
-                      style={isFieldAdded("Volunteering", idx, "description") ? { ...baseTextStyle, ...hlStyle } : baseTextStyle}
-                      dangerouslySetInnerHTML={{ __html: vol.description }}
-                    />
+                    <SafeHTML content={vol.description} className="text-sm mt-1" />
                   )}
                 </div>
               ))

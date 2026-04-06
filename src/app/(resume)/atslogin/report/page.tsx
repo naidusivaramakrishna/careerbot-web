@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback, Suspense } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -559,7 +559,9 @@ function ATSLoginReport() {
     return map;
   }, [issues]);
 
-  // Click a breakdown bar → switch to its priority filter + scroll to its group
+  const issuesPanelRef = useRef<HTMLDivElement>(null);
+
+  // Click a breakdown bar → switch to its priority filter + scroll only the issues panel
   const scrollToSection = useCallback((sectionName: string) => {
     const inCritical = grouped.critical.some(i => i.section === sectionName);
     const inUrgent   = grouped.urgent.some(i => i.section === sectionName);
@@ -567,10 +569,14 @@ function ATSLoginReport() {
     const target = inCritical ? "critical" : inUrgent ? "urgent" : inOptional ? "optional" : null;
     if (!target) return;
     setFilter(target);
-    // Expand the section if it was collapsed
     setCollapsedSections(prev => { const n = new Set(prev); n.delete(sectionName); return n; });
     setTimeout(() => {
-      document.getElementById(`issue-section-${sectionName}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const panel = issuesPanelRef.current;
+      const el = document.getElementById(`issue-section-${sectionName}`);
+      if (panel && el) {
+        const top = el.offsetTop - panel.offsetTop;
+        panel.scrollTo({ top, behavior: "smooth" });
+      }
     }, 80);
   }, [grouped]);
 
@@ -749,7 +755,7 @@ function ATSLoginReport() {
                       <p className="text-sm text-gray-600 mt-1">Great job on this category!</p>
                     </div>
                   ) : (
-                    <div className="max-h-[720px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth"
+                    <div ref={issuesPanelRef} className="max-h-[720px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth"
                          style={{ maskImage: "linear-gradient(to bottom, black calc(100% - 32px), transparent 100%)" }}>
                       {/* Group by section with dividers */}
                       {(() => {

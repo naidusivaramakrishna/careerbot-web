@@ -1,21 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
   AlertCircle,
-  X,
   Sparkles,
   Loader2,
   Check,
   Upload,
-  Shield,
-  Zap,
   ArrowRight,
-  TrendingUp,
+  Lightbulb,
+  BookOpen,
+  Mail,
+  Heart,
 } from "lucide-react";
 import { processResumeComplete } from "@/api/resumeatsapi";
+import SafeHTML from "@/components/common/SafeHTML";
 
 enum AnalysisPhase {
   Uploading = "Uploading resume...",
@@ -53,81 +54,111 @@ function LoadingModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "linear-gradient(135deg,rgba(37,99,235,0.18) 0%,rgba(99,102,241,0.18) 100%)", backdropFilter: "blur(12px)" }}>
-
-      {/* fix #7: shadow-xl + subtle gradient bg */}
-      <div className="relative w-full max-w-md rounded-3xl overflow-hidden"
-        style={{ background: "linear-gradient(180deg,#ffffff 0%,#F8FAFF 100%)", boxShadow: "0 24px 64px 0 rgba(37,99,235,0.18), 0 2px 8px 0 rgba(0,0,0,0.06)" }}>
-        <div className="h-1.5 w-full bg-linear-to-r from-blue-500 via-indigo-500 to-violet-500" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{
+        background: "linear-gradient(135deg,rgba(37,99,235,0.18) 0%,rgba(99,102,241,0.18) 100%)",
+        backdropFilter: "blur(12px)",
+      }}
+    >
+      <div
+        className="relative w-full max-w-md rounded-3xl overflow-hidden"
+        style={{
+          background: "linear-gradient(180deg,#ffffff 0%,#F8FAFF 100%)",
+          boxShadow: "0 24px 64px 0 rgba(37,99,235,0.18), 0 2px 8px 0 rgba(0,0,0,0.06)",
+        }}
+      >
+        <div className="h-1.5 w-full bg-linear-to-r from-teal-400 via-cyan-400 to-teal-500" />
         <div className="px-10 pt-8 pb-8">
-          <div className="pointer-events-none absolute -top-20 -right-20 w-56 h-56 rounded-full bg-blue-200 opacity-20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-20 -left-20 w-56 h-56 rounded-full bg-indigo-200 opacity-20 blur-3xl" />
-
+          <div className="pointer-events-none absolute -top-20 -right-20 w-56 h-56 rounded-full bg-teal-200 opacity-20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-20 w-56 h-56 rounded-full bg-cyan-200 opacity-20 blur-3xl" />
           <div className="relative flex flex-col items-center text-center">
-
-            {/* fix #1: ring with stronger glow on active arc */}
             <div className="relative mb-5" style={{ width: 176, height: 176 }}>
               {!isComplete && (
-                <span className="absolute inset-2 rounded-full bg-blue-50/40 animate-ping opacity-10" />
+                <span className="absolute inset-2 rounded-full bg-teal-50/40 animate-ping opacity-10" />
               )}
-              <svg width="176" height="176" viewBox="0 0 120 120" className="-rotate-90"
-                role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+              <svg
+                width="176"
+                height="176"
+                viewBox="0 0 120 120"
+                className="-rotate-90"
+                role="progressbar"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
                 <defs>
                   <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#3B82F6" /><stop offset="100%" stopColor="#6366F1" />
+                    <stop offset="0%" stopColor="#14b8a6" />
+                    <stop offset="100%" stopColor="#0891b2" />
                   </linearGradient>
                   <filter id="glow">
                     <feGaussianBlur stdDeviation="1" result="blur" />
-                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
                   </filter>
                 </defs>
                 <circle cx="60" cy="60" r={radius} fill="none" stroke="#E8EDFF" strokeWidth={strokeWidth} />
-                <circle cx="60" cy="60" r={radius} fill="none" stroke="url(#ringGrad)" strokeWidth={strokeWidth}
-                  strokeLinecap="round" strokeDasharray={circumference}
+                <circle
+                  cx="60"
+                  cy="60"
+                  r={radius}
+                  fill="none"
+                  stroke="url(#ringGrad)"
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
                   strokeDashoffset={circumference - (progress / 100) * circumference}
-                  filter="url(#glow)" className="transition-all duration-700 ease-out" />
+                  filter="url(#glow)"
+                  className="transition-all duration-700 ease-out"
+                />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
                 {isComplete ? (
-                  <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-200">
+                  <div className="w-10 h-10 rounded-full bg-teal-500 flex items-center justify-center shadow-lg shadow-teal-200">
                     <Check className="w-5 h-5 text-white" strokeWidth={3} />
                   </div>
                 ) : (
                   <>
-                    <span className="text-4xl font-extrabold leading-none"
-                      style={{ background: "linear-gradient(135deg,#2563EB,#6366F1)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                    <span
+                      className="text-4xl font-extrabold leading-none"
+                      style={{
+                        background: "linear-gradient(135deg,#14b8a6,#0891b2)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                      }}
+                    >
                       {progress}%
                     </span>
-                    {/* fix #2: larger + darker "scanning" label */}
-                    <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-indigo-500 mt-0.5">scanning</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-teal-500 mt-0.5">
+                      scanning
+                    </span>
                   </>
                 )}
               </div>
             </div>
-
             <h3 className="text-[1.35rem] font-bold text-gray-900 leading-tight mb-1">
               {isComplete ? "Analysis Complete!" : "Analyzing Your Resume"}
             </h3>
-
-            {/* fix #8: shorter, sharper microcopy */}
             <p className="text-sm text-gray-500 mb-3 leading-relaxed">
               {isComplete
                 ? "Your personalised ATS report is ready to view."
                 : "Scanning for ATS issues and missing keywords."}
             </p>
-
-            {/* fix #5: reduced opacity dots so they don't compete */}
             {!isComplete && (
               <div className="flex items-center gap-1.5 mb-5 opacity-50">
                 {[0, 150, 300].map((d) => (
-                  <span key={d} className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                  <span
+                    key={d}
+                    className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-bounce"
+                    style={{ animationDelay: `${d}ms` }}
+                  />
                 ))}
               </div>
             )}
             {isComplete && <div className="mb-5" />}
-
-            {/* fix #3 + #4: active row gets bg tint, inactive clearly dimmed */}
             <div className="w-full text-left mb-5">
               {steps.map((step, idx) => {
                 const done = isComplete || stepIndex > idx;
@@ -135,47 +166,72 @@ function LoadingModal({
                 return (
                   <div key={idx} className="flex items-stretch gap-3.5">
                     <div className="flex flex-col items-center">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold transition-all duration-500 ${
-                        done
-                          ? "bg-emerald-500 text-white shadow-sm shadow-emerald-200"
-                          : active
-                          ? "bg-blue-600 text-white shadow-md shadow-blue-300/60"
-                          : "bg-gray-100 text-gray-300"}`}>
-                        {done ? <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                          : active ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          : <span>{idx + 1}</span>}
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold transition-all duration-500 ${
+                          done
+                            ? "bg-teal-500 text-white shadow-sm shadow-teal-200"
+                            : active
+                            ? "bg-teal-600 text-white shadow-md shadow-teal-300/60"
+                            : "bg-gray-100 text-gray-300"
+                        }`}
+                      >
+                        {done ? (
+                          <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                        ) : active ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <span>{idx + 1}</span>
+                        )}
                       </div>
                       {idx < steps.length - 1 && (
-                        <div className={`w-px flex-1 my-1 rounded-full transition-colors duration-500 ${done ? "bg-emerald-200" : "bg-gray-100"}`} />
+                        <div
+                          className={`w-px flex-1 my-1 rounded-full transition-colors duration-500 ${
+                            done ? "bg-teal-200" : "bg-gray-100"
+                          }`}
+                        />
                       )}
                     </div>
-                    {/* active row: subtle blue tint background */}
-                    <div className={`flex items-center gap-2 pb-4 flex-1 rounded-lg transition-all duration-300 ${
-                      idx === steps.length - 1 ? "pb-0" : ""} ${active ? "px-2 -mx-2 bg-blue-50/60" : ""}`}>
-                      <span className={`text-sm transition-all duration-300 ${
-                        done ? "font-medium text-emerald-600"
-                          : active ? "font-semibold text-blue-700"
-                          : "font-normal text-gray-300"}`}>
+                    <div
+                      className={`flex items-center gap-2 pb-4 flex-1 rounded-lg transition-all duration-300 ${
+                        idx === steps.length - 1 ? "pb-0" : ""
+                      } ${active ? "px-2 -mx-2 bg-teal-50/60" : ""}`}
+                    >
+                      <span
+                        className={`text-sm transition-all duration-300 ${
+                          done
+                            ? "font-medium text-teal-600"
+                            : active
+                            ? "font-semibold text-teal-700"
+                            : "font-normal text-gray-300"
+                        }`}
+                      >
                         {step.label}
                       </span>
                       {active && (
                         <span className="flex gap-0.5 items-center opacity-60">
                           {[0, 100, 200].map((d) => (
-                            <span key={d} className="w-1 h-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                            <span
+                              key={d}
+                              className="w-1 h-1 rounded-full bg-teal-500 animate-bounce"
+                              style={{ animationDelay: `${d}ms` }}
+                            />
                           ))}
                         </span>
                       )}
-                      {done && <span className="text-xs text-emerald-500 font-semibold ml-0.5">✓</span>}
+                      {done && <span className="text-xs text-teal-500 font-semibold ml-0.5">✓</span>}
                     </div>
                   </div>
                 );
               })}
             </div>
-
-            {/* fix #6: higher contrast time estimate */}
             <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium bg-gray-100/80 rounded-xl px-4 py-2.5 w-full justify-center">
               <svg className="w-3.5 h-3.5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               <span>Usually takes 30–60 seconds</span>
             </div>
@@ -186,143 +242,6 @@ function LoadingModal({
   );
 }
 
-/* ─────────────────────────────────────────────
-   Score Preview (right panel)
-───────────────────────────────────────────── */
-function ScorePreview() {
-  const [score, setScore] = useState(42);
-  const [animated, setAnimated] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const circum = 2 * Math.PI * 40;
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && !animated) {
-        setAnimated(true);
-        let cur = 42;
-        const tick = () => {
-          cur = Math.min(cur + 1, 92);
-          setScore(cur);
-          if (cur < 92) requestAnimationFrame(tick);
-        };
-        setTimeout(() => requestAnimationFrame(tick), 500);
-      }
-    }, { threshold: 0.4 });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [animated]);
-
-  const pct = score / 100;
-
-  return (
-    <div ref={ref} className="flex flex-col items-center gap-5 select-none w-full max-w-[280px] mx-auto">
-
-      {/* Score cards row */}
-      <div className="flex items-center gap-4 w-full">
-        {/* Before — fix #3: faded/muted */}
-        <div className="flex-1 bg-white rounded-2xl border border-gray-100 p-4 flex flex-col items-center gap-2 opacity-70">
-          <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Before</span>
-          <div className="relative w-16 h-16">
-            <svg viewBox="0 0 96 96" className="w-16 h-16 -rotate-90">
-              <circle cx="48" cy="48" r="40" fill="none" stroke="#FEE2E2" strokeWidth="7" />
-              <circle cx="48" cy="48" r="40" fill="none" stroke="#FCA5A5" strokeWidth="7"
-                strokeLinecap="round" strokeDasharray={circum} strokeDashoffset={circum * (1 - 0.42)} />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-base font-extrabold text-red-400">42</span>
-          </div>
-          <span className="text-[10px] font-semibold text-red-300">Rejected</span>
-        </div>
-
-        {/* Arrow */}
-        <div className="flex flex-col items-center gap-0.5 shrink-0">
-          <TrendingUp className="w-5 h-5 text-blue-500" />
-          <span className="text-[9px] font-extrabold text-blue-500">+50 pts</span>
-        </div>
-
-        {/* After — fix #3: strong glow, prominent */}
-        <div className="flex-1 bg-white rounded-2xl p-4 flex flex-col items-center gap-2"
-          style={{ boxShadow: "0 0 0 2px #93C5FD, 0 6px 28px 0 rgba(59,130,246,0.22)" }}>
-          <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">After</span>
-          <div className="relative w-16 h-16">
-            <svg viewBox="0 0 96 96" className="w-16 h-16 -rotate-90">
-              <defs>
-                <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#3B82F6" /><stop offset="100%" stopColor="#6366F1" />
-                </linearGradient>
-              </defs>
-              <circle cx="48" cy="48" r="40" fill="none" stroke="#DBEAFE" strokeWidth="8" />
-              <circle cx="48" cy="48" r="40" fill="none" stroke="url(#sg)" strokeWidth="8"
-                strokeLinecap="round" strokeDasharray={circum}
-                strokeDashoffset={circum * (1 - pct)}
-                style={{ transition: "stroke-dashoffset 0.03s linear" }} />
-            </svg>
-            {score >= 90 && (
-              <span className="absolute inset-0 rounded-full animate-ping opacity-10"
-                style={{ background: "radial-gradient(circle,rgba(99,102,241,0.5) 0%,transparent 70%)" }} />
-            )}
-            <span className="absolute inset-0 flex items-center justify-center text-base font-extrabold text-blue-600">
-              {score}
-            </span>
-          </div>
-          <span className="text-[10px] font-semibold text-blue-500">
-            {score >= 90 ? "🎉 Interview!" : "Improving…"}
-          </span>
-        </div>
-      </div>
-
-      {/* What changes — fix #5: stronger contrast, larger checks */}
-      <div className="w-full bg-white rounded-2xl border border-gray-200/70 px-4 py-3.5 space-y-2.5"
-        style={{ boxShadow: "0 2px 8px 0 rgba(0,0,0,0.04)" }}>
-        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">What AI fixes for you</p>
-        {[
-          { label: "Missing keywords added", color: "bg-blue-500" },
-          { label: "Format issues corrected", color: "bg-indigo-500" },
-          { label: "Section headers optimised", color: "bg-violet-500" },
-        ].map((item) => (
-          <div key={item.label} className="flex items-center gap-2.5">
-            <div className={`w-2 h-2 rounded-full shrink-0 ${item.color}`} />
-            <span className="text-xs text-gray-700 font-medium">{item.label}</span>
-            <div className="ml-auto">
-              <Check className="w-3.5 h-3.5 text-emerald-500" strokeWidth={3} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   Step Indicator  (fix #4 — stronger hierarchy)
-───────────────────────────────────────────── */
-function StepIndicator({ active }: { active: 0 | 1 | 2 }) {
-  const steps = ["Upload", "Analyse", "Improve"];
-  return (
-    <div className="flex items-center gap-1.5 mb-6">
-      {steps.map((step, i) => (
-        <div key={step} className="flex items-center gap-1.5">
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all duration-300 ${
-            i < active
-              ? "bg-emerald-100 text-emerald-700 font-semibold"
-              : i === active
-              ? "bg-blue-600 text-white font-bold shadow-md shadow-blue-300"
-              : "bg-gray-100 text-gray-300 font-medium"}`}>
-            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-              i < active ? "bg-emerald-200 text-emerald-700"
-                : i === active ? "bg-white/25 text-white"
-                : "bg-gray-200 text-gray-400"}`}>
-              {i < active ? "✓" : i + 1}
-            </span>
-            {step}
-          </div>
-          {i < 2 && <div className={`w-5 h-px shrink-0 ${i < active ? "bg-emerald-200" : "bg-gray-200"}`} />}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /* ─────────────────────────────────────────────
    Main Page
@@ -331,15 +250,20 @@ export default function ATSLoginPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState<AnalysisPhase | "">("");
   const [progress, setProgress] = useState(0);
 
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
   const handleDragLeave = () => setIsDragging(false);
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setIsDragging(false);
+    e.preventDefault();
+    setIsDragging(false);
     validateAndSetFile(e.dataTransfer.files[0]);
   };
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -350,23 +274,33 @@ export default function ATSLoginPage() {
     setError("");
     const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
     if (!["pdf", "docx", "doc"].includes(ext)) {
-      setError("Invalid file type. Only PDF, DOCX, and DOC are allowed."); return;
+      setError("Invalid file type. Only PDF, DOCX, and DOC are allowed.");
+      return;
     }
     if (f.size > 10 * 1024 * 1024) {
-      setError("File size exceeds 10MB. Please upload a smaller file."); return;
+      setError("File size exceeds 10MB. Please upload a smaller file.");
+      return;
     }
     setFile(f);
   };
 
-  const handleRemoveFile = () => { setFile(null); setError(""); };
+  const handleRemoveFile = () => {
+    setFile(null);
+    setError("");
+    setAgreed(false);
+  };
 
   const handleScanResume = async () => {
     if (!file) return;
-    setError(""); setIsLoading(true); setProgress(0);
+    setError("");
+    setIsLoading(true);
+    setProgress(0);
     try {
-      setLoadingPhase(AnalysisPhase.Uploading); setProgress(30);
+      setLoadingPhase(AnalysisPhase.Uploading);
+      setProgress(30);
       const result = await processResumeComplete(file);
-      setProgress(70); setLoadingPhase(AnalysisPhase.Analyzing);
+      setProgress(70);
+      setLoadingPhase(AnalysisPhase.Analyzing);
       if (!result.success) {
         let msg = "Upload failed";
         if (result && typeof result === "object" && "error" in result) {
@@ -377,7 +311,8 @@ export default function ATSLoginPage() {
         }
         throw new Error(msg);
       }
-      setProgress(100); setLoadingPhase(AnalysisPhase.Complete);
+      setProgress(100);
+      setLoadingPhase(AnalysisPhase.Complete);
       const resumeId = "resume_id" in result ? result.resume_id : "";
       setTimeout(() => router.push(`/atslogin/report?resume_id=${resumeId}`), 600);
     } catch (err: unknown) {
@@ -387,32 +322,20 @@ export default function ATSLoginPage() {
           const p = JSON.parse(err.message);
           const m = p.message || p.error?.message || p.error || p.detail;
           msg = typeof m === "string" ? m : err.message;
-        } catch { msg = err.message || msg; }
+        } catch {
+          msg = err.message || msg;
+        }
       }
-      setError(msg); setIsLoading(false); setProgress(0); setLoadingPhase("");
+      setError(msg);
+      setIsLoading(false);
+      setProgress(0);
+      setLoadingPhase("");
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024, sizes = ["Bytes", "KB", "MB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
-  };
-
-  /* ── shared right panel ── */
-  const RightPanel = () => (
-    <div className="hidden lg:flex items-center justify-center p-10 bg-linear-to-br from-slate-50 to-blue-50/40 relative overflow-hidden">
-      <div className="pointer-events-none absolute top-0 right-0 w-40 h-40 rounded-full opacity-20 blur-3xl"
-        style={{ background: "radial-gradient(circle,#6366F1 0%,transparent 70%)" }} />
-      <div className="pointer-events-none absolute bottom-0 left-0 w-32 h-32 rounded-full opacity-15 blur-3xl"
-        style={{ background: "radial-gradient(circle,#3B82F6 0%,transparent 70%)" }} />
-      <ScorePreview />
-    </div>
-  );
 
   return (
-    <div className="min-h-[calc(100vh-56px)] bg-linear-to-b from-blue-50 via-indigo-50/50 to-white">
+    <div className="min-h-[calc(100vh-56px)] bg-white">
       <LoadingModal isOpen={isLoading} phase={loadingPhase} progress={progress} />
 
       {/* Error Modal */}
@@ -420,228 +343,388 @@ export default function ATSLoginPage() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-red-50 rounded-xl"><AlertCircle className="h-6 w-6 text-red-600" /></div>
+              <div className="p-3 bg-red-50 rounded-xl">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+              </div>
               <h3 className="text-lg font-bold text-gray-900">Error</h3>
             </div>
             <p className="text-gray-700 mb-6 leading-relaxed">{error}</p>
-            <button onClick={() => setError("")}
-              className="w-full py-3 bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-semibold rounded-xl transition-all">
+            <button
+              onClick={() => setError("")}
+              className="w-full py-3 bg-[#1e3a5f] hover:bg-[#162d4a] text-white font-semibold rounded-xl transition-all"
+            >
               Close
             </button>
           </div>
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-6 lg:px-8 py-6">
+      {/* ── Section 1: Hero ── */}
+      <section
+        className="py-16 lg:py-24"
+        style={{ background: "linear-gradient(160deg,#eaf4fb 0%,#f0f7ff 50%,#ffffff 100%)" }}
+      >
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
 
-        {/* ── Hero — fix #5 tighter spacing ── */}
-        <div className="mb-4">
-          <div className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full mb-3">
-            <Zap className="w-3 h-3" />
-            AI-Powered ATS Scanner
-          </div>
-          <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 mb-2.5 leading-[1.1]">
-            Stop Getting Rejected by ATS —{" "}
-            <span style={{ background: "linear-gradient(135deg,#2563EB,#4F46E5)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              Fix Your Resume in Seconds
-            </span>
-          </h1>
-          <p className="text-lg text-gray-500 max-w-xl leading-relaxed">
-            See exactly what&apos;s blocking your resume and{" "}
-            <span className="font-semibold text-gray-700">fix it instantly with AI.</span>
-          </p>
-        </div>
+            {/* Left: Hero Text */}
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-500 mb-6">
+                <div className="w-8 h-[2px] bg-blue-400" />
+                <span>ATS Resume Checker by CareerBot</span>
+              </div>
+              <h1 className="text-5xl lg:text-6xl font-extrabold text-[#1a2b4a] leading-[1.1] mb-6">
+                Will Your Resume<br />
+                Make It Past the{" "}
+                <span className="text-[#4299e1]">ATS</span> Bots?
+              </h1>
+              <p className="text-base text-gray-500 leading-relaxed max-w-md">
+                75% of qualified candidates never make it to the interview stage because their resumes
+                fail ATS scans. Don&apos;t be one of them. Upload your resume and find out if it will
+                survive the digital gatekeepers in just 60 seconds.
+              </p>
+            </div>
 
-        {/* ── Upload Card ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-7"
-          style={{ boxShadow: "0 8px 40px 0 rgba(37,99,235,0.09), 0 1px 4px 0 rgba(0,0,0,0.05)" }}>
+            {/* Right: Upload Card */}
+            <div
+              className="bg-white rounded-2xl p-10 text-center"
+              style={{ boxShadow: "0 4px 40px 0 rgba(60,100,180,0.12), 0 1px 4px 0 rgba(0,0,0,0.04)", border: "1px solid #e8edf5" }}
+            >
+              <h2 className="text-2xl font-bold text-gray-900 mb-4 leading-snug">
+                Upload Your Resume to See if it Beats the ATS Bots
+              </h2>
+              <p className="text-sm text-gray-400 mb-8 leading-relaxed">
+                Our scanner checks for issues in formatting, keywords, and structure that could
+                stop your resume from passing.
+              </p>
 
-          {!file ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 items-center">
-              {/* Left */}
-              <div className="p-8 lg:p-10 border-b lg:border-b-0 lg:border-r border-gray-100">
-                <StepIndicator active={0} />
+              <input
+                type="file"
+                onChange={handleFileChange}
+                accept=".pdf,.docx,.doc"
+                className="hidden"
+                id="hero-file-upload"
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+              />
 
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Upload Your Resume</h2>
-                <p className="text-sm text-gray-500 mb-5">
-                  Drop your file and get an instant ATS score with AI-powered improvement suggestions.
-                </p>
-
-                {/* Drag & Drop Zone — fix #1: thinner border + inner shadow + glow hover */}
+              {!file ? (
                 <div
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`relative rounded-2xl p-7 text-center cursor-pointer transition-all duration-200 ${
-                    isDragging
-                      ? "border border-blue-400 bg-blue-50/80 shadow-[inset_0_1px_4px_rgba(59,130,246,0.1),0_0_0_4px_rgba(59,130,246,0.12)]"
-                      : "border border-blue-150 bg-linear-to-br from-blue-50/40 to-indigo-50/20 hover:border-blue-300 hover:bg-blue-50/60 hover:shadow-[inset_0_1px_3px_rgba(59,130,246,0.07),0_0_0_3px_rgba(59,130,246,0.06)]"
-                  }`}
-                  style={{ borderColor: isDragging ? "#93C5FD" : "#DBEAFE" }}
                 >
-                  <div className="flex flex-col items-center gap-3">
-                    {/* fix #6: icon box micro-interaction */}
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                      isDragging ? "bg-blue-200 scale-110 rotate-3" : "bg-blue-100 group-hover:bg-blue-200"}`}>
-                      <Upload className={`w-6 h-6 transition-all duration-300 ${isDragging ? "text-blue-700 -translate-y-1" : "text-blue-600"}`} />
-                    </div>
+                  <label
+                    htmlFor="hero-file-upload"
+                    className={`inline-flex items-center justify-center gap-3 px-10 py-4 rounded-full text-white font-semibold text-base cursor-pointer transition-all duration-200 hover:opacity-90 hover:shadow-lg mb-5 ${
+                      isDragging ? "opacity-80 scale-95" : ""
+                    }`}
+                    style={{ background: "#1a2b4a", minWidth: "260px" }}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Upload Your Resume
+                  </label>
 
-                    <div>
-                      <p className="font-semibold text-gray-800 mb-0.5 text-base">
-                        {isDragging ? "Drop your resume here 🚀" : "Drag & drop your resume here"}
-                      </p>
-                      <p className="text-xs text-gray-400">or click below to browse files</p>
-                    </div>
+                  <p className="text-sm text-gray-400 mb-8">or drag and drop it here</p>
 
-                    <input type="file" onChange={handleFileChange} accept=".pdf,.docx,.doc" className="hidden" id="file-upload" />
-
-                    {/* fix #2: CTA — deeper gradient + glow + arrow slide */}
-                    <label htmlFor="file-upload"
-                      className="group relative w-full max-w-xs py-3 px-6 text-white font-semibold rounded-xl cursor-pointer text-sm text-center
-                        hover:scale-[1.03] active:scale-[0.98] transition-all duration-200
-                        flex items-center justify-center gap-2 overflow-hidden
-                        shadow-lg shadow-blue-300/50 hover:shadow-xl hover:shadow-blue-400/40"
-                      style={{ background: "linear-gradient(135deg, #2563EB 0%, #4338CA 100%)" }}>
-                      <span className="relative z-10 flex items-center gap-2">
-                        Scan Resume for ATS Issues
-                        <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1.5" />
-                      </span>
-                      <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                        style={{ background: "linear-gradient(135deg,rgba(255,255,255,0.14) 0%,transparent 55%)" }} />
-                    </label>
-
-                    <p className="text-xs text-blue-600 font-semibold">⚡ Takes &lt; 10 seconds</p>
+                  <div className="border-t border-gray-100 pt-5">
+                    <p className="text-xs text-gray-400">Supported formats: PDF.</p>
+                    <p className="text-xs text-gray-400 mt-1">Max file size: 5MB.</p>
                   </div>
                 </div>
-
-                {/* Trust signals — fix #7 + tighter gap to upload box */}
-                <div className="flex flex-wrap gap-5 mt-3">
-                  {[
-                    { icon: Shield, text: "Your data is secure" },
-                    { icon: Check, text: "No signup required" },
-                    { icon: FileText, text: "PDF & DOCX supported" },
-                  ].map(({ icon: Icon, text }) => (
-                    <div key={text} className="flex items-center gap-2 text-xs text-gray-600 font-medium">
-                      <Icon className="w-4 h-4 text-emerald-500 shrink-0" />
-                      {text}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <RightPanel />
-            </div>
-          ) : (
-            /* File selected */
-            <div className="grid grid-cols-1 lg:grid-cols-2 items-center">
-              <div className="p-8 lg:p-10 border-b lg:border-b-0 lg:border-r border-gray-100">
-                <StepIndicator active={1} />
-
-                <h2 className="text-xl font-bold text-gray-900 mb-5">Ready to Analyse</h2>
-
-                <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-xl border border-blue-100 mb-5">
-                  <div className="shrink-0 p-3 bg-blue-100 rounded-xl">
-                    <FileText className="h-5 w-5 text-blue-600" />
+              ) : (
+                <div className="flex flex-col items-center gap-5">
+                  {/* File pill — check + truncated name + delete */}
+                  <div className="inline-flex items-center gap-3 border border-gray-200 rounded-full px-6 py-3">
+                    <Check className="w-4 h-4 text-teal-500 shrink-0" strokeWidth={2.5} />
+                    <span className="text-sm font-medium text-gray-800 max-w-48 truncate">
+                      {file.name.replace(/\.[^.]+$/, "")}
+                    </span>
+                    <button
+                      onClick={handleRemoveFile}
+                      disabled={isLoading}
+                      className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 truncate text-sm">{file.name}</p>
-                    <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                  </div>
-                  <button onClick={handleRemoveFile} disabled={isLoading}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
 
-                <button onClick={handleScanResume} disabled={isLoading}
-                  className="group relative w-full py-3.5 px-6 text-white font-semibold rounded-xl text-sm
-                    disabled:opacity-60 disabled:cursor-not-allowed
-                    transition-all duration-200 flex items-center justify-center gap-2
-                    shadow-lg shadow-blue-300/50 hover:shadow-xl hover:shadow-blue-400/40
-                    hover:scale-[1.02] active:scale-[0.99] mb-3 overflow-hidden"
-                  style={{ background: isLoading ? "#2563EB" : "linear-gradient(135deg, #2563EB 0%, #4338CA 100%)" }}>
-                  <span className="relative z-10 flex items-center gap-2">
+                  {/* Uploaded Successfully */}
+                  <p className="text-sm font-semibold text-teal-500">Uploaded Successfully</p>
+
+                  {/* Terms checkbox — user must check manually */}
+                  <label className="flex items-start gap-2.5 text-xs text-gray-500 cursor-pointer text-left max-w-xs">
+                    <input
+                      type="checkbox"
+                      checked={agreed}
+                      onChange={(e) => setAgreed(e.target.checked)}
+                      className="mt-0.5 accent-teal-500 shrink-0 w-4 h-4 cursor-pointer"
+                    />
+                    <span>
+                      I agree to CareerBot&apos;s{" "}
+                      <span className="underline">Terms of Service</span>
+                      {" "}and{" "}
+                      <span className="underline">Privacy Policy</span>
+                    </span>
+                  </label>
+
+                  {/* Continue button — enabled only after checkbox is checked */}
+                  <button
+                    onClick={handleScanResume}
+                    disabled={isLoading || !agreed}
+                    className="inline-flex items-center justify-center gap-2 px-12 py-4 rounded-full text-white font-semibold text-base disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 hover:opacity-90 hover:shadow-lg"
+                    style={{ background: "#14b8a6" }}
+                  >
                     {isLoading ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" /><span>Scanning…</span></>
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Scanning…</span>
+                      </>
                     ) : (
                       <>
-                        <Sparkles className="h-4 w-4" />
-                        <span>Analyse Resume &amp; Get Score</span>
-                        <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1.5" />
+                        Continue
+                        <ArrowRight className="w-4 h-4" />
                       </>
                     )}
-                  </span>
-                  <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    style={{ background: "linear-gradient(135deg,rgba(255,255,255,0.12) 0%,transparent 55%)" }} />
-                </button>
-
-                {!isLoading && (
-                  <button onClick={handleRemoveFile}
-                    className="w-full py-2.5 text-sm text-gray-500 hover:text-blue-600 font-medium border border-gray-200 rounded-xl hover:border-blue-300 transition-all duration-200">
-                    Change file
                   </button>
-                )}
-              </div>
-
-              <RightPanel />
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
+      </section>
 
-        {/* ── Feature Cards ── */}
-        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">What&apos;s included</h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-7">
+      {/* ── Section 2: 3 Simple Steps ── */}
+      <section className="bg-gray-50 py-16">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="mb-3">
+            <span className="inline-block bg-teal-100 text-teal-700 text-xs font-semibold px-3 py-1 rounded-full">
+              how it works
+            </span>
+          </div>
+          <h2 className="text-3xl font-extrabold text-gray-900 mb-10">
+            3 Simple Steps to Test Your ATS Compatibility
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            {[
+              {
+                num: "1",
+                title: "Upload Your Resume",
+                desc: "Upload a PDF file, even if it&apos;s not a CareerBot template. Our ATS scanner works with all resume types.",
+                icon: <Upload className="w-7 h-7 text-indigo-400" />,
+              },
+              {
+                num: "2",
+                title: "Get Your ATS Score",
+                desc: "Receive an instant compatibility score showing if your resume would pass or fail real-world ATS systems.",
+                icon: (
+                  <svg className="w-7 h-7 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                ),
+              },
+              {
+                num: "3",
+                title: "Unlock Detailed Insights",
+                desc: "See exactly what&apos;s working and what&apos;s not, with personalised recommendations to improve your success rate.",
+                icon: <Lightbulb className="w-7 h-7 text-indigo-400" />,
+              },
+            ].map((step) => (
+              <div key={step.num} className="bg-white rounded-2xl p-7 border border-gray-100 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mb-5">
+                  {step.icon}
+                </div>
+                <h3 className="font-bold text-gray-900 mb-2">
+                  {step.num}. {step.title}
+                </h3>
+                <SafeHTML
+                  content={step.desc}
+                  as="p"
+                  className="text-sm text-gray-500 leading-relaxed"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-center">
+            <label
+              htmlFor="hero-file-upload"
+              className="inline-flex items-center gap-2 px-8 py-4 rounded-full text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:opacity-90 hover:shadow-lg"
+              style={{ background: "linear-gradient(135deg,#0d9488,#0891b2)" }}
+            >
+              Check Your Resume Now
+              <ArrowRight className="w-4 h-4" />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Section 4: Choose Your Level ── */}
+      <section className="bg-gray-50 py-16">
+        <div className="max-w-5xl mx-auto px-6 lg:px-8">
+          <div className="mb-3 text-center">
+            <span className="inline-block bg-teal-100 text-teal-700 text-xs font-semibold px-3 py-1 rounded-full">
+              simple options
+            </span>
+          </div>
+          <h2 className="text-3xl font-extrabold text-gray-900 text-center mb-10">
+            Choose Your Level of ATS Insight
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {/* Quick ATS Check */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-8">
+              <h3 className="text-2xl font-extrabold text-gray-900 mb-1">Quick ATS Check</h3>
+              <p className="text-sm text-gray-400 mb-6">no sign-up required</p>
+              <ul className="space-y-3 mb-8">
+                {[
+                  "Basic ATS Compatibility Score",
+                  "Primary Formatting Issues Detection",
+                  "General ATS Readability Assessment",
+                  "Essential AI Recommendations",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="w-4 h-4 text-gray-500 shrink-0" strokeWidth={2.5} />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <label
+                htmlFor="hero-file-upload"
+                className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl text-gray-900 font-semibold text-sm border-2 border-gray-900 cursor-pointer transition-all hover:bg-gray-50"
+              >
+                Get Basic Score
+                <ArrowRight className="w-4 h-4" />
+              </label>
+            </div>
+
+            {/* Complete ATS Analysis */}
+            <div
+              className="rounded-2xl p-8"
+              style={{ background: "linear-gradient(135deg,#e8f4fd 0%,#dbeafe 100%)", border: "1.5px solid #BFDBFE" }}
+            >
+              <h3 className="text-2xl font-extrabold text-gray-900 mb-1">Complete ATS Analysis</h3>
+              <p className="text-sm text-gray-500 mb-6">get full report to your email</p>
+              <ul className="space-y-3 mb-8">
+                {[
+                  "Detailed ATS Score Across 5 Key Areas",
+                  "Keyword Optimization Analysis",
+                  "Section-by-Section Feedback",
+                  "Format & Structure Evaluation",
+                  "Personalized Improvement Suggestions",
+                  "Industry-Specific Insights",
+                  "One-Click Resume Fix with CareerBot Templates",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="w-4 h-4 text-blue-500 shrink-0" strokeWidth={2.5} />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <label
+                htmlFor="hero-file-upload"
+                className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl text-white font-semibold text-sm cursor-pointer transition-all hover:opacity-90"
+                style={{ background: "linear-gradient(135deg,#0d9488,#0891b2)" }}
+              >
+                Unlock Full Analysis
+                <ArrowRight className="w-4 h-4" />
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Section 5: Feature Toolkit ── */}
+      <section className="max-w-7xl mx-auto px-6 lg:px-8 py-16">
+        <div className="mb-2">
+          <div className="w-8 h-0.5 bg-teal-400 mb-4" />
+        </div>
+        <h2 className="text-3xl font-extrabold text-gray-900 mb-2">
+          The Ultimate{" "}
+          <span
+            style={{
+              background: "linear-gradient(135deg,#0d9488,#0891b2)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            AI Job Search Toolkit
+          </span>
+        </h2>
+        <p className="text-gray-500 mb-10 max-w-xl">
+          Get tools and insights for every step of your job search. CareerBot is packed with powerful features and
+          valuable guides to help you advance your career.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
             {
-              bg: "bg-blue-100", icon: (
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>),
-              title: "ATS Score Breakdown",
-              desc: "See exactly why your resume fails filters — section by section.",
+              icon: <Sparkles className="w-7 h-7 text-blue-400" />,
+              bg: "bg-blue-50",
+              title: "AI-Powered Resume Builder",
+              desc: "Easily create a tailored resume using AI-driven content suggestions that highlight your abilities and accomplishments for any position.",
             },
             {
-              bg: "bg-teal-100", icon: (
-                <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                </svg>),
-              title: "Missing Keywords Finder",
-              desc: "Match your resume to job descriptions and instantly close keyword gaps.",
+              icon: <Heart className="w-7 h-7 text-blue-400" />,
+              bg: "bg-blue-50",
+              title: "AI-Powered Cover Letter Builder",
+              desc: "Instantly generate a personalised cover letter based on your resume, crafted to showcase your strengths and match the job requirements.",
             },
             {
-              bg: "bg-green-100", icon: (
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>),
-              title: "Formatting Fix Suggestions",
-              desc: "Make your resume readable by ATS bots with targeted format corrections.",
+              icon: <FileText className="w-7 h-7 text-blue-400" />,
+              bg: "bg-blue-50",
+              title: "16+ ATS-Friendly Resume Templates",
+              desc: "Choose from over 16 professionally designed, ATS-friendly templates that make your resume stand out to recruiters.",
+            },
+            {
+              icon: <BookOpen className="w-7 h-7 text-blue-400" />,
+              bg: "bg-blue-50",
+              title: "90+ Inspirational Resume Examples",
+              desc: "Access a library of resumes from various industries for inspiration and guidance on how to structure and style your own.",
+            },
+            {
+              icon: <Mail className="w-7 h-7 text-blue-400" />,
+              bg: "bg-blue-50",
+              title: "16 Cover Letter Templates",
+              desc: "Our professional templates are designed to help you stand out from the crowd and impress the hiring manager with a flawless job application.",
+            },
+            {
+              icon: <Lightbulb className="w-7 h-7 text-blue-400" />,
+              bg: "bg-blue-50",
+              title: "Career Blog",
+              desc: "From perfecting your resume to acing interviews: get expert tips, step-by-step guides, and real-world examples to help you advance your career.",
             },
           ].map((card) => (
-            <div key={card.title}
-              className="group p-5 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex gap-4 items-start cursor-default">
-              <div className={`shrink-0 w-10 h-10 rounded-xl ${card.bg} flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform duration-200`}>
+            <div
+              key={card.title}
+              className="group rounded-2xl border border-gray-100 bg-gray-50 p-6 hover:shadow-md hover:-translate-y-1 transition-all duration-200 cursor-pointer"
+            >
+              <div
+                className={`w-16 h-16 rounded-xl ${card.bg} flex items-center justify-center mb-5 group-hover:scale-105 transition-transform duration-200`}
+              >
                 {card.icon}
               </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1 text-sm">{card.title}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">{card.desc}</p>
-              </div>
+              <h3 className="font-bold text-gray-900 mb-2 text-sm">{card.title}</h3>
+              <p className="text-sm text-gray-500 leading-relaxed mb-3">{card.desc}</p>
+              <span className="text-sm text-blue-500 font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
+                Read <ArrowRight className="w-3.5 h-3.5" />
+              </span>
             </div>
           ))}
         </div>
-
-        {/* ── Pro Tip — fix #6: softer tint + border ── */}
-        <div className="flex items-start gap-3 bg-blue-50/60 border border-blue-100 rounded-xl px-5 py-3.5">
-          <svg className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-          </svg>
-          <p className="text-sm text-blue-700/80">
-            <span className="font-semibold text-blue-700">Pro Tip:</span>{" "}
-            Text-based resumes work best. Scanned PDFs and images can&apos;t be parsed by ATS systems.
-          </p>
-        </div>
-
-      </main>
+      </section>
     </div>
   );
 }

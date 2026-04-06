@@ -76,4 +76,3 @@ export function getSeniorityBadgeColor(level: string) {
       return "bg-gray-100 text-gray-700";
   }
 }
- 

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
+import SafeHTML from "@/components/common/SafeHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import MonthYearPicker from "../MonthYearPicker";
@@ -403,9 +404,9 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                   )}
                   
                   {project.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: project.description }} 
+                    <SafeHTML
+                      content={project.description}
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
                     />
                   )}
                 </div>

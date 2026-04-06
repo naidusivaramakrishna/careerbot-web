@@ -3,5 +3,6 @@
 import ATSLoginPage from "./_components/ATSLoginPage";
 
 export default function ATSLogin() {
-  return <ATSLoginPage />;
+  return <ATSLoginPage />
+  ;
 }

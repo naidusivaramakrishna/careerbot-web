@@ -551,147 +551,149 @@ export default function JobCard(props: JobCardProps) {
     }
   };
 
+  const level = deriveExperienceLevelFromYears(props.experience) || props.experience_level;
+  const levelColors = getExperienceLevelColors(level);
 
   return (
-    <div className="group bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-300 hover:cursor-pointer transition-all duration-200">
-      {/* HEADER: Logo + Title/Company + Save Button */}
-      <div className="flex gap-4 mb-4">
-        {/* Logo */}
-        <div className="h-12 w-12 flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 font-semibold rounded-lg flex-shrink-0">
-          {props.logo && props.logo.trim() && !logoError ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={props.logo}
-              alt={props.company}
-              width={40}
-              height={40}
-              onError={() => setLogoError(true)}
-              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
-            />
-          ) : (
-            <span className="text-lg font-bold text-blue-600">
-              {(props.company || "J").charAt(0).toUpperCase()}
+    <div className="group bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_20px_rgba(37,87,167,0.10)] hover:border-[#2557a7]/25 transition-all duration-250 overflow-hidden">
+
+      {/* TOP ACCENT BAR — subtle brand line */}
+      <div className="h-[3px] w-full bg-gradient-to-r from-[#2557a7]/60 via-[#2557a7]/20 to-transparent" />
+
+      <div className="p-4">
+        {/* ROW 1: Logo + Title + Company + Save + Time */}
+        <div className="flex gap-3">
+          {/* Logo */}
+          <div className="h-10 w-10 flex-shrink-0 flex items-center justify-center rounded-lg border border-gray-100 bg-gray-50 overflow-hidden shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]">
+            {props.logo && props.logo.trim() && !logoError ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={props.logo}
+                alt={props.company}
+                width={38}
+                height={38}
+                onError={() => setLogoError(true)}
+                className="max-w-full max-h-full object-contain"
+              />
+            ) : (
+              <span className="text-[15px] font-bold text-[#2557a7] select-none">
+                {(props.company || "J").charAt(0).toUpperCase()}
+              </span>
+            )}
+          </div>
+
+          {/* Title + Company + meta */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-semibold text-gray-900 leading-snug capitalize truncate group-hover:text-[#2557a7] transition-colors duration-150">
+                  {props.title || "Job Title"}
+                </h3>
+                <p className="text-[13px] text-gray-400 mt-0.5 font-medium truncate">
+                  {props.company || "Company"}
+                </p>
+              </div>
+
+              {/* Right: Time + Save */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {(props.posted_date || props.created_at) && (
+                  <span className="text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                    {formatPostedTime(props.posted_date || props.created_at)}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 transition-colors duration-150"
+                  title={isSaved ? "Remove from saved" : "Save job"}
+                  onClick={handleSaveJob}
+                >
+                  <Heart
+                    size={15}
+                    className={`transition-all duration-200 ${
+                      isSaved ? "fill-red-500 text-red-500" : "text-gray-300 hover:text-red-400"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ROW 2: Info chips — location, type, mode */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-3">
+          {props.location && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11px] text-gray-500 font-medium">
+              <MapPin size={10} className="text-gray-400" />
+              {props.location}
+            </span>
+          )}
+          {props.type && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11px] text-gray-500 font-medium">
+              <Clock size={10} className="text-gray-400" />
+              {props.type}
+            </span>
+          )}
+          {props.mode && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#2557a7]/5 border border-[#2557a7]/12 rounded-full text-[11px] text-[#2557a7] font-medium">
+              {props.mode}
+            </span>
+          )}
+          {level && (
+            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${levelColors.bg || "bg-gray-50"} ${levelColors.text || "text-gray-500"} border-current/10`}>
+              <Layers size={10} />
+              {level}
             </span>
           )}
         </div>
 
-        {/* Title + Company Name + Save Button + Posted Time */}
-        <div className="flex-1">
-          <div className="flex items-start justify-between gap-2 mb-1">
-            <h3 className="text-lg font-semibold text-gray-900 capitalize">
-              {props.title || "Job Title"}
-            </h3>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {(props.posted_date || props.created_at) && (
-                <p className="text-xs text-green-600 font-medium whitespace-nowrap">
-                  {formatPostedTime(props.posted_date || props.created_at)}
-                </p>
-              )}
-              <button
-                type="button"
-                className="p-1 transition-all duration-200"
-                title={isSaved ? "Remove from saved" : "Save job"}
-                onClick={handleSaveJob}
-              >
-                <Heart
-                  className={`w-5 h-5 transition-all duration-200 ${
-                    isSaved
-                      ? "fill-red-600 text-red-600"
-                      : "text-gray-400 hover:text-red-600 hover:scale-110"
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">
-              {props.company || "Company"}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Job Details: Type • Location */}
-      <div className="flex flex-wrap items-center gap-2 mb-6 text-sm text-gray-700">
-        {props.type && (
-          <>
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-gray-500" />
-              <span>{props.type}</span>
-            </div>
-            {props.location && <span className="mx-1.5">•</span>}
-          </>
-        )}
-        {props.location && (
-          <div className="flex items-center gap-1.5">
-            <MapPin className="w-4 h-4 text-red-600" />
-            <span>{props.location}</span>
+        {/* ROW 3: Experience + Salary */}
+        {(props.experience || props.salary) && (
+          <div className="flex items-center gap-3 mt-2">
+            {props.experience && (
+              <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
+                <Briefcase size={12} className="text-gray-400" />
+                {props.experience}
+              </span>
+            )}
+            {props.salary && (
+              <span className="flex items-center gap-1 text-[12px] font-semibold text-gray-700">
+                <IndianRupee size={12} className="text-gray-500" />
+                {props.salary}
+              </span>
+            )}
           </div>
         )}
-      </div>
 
-      {/* Meta Info: Entry Level • Experience • Salary */}
-      <div className="mb-6 text-sm text-gray-700">
-        <div className="flex flex-wrap items-center gap-2">
-          {(() => {
-            const level = deriveExperienceLevelFromYears(props.experience) || props.experience_level;
-            return level ? (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium">{level}</span>
-                </div>
-                {(props.experience || props.salary) && <span className="mx-1.5">•</span>}
-              </>
-            ) : null;
-          })()}
-          {props.experience && (
-            <>
-              <div className="flex items-center gap-1.5">
-                <Briefcase className="w-4 h-4 text-gray-500" />
-                <span>{props.experience}</span>
-              </div>
-              {props.salary && <span className="mx-1.5">•</span>}
-            </>
-          )}
-          {props.salary && (
-            <div className="flex items-center gap-1.5">
-              <IndianRupee className="w-4 h-4 text-gray-500" />
-              <span>{props.salary}</span>
-            </div>
-          )}
+        {/* ROW 4: Action Buttons */}
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
+          {/* Ask Nancy */}
+          <button
+            type="button"
+            onClick={props.onBotClick}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-[#2557a7] border border-[#2557a7]/20 hover:bg-[#2557a7]/5 hover:border-[#2557a7]/40 transition-all duration-150"
+            title="Chat with Nancy"
+          >
+            <Sparkles size={12} className="text-[#2557a7]" />
+            Ask Nancy
+          </button>
+
+          {/* Apply Now */}
+          <button
+            type="button"
+            className={`px-5 py-1.5 rounded-lg text-[13px] font-semibold whitespace-nowrap transition-all duration-150 ${
+              isSubmitting
+                ? "bg-[#2557a7]/50 text-white cursor-wait"
+                : isApplied
+                ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-default"
+                : "bg-[#2557a7] text-white hover:bg-[#1a4a96] shadow-sm hover:shadow-md"
+            }`}
+            onClick={handleApplyNow}
+            disabled={isSubmitting || isApplied}
+            title={isApplied ? "Already applied" : "Apply to this job"}
+          >
+            {isSubmitting ? "Applying..." : isApplied ? "Applied ✓" : "Apply Now"}
+          </button>
         </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex items-center justify-end gap-3 mt-4">
-        {/* Ask Nancy Button */}
-        <button
-          type="button"
-          onClick={props.onBotClick}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 hover:shadow-sm whitespace-nowrap transition-all duration-200"
-          title="Chat with Nancy"
-        >
-          <Sparkles className="h-4 w-4 text-indigo-600" />
-          Ask Nancy
-        </button>
-
-        {/* Apply Now Button */}
-        <button
-          type="button"
-          className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap text-center ${
-            isSubmitting
-              ? "bg-blue-400 text-white cursor-wait"
-              : isApplied
-              ? "bg-gray-200 text-gray-700 cursor-not-allowed opacity-60"
-              : "bg-blue-600 text-white hover:bg-blue-700"
-          }`}
-          onClick={handleApplyNow}
-          disabled={isSubmitting || isApplied}
-          title={isApplied ? "You've already applied to this job" : "Apply to this job"}
-        >
-          {isSubmitting ? "Applying..." : isApplied ? "Applied ✓" : "Apply Now"}
-        </button>
       </div>
 
       {/* Application Modal */}

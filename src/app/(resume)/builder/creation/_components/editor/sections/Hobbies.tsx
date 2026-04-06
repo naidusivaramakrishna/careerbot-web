@@ -2,6 +2,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
+import SafeHTML from "@/components/common/SafeHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import {
@@ -334,9 +335,9 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                   )}
                   
                   {hobby.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: hobby.description }} 
+                    <SafeHTML
+                      content={hobby.description}
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
                     />
                   )}
                   

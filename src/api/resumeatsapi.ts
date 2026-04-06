@@ -161,7 +161,19 @@ export const processResumeComplete = async (file: File) => {
 
     return { success: true, ...payload };
   } catch (err: unknown) {
-    const message = (err as { message?: string })?.message ?? String(err);
+    let message = (err as { message?: string })?.message ?? String(err);
+
+    // Detect and normalize credit/quota errors
+    const lowerMsg = message.toLowerCase();
+    if (lowerMsg.includes("credit") ||
+        lowerMsg.includes("quota") ||
+        lowerMsg.includes("insufficient") ||
+        lowerMsg.includes("limit exceeded") ||
+        lowerMsg.includes("payment required") ||
+        lowerMsg.includes("402")) {
+      message = "You don't have enough credits to analyze this resume. Please upgrade your plan or purchase credits.";
+    }
+
     return { success: false, error: message };
   }
 };

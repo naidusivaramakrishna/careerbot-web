@@ -147,10 +147,10 @@ export default function JobsContents() {
       // 🔍 DEBUG: Log work mode information and API source for all jobs
       console.log("🏢 === WORK MODE DEBUG BY API SOURCE ===");
 
-      const recruiterJobsWithMode = jobsData.filter((job: any) => job.recruiter_id && job.mode).length;
-      const recruiterJobsWithoutMode = jobsData.filter((job: any) => job.recruiter_id && !job.mode).length;
-      const aggregatedJobsWithMode = jobsData.filter((job: any) => !job.recruiter_id && job.mode).length;
-      const aggregatedJobsWithoutMode = jobsData.filter((job: any) => !job.recruiter_id && !job.mode).length;
+      const recruiterJobsWithMode = jobsData.filter((job: any) => job.recruiter_id && job.work_mode).length;
+      const recruiterJobsWithoutMode = jobsData.filter((job: any) => job.recruiter_id && !job.work_mode).length;
+      const aggregatedJobsWithMode = jobsData.filter((job: any) => !job.recruiter_id && job.work_mode).length;
+      const aggregatedJobsWithoutMode = jobsData.filter((job: any) => !job.recruiter_id && !job.work_mode).length;
 
       console.log(`📊 TOTAL JOBS: ${jobsData.length}`);
       console.log(`\n👷 RECRUITER JOBS (Manual Portal):`);
@@ -160,11 +160,18 @@ export default function JobsContents() {
       console.log(`   WITH work mode ✅: ${aggregatedJobsWithMode}`);
       console.log(`   WITHOUT work mode ❌: ${aggregatedJobsWithoutMode}`);
 
+      console.log(`\n📌 ALL RECRUITER JOBS (${recruiterJobsWithMode + recruiterJobsWithoutMode}):`);
+      jobsData.forEach((job: any, idx: number) => {
+        if (job.recruiter_id) {
+          console.log(`  [${idx + 1}] 👷 RECRUITER | "${job.title || job.job_title}" | Company: ${job.company || job.about_company}`);
+        }
+      });
+
       console.log(`\n📌 JOBS WITH WORK MODE (${recruiterJobsWithMode + aggregatedJobsWithMode}):`);
       jobsData.forEach((job: any, idx: number) => {
-        if (job.mode) {
+        if (job.work_mode) {
           const source = job.recruiter_id ? "👷 RECRUITER" : "🌐 AGGREGATED";
-          console.log(`  [${idx + 1}] ${source} | "${job.title || job.job_title}" → Mode: ${job.mode}`);
+          console.log(`  [${idx + 1}] ${source} | "${job.title || job.job_title}" → Mode: ${job.work_mode}`);
         }
       });
       console.log("=== END WORK MODE DEBUG ===");
@@ -173,7 +180,7 @@ export default function JobsContents() {
         .map((job: any /* Supports both manual and aggregated job formats */, index: number) => {
           // 🔄 Normalize both manual and aggregated job formats
           const title = job.title || job.job_title || "Job Title";
-          const company = job.company || job.about_company || "Company";
+          const company = job.company || job.company_name || job.organization || job.about_company || job.employer || "";
           const location = job.location || job.job_location || job.city || job.place || "Location not specified";
 
           // Debug: Log salary data available in API response
@@ -191,8 +198,8 @@ export default function JobsContents() {
             // Use only API-provided logos (organization_logo or company_logo)
             logo: job.organization_logo || job.company_logo || "",
             type: job.job_type || "Full-time",
-            // Work mode (Remote, Hybrid, Onsite, etc.) - only from recruiter jobs
-            mode: job.mode || "",
+            // Work mode (Remote, Hybrid, Onsite, etc.)
+            mode: job.work_mode || "",
             // Salary: use as-is if string, otherwise empty
             salary: (() => {
               let salaryValue = "";
@@ -203,9 +210,9 @@ export default function JobsContents() {
             })(),
             time: "Recently",
             // Handle both manual (url) and aggregated (apply_url) formats
-            // For recruiter jobs: only use application_url, NOT company_website
-            url: job.url || job.apply_url || "",
-            application_url: job.application_url || "",
+            // For recruiter jobs: DON'T set URL so it opens modal instead of redirecting
+            url: job.recruiter_id ? "" : (job.url || job.apply_url || ""),
+            application_url: job.recruiter_id ? "" : (job.application_url || ""),
             recruiter_id: job.recruiter_id || "",
             matchScore: 75,
             matchText: "Match",
@@ -253,6 +260,9 @@ export default function JobsContents() {
 
       // Update count based on accumulated new jobs
       setNewJobsCount((prev) => page === 1 ? newlyAddedJobIds.length : prev + newlyAddedJobIds.length);
+
+      // Save fetch time so next load can detect new jobs
+      if (page === 1) localStorage.setItem("lastJobFetchTime", new Date().toISOString());
 
       // 🔄 Load More: Append new jobs instead of replacing
       if (page === 1) {
@@ -399,10 +409,12 @@ export default function JobsContents() {
 
     // Filter by location from search bar (only if user selected a specific location)
     if (selectedLocation && selectedLocation !== "All Locations" && selectedLocation !== "Remote") {
-      const locationQuery = selectedLocation.toLowerCase().replace(", india", "");
-      filtered = filtered.filter((job) =>
-        job.location.toLowerCase().includes(locationQuery)
-      );
+      // Extract city name from selected location (e.g., "Mumbai, India" → "mumbai")
+      const selectedCity = selectedLocation.toLowerCase().split(",")[0].trim();
+      filtered = filtered.filter((job) => {
+        const jobCity = job.location.toLowerCase().split(",")[0].trim();
+        return jobCity === selectedCity;
+      });
     }
 
     // Filter by search query (job title and company)
@@ -565,13 +577,9 @@ export default function JobsContents() {
 
   // --------------- UI ----------------
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-[#f4f6fb]">
       {/* CENTER PANEL */}
-      <main className="flex-1 px-10 py-8 overflow-y-scroll">
-        <div className="mb-8 -mt-6 -ml-8">
-          <h1 className="text-3xl font-bold text-[#2557a7]">CareerBot</h1>
-        </div>
-
+      <main className="flex-1 px-8 py-6 overflow-y-scroll">
         <JobsHeaderSection
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -587,7 +595,7 @@ export default function JobsContents() {
         {(searchQuery || selectedLocation !== "All Locations" || selectedFilters.length > 0) && (
           <div className="mb-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-gray-700">Active Filters:</span>
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Active Filters</span>
               {(searchQuery || selectedLocation !== "All Locations" || selectedFilters.length > 0) && (
                 <button
                   type="button"
@@ -596,7 +604,7 @@ export default function JobsContents() {
                     setSelectedLocation("All Locations");
                     setSelectedFilters([]);
                   }}
-                  className="text-xs font-medium text-blue-600 hover:text-blue-800 underline"
+                  className="text-xs text-[#2557a7] hover:text-[#1a4a96] font-medium"
                   title="Clear all filters"
                 >
                   Clear All
@@ -605,12 +613,12 @@ export default function JobsContents() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {searchQuery && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-sm">
-                  <span className="text-gray-700">{searchQuery}</span>
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-[#2557a7]/8 border border-[#2557a7]/20 rounded-full text-xs text-[#2557a7]">
+                  <span>{searchQuery}</span>
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="text-blue-600 hover:text-blue-800 font-semibold"
+                    className="text-[#2557a7]/60 hover:text-[#2557a7] ml-1 font-semibold leading-none"
                     title="Clear search"
                   >
                     ×
@@ -618,12 +626,12 @@ export default function JobsContents() {
                 </div>
               )}
               {selectedLocation !== "All Locations" && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-sm">
-                  <span className="text-gray-700">{selectedLocation}</span>
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-[#2557a7]/8 border border-[#2557a7]/20 rounded-full text-xs text-[#2557a7]">
+                  <span>{selectedLocation}</span>
                   <button
                     type="button"
                     onClick={() => setSelectedLocation("All Locations")}
-                    className="text-blue-600 hover:text-blue-800 font-semibold"
+                    className="text-[#2557a7]/60 hover:text-[#2557a7] ml-1 font-semibold leading-none"
                     title="Clear location"
                   >
                     ×
@@ -633,13 +641,13 @@ export default function JobsContents() {
               {selectedFilters.map((filter) => (
                 <div
                   key={filter}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-sm"
+                  className="flex items-center gap-1.5 px-3 py-1 bg-[#2557a7]/8 border border-[#2557a7]/20 rounded-full text-xs text-[#2557a7]"
                 >
-                  <span className="text-gray-700">{filter}</span>
+                  <span>{filter}</span>
                   <button
                     type="button"
                     onClick={() => handleFilterToggle(filter)}
-                    className="text-blue-600 hover:text-blue-800 font-semibold"
+                    className="text-[#2557a7]/60 hover:text-[#2557a7] ml-1 font-semibold leading-none"
                     title="Remove filter"
                   >
                     ×
@@ -668,33 +676,32 @@ export default function JobsContents() {
               ))}
             </div>
           ) : error ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-800 font-semibold">Failed to Load Jobs</p>
-              <p className="text-red-600 text-sm mt-1">{error}</p>
+            <div className="bg-red-50 border border-red-100 rounded-2xl p-5">
+              <p className="text-red-800 font-semibold text-sm">Failed to Load Jobs</p>
+              <p className="text-red-500 text-xs mt-1">{error}</p>
             </div>
           ) : filteredJobs.length === 0 && !hasNextPage ? (
             // Only show "no jobs" when: filteredJobs is empty AND no more pages to load
-            <div className="text-center py-12">
-              <h1 className="text-xl font-semibold mb-2">
-                Recommended Jobs for You
-              </h1>
-              <p className="text-sm text-gray-500 mb-4">
-                Personalized opportunities matched to your skills and preferences
-              </p>
-              <p className="text-gray-500 text-lg">No jobs found</p>
-              <p className="text-gray-400 text-sm mt-2">
+            <div className="text-center py-16">
+              <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-gray-400">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+              </div>
+              <p className="text-gray-700 font-semibold text-base">No jobs found</p>
+              <p className="text-gray-400 text-sm mt-1">
                 {activeTab === "saved"
                   ? "You haven't saved any jobs yet"
                   : activeTab === "new"
                   ? "No new jobs added in the latest update"
-                  : searchQuery && `for "${searchQuery}"`}
+                  : searchQuery && `No results for "${searchQuery}"`}
                 {selectedFilters.length > 0 && ` matching ${selectedFilters.join(", ")}`}
               </p>
             </div>
           ) : filteredJobs.length === 0 && hasNextPage ? (
             // If filtered jobs are empty but hasNextPage is true, show scroll prompt
             <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">
+              <p className="text-gray-500 text-sm">
                 {activeTab === "new"
                   ? "No matching jobs in current view"
                   : "Keep scrolling to load more jobs"}
@@ -720,7 +727,6 @@ export default function JobsContents() {
           >
             {loadingMore && (
               <div className="space-y-4 w-full">
-                {/* Show 3 skeleton cards while loading */}
                 {Array.from({ length: 3 }).map((_, i) => (
                   <JobSkeleton key={`skeleton-${i}`} />
                 ))}
@@ -728,48 +734,48 @@ export default function JobsContents() {
             )}
 
             {!loadingMore && !hasNextPage && filteredJobs.length > 0 && currentPage > 1 && (
-              <div className="w-full max-w-md mx-auto text-center py-12 px-6">
-                <div className="mb-4 text-4xl">✅</div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <div className="w-full max-w-sm mx-auto text-center py-12 px-6">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-emerald-500">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className="text-base font-semibold text-gray-900 mb-1">
                   You&apos;re all caught up
                 </h2>
-                <p className="text-gray-600 mb-6">
+                <p className="text-gray-400 text-sm mb-6">
                   You&apos;ve seen all available jobs matching your criteria.
                 </p>
 
-                {/* Job Alerts CTA */}
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] hover:bg-[#1a4a96] text-white text-sm font-medium rounded-xl transition-colors"
                   onClick={() => {
                     toast.info("Job alerts feature coming soon!");
                   }}
                 >
-                  <span>🔔</span>
                   Turn on job alerts
                 </button>
 
-                <p className="text-xs text-gray-500 mt-6">
+                <p className="text-xs text-gray-400 mt-4">
                   Get notified when new jobs match your profile
                 </p>
               </div>
             )}
 
             {!loadingMore && hasNextPage && filteredJobs.length > 0 && (
-              <div className="h-4 text-xs text-gray-400 text-center">
-                📍 Scroll sentinel
-              </div>
+              <div className="h-4" />
             )}
           </div>
         </div>
       </main>
 
       {/* RIGHT PANEL - Sticky Sidebar */}
-      <aside className="w-[400px] pr-8 py-8 space-y-6 sticky top-8 h-fit">
+      <aside className="w-[360px] pr-6 py-6 space-y-4 sticky top-0 h-fit">
         {!openChat && (
           <>
-            <TopPickCard />
-            <SalaryInsights />
+            <TopPickCard jobs={jobs} />
+            <SalaryInsights jobs={jobs} />
             <CareerTip />
           </>
         )}

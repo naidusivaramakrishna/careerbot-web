@@ -10,6 +10,7 @@ export interface ExtensionSession {
   job_description: string | null;
   job_url: string | null;
   resume_id: string | null;
+  jd_id: string | null;
   profile: Record<string, unknown>;
   created_at: string;
   expires_at: string;

@@ -1,0 +1,93 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [master, develop2, feature/**]
+  pull_request:
+    branches: [master, develop2]
+
+jobs:
+  security-checks:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check .env files are not tracked
+        run: |
+          if git ls-files | grep -E '^\.env$|^\.env\.' | grep -v '.env.example'; then
+            echo "ERROR: .env files are tracked in git!"
+            exit 1
+          fi
+          echo "OK: No .env files tracked"
+
+      - name: Check for hardcoded secrets
+        run: |
+          FOUND=0
+          if grep -rn "sk-[a-zA-Z0-9]{32,}" src/ --include="*.ts" --include="*.tsx" 2>/dev/null; then
+            echo "ERROR: Possible hardcoded OpenAI key found"
+            FOUND=1
+          fi
+          if grep -rn "AKIA[A-Z0-9]{16}" src/ --include="*.ts" --include="*.tsx" 2>/dev/null; then
+            echo "ERROR: Possible hardcoded AWS key found"
+            FOUND=1
+          fi
+          if [ $FOUND -eq 1 ]; then exit 1; fi
+          echo "OK: No hardcoded secrets found"
+
+      - name: Check NEXT_PUBLIC_ key exposure
+        run: |
+          if grep -rn "NEXT_PUBLIC_.*API_KEY\|NEXT_PUBLIC_.*SECRET\|NEXT_PUBLIC_.*TOKEN" src/ --include="*.ts" --include="*.tsx" 2>/dev/null; then
+            echo "ERROR: Sensitive keys should not use NEXT_PUBLIC_ prefix (they get bundled into client JS)"
+            exit 1
+          fi
+          echo "OK: No sensitive keys exposed via NEXT_PUBLIC_"
+
+  lint-and-build:
+    name: Lint and Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint (advisory)
+        run: npx eslint src/ --ext .ts,.tsx --max-warnings 100 || true
+
+      - name: TypeScript check (advisory)
+        run: npx tsc --noEmit 2>&1 | tail -20 || true
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Count console.log usages (advisory)
+        run: |
+          COUNT=$(grep -rn "console\.log" src/ --include="*.ts" --include="*.tsx" | wc -l)
+          echo "console.log count: $COUNT"
+          if [ "$COUNT" -gt 100 ]; then
+            echo "WARNING: High console.log count ($COUNT). Consider using logger."
+          fi
+
+      - name: Count dangerouslySetInnerHTML usages (advisory)
+        run: |
+          COUNT=$(grep -rn "dangerouslySetInnerHTML" src/ --include="*.ts" --include="*.tsx" | wc -l)
+          echo "dangerouslySetInnerHTML count: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "WARNING: $COUNT dangerouslySetInnerHTML usages found. Ensure DOMPurify sanitization."
+          fi
+
+      - name: Check for direct cloud API URLs (advisory)
+        run: |
+          if grep -rn "azure\.com\|openai\.com\|amazonaws\.com" src/ --include="*.ts" --include="*.tsx" 2>/dev/null; then
+            echo "WARNING: Direct cloud API URLs found in source. Prefer proxying through backend."
+          fi
+          echo "Cloud URL check complete"

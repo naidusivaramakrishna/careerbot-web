@@ -71,4 +71,3 @@ export const applyToJob = async (jobId: string, data: ApplicationData) => {
   toast.error("Failed to apply. Please try again.");
   return { success: false, applied: false };
 };
- 

@@ -1,22 +1,7 @@
 // background/service-worker.js
 
-const POPUP_WIDTH  = 380;
-const POPUP_HEIGHT = 580;
-
-chrome.action.onClicked.addListener(async () => {
-  const win = await chrome.windows.getCurrent();
-
-  const left = win.left + win.width - POPUP_WIDTH - 16;
-  const top  = win.top  + Math.round((win.height - POPUP_HEIGHT) / 2);
-
-  chrome.windows.create({
-    url:    chrome.runtime.getURL('popup/popup.html'),
-    type:   'popup',
-    width:  POPUP_WIDTH,
-    height: POPUP_HEIGHT,
-    left:   Math.max(0, left),
-    top:    Math.max(0, top),
-  });
+chrome.action.onClicked.addListener(() => {
+  openPopup();
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -24,6 +9,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleJDDetected(message.data, sender.tab);
     sendResponse({ ok: true });
   }
+
+  // User clicked "Tailor Resume" in the banner — save JD and open popup immediately
+  if (message.type === 'JD_TAILOR_NOW') {
+    handleJDDetected(message.data, sender.tab).then(() => {
+      openPopup();
+    });
+    sendResponse({ ok: true });
+  }
+
   return true;
 });
 
@@ -33,6 +27,7 @@ async function handleJDDetected(data, tab) {
       jd:        data.jd,
       meta:      data.meta,
       url:       tab?.url || '',
+      tabId:     tab?.id  || null,
       timestamp: Date.now(),
     }
   });
@@ -42,13 +37,43 @@ async function handleJDDetected(data, tab) {
   chrome.action.setBadgeBackgroundColor({ color: '#8b5cf6', tabId: tab?.id });
 }
 
-// Clear old detected JDs when tab navigates away
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  if (changeInfo.status === 'loading') {
-    const { detectedJD } = await chrome.storage.local.get('detectedJD');
-    if (detectedJD) {
-      chrome.action.setBadgeText({ text: '' });
-    }
+async function openPopup() {
+  const popupUrl = chrome.runtime.getURL('popup/popup.html');
+
+  // If already open, just focus it
+  const existing = await chrome.windows.getAll({ windowTypes: ['popup'] });
+  const careerbotWin = existing.find(w => w.type === 'popup');
+  if (careerbotWin) {
+    await chrome.windows.update(careerbotWin.id, { focused: true });
+    return;
+  }
+
+  const win = await chrome.windows.getCurrent().catch(() => null);
+  const W = 800;
+  const H = Math.round((win?.height || screen.availHeight) * 0.90);
+  const left = (win?.left || 0) + (win?.width || screen.availWidth) - W;
+  const top  = win?.top || 0;
+
+  chrome.windows.create({
+    url:    popupUrl,
+    type:   'popup',
+    width:  W,
+    height: H,
+    left:   Math.max(0, left),
+    top:    Math.max(0, top),
+  });
+}
+
+// Clear detected JD only when the exact tab that detected it navigates away
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'loading') return;
+  // Never clear when our own popup/extension pages are loading
+  if (tab.url?.startsWith('chrome-extension://')) return;
+
+  const { detectedJD } = await chrome.storage.local.get('detectedJD');
+  if (detectedJD && detectedJD.tabId === tabId) {
+    await chrome.storage.local.remove('detectedJD');
+    chrome.action.setBadgeText({ text: '' });
   }
 });
 
