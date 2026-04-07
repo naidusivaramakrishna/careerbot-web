@@ -68,7 +68,7 @@ export const CreditBalanceCard: React.FC<CreditBalanceCardProps> = ({
       )}
       {isMedium && (
         <div className="mt-3 text-xs text-orange-600 bg-orange-50 rounded-lg px-3 py-2">
-          💡 You've used over half your credits this month.
+          💡 You&apos;ve used over half your credits this month.
         </div>
       )}
     </div>

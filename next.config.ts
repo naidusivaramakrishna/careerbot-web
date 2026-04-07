@@ -48,6 +48,7 @@ const nextConfig: NextConfig = {
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
         /^node:/,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (resource: any) => {
           resource.request = resource.request.replace(/^node:/, '');
         }

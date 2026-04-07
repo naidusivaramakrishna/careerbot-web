@@ -69,6 +69,7 @@ export default function ScheduleInterviewModal({
       }
 
       onClose();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       logger.error('Failed to schedule interview:', error);
       const errorMessage = error?.response?.data?.error?.message ||
@@ -90,7 +91,7 @@ export default function ScheduleInterviewModal({
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Schedule Interview</h2>
-            <p className="text-sm text-gray-600 mt-1">Let's learn more about the candidate's proficiencies</p>
+            <p className="text-sm text-gray-600 mt-1">Let&apos;s learn more about the candidate&apos;s proficiencies</p>
           </div>
           <button
             onClick={onClose}

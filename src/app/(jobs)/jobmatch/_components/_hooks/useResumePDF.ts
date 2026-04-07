@@ -88,6 +88,7 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
 
         console.warn("⚠️ Unsupported file type:", contentType);
         setPdfError("Unsupported document type. Please use PDF or DOCX format.");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error("❌ Error loading resume PDF:", err);
         // Don't set error - let it fall back to frontend template

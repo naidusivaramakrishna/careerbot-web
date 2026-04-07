@@ -32,6 +32,7 @@ function CandidateDetailsContent() {
   const applicationId = params.id as string;
   const jobIdFromUrl = searchParams.get('jobId');
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [candidate, setCandidate] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +71,7 @@ function CandidateDetailsContent() {
         } else {
           setError('No candidate data found');
         }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error('🔴 Error fetching candidate details:', err);
         logger.error('Failed to fetch candidate details:', {

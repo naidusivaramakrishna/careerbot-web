@@ -19,7 +19,7 @@ export default function MockInterviewPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'overview' | 'notes' | 'practice'>('overview');
   const [isLoading, setIsLoading] = useState(false);
-  const [notes, setNotes] = useState<any>(null);
+  const [notes, setNotes] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const [readinessScore, setReadinessScore] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,7 +110,7 @@ export default function MockInterviewPage() {
           {['overview', 'notes', 'practice'].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab as any)}
+              onClick={() => setActiveTab(tab as any)} // eslint-disable-line @typescript-eslint/no-explicit-any
               className={`px-4 py-3 font-medium border-b-2 transition-colors ${
                 activeTab === tab
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -295,7 +295,7 @@ function NotesTab({
   onGenerateNotes,
   onStartPractice,
 }: {
-  notes: any;
+  notes: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   isLoading: boolean;
   onGenerateNotes: () => void;
   onStartPractice: () => void;
@@ -352,7 +352,7 @@ function NotesTab({
                 Project Explanations
               </h3>
               <div className="space-y-4">
-                {notes.project_explanations.map((project: any, idx: number) => (
+                {notes.project_explanations.map((project: any, idx: number) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
                   <div key={idx} className="border-l-4 border-blue-500 pl-4 py-2">
                     <h4 className="font-semibold text-gray-900 dark:text-white">
                       {project.project_name}
@@ -380,7 +380,7 @@ function NotesTab({
                 HR Answer Scripts
               </h3>
               <div className="space-y-4">
-                {notes.hr_answers.map((qa: any, idx: number) => (
+                {notes.hr_answers.map((qa: any, idx: number) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
                   <div key={idx} className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800">
                     <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
                       Q: {qa.question_text}

@@ -22,6 +22,7 @@ export type WebSocketMessageType =
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -244,6 +245,7 @@ export function useWebsocketInterview(): UseWebsocketInterviewReturn {
               clearInterval(pingIntervalRef.current);
             }
           };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
           const errorMsg = err.message || 'Failed to connect to interview server';
           setError(errorMsg);
@@ -359,6 +361,7 @@ export function useWebsocketInterview(): UseWebsocketInterviewReturn {
           ws.onmessage = handleMessage;
           ws.onclose = () => setIsConnected(false);
           ws.onerror = (e) => setError('Reconnection failed');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
           setError(`Reconnection error: ${err.message}`);
         }

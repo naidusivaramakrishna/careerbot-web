@@ -152,7 +152,9 @@ export interface TemplateResponse {
     body_size: number;
     line_height: number;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sections?: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   styling?: Record<string, any>;
   is_premium?: boolean;
   is_active?: boolean;
@@ -273,6 +275,7 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
         logger.debug("🔍 First resume personalInfo:", response.data[0]?.personalInfo);
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const transformedResumes = response.data.map((resume: any) => {
         const resumeId = resume.id || resume._id;
 
@@ -330,9 +333,11 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
 /**
  * Transform frontend customSections (fields-based) to backend format (items-based)
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const transformCustomSectionsForBackend = (customSections: CustomSection[]): any[] => {
   return customSections.map((section) => {
     // Create an item from the fields
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const item: any = {
       title: '',
       subtitle: '',
@@ -394,6 +399,7 @@ const transformCustomSectionsForBackend = (customSections: CustomSection[]): any
 /**
  * Transform backend customSections (items-based) to frontend format (fields-based)
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const transformCustomSectionsFromBackend = (backendSections: any[]): CustomSection[] => {
   if (!backendSections || backendSections.length === 0) return [];
 

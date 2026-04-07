@@ -1,4 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const sharp = require('sharp');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const path = require('path');
 
 const inputPath = path.join(__dirname, 'logo.png');

@@ -61,7 +61,9 @@ export function cleanResumeContent(content: string): CleanedResumeData {
     const candidate = cleanContent.replace(/\.$/, '');
     const parsed = JSON.parse(candidate);
     if (parsed && typeof parsed === 'object') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (typeof (parsed as any).summary === 'string') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         cleanContent = (parsed as any).summary.trim();
       }
     }
@@ -79,6 +81,7 @@ export function cleanResumeContent(content: string): CleanedResumeData {
 /**
  * Clean all text fields in resume data object
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function cleanResumeData(resumeData: any): any {
   if (!resumeData || typeof resumeData !== 'object') {
     return resumeData;
@@ -90,6 +93,7 @@ export function cleanResumeData(resumeData: any): any {
   }
 
   // Handle objects
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cleaned: any = {};
 
   for (const [key, value] of Object.entries(resumeData)) {
@@ -117,9 +121,11 @@ export function cleanResumeData(resumeData: any): any {
 /**
  * Extract all embedded suggestions from resume data
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractAllSuggestions(resumeData: any): string[] {
   const suggestions: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function extract(data: any) {
     if (!data) return;
 
@@ -140,7 +146,9 @@ export function extractAllSuggestions(resumeData: any): string[] {
 /**
  * Process enhanced sections from API to separate content from suggestions
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function processEnhancedSections(enhancedSections: any): {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cleanedData: any;
   embeddedSuggestions: string[];
 } {

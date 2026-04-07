@@ -8,10 +8,12 @@ interface ResumePreviewProps {
   isUpdating: boolean;
   isDocx: boolean;
   docxBlob: Blob | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   parsedData: any;
   onRegenerate?: () => void;
   resumeId?: string | null;
   activeSection?: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   editOverrides?: Record<string, any>;
   addedFields?: Record<string, string[]>;
   onEditSection?: (key: string) => void;

@@ -132,6 +132,7 @@ export function AudioRecorder({
 
       setIsRecording(true);
       setRecordingTime(0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setPermissionDenied(true);

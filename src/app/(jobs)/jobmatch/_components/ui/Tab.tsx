@@ -2,6 +2,7 @@
 
 import React from "react";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Tab = ({ label, icon, active, onClick }: any) => (
   <button
     onClick={onClick}

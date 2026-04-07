@@ -3,7 +3,9 @@
 import React from "react";
 
 interface SkillsEditorProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   formData: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setFormData: (data: any) => void;
 }
 

@@ -8,8 +8,10 @@ export type SkillType = "technical" | "soft";
 
 export const useSkillUpdate = (
   _resumeId: string | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   matchResults: any,
   _resolveResumeId: () => string | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setMatchResults: (data: any) => void,
   onResumeUpdated?: () => void
 ) => {
@@ -25,13 +27,17 @@ export const useSkillUpdate = (
   }, [matchResults]);
 
   /* ── shared helpers ── */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filterSkill = (arr: any[], skill: string) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (arr || []).filter((s: any) => {
       const name = typeof s === "string" ? s : s?.skill;
       return name?.toLowerCase() !== skill.toLowerCase();
     });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const skillInArr = (arr: any[], skill: string) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (arr || []).some((s: any) => {
       const name = typeof s === "string" ? s : s?.skill;
       return name?.toLowerCase() === skill.toLowerCase();
@@ -39,6 +45,7 @@ export const useSkillUpdate = (
 
   /* ── build optimistic state after ADD ── */
   const buildAddedState = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (prev: any, skill: string, skillType: SkillType) => {
       const prevData = prev?.data || {};
       const prevMatchResult = prevData.match_result || {};
@@ -62,6 +69,7 @@ export const useSkillUpdate = (
             : [...prevNewlyAddedSoft, skill]
           : prevNewlyAddedSoft;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const addToMatched = (matched: any[], missing: any[]) =>
         skillInArr(missing, skill) && !skillInArr(matched, skill)
           ? [...(matched || []), skill]
@@ -98,6 +106,7 @@ export const useSkillUpdate = (
 
   /* ── build optimistic state after REMOVE ── */
   const buildRemovedState = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (prev: any, skill: string, skillType: SkillType) => {
       const prevData = prev?.data || {};
       const prevMatchResult = prevData.match_result || {};
@@ -117,8 +126,10 @@ export const useSkillUpdate = (
           ? prevNewlyAddedSoft.filter((s: string) => s.toLowerCase() !== skill.toLowerCase())
           : prevNewlyAddedSoft;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const removeFromMatched = (arr: any[]) => filterSkill(arr, skill);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const addBackToMissing = (missing: any[], matched: any[]) =>
         skillInArr(matched, skill) && !skillInArr(missing, skill)
           ? [...(missing || []), skill]
@@ -167,6 +178,7 @@ export const useSkillUpdate = (
       setIsUpdating(true);
 
       // 1. Optimistic update — always applies immediately
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setMatchResults((prev: any) => buildAddedState(prev, skill, skillType));
 
       // 2. Trigger PDF refresh
@@ -174,6 +186,7 @@ export const useSkillUpdate = (
 
       // 3. Sync with backend (best-effort — UI update already done)
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const response = await httpClient.post<any>(
           `/matcher/live-update/${matchId}/add-skill`,
           { skill_to_add: skill }
@@ -181,12 +194,14 @@ export const useSkillUpdate = (
         const responseData = response.data?.data || response.data;
         const newScore = responseData?.ats_scores?.new;
         if (newScore) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           setMatchResults((prev: any) => ({
             ...prev,
             data: { ...prev?.data, ats_score: newScore },
           }));
         }
       } catch (err: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const status = (err as any)?.response?.status;
         if (status === 429) {
           toast.error("Too many requests. Please wait before adding another skill.");
@@ -213,6 +228,7 @@ export const useSkillUpdate = (
       setIsUpdating(true);
 
       // 1. Optimistic update
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setMatchResults((prev: any) => buildRemovedState(prev, skill, skillType));
 
       // 2. Trigger PDF refresh
@@ -220,6 +236,7 @@ export const useSkillUpdate = (
 
       // 3. Sync with backend (best-effort)
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const response = await httpClient.post<any>(
           `/matcher/live-update/${matchId}/remove-skill`,
           { skill_to_remove: skill }
@@ -227,12 +244,14 @@ export const useSkillUpdate = (
         const responseData = response.data?.data || response.data;
         const newScore = responseData?.ats_scores?.new;
         if (newScore) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           setMatchResults((prev: any) => ({
             ...prev,
             data: { ...prev?.data, ats_score: newScore },
           }));
         }
       } catch (err: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const status = (err as any)?.response?.status;
         if (status === 429) {
           toast.error("Too many requests. Please wait before removing another skill.");

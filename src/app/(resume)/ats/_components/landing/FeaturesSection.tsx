@@ -317,8 +317,8 @@ function ChecklistSection() {
 
             <div className="bg-[#0275dd]/5 border-l-4 border-[#0275dd] rounded-lg p-5">
               <p className="text-base font-semibold text-[#2d2d2d]">
-                "Get clarity where your resume truly stands — powered by recruiter-trained
-                AI."
+                &quot;Get clarity where your resume truly stands — powered by recruiter-trained
+                AI.&quot;
               </p>
             </div>
           </div>
@@ -338,7 +338,7 @@ function ChecklistSection() {
 
           <div className="bg-white rounded-3xl p-8 border-2 border-[#0275dd]/20 shadow-lg hover:shadow-2xl transition-all duration-500 text-center flex flex-col justify-center">
             <h3 className="text-2xl font-black mb-4 text-[#2d2d2d] leading-tight">
-              Ready to see your resume through recruiter's eyes?
+              Ready to see your resume through recruiter&apos;s eyes?
             </h3>
             <p className="text-lg font-bold text-[#2d2d2d] mb-6">
               Run a deep ATS analysis now.

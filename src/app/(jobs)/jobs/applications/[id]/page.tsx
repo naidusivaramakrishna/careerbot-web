@@ -370,6 +370,7 @@ export default function ApplicationTrackingPage() {
         );
         setApplication(response.data.data);
         setError(null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error("Error fetching application:", err);
         if (err.response?.status === 404) {
@@ -403,7 +404,7 @@ export default function ApplicationTrackingPage() {
         <div className="bg-white rounded-xl shadow p-8 max-w-md w-full text-center">
           <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
           <h2 className="text-lg font-semibold mb-2">{error || "Application not found"}</h2>
-          <p className="text-gray-600 mb-6">The application you're looking for doesn't exist.</p>
+          <p className="text-gray-600 mb-6">The application you&apos;re looking for doesn&apos;t exist.</p>
           <Link
             href="/jobs"
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"

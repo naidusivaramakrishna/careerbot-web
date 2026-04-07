@@ -76,10 +76,12 @@ export default function JobDetailPage() {
         try {
           const response = await recruiterAuthApi.getMyJobs();
           if (response.data) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const foundJob = response.data.find((j: any) => String(j.id) === String(jobId));
 
             if (foundJob) {
               // Helper function to get value or fallback for empty strings
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const getValue = (value: any, fallback: string) => {
                 return value && typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback;
               };
@@ -116,6 +118,7 @@ export default function JobDetailPage() {
               return;
             }
           }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (apiError: any) {
           // Check if it's an authentication error
           if (apiError.message?.includes('Authentication required')) {
@@ -135,6 +138,7 @@ export default function JobDetailPage() {
 
           if (foundJob) {
             // Helper function to get value or fallback for empty strings
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const getValue = (value: any, fallback: string) => {
               return value && typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback;
             };
@@ -178,6 +182,7 @@ export default function JobDetailPage() {
       // Try to delete from backend API first
       try {
         await recruiterAuthApi.deleteJob(String(jobId));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (apiError: any) {
         // Silently handle backend errors - we'll still delete from localStorage
         if (!apiError.message?.includes('Authentication required')) {
@@ -245,7 +250,7 @@ export default function JobDetailPage() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Job Not Found</h2>
           <p className="text-gray-600 mb-6">
-            The job you're looking for doesn't exist or has been removed.
+            The job you&apos;re looking for doesn&apos;t exist or has been removed.
           </p>
           <button
             onClick={() => router.push('/recruiter/posted-jobs')}

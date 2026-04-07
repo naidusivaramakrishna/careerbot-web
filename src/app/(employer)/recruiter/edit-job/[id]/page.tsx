@@ -79,6 +79,7 @@ const EditJobPage = () => {
         };
 
         // Helper function to map job data to form fields
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mapJobToFormData = (job: any) => {
           setFormData({
             title: job.title || '',
@@ -101,6 +102,7 @@ const EditJobPage = () => {
         try {
           const response = await recruiterAuthApi.getMyJobs();
           if (response.data) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const job = response.data.find((j: any) => String(j.id) === String(jobId));
             if (job) {
               mapJobToFormData(job);
@@ -116,6 +118,7 @@ const EditJobPage = () => {
         if (storedJobs) {
           const jobs = JSON.parse(storedJobs);
           // Use string comparison to handle both string UUIDs and number IDs
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const job = jobs.find((j: any) => String(j.id) === String(jobId));
 
           if (job) {
@@ -177,6 +180,7 @@ const EditJobPage = () => {
       try {
         // Pass jobId as-is (could be string UUID or number)
         // Only send fields that have values to avoid 422 validation errors
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updatePayload: any = {
           title: cleanedData.title,
           location: cleanedData.location,
@@ -201,8 +205,10 @@ const EditJobPage = () => {
         }
         updatePayload.remote = cleanedData.location === 'Remote';
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await recruiterAuthApi.updateJob(jobId as any, updatePayload);
         logger.info('Job updated in backend successfully');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (apiError: any) {
         logger.error('Backend update failed:', apiError.message);
         // Continue with localStorage update even if backend fails
@@ -212,6 +218,7 @@ const EditJobPage = () => {
       const storedJobs = localStorage.getItem("postedJobs");
       if (storedJobs) {
         const jobs = JSON.parse(storedJobs);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updatedJobs = jobs.map((job: any) => {
           // Use string comparison to handle both string UUIDs and number IDs
           if (String(job.id) === String(jobId)) {
@@ -239,6 +246,7 @@ const EditJobPage = () => {
 
       alert('Job updated successfully!');
       router.push('/recruiter/posted-jobs');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       logger.error('Error updating job:', error);
       alert(error.message || 'Failed to update job. Please try again.');

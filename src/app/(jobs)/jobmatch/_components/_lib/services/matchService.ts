@@ -36,6 +36,7 @@ export function validateJDInput(jdFile: File | null, jdText: string): { valid: b
 /**
  * Extract ATS score from match results
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractATSScore(matchResults: any): number {
   if (!matchResults?.data) return 0;
 
@@ -53,6 +54,7 @@ export function extractATSScore(matchResults: any): number {
 /**
  * Extract missing skills from match results
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractMissingSkills(matchResults: any) {
   if (!matchResults?.data) {
     return {
@@ -76,6 +78,7 @@ export function extractMissingSkills(matchResults: any) {
 /**
  * Extract matched skills from match results
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractMatchedSkills(matchResults: any): string[] {
   if (!matchResults?.data) return [];
 

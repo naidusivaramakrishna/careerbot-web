@@ -31,8 +31,10 @@ export interface UpdateSystemConfigRequest {
     allowed_file_types?: string[];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface SystemConfigResponse extends SystemConfig { }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ResetSystemConfigResponse extends SystemConfig { }
 
 // Login methods enum for type safety

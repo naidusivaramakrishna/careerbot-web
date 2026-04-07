@@ -10,6 +10,7 @@ export interface GenerateTestRequest {
 
 export interface GenerateTestResponse {
   test_id: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   questions: any[];
   message?: string;
   // Add other response fields as per your API response
@@ -145,6 +146,7 @@ export const startSession = async (data: StartSessionRequest): Promise<StartSess
     logger.debug('🔍 ===== END RAW RESPONSE =====');
 
     // Check for different possible response structures
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const responseData: any = response.data;
 
     // Try to find session_id in different possible locations
@@ -191,10 +193,12 @@ export const startSession = async (data: StartSessionRequest): Promise<StartSess
  */
 export const getCurrentQuestion = async (sessionId: string): Promise<CurrentQuestionResponse> => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response = await httpClient.get<any>(`/ai-assessment/sessions/${sessionId}/current-question`);
     logger.debug('🔍 getCurrentQuestion response:', response.data);
 
     // The API returns the question nested in current_question
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const responseData: any = response.data;
 
     if (responseData?.current_question) {
@@ -259,6 +263,7 @@ export const getNextQuestion = async (data: NextQuestionRequest) => {
     //   `/ai-assessment/sessions/${data.session_id}/next-question?question_id=${data.question_id}`,
     //   {}  // question_id passed as query parameter
     // );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response = await httpClient.post<any>(
       `/ai-assessment/sessions/${data.session_id}/next-question?completed_question_id=${data.question_id}`,
       {}  // question_id passed as query parameter

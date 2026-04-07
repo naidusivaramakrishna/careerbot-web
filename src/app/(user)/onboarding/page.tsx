@@ -203,6 +203,7 @@ const OnboardingContent: React.FC = () => {
         {/* ── Footer ── */}
         <p className="text-center mt-2 text-xs text-gray-400 shrink-0">
           Already have an account?{' '}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a
             href="/?showLogin=true"
             className="font-semibold hover:underline"

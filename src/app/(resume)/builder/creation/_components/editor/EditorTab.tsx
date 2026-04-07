@@ -276,6 +276,7 @@ const EditorTab: React.FC<Props> = ({
         
         const backendKey = sectionKeyMap[sectionName] || sectionName.toLowerCase().replace(/\s+/g, "_");
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updatePayload: Record<string, any> = {
           [backendKey]: sectionData,
         };
@@ -403,6 +404,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Education") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const educationArray: any[] = [];
       let index = 0;
       
@@ -421,6 +423,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Work Experience") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const workArray: any[] = [];
       let index = 0;
       
@@ -442,6 +445,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Projects") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const projectsArray: any[] = [];
       let index = 0;
       
@@ -465,6 +469,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Certifications") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const certsArray: any[] = [];
       let index = 0;
       
@@ -481,6 +486,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Achievements") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const achievementsArray: any[] = [];
       let index = 0;
       
@@ -497,6 +503,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Internships") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const internshipsArray: any[] = [];
       let index = 0;
       
@@ -517,6 +524,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Volunteering") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const volunteeringArray: any[] = [];
       let index = 0;
       
@@ -534,6 +542,7 @@ const EditorTab: React.FC<Props> = ({
     }
 
         if (sectionName === "Awards") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const awardsArray: any[] = [];
       let index = 0;
       
@@ -550,6 +559,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Hobbies") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const hobbiesArray: any[] = [];
       let index = 0;
       
@@ -567,6 +577,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Interests") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const interestsArray: any[] = [];
       let index = 0;
       
@@ -583,6 +594,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "Languages") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const languagesArray: any[] = [];
       let index = 0;
       
@@ -599,6 +611,7 @@ const EditorTab: React.FC<Props> = ({
     
     // ✅ FIXED: Publications returns [] instead of {}
     if (sectionName === "Publications") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const publicationsArray: any[] = [];
       let index = 0;
       
@@ -618,6 +631,7 @@ const EditorTab: React.FC<Props> = ({
     }
     
     if (sectionName === "References") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const referencesArray: any[] = [];
       let index = 0;
       
@@ -701,6 +715,7 @@ const EditorTab: React.FC<Props> = ({
       sectionKeyMap[openModalSection] ||
       openModalSection.toLowerCase().replace(/\s+/g, "_");
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updatePayload: Record<string, any> = {
       [backendKey]: sectionData,
     };

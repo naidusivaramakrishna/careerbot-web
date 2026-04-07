@@ -152,6 +152,7 @@ function MessagesPageContent() {
         const response = await recruiterAuthApi.getConversations();
         if (response?.data) {
           // Map API response to conversation format
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const mappedConversations = response.data.map((conv: any) => ({
             candidateId: conv.id || conv.candidateId,
             candidateName: conv.candidateName || conv.name || '',
@@ -165,6 +166,7 @@ function MessagesPageContent() {
           }));
           setConversations(mappedConversations);
         }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error('Failed to fetch conversations:', err);
         // Try to restore from localStorage on error
@@ -281,6 +283,7 @@ function MessagesPageContent() {
           : c
       ));
       setNewMessage('');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const errorMsg = err?.response?.data?.message || err?.message || 'Failed to send message';
       setError(errorMsg);

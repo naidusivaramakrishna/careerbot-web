@@ -2,9 +2,12 @@
 
 import { useState, useCallback, useMemo } from "react";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const useMatchAnalysis = (initialMatchResults: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [matchResults, setMatchResults] = useState<any>(initialMatchResults);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const resolveResumeId = useCallback((parsedResumeData?: any): string | null => {
     // Try all possible locations for resume ID
     const candidate =

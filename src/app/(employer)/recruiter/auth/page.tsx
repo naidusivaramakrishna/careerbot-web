@@ -126,7 +126,7 @@ export default function AuthPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    let newErrors = {
+    const newErrors = {
       email: "",
       password: "",
       confirmPassword: "",
@@ -220,6 +220,7 @@ export default function AuthPage() {
             window.location.href = "/recruiter/dashboard";
           }, 500);
         }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
         logger.error('Authentication error details:', error);
         logger.error('Error message:', error.message);

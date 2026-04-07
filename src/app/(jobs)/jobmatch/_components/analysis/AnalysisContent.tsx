@@ -43,7 +43,9 @@ const scoreLabel = (s: number) => {
   if (s >= 40) return { text: "Fair Match",       color: "text-orange-500",  ring: "#f97316" };
   return             { text: "Needs Improvement", color: "text-red-500",     ring: "#ef4444" };
 };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toStrArr = (arr: any[]) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   arr.map((x: any) => (typeof x === "string" ? x : x?.skill)).filter(Boolean);
 
 const AnalysisContent: React.FC<AnalysisContentProps> = ({
@@ -55,6 +57,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
   const [activeView, setActiveView] = useState<"resume" | "jd">("resume");
   const [activeResumeSection, setActiveResumeSection] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [editOverrides, setEditOverrides] = useState<Record<string, any>>({});
   const [addedFields, setAddedFields] = useState<Record<string, string[]>>({});
   const [deletedSections, setDeletedSections] = useState<string[]>([]);
@@ -64,8 +67,10 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
   const docScrollRef = useRef<HTMLDivElement>(null);
 
   /* ── extract current section data for the editor modal ── */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getSectionData = useCallback((key: string): any => {
     if (editOverrides[key] !== undefined) return editOverrides[key];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const d = ((parsedResumeData as any)?.parsed_data ?? parsedResumeData ?? {}) as any;
     const llm = d?.llm_data ?? {};
     switch (key) {
@@ -89,11 +94,13 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
       case "skills": {
         let s = d.skills || d.technical_skills || llm.skills || llm.technical_skills || [];
         if (!Array.isArray(s)) s = typeof s === "object" ? Object.values(s).flat() : [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (s as any[]).map((x: any) => typeof x === "string" ? x : (x?.skill || x?.name || "")).filter(Boolean);
       }
       case "softSkills": {
         let s = d.soft_skills || llm.soft_skills || [];
         if (!Array.isArray(s)) s = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return (s as any[]).map((x: any) => typeof x === "string" ? x : (x?.skill || x?.name || "")).filter(Boolean);
       }
       case "experience":     return d.workExperience || d.work_experience || d.experience || llm.workExperience || llm.work_experience || [];
@@ -124,6 +131,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
   }, []);
 
   /* ── save section edits ── */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSaveSection = useCallback((key: string, data: any) => {
     const original = getSectionData(key);
     setEditOverrides(prev => ({ ...prev, [key]: data }));
@@ -132,7 +140,9 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
     if (key === 'contact') {
       const fields = ['name', 'title', 'email', 'phone', 'location', 'linkedin', 'github', 'portfolio'];
       for (const f of fields) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const oldVal = (original as any)?.[f] || '';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const newVal = (data as any)?.[f] || '';
         if (newVal && newVal !== oldVal) changed.push(f);
       }
@@ -169,6 +179,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
   /* ── available resume sections (derived from parsedResumeData) ── */
   const availableSections = useMemo(() => {
     if (!parsedResumeData) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const d = (parsedResumeData?.parsed_data ?? parsedResumeData) as any;
     const llm = d?.llm_data ?? {};
     const hasData = (keys: string[]) =>

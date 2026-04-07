@@ -7,6 +7,7 @@ const resumeInput =
   "border border-transparent " +
   "focus:outline-none focus:border-[#2557a7] focus:ring-0 transition-colors text-sm";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const PersonalInfoEditor = ({ formData, setFormData }: any) => {
   const fullName = `${formData.firstName || ""} ${formData.lastName || ""}`.trim();
 

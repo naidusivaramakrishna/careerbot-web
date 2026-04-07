@@ -134,6 +134,7 @@ const ResumeListPageContent = () => {
       if (refreshParam) {
         router.replace('/builder/start/list', { scroll: false });
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       if (err.response?.status === 401 || err.message?.includes("sign in")) {
         toast.error("Session expired. Please log in again");
@@ -172,6 +173,7 @@ const ResumeListPageContent = () => {
       setDeleteConfirmId(null);
       setIsDropdownOpen(null);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       if (err.response?.status === 401) {
         toast.error("Session expired. Please log in again");
@@ -208,6 +210,7 @@ const ResumeListPageContent = () => {
       setDownloadModalOpen(false);
       setIsDropdownOpen(null);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       if (err.response?.status === 401) {
         toast.error("Session expired. Please log in again");

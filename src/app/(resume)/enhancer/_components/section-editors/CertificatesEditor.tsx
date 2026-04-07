@@ -7,6 +7,7 @@ interface Props {
   formData: {
     certificates: { name: string }[];
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setFormData: (data: any) => void;
 }
 

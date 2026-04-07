@@ -15,6 +15,7 @@ interface Props {
     items: ProjectItemForm[];
     activeIndex: number;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setFormData: (data: any) => void;
 }
 
@@ -34,6 +35,7 @@ const ProjectsEditor: React.FC<Props> = ({ formData, setFormData }) => {
   const activeIndex = formData?.activeIndex ?? 0;
   const project = items[activeIndex] || emptyItem;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const update = (field: string, value: any) => {
     const updated = [...items];
     updated[activeIndex] = { ...project, [field]: value };

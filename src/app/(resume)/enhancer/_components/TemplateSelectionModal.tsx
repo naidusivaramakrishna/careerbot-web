@@ -513,7 +513,7 @@ export default function TemplateSelectionModal({
                       More Templates Coming Soon
                     </h3>
                     <p className="text-base text-gray-600">
-                      We're crafting additional professional templates to give you
+                      We&apos;re crafting additional professional templates to give you
                       even more options to stand out
                     </p>
                   </div>

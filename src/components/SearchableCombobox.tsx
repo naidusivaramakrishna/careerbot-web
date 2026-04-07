@@ -162,7 +162,7 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
                     className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 text-green-700 border-t border-neutral-200 transition"
                     type="button"
                   >
-                    + Add "{searchText}" as custom value
+                    + Add &quot;{searchText}&quot; as custom value
                   </button>
                 )}
               </>
@@ -180,7 +180,7 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
                     className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 text-green-700 border-t border-neutral-200 transition"
                     type="button"
                   >
-                    + Add "{searchText}" as custom value
+                    + Add &quot;{searchText}&quot; as custom value
                   </button>
                 )}
               </>

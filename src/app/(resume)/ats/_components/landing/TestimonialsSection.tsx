@@ -162,9 +162,9 @@ function App() {
                     </div>
 
                     <blockquote className="text-[#2d2d2d]/80 text-base leading-relaxed mb-6 flex-grow font-medium">
-                      <span className="text-2xl text-[#0275dd] font-serif">"</span>
+                      <span className="text-2xl text-[#0275dd] font-serif">&quot;</span>
                       {testimonial.text}
-                      <span className="text-2xl text-[#0275dd] font-serif">"</span>
+                      <span className="text-2xl text-[#0275dd] font-serif">&quot;</span>
                     </blockquote>
 
                     <div className="mb-6 relative overflow-hidden rounded-2xl">

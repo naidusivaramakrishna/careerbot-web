@@ -43,7 +43,9 @@ export default function PracticePage() {
     text: 'Tell me about yourself and your background.',
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [feedback, setFeedback] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [questionsAnswered, setQuestionsAnswered] = useState<Array<any>>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +102,7 @@ export default function PracticePage() {
           handleStopRecording();
         }
       }, 1000);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError('Microphone access denied. Please enable microphone permissions.');
       console.error(err);
@@ -178,6 +181,7 @@ export default function PracticePage() {
       ]);
 
       setSessionState('completed');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError('Failed to submit answer. Please try again.');
       console.error(err);

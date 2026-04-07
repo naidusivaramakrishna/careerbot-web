@@ -474,6 +474,7 @@ const ResumePage = () => {
       } else {
         logger.info(`Loaded ${resumesWithScores.length} resume(s) with scores`);
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       logger.error('Error fetching resumes:', err);
 
@@ -507,6 +508,7 @@ const ResumePage = () => {
       setDeleteConfirmId(null);
       setIsDropdownOpen(null);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       logger.error(`Error deleting resume: ${resumeId}`, err);
 
@@ -546,6 +548,7 @@ const ResumePage = () => {
       setDownloadModalOpen(false);
       setIsDropdownOpen(null);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       logger.error(`Error downloading resume: ${resumeId}`, err);
 

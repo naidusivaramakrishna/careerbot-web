@@ -22,8 +22,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [interviews, setInterviews] = useState<any[]>([]);
-  const [candidates, setCandidates] = useState<any[]>([]);
+  const [interviews, setInterviews] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [candidates, setCandidates] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const [stats, setStats] = useState({
     activeJobs: 0,
@@ -112,7 +112,7 @@ export default function DashboardPage() {
         }
 
         // Fetch active job postings from my-jobs endpoint (for job list)
-        let jobsData: any[] = [];
+        let jobsData: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
         try {
           logger.debug('🔵 Fetching jobs from my-jobs endpoint...');
           const jobsResponse = await recruiterAuthApi.getMyJobs();
@@ -167,7 +167,7 @@ export default function DashboardPage() {
             });
 
             // Format jobs immediately (without waiting for applicant counts)
-            const formattedJobs = jobsToDisplay.map((job: any, index: number) => ({
+            const formattedJobs = jobsToDisplay.map((job: any, index: number) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
               id: job.id || `job-${index}`,
               jobId: job.job_id || job.id,
               title: job.job_title || job.title || 'Untitled Job',
@@ -177,14 +177,14 @@ export default function DashboardPage() {
               status: job.status || 'Active', // Add status field
             }));
 
-            console.log('📋 Jobs formatted with statuses:', formattedJobs.map((j: any) => ({
+            console.log('📋 Jobs formatted with statuses:', formattedJobs.map((j: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
               title: j.title,
               status: j.status,
               statusLower: j.status?.toLowerCase(),
             })));
 
             // Filter to show only ACTIVE jobs (but be lenient with status matching)
-            const activeJobs = formattedJobs.filter((job: any) => {
+            const activeJobs = formattedJobs.filter((job: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               const jobStatus = (job.status || 'Active').toLowerCase().trim();
               // Accept 'active' or any status that contains 'active'
               const isActive = jobStatus.includes('active') || jobStatus === '';
@@ -199,11 +199,11 @@ export default function DashboardPage() {
             // Fetch applicant counts in background (non-blocking) for ACTIVE jobs only
             Promise.all(
               jobsToDisplay
-                .filter((job: any) => {
+                .filter((job: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                   const status = (job.status || 'Active').toLowerCase().trim();
                   return status.includes('active') || status === '';
                 })
-                .map(async (job: any) => {
+                .map(async (job: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                   try {
                     const jobId = String(job.job_id || job.id);
                     const appResponse = await recruiterAuthApi.getJobApplications(jobId);
@@ -222,7 +222,7 @@ export default function DashboardPage() {
             ).then((results) => {
               // Update jobs with applicant counts
               setJobs((prevJobs) => {
-                const updated = prevJobs.map((job: any) => {
+                const updated = prevJobs.map((job: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                   const result = results.find((r) => r.jobId === job.jobId);
                   if (result) {
                     return { ...job, applicants: result.applicantCount };
@@ -244,7 +244,7 @@ export default function DashboardPage() {
 
           logger.debug('Dashboard data successfully loaded:', { stats: data });
         }
-      } catch (error: any) {
+      } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
         logger.error('❌ Error loading dashboard data:', {
           message: error?.message,
           status: error?.response?.status,
@@ -312,7 +312,7 @@ export default function DashboardPage() {
   const shouldShowTopMatches = matchesQuery(['matches', 'candidates']);
   const shouldShowInterviews = matchesQuery(['interview', 'interviews', 'upcoming']);
 
-  const StatCard = ({ icon: Icon, label, value, subtext, trend }: any) => (
+  const StatCard = ({ icon: Icon, label, value, subtext, trend }: any) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
     <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between">
         <div>
@@ -446,7 +446,7 @@ export default function DashboardPage() {
 
             {candidates && candidates.length > 0 ? (
               <div className="space-y-3">
-                {candidates.map((candidate: any, index: number) => {
+                {candidates.map((candidate: any, index: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                   const matchPercentage = candidate.match_percentage || candidate.matchPercentage || 0;
                   const matchColor = matchPercentage >= 80 ? 'bg-green-100 text-green-700' :
                                     matchPercentage >= 60 ? 'bg-blue-100 text-blue-700' :
@@ -515,7 +515,7 @@ export default function DashboardPage() {
 
           {interviews && interviews.length > 0 ? (
             <div className="space-y-3">
-              {interviews.map((interview: any, index: number) => {
+              {interviews.map((interview: any, index: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                 // Log first interview structure to see available fields
                 if (index === 0) {
                   console.log('🔍 Interview data structure:', {

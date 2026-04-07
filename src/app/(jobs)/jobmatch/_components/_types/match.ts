@@ -2,7 +2,9 @@
 
 export interface AnalysisContentProps {
   jdText: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   matchResults: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   parsedResumeData?: any;
   onBackToUpload?: () => void;
 }

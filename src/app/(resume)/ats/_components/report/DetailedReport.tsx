@@ -27,6 +27,7 @@ interface BreakdownItem {
   deductions?: string[];
   percentage?: number;
   file?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details?: { [key: string]: any };
 }
 
@@ -103,6 +104,7 @@ function extractIssueCards(breakdown: ResumeScoreData["Breakdown"]): IssueCard[]
 
     const displaySection = section.replace(/Enhanced$/, "");
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     deductions.forEach((deduction: any) => {
       let deductionText: string;
       if (typeof deduction === "string") {
@@ -137,6 +139,7 @@ function extractIssueCards(breakdown: ResumeScoreData["Breakdown"]): IssueCard[]
   return cards;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformATSDataToScoreFormat(atsData: any): ResumeScoreData {
   const breakdown =
     atsData?.ats_score?.SectionBreakdown ||

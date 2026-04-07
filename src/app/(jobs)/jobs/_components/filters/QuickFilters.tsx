@@ -25,6 +25,7 @@ type Props = {
   selected?: string[];
   onToggle?: (f: string) => void;
   onFilterChange?: (filters: FilterParams) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   jobs?: any[];
 };
 
@@ -39,6 +40,7 @@ export interface FilterParams {
 }
 
 // Helper function to extract unique salary values from jobs
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractSalaryPresets(jobs: any[] = []): { label: string; value: number }[] {
   const salaryValues = new Set<number>();
 

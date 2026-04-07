@@ -110,7 +110,7 @@ export function toggleJobSaved(
   if (typeof window === "undefined") return false;
  
   try {
-    let saved = getSavedJobs();
+    const saved = getSavedJobs();
  
     // Check if already saved
     const existingIndex = saved.findIndex((job) => job.jobId === jobId);

@@ -15,6 +15,7 @@ interface Interview {
   status: 'Scheduled' | 'Completed' | 'Cancelled' | 'Rescheduled';
   candidateInitials: string;
   candidateColor: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -182,6 +183,7 @@ export default function RescheduleInterviewModal({
               </label>
               <textarea
                 name="notes"
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 value={(formData as any).notes || ''}
                 onChange={handleInputChange}
                 rows={4}
@@ -217,7 +219,7 @@ function convertTo24HourFormat(time12: string): string {
   if (!time12) return '';
 
   const [time, period] = time12.split(' ');
-  let [hours, minutes] = time.split(':').map(Number);
+  const [hours, minutes] = time.split(':').map(Number);
 
   if (period === 'PM' && hours !== 12) {
     hours += 12;

@@ -29,6 +29,7 @@ type Props = {
 };
 
 /** Returns "idx.fieldName" keys for fields that changed (any edit, not just empty→filled) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getAddedFieldKeys(oldItems: any[], newItems: any[]): string[] {
   const keys: string[] = [];
   for (let i = 0; i < newItems.length; i++) {
@@ -43,6 +44,7 @@ function getAddedFieldKeys(oldItems: any[], newItems: any[]): string[] {
 
 const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
   const { resumeData, setResumeData, activeSection, addAddedFields } = useResume();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [formData, setFormData] = useState<any>(null);
 
   /* ================= AUTO-CATEGORIZE FLAT SKILLS ================= */
@@ -254,6 +256,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
 
         // Normalize keys: backend/local data may use snake_case (programming_languages, cloud_platforms, soft_skills)
         const rawSkills = resumeData.categorizedSkills || {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const getVal = (obj: any, ...keys: string[]) => {
           for (const k of keys) {
             if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
@@ -270,6 +273,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
           tools: getVal(rawSkills, "tools", "toolset"),
           cloudPlatforms: getVal(rawSkills, "cloudPlatforms", "cloud_platforms", "cloudPlatformsList"),
           softSkills: getVal(rawSkills, "softSkills", "soft_skills", "softSkillsList"),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as Record<string, any>;
 
         console.log("Normalized skills data:", skillsData);
@@ -316,6 +320,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
       case "Languages":
         // Convert categorizedSkills from arrays to comma-separated strings (normalize keys like in Skills case)
         const rawSkills2 = resumeData.categorizedSkills || {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const getVal2 = (obj: any, ...keys: string[]) => {
           for (const k of keys) {
             if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
@@ -332,6 +337,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
           tools: getVal2(rawSkills2, "tools", "toolset"),
           cloudPlatforms: getVal2(rawSkills2, "cloudPlatforms", "cloud_platforms"),
           softSkills: getVal2(rawSkills2, "softSkills", "soft_skills"),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as Record<string, any>;
 
         const convertedSkills2 = {
@@ -513,6 +519,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
   const handleSave = async () => {
     if (!resumeData || !activeSection) return;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updated: any = { ...resumeData };
     let didChange = false;
     let changedFieldNames: string[] = [];
@@ -1018,6 +1025,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
 
     const items = formData.items || [];
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let blank: any;
 
     if (activeSection === "Education") {
@@ -1122,6 +1130,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
           <SummaryEditor
             formData={formData}
             setFormData={setFormData}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             summaryVariants={(resumeData as any)?.summaryVariants}
           />
         );
@@ -1232,6 +1241,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
                       <button
                         onClick={() => {
                           const idx = formData.activeIndex ?? 0;
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           const nextItems = formData.items.filter((_: any, i: number) => i !== idx);
                           setFormData({ ...formData, items: nextItems, activeIndex: Math.min(idx, nextItems.length - 1) });
                         }}

@@ -75,7 +75,7 @@ const ResendVerificationPage = () => {
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">Resend Verification Email</h1>
             <p className="text-gray-600 text-center mb-6">
-              Enter your email address and we'll send you a new verification link.
+              Enter your email address and we&apos;ll send you a new verification link.
             </p>
           </>
         )}

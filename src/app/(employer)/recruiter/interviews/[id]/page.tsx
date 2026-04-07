@@ -123,6 +123,7 @@ export default function InterviewDetailsPage() {
         // Check if response contains the data at different levels
         if (response?.data && typeof response.data === 'object') {
           // API wrapped response
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const apiData = response.data as any;
 
           // Map API response to Interview interface
@@ -137,6 +138,7 @@ export default function InterviewDetailsPage() {
             locationType: apiData.meeting_link ? 'online' : 'in-person',
             interviewType: apiData.interview_type || 'Technical',
             interviewer: apiData.interviewer_name || 'Not assigned',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             status: (apiData.status ? apiData.status.charAt(0).toUpperCase() + apiData.status.slice(1).replace(/_/g, ' ') : 'Scheduled') as any,
             candidateInitials: apiData.candidate_name ? apiData.candidate_name.split(' ').map((n: string) => n?.[0] || '').join('').toUpperCase().slice(0, 2) : 'C',
             candidateColor: 'bg-purple-100 text-purple-600',
@@ -153,6 +155,7 @@ export default function InterviewDetailsPage() {
           };
         } else if (typeof response === 'object' && response !== null) {
           // Direct response
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const apiData = response as any;
 
           interviewData = {
@@ -166,6 +169,7 @@ export default function InterviewDetailsPage() {
             locationType: apiData.meeting_link ? 'online' : 'in-person',
             interviewType: apiData.interview_type || 'Technical',
             interviewer: apiData.interviewer_name || 'Not assigned',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             status: (apiData.status ? apiData.status.charAt(0).toUpperCase() + apiData.status.slice(1).replace(/_/g, ' ') : 'Scheduled') as any,
             candidateInitials: apiData.candidate_name ? apiData.candidate_name.split(' ').map((n: string) => n?.[0] || '').join('').toUpperCase().slice(0, 2) : 'C',
             candidateColor: 'bg-purple-100 text-purple-600',
@@ -195,6 +199,7 @@ export default function InterviewDetailsPage() {
         } else {
           throw new Error('No interview data found in API response');
         }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (apiError: any) {
         console.error('❌ API Error in getInterviewDetails:', apiError);
         logger.warn('❌ Failed to fetch from API, trying localStorage fallback:', apiError?.message);
@@ -256,13 +261,14 @@ export default function InterviewDetailsPage() {
     });
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSaveReschedule = async (updated: any) => {
     try {
       // Helper function to convert 12-hour to 24-hour format
       const convertTo24Hour = (time12: string): string => {
         if (!time12) return '10:00:00';
         const [timePart, period] = time12.split(' ');
-        let [hours, minutes] = timePart.split(':').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
 
         if (period === 'PM' && hours !== 12) {
           hours += 12;
@@ -289,6 +295,7 @@ export default function InterviewDetailsPage() {
       // Update local state on success
       updateInterview({ ...updated, status: 'Rescheduled' });
       showToast('Interview rescheduled successfully.', 'success');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       logger.error('Failed to reschedule interview:', error);
       showToast(`Failed to reschedule interview: ${error?.response?.data?.message || error?.message}`, 'error');
@@ -347,6 +354,7 @@ export default function InterviewDetailsPage() {
         Reject: '❌ Candidate marked as REJECTED. Status updated successfully.'
       };
       showToast(msgs[recommendation], recommendation === 'Hire' ? 'success' : recommendation === 'Hold' ? 'info' : 'error');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('❌ Error updating candidate status:', error);
       showToast(`Failed to update status: ${error?.message || 'Unknown error'}`, 'error');
@@ -383,6 +391,7 @@ export default function InterviewDetailsPage() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <RescheduleInterviewModal
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         interview={interview as any}
         isOpen={showRescheduleModal}
         onClose={() => setShowRescheduleModal(false)}
@@ -465,6 +474,7 @@ export default function InterviewDetailsPage() {
                         // Update local state on success
                         updateInterview({ status: 'Cancelled' });
                         showToast('Interview cancelled successfully.', 'success');
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       } catch (error: any) {
                         logger.error('Failed to cancel interview:', error);
                         showToast(`Failed to cancel interview: ${error?.response?.data?.message || error?.message}`, 'error');
@@ -777,7 +787,7 @@ export default function InterviewDetailsPage() {
               <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
                 <CheckCircle2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-600 font-medium">Complete interview to submit evaluation.</p>
-                <p className="text-sm text-gray-400 mt-1">Use "Mark as Completed" in Quick Actions to unlock this panel.</p>
+                <p className="text-sm text-gray-400 mt-1">Use &quot;Mark as Completed&quot; in Quick Actions to unlock this panel.</p>
               </div>
             ) : evalSubmitted && interview.evaluation ? (
               <div className="bg-green-50 border border-green-200 rounded-xl p-5">

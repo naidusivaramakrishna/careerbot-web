@@ -16,6 +16,7 @@ interface Props {
     items: InternshipItemForm[];
     activeIndex: number;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setFormData: (data: any) => void;
 }
 
@@ -35,6 +36,7 @@ const InternshipsEditor: React.FC<Props> = ({ formData, setFormData }) => {
   const activeIndex = formData?.activeIndex ?? 0;
   const internship = items[activeIndex] || emptyItem;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const update = (field: string, value: any) => {
     const updated = [...items];
     updated[activeIndex] = { ...internship, [field]: value };

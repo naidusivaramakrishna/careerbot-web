@@ -15,6 +15,7 @@ interface Props {
     languages?: LanguageItem[] | string[];
     categorizedSkills?: Record<string, string>;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setFormData: (data: any) => void;
 }
 

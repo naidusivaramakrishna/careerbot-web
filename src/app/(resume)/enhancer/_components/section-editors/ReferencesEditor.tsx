@@ -13,6 +13,7 @@ interface Props {
     items: ReferenceItemForm[];
     activeIndex: number;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setFormData: (data: any) => void;
 }
 

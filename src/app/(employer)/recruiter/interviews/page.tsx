@@ -177,6 +177,7 @@ export default function InterviewsPage() {
           // Log all fields in the interview response
           console.log('📋 ALL INTERVIEW FIELDS:');
           if (data[0]) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             Object.entries(data[0]).forEach(([key, value]: [string, any]) => {
               if (value === null) {
                 console.log(`  - ${key}: null`);
@@ -207,6 +208,7 @@ export default function InterviewsPage() {
                 if (!job?.id) continue;
 
                 const appResponse = await recruiterAuthApi.getJobApplications(job.id);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 let applications: any[] = [];
                 const responseData = appResponse.data || appResponse || {};
 
@@ -223,6 +225,7 @@ export default function InterviewsPage() {
                 console.log(`📋 Applications for job ${job.id}:`, applications.length);
 
                 // Map each application's candidate name by application ID (same as candidates page)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 applications.forEach((app: any) => {
                   // Use same logic as candidates page to get candidate name
                   const candName = app.candidate_name || app.name || 'Candidate';
@@ -233,6 +236,7 @@ export default function InterviewsPage() {
                     console.log(`  ✓ Mapped app ID ${app.id} -> "${candName}"`);
                   }
                 });
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               } catch (err: any) {
                 console.warn('Could not fetch applications for job:', job?.id, err?.message);
               }
@@ -241,11 +245,13 @@ export default function InterviewsPage() {
             if (candidateMap.size > 0) {
               console.log('✅ Map entries:', Array.from(candidateMap.entries()).map(([k, v]) => `${k}: ${v}`));
             }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } catch (err: any) {
             console.warn('Could not fetch jobs for candidate mapping:', err?.message);
           }
 
           // Map API response to Interview interface
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const mappedInterviews: Interview[] = data.map((interview: any, index: number) => {
             // Get candidate name using same approach as candidates page
             const candidateName =
@@ -285,6 +291,7 @@ export default function InterviewsPage() {
           console.warn('⚠️ No interviews data from API');
           setInterviews([]);
         }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
         console.error('❌ Error fetching interviews:', error);
         console.error('Error details:', {
@@ -365,7 +372,7 @@ export default function InterviewsPage() {
       const convertTo24Hour = (time12: string): string => {
         if (!time12) return '10:00:00';
         const [timePart, period] = time12.split(' ');
-        let [hours, minutes] = timePart.split(':').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
 
         if (period === 'PM' && hours !== 12) {
           hours += 12;
@@ -381,6 +388,7 @@ export default function InterviewsPage() {
         scheduled_at: `${updatedInterview.date}T${convertTo24Hour(updatedInterview.time)}`,
         location: updatedInterview.location,
         interviewer_name: updatedInterview.interviewer,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         notes: (updatedInterview as any).notes,
       };
 
@@ -392,6 +400,7 @@ export default function InterviewsPage() {
       // Update local state on success
       setInterviews(prev => prev.map(i => i.id === updatedInterview.id ? updatedInterview : i));
       showToast('Interview rescheduled successfully.', 'success');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       logger.error('Failed to reschedule interview:', error);
       showToast(`Failed to reschedule interview: ${error?.response?.data?.message || error?.message}`, 'error');
@@ -710,6 +719,7 @@ export default function InterviewsPage() {
                     setShowCancelModal(false);
                     setCancelReason('');
                     showToast('Interview cancelled successfully.', 'error');
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   } catch (error: any) {
                     logger.error('Failed to cancel interview:', error);
                     showToast(`Failed to cancel interview: ${error?.response?.data?.message || error?.message}`, 'error');

@@ -825,6 +825,7 @@ const getActivityDotColor = (type: string) => {
 };
 
 interface RecentActivitySectionProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   activities: any[];
 }
 

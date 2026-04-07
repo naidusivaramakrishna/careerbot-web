@@ -36,6 +36,7 @@ export default function DashboardLayout({ children, onSearch }: DashboardLayoutP
   const isDashboard = pathname === '/recruiter/dashboard';
 
   // Helper to extract username from any response/storage shape
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractUsername = (data: any): string =>
     data?.username ||
     data?.recruiter?.username ||
@@ -110,7 +111,9 @@ export default function DashboardLayout({ children, onSearch }: DashboardLayoutP
       const stored = localStorage.getItem('interviews');
       const items: { id: number; message: string; time: string; type: string }[] = [];
       if (stored) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const interviews: any[] = JSON.parse(stored);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         interviews.forEach((iv: any) => {
           if (iv.date === todayStr && (iv.status === 'Scheduled' || iv.status === 'Rescheduled')) {
             items.push({ id: iv.id, message: `Interview with ${iv.candidateName} is scheduled today at ${iv.time}`, time: 'Today', type: 'interview' });

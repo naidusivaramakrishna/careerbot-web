@@ -59,6 +59,7 @@ export default function LiveInterviewPage() {
 
       setSessionId('demo-session-123');
       setSessionState('active');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError(err.message || 'Failed to initialize session');
       setSessionState('error');
@@ -104,6 +105,7 @@ export default function LiveInterviewPage() {
           handleStopRecording();
         }
       }, 1000);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError('Microphone access denied. Please enable microphone permissions.');
       console.error(err);
@@ -155,6 +157,7 @@ export default function LiveInterviewPage() {
       setTranscript('');
       setCurrentScore(null);
       setRecordingTime(0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setError('Failed to load next question');
       console.error(err);
@@ -262,7 +265,7 @@ export default function LiveInterviewPage() {
                     Ready to Start?
                   </h2>
                   <p className="text-gray-600 dark:text-gray-400 mb-6">
-                    You'll be asked 8-10 questions. Answer clearly and naturally.
+                    You&apos;ll be asked 8-10 questions. Answer clearly and naturally.
                   </p>
                   <Button size="lg" onClick={() => setSessionState('active')}>
                     Start Interview
@@ -477,7 +480,7 @@ export default function LiveInterviewPage() {
                 Interview Complete!
               </h2>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Your report is being generated. You'll be redirected shortly...
+                Your report is being generated. You&apos;ll be redirected shortly...
               </p>
               <Button onClick={() => router.push(`/interview/mock/report?session=${sessionId}`)}>
                 View Report

@@ -443,6 +443,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
           workExperience: data.workExperience || [],
           projects: data.projects || [],
           skills: data.skills || [],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           categorizedSkills: data.categorizedSkills || data.categorized_skills || (data as any).categorizedSkills || {
             programming_languages: [],
             frameworks: [],
@@ -451,6 +452,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
             cloud_platforms: [],
             soft_skills: []
           },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           certifications: (data.certifications || []).map((cert: any) => ({
             name: cert.name || "",
             issuedBy: cert.issuedBy || cert.issued_by || "",

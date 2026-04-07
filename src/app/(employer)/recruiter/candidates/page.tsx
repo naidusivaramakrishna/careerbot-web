@@ -68,6 +68,7 @@ export default function CandidatesPage() {
             const applicationsResponse = await recruiterAuthApi.getJobApplications(job.id);
             const responseData = applicationsResponse.data || applicationsResponse || {};
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let applications: any[] = [];
             if (Array.isArray(responseData)) {
               applications = responseData;
@@ -81,6 +82,7 @@ export default function CandidatesPage() {
 
             console.log(`%c✅ Found ${applications.length} applications`, 'color: green; font-weight: bold');
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             applications.forEach((app: any) => {
               allCandidates.push({
                 id: candidateId++,
@@ -100,6 +102,7 @@ export default function CandidatesPage() {
                 jobId: job.id,
               });
             });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } catch (err: any) {
             console.error(`❌ Error fetching applications for job ${job.id}:`, err);
           }
@@ -107,6 +110,7 @@ export default function CandidatesPage() {
 
         console.log('%c✅ [CANDIDATES] All candidates loaded:', 'color: green; font-weight: bold', allCandidates);
         setCandidates(allCandidates);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
         console.error('%c❌ [CANDIDATES] Error:', 'color: red; font-weight: bold', error);
         setCandidates([]);
@@ -171,6 +175,7 @@ export default function CandidatesPage() {
       const url = `/recruiter/candidates/${candidate.applicationId}?jobId=${candidate.jobId}`;
       console.log('🔗 Navigating to candidate details:', url);
       router.push(url);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('Error navigating to candidate details:', error);
       setToastMessage('Failed to navigate to candidate details');
@@ -210,6 +215,7 @@ export default function CandidatesPage() {
       setCandidates(candidates.map(c =>
         c.id === candidate.id ? { ...c, status: 'Rejected' } : c
       ));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('❌ Error rejecting candidate:', error);
       console.error('Error details:', {
@@ -231,6 +237,7 @@ export default function CandidatesPage() {
       setSelectedCandidateForSchedule(candidate);
       setShowScheduleModal(true);
       setToastMessage('Schedule interview modal opened');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('Error opening schedule interview modal:', error);
       setToastMessage('Failed to open schedule interview modal');
@@ -270,6 +277,7 @@ export default function CandidatesPage() {
       setCandidates(candidates.map(c =>
         c.id === candidate.id ? { ...c, status: 'Hired' } : c
       ));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('❌ Error marking candidate as hired:', error);
       console.error('Error details:', {

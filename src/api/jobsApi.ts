@@ -135,6 +135,7 @@ export const createJob = async (jobData: Job): Promise<ApiResponse<Job>> => {
 export const searchJobs = async (params: JobSearchParams): Promise<ApiResponse<Job[]>> => {
   try {
     // Map frontend params to backend params
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const backendParams: Record<string, any> = {
       skip: params.skip || 0,
       limit: params.limit || 20,
@@ -394,8 +395,10 @@ export const getRecruiterJobs = async (
  * Get a single job by ID
  * GET /api/v1/jobs/{job_id}
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const getJobById = async (jobId: string): Promise<ApiResponse<any>> => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response = await httpClient.get<ApiResponse<any>>(
       `/jobs/${jobId}`,
       getRequestConfig()

@@ -39,7 +39,7 @@ function MockInterviewReportContent() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   // Placeholder report data
-  const [report, setReport] = useState<any>(null);
+  const [report, setReport] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   // Load report on mount
   useEffect(() => {
@@ -95,7 +95,7 @@ function MockInterviewReportContent() {
         ],
         created_at: new Date().toISOString(),
       });
-    } catch (err: any) {
+    } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       setError('Failed to load report. Please try again.');
       console.error(err);
     } finally {
@@ -286,7 +286,7 @@ function MockInterviewReportContent() {
                   Questions to Practice Again
                 </h3>
                 <div className="space-y-3">
-                  {report.redo_questions.map((item: any, idx: number) => (
+                  {report.redo_questions.map((item: any, idx: number) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
                     <div
                       key={idx}
                       className="p-4 bg-gray-50 rounded-lg border border-gray-200"
@@ -326,7 +326,7 @@ function MockInterviewReportContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.question_breakdown.map((item: any, idx: number) => (
+                  {report.question_breakdown.map((item: any, idx: number) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
                     <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-3 text-gray-700">
                         Question {idx + 1}
@@ -405,7 +405,7 @@ function MockInterviewReportContent() {
                   3. <strong>Track your progress</strong> over time
                 </li>
                 <li>
-                  4. <strong>Schedule your real interview</strong> when you're confident
+                  4. <strong>Schedule your real interview</strong> when you&apos;re confident
                 </li>
               </ol>
             </Card>

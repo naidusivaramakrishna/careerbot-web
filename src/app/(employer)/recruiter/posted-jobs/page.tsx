@@ -167,8 +167,10 @@ const PostedJobsPageContent = () => {
           if (response.data && response.data.length > 0) {
             // Map backend job data to match the Job interface
             let allFinalJobs: Job[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const formattedJobs: Job[] = response.data.map((job: any) => {
               // Helper function to get value or fallback for empty strings
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const getValue = (value: any, fallback: string) => {
                 return value && typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback;
               };
@@ -223,10 +225,12 @@ const PostedJobsPageContent = () => {
             if (storedJobs) {
               try {
                 const parsedStoredJobs = JSON.parse(storedJobs);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const getValue = (value: any, fallback: string) => {
                   return value && typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback;
                 };
 
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const formattedStoredJobs: Job[] = parsedStoredJobs.map((job: any) => {
                   const jobCategory = getValue(job.category, '') ||
                                      getValue(job.job_category, '') ||
@@ -356,6 +360,7 @@ const PostedJobsPageContent = () => {
           } else {
             logger.warn('⚠️ API returned empty jobs list, checking localStorage...');
           }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (apiError: any) {
           // Check if it's an authentication error
           logger.error('🔴 API Error:', apiError);
@@ -527,11 +532,13 @@ const PostedJobsPageContent = () => {
           logger.debug('Parsed jobs:', allJobsToUse);
 
           // Helper function to get value or fallback for empty strings
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const getValue = (value: any, fallback: string) => {
             return value && typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback;
           };
 
           // Map the stored job data to match your Job interface
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const formattedJobs = allJobsToUse.map((job: any) => {
             // Get job category - check multiple possible field names
             const jobCategory = getValue(job.category, '') ||
@@ -610,6 +617,7 @@ const PostedJobsPageContent = () => {
       const storedJobs = localStorage.getItem("postedJobs");
       if (storedJobs) {
         const jobs = JSON.parse(storedJobs);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updatedJobs = jobs.map((j: any) =>
           j.id === jobId ? { ...j, status: 'Unpublished' } : j
         );
@@ -626,6 +634,7 @@ const PostedJobsPageContent = () => {
       alert('Job unpublished successfully!');
       setShowJobDetails(false);
       setSelectedJob(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       alert('Failed to unpublish job. Please try again.');
     } finally {
@@ -644,6 +653,7 @@ const PostedJobsPageContent = () => {
       // Try to delete from backend API first
       try {
         await recruiterAuthApi.deleteJob(String(jobId));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (apiError: any) {
         // Silently handle backend errors - we'll still delete from localStorage
         if (!apiError.message?.includes('Authentication required')) {
@@ -656,6 +666,7 @@ const PostedJobsPageContent = () => {
       const storedJobs = localStorage.getItem("postedJobs");
       if (storedJobs) {
         const jobs = JSON.parse(storedJobs);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updatedJobs = jobs.filter((j: any) => j.id !== jobId);
         localStorage.setItem("postedJobs", JSON.stringify(updatedJobs));
       }
@@ -664,6 +675,7 @@ const PostedJobsPageContent = () => {
       setAllJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
 
       alert('Job deleted successfully!');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       alert('Failed to delete job. Please try again.');
     } finally {
@@ -984,7 +996,7 @@ const PostedJobsPageContent = () => {
                     <div className="mb-8 p-6 bg-white rounded-lg border border-gray-200">
                       <h3 className="font-bold text-gray-900 text-lg mb-2">Congrats! Your job is now live.</h3>
                       <p className="text-gray-600 mb-4">Make it stand out even more by promoting it.</p>
-                      <p className="text-sm text-gray-600 mb-6">Promoting your job will showcase it to more qualified candidates who match what you're looking for. Salary information is not required for promoted jobs.</p>
+                      <p className="text-sm text-gray-600 mb-6">Promoting your job will showcase it to more qualified candidates who match what you&apos;re looking for. Salary information is not required for promoted jobs.</p>
                       <button
                         onClick={() => setActiveTab('promote')}
                         className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"

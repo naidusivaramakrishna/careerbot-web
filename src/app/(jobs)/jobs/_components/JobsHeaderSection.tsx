@@ -12,6 +12,7 @@ interface JobsHeaderSectionProps {
   selectedFilters?: string[];
   onFilterToggle?: (filter: string) => void;
   onFilterChange?: (filters: FilterParams) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   jobs?: any[];
 }
 
@@ -34,6 +35,7 @@ const defaultLocations = [
 ];
 
 // Helper function to extract unique locations from jobs
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractLocationsFromJobs(jobsData: any[] = []): string[] {
   const locationsSet = new Set<string>();
   locationsSet.add("All Locations"); // Always include "All Locations" first

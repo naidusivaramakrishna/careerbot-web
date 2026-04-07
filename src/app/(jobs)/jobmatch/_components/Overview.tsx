@@ -54,6 +54,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   >("parsing");
 
   // Lazy initializers read sessionStorage on first render (no flash)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [matchResults, setMatchResults] = useState<any>(() => {
     try {
       const mr = sessionStorage.getItem('jm_matchResults');
@@ -61,6 +62,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     } catch { return null; }
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [parsedResumeData, setParsedResumeData] = useState<any>(() => {
     try {
       const prd = sessionStorage.getItem('jm_parsedResumeData');
@@ -68,6 +70,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     } catch { return null; }
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [_parsedJDData, setParsedJDData] = useState<any>(null);
 
   const [jdText, setJdText] = useState<string>(() => {
@@ -163,13 +166,16 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     try {
       // Step 1: Parse Resume (skip if resume_id already provided by extension session)
       let resume_id = sessionResumeId;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let fullResumeData: any = null;
 
       if (!resume_id) {
         const resumeParsed = await parseResume(uploadedFile!);
         resume_id =
           resumeParsed?.resume_id ??
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (resumeParsed as any)?.id ??
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (resumeParsed as any)?._id ??
           null;
 
@@ -196,6 +202,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
       // Step 2: Use pre-parsed jd_id from extension session (skip re-parsing)
       let jd_id: string | null = sessionJdId ?? null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let jdParsed: any = null;
 
       if (!jd_id) {
@@ -218,6 +225,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       setProcessingStage("scoring");
 
       // Step 3: Match Resume and JD (with retry for backend errors)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let matchResp: any;
       let retryCount = 0;
       const maxRetries = 2;
@@ -226,6 +234,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
         try {
           matchResp = await matchResumeAndJD(resume_id, jd_id);
           break; // Success
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
           retryCount++;
           if (retryCount <= maxRetries) {
@@ -246,6 +255,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           const existing = await getMatchByIds(resume_id, jd_id);
           if (Array.isArray(existing)) {
             const matched = existing.find(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (m: any) =>
                 m.jd_id === jd_id || m.job_description_id === jd_id
             );
@@ -303,10 +313,12 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           window.scrollTo({ top, behavior: "smooth" });
         }
       }, 1500);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       // Parse error message from API response
       let errorMessage = "Something went wrong.";
-      let details: any = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const details: any = {};
 
       if (err?.__raw) {
         // Handle error from safePost/safeGet helpers

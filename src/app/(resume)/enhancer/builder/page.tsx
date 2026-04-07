@@ -183,6 +183,7 @@ export default function BuilderPage() {
 
     // ── Experience ──────────────────────────────────────────────────
     if (section === 'Experience') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const exp: any[] = resumeData.workExperience || [];
       if (exp.length === 0) return false;
       if (title.includes('location'))                                        return exp.every(e => !!e.location?.trim());
@@ -194,6 +195,7 @@ export default function BuilderPage() {
 
     // ── Education ───────────────────────────────────────────────────
     if (section === 'Education') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const edu: any[] = resumeData.education || [];
       if (edu.length === 0) return false;
       if (title.includes('graduation') || title.includes('gpa') || title.includes('grade'))
@@ -205,6 +207,7 @@ export default function BuilderPage() {
 
     // ── Projects ────────────────────────────────────────────────────
     if (section === 'Projects') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const projects: any[] = resumeData.projects || [];
       if (projects.length === 0) return false;
       if (title.includes('link') || title.includes('url') || title.includes('github'))
@@ -222,6 +225,7 @@ export default function BuilderPage() {
 
     // ── Certificates ────────────────────────────────────────────────
     if (section === 'Certificates') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const certs: any[] = resumeData.certifications || [];
       if (certs.length === 0) return false;
       if (title.includes('date') || title.includes('year') || title.includes('expir'))
@@ -232,6 +236,7 @@ export default function BuilderPage() {
 
     // ── Achievements ─────────────────────────────────────────────────
     if (section === 'Achievements') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ach: any[] = resumeData.achievements || [];
       if (ach.length === 0) return false;
       if (title.includes('date') || title.includes('year')) return ach.every(a => a.date || a.year);
@@ -240,6 +245,7 @@ export default function BuilderPage() {
 
     // ── Awards ───────────────────────────────────────────────────────
     if (section === 'Awards') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const awards: any[] = resumeData.awards || [];
       if (awards.length === 0) return false;
       if (title.includes('date') || title.includes('year')) return awards.every(a => a.date || a.year);
@@ -248,6 +254,7 @@ export default function BuilderPage() {
 
     // ── Internships ──────────────────────────────────────────────────
     if (section === 'Internships') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const interns: any[] = resumeData.internships || [];
       if (interns.length === 0) return false;
       if (title.includes('location'))  return interns.every(i => !!i.location?.trim());
@@ -259,6 +266,7 @@ export default function BuilderPage() {
 
     // ── Volunteering ─────────────────────────────────────────────────
     if (section === 'Volunteering') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const vol: any[] = resumeData.volunteering || [];
       if (vol.length === 0) return false;
       if (title.includes('date') || title.includes('start') || title.includes('end'))
@@ -268,6 +276,7 @@ export default function BuilderPage() {
 
     // ── Languages ───────────────────────────────────────────────────
     if (section === 'Languages') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const langs: any[] = resumeData.languages || [];
       if (langs.length === 0) return false;
       if (title.includes('proficien') || title.includes('level'))
@@ -276,6 +285,7 @@ export default function BuilderPage() {
 
     // ── Publications ─────────────────────────────────────────────────
     if (section === 'Publications') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pubs: any[] = resumeData.publications || [];
       if (pubs.length === 0) return false;
       if (title.includes('date') || title.includes('year')) return pubs.every(p => p.date || p.year);
@@ -284,6 +294,7 @@ export default function BuilderPage() {
 
     // ── References ──────────────────────────────────────────────────
     if (section === 'References') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const refs: any[] = resumeData.references || [];
       if (refs.length === 0) return false;
       if (title.includes('email'))   return refs.every(r => !!r.email?.trim());
@@ -477,9 +488,11 @@ export default function BuilderPage() {
           // Sync preview with the updated backend state
           try {
             // applyFix response has the live state used to generate the PDF — use it first
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const liveResume = result.enhancer_state?.resume as any;
             // getEnhancedResume gives the persisted DB record as fallback
             const historyItem = await getEnhancedResume(enhancedId);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const dbData = historyItem.enhanced_data as any;
 
             const formatBullets = (contribs: unknown): string => {
@@ -489,6 +502,7 @@ export default function BuilderPage() {
             };
 
             // Helper: pick first non-empty array from multiple candidate paths
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const firstArr = (...candidates: any[]): any[] => {
               for (const c of candidates) {
                 if (Array.isArray(c) && c.length > 0) return c;
@@ -505,6 +519,7 @@ export default function BuilderPage() {
               dbData?.llm_data?.experience,
             );
             if (expArr.length > 0) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const mappedExp = expArr.map((exp: any) => {
                 const dur = exp.duration as string | undefined;
                 const startDate = exp.start_date || exp.from || dur?.split(/\s[-–]\s/)[0] || '';
@@ -518,6 +533,7 @@ export default function BuilderPage() {
                   description: formatBullets(exp.key_contributions || exp.contributions || exp.responsibilities) || String(exp.description || ''),
                   currentlyWorking: exp.is_current || exp.currently_working || !dur || dur.toLowerCase().includes('present'),
                 };
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               }).filter((e: any) => e.company || e.role);
               if (mappedExp.length > 0) patch.workExperience = mappedExp;
             }
@@ -529,6 +545,7 @@ export default function BuilderPage() {
               dbData?.llm_data?.projects, dbData?.llm_data?.project_details,
             );
             if (projArr.length > 0) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const mappedProj = projArr.map((proj: any) => ({
                 title: String(proj.title || proj.name || proj.project_name || proj.projectName || ''),
                 link: String(proj.url || proj.link || proj.github || ''),
@@ -537,6 +554,7 @@ export default function BuilderPage() {
                 startDate: String(proj.start_date || proj.date || ''),
                 endDate: String(proj.end_date || ''),
                 client: String(proj.client || ''),
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               })).filter((p: any) => p.title);
               if (mappedProj.length > 0) patch.projects = mappedProj;
             }
@@ -556,6 +574,7 @@ export default function BuilderPage() {
         }
       } catch (err: unknown) {
         const raw = (err as { __raw?: Record<string, unknown> })?.__raw;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const errDetails = (raw as any)?.error?.details;
         if (errDetails?.error === 'INSUFFICIENT_CREDITS') {
           toast.error(

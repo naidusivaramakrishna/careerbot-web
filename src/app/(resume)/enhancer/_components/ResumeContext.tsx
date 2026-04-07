@@ -80,19 +80,31 @@ export interface PersonalInfo {
 export interface ResumeData {
   personalInfo: PersonalInfo;
   professionalSummary?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   workExperience: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   education: any[];
   skills: string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   projects: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   certifications?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   achievements?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   volunteering?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   references?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   internships?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   awards?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   hobbies?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   interests?: any[];
   languages?: LanguageItem[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   publications?: any[];
   categorizedSkills?: Record<string, string | string[]>;
   summaryVariants?: unknown[];
@@ -247,7 +259,7 @@ export function ResumeProvider({ children }: { children: ReactNode }) {
       // Storage unavailable or corrupt — start fresh
     }
     setIsLoaded(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   // Sync resumeData to sessionStorage whenever it changes

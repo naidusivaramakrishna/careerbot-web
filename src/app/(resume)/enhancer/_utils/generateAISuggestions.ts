@@ -1,7 +1,9 @@
 import type { Improvement } from '@/api/enhancerApi';
 
 interface EnhancementResult {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   enhanced_sections: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ats_score: any;
   improvements: Improvement[];
   suggestions?: string[]; // New: Array of plain text suggestions from backend
@@ -303,6 +305,7 @@ export function generateDetailedSuggestions(
 
   // 9. Projects with Embedded Suggestions (Clean them)
   const projects = enhanced_sections?.llm_data?.projects || [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   projects.forEach((project: any, index: number) => {
     if (project.key_contributions) {
       project.key_contributions.forEach((contribution: string, cIndex: number) => {
@@ -330,6 +333,7 @@ export function generateDetailedSuggestions(
 
   // 10. Experience Quantification
   const experience = enhanced_sections?.llm_data?.experience || [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hasQuantifiableMetrics = experience.some((exp: any) =>
     exp.key_contributions?.some((contrib: string) =>
       /\d+/.test(contrib) // Check if contains numbers
