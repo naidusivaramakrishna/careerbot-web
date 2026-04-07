@@ -270,16 +270,22 @@
 
     const wrap = document.createElement('div');
     wrap.className = 'cb-wrap';
-    wrap.innerHTML = `
+    // Static structure only — user data set via textContent below to prevent XSS
+    const staticBanner = `
       <div class="cb-icon">✨</div>
       <div class="cb-meta">
-        <span class="cb-title">${meta.title || 'Job Detected'}</span>
-        ${meta.company ? `<span class="cb-company">${meta.company}</span>` : ''}
-        <span class="cb-badge">${meta.source || 'careerbot'}</span>
+        <span class="cb-title"></span>
+        <span class="cb-company"></span>
+        <span class="cb-badge"></span>
       </div>
       <button class="cb-btn" id="cb-tailor-btn">✦ Tailor Resume</button>
       <button class="cb-close" id="cb-close-btn">✕</button>
     `;
+    wrap.innerHTML = staticBanner; // safe: static structure only, user data via textContent
+    wrap.querySelector('.cb-title').textContent = meta.title || 'Job Detected';
+    const companyEl = wrap.querySelector('.cb-company');
+    if (meta.company) { companyEl.textContent = meta.company; } else { companyEl.remove(); }
+    wrap.querySelector('.cb-badge').textContent = meta.source || 'careerbot';
 
     shadow.appendChild(style);
     shadow.appendChild(wrap);

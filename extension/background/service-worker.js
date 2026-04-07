@@ -5,6 +5,12 @@ chrome.action.onClicked.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Validate that the message comes from our own extension only.
+  // This prevents any externally_connectable web page from triggering handlers.
+  if (sender.id !== chrome.runtime.id) {
+    return false;
+  }
+
   if (message.type === 'JD_DETECTED') {
     handleJDDetected(message.data, sender.tab);
     sendResponse({ ok: true });

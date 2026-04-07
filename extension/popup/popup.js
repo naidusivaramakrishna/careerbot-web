@@ -1,5 +1,20 @@
 // popup.js — CareerBot Extension Popup
 
+/** Fallback for broken extension icons — replaces img with a static SVG via DOM APIs. */
+function cbIconFallback(parent, size) { // safe: static SVG, no user data
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', size); svg.setAttribute('height', size);
+  svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'white');
+  svg.setAttribute('stroke-width', '2'); svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round'); svg.setAttribute('viewBox', '0 0 24 24');
+  [['M12 2L2 7l10 5 10-5-10-5z'], ['M2 17l10 5 10-5'], ['M2 12l10 5 10-5']].forEach(([d]) => {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  });
+  parent.replaceChildren(svg);
+}
+
 const BASE_URL  = 'http://localhost:8000/api/v1';
 const PORTAL_URL = 'http://localhost:3000';
 
@@ -238,9 +253,8 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   const makeLegend = () => {
     const legend = document.createElement('div');
     legend.className = 'skills-legend';
-    legend.innerHTML = `
-      <span class="skills-legend-dot matched">Matched</span>
-      <span class="skills-legend-dot missing">Missing</span>`;
+    const legendHTML = '<span class="skills-legend-dot matched">Matched</span><span class="skills-legend-dot missing">Missing</span>';
+    legend.innerHTML = legendHTML; // safe: static hardcoded strings, no user data
     return legend;
   };
 
@@ -255,7 +269,7 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   // ── Technical Skills Card ──
   const techContent = document.getElementById('tech-skills-content');
   if (techContent) {
-    techContent.innerHTML = '';
+    techContent.replaceChildren();
     techContent.appendChild(makeLegend());
     techContent.appendChild(makeAllSkillsGroup(allTechMatched, allTechMissing));
   }
@@ -264,7 +278,7 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   // ── Soft Skills Card ──
   const softContent = document.getElementById('soft-skills-content');
   if (softContent) {
-    softContent.innerHTML = '';
+    softContent.replaceChildren();
     softContent.appendChild(makeLegend());
     softContent.appendChild(makeAllSkillsGroup(allSoftMatched, allSoftMissing));
   }
@@ -620,7 +634,11 @@ function updateProfileCard(user) {
     }
     // Avatar image if available
     if (avatarEl && user.avatar) {
-      avatarEl.innerHTML = `<img src="${user.avatar}" alt="" />`;
+      const img = document.createElement('img');
+      img.src = user.avatar;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      avatarEl.replaceChildren(img);
     }
   } else {
     // Logged out

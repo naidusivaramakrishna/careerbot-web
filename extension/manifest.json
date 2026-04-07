@@ -166,7 +166,32 @@
   "web_accessible_resources": [
     {
       "resources": ["icons/*", "popup/popup.html", "popup/popup.css", "popup/popup.js"],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://linkedin.com/*",
+        "https://www.naukri.com/*",
+        "https://www.indeed.com/*",
+        "https://in.indeed.com/*",
+        "https://www.indeed.co.in/*",
+        "https://www.glassdoor.com/*",
+        "https://glassdoor.com/*",
+        "https://www.glassdoor.co.in/*",
+        "https://glassdoor.co.in/*",
+        "https://www.shine.com/*",
+        "https://shine.com/*",
+        "https://www.timesjobs.com/*",
+        "https://internshala.com/*",
+        "https://www.foundit.in/*",
+        "https://www.foundit.sg/*",
+        "https://www.foundit.my/*",
+        "https://www.foundit.ph/*",
+        "https://www.ziprecruiter.com/*",
+        "https://wellfound.com/*",
+        "https://angel.co/*",
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*",
+        "https://jobs.lever.co/*"
+      ]
     }
   ]
 }
