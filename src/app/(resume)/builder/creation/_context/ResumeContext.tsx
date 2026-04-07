@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { getResumeById, updateResume } from "@/api/resumeApi";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
@@ -37,16 +37,19 @@ export interface ResumeData {
     location: string;
     linkedinUrl: string;
     portfolioUrl: string;
+    countryCode?: string;
   };
   professionalSummary: {
     summary: string;
     targetRole: string;
   };
-  education: { 
-    school: string; 
-    degree: string; 
-    startDate: string; 
-    endDate: string; 
+  education: {
+    school: string;
+    degree: string;
+    startDate: string;
+    endDate: string;
+    scoreType?: string;
+    scoreValue?: string;
   }[];
   workExperience: { 
     company: string; 
@@ -261,7 +264,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
   });
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [resumeId, setResumeId] = useState<string | null>(null);
+  const [, setResumeId] = useState<string | null>(null);
   const [isLoadingResume, setIsLoadingResume] = useState(true);
   
   // ✅ NEW: Track if initial load is complete
@@ -307,7 +310,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
 
   // ✅ FIXED: Only save to localStorage AFTER initial load is complete
   useEffect(() => {
-    if (typeof window !== 'undefined' && hasLoadedInitialData && resumeData) {
+    if (hasLoadedInitialData && resumeData) {
       try {
         localStorage.setItem('resumeData', JSON.stringify(resumeData));
       } catch (error) {
@@ -318,7 +321,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
 
   // ✅ NEW: Save data before page unload (backup save)
   useEffect(() => {
-    if (typeof window !== 'undefined' && hasLoadedInitialData) {
+    if (hasLoadedInitialData) {
       const handleBeforeUnload = () => {
         try {
           localStorage.setItem('resumeData', JSON.stringify(resumeData));
@@ -406,7 +409,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
         setIsLoadingResume(true);
 
         // ✅ Check for cached resume data first (for instant loading after creation)
-        const cachedData = typeof window !== 'undefined' ? localStorage.getItem("cached_resume_data") : null;
+        const cachedData = localStorage.getItem("cached_resume_data");
         let data;
 
         if (cachedData) {
@@ -514,7 +517,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
   // Custom sections management
   const addCustomSection = (sectionName: string) => {
     const newSection: CustomSection = {
-      id: `custom_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `custom_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       sectionName,
       fields: [],
     };
@@ -543,7 +546,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp }: ResumeProvi
     fieldType: CustomField["fieldType"]
   ) => {
     const newField: CustomField = {
-      id: `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `field_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       fieldName,
       fieldType,
       value: fieldType === "list" ? [] : "",

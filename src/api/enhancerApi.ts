@@ -3,7 +3,10 @@ import axios from "axios";
 import type { AxiosRequestConfig } from 'axios';
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import logger from "@/lib/logger";
-import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeResponse, UpdateEnhancedResumeRequest } from '@/types/api.types';
+import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeResponse, UpdateEnhancedResumeRequest, Improvement } from '@/types/api.types';
+
+// Re-export types that consumers import from this module
+export type { EnhancedResumeHistoryItem, EnhanceResumeResponse, Improvement };
 
 /* ========== SAFE HELPERS ========== */
 interface ApiErrorWithRaw extends Error {
@@ -153,9 +156,9 @@ export async function enhanceResume(request: EnhanceResumeRequest): Promise<Enha
 
   // Normalize any oddly formatted summary variants returned by backend.
   try {
-    const enhanced = response?.enhanced_resume as unknown as Record<string, unknown> | undefined;
+    const enhanced = response?.enhanced_resume as Record<string, unknown> | undefined;
     if (enhanced && Array.isArray(enhanced.summary_variants)) {
-      enhanced.summary_variants = enhanced.summary_variants.map((v: unknown) => {
+      enhanced.summary_variants = (enhanced.summary_variants as unknown[]).map((v: unknown) => {
         const out = { ...(v as Record<string, unknown>) } as Record<string, unknown>;
         const raw = out.summary;
         if (typeof raw === 'string') {
@@ -190,7 +193,7 @@ export async function enhanceResume(request: EnhanceResumeRequest): Promise<Enha
         return out;
       });
       // copy back to typed structure
-      (response.enhanced_resume as unknown as Record<string, unknown>).summary_variants = enhanced.summary_variants;
+      (enhanced as Record<string, unknown>).summary_variants = enhanced.summary_variants;
     }
   } catch (err) {
     // Don't fail the whole call if normalization fails — log and continue
@@ -444,7 +447,7 @@ export async function processResumeEnhancement(
   // enhancer_state.resume replaces the old enhanced_resume field
   const resumeData = enhanceResult.enhancer_state?.resume;
   if (resumeData && !enhanceResult.enhanced_resume) {
-    (enhanceResult as unknown as Record<string, unknown>).enhanced_resume = resumeData;
+    enhanceResult.enhanced_resume = resumeData as import('@/types/api.types').ResumeData;
   }
 
   // Set parsed_data from enhancer_state.resume if not already present

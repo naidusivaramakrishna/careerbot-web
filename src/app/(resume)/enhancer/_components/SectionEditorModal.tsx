@@ -538,7 +538,7 @@ const SectionEditorModal: React.FC<Props> = ({ isOpen, onClose, onSave }) => {
         const cleared: string[] = [];
         const contactFields = ["email", "phone", "location", "linkedinUrl", "githubUrl", "portifolioUrl"] as const;
         for (const f of contactFields) {
-          const oldVal = (orig as Record<string, string>)[f] || "";
+          const oldVal = (orig as unknown as Record<string, string>)[f] || "";
           const newVal = (newPersonalInfo as Record<string, string>)[f] || "";
           if (!oldVal && newVal) newlyAdded.push(f);
           else if (oldVal && !newVal) cleared.push(f);

@@ -24,7 +24,7 @@ export default function RootLayout({
       localStorage.setItem("current_resume_id", params.resumeId);
     }
     // Fallback to localStorage for static route
-    else if (typeof window !== 'undefined') {
+    else {
       const storedId = localStorage.getItem("current_resume_id");
       if (storedId && storedId !== 'null' && storedId !== 'undefined') {
         setResumeId(storedId);

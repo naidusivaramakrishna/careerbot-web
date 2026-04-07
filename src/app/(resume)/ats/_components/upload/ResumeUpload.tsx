@@ -129,7 +129,7 @@ const ResumeUpload: React.FC = () => {
       clearInterval(progInt);
       setIsProcessing(false);
 
-      if (result.parsed_data?.error || result.parsed_data?.ocr_needed || !result.success) {
+      if (!result.success) {
         setIsImageBased(true);
         setCurrentScore(0);
         setProgress(100);
@@ -139,27 +139,33 @@ const ResumeUpload: React.FC = () => {
         return;
       }
 
-      if (result.success) {
-        setCurrentScore(result.finalWeightedScore ?? 0);
-
-        localStorage.setItem(
-          "atsAnalysisData",
-          JSON.stringify({
-            ...result,
-            file_name: f.name,
-            file_size: f.size,
-            file_type: f.type,
-            upload_time: new Date().toISOString(),
-            missingFields: result.missingFields ?? [],
-          })
-        );
-        localStorage.setItem("currentScore", String(result.finalWeightedScore ?? 0));
-        localStorage.setItem("isImageBased", "false");
+      if (result.parsed_data?.error || result.parsed_data?.ocr_needed) {
+        setIsImageBased(true);
+        setCurrentScore(0);
         setProgress(100);
-        setTimeout(() => setStep(3), 500);
-      } else {
-        throw new Error(result.error ?? "Unknown error");
+        setStep(3);
+        localStorage.setItem("isImageBased", "true");
+        localStorage.setItem("currentScore", "0");
+        return;
       }
+
+      setCurrentScore(result.finalWeightedScore ?? 0);
+
+      localStorage.setItem(
+        "atsAnalysisData",
+        JSON.stringify({
+          ...result,
+          file_name: f.name,
+          file_size: f.size,
+          file_type: f.type,
+          upload_time: new Date().toISOString(),
+          missingFields: result.missingFields ?? [],
+        })
+      );
+      localStorage.setItem("currentScore", String(result.finalWeightedScore ?? 0));
+      localStorage.setItem("isImageBased", "false");
+      setProgress(100);
+      setTimeout(() => setStep(3), 500);
     } catch (err: unknown) {
       clearInterval(progInt);
       let message = "Processing failed. Try again.";

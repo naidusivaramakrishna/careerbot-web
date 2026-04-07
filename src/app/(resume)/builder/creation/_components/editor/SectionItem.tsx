@@ -39,8 +39,11 @@ const SectionItem: React.FC<Props> = ({
   const [hovered, setHovered] = useState(false);
   const [deleteHovered, setDeleteHovered] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-  const [isDeleting, setIsDeleting] = useState(false); // ✅ NEW: Loading state
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => { setIsMounted(true); }, []);
 
   const handleHeaderClick = () => {
     if (isDragging) return;
@@ -218,7 +221,7 @@ const SectionItem: React.FC<Props> = ({
       </div>
 
       {/* Tooltip - Rendered via Portal outside sidebar */}
-      {deleteHovered && typeof window !== 'undefined' && createPortal(
+      {deleteHovered && isMounted && createPortal(
         <div
           className="fixed px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded whitespace-nowrap shadow-xl pointer-events-none"
           style={{

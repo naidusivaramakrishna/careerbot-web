@@ -161,7 +161,7 @@ const ChecklistCard: React.FC<ChecklistCardProps> = React.memo(
               }`}
               aria-hidden="true"
             >
-              {React.cloneElement(category.icon, {
+              {React.cloneElement(category.icon as React.ReactElement<{ className?: string }>, {
                 className: `w-7 h-7 text-white transition-all duration-500 ${
                   isHovered ? "scale-110" : "scale-100"
                 }`,

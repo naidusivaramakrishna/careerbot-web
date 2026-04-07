@@ -217,12 +217,16 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       {isOpen && filteredSuggestions.length > 0 && (
         <div
           ref={dropdownRef}
+          role="listbox"
           className="absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
           style={{ top: "100%", marginTop: "4px" }}
         >
           {filteredSuggestions.map((suggestion, index) => (
             <div
               key={index}
+              role="option"
+              aria-selected={index === highlightedIndex}
+              tabIndex={-1}
               onClick={() => handleSelect(suggestion)}
               onMouseEnter={() => setHighlightedIndex(index)}
               onMouseLeave={() => setHighlightedIndex(-1)}

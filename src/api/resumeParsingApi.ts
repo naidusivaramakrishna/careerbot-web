@@ -230,7 +230,7 @@ export const extractResume = async (file: File): Promise<ResumeExtractResponse> 
 
         const response = await httpClient.post<ResumeExtractResponse>(
             "/parser/parse_resume/",
-            formData as unknown as Record<string, unknown>,
+            formData,
             {
                 headers: {
                     "Content-Type": "multipart/form-data",

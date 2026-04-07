@@ -773,7 +773,6 @@ const EditorTab: React.FC<Props> = ({
             size={54}
             strokeWidth={4}
             totalSections={totalSections}
-            completedSections={completedSectionsCount}
           />
         </div>
       </div>

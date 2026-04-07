@@ -14,6 +14,8 @@ export interface Resume {
   modified: string;
   created: string;
   primary: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const ResumePage = () => {

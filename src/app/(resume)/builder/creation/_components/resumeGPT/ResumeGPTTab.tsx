@@ -80,7 +80,7 @@ export default function ResumeGPT() {
     "phone",
     "location",
     "linkedinUrl",
-    "portifolioUrl",
+    "portfolioUrl",
   ];
 
   // Personal info prompts mapping
@@ -90,7 +90,8 @@ export default function ResumeGPT() {
     phone: "Nice! What's your phone number?",
     location: "Thanks! Where are you located?",
     linkedinUrl: "Finally, What's your LinkedIn URL?",
-    portifolioUrl: "What's your Portfolio link?",
+    portfolioUrl: "What's your Portfolio link?",
+    countryCode: "",
   };
 
   // ✅ Initialize conversation with existing data from resumeData
@@ -531,7 +532,9 @@ export default function ResumeGPT() {
       const updated = { ...prev };
       switch (section) {
         case "Professional Summary":
-          updated.professionalSummary = data as string;
+          updated.professionalSummary = typeof data === "string"
+            ? { summary: data, targetRole: prev.professionalSummary.targetRole }
+            : data as { summary: string; targetRole: string };
           break;
         case "Education":
           updated.education = [...prev.education, ...(Array.isArray(data) ? data : [data])];

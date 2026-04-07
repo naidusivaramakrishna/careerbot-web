@@ -85,7 +85,7 @@ export async function injectDocxHeaderIntoBody(docxBlob: Blob): Promise<Blob> {
       ? wP
       : [wP || {}];
 
-    wBody["w:p"] = [...headerParagraphs, ...bodyParagraphs] as unknown as Record<string, unknown>;
+    wBody["w:p"] = [...headerParagraphs, ...bodyParagraphs];
     const newDocumentXml = builder.build(documentJson);
     zip.file("word/document.xml", newDocumentXml);
 

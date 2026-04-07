@@ -16,7 +16,6 @@ import {
   Heart,
 } from "lucide-react";
 import { processResumeComplete } from "@/api/resumeatsapi";
-import SafeHTML from "@/components/common/SafeHTML";
 
 enum AnalysisPhase {
   Uploading = "Uploading resume...",
@@ -549,10 +548,9 @@ export default function ATSLoginPage() {
                 <h3 className="font-bold text-gray-900 mb-2">
                   {step.num}. {step.title}
                 </h3>
-                <SafeHTML
-                  content={step.desc}
-                  as="p"
+                <p
                   className="text-sm text-gray-500 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: step.desc }}
                 />
               </div>
             ))}

@@ -2,6 +2,7 @@ import { isAuthenticated } from "./authApi";
 import { getCorrelationId } from "@/lib/correlationId";
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import { enhanceResume } from "./enhancerApi";
+import { calculateATS } from "./parserApi";
 
 const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
@@ -86,38 +87,9 @@ export const clearCacheForResume = async (resumeId: string) => {
 
 /* ------------------------------------------------------
    STEP 3 — Calculate ATS Score
-   (AUTO PROTECTS AGAINST 0% SCORE BUG)
+   Delegates to parserApi.calculateATS to avoid duplication.
 ------------------------------------------------------ */
-export const fetchAtsScore = async (resumeId: string) => {
-  const correlationId = getCorrelationId();
-  const url = `${API_BASE}/api/v1/parser/calculate_ats_score/${resumeId}`;
-
-  logApiRequest('POST', url, { resumeId, force_recalculate: true });
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(correlationId && { 'X-Correlation-ID': correlationId }),
-      },
-      body: JSON.stringify({
-        force_recalculate: true,
-        disable_cache: true,
-      }),
-    });
-
-    const traceId = response.headers.get('x-trace-id');
-    logApiResponse('POST', url, response.status, traceId || undefined);
-
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
-  } catch (error) {
-    logApiError('POST', url, error);
-    throw error;
-  }
-};
+export const fetchAtsScore = (resumeId: string) => calculateATS(resumeId);
 
 /* ------------------------------------------------------
    STEP 4 — Complete Resume → ATS Flow
@@ -159,7 +131,7 @@ export const processResumeComplete = async (file: File) => {
 
     localStorage.setItem("atsAnalysisData", JSON.stringify(payload));
 
-    return { success: true, ...payload };
+    return { success: true as const, ...payload };
   } catch (err: unknown) {
     let message = (err as { message?: string })?.message ?? String(err);
 
@@ -174,7 +146,7 @@ export const processResumeComplete = async (file: File) => {
       message = "You don't have enough credits to analyze this resume. Please upgrade your plan or purchase credits.";
     }
 
-    return { success: false, error: message };
+    return { success: false as const, error: message };
   }
 };
 

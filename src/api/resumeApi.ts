@@ -14,6 +14,7 @@ export interface CategorizedSkills {
 
 export interface ResumeResponse {
   id: string;
+  _id?: string;
   personalInfo?: {
     fullname?: string;
     email?: string;
@@ -209,7 +210,7 @@ export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
       resumeData
     );
 
-    const resumeId = response.data.id || (response.data as any)._id;
+    const resumeId = response.data.id || response.data._id;
 
     logger.info("✅ Resume created with ID:", resumeId);
 
@@ -300,7 +301,9 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
     }
     
     if (response.data && typeof response.data === 'object') {
-      const resumeId = (response.data as any).id || (response.data as any)._id;
+      // Backend occasionally returns a single object instead of an array
+      const singleResume = response.data as unknown as ResumeResponse;
+      const resumeId = singleResume.id || singleResume._id;
 
       if (resumeId) {
         logger.info("✅ Single resume received");
@@ -498,7 +501,7 @@ const transformResumeDataForBackend = (resumeData: Partial<ResumeResponse>): Par
   // Transform customSections from fields-based to items-based structure
   if (transformed.customSections && Array.isArray(transformed.customSections) && transformed.customSections.length > 0) {
     logger.info("🔄 Transforming customSections from fields to items format...");
-    transformed.customSections = transformCustomSectionsForBackend(transformed.customSections as any) as any;
+    transformed.customSections = transformCustomSectionsForBackend(transformed.customSections!) as CustomSection[];
     logger.info("✅ Transformed customSections:", transformed.customSections);
   }
 
@@ -547,7 +550,7 @@ export const getResumeById = async (resumeId: string): Promise<ResumeResponse> =
     // Transform backend customSections (items) to frontend format (fields)
     if (response.data.customSections && Array.isArray(response.data.customSections) && response.data.customSections.length > 0) {
       logger.info("🔄 Transforming backend customSections to frontend format...");
-      response.data.customSections = transformCustomSectionsFromBackend(response.data.customSections as any) as any;
+      response.data.customSections = transformCustomSectionsFromBackend(response.data.customSections);
       logger.info("✅ Transformed customSections:", response.data.customSections);
     }
 
@@ -795,7 +798,7 @@ export const downloadResume = async (
 
     logger.debug("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?format=${backendFormat}`);
 
-    const response = await httpClient.get(
+    const response = await httpClient.get<Blob>(
       `/resumes/${resumeId}/download?format=${backendFormat}`,
       {
         responseType: 'blob',
@@ -805,7 +808,7 @@ export const downloadResume = async (
     logger.info("✅ Download response received:", {
       status: response.status,
       contentType: response.headers['content-type'],
-      size: response.data.size
+      size: (response.data as Blob).size
     });
 
     return response.data;
@@ -886,7 +889,7 @@ export const applyTemplateToResume = async (
     logger.debug("🔍 POST URL:", endpoint);
     logger.debug("🔍 Request payload:", JSON.stringify(payload));
 
-    const response = await httpClient.post(endpoint, payload, {
+    const response = await httpClient.post<{ message: string; resume_id: string; template_id: string }>(endpoint, payload, {
       headers: {
         'Content-Type': 'application/json'
       }

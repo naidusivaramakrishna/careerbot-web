@@ -162,14 +162,14 @@ const ResumeTableRow = ({
   const displayScore = resume.score || 0;
 
   // ✅ Dynamic time formatting that updates every minute
-  const [createdTime, setCreatedTime] = useState(formatDateResume(resume.createdAt));
-  const [modifiedTime, setModifiedTime] = useState(formatDateResume(resume.updatedAt));
+  const [createdTime, setCreatedTime] = useState(formatDateResume(resume.createdAt ?? resume.created));
+  const [modifiedTime, setModifiedTime] = useState(formatDateResume(resume.updatedAt ?? resume.modified));
 
   useEffect(() => {
     // Update the time display every minute
     const interval = setInterval(() => {
-      setCreatedTime(formatDateResume(resume.createdAt));
-      setModifiedTime(formatDateResume(resume.updatedAt));
+      setCreatedTime(formatDateResume(resume.createdAt ?? resume.created));
+      setModifiedTime(formatDateResume(resume.updatedAt ?? resume.modified));
     }, 60000); // Update every 60 seconds
 
     return () => clearInterval(interval);

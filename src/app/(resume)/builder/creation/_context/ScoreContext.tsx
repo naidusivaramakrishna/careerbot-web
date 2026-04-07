@@ -31,8 +31,6 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // ✅ Initialize score after component mounts
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
     const resumeId = getCurrentResumeId();
     setCurrentResumeId(resumeId);
 
