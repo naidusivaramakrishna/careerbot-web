@@ -20,6 +20,12 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  {
+    rules: {
+      // Strip console.log/debug/info in production builds; keep warn/error for visibility
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
 ];
 
 export default eslintConfig;

@@ -27,6 +27,12 @@
 .DS_Store
 *.pem
 
+# binary artifacts — never commit archives
+*.zip
+*.tar.gz
+*.gz
+*.bin
+
 # debug
 npm-debug.log*
 yarn-debug.log*

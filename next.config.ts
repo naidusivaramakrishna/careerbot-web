@@ -1,15 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  reactStrictMode: false, // ✅ Make sure this is here
+  reactStrictMode: true,
 
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
-  typescript: {
-    ignoreBuildErrors: true,
-  },
 
   images: {
     remotePatterns: [

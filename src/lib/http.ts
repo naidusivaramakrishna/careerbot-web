@@ -9,6 +9,9 @@ import {
   clearCorrelationId,
 } from './correlationId';
 
+if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
+  throw new Error('[careerbot] NEXT_PUBLIC_BASE_URL must be set in production');
+}
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -207,7 +210,7 @@ export const httpClient = {
 
   patch: <T = unknown>(
     url: string,
-    data?: Record<string, unknown>,
+    data?: object,
     config?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> =>
     client.patch<T>(url, data, config),
