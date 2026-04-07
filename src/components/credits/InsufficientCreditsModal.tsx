@@ -34,11 +34,10 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
 
   const deficit = requiredCredits - currentBalance;
 
-  // Suggest a plan based on deficit
+  // Suggest a plan based on deficit (indices: FREE=0, PRO=1, MAX=2)
   const getSuggestedPlan = () => {
-    if (deficit <= 50) return SUBSCRIPTION_PLANS[1]; // STARTER (100 credits)
-    if (deficit <= 150) return SUBSCRIPTION_PLANS[2]; // BASIC (200 credits)
-    return SUBSCRIPTION_PLANS[3]; // PRO (500 credits)
+    if (deficit <= 50) return SUBSCRIPTION_PLANS[1];  // PRO (500 credits)
+    return SUBSCRIPTION_PLANS[2];                      // MAX (2000 credits)
   };
 
   const suggestedPlan = getSuggestedPlan();
@@ -125,9 +124,9 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
                   <strong>₹{suggestedPlan.price_inr}/month</strong>
                 </p>
                 <ul className="text-xs text-gray-600 space-y-1">
-                  <li>✓ {suggestedPlan.resume_builder_limit === -1 ? 'Unlimited' : suggestedPlan.resume_builder_limit} resume{suggestedPlan.resume_builder_limit !== 1 ? 's' : ''}</li>
-                  <li>✓ {suggestedPlan.job_matches_limit === -1 ? 'Unlimited' : suggestedPlan.job_matches_limit} job match{suggestedPlan.job_matches_limit !== 1 ? 'es' : ''}</li>
-                  <li>✓ {suggestedPlan.english_assessments_limit === -1 ? 'Unlimited' : suggestedPlan.english_assessments_limit} assessment{suggestedPlan.english_assessments_limit !== 1 ? 's' : ''}</li>
+                  <li>✓ {suggestedPlan.features.resumes_limit === 'unlimited' ? 'Unlimited' : suggestedPlan.features.resumes_limit} resume{suggestedPlan.features.resumes_limit !== 1 ? 's' : ''}</li>
+                  <li>✓ {suggestedPlan.features.job_matches_limit === 'unlimited' ? 'Unlimited' : suggestedPlan.features.job_matches_limit} job match{suggestedPlan.features.job_matches_limit !== 1 ? 'es' : ''}</li>
+                  <li>✓ {suggestedPlan.features.assessments_limit === 'unlimited' ? 'Unlimited' : suggestedPlan.features.assessments_limit} assessment{suggestedPlan.features.assessments_limit !== 1 ? 's' : ''}</li>
                 </ul>
               </div>
             </div>

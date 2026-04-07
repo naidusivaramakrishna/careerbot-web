@@ -60,7 +60,7 @@ export default function ErrorPopupModal({
   let icon = AlertCircle;
   let message = error;
   let showRetryButton = !!onRetry;
-  let buttonLabel = "Try Again";
+  const buttonLabel = "Try Again";
   let secondaryAction: {
     label: string;
     onClick: () => void;
@@ -140,7 +140,9 @@ export default function ErrorPopupModal({
 
   const handleRetryClick = () => {
     onClose();
-    setTimeout(onRetry, 200);
+    if (onRetry) {
+      setTimeout(onRetry, 200);
+    }
   };
 
   const IconComponent = icon;

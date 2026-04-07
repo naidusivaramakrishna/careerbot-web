@@ -21,6 +21,10 @@ export default function ToggleSwitch({ initial = true, onToggle }: ToggleSwitchP
             {/* Toggle Button */}
             <div
                 onClick={handleToggle}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleToggle()}
+                role="switch"
+                aria-checked={enabled}
+                tabIndex={0}
                 className={`relative w-12 h-6 rounded-full cursor-pointer transition-colors duration-300 ${enabled ? "bg-green-500" : "bg-gray-400"
                     }`}
             >

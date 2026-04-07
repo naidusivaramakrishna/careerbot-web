@@ -27,15 +27,23 @@ export const useAdminAccess = (pageKey: AdminPageKey): UseAdminAccessReturn => {
         setLoading(true);
         setError(null);
 
-        // Check cache first (role doesn't change during session)
+        // Check cache with 60s TTL — ensures revoked/demoted roles take effect promptly
+        const ROLE_CACHE_TTL_MS = 60 * 1000;
         const cached = sessionStorage.getItem('admin_role');
-        if (cached) {
+        const cachedAt = Number(sessionStorage.getItem('admin_role_at') ?? 0);
+        const isCacheValid = cached && (Date.now() - cachedAt) < ROLE_CACHE_TTL_MS;
+
+        if (isCacheValid) {
           const normalizedRole = cached as AdminRole;
           setUserRole(normalizedRole);
           logger.debug(`Admin role from cache: ${normalizedRole}`);
           setLoading(false);
           return;
         }
+
+        // Cache miss or expired — clear stale entry and re-fetch
+        sessionStorage.removeItem('admin_role');
+        sessionStorage.removeItem('admin_role_at');
 
         const admin = await getCurrentAdmin();
         logger.debug(`getCurrentAdmin response: role=${admin?.role}`);
@@ -44,8 +52,9 @@ export const useAdminAccess = (pageKey: AdminPageKey): UseAdminAccessReturn => {
           // Normalize role to uppercase (API might return lowercase)
           const normalizedRole = admin.role.toUpperCase() as AdminRole;
           setUserRole(normalizedRole);
-          // Cache the role for subsequent page navigations
+          // Cache the role with a timestamp for TTL enforcement
           sessionStorage.setItem('admin_role', normalizedRole);
+          sessionStorage.setItem('admin_role_at', String(Date.now()));
           logger.debug(`Admin access check: role=${normalizedRole}, page=${pageKey}, hasAccess=${hasPageAccess(normalizedRole, pageKey)}`);
         } else {
           logger.error('Unable to determine admin role');
