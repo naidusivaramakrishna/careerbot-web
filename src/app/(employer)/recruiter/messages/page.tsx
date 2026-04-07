@@ -149,7 +149,8 @@ function MessagesPageContent() {
       try {
         setLoading(true);
         setError('');
-        const response = await recruiterAuthApi.getConversations();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response: any = await recruiterAuthApi.getConversations();
         if (response?.data) {
           // Map API response to conversation format
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

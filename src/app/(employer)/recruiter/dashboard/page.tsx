@@ -55,9 +55,11 @@ export default function DashboardPage() {
 
         // Fetch stats from dashboard stats endpoint (for stats cards)
         try {
-          const statsResponse = await recruiterAuthApi.getDashboardStats();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const statsResponse: any = await recruiterAuthApi.getDashboardStats();
           logger.debug('✅ Dashboard stats fetched:', statsResponse);
-          const statsData = statsResponse?.data || statsResponse;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const statsData: any = statsResponse?.data || statsResponse;
           if (statsData) {
             stats = {
               activeJobs: statsData.activeJobs || 0,
@@ -85,7 +87,8 @@ export default function DashboardPage() {
               console.log('⚠️ upcomingInterviews is empty or missing, fetching from interviews endpoint');
               // Fallback: fetch interviews from dedicated endpoint
               try {
-                const interviewsResponse = await recruiterAuthApi.getScheduledInterviews();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const interviewsResponse: any = await recruiterAuthApi.getScheduledInterviews();
                 const interviewsData = interviewsResponse?.data || interviewsResponse || [];
                 console.log('✅ Interviews fetched from endpoint:', interviewsData);
                 setInterviews(Array.isArray(interviewsData) ? interviewsData : []);
@@ -115,7 +118,8 @@ export default function DashboardPage() {
         let jobsData: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
         try {
           logger.debug('🔵 Fetching jobs from my-jobs endpoint...');
-          const jobsResponse = await recruiterAuthApi.getMyJobs();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const jobsResponse: any = await recruiterAuthApi.getMyJobs();
           logger.debug('✅ Jobs fetched:', jobsResponse);
           jobsData = Array.isArray(jobsResponse?.data) ? jobsResponse.data : Array.isArray(jobsResponse) ? jobsResponse : [];
         } catch (jobsError) {
@@ -206,7 +210,8 @@ export default function DashboardPage() {
                 .map(async (job: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                   try {
                     const jobId = String(job.job_id || job.id);
-                    const appResponse = await recruiterAuthApi.getJobApplications(jobId);
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const appResponse: any = await recruiterAuthApi.getJobApplications(jobId);
                     let applicantCount = 0;
 
                     if (Array.isArray(appResponse?.data)) {

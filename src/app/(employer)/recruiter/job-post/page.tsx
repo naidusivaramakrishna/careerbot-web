@@ -229,14 +229,15 @@ export default function PostJobPage() {
 
       // Send to backend API: POST /api/v1/jobs/
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await recruiterAuthApi.createJob(jobData as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response: any = await recruiterAuthApi.createJob(jobData as any);
       logger.debug('API Response:', response);
 
       // Create job object for local storage
       const newJob = {
         ...form,
-        id: response.data?.id || Date.now(),
-        postedDate: response.data?.created_at || new Date().toISOString(),
+        id: response?.data?.id || Date.now(),
+        postedDate: response?.data?.created_at || new Date().toISOString(),
         status: "active",
         applicants: 0,
         newApplicants: 0,

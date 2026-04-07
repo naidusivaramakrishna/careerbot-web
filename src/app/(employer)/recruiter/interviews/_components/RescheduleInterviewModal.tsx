@@ -219,7 +219,8 @@ function convertTo24HourFormat(time12: string): string {
   if (!time12) return '';
 
   const [time, period] = time12.split(' ');
-  const [hours, minutes] = time.split(':').map(Number);
+  // eslint-disable-next-line prefer-const
+  let [hours, minutes] = time.split(':').map(Number);
 
   if (period === 'PM' && hours !== 12) {
     hours += 12;

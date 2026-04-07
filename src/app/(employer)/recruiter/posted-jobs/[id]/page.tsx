@@ -74,8 +74,9 @@ export default function JobDetailPage() {
         // Try to fetch from backend using getMyJobs
         // Endpoint: GET /api/v1/jobs/my-jobs
         try {
-          const response = await recruiterAuthApi.getMyJobs();
-          if (response.data) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const response: any = await recruiterAuthApi.getMyJobs();
+          if (response?.data) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const foundJob = response.data.find((j: any) => String(j.id) === String(jobId));
 

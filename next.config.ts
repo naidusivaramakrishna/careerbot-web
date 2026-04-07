@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
   },
 
   // Fix for uuid v13.0.0 and Node.js built-in modules
-  webpack: (config, { webpack }) => {
+  webpack: (config, { webpack, isServer }) => {
     // Use NormalModuleReplacementPlugin to handle node: protocol imports
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
@@ -60,6 +60,15 @@ const nextConfig: NextConfig = {
       ...config.resolve.alias,
       'uuid': require.resolve('uuid'),
     };
+
+    // Exclude browser-only packages from server bundle (prevents SSR prerender errors)
+    if (isServer) {
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : []),
+        'mespeak',
+        'jsdom',
+      ];
+    }
 
     return config;
   },

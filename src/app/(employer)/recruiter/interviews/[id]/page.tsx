@@ -115,7 +115,8 @@ export default function InterviewDetailsPage() {
         logger.debug('📤 Fetching interview details for ID:', id);
 
         // First, try to fetch from API
-        const response = await recruiterAuthApi.getInterviewDetails(id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response: any = await recruiterAuthApi.getInterviewDetails(id);
         logger.debug('📥 API interview details response:', response);
 
         let interviewData: Interview | null = null;
@@ -268,7 +269,8 @@ export default function InterviewDetailsPage() {
       const convertTo24Hour = (time12: string): string => {
         if (!time12) return '10:00:00';
         const [timePart, period] = time12.split(' ');
-        const [hours, minutes] = timePart.split(':').map(Number);
+        // eslint-disable-next-line prefer-const
+        let [hours, minutes] = timePart.split(':').map(Number);
 
         if (period === 'PM' && hours !== 12) {
           hours += 12;
@@ -329,7 +331,8 @@ export default function InterviewDetailsPage() {
           status: statusValue
         });
 
-        const apiResponse = await recruiterAuthApi.updateCandidateStatus(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const apiResponse: any = await recruiterAuthApi.updateApplicationStatus(
           interview.jobId,
           interview.applicationId,
           { status: statusValue, notes: evalFeedback }

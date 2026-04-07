@@ -1,4 +1,6 @@
-import DOMPurify from "isomorphic-dompurify";
+// dompurify is browser-only; this function is always called inside useEffect (client-side).
+// Using "dompurify" directly avoids the isomorphic-dompurify → jsdom → ESM build failure.
+import DOMPurify from "dompurify";
 
 const EDITOR_CONFIG = {
   ALLOWED_TAGS: ["b", "i", "em", "strong", "p", "ul", "ol", "li", "br", "span"],
@@ -14,5 +16,5 @@ const EDITOR_CONFIG = {
 export function setSafeInnerHTML(el: HTMLElement | null, html: string): void {
   if (!el) return;
   // Cast to string: dompurify 3.x returns string | TrustedHTML, innerHTML requires string
-  el.innerHTML = DOMPurify.sanitize(html ?? "", EDITOR_CONFIG) as string;
+  el.innerHTML = DOMPurify.sanitize(html ?? "", EDITOR_CONFIG) as string; // safe: DOMPurify-sanitized
 }

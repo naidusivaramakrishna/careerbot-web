@@ -47,8 +47,9 @@ export default function CandidatesPage() {
         console.log('%c🔵 [CANDIDATES] Fetching candidates from API...', 'color: blue; font-weight: bold');
 
         // Get all jobs
-        const jobsResponse = await recruiterAuthApi.getMyJobs();
-        const jobs = jobsResponse.data || jobsResponse || [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const jobsResponse: any = await recruiterAuthApi.getMyJobs();
+        const jobs = jobsResponse?.data || jobsResponse || [];
         console.log('%c✅ [CANDIDATES] Jobs fetched:', 'color: green; font-weight: bold', jobs);
 
         if (jobs.length === 0) {
@@ -65,8 +66,9 @@ export default function CandidatesPage() {
         for (const job of jobs) {
           try {
             console.log(`%c📊 Fetching applications for job: ${job.id}`, 'color: blue; font-weight: bold');
-            const applicationsResponse = await recruiterAuthApi.getJobApplications(job.id);
-            const responseData = applicationsResponse.data || applicationsResponse || {};
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const applicationsResponse: any = await recruiterAuthApi.getJobApplications(job.id);
+            const responseData = applicationsResponse?.data || applicationsResponse || {};
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let applications: any[] = [];
@@ -191,7 +193,8 @@ export default function CandidatesPage() {
       console.log('🔴 Rejecting candidate:', { jobId: candidate.jobId, applicationId: candidate.applicationId, candidateName: candidate.name });
 
       // Update status to rejected using the centralized status update API
-      const response = await recruiterAuthApi.updateCandidateStatus(candidate.jobId || '', candidate.applicationId || '', {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response: any = await recruiterAuthApi.updateApplicationStatus(candidate.jobId || '', candidate.applicationId || '', {
         status: 'rejected',
         reason: 'Not a good fit',
       });
@@ -253,7 +256,8 @@ export default function CandidatesPage() {
       console.log('🟢 Marking candidate as hired:', { jobId: candidate.jobId, applicationId: candidate.applicationId, candidateName: candidate.name });
 
       // Update status to hired using the status update API
-      const response = await recruiterAuthApi.updateCandidateStatus(candidate.jobId || '', candidate.applicationId || '', {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response: any = await recruiterAuthApi.updateApplicationStatus(candidate.jobId || '', candidate.applicationId || '', {
         status: 'hired',
         notes: 'Candidate marked as hired',
       });

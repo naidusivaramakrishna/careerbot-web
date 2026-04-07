@@ -158,13 +158,14 @@ const PostedJobsPageContent = () => {
         // Try to fetch recruiter's jobs from backend
         try {
           logger.debug('🔵 Fetching jobs from backend API...');
-          const response = await recruiterAuthApi.getMyJobs();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const response: any = await recruiterAuthApi.getMyJobs();
           logger.debug('🟢 Backend API response:', response);
-          logger.debug('🟢 Response data:', response.data);
-          logger.debug('🟢 Response data length:', response.data?.length);
+          logger.debug('🟢 Response data:', response?.data);
+          logger.debug('🟢 Response data length:', response?.data?.length);
 
           // Check if we have jobs from API
-          if (response.data && response.data.length > 0) {
+          if (response?.data && response.data.length > 0) {
             // Map backend job data to match the Job interface
             let allFinalJobs: Job[] = [];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -329,7 +330,8 @@ const PostedJobsPageContent = () => {
             Promise.all(
               allFinalJobs.map(async (job, index) => {
                 try {
-                  const appResponse = await recruiterAuthApi.getJobApplications(String(job.id));
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const appResponse: any = await recruiterAuthApi.getJobApplications(String(job.id));
                   let applicantCount = 0;
 
                   if (Array.isArray(appResponse?.data)) {

@@ -100,8 +100,9 @@ const EditJobPage = () => {
 
         // First try to get from backend API using getMyJobs
         try {
-          const response = await recruiterAuthApi.getMyJobs();
-          if (response.data) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const response: any = await recruiterAuthApi.getMyJobs();
+          if (response?.data) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const job = response.data.find((j: any) => String(j.id) === String(jobId));
             if (job) {

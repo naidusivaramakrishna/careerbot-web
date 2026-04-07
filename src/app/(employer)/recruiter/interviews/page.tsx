@@ -128,7 +128,8 @@ export default function InterviewsPage() {
     const fetchInterviews = async () => {
       try {
         console.log('📤 Fetching scheduled interviews from API...');
-        const response = await recruiterAuthApi.getScheduledInterviews();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response: any = await recruiterAuthApi.getScheduledInterviews();
 
         console.log('📥 API Response:', response);
         console.log('📥 Response type:', typeof response);
@@ -198,8 +199,9 @@ export default function InterviewsPage() {
 
           try {
             console.log('🔄 Fetching jobs for candidate mapping...');
-            const jobsResponse = await recruiterAuthApi.getMyJobs();
-            const jobs = jobsResponse.data || jobsResponse || [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const jobsResponse: any = await recruiterAuthApi.getMyJobs();
+            const jobs = jobsResponse?.data || jobsResponse || [];
             console.log('📋 Extracted jobs count:', jobs.length);
 
             // Fetch applications for each job to build candidate map
@@ -207,10 +209,11 @@ export default function InterviewsPage() {
               try {
                 if (!job?.id) continue;
 
-                const appResponse = await recruiterAuthApi.getJobApplications(job.id);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const appResponse: any = await recruiterAuthApi.getJobApplications(job.id);
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 let applications: any[] = [];
-                const responseData = appResponse.data || appResponse || {};
+                const responseData = appResponse?.data || appResponse || {};
 
                 if (Array.isArray(responseData)) {
                   applications = responseData;
@@ -372,7 +375,8 @@ export default function InterviewsPage() {
       const convertTo24Hour = (time12: string): string => {
         if (!time12) return '10:00:00';
         const [timePart, period] = time12.split(' ');
-        const [hours, minutes] = timePart.split(':').map(Number);
+        // eslint-disable-next-line prefer-const
+        let [hours, minutes] = timePart.split(':').map(Number);
 
         if (period === 'PM' && hours !== 12) {
           hours += 12;

@@ -56,7 +56,8 @@ function CandidateDetailsContent() {
 
         // Fetch candidate details using jobId and applicationId
         console.log(`🔗 Calling getCandidateDetails with jobId: ${jobIdFromUrl}, applicationId: ${applicationId}`);
-        const candidateData = await recruiterAuthApi.getCandidateDetails(jobIdFromUrl, applicationId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const candidateData: any = await recruiterAuthApi.getCandidateDetails(jobIdFromUrl, applicationId);
 
         console.log('📥 Candidate details API response:', candidateData);
         console.log('📋 Full candidate data fields:', candidateData ? Object.keys(candidateData) : []);
