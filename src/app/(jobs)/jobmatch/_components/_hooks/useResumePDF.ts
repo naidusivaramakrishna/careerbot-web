@@ -54,7 +54,7 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
 
         if (!isMounted) return;
 
-        const blob = resp.data;
+        const blob = resp.data as Blob;
         const contentType = resp.headers["content-type"] || "";
 
         console.log("📄 File content-type:", contentType);

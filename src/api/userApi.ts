@@ -637,7 +637,7 @@ export const uploadProfilePicture = async (file: File): Promise<ProfilePictureRe
 
         const response = await httpClient.post<ProfilePictureResponse>(
             "/profile/picture/upload",
-            formData as unknown as Record<string, unknown>,
+            formData,
             {
                 headers: {
                     "Content-Type": "multipart/form-data"
@@ -691,8 +691,7 @@ export const addEducationAutoFill = async (educationData: EducationAutoFillReque
     try {
         const response = await httpClient.post<ApiResponse<Education>>(
             '/profile/education/auto-fill',
-            educationData as unknown as Record<string, unknown>
-        );
+            educationData        );
         return response.data.data || response.data as unknown as Education;
     } catch (error) {
         logger.error('Error adding education via auto-fill:', error);
@@ -708,8 +707,7 @@ export const addExperienceAutoFill = async (experienceData: ExperienceAutoFillRe
     try {
         const response = await httpClient.post<ApiResponse<Experience>>(
             '/profile/experience/auto-fill',
-            experienceData as unknown as Record<string, unknown>
-        );
+            experienceData        );
         return response.data.data || response.data as unknown as Experience;
     } catch (error) {
         logger.error('Error adding experience via auto-fill:', error);
@@ -725,8 +723,7 @@ export const addSkillAutoFill = async (skillData: SkillAutoFillRequest): Promise
     try {
         const response = await httpClient.post<ApiResponse<Skill>>(
             '/profile/skills/auto-fill',
-            skillData as unknown as Record<string, unknown>
-        );
+            skillData        );
         return response.data.data || response.data as unknown as Skill;
     } catch (error) {
         logger.error('Error adding skill via auto-fill:', error);
@@ -742,8 +739,7 @@ export const addCertificationAutoFill = async (certificationData: CertificationA
     try {
         const response = await httpClient.post<ApiResponse<Certification>>(
             '/profile/certifications/auto-fill',
-            certificationData as unknown as Record<string, unknown>
-        );
+            certificationData        );
         return response.data.data || response.data as unknown as Certification;
     } catch (error) {
         logger.error('Error adding certification via auto-fill:', error);
@@ -759,8 +755,7 @@ export const addProjectAutoFill = async (projectData: ProjectAutoFillRequest): P
     try {
         const response = await httpClient.post<ApiResponse<Projects>>(
             '/profile/projects/auto-fill',
-            projectData as unknown as Record<string, unknown>
-        );
+            projectData        );
         return response.data.data || response.data as unknown as Projects;
     } catch (error) {
         logger.error('Error adding project via auto-fill:', error);

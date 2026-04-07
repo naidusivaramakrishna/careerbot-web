@@ -114,7 +114,7 @@ const ExpItem = ({ item, onChange, onRemove }: { item: any; onChange: (v: any) =
   const desc = Array.isArray(item.description) ? item.description.join("\n") : (item.description || "");
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer select-none" onClick={() => setOpen(o => !o)}>
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer select-none" role="button" tabIndex={0} onClick={() => setOpen(o => !o)} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}>
         <span className="text-sm font-medium text-gray-700 truncate">{item.role || item.title || "New Entry"}</span>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={e => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 transition-colors">
@@ -155,7 +155,7 @@ const EduItem = ({ item, onChange, onRemove }: { item: any; onChange: (v: any) =
   const [open, setOpen] = useState(true);
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer select-none" onClick={() => setOpen(o => !o)}>
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer select-none" role="button" tabIndex={0} onClick={() => setOpen(o => !o)} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}>
         <span className="text-sm font-medium text-gray-700 truncate">{item.degree || item.qualification || "New Entry"}</span>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={e => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 transition-colors">
@@ -188,7 +188,7 @@ const ProjItem = ({ item, onChange, onRemove }: { item: any; onChange: (v: any) 
   const tech = Array.isArray(item.technologies) ? item.technologies.join(", ") : (item.technologies || "");
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer select-none" onClick={() => setOpen(o => !o)}>
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer select-none" role="button" tabIndex={0} onClick={() => setOpen(o => !o)} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}>
         <span className="text-sm font-medium text-gray-700 truncate">{item.title || item.name || "New Project"}</span>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={e => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 transition-colors">

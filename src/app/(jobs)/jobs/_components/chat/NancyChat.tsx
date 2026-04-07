@@ -40,7 +40,7 @@ const generateMessageId = (): string => {
 
 // Helper function to determine if message should show regenerate button
 const shouldShowRegenerate = (msg: Message): boolean => {
-  return msg.type === 'bot' && msg.wordCount && msg.wordCount > 30;
+  return msg.type === 'bot' && !!msg.wordCount && msg.wordCount > 30;
 };
 
 export default function NancyChat({

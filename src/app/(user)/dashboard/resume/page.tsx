@@ -420,7 +420,7 @@ const ResumePage = () => {
 
   const transformResumeData = (backendData: ResumeResponse[]): Resume[] => {
     return backendData.map((item) => {
-      const name = item.personalInfo?.fullName || 'Unknown';
+      const name = item.personalInfo?.fullname || 'Unknown';
       const role = item.work_experience?.[0]?.role || 'No Job Title';
 
       return {

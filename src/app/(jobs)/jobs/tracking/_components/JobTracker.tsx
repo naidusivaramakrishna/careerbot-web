@@ -135,7 +135,7 @@ function JobCard({
           <p className="text-xs text-gray-500 mt-0.5">{job.company}</p>
           <div className="flex items-center gap-2 mt-2">
             <span className={`text-xs px-2 py-1 rounded font-medium ${colors.badge}`}>{job.status}</span>
-            <span className="text-xs text-gray-500">{formatDate(job.appliedDate)}</span>
+            <span className="text-xs text-gray-500">{job.appliedDate ? new Date(job.appliedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span>
           </div>
         </div>
 

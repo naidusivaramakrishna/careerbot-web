@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getAllJobs, searchJobs, runJobAggregator } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/QuickFilters";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import { getJobId } from "@/utils/jobIdHelper";
 
 import JobsTabs, { TabType } from "./JobsTabs";
 import JobList from "./sidebar/JobList";
+import Pagination from "./Pagination";
 import TopPickCard from "./sidebar/TopPickCard";
 import SalaryInsights from "./sidebar/SalaryInsights";
 import CareerTip from "./sidebar/CareerTip";
@@ -25,16 +26,15 @@ export default function JobsContents() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [activeFilters, setActiveFilters] = useState<FilterParams>({});
   const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [selectedLocation, setSelectedLocation] = useState("All Locations"); // Default to show all
+  const [selectedLocation, setSelectedLocation] = useState("All Locations");
 
   const [openChat, setOpenChat] = useState(false);
   const [selectedJob, setSelectedJob] = useState<any>(null);
@@ -42,12 +42,7 @@ export default function JobsContents() {
   const [newJobsCount, setNewJobsCount] = useState(0);
   const [savedJobsCount, setSavedJobsCount] = useState(0);
 
-  const [newJobIds, setNewJobIds] = useState<string[]>([]); // Track newly added jobs
-
-  // 🔄 Infinite Scroll
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const isFetchingRef = useRef(false); // Prevent duplicate API calls
+  const [newJobIds, setNewJobIds] = useState<string[]>([]);
 
   // Handle filter changes from QuickFilters
   const handleFilterChange = useCallback((filters: FilterParams) => {
@@ -57,32 +52,17 @@ export default function JobsContents() {
     setJobs([]); // Clear existing jobs
   }, []);
 
+  const JOBS_PER_PAGE = 10;
+
   // ---------------- API FETCH ----------------
   const fetchJobs = useCallback(async (page: number = 1) => {
-    console.log(`🔄 fetchJobs called with page: ${page}, isFetching: ${isFetchingRef.current}`);
-
-    // Prevent duplicate API calls during rapid scrolling
-    if (page > 1 && isFetchingRef.current) {
-      console.warn(`⚠️ Preventing duplicate fetch for page ${page}, already fetching`);
-      return;
-    }
-
-    if (page > 1) {
-      isFetchingRef.current = true;
-      setLoadingMore(true);
-      console.log(`📄 Loading more: Page ${page}`);
-    } else {
-      setLoading(true);
-      console.log(`📄 Initial load: Page ${page}`);
-    }
+    setLoading(true);
     setError(null);
 
     try {
       let newlyAddedJobIds: string[] = [];
 
-      // Call the jobsApi function with proper parameters
-      // Fetch 20 jobs per page consistently (recruiter + external mixed)
-      const jobsPerPage = 20;
+      const jobsPerPage = JOBS_PER_PAGE;
       const skip = (page - 1) * jobsPerPage;
 
       // Run aggregator on first page load
@@ -177,7 +157,7 @@ export default function JobsContents() {
       console.log("=== END WORK MODE DEBUG ===");
 
       const transformedJobs = jobsData
-        .map((job: any /* Supports both manual and aggregated job formats */, index: number) => {
+        .map((job: any /* Supports both manual and aggregated job formats */) => {
           // 🔄 Normalize both manual and aggregated job formats
           const title = job.title || job.job_title || "Job Title";
           const company = job.company || job.company_name || job.organization || job.about_company || job.employer || "";
@@ -264,24 +244,16 @@ export default function JobsContents() {
       // Save fetch time so next load can detect new jobs
       if (page === 1) localStorage.setItem("lastJobFetchTime", new Date().toISOString());
 
-      // 🔄 Load More: Append new jobs instead of replacing
-      if (page === 1) {
-        // First page: replace all jobs
-        setJobs(transformedJobs);
-        console.log(`📥 Page 1: Set ${transformedJobs.length} jobs (replaced)`);
-      } else {
-        // Subsequent pages: append new jobs
-        setJobs((prevJobs) => {
-          const newTotal = prevJobs.length + transformedJobs.length;
-          console.log(`📥 Page ${page}: Appending ${transformedJobs.length} jobs (total now: ${newTotal})`);
-          return [...prevJobs, ...transformedJobs];
-        });
-      }
-
-      // Set pagination info from API response
-      const hasNextPageValue = response.pagination?.has_next || false;
+      // Replace jobs for the current page (no accumulation)
+      setJobs(transformedJobs);
       setCurrentPage(page);
-      setHasNextPage(hasNextPageValue);
+
+      // Calculate total pages from API pagination info
+      const total = response.pagination?.total || response.pagination?.total_count || transformedJobs.length;
+      const hasNext = response.pagination?.has_next || false;
+      const calculatedTotalPages = response.pagination?.total_pages
+        || (total > 0 ? Math.ceil(total / JOBS_PER_PAGE) : hasNext ? page + 1 : page);
+      setTotalPages(calculatedTotalPages);
 
       // Get saved jobs count
       setSavedJobsCount(getSavedJobsCount());
@@ -290,14 +262,8 @@ export default function JobsContents() {
       console.log(`   - Loaded ${transformedJobs.length} jobs`);
       console.log(`   - Total jobs in state: ${page === 1 ? transformedJobs.length : 'appended'}`);
       console.log(`   - has_next from API: ${response.pagination?.has_next}`);
-      console.log(`   - hasNextPageValue (state will be): ${hasNextPageValue}`);
+      console.log(`   - totalPages calculated: ${calculatedTotalPages}`);
       console.log(`   - Response pagination:`, response.pagination);
-
-      if (hasNextPageValue) {
-        console.log(`✅ More pages available - infinite scroll will remain active`);
-      } else {
-        console.log(`⏹️ No more pages - "You're all caught up" message will show`);
-      }
 
       if (transformedJobs.length === 0) {
         toast.info("No jobs found matching your criteria");
@@ -309,8 +275,6 @@ export default function JobsContents() {
       toast.error(errorMessage);
     } finally {
       setLoading(false);
-      setLoadingMore(false);
-      isFetchingRef.current = false;
     }
   }, [activeFilters, selectedLocation, searchQuery]);
 
@@ -331,68 +295,10 @@ export default function JobsContents() {
     fetchJobs(1);
   }, [fetchJobs, searchQuery, activeFilters]);
 
-  // 🔄 Infinite Scroll: Setup Intersection Observer (watches window viewport)
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-
-    console.log(`🔍 Setting up IntersectionObserver, sentinel exists: ${!!sentinel}, hasNextPage: ${hasNextPage}`);
-
-    // Don't observe if there are no more pages
-    if (!hasNextPage) {
-      console.log(`⏹️ Not observing - all jobs loaded (has_next: false)`);
-      if (sentinel && observerRef.current) {
-        observerRef.current.unobserve(sentinel);
-      }
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        console.log(`👁️ Intersection Observer callback:`, {
-          isIntersecting: entry.isIntersecting,
-          hasNextPage,
-          loadingMore,
-          isFetching: isFetchingRef.current,
-          currentPage,
-          boundingClientRect: {
-            top: entry.boundingClientRect.top,
-            bottom: entry.boundingClientRect.bottom,
-            height: entry.boundingClientRect.height,
-          }
-        });
-
-        // When sentinel is visible in window viewport and we have more pages, fetch next page
-        if (entry.isIntersecting && hasNextPage && !loadingMore && !isFetchingRef.current) {
-          console.log(`🚀 Triggering fetch for page ${currentPage + 1}`);
-          fetchJobs(currentPage + 1);
-        } else {
-          console.log(`⛔ Fetch blocked - isIntersecting: ${entry.isIntersecting}, hasNextPage: ${hasNextPage}, loadingMore: ${loadingMore}, isFetching: ${isFetchingRef.current}`);
-        }
-      },
-      {
-        root: null, // Watch the browser window viewport (default)
-        rootMargin: "300px", // Start loading 300px before sentinel enters viewport
-        threshold: 0.01
-      }
-    );
-
-    if (sentinel) {
-      observer.observe(sentinel);
-      console.log(`✅ Observing sentinel element`);
-    } else {
-      console.error(`❌ Sentinel element not found!`);
-    }
-
-    observerRef.current = observer;
-
-    return () => {
-      if (sentinel) {
-        observer.unobserve(sentinel);
-        console.log(`🛑 Unobserved sentinel element`);
-      }
-    };
-  }, [hasNextPage, loadingMore, currentPage, fetchJobs]);
+  const handlePageChange = (page: number) => {
+    fetchJobs(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // 🔍 FILTER LOGIC - RUNS WHEN SEARCH, FILTERS, OR TAB CHANGES
   useEffect(() => {
@@ -680,8 +586,8 @@ export default function JobsContents() {
               <p className="text-red-800 font-semibold text-sm">Failed to Load Jobs</p>
               <p className="text-red-500 text-xs mt-1">{error}</p>
             </div>
-          ) : filteredJobs.length === 0 && !hasNextPage ? (
-            // Only show "no jobs" when: filteredJobs is empty AND no more pages to load
+          ) : filteredJobs.length === 0 ? (
+            // Show "no jobs" when filteredJobs is empty
             <div className="text-center py-16">
               <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
                 <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-gray-400">
@@ -698,75 +604,24 @@ export default function JobsContents() {
                 {selectedFilters.length > 0 && ` matching ${selectedFilters.join(", ")}`}
               </p>
             </div>
-          ) : filteredJobs.length === 0 && hasNextPage ? (
-            // If filtered jobs are empty but hasNextPage is true, show scroll prompt
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-sm">
-                {activeTab === "new"
-                  ? "No matching jobs in current view"
-                  : "Keep scrolling to load more jobs"}
-              </p>
-            </div>
           ) : (
-            <>
-              <JobList
-                jobs={filteredJobs}
-                onBotClick={(job) => {
-                  setSelectedJob(job);
-                  setOpenChat(true);
-                }}
-              />
-            </>
+            <JobList
+              jobs={filteredJobs}
+              onBotClick={(job) => {
+                setSelectedJob(job);
+                setOpenChat(true);
+              }}
+            />
           )}
 
-          {/* Infinite Scroll Sentinel & Loading Indicator - Always rendered */}
-          <div
-            ref={sentinelRef}
-            className="mt-12 flex justify-center py-8"
-            data-testid="infinite-scroll-sentinel"
-          >
-            {loadingMore && (
-              <div className="space-y-4 w-full">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <JobSkeleton key={`skeleton-${i}`} />
-                ))}
-              </div>
-            )}
-
-            {!loadingMore && !hasNextPage && filteredJobs.length > 0 && currentPage > 1 && (
-              <div className="w-full max-w-sm mx-auto text-center py-12 px-6">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
-                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-emerald-500">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h2 className="text-base font-semibold text-gray-900 mb-1">
-                  You&apos;re all caught up
-                </h2>
-                <p className="text-gray-400 text-sm mb-6">
-                  You&apos;ve seen all available jobs matching your criteria.
-                </p>
-
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] hover:bg-[#1a4a96] text-white text-sm font-medium rounded-xl transition-colors"
-                  onClick={() => {
-                    toast.info("Job alerts feature coming soon!");
-                  }}
-                >
-                  Turn on job alerts
-                </button>
-
-                <p className="text-xs text-gray-400 mt-4">
-                  Get notified when new jobs match your profile
-                </p>
-              </div>
-            )}
-
-            {!loadingMore && hasNextPage && filteredJobs.length > 0 && (
-              <div className="h-4" />
-            )}
-          </div>
+          {/* Pagination */}
+          {filteredJobs.length > 0 && totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          )}
         </div>
       </main>
 

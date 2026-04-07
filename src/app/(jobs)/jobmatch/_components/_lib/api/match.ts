@@ -36,11 +36,7 @@ export async function processMatchAnalysis(
   // Step 1: Parse Resume
   onStageChange("parsing");
   const resumeParsed = await parseResume(uploadedFile);
-  const resumeData = resumeParsed as unknown as Record<string, unknown>;
-  const resume_id =
-    (resumeData?.resume_id as string) ??
-    (resumeData?.id as string) ??
-    null;
+  const resume_id = resumeParsed?.resume_id ?? null;
 
   if (!resume_id) {
     throw new Error("Resume parsing failed — no resume_id returned.");

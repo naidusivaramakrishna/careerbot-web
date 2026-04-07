@@ -10,8 +10,6 @@ import {
   FileText,
   CheckCircle,
   Sparkles,
-  Target,
-  Zap,
   ArrowRight,
 } from "lucide-react";
 import AnalysisContent from "./analysis/AnalysisContent";
@@ -453,7 +451,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
                             <button onClick={() => resumeInputRef.current?.click()} className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 transition-colors"><RefreshCcw className="w-3 h-3" /> Replace Resume</button>
                           </div>
                         ) : (
-                          <div onClick={() => resumeInputRef.current?.click()} className="h-65 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-all duration-200 group">
+                          <div onClick={() => resumeInputRef.current?.click()} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && resumeInputRef.current?.click()} role="button" tabIndex={0} aria-label="Upload resume" className="h-65 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-all duration-200 group">
                             <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors"><Upload className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" /></div>
                             <div className="text-center">
                               <p className="text-sm font-medium text-gray-700"><span className="text-[#2557a7]">Click to upload</span> or drag & drop</p>

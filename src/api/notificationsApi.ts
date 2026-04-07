@@ -37,6 +37,9 @@ export function subscribeToNotifications(
   onError?: (error: Event) => void,
   onOpen?: () => void,
 ): EventSource {
+  if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
+    throw new Error('[careerbot] NEXT_PUBLIC_BASE_URL must be set in production');
+  }
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
   const eventSource = new EventSource(`${baseUrl}/notifications/stream`, {
     withCredentials: true,

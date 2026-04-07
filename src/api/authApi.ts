@@ -41,7 +41,7 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     new URLSearchParams({
       username: data.email,
       password: data.password,
-    }) as unknown as Record<string, unknown>,
+    }),
     { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
   );
 
@@ -73,8 +73,7 @@ export const getLinkedInLoginUrl = async (): Promise<string> => {
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
   const response = await httpClient.post<SignUpResponse>(
     "/auth/signup",
-    data as unknown as Record<string, unknown>
-  );
+    data  );
   // ✅ Backend sets httpOnly cookies automatically after signup
   return response.data;
 };
@@ -102,7 +101,7 @@ export const resendVerificationEmail = async (
 ): Promise<ResendEmailResponse> => {
   const response = await httpClient.post<ResendEmailResponse>(
     "/auth/email/resend",
-    data as unknown as Record<string, unknown>,
+    data,
     {
       headers: {
         "Content-Type": "application/json",
@@ -134,7 +133,7 @@ export const verifyEmail = async (
 ): Promise<VerifyEmailResponse> => {
   const response = await httpClient.post<VerifyEmailResponse>(
     "/auth/email/verify",
-    data as unknown as Record<string, unknown>,
+    data,
     {
       headers: {
         "Content-Type": "application/json",
@@ -168,7 +167,7 @@ export const requestPasswordReset = async (
 ): Promise<RequestPasswordResetResponse> => {
   const response = await httpClient.post<RequestPasswordResetResponse>(
     "/auth/password/reset",
-    data as unknown as Record<string, unknown>,
+    data,
     {
       headers: {
         "Content-Type": "application/json",
@@ -202,7 +201,7 @@ export const confirmPasswordReset = async (
 ): Promise<ConfirmPasswordResetResponse> => {
   const response = await httpClient.patch<ConfirmPasswordResetResponse>(
     "/auth/password/reset",
-    data as unknown as Record<string, unknown>,
+    data,
     {
       headers: {
         "Content-Type": "application/json",
@@ -233,7 +232,7 @@ export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
   try {
     const response = await httpClient.post<TokenRefreshResponse>(
       "/auth/refresh",
-      { refresh_token: "" } as unknown as Record<string, unknown>,
+      { refresh_token: "" },
       {
         headers: {
           "Content-Type": "application/json",
