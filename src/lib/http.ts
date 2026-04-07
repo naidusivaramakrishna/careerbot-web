@@ -10,7 +10,7 @@ import {
 } from './correlationId';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
-  throw new Error('[careerbot] NEXT_PUBLIC_BASE_URL must be set in production');
+  console.warn('[careerbot] NEXT_PUBLIC_BASE_URL is not set — falling back to localhost. Set this in production.');
 }
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';

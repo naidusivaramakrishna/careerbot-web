@@ -68,6 +68,7 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
+          NEXT_PUBLIC_BASE_URL: http://localhost:8000/api/v1
 
       - name: Count console.log usages (advisory)
         run: |
