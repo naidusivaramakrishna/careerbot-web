@@ -167,7 +167,7 @@ const PostedJobsPageContent = () => {
           if (response.data && response.data.length > 0) {
             // Map backend job data to match the Job interface
             let allFinalJobs: Job[] = [];
-            const formattedJobs = response.data.map((job: any) => {
+            const formattedJobs: Job[] = response.data.map((job: any) => {
               // Helper function to get value or fallback for empty strings
               const getValue = (value: any, fallback: string) => {
                 return value && typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback;
@@ -275,7 +275,7 @@ const PostedJobsPageContent = () => {
                 const storedMap = new Map<number, Job>();
                 formattedStoredJobs.forEach(job => storedMap.set(job.id, job));
 
-                allFinalJobs = formattedJobs.map(apiJob => {
+                allFinalJobs = formattedJobs.map((apiJob) => {
                   const stored = storedMap.get(apiJob.id);
                   if (!stored) return apiJob;
                   // Fill optional fields from localStorage if API didn't return them

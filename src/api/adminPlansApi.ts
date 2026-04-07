@@ -122,7 +122,7 @@ export const createPlan = async (
     try {
         const response = await httpClient.post<CreatePlanResponse>(
             '/admin/settings/plans',
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -216,7 +216,7 @@ export const updatePlan = async (
     try {
         const response = await httpClient.put<UpdatePlanResponse>(
             `/admin/settings/plans/${planId}`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',

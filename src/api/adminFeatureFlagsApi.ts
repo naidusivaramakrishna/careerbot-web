@@ -101,7 +101,7 @@ export const updateFeatureFlags = async (
     try {
         const response = await httpClient.put<UpdateFeatureFlagsResponse>(
             '/admin/settings/feature-flags',
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',

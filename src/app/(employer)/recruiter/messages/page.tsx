@@ -209,7 +209,7 @@ function MessagesPageContent() {
   // Mark conversation as read when opening
   const markConversationAsRead = async (conversationId: number) => {
     try {
-      await recruiterAuthApi.markConversationAsRead(conversationId);
+      await recruiterAuthApi.markConversationAsRead(conversationId.toString());
       // Clear unread for this conversation
       setConversations(prev => prev.map(c =>
         c.candidateId === conversationId ? { ...c, unread: 0 } : c
@@ -268,7 +268,7 @@ function MessagesPageContent() {
     setSendingMessage(true);
     try {
       // Send message through API
-      await recruiterAuthApi.sendMessage(activeId, { text: newMessage.trim() });
+      await recruiterAuthApi.sendMessage(String(activeId), { text: newMessage.trim() });
 
       // Update local state optimistically
       const now = new Date();

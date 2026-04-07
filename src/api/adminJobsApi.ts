@@ -245,7 +245,7 @@ export const createJob = async (
     try {
         const response = await httpClient.post<CreateJobResponse>(
             '/admin/jobs/',
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -354,7 +354,7 @@ export const updateJob = async (
     try {
         const response = await httpClient.put<UpdateJobResponse>(
             `/admin/jobs/${jobId}`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -406,7 +406,7 @@ export const bulkUpdateJobStatus = async (
     try {
         const response = await httpClient.post<BulkUpdateStatusResponse>(
             '/admin/jobs/bulk/update-status',
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -437,7 +437,7 @@ export const bulkDeleteJobs = async (
     try {
         const response = await httpClient.post<BulkDeleteResponse>(
             '/admin/jobs/bulk/delete',
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -573,7 +573,7 @@ export const uploadJobLogo = async (file: File): Promise<string> => {
 
         const response = await httpClient.post<{ logo_url: string }>(
             '/admin/jobs/logo/upload',
-            formData as unknown as Record<string, unknown>,
+            formData,
             {
                 headers: {
                     'Content-Type': 'multipart/form-data',

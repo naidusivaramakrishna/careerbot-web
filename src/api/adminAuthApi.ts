@@ -135,7 +135,7 @@ export const bootstrapAdmin = async (
 
     const response = await httpClient.post<AdminBootstrapResponse>(
       '/admin/auth/bootstrap',
-      formData as unknown as Record<string, unknown>,
+      formData,
       { 
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -164,7 +164,7 @@ export const adminSignUp = async (
 
     const response = await httpClient.post<AdminSignUpResponse>(
       '/admin/auth/signup',
-      formData as unknown as Record<string, unknown>,
+      formData,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -208,7 +208,7 @@ export const adminLogin = async (
 
     const response = await httpClient.post<AdminLoginResponse>(
       '/admin/auth/login',
-      formData as unknown as Record<string, unknown>,
+      formData,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -252,7 +252,7 @@ export const createAdmin = async (
   try {
     const response = await httpClient.post<CreateAdminResponse>(
       '/admin/auth/admins',
-      data as unknown as Record<string, unknown>,
+      data,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -315,7 +315,7 @@ export const enable2FA = async (
   try {
     const response = await httpClient.post<Enable2FAResponse>(
       '/admin/auth/2fa/enable',
-      data as unknown as Record<string, unknown>,
+      data,
       {
         headers: {
           'Content-Type': 'application/json',

@@ -126,7 +126,7 @@ export const updateSystemConfig = async (
     try {
         const response = await httpClient.put<SystemConfigResponse>(
             '/admin/settings/system-config',
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',

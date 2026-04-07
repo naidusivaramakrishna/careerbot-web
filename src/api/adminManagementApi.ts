@@ -171,7 +171,7 @@ export const updateAdminRole = async (
     try {
         const response = await httpClient.patch<UpdateAdminRoleResponse>(
             `/admin/auth/${adminId}/role`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -208,7 +208,7 @@ export const updateAdminStatus = async (
     try {
         const response = await httpClient.patch<UpdateAdminStatusResponse>(
             `/admin/auth/${adminId}/status`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',

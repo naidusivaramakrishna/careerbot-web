@@ -257,7 +257,7 @@ export const updateUser = async (
     try {
         const response = await httpClient.put<UpdateUserResponse>(
             `/admin/users/${userId}`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -334,7 +334,7 @@ export const suspendUser = async (
     try {
         const response = await httpClient.post<SuspendUserResponse>(
             `/admin/users/${userId}/suspend`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -449,7 +449,7 @@ export const exportUsers = async (
     try {
         const response = await httpClient.post(
             `/admin/users/export`,
-            data as unknown as Record<string, unknown>,
+            data,
             {
                 headers: {
                     'Content-Type': 'application/json',
