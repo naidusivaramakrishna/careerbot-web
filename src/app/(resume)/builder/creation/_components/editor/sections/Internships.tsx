@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import SafeHTML from "@/components/common/SafeHTML";
+import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import MonthYearPicker from "../MonthYearPicker";
@@ -297,7 +298,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      setSafeInnerHTML(el, suggestion);
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -337,7 +338,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
     editingEntries.forEach((internship, idx) => {
       const el = editorRefs.current[idx];
       if (el && internship.description && el.innerHTML !== internship.description) {
-        el.innerHTML = internship.description;
+        setSafeInnerHTML(el, internship.description);
       }
     });
   }, [editingEntries]);

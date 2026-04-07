@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import SafeHTML from "@/components/common/SafeHTML";
+import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import MonthYearPicker from "../MonthYearPicker";
@@ -302,7 +303,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      setSafeInnerHTML(el, suggestion);
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -342,7 +343,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
     editingEntries.forEach((work, idx) => {
       const el = editorRefs.current[idx];
       if (el && work.description && el.innerHTML !== work.description) {
-        el.innerHTML = work.description;
+        setSafeInnerHTML(el, work.description);
       }
     });
   }, [editingEntries]);

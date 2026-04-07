@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
+import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import AISuggestions from "../AISuggestions";
 import AutocompleteInput from "../AutocompleteInput";
 import { roles } from "../../../../../../../types/roles";
@@ -162,7 +163,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
-      el.innerHTML = suggestion;
+      setSafeInnerHTML(el, suggestion);
       handleChange(suggestion);
       
       setTimeout(() => {
@@ -204,7 +205,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   useEffect(() => {
     const el = editorRef.current;
     if (el && resumeData.professionalSummary.summary && el.innerHTML !== resumeData.professionalSummary.summary) {
-      el.innerHTML = resumeData.professionalSummary.summary;
+      setSafeInnerHTML(el, resumeData.professionalSummary.summary);
     }
   }, [resumeData.professionalSummary.summary]);
 

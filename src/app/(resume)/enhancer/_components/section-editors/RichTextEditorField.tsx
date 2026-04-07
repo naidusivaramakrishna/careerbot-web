@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
+import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 
 interface RichTextEditorFieldProps {
   label: string;
@@ -34,7 +35,7 @@ export default function RichTextEditorField({
   useEffect(() => {
     if (editorRef.current && !isUserTyping.current && document.activeElement !== editorRef.current) {
       if (editorRef.current.innerHTML !== value) {
-        editorRef.current.innerHTML = value || "";
+        setSafeInnerHTML(editorRef.current, value || "");
       }
     }
   }, [value]);

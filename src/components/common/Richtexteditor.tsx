@@ -1,5 +1,6 @@
 import { Bold, Italic, List, ListOrdered, Underline, Sparkles } from "lucide-react";
 import { useRef, useEffect } from "react";
+import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 
 interface RichTextEditorProps {
     value: string;
@@ -29,7 +30,7 @@ export default function RichTextEditor({
     // Update editor content when value changes externally (e.g., from AI generation)
     useEffect(() => {
         if (editorRef.current && document.activeElement !== editorRef.current) {
-            editorRef.current.innerHTML = value || '';
+            setSafeInnerHTML(editorRef.current, value || '');
         }
     }, [value]);
 

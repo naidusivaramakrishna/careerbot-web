@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import SafeHTML from "@/components/common/SafeHTML";
+import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import {
@@ -275,7 +276,7 @@ Master blockchain technologies and distributed systems architecture, contributin
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      setSafeInnerHTML(el, suggestion);
       handleChange(editIndex, "description", suggestion);
 
       setTimeout(() => {
@@ -307,7 +308,7 @@ Master blockchain technologies and distributed systems architecture, contributin
     editingEntries.forEach((interest, idx) => {
       const el = editorRefs.current[idx];
       if (el && interest.description && el.innerHTML !== interest.description) {
-        el.innerHTML = interest.description;
+        setSafeInnerHTML(el, interest.description);
       }
     });
   }, [editingEntries]);
