@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data);
 
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[login] unexpected error:', error instanceof Error ? error.message : error);
+    return NextResponse.json({ error: 'Login failed. Please try again.' }, { status: 500 });
   }
 }

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 
-// Public routes that do NOT require authentication.
-// Everything else is protected by default (denylist approach).
+// Public routes — no auth required
 const publicRoutes = [
     '/',
     '/admin/login',
@@ -13,43 +13,59 @@ const publicRoutes = [
     '/resend-verification',
 ];
 
-export function middleware(request: NextRequest) {
+const RECRUITER_PREFIX = '/recruiter';
+const ADMIN_PREFIX = '/admin';
+
+export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    // Get tokens from cookies
-    const accessToken = request.cookies.get('access_token')?.value;
-    const refreshToken = request.cookies.get('refresh_token')?.value;
-
     // Allow public routes without authentication
-    const isPublicRoute = publicRoutes.some((route) =>
-        pathname === route || pathname.startsWith(route + '/')
+    const isPublicRoute = publicRoutes.some(
+        (route) => pathname === route || pathname.startsWith(route + '/')
     );
-
     if (isPublicRoute) {
         return NextResponse.next();
     }
 
-    // All other routes require authentication.
-    // - If access_token exists, allow (fresh session)
-    // - If no access_token but refresh_token exists, allow (interceptor will refresh)
-    // - If neither exists, redirect to home page
-    if (!accessToken && !refreshToken) {
-        return NextResponse.redirect(new URL('/', request.url));
+    const token = request.cookies.get('access_token')?.value;
+    const refreshToken = request.cookies.get('refresh_token')?.value;
+
+    if (!token && !refreshToken) {
+        const loginUrl = pathname.startsWith(ADMIN_PREFIX)
+            ? '/admin/login'
+            : pathname.startsWith(RECRUITER_PREFIX)
+            ? '/recruiter/auth'
+            : '/';
+        return NextResponse.redirect(new URL(loginUrl, request.url));
+    }
+
+    // JWT role enforcement — decode access_token to check role claim
+    if (token && process.env.JWT_SECRET) {
+        try {
+            const { payload } = await jwtVerify(
+                token,
+                new TextEncoder().encode(process.env.JWT_SECRET)
+            );
+            const role = payload.role as string | undefined;
+
+            if (pathname.startsWith(RECRUITER_PREFIX) && role !== 'recruiter' && role !== 'admin') {
+                return NextResponse.redirect(new URL('/403', request.url));
+            }
+            if (pathname.startsWith(ADMIN_PREFIX) && role !== 'admin') {
+                return NextResponse.redirect(new URL('/403', request.url));
+            }
+        } catch {
+            // Token invalid or expired — redirect to login, interceptor will attempt refresh
+            const loginUrl = pathname.startsWith(ADMIN_PREFIX) ? '/admin/login' : '/';
+            return NextResponse.redirect(new URL(loginUrl, request.url));
+        }
     }
 
     return NextResponse.next();
 }
 
-// Configure which routes the middleware should run on
 export const config = {
     matcher: [
-        /*
-         * Match all request paths except:
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
-         * - public files (public folder)
-         */
         '/((?!_next/static|_next/image|favicon.ico|assets|api).*)',
     ],
 };

@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MB
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  // Require authenticated session
+  const cookieStore = await cookies();
+  const session = cookieStore.get('access_token') ?? cookieStore.get('session');
+  if (!session?.value) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Enforce body size cap
+  const contentLength = Number(request.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Request too large' }, { status: 413 });
+  }
+
   try {
     const body = await request.json();
     const { resumeData } = body;
