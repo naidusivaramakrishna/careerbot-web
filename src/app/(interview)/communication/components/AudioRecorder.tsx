@@ -13,6 +13,7 @@ interface AudioRecorderProps {
   // NEW: For progressive upload
   sessionId?: string;
   questionId?: string;
+  testId?: string; // Assessment test session ID for backend correlation
   onUploadStatusChange?: (
     questionId: string,
     status: 'uploading' | 'completed' | 'failed',
@@ -28,6 +29,7 @@ export default function AudioRecorder({
   maxDuration = 15,
   sessionId,
   questionId,
+  testId,
   onUploadStatusChange,
   enableProgressiveUpload = false,
   disabled = false,
@@ -98,7 +100,7 @@ export default function AudioRecorder({
           const result = await uploadAudio({
             session_id: sessionId,
             question_id: questionId,
-            test_id: '', // This should be passed as a prop if needed
+            test_id: testId ?? '',
             audio_file: blob
           });
 

@@ -79,6 +79,10 @@ export interface VideoEvaluationResponse {
   evaluation_id: string;
   status: string;
   message?: string;
+  data?: {
+    video_evaluation_id?: string;
+    [key: string]: unknown;
+  };
   // Add other response fields as per your API response
 }
 
@@ -87,6 +91,10 @@ export interface FinalReportRequest {
   test_id: string;
   video_evaluation_id?: string;
   audio_evaluation_id?: string;
+  mcq_evaluation_id?: string;
+  video_evaluation?: { data: unknown };
+  audio_evaluation?: { data: unknown };
+  mcq_evaluation?: { data: unknown };
   // Backend will retrieve evaluation data using these IDs
   // No need to send full evaluation objects from frontend
 }
@@ -339,7 +347,7 @@ export const submitVideoEvaluation = async (data: VideoEvaluationRequest): Promi
     // Note: Must explicitly set Content-Type to undefined to let axios handle FormData
     const response = await httpClient.post<VideoEvaluationResponse>(
       '/ai-assessment/video-evaluation',
-      formData as unknown as Record<string, unknown>,
+      formData,
       {
         headers: {
           'Content-Type': undefined
@@ -503,7 +511,7 @@ export const uploadAudio = async (data: AudioUploadRequest): Promise<AudioUpload
     // Note: Must explicitly set Content-Type to undefined to let axios handle FormData
     const response = await httpClient.post<AudioUploadResponse>(
       '/ai-assessment/audio/upload-progressive',
-      formData as unknown as Record<string, unknown>,
+      formData,
       {
         headers: {
           'Content-Type': undefined
@@ -572,6 +580,7 @@ export interface AudioEvaluationRequest {
 export interface AudioEvaluationResponse {
   status: string;
   message?: string;
+  audio_evaluation_id?: string;
   evaluation?: {
     [key: string]: unknown;
   };

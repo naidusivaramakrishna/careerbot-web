@@ -15,7 +15,10 @@ export type WebSocketMessageType =
   | 'interview_complete'
   | 'error'
   | 'pong'
-  | 'session_paused';
+  | 'session_paused'
+  | 'audio_chunk'
+  | 'end_answer'
+  | 'end_interview';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;
@@ -187,6 +190,15 @@ export function useWebsocketInterview(): UseWebsocketInterviewReturn {
     async (sessionId: string, jwtToken: string) => {
       return new Promise<void>((resolve, reject) => {
         try {
+          if (!jwtToken) {
+            reject(new Error('Authentication token is required to start interview'));
+            return;
+          }
+          if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_WS_URL) {
+            reject(new Error('WebSocket URL is not configured'));
+            return;
+          }
+
           setIsLoading(true);
           setError(null);
 
@@ -314,6 +326,14 @@ export function useWebsocketInterview(): UseWebsocketInterviewReturn {
    */
   const reconnect = useCallback(
     (sessionId: string, jwtToken: string) => {
+      if (!jwtToken) {
+        setError('Authentication token is required to reconnect');
+        return;
+      }
+      if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_WS_URL) {
+        setError('WebSocket URL is not configured');
+        return;
+      }
       if (reconnectToken) {
         const wsUrl =
           `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}` +
