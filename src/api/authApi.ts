@@ -1,4 +1,5 @@
 import { httpClient } from "@/lib/http";
+import { setTenantId, clearTenantId } from '@/lib/tenantStorage';
 
 export interface LoginRequest {
   email: string;
@@ -10,6 +11,7 @@ export interface LoginResponse {
   refresh_token: string;
   token_type: string;
   expires_in?: number;
+  tenant_id?: string;
 }
 
 export interface SignUpRequest {
@@ -21,6 +23,7 @@ export interface SignUpRequest {
 export interface SignUpResponse {
   success: boolean;
   message?: string;
+  tenant_id?: string;
 }
 
 // ✅ Tokens are now httpOnly cookies - never accessible to JavaScript
@@ -45,15 +48,16 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
   );
 
-  // ✅ Backend sets httpOnly cookies automatically
-  // ❌ No need to manually store tokens - browser handles this
+  if (response.data.tenant_id) {
+    setTenantId(response.data.tenant_id);
+  }
+
   return response.data;
 };
 
 export const signOut = async () => {
   await httpClient.post("/auth/signout").catch(() => {});
-  // Clear user-specific data cached in sessionStorage so the next user
-  // (or the same user after re-login) starts with a clean slate
+  clearTenantId();
   ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText'].forEach(
     (key) => sessionStorage.removeItem(key)
   );
@@ -74,7 +78,10 @@ export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
   const response = await httpClient.post<SignUpResponse>(
     "/auth/signup",
     data  );
-  // ✅ Backend sets httpOnly cookies automatically after signup
+  if (response.data.tenant_id) {
+    setTenantId(response.data.tenant_id);
+  }
+
   return response.data;
 };
 
@@ -232,7 +239,7 @@ export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
   try {
     const response = await httpClient.post<TokenRefreshResponse>(
       "/auth/refresh",
-      { refresh_token: "" },
+      {},
       {
         headers: {
           "Content-Type": "application/json",

@@ -3,31 +3,26 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertCircle,
-  AlertTriangle,
-  Info,
-  CheckCircle,
   CheckCircle2,
-  BarChart3,
-  Target,
-  Sparkles,
-  Lightbulb,
   RefreshCw,
+  XCircle,
   User,
   GraduationCap,
   Briefcase,
-  FolderKanban,
+  FolderOpen,
+  Zap,
   Award,
-  Code,
+  AlignLeft,
+  Building2,
+  Tag,
+  LayoutTemplate,
   BookOpen,
-  TrendingUp,
-  FileText,
-  ArrowRight,
-  WrenchIcon,
-  XCircle,
-  ChevronDown,
-  MousePointerClick,
+  ScanLine,
+  Lightbulb,
 } from "lucide-react";
+import JobMatchTemplateThree from "@/app/(jobs)/jobmatch/_components/resume/JobMatchTemplateThree";
+
+const PREVIEW_BASE = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:8000/api/v1";
 
 /* ─── TYPES ───────────────────────────────────────────── */
 interface BreakdownItem {
@@ -142,6 +137,82 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
   };
 }
 
+function getSuggestion(section: string, description: string): string {
+  const d = description.toLowerCase();
+  // Skills
+  if (section === "Skills") {
+    if (d.includes("not demonstrated") || d.includes("listed but")) return "Add this skill to a project or internship bullet — e.g. 'Built X using [skill]' — so it appears in context, not just the skills list.";
+    if (d.includes("soft skill") || d.includes("no soft")) return "Add 3 soft skills (e.g. Communication, Problem Solving, Leadership) in a dedicated Soft Skills section.";
+    if (d.includes("missing") || d.includes("no ")) return "Add this skill explicitly in your Skills section using the exact term from job postings.";
+    return "Expand your Skills section with tools and technologies from the target job description.";
+  }
+  // Keywords
+  if (section === "Keywords") {
+    if (d.includes("density") || d.includes("overlap")) return "Mirror exact phrases from the job posting. If the JD says 'CI/CD pipelines', use that exact phrase — not just 'CI/CD'.";
+    return "Add missing keywords from the job description verbatim — ATS matches exact phrases, not synonyms.";
+  }
+  // Summary
+  if (section === "Summary") {
+    if (d.includes("short") || d.includes("23 word") || d.includes("too short")) return "Expand to 3–5 sentences: include your job title, years of experience, 2–3 top skills, and one career highlight.";
+    if (d.includes("objective") || d.includes("challenging position") || d.includes("reputed")) return "Replace generic objective with a targeted professional summary. Start with: '[Title] with [X] years of experience in [domain]...'";
+    if (d.includes("technical skill") || d.includes("no mention")) return "Weave 2–3 of your top technical skills directly into the summary paragraph — not just in the skills section.";
+    return "Rewrite your summary to include your exact job target, years of experience, and 2–3 measurable strengths.";
+  }
+  // Experience
+  if (section === "Experience") {
+    if (d.includes("metric") || d.includes("number") || d.includes("quantif")) return "Add at least one number to each bullet — team size, % improvement, revenue, users, or time saved.";
+    if (d.includes("action verb") || d.includes("passive") || d.includes("responsible")) return "Replace 'Responsible for' and 'Worked on' with strong action verbs: Engineered, Reduced, Led, Shipped, Increased.";
+    if (d.includes("0%") || d.includes("missing") || d.includes("no experience")) return "Add your internships or projects in an Experience section — even a 1-month role counts.";
+    return "Strengthen each bullet with an action verb + specific result. Format: '[Verb] [what you did] resulting in [outcome]'.";
+  }
+  // Education
+  if (section === "Education") {
+    if (d.includes("grade") || d.includes("percentage") || d.includes("gpa")) return "Add your grade/percentage/GPA next to the degree. Format: 'B.Tech in CSE — 8.2 CGPA (2021–2025)'.";
+    if (d.includes("passed out") || d.includes("year")) return "Add your graduation year next to the degree name. ATS requires a date to parse the entry correctly.";
+    return "Complete your education entry: degree name, institution, year, and grade/CGPA on a single line.";
+  }
+  // Contact
+  if (section === "Contact") {
+    if (d.includes("linkedin")) return "Add your LinkedIn URL in the contact section. Format: linkedin.com/in/your-name. Recruiters verify your profile before reaching out.";
+    if (d.includes("phone") || d.includes("mobile")) return "Add a mobile number with country code. Recruiters use phone for shortlisted candidates.";
+    if (d.includes("email")) return "Use a professional email (firstname.lastname@gmail.com). Avoid nicknames or numbers.";
+    return "Complete your contact section: name, email, phone, city, and LinkedIn URL on one line.";
+  }
+  // Formatting
+  if (section === "Formatting") {
+    if (d.includes("page") || d.includes("long") || d.includes("2 page")) return "Trim to 1 page for under 3 years of experience. Remove older education entries and redundant skill repetitions.";
+    if (d.includes("table") || d.includes("column") || d.includes("graphic")) return "Remove tables and multi-column layouts. ATS parsers read left-to-right, single column only.";
+    return "Use a clean single-column layout with standard section headings. Avoid text boxes, borders, and graphics.";
+  }
+  // ContentQuality
+  if (section === "ContentQuality") {
+    if (d.includes("replace") || d.includes("aimed") || d.includes("suggested")) return "Rewrite this bullet with a specific achievement. Use: '[Action verb] [what] for [who], resulting in [measurable outcome]'.";
+    if (d.includes("strong debug") || d.includes("problem solv")) return "Demonstrate this skill with a concrete example: 'Debugged [X] issue that reduced error rate by Y%' rather than claiming it abstractly.";
+    return "Replace vague phrases with specific, measurable achievements. Every bullet should answer: what did you do and what was the result?";
+  }
+  // Certifications
+  if (section === "Certifications") {
+    if (d.includes("not relevant") || d.includes("domain")) return "Add certifications aligned with your target role — e.g. AWS, Google Cloud, or HackerRank for tech roles.";
+    return "Include the certifying body and year: 'AWS Certified Solutions Architect – AWS (2024)'.";
+  }
+  // Projects
+  if (section === "Projects") {
+    if (d.includes("generic") || d.includes("description")) return "Add: the problem solved, tech stack used, your specific contribution, and a result — e.g. 'Reduced load time by 40%'.";
+    return "Each project needs: title, tech stack, your role, and one measurable outcome. One line minimum per project.";
+  }
+  // Internships
+  if (section === "Internships") {
+    if (d.includes("missing") || d.includes("date")) return "Add start and end dates to your internship. Format: 'Company Name — Role (Mon YYYY – Mon YYYY)'.";
+    return "Add 2–3 bullet achievements to each internship entry with action verbs and numbers where possible.";
+  }
+  // ATSCompatibility
+  if (section === "ATSCompatibility") {
+    return "Use standard section headings (Education, Experience, Skills). Avoid PDFs with embedded fonts or scanned images.";
+  }
+  // General
+  return "Address this issue to strengthen the overall quality and ATS compatibility of your resume.";
+}
+
 function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
   const cards: IssueCard[] = [];
   let id = 0;
@@ -175,7 +246,7 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
         priority:    pct === 0 || section === "Experience" ? "critical" : pct < 80 ? "urgent" : "optional",
         section:     display,
         description: dStr,
-        suggestion:  `Review and improve the ${display} section to increase your ATS score.`,
+        suggestion:  getSuggestion(display, dStr),
       });
     });
 
@@ -222,250 +293,244 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
       const key = `${sectionName}:${description}`;
       if (seen.has(key)) return;
       seen.add(key);
-      cards.push({ id: `i-${id++}`, priority: "optional", section: sectionName, description, suggestion: `Address this suggestion in ${sectionName} to strengthen your resume.` });
+      cards.push({ id: `i-${id++}`, priority: "optional", section: sectionName, description, suggestion: getSuggestion(sectionName, description) });
     });
   }
 
   return cards;
 }
 
-/* ─── PRIORITY META ───────────────────────────────────── */
-const PRIORITY_META = {
-  critical: {
-    borderColor: "border-red-200",
-    leftBorder:  "border-l-red-500",
-    cardBg:      "bg-red-50/40",
-    badge:       "text-red-600 bg-red-50 border border-red-200",
-    icon:        AlertTriangle,
-    label:       "Critical Fix",
-    chipActive:  "text-red-500",
-    bgColor:     "bg-red-50/50",
-    hoverBg:     "hover:bg-red-50",
-    dot:         "bg-red-500",
-    iconBg:      "bg-red-100",
-  },
-  urgent: {
-    borderColor: "border-yellow-200",
-    leftBorder:  "border-l-yellow-400",
-    cardBg:      "bg-yellow-50/40",
-    badge:       "text-yellow-700 bg-yellow-50 border border-yellow-200",
-    icon:        AlertCircle,
-    label:       "Urgent Fix",
-    chipActive:  "text-yellow-600",
-    bgColor:     "bg-yellow-50/50",
-    hoverBg:     "hover:bg-yellow-50",
-    dot:         "bg-yellow-400",
-    iconBg:      "bg-yellow-100",
-  },
-  optional: {
-    borderColor: "border-gray-200",
-    leftBorder:  "border-l-gray-300",
-    cardBg:      "bg-gray-50/30",
-    badge:       "text-gray-600 bg-gray-100 border border-gray-200",
-    icon:        Info,
-    label:       "Optional",
-    chipActive:  "text-gray-500",
-    bgColor:     "bg-gray-50/50",
-    hoverBg:     "hover:bg-gray-50",
-    dot:         "bg-gray-400",
-    iconBg:      "bg-gray-100",
-  },
-};
 
-/* ─── SECTION META ────────────────────────────────────── */
-const SECTION_META: Record<string, { icon: React.ElementType; color: string; bar: string }> = {
-  Contact:          { icon: User,          color: "text-blue-600",    bar: "bg-gradient-to-r from-blue-300 to-blue-500" },
-  Education:        { icon: GraduationCap, color: "text-purple-600",  bar: "bg-gradient-to-r from-purple-300 to-purple-500" },
-  Experience:       { icon: Briefcase,     color: "text-indigo-600",  bar: "bg-gradient-to-r from-indigo-300 to-indigo-500" },
-  Projects:         { icon: FolderKanban,  color: "text-cyan-600",    bar: "bg-gradient-to-r from-cyan-300 to-cyan-500" },
-  Skills:           { icon: Code,          color: "text-green-600",   bar: "bg-gradient-to-r from-green-300 to-green-500" },
-  Certifications:   { icon: Award,         color: "text-amber-600",   bar: "bg-gradient-to-r from-amber-300 to-amber-500" },
-  Summary:          { icon: FileText,      color: "text-gray-600",    bar: "bg-gradient-to-r from-gray-300 to-gray-500" },
-  Internships:      { icon: Briefcase,     color: "text-pink-600",    bar: "bg-gradient-to-r from-pink-300 to-pink-500" },
-  Keywords:         { icon: Target,        color: "text-emerald-600", bar: "bg-gradient-to-r from-emerald-300 to-emerald-500" },
-  Formatting:       { icon: BarChart3,     color: "text-sky-600",     bar: "bg-gradient-to-r from-sky-300 to-sky-500" },
-  FormattingEnhanced: { icon: BarChart3,   color: "text-sky-600",     bar: "bg-gradient-to-r from-sky-300 to-sky-500" },
-  ContentQuality:   { icon: BookOpen,      color: "text-orange-600",  bar: "bg-gradient-to-r from-orange-300 to-orange-500" },
-  ATSCompatibility: { icon: Sparkles,      color: "text-violet-600",  bar: "bg-gradient-to-r from-violet-300 to-violet-500" },
-  LengthScore:      { icon: FileText,      color: "text-teal-600",    bar: "bg-gradient-to-r from-teal-300 to-teal-500" },
-  StructureScore:   { icon: BarChart3,     color: "text-rose-600",    bar: "bg-gradient-to-r from-rose-300 to-rose-500" },
-};
 
-/* ─── CIRCULAR GAUGE ──────────────────────────────────── */
-function CircularGauge({ score, totalIssues }: { score: number; totalIssues: number }) {
-  const [animated, setAnimated] = useState(0);
-  const pct = Math.min(100, Math.max(0, score));
 
-  useEffect(() => {
-    const t = setTimeout(() => setAnimated(pct), 150);
-    return () => clearTimeout(t);
-  }, [pct]);
-
-  const color    = pct >= 80 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#ef4444";
-  const gradient = pct >= 80 ? "from-emerald-400 to-emerald-500" : pct >= 50 ? "from-amber-400 to-amber-500" : "from-red-400 to-red-500";
-  const label    = pct >= 80 ? "Excellent" : pct >= 50 ? "Good" : "Needs Work";
-  const confidence = pct >= 90 ? 5 : pct >= 75 ? 4 : pct >= 60 ? 3 : pct >= 45 ? 2 : 1;
-
-  const radius       = 88;
-  const circumference = 2 * Math.PI * radius;
-
+/* ─── WHY TOOLTIP ─────────────────────────────────────── */
+function WhyTooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
   return (
-    <div className="flex flex-col items-center px-6 pt-5 pb-4">
-      {/* Ring */}
-      <div className="relative mb-5" style={{ width: 220, height: 220 }}>
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full blur-2xl opacity-30" />
-        <svg className="-rotate-90 relative z-10" width="220" height="220" viewBox="0 0 220 220">
-          <circle cx="110" cy="110" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="10" />
-          <circle
-            cx="110" cy="110" r={radius}
-            fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
-            strokeDasharray={`${(animated / 100) * circumference} ${circumference}`}
-            style={{ transition: "stroke-dasharray 1.2s ease-in-out, stroke 0.5s ease", filter: `drop-shadow(0 0 6px ${color}66)` }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className={`text-6xl font-black bg-gradient-to-br ${gradient} bg-clip-text text-transparent leading-none`}>
-            {animated}
-          </div>
-          <div className="text-[10px] font-medium text-gray-400 mt-1 tracking-widest uppercase">ATS Score</div>
-          {/* Risk badge directly under score */}
-          <div className={`mt-2.5 px-3 py-1 rounded-full text-[10px] font-bold border ${
-            pct >= 80 ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-            : pct >= 50 ? "bg-amber-50 border-amber-200 text-amber-700"
-            : "bg-red-50 border-red-200 text-red-600"
-          }`}>
-            {label}
-          </div>
-        </div>
-      </div>
-
-      {/* Two mini stat cards under circle */}
-      <div className="grid grid-cols-2 gap-3 w-full">
-        <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-center">
-          <p className="text-xl font-extrabold text-gray-800 leading-none">{confidence}/5</p>
-          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mt-1">Confidence</p>
-        </div>
-        <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-center">
-          <p className={`text-xl font-extrabold leading-none ${totalIssues > 0 ? "text-red-500" : "text-emerald-600"}`}>{totalIssues}</p>
-          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide mt-1">Issues</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── SECTION BAR ─────────────────────────────────────── */
-function SectionBar({ name, score, index, issueCount, onClick }: {
-  name: string; score: number; index: number; issueCount: number; onClick?: () => void;
-}) {
-  const [width, setWidth] = useState(0);
-  const meta  = SECTION_META[name] || { icon: FileText, color: "text-gray-600", bar: "bg-gradient-to-r from-gray-300 to-gray-500" };
-  const Icon  = meta.icon;
-  const label = name.replace(/Enhanced$/, "").replace(/([A-Z])/g, " $1").trim();
-
-  // Score-based color overrides
-  const scoreColor = score >= 70 ? "text-emerald-600" : score >= 40 ? "text-yellow-600" : score > 0 ? "text-orange-600" : "text-red-500";
-  const barClass   = score >= 70 ? meta.bar
-    : score >= 40 ? "bg-gradient-to-r from-yellow-300 to-yellow-500"
-    : score >  0  ? "bg-gradient-to-r from-orange-300 to-orange-500"
-    : "bg-gradient-to-r from-red-400 to-red-500";
-  const statusText = score === 0 ? "Missing section"
-    : score < 40   ? "Needs attention"
-    : score < 70   ? "Could improve"
-    : null;
-
-  useEffect(() => {
-    const t = setTimeout(() => setWidth(score), 120 + index * 60);
-    return () => clearTimeout(t);
-  }, [score, index]);
-
-  return (
-    <div
-      className={`group rounded-lg p-2 -mx-2 transition-all duration-200 ${onClick ? "cursor-pointer hover:bg-blue-50/60" : ""}`}
-      onClick={onClick}
-      title={onClick ? `Click to jump to ${label} issues` : undefined}
+    <span
+      className="relative inline-block"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onClick={e => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-            <Icon className={`w-4 h-4 ${meta.color}`} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-700 leading-none">{label}</p>
-            {statusText && (
-              <p className={`text-[10px] font-medium mt-0.5 flex items-center gap-1 ${score === 0 ? "text-red-500" : score < 40 ? "text-orange-500" : "text-yellow-600"}`}>
-                <AlertTriangle className="w-2.5 h-2.5" />
-                {statusText}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {issueCount > 0 && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${score === 0 ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600"}`}>
-              {issueCount} issue{issueCount > 1 ? "s" : ""}
-            </span>
-          )}
-          <p className={`text-sm font-extrabold ${scoreColor} w-9 text-right`}>{score}%</p>
-          {onClick && issueCount > 0 && (
-            <MousePointerClick className="w-3.5 h-3.5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-          )}
-        </div>
-      </div>
-      <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-        <div
-          className={`h-full ${barClass} rounded-full transition-all duration-700 ease-out`}
-          style={{ width: `${width}%` }}
-        />
-      </div>
-    </div>
+      <span className="text-[10px] font-semibold text-slate-400 hover:text-indigo-500 border border-slate-200 hover:border-indigo-300 rounded px-1.5 py-0.5 transition-colors cursor-default select-none">
+        WHY?
+      </span>
+      {show && (
+        <span
+          className="absolute bottom-full right-0 mb-2.5 w-72 rounded-2xl px-4 py-3.5 text-[12px] leading-relaxed text-white z-50 pointer-events-none block"
+          style={{ background: "#1a2e5a", boxShadow: "0 20px 60px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.12)" }}
+        >
+          {text}
+          <span
+            className="absolute top-full right-3 block"
+            style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: "6px solid #1a2e5a" }}
+          />
+        </span>
+      )}
+    </span>
   );
 }
 
 /* ─── ISSUE CARD ──────────────────────────────────────── */
-function IssueCard({ issue, onFix, onDismiss }: { issue: IssueCard; onFix: () => void; onDismiss: () => void }) {
-  const meta = PRIORITY_META[issue.priority];
-  const Icon = meta.icon;
+function IssueCard({
+  issue, Icon, onDismiss, onFix,
+}: {
+  issue: IssueCard; Icon: React.ElementType; onDismiss: () => void; onFix: () => void;
+}) {
+  const SECTION_IMPACT: Record<string, number> = {
+    Keywords: 20, Skills: 18, Experience: 16, Summary: 14,
+    ContentQuality: 12, ATSCompatibility: 10, Formatting: 9,
+    Education: 8, Certifications: 7, Projects: 7,
+    Contact: 6, Internships: 5, General: 4,
+  };
+
+  const isCritical = issue.priority === "critical";
+  const isUrgent   = issue.priority === "urgent";
+
+  const palette = isCritical
+    ? { accent: "#ef4444", soft: "#fff5f5", softBorder: "rgba(239,68,68,0.18)", ptsFg: "#dc2626", ptsBg: "#fee2e2", iconRing: "rgba(239,68,68,0.12)" }
+    : isUrgent
+    ? { accent: "#f59e0b", soft: "#fffbeb", softBorder: "rgba(245,158,11,0.18)", ptsFg: "#b45309", ptsBg: "#fef3c7", iconRing: "rgba(245,158,11,0.12)" }
+    : { accent: "#8b5cf6", soft: "#faf5ff", softBorder: "rgba(139,92,246,0.18)", ptsFg: "#6d28d9", ptsBg: "#ede9fe", iconRing: "rgba(139,92,246,0.12)" };
+
+  const rawPts     = SECTION_IMPACT[issue.section] ?? 5;
+  const impactPts  = isCritical ? rawPts : isUrgent ? Math.floor(rawPts * 0.65) : Math.floor(rawPts * 0.35);
+
+  const raw   = issue.description;
+  const cut   = raw.search(/[.!?]\s/);
+  const title = cut > 0 && cut < 90 ? raw.slice(0, cut + 1) : raw.slice(0, 88) + (raw.length > 88 ? "…" : "");
 
   return (
-    <div className={`rounded-lg border ${meta.cardBg} ${meta.borderColor} shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}>
-      <div className="px-4 py-3">
-        {/* Two-line header: section + badge on line 1, description on line 2 */}
-        <div className="flex items-start gap-2.5 mb-2">
-          <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${meta.chipActive}`} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <p className="font-semibold text-xs text-gray-800">{issue.section}</p>
-              <span className={`text-[9px] px-1.5 py-0.5 font-bold rounded-full uppercase tracking-wide ${meta.badge}`}>
-                {meta.label}
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 truncate">{issue.description}</p>
+    <div
+      className="group relative bg-white rounded-xl overflow-hidden transition-all duration-150 cursor-default"
+      style={{
+        border: "1px solid #e2e8f0",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(0,0,0,0.09)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 3px rgba(0,0,0,0.05)"; (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
+    >
+      <div className="px-4 py-4 flex gap-3.5">
+
+        {/* Icon bubble */}
+        <div
+          className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center mt-0.5"
+          style={{ background: "#f8fafc", border: "1px solid #edf0f4" }}
+        >
+          <Icon style={{ width: 16, height: 16, color: "#64748b" }} />
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 min-w-0">
+
+          {/* Row 1: title + pts */}
+          <div className="flex items-start justify-between gap-2 mb-1.5">
+            <p className="text-[13px] font-bold text-gray-900 leading-snug flex-1">{title}</p>
+            <span
+              className="shrink-0 text-[11px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap mt-0.5"
+              style={{ background: "#f8fafc", color: palette.ptsFg, border: "1px solid #edf0f4" }}
+            >
+              +{impactPts} pts
+            </span>
           </div>
-        </div>
 
-        {/* Suggestion — borderless subtle bg */}
-        <div className="flex items-start gap-1.5 bg-gray-50 rounded-md px-2.5 py-1.5 mb-2.5">
-          <Sparkles className="w-3 h-3 text-blue-400 flex-shrink-0 mt-0.5" />
-          <p className="text-[11px] text-gray-500 leading-snug">{issue.suggestion}</p>
-        </div>
+          {/* Row 2: suggestion */}
+          <p className="text-[12px] text-gray-400 leading-relaxed mb-3 line-clamp-2">{issue.suggestion}</p>
 
-        {/* Actions */}
-        <div className="flex items-center justify-between gap-2">
-          <button
-            onClick={onDismiss}
-            className="text-xs text-gray-400 hover:text-gray-700 font-medium transition-colors"
-          >
-            Dismiss
-          </button>
+          {/* Row 3: action */}
           <button
             onClick={onFix}
-            className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md hover:scale-[1.02] transition-all flex items-center gap-1.5"
+            className="inline-flex items-center gap-1.5 text-[12px] font-bold px-4 py-1.5 rounded-xl transition-all duration-150 active:scale-95"
+            style={{
+              background: "#2557a7",
+              color: "white",
+              boxShadow: "0 2px 8px rgba(37,87,167,0.28)",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 14px rgba(37,87,167,0.4)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 8px rgba(37,87,167,0.28)"; }}
           >
-            <WrenchIcon className="w-3 h-3" />
-            Fix with AI
-            <ArrowRight className="w-3 h-3" />
+            Fix Now
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
+        </div>
+      </div>
+
+      {/* Dismiss — only visible on hover */}
+      <button
+        onClick={onDismiss}
+        className="absolute top-3 right-3 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all duration-150"
+        title="Dismiss"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/* ─── PRIORITY GROUP ──────────────────────────────────── */
+function PriorityGroup({
+  title, subtitle, accent, accentBg, issues, sectionIcons,
+  onDismiss, onFix, tooltip,
+}: {
+  title: string; subtitle: string; accent: string; accentBg: string;
+  issues: IssueCard[]; sectionIcons: Record<string, React.ElementType>;
+  onDismiss: (id: string) => void;
+  onFix: () => void; tooltip: string;
+}) {
+  const [open, setOpen] = useState(true);
+  if (!issues.length) return null;
+
+  return (
+    <div className="mb-3">
+      {/* Group header pill */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-150 hover:bg-gray-50 active:scale-[0.998]"
+        style={{ background: "#ffffff", border: "1px solid #edf0f4", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
+      >
+        {/* Priority dot */}
+        <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-offset-1" style={{ background: accent, ringColor: `${accent}40` }} />
+
+        {/* Title */}
+        <span className="text-[13.5px] font-extrabold flex-1 text-left" style={{ color: accent }}>{title}</span>
+
+        {/* Subtitle — hidden on small screens */}
+        <span className="text-[11.5px] text-gray-500 hidden sm:block mr-1 font-medium">{subtitle}</span>
+
+        {/* WHY tooltip */}
+        <WhyTooltip text={tooltip} />
+
+        {/* Count badge */}
+        <span
+          className="text-[11px] font-black px-2.5 py-0.5 rounded-full ml-0.5 min-w-[22px] text-center"
+          style={{ background: accent, color: "white", boxShadow: `0 2px 6px ${accent}55` }}
+        >
+          {issues.length}
+        </span>
+
+        {/* Chevron */}
+        <svg
+          className={`w-4 h-4 transition-transform duration-250 ml-0.5 shrink-0 ${open ? "rotate-180" : ""}`}
+          style={{ color: accent }}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {/* Animated body */}
+      <div
+        className="overflow-hidden transition-all duration-300 ease-in-out"
+        style={{ maxHeight: open ? "5000px" : "0px", opacity: open ? 1 : 0 }}
+      >
+        <div className="pt-3 pb-1 space-y-6">
+          {(() => {
+            const sectionMap = new Map<string, IssueCard[]>();
+            for (const issue of issues) {
+              if (!sectionMap.has(issue.section)) sectionMap.set(issue.section, []);
+              sectionMap.get(issue.section)!.push(issue);
+            }
+            return Array.from(sectionMap.entries()).map(([section, sectionIssues]) => {
+              const SectionIcon = sectionIcons[section] ?? Lightbulb;
+              const label = section.replace(/([A-Z])/g, " $1").trim();
+              return (
+                <div key={section} id={`issue-section-${section}`}>
+                  {/* Section divider */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: accentBg }}>
+                      <SectionIcon style={{ width: 12, height: 12, color: accent }} />
+                    </div>
+                    <span className="text-[10.5px] font-black tracking-[0.15em] uppercase text-gray-400">{label}</span>
+                    <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${accent}30, transparent)` }} />
+                    <span
+                      className="text-[10px] font-black px-2 py-0.5 rounded-full"
+                      style={{ background: accentBg, color: accent, border: `1px solid ${accent}22` }}
+                    >
+                      {sectionIssues.length}
+                    </span>
+                  </div>
+
+                  {/* Cards */}
+                  <div className="space-y-2.5">
+                    {sectionIssues.map(issue => (
+                      <IssueCard
+                        key={issue.id}
+                        issue={issue}
+                        Icon={SectionIcon}
+                        onDismiss={() => onDismiss(issue.id)}
+                        onFix={onFix}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </div>
       </div>
     </div>
@@ -477,9 +542,11 @@ function ATSLoginReport() {
   const router   = useRouter();
   const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null);
   const [loading,   setLoading]   = useState(true);
-  const [filter,       setFilter]       = useState<"critical" | "urgent" | "optional">("critical");
+  const [filter,       setFilter]       = useState<"all" | "critical" | "urgent" | "optional">("all");
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [parsedData,   setParsedData]   = useState<any>(null);
 
   useEffect(() => {
     try {
@@ -487,7 +554,15 @@ function ATSLoginReport() {
       if (raw) {
         const data = JSON.parse(raw);
         setScoreData(transformData(data));
-
+        // Pass the full data object so JobMatchTemplateThree can correctly access
+        // data.parsed_data (the template does `data?.parsed_data || data` internally)
+        if (data?.parsed_data) {
+          setParsedData(data);
+        }
+        const resumeId = data?.resume_id as string | undefined;
+        if (resumeId) {
+          setPreviewUrl(`${PREVIEW_BASE}/parser/preview/${resumeId}`);
+        }
       }
     } catch { /* ignore */ }
     finally   { setLoading(false); }
@@ -495,13 +570,6 @@ function ATSLoginReport() {
 
   const issues = useMemo(() => scoreData ? extractIssues(scoreData.Breakdown) : [], [scoreData]);
 
-  // Auto-select highest priority filter
-  useEffect(() => {
-    if (!issues.length) return;
-    const hasCritical = issues.some(i => i.priority === "critical");
-    const hasUrgent   = issues.some(i => i.priority === "urgent");
-    setFilter(hasCritical ? "critical" : hasUrgent ? "urgent" : "optional");
-  }, [issues]);
 
   const grouped = useMemo(() => ({
     critical: issues.filter(i => i.priority === "critical" && !dismissedIds.has(i.id)),
@@ -569,7 +637,6 @@ function ATSLoginReport() {
     const target = inCritical ? "critical" : inUrgent ? "urgent" : inOptional ? "optional" : null;
     if (!target) return;
     setFilter(target);
-    setCollapsedSections(prev => { const n = new Set(prev); n.delete(sectionName); return n; });
     setTimeout(() => {
       const panel = issuesPanelRef.current;
       const el = document.getElementById(`issue-section-${sectionName}`);
@@ -579,15 +646,6 @@ function ATSLoginReport() {
       }
     }, 80);
   }, [grouped]);
-
-  const toggleSection = useCallback((section: string) => {
-    setCollapsedSections(prev => {
-      const next = new Set(prev);
-      next.has(section) ? next.delete(section) : next.add(section);
-      return next;
-    });
-  }, []);
-
 
   const handleFixNow = () => {
     try {
@@ -609,287 +667,456 @@ function ATSLoginReport() {
 
   /* ── Loading ─────────────────────── */
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "linear-gradient(135deg,#f0f4ff 0%,#f8faff 100%)" }}>
       <div className="text-center">
-        <div className="w-16 h-16 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-        <p className="text-lg font-semibold text-gray-800">Analyzing your resume…</p>
-        <p className="text-sm text-gray-500 mt-2">This won&apos;t take long</p>
+        <div className="w-14 h-14 border-4 border-t-transparent rounded-full animate-spin mx-auto mb-5" style={{ borderColor: "#1a2e5a", borderTopColor: "transparent" }} />
+        <p className="text-base font-bold text-gray-800">Analyzing your resume…</p>
+        <p className="text-sm text-gray-400 mt-1.5">Building your personalized report</p>
       </div>
     </div>
   );
 
   /* ── No data ─────────────────────── */
   if (!scoreData) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
-      <div className="max-w-md text-center bg-white rounded-2xl shadow-lg p-10 border border-gray-200">
-        <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-          <XCircle className="w-10 h-10 text-red-400" />
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "linear-gradient(135deg,#f0f4ff 0%,#f8faff 100%)" }}>
+      <div className="max-w-md w-full text-center bg-white rounded-3xl p-12" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.10)" }}>
+        <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ background: "#fef2f2" }}>
+          <XCircle className="w-10 h-10" style={{ color: "#ef4444" }} />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-3">No Report Found</h2>
-        <p className="text-gray-500 mb-8">Upload and scan your resume first to see your detailed analysis.</p>
+        <h2 className="text-2xl font-black text-gray-900 mb-2">No Report Found</h2>
+        <p className="text-gray-400 mb-8 text-sm leading-relaxed">Upload and scan your resume first to see your full ATS analysis.</p>
         <button
           onClick={() => router.push("/atslogin")}
-          className="w-full px-6 py-3.5 bg-[#2557a7] text-white rounded-xl font-bold hover:bg-[#1a4a8f] shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-3 group"
+          className="w-full px-6 py-3.5 text-white rounded-2xl font-bold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2"
+          style={{ background: "linear-gradient(135deg,#1a2e5a,#2d4a8a)" }}
         >
-          <RefreshCw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" />
+          <RefreshCw className="w-4 h-4" />
           Go to ATS Scanner
         </button>
       </div>
     </div>
   );
 
+  /* ── gauge helpers ── */
+  const gaugeColor  = pct >= 70 ? "#22c55e" : pct >= 40 ? "#f59e0b" : "#ef4444";
+  const gradeLabel  = pct >= 85 ? "EXCELLENT" : pct >= 70 ? "GOOD" : pct >= 50 ? "AVERAGE" : "NEEDS WORK";
+
+  const SECTION_ICONS: Record<string, React.ElementType> = {
+    Contact: User,
+    Education: GraduationCap,
+    Experience: Briefcase,
+    Projects: FolderOpen,
+    Skills: Zap,
+    Certifications: Award,
+    Summary: AlignLeft,
+    Internships: Building2,
+    Keywords: Tag,
+    Formatting: LayoutTemplate,
+    ContentQuality: BookOpen,
+    ATSCompatibility: ScanLine,
+    General: Lightbulb,
+  };
+  const WHY_TEXT: Record<string, string> = {
+    Keywords: "Keyword density directly determines your ATS match score. Resumes with less than 60% keyword overlap are typically auto-rejected.",
+    Skills: "ATS systems scan for skill keywords matching the job description. Missing skills are the #1 reason resumes get filtered out.",
+    Summary: "The summary is the first thing recruiters read. A weak or missing summary wastes your most valuable resume real estate.",
+    Experience: "Work experience is the most weighted ATS section. Vague descriptions with no metrics score poorly against structured job requirements.",
+    Education: "Incomplete education entries cause ATS parsing failures and signal poor attention to detail.",
+    Contact: "ATS systems extract contact info to build your candidate profile. Missing fields prevent recruiter follow-up entirely.",
+    Formatting: "Non-standard layouts — tables, columns, headers/footers — cause ATS parsers to misread or skip entire sections.",
+    ContentQuality: "Grammar errors, passive voice, and filler phrases reduce readability scores and signal a lack of professionalism.",
+    Certifications: "Certifications validate your skills and increase keyword density for technical roles.",
+    Projects: "Projects prove applied skills, especially for candidates with limited work experience. Generic descriptions add no signal.",
+    Internships: "Internship entries are evaluated the same way as full roles. Incomplete entries weaken the section.",
+    ATSCompatibility: "Even a perfect resume gets rejected if the ATS cannot parse it. Compatibility issues are silent failures.",
+    General: "General improvements that strengthen overall readability and professionalism across all sections.",
+  };
+
+  const TAB_CONFIG = [
+    { key: "all",      label: "All",             count: grouped.critical.length + grouped.urgent.length + grouped.optional.length },
+    { key: "critical", label: "Fix First",        count: grouped.critical.length,  color: "#ef4444" },
+    { key: "urgent",   label: "High Impact",      count: grouped.urgent.length,    color: "#f59e0b" },
+    { key: "optional", label: "Nice to Improve",  count: grouped.optional.length,  color: "#8b5cf6" },
+  ] as const;
+
   /* ── Report ──────────────────────── */
   return (
-    <div className="w-full bg-gradient-to-br from-gray-50 via-white to-gray-50 min-h-screen">
+    <div className="w-full min-h-screen" style={{ background: "#f0f4f8" }}>
 
-      {/* ── Page Header ─────────────────────────────────── */}
-      <div className="w-full bg-white border-b border-gray-100 px-6 pt-5 pb-5">
-        <div className="max-w-[1650px] mx-auto">
-          <div className="flex flex-wrap items-center gap-3 mb-5">
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">ATS Resume Analysis Report</h1>
-          </div>
+      {/* ══ BODY ══ */}
+      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-        </div>
-      </div>
+          {/* ── LEFT: Score card (3 cols, sticky) ────── */}
+          <div className="lg:col-span-4 lg:sticky lg:top-6 self-start space-y-4">
 
-      {/* ── Body ─────────────────────────────────────────── */}
-      <div className="w-full px-6 py-8">
-        <div className="max-w-[1650px] mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Score gauge card */}
+            <div
+              className="rounded-3xl overflow-hidden bg-white"
+              style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.07)" }}
+            >
+              {/* Colored top accent bar */}
+              <div className="h-[4px] w-full" style={{ background: gaugeColor }} />
 
-            {/* ── LEFT: Issues (8 cols) ────────────────── */}
-            <div className="lg:col-span-8 space-y-6">
+              {/* Score hero */}
+              <div className="px-6 pt-5 pb-0">
 
-              {/* Pro Tip Banner */}
-              <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-6 relative overflow-hidden hover:shadow-xl hover:shadow-indigo-500/20 transition-all">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <Lightbulb className="w-6 h-6 text-gray-900" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-lg font-bold text-gray-900">Pro Tip</h3>
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200">ATS</span>
-                    </div>
-                    <p className="text-sm text-gray-700 leading-relaxed">
-                      Focus on <strong>Critical</strong> issues first — they have the biggest impact on your ATS pass rate.
-                      Each fix improves your chances of reaching a human recruiter.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Issues Card */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
-
-                {/* Issues Header */}
-                <div className="px-6 pt-5 pb-5 bg-gray-50 border-b-2 border-gray-200">
-                  <div className="flex flex-wrap gap-4 items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-14 h-14 rounded-xl flex items-center justify-center border ${issues.length === 0 ? "bg-blue-100 border-blue-200" : "bg-gray-100 border-gray-300"}`}>
-                        {issues.length === 0
-                          ? <CheckCircle className="w-7 h-7 text-blue-600" />
-                          : <AlertCircle className="w-7 h-7 text-gray-600" />
-                        }
-                      </div>
-                      <div>
-                        <p className="font-extrabold text-2xl text-gray-900">
-                          {issues.length === 0 ? "Perfect Resume!" : "Issues Detected"}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-0.5">
-                          {issues.length === 0
-                            ? "Your resume is fully optimised"
-                            : `${issues.length} ${issues.length === 1 ? "item" : "items"} need your attention`}
-                        </p>
-                      </div>
-                    </div>
-
-                    {issues.length > 0 && (
-                      <div className="flex items-center gap-3">
-                        {(["critical", "urgent", "optional"] as const).map(type => {
-                          const emoji = type === "critical" ? "🔴" : type === "urgent" ? "🟠" : "⚪";
-                          const chipLabel = type === "critical" ? "Critical Issues" : type === "urgent" ? "Urgent Fixes" : "Optional";
-                          return (
-                            <button
-                              key={type}
-                              onClick={() => setFilter(type)}
-                              className={`group rounded-xl px-5 py-3 border min-w-[120px] transition-all transform backdrop-blur-sm ${
-                                filter === type
-                                  ? `${PRIORITY_META[type].bgColor} ${PRIORITY_META[type].borderColor} shadow-md shadow-indigo-500/20 scale-105`
-                                  : "bg-gray-100 border-gray-300 hover:shadow-sm hover:scale-105 hover:bg-gray-200"
-                              }`}
-                            >
-                              <div className="text-center">
-                                <div className="flex items-center justify-center gap-1.5 mb-1">
-                                  <span className="text-sm">{emoji}</span>
-                                  <span className={`text-3xl font-black leading-none ${filter === type ? PRIORITY_META[type].chipActive : "text-gray-300 group-hover:text-gray-400"}`}>
-                                    {grouped[type].length}
-                                  </span>
-                                </div>
-                                <div className={`text-xs font-bold tracking-wide ${filter === type ? PRIORITY_META[type].chipActive : "text-gray-400"}`}>
-                                  {chipLabel}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                {/* Label row */}
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-black tracking-[0.18em] uppercase text-gray-400">ATS Score</span>
+                  <span
+                    className="text-[10px] font-black tracking-[0.12em] px-2.5 py-1 rounded-full uppercase"
+                    style={{ background: `${gaugeColor}14`, color: gaugeColor, border: `1.5px solid ${gaugeColor}30` }}
+                  >
+                    {gradeLabel}
+                  </span>
                 </div>
 
-{/* Issues Content */}
-                <div className="p-6">
-                  {issues.length === 0 ? (
-                    <div className="py-16 text-center bg-blue-50 rounded-xl border border-blue-200">
-                      <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <CheckCircle2 className="w-10 h-10 text-blue-600" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-blue-700 mb-2">All Clear!</h3>
-                      <p className="text-sm text-blue-600/80 max-w-md mx-auto">Your resume is in excellent shape. No issues detected.</p>
-                    </div>
-                  ) : grouped[filter].length === 0 ? (
-                    <div className="py-12 text-center bg-gray-50 border border-dashed border-gray-300 rounded-xl">
-                      <Info className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                      <h3 className="text-lg font-bold text-gray-700 capitalize">No {filter} Issues</h3>
-                      <p className="text-sm text-gray-600 mt-1">Great job on this category!</p>
-                    </div>
-                  ) : (
-                    <div ref={issuesPanelRef} className="max-h-[720px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth"
-                         style={{ maskImage: "linear-gradient(to bottom, black calc(100% - 32px), transparent 100%)" }}>
-                      {/* Group by section with dividers */}
-                      {(() => {
-                        const sectionGroups: Record<string, IssueCard[]> = {};
-                        grouped[filter].forEach(issue => {
-                          if (!sectionGroups[issue.section]) sectionGroups[issue.section] = [];
-                          sectionGroups[issue.section].push(issue);
-                        });
-                        return Object.entries(sectionGroups).map(([section, sectionIssues], gIdx) => {
-                          const isCollapsed = collapsedSections.has(section);
-                          return (
-                            <div key={section} id={`issue-section-${section}`} className={gIdx > 0 ? "mt-5" : ""}>
-                              {/* Collapsible section header */}
-                              <button
-                                onClick={() => toggleSection(section)}
-                                className="flex items-center gap-2 mb-2 w-full text-left group/hdr hover:bg-gray-50 rounded-lg px-2 py-1.5 -mx-2 transition-colors"
-                              >
-                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">{section}</span>
-                                <div className="flex-1 h-px bg-gray-200" />
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  filter === "critical" ? "bg-red-100 text-red-600"
-                                  : filter === "urgent" ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-gray-100 text-gray-500"
-                                }`}>
-                                  {sectionIssues.length} issue{sectionIssues.length > 1 ? "s" : ""}
-                                </span>
-                                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`} />
-                              </button>
-                              {!isCollapsed && (
-                                <div className="space-y-2.5">
-                                  {sectionIssues.map(issue => (
-                                    <IssueCard key={issue.id} issue={issue} onFix={handleFixNow} onDismiss={() => setDismissedIds(prev => new Set([...prev, issue.id]))} />
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-
-            {/* ── RIGHT: Score + Breakdown (4 cols) ───── */}
-            <div className="lg:col-span-4 space-y-5">
-
-              {/* Overall Score Card */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
-                <div className="px-6 py-4 bg-[#2557a7]">
-                  <h2 className="text-base font-bold text-white">Overall Score</h2>
+                {/* Big number */}
+                <div className="flex items-end gap-1 mb-1">
+                  <span
+                    className="font-black leading-none"
+                    style={{ fontSize: 72, color: gaugeColor, letterSpacing: "-4px", lineHeight: 1 }}
+                  >
+                    {pct}
+                  </span>
+                  <span className="text-[20px] font-bold pb-2" style={{ color: "#cbd5e1" }}>/100</span>
                 </div>
 
-                <CircularGauge score={pct} totalIssues={issues.length} />
-
-                {/* Estimated score after fix */}
-                {issues.length > 0 && pct < 95 && (
-                  <div className="mx-5 mb-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
-                    <p className="text-[10px] font-semibold text-emerald-600 mb-3 flex items-center gap-1.5 uppercase tracking-widest">
-                      <TrendingUp className="w-3 h-3" />
-                      Estimated Score After Fixes
-                    </p>
-                    <div className="flex items-center justify-center gap-4">
-                      <div className="text-center">
-                        <p className="text-3xl font-black text-gray-400 leading-none">{pct}</p>
-                        <p className="text-[9px] text-gray-400 font-medium mt-1 uppercase tracking-wide">Current</p>
-                      </div>
-                      <ArrowRight className="w-7 h-7 text-emerald-400 flex-shrink-0" strokeWidth={2} />
-                      <div className="text-center">
-                        <p className="text-3xl font-black text-emerald-600 leading-none">
-                          ~{Math.min(100, pct + Math.min(100 - pct, grouped.critical.length * 4 + grouped.urgent.length * 2))}
-                        </p>
-                        <p className="text-[9px] text-emerald-600 font-medium mt-1 uppercase tracking-wide">Potential</p>
-                      </div>
-                    </div>
-                  </div>
+                {/* Pts hint */}
+                {pct < 100 && (
+                  <p className="text-[11.5px] font-semibold mb-5" style={{ color: "#94a3b8" }}>
+                    +{pct >= 90 ? 100 - pct : Math.max(0, 90 - pct)} pts to reach {pct >= 90 ? "perfect score" : "90"}
+                  </p>
                 )}
 
-                {/* Action Buttons */}
-                <div className="px-6 pb-6 flex gap-3">
-                  <button
-                    onClick={handleFixNow}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center gap-2 group text-sm"
-                  >
-                    <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
-                    Fix with AI Enhancer
-                  </button>
-                  <button
-                    onClick={() => router.push("/atslogin")}
-                    className="px-4 py-3 text-gray-500 font-semibold text-sm border border-gray-200 rounded-xl hover:text-indigo-600 hover:border-indigo-300 transition-all flex items-center justify-center gap-2 group"
-                  >
-                    <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-                    Rescan
-                  </button>
-                </div>
-              </div>
-
-              {/* Score Breakdown */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden">
-                <div className="px-6 py-5 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#2557a7] flex items-center justify-center shadow-sm">
-                    <BarChart3 className="w-5 h-5 text-white" />
+                {/* Tiered track */}
+                <div className="mb-2">
+                  <div className="relative h-[10px] flex gap-[3px] rounded-full overflow-visible">
+                    {/* Poor 0–40 */}
+                    <div className="rounded-full overflow-hidden" style={{ width: "40%", background: "#f1f5f9" }}>
+                      <div className="h-full rounded-full" style={{ width: pct > 0 ? `${Math.min(100, (pct / 40) * 100)}%` : "0%", background: "#ef4444", transition: "width 1s ease" }} />
+                    </div>
+                    {/* Average 40–70 */}
+                    <div className="rounded-full overflow-hidden" style={{ width: "30%", background: "#f1f5f9" }}>
+                      <div className="h-full rounded-full" style={{ width: pct > 40 ? `${Math.min(100, ((pct - 40) / 30) * 100)}%` : "0%", background: "#f59e0b", transition: "width 1s ease 0.1s" }} />
+                    </div>
+                    {/* Good 70–90 */}
+                    <div className="rounded-full overflow-hidden" style={{ width: "20%", background: "#f1f5f9" }}>
+                      <div className="h-full rounded-full" style={{ width: pct > 70 ? `${Math.min(100, ((pct - 70) / 20) * 100)}%` : "0%", background: "#22c55e", transition: "width 1s ease 0.2s" }} />
+                    </div>
+                    {/* Best 90–100 */}
+                    <div className="rounded-full overflow-hidden" style={{ width: "10%", background: "#f1f5f9" }}>
+                      <div className="h-full rounded-full" style={{ width: pct > 90 ? `${Math.min(100, ((pct - 90) / 10) * 100)}%` : "0%", background: "#2557a7", transition: "width 1s ease 0.3s" }} />
+                    </div>
                   </div>
-                  <h2 className="text-xl font-bold text-gray-900">Score Breakdown</h2>
-                </div>
 
-                <div className="px-6 py-6 space-y-5 max-h-[600px] overflow-y-auto custom-scrollbar">
-                  {allScoreItems.map((item, idx) => {
-                    const count = sectionIssueCounts[item.name] ?? 0;
-                    return (
-                      <SectionBar
-                        key={item.name}
-                        name={item.name}
-                        score={item.score}
-                        index={idx}
-                        issueCount={count}
-                        onClick={count > 0 ? () => scrollToSection(item.name) : undefined}
-                      />
-                    );
-                  })}
+                  {/* Tier labels */}
+                  <div className="flex mt-1.5" style={{ gap: "3px" }}>
+                    <span className="text-[9px] font-bold text-center" style={{ width: "40%", color: "#ef4444" }}>Poor</span>
+                    <span className="text-[9px] font-bold text-center" style={{ width: "30%", color: "#f59e0b" }}>Average</span>
+                    <span className="text-[9px] font-bold text-center" style={{ width: "20%", color: "#22c55e" }}>Good</span>
+                    <span className="text-[9px] font-bold text-center" style={{ width: "10%", color: "#2557a7" }}>Best</span>
+                  </div>
                 </div>
               </div>
 
+              {/* Divider */}
+              <div className="mx-5 my-4 border-t border-gray-100" />
+
+              {/* CTA buttons */}
+              <div className="px-5 pb-6 space-y-2.5">
+                <button
+                  onClick={handleFixNow}
+                  className="w-full py-3 rounded-2xl text-sm font-bold text-white transition-all hover:brightness-110 active:scale-95"
+                  style={{ background: "#2557a7", boxShadow: "0 4px 14px rgba(37,87,167,0.30)" }}
+                >
+                  Fix My Resume
+                </button>
+                <button
+                  onClick={() => router.push("/atslogin")}
+                  className="w-full py-2.5 rounded-2xl text-sm font-semibold transition-all active:scale-95"
+                  style={{ background: "white", border: "1px solid #e2e8f0", color: "#94a3b8" }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = "#f8fafc")}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = "white")}
+                >
+                  Upload &amp; Rescan
+                </button>
+              </div>
+            </div>
+
+            {/* Score Breakdown card */}
+            <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.07)" }}>
+
+              {/* Header */}
+              <div className="px-5 pt-5 pb-3" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <p className="text-[16px] font-extrabold" style={{ color: "#1a2e5a" }}>Score Breakdown</p>
+                <p className="text-[12px] text-gray-400 mt-0.5">Tap a section to view issues</p>
+              </div>
+
+              {/* Section rows */}
+              <div className="px-3 py-3 space-y-1.5 max-h-[460px] overflow-y-auto custom-scrollbar">
+                {allScoreItems.map(item => {
+                  const count     = sectionIssueCounts[item.name] ?? 0;
+                  const hasIssues = count > 0;
+                  const label     = item.name.replace(/([A-Z])/g, " $1").trim();
+                  const isGood    = item.score >= 80;
+                  const isMid     = item.score >= 50 && item.score < 80;
+                  const barColor  = isGood ? "#22c55e" : isMid ? "#f59e0b" : "#ef4444";
+                  const badgeBg   = item.score < 50 ? "#ef4444" : "#f59e0b";
+                  const SIcon     = SECTION_ICONS[item.name] ?? Lightbulb;
+
+                  return (
+                    <button
+                      key={item.name}
+                      onClick={hasIssues ? () => scrollToSection(item.name) : undefined}
+                      className={`w-full text-left rounded-xl px-3 py-2.5 bg-white transition-all duration-150 ${hasIssues ? "cursor-pointer hover:bg-slate-50" : "cursor-default"}`}
+                      style={{ border: "1px solid #eef1f6" }}
+                      onMouseEnter={e => hasIssues && ((e.currentTarget as HTMLButtonElement).style.boxShadow = "0 3px 10px rgba(0,0,0,0.07)")}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.boxShadow = "none")}
+                    >
+                      <div className="flex items-center gap-2.5">
+
+                        {/* Icon */}
+                        <div className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
+                          style={{ background: `${barColor}12`, border: `1px solid ${barColor}25` }}>
+                          <SIcon style={{ width: 13, height: 13, color: barColor }} />
+                        </div>
+
+                        {/* Label + bar */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[12px] font-semibold text-gray-700 truncate leading-none">{label}</span>
+                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                              {hasIssues ? (
+                                <span
+                                  className="w-[17px] h-[17px] rounded-full text-[9px] font-black text-white flex items-center justify-center"
+                                  style={{ background: badgeBg }}
+                                >
+                                  {count}
+                                </span>
+                              ) : (
+                                <CheckCircle2 style={{ width: 13, height: 13, color: "#22c55e" }} />
+                              )}
+                              <span className="text-[12px] font-black tabular-nums" style={{ color: barColor }}>{item.score}%</span>
+                            </div>
+                          </div>
+                          <div className="h-[5px] rounded-full overflow-hidden" style={{ background: "#f1f5f9" }}>
+                            <div
+                              className="h-full rounded-full"
+                              style={{ width: `${item.score}%`, background: barColor, transition: "width 0.8s ease" }}
+                            />
+                          </div>
+                        </div>
+
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pb-3" />
             </div>
 
           </div>
+
+          {/* ── RIGHT: Preview + Issues (9 cols) ── */}
+          <div className="lg:col-span-8 space-y-6">
+
+            {/* Resume Preview */}
+            {(parsedData || previewUrl) && (
+              <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.07)" }}>
+                {/* Preview header bar */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-400" />
+                      <div className="w-3 h-3 rounded-full bg-amber-400" />
+                      <div className="w-3 h-3 rounded-full bg-green-400" />
+                    </div>
+                    <span className="text-[13px] font-bold text-gray-600">Resume Preview</span>
+                  </div>
+                  <button
+                    onClick={handleFixNow}
+                    className="flex items-center gap-1.5 text-[12px] font-bold px-4 py-2 rounded-xl hover:opacity-90 active:scale-95 transition-all text-white"
+                    style={{ background: "#1a2e5a" }}
+                  >
+                    Edit Resume
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="overflow-y-auto custom-scrollbar" style={{ maxHeight: "860px" }}>
+                  {parsedData
+                    ? <JobMatchTemplateThree data={parsedData} />
+                    : <iframe src={previewUrl!} className="w-full border-none" style={{ height: "860px" }} title="Resume Preview" />
+                  }
+                </div>
+              </div>
+            )}
+
+            {/* Issues Card */}
+            <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 4px 32px rgba(0,0,0,0.10)" }}>
+
+              {/* Issues header */}
+              <div style={{ background: "#2557a7", padding: "22px 24px 0" }}>
+
+                {/* Decorative glow blobs */}
+                <div className="pointer-events-none absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-10 blur-3xl" style={{ background: "#4a7fd4" }} />
+                <div className="pointer-events-none absolute top-4 left-1/3 w-24 h-24 rounded-full opacity-5 blur-2xl" style={{ background: "#8b5cf6" }} />
+
+                <div className="relative flex items-start justify-between mb-5">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <svg className="w-4 h-4 shrink-0" style={{ color: "rgba(255,255,255,0.5)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      <h3 className="text-[17px] font-extrabold text-white leading-tight tracking-tight">
+                        {issues.length === 0 ? "Resume Looks Great!" : "Action Items"}
+                      </h3>
+                    </div>
+                    <p className="text-[12px] font-medium pl-6" style={{ color: "rgba(255,255,255,0.45)" }}>
+                      {issues.length === 0
+                        ? "No issues found — your resume is fully optimised"
+                        : `${issues.length} issue${issues.length === 1 ? "" : "s"} found · sorted by impact on your score`}
+                    </p>
+                  </div>
+                  {issues.length > 0 && (
+                    <button
+                      onClick={handleFixNow}
+                      className="flex items-center gap-1.5 text-[12px] font-bold px-4 py-2.5 rounded-xl text-white transition-all shrink-0 hover:brightness-110 active:scale-95"
+                      style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)", backdropFilter: "blur(4px)" }}
+                    >
+                      Fix All Issues
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
+                {/* Tab bar */}
+                {issues.length > 0 && (
+                  <div className="relative flex items-end gap-0.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                    {TAB_CONFIG.map(tab => {
+                      const isActive = filter === tab.key;
+                      const dotColor = "color" in tab ? tab.color : undefined;
+                      return (
+                        <button
+                          key={tab.key}
+                          onClick={() => setFilter(tab.key)}
+                          className="relative flex items-center gap-1.5 px-4 py-2.5 text-[12.5px] font-bold whitespace-nowrap transition-all duration-150"
+                          style={{
+                            background: isActive ? "white" : "transparent",
+                            color: isActive ? "#1a2e5a" : "rgba(255,255,255,0.75)",
+                            borderRadius: isActive ? "10px 10px 0 0" : "8px 8px 0 0",
+                          }}
+                        >
+                          {dotColor && (
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0 transition-all"
+                              style={{ background: isActive ? dotColor : "rgba(255,255,255,0.25)" }}
+                            />
+                          )}
+                          {tab.label}
+                          {tab.count > 0 && (
+                            <span
+                              className="text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center"
+                              style={{
+                                background: isActive ? "#1a2e5a" : "rgba(255,255,255,0.15)",
+                                color: isActive ? "white" : "rgba(255,255,255,0.65)",
+                              }}
+                            >
+                              {tab.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Issues content */}
+              <div className="p-5">
+                {issues.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)" }}>
+                      <CheckCircle2 className="w-10 h-10" style={{ color: "#16a34a" }} />
+                    </div>
+                    <p className="text-lg font-black text-gray-800 mb-1.5">All Clear!</p>
+                    <p className="text-sm text-gray-400">No issues detected across all resume sections.</p>
+                  </div>
+                ) : (
+                  <div ref={issuesPanelRef} className="space-y-2">
+
+                    {(filter === "all" || filter === "critical") && (
+                      <PriorityGroup
+                        title="Fix First"
+                        subtitle="Blocking your ATS pass rate"
+                        accent="#ef4444"
+                        accentBg="#fff5f5"
+                        issues={grouped.critical}
+                        sectionIcons={SECTION_ICONS}
+                        tooltip={WHY_TEXT.General}
+                        onDismiss={(id: string) => setDismissedIds(prev => new Set([...prev, id]))}
+                        onFix={handleFixNow}
+                      />
+                    )}
+
+                    {(filter === "all" || filter === "urgent") && (
+                      <PriorityGroup
+                        title="High Impact"
+                        subtitle="Significant score improvements"
+                        accent="#f59e0b"
+                        accentBg="#fffbeb"
+                        issues={grouped.urgent}
+                        sectionIcons={SECTION_ICONS}
+                        tooltip="These issues cost meaningful ATS points. Fixing them moves your score into the competitive range."
+                        onDismiss={(id: string) => setDismissedIds(prev => new Set([...prev, id]))}
+                        onFix={handleFixNow}
+                      />
+                    )}
+
+                    {(filter === "all" || filter === "optional") && (
+                      <PriorityGroup
+                        title="Nice to Improve"
+                        subtitle="Polish that separates good from great"
+                        accent="#8b5cf6"
+                        accentBg="#faf5ff"
+                        issues={grouped.optional}
+                        sectionIcons={SECTION_ICONS}
+                        tooltip="Low-severity polish items. Address after fixing critical and urgent issues for maximum ROI."
+                        onDismiss={(id: string) => setDismissedIds(prev => new Set([...prev, id]))}
+                        onFix={handleFixNow}
+                      />
+                    )}
+
+                    {(
+                      (filter === "critical" && grouped.critical.length === 0) ||
+                      (filter === "urgent"   && grouped.urgent.length === 0)   ||
+                      (filter === "optional" && grouped.optional.length === 0)
+                    ) && (
+                      <div className="py-14 text-center rounded-2xl" style={{ background: "#f9fafb" }}>
+                        <CheckCircle2 className="w-9 h-9 mx-auto mb-3 text-emerald-400" />
+                        <p className="text-sm font-bold text-gray-500">No issues in this category</p>
+                      </div>
+                    )}
+
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+
         </div>
       </div>
 
       <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
       `}</style>

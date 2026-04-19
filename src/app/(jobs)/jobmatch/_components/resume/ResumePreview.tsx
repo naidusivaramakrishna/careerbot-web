@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import JobMatchTemplate from "./JobMatchTemplate";
+import JobMatchTemplateThree from "./JobMatchTemplateThree";
 
 interface ResumePreviewProps {
   pdfBlobUrl: string | null;
@@ -139,7 +139,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           </div>
         )}
         <div ref={scrollContainerRef}>
-          <JobMatchTemplate data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} />
+          <JobMatchTemplateThree data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} />
         </div>
       </div>
     );

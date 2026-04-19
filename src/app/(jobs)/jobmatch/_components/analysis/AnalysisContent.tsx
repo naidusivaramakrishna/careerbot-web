@@ -287,7 +287,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
     if (!resumeId) return;
     setDownloading(true);
     try {
-      const res = await httpClient.get(`/parser/download/${resumeId}?format=${fmt}`, { responseType: "blob" });
+      const res = await httpClient.get(`/parser/download/${resumeId}?format=${fmt}&template_id=minimalist_classic&preserve_template=false`, { responseType: "blob" });
       const ct = res.headers["content-type"] || "";
       const ext = fmt === "docx" || ct.includes("openxml") || ct.includes("wordprocessingml") ? "docx" : "pdf";
       const cd = res.headers["content-disposition"];
@@ -318,16 +318,23 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
   };
 
   /* ── opportunity group ── */
+  const borderMap: Record<string, string> = {
+    "text-red-500": "border-red-400",
+    "text-amber-500": "border-amber-400",
+    "text-blue-500": "border-blue-400",
+    "text-purple-500": "border-purple-400",
+  };
   const OpGroup = ({ title, count, color, skills, type, hover }: {
     title: string; count: number; color: string;
     skills: string[]; type: "technical" | "soft"; hover: string;
   }) => {
     if (!skills.length) return null;
+    const border = borderMap[color] ?? "border-gray-300";
     return (
-      <div>
-        <div className="flex items-center gap-1.5 mb-2">
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${color}`}>{title}</span>
-          <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded-full ${color.replace("text-", "bg-").replace("-500", "-100").replace("-600", "-100")} ${color}`}>{count}</span>
+      <div className={`border-l-2 pl-3 ${border}`}>
+        <div className="flex items-center justify-between mb-2">
+          <span className={`text-xs font-bold ${color}`}>{title}</span>
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${color.replace("text-", "bg-").replace("-500", "-100")} ${color}`}>{count}</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {skills.map(s => <Tag key={s} skill={s} type={type} hover={hover} />)}
@@ -347,7 +354,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
         {/* Header */}
         <div className="px-5 pt-5 pb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-[#2557a7] flex items-center justify-center">
               <Briefcase className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="text-sm font-bold text-gray-800">Job Match</span>
@@ -372,7 +379,7 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
                 {availableSections.filter(s => !deletedSections.includes(s.key)).map(({ key, label, Icon }) => {
                   const active = activeResumeSection === key;
                   return (
-                    <div key={key} className={`group flex items-center rounded-xl transition-all ${active ? "bg-blue-600 shadow-sm" : "hover:bg-gray-300"}`}>
+                    <div key={key} className={`group flex items-center rounded-xl transition-all ${active ? "bg-[#2557a7] shadow-sm" : "hover:bg-gray-100"}`}>
                       <button
                         onClick={() => setActiveResumeSection(active ? null : key)}
                         className={`flex-1 flex items-center gap-3 px-3 py-2.5 transition-colors`}
@@ -403,30 +410,75 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
         {/* ── Top toolbar — always visible, becomes floating card on scroll ── */}
         <div className="shrink-0 flex items-center justify-center py-3 px-4 bg-[#fafafa]">
-          <div className={`flex items-center gap-1 px-3 py-2 transition-all duration-300 ${
+          <div className={`flex items-center gap-2 transition-all duration-300 ${
             toolbarVisible
-              ? "bg-white border border-gray-200 rounded-2xl shadow-lg"
-              : "bg-transparent"
+              ? "bg-white border border-gray-200 rounded-2xl shadow-lg px-3 py-2"
+              : ""
           }`}>
-            <button
-              onClick={() => setActiveView("resume")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${activeView === "resume" ? "border border-rose-400 text-rose-500" : "text-gray-500 hover:bg-gray-100"}`}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              Preview
-            </button>
-            <button
-              onClick={() => { setActiveView("jd"); setActiveResumeSection(null); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${activeView === "jd" ? "border border-blue-400 text-blue-600 font-semibold" : "text-gray-500 hover:bg-gray-100"}`}
-            >
-              <Target className="w-3.5 h-3.5" />
-              Resume Tailoring
-              <span className="bg-blue-100 text-blue-600 text-[10px] font-bold px-1.5 py-0.5 rounded ml-0.5">Beta</span>
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 text-xs font-medium hover:bg-gray-100 rounded-full transition-colors">
-              <HelpCircle className="w-3.5 h-3.5" />
-              Help Center
-            </button>
+            {/* Pill tab group */}
+            <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
+              <button
+                onClick={() => setActiveView("resume")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeView === "resume" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Preview
+              </button>
+              <button
+                onClick={() => { setActiveView("jd"); setActiveResumeSection(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeView === "jd" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <Target className="w-3.5 h-3.5" />
+                Resume Tailoring
+                <span className="bg-blue-100 text-blue-600 text-[10px] font-bold px-1.5 py-0.5 rounded ml-0.5">Beta</span>
+              </button>
+              <button className="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 text-xs font-semibold hover:text-gray-700 rounded-lg transition-all">
+                <HelpCircle className="w-3.5 h-3.5" />
+                Help Center
+              </button>
+            </div>
+            {/* Download — only in resume view */}
+            {activeView === "resume" && (
+              <>
+                <div className="h-5 w-px bg-gray-200" />
+                <div className="relative">
+                  <button
+                    title="Download Resume"
+                    onClick={() => setDownloadMenuOpen(o => !o)}
+                    disabled={downloading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-gray-500 text-xs font-semibold hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-40"
+                  >
+                    {downloading
+                      ? <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                      : <Download className="w-3.5 h-3.5" />
+                    }
+                    Download
+                  </button>
+                  {downloadMenuOpen && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-32.5 py-1" onMouseLeave={() => setDownloadMenuOpen(false)}>
+                      <button
+                        onClick={() => { setDownloadMenuOpen(false); handleDownload("pdf"); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <Download className="w-4 h-4 text-red-500" />
+                        Download PDF
+                      </button>
+                      <button
+                        onClick={() => { setDownloadMenuOpen(false); handleDownload("docx"); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <FileText className="w-4 h-4 text-blue-500" />
+                        Download DOCX
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -436,46 +488,9 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
           {/* Document area — single scroll container */}
           <div ref={docScrollRef} className="h-full overflow-y-auto p-6 flex flex-col items-center">
             {activeView === "resume" && (
-              <div className="w-full max-w-4xl flex gap-3 items-start">
-                {/* Eye + Download icons beside the card */}
-                <div className="flex flex-col gap-3 pt-3 shrink-0">
-                  <button title="Preview" className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Eye className="w-9 h-9" />
-                  </button>
-                  <div className="relative">
-                    <button
-                      title="Download"
-                      onClick={() => setDownloadMenuOpen(o => !o)}
-                      disabled={downloading}
-                      className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
-                    >
-                      {downloading
-                        ? <div className="w-9 h-9 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                        : <Download className="w-9 h-9" />
-                      }
-                    </button>
-                    {downloadMenuOpen && (
-                      <div className="absolute left-full top-0 ml-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[130px] py-1" onMouseLeave={() => setDownloadMenuOpen(false)}>
-                        <button
-                          onClick={() => { setDownloadMenuOpen(false); handleDownload("pdf"); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        >
-                          <Download className="w-4 h-4 text-red-500" />
-                          Download PDF
-                        </button>
-                        <button
-                          onClick={() => { setDownloadMenuOpen(false); handleDownload("docx"); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        >
-                          <FileText className="w-4 h-4 text-blue-500" />
-                          Download DOCX
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="w-full max-w-4xl">
                 {/* Resume card */}
-                <div className="flex-1 bg-white rounded-xl border border-gray-100 relative" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                <div className="bg-white rounded-xl border border-gray-100 relative" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
                 {isUpdating && (
                   <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50 backdrop-blur-sm">
                     <div className="flex flex-col items-center gap-3">
@@ -510,7 +525,12 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
 
         {/* Header row */}
         <div className="h-14 px-5 flex items-center justify-between border-b border-gray-100 shrink-0">
-          <span className="text-sm font-bold text-gray-800">Fit Score</span>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-[#2557a7] flex items-center justify-center shrink-0">
+              <Target className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="text-sm font-bold text-gray-800">Fit Score</span>
+          </div>
           <span className={`px-2.5 py-1 text-[11px] font-bold rounded-full ${
             score >= 80 ? "bg-emerald-100 text-emerald-700"
             : score >= 60 ? "bg-amber-100 text-amber-700"
@@ -540,24 +560,24 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
               </div>
 
               <p className={`mt-2 text-sm font-bold ${sl.color}`}>{sl.text}</p>
-              <p className="mt-1 text-[11px] text-gray-400 text-center leading-snug px-4">
-                {score >= 80 ? "Great match for this role."
-                  : score >= 60 ? "Let's sharpen it for this specific role."
-                  : "Add relevant skills to improve your score."}
+              <p className="mt-0.5 text-[11px] text-gray-400 text-center leading-snug px-4">
+                {score >= 80 ? "Great match — you\'re a strong candidate."
+                  : score >= 60 ? "Good start. Add missing skills to boost your score."
+                  : "Add relevant skills to significantly improve your match."}
               </p>
 
               {/* Quick stats row */}
               <div className="flex gap-3 mt-4 w-full items-stretch">
-                <div className="flex-1 flex flex-col items-center justify-center bg-emerald-50 border border-emerald-100 rounded-xl py-3 min-h-15">
-                  <span className="text-xl font-black text-emerald-600 leading-none">{allMatched.length}</span>
+                <div className="flex-1 flex flex-col items-center justify-center bg-emerald-50 border border-emerald-100 rounded-xl py-3.5 min-h-15">
+                  <span className="text-2xl font-black text-emerald-600 leading-none">{allMatched.length}</span>
                   <span className="text-[10px] text-emerald-500 font-semibold mt-1">Matched</span>
                 </div>
-                <div className="flex-1 flex flex-col items-center justify-center bg-red-50 border border-red-100 rounded-xl py-3 min-h-15">
-                  <span className="text-xl font-black text-red-500 leading-none">{totalMissing}</span>
+                <div className="flex-1 flex flex-col items-center justify-center bg-red-50 border border-red-100 rounded-xl py-3.5 min-h-15">
+                  <span className="text-2xl font-black text-red-500 leading-none">{totalMissing}</span>
                   <span className="text-[10px] text-red-400 font-semibold mt-1">Missing</span>
                 </div>
-                <div className="flex-1 flex flex-col items-center justify-center bg-blue-50 border border-blue-100 rounded-xl py-3 min-h-15">
-                  <span className="text-xl font-black text-blue-600 leading-none">{allMatched.length + totalMissing}</span>
+                <div className="flex-1 flex flex-col items-center justify-center bg-blue-50 border border-blue-100 rounded-xl py-3.5 min-h-15">
+                  <span className="text-2xl font-black text-blue-600 leading-none">{allMatched.length + totalMissing}</span>
                   <span className="text-[10px] text-blue-400 font-semibold mt-1">Total</span>
                 </div>
               </div>
@@ -568,7 +588,10 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
               <>
                 <hr className="border-gray-100" />
                 <div className="space-y-3">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">SKILL BREAKDOWN</p>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1 h-3 bg-[#2557a7] rounded-full" />
+                    <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Skill Breakdown</p>
+                  </div>
                   {techTotal > 0 && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
@@ -608,7 +631,10 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
             {/* Opportunities */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">OPPORTUNITIES</p>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1 h-3 bg-red-400 rounded-full" />
+                  <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Opportunities</p>
+                </div>
                 {totalMissing > 0 && (
                   <span className="px-2 py-0.5 text-[10px] font-bold bg-red-50 text-red-500 rounded-full border border-red-100">
                     {totalMissing} to add
@@ -635,7 +661,10 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
               <>
                 <hr className="border-gray-100" />
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">MUST-HAVES</p>
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <div className="w-1 h-3 bg-emerald-500 rounded-full" />
+                    <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Matched Skills</p>
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
                     {allMatched.map(s => (
                       <span key={s} className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">

@@ -26,6 +26,9 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  // Keep onNotification in a ref so connect() doesn't need it as a dependency
+  const onNotificationRef = useRef(onNotification);
+  onNotificationRef.current = onNotification;
 
   // Connect to notification stream
   const connect = useCallback(() => {
@@ -38,7 +41,7 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
         (notification: Notification) => {
           setNotifications((prev) => [notification, ...prev]);
           setUnreadCount((prev) => prev + 1);
-          onNotification?.(notification);
+          onNotificationRef.current?.(notification);
         },
         () => {
           // Close and clear the dead connection so the next connect() call works
@@ -63,7 +66,7 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
       console.error('Failed to connect to notification stream:', err);
       setIsConnected(false);
     }
-  }, [onNotification]);
+  }, []);
 
   // Disconnect from notification stream
   const disconnect = useCallback(() => {
@@ -78,7 +81,7 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
     setIsConnected(false);
   }, []);
 
-  // Auto-connect on mount
+  // Auto-connect on mount — connect/disconnect are stable (no changing deps)
   useEffect(() => {
     if (autoConnect) {
       connect();
@@ -86,7 +89,8 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
     return () => {
       disconnect();
     };
-  }, [autoConnect, connect, disconnect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect]);
 
   // Mark notification as read
   const markAsRead = useCallback(async (notificationId: string) => {

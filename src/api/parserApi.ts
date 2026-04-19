@@ -97,6 +97,14 @@ export async function getResume(resume_id: string): Promise<ResumeData> {
   return await safeGet<ResumeData>(`/parser/get_resume/?resume_id=${resume_id}`);
 }
 
+export async function previewResume(resume_id: string): Promise<ResumeData> {
+  return await safeGet<ResumeData>(`/parser/preview/${resume_id}`);
+}
+
+export async function downloadResumeJson(resume_id: string): Promise<ResumeData> {
+  return await safeGet<ResumeData>(`/parser/download/${resume_id}`);
+}
+
 export async function deleteResume(resume_id: string): Promise<void> {
   await safeDelete(`/parser/delete_resume/${resume_id}`);
 }
