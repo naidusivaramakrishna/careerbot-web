@@ -151,8 +151,8 @@ function LoadingModal({
                 {[0, 150, 300].map((d) => (
                   <span
                     key={d}
-                    className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "#2557a7" }}
-                    style={{ animationDelay: `${d}ms` }}
+                    className="w-1.5 h-1.5 rounded-full animate-bounce"
+                    style={{ background: "#2557a7", animationDelay: `${d}ms` }}
                   />
                 ))}
               </div>
@@ -208,8 +208,8 @@ function LoadingModal({
                           {[0, 100, 200].map((d) => (
                             <span
                               key={d}
-                              className="w-1 h-1 rounded-full animate-bounce" style={{ background: "#2557a7" }}
-                              style={{ animationDelay: `${d}ms` }}
+                              className="w-1 h-1 rounded-full animate-bounce"
+                              style={{ background: "#2557a7", animationDelay: `${d}ms` }}
                             />
                           ))}
                         </span>

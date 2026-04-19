@@ -454,7 +454,7 @@ function PriorityGroup({
         style={{ background: "#ffffff", border: "1px solid #edf0f4", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
       >
         {/* Priority dot */}
-        <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-offset-1" style={{ background: accent, ringColor: `${accent}40` }} />
+        <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-offset-1" style={{ background: accent, outline: `2px solid ${accent}40`, outlineOffset: '1px' }} />
 
         {/* Title */}
         <span className="text-[13.5px] font-extrabold flex-1 text-left" style={{ color: accent }}>{title}</span>
