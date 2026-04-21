@@ -1,5 +1,5 @@
 import { httpClient } from "@/lib/http";
-import { setTenantId, clearTenantId } from '@/lib/tenantStorage';
+import { getTenantId, generateTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
 
 export interface LoginRequest {
   email: string;
@@ -39,17 +39,31 @@ export const isAuthenticated = async (): Promise<boolean> => {
 };
 
 export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
+  // Try to get tenant from email mapping (multi-account support)
+  let tenantId = getTenantByEmail(data.email);
+
+  // Fallback to active tenant if email not found in map
+  if (!tenantId) {
+    tenantId = getTenantId();
+  }
+
   const response = await httpClient.post<LoginResponse>(
     "/auth/signin",
     new URLSearchParams({
       username: data.email,
       password: data.password,
     }),
-    { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Tenant-Id": tenantId,
+      },
+    }
   );
 
+  // Update email → tenant mapping from backend response
   if (response.data.tenant_id) {
-    setTenantId(response.data.tenant_id);
+    setTenantForEmail(data.email, response.data.tenant_id);
   }
 
   return response.data;
@@ -57,7 +71,12 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
 
 export const signOut = async () => {
   await httpClient.post("/auth/signout").catch(() => {});
-  clearTenantId();
+
+  // ✅ KEEP tenant_id in localStorage
+  // User belongs to this tenant across sessions (per backend Option C)
+  // Backend clears httpOnly cookies automatically - we don't need to clear tenant_id
+  // clearTenantId() removed - allows re-login to same tenant
+
   ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText'].forEach(
     (key) => sessionStorage.removeItem(key)
   );
@@ -75,11 +94,23 @@ export const getLinkedInLoginUrl = async (): Promise<string> => {
 };
 
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
+  // Generate new tenant_id for this signup
+  const tenantId = generateTenantId();
+
   const response = await httpClient.post<SignUpResponse>(
     "/auth/signup",
-    data  );
+    data,
+    {
+      headers: {
+        "X-Tenant-Id": tenantId,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  // Store email → tenant mapping for multi-account support
   if (response.data.tenant_id) {
-    setTenantId(response.data.tenant_id);
+    setTenantForEmail(data.email, response.data.tenant_id);
   }
 
   return response.data;

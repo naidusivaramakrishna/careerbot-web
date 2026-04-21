@@ -45,6 +45,7 @@ const JobManagement = () => {
   const [jobToDelete, setJobToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [formData, setFormData] = useState<JobFormData | null>(null)
+  const [previewJobId, setPreviewJobId] = useState<string | undefined>(undefined)
   const [editingJobDetails, setEditingJobDetails] = useState<JobDetailsResponse | null>(null)
   const [loadingJobDetails, setLoadingJobDetails] = useState(false)
 
@@ -141,8 +142,9 @@ const JobManagement = () => {
     setPageState("add")
   }, [])
 
-  const handlePreview = useCallback((data: JobFormData) => {
+  const handlePreview = useCallback((data: JobFormData, jobId?: string) => {
     setFormData(data)
+    setPreviewJobId(jobId)
     setPageState("preview")
   }, [])
 
@@ -150,6 +152,7 @@ const JobManagement = () => {
     setPageState("list")
     setEditingJobDetails(null)
     setFormData(null)
+    setPreviewJobId(undefined)
     fetchJobs()
     toast.success('Job published successfully!')
   }, [fetchJobs])
@@ -158,6 +161,7 @@ const JobManagement = () => {
     setPageState("list")
     setEditingJobDetails(null)
     setFormData(null)
+    setPreviewJobId(undefined)
     fetchJobs()
     toast.success('Job saved as draft successfully!')
   }, [fetchJobs])
@@ -166,6 +170,7 @@ const JobManagement = () => {
     setPageState("list")
     setEditingJobDetails(null)
     setFormData(null)
+    setPreviewJobId(undefined)
   }, [])
 
   const handleBackToEdit = useCallback(() => {
@@ -193,6 +198,7 @@ const JobManagement = () => {
         data={formData}
         onPublish={handleJobPublished}
         onBack={handleBackToEdit}
+        jobId={previewJobId}
       />
     )
   }

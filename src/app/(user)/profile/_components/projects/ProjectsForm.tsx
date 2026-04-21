@@ -83,11 +83,10 @@ export default function ProjectsForm({
                         name="project_name"
                         value={projectsForm.project_name || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("project_name")
+                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("project_name")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("project_name") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("project_name")}</p>
@@ -102,11 +101,10 @@ export default function ProjectsForm({
                         name="role"
                         value={projectsForm.role || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("role")
+                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("role")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("role") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("role")}</p>
@@ -122,11 +120,10 @@ export default function ProjectsForm({
                         value={projectsForm.technologies || ""}
                         onChange={handleChange}
                         placeholder="e.g. React, Node.js, MongoDB"
-                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("technologies")
+                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("technologies")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("technologies") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("technologies")}</p>
@@ -144,11 +141,10 @@ export default function ProjectsForm({
                             name={field}
                             value={String((projectsForm as Record<string, unknown>)[field] || "")}
                             onChange={handleChange}
-                            className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-                                getFieldError(field)
+                            className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError(field)
                                     ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                     : "border-neutral-200"
-                            }`}
+                                }`}
                         />
                         {getFieldError(field) && (
                             <p className="text-red-600 text-xs mt-1">{getFieldError(field)}</p>
@@ -164,11 +160,10 @@ export default function ProjectsForm({
                         name="project_link"
                         value={projectsForm.project_link || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("project_link")
+                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("project_link")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("project_link") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("project_link")}</p>

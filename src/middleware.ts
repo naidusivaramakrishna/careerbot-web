@@ -27,8 +27,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    const token = request.cookies.get('access_token')?.value;
-    const refreshToken = request.cookies.get('refresh_token')?.value;
+    // Check for both regular and admin-prefixed token names
+    const token = request.cookies.get('access_token')?.value ||
+                  request.cookies.get('admin_access_token')?.value;
+    const refreshToken = request.cookies.get('refresh_token')?.value ||
+                         request.cookies.get('admin_refresh_token')?.value;
 
     if (!token && !refreshToken) {
         const loginUrl = pathname.startsWith(ADMIN_PREFIX)

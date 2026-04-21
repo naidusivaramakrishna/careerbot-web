@@ -215,6 +215,3 @@ export default function CertificationsSection({
         </div>
     );
 }
-
-
-

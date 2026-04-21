@@ -87,9 +87,12 @@ client.interceptors.request.use(
       config.headers['X-Correlation-ID'] = correlationId;
     }
 
-    const tenantId = getTenantId();
-    if (tenantId && config.headers) {
-      config.headers['X-Tenant-Id'] = tenantId;
+    // Only add X-Tenant-Id if not already set (signup/signin set it explicitly)
+    if (!config.headers['X-Tenant-Id']) {
+      const tenantId = getTenantId();
+      if (tenantId && config.headers) {
+        config.headers['X-Tenant-Id'] = tenantId;
+      }
     }
 
     if (config.method?.toLowerCase() === 'get') {

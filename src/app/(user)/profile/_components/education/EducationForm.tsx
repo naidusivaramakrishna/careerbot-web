@@ -46,8 +46,8 @@ export default function EducationForm({
       [name]: isDateField
         ? toISODate(value)
         : name === "cgpa"
-        ? value === "" ? undefined : parseFloat(value)
-        : value,
+          ? value === "" ? undefined : parseFloat(value)
+          : value,
     }));
   };
 
@@ -63,11 +63,10 @@ export default function EducationForm({
             name="institution"
             value={educationForm.institution || ""}
             onChange={handleChange}
-            className={`border p-2.5 text-sm rounded-lg bg-gray-100 transition-colors ${
-              getFieldError("institution")
+            className={`border p-2.5 text-sm rounded-lg bg-gray-100 transition-colors ${getFieldError("institution")
                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                 : "border-neutral-200"
-            }`}
+              }`}
           />
           {getFieldError("institution") && (
             <p className="text-red-600 text-xs mt-1">{getFieldError("institution")}</p>
@@ -110,11 +109,10 @@ export default function EducationForm({
             value={educationForm.cgpa || ""}
             onChange={handleChange}
             placeholder="e.g., 7.5"
-            className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-              getFieldError("cgpa")
+            className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("cgpa")
                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                 : "border-neutral-200"
-            }`}
+              }`}
           />
           {getFieldError("cgpa") && (
             <p className="text-red-600 text-xs mt-1">{getFieldError("cgpa")}</p>
@@ -132,11 +130,10 @@ export default function EducationForm({
               name={field}
               value={String((educationForm as Record<string, unknown>)[field] || "")}
               onChange={handleChange}
-              className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-                getFieldError(field)
+              className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError(field)
                   ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                   : "border-neutral-200"
-              }`}
+                }`}
             />
             {getFieldError(field) && (
               <p className="text-red-600 text-xs mt-1">{getFieldError(field)}</p>

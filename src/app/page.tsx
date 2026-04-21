@@ -1,14 +1,23 @@
 "use client"
 import AuthModal from "@/components/SignUpModal";
+import { useTenant } from "@/contexts/TenantContext";
 import { useEffect, useState } from "react";
 
 export default function Home() {
   const [open, setOpen] = useState(false)
   const [initialFormType, setInitialFormType] = useState<"signup" | "signin">("signup")
+  const { setActiveTenant } = useTenant()
 
   useEffect(() => {
-    // Check for showLogin query parameter (from http.ts redirect)
+    // Check for URL query parameters
     const params = new URLSearchParams(window.location.search);
+
+    // Set tenant from URL parameter if provided
+    const tenantId = params.get('tenant_id');
+    if (tenantId) {
+      setActiveTenant(tenantId);
+    }
+
     if (params.get('showLogin') === 'true') {
       setInitialFormType("signin");
       setOpen(true);

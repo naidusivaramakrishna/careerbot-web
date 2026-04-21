@@ -49,8 +49,8 @@ export default function CertificationForm({
                         value={certificationForm.certification_name || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("certification_name")
-                                ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
-                                : "border-neutral-200"
+                            ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
+                            : "border-neutral-200"
                             }`}
                     />
                     {getFieldError("certification_name") && (
@@ -65,8 +65,8 @@ export default function CertificationForm({
                         value={certificationForm.issuer || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("issuer")
-                                ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
-                                : "border-neutral-200"
+                            ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
+                            : "border-neutral-200"
                             }`}
                     />
                     {getFieldError("issuer") && (
@@ -81,8 +81,8 @@ export default function CertificationForm({
                         value={certificationForm.start_date || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("start_date")
-                                ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
-                                : "border-neutral-200"
+                            ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
+                            : "border-neutral-200"
                             }`}
                     />
                     {getFieldError("start_date") && (
@@ -97,8 +97,8 @@ export default function CertificationForm({
                         value={certificationForm.end_date || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("end_date")
-                                ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
-                                : "border-neutral-200"
+                            ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
+                            : "border-neutral-200"
                             }`}
                     />
                     {getFieldError("end_date") && (
