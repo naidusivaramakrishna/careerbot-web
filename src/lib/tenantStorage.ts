@@ -3,12 +3,15 @@ const TENANT_MAP_KEY = 'careerbot_email_tenant_map';
 const DEFAULT_TENANT = 'public';
 
 /**
- * Generate a random tenant_id for new signups
- * Format: tenant_<random_alphanumeric>
- * Backend will echo this back in the response
+ * Generate tenant_id for new signups
+ * Currently returns "public" for all signups
+ * TODO: In future, generate random tenant_id (format: tenant_<random>)
+ * when multi-tenant organization support is required
  */
 export function generateTenantId(): string {
-  return 'tenant_' + Math.random().toString(36).substring(2, 11);
+  // Temporary: Use "public" for all signups
+  // Future: return 'tenant_' + Math.random().toString(36).substring(2, 11);
+  return 'public';
 }
 
 /**

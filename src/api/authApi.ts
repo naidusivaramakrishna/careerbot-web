@@ -1,5 +1,5 @@
 import { httpClient } from "@/lib/http";
-import { getTenantId, generateTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
+import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
 
 export interface LoginRequest {
   email: string;
@@ -94,8 +94,8 @@ export const getLinkedInLoginUrl = async (): Promise<string> => {
 };
 
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
-  // Generate new tenant_id for this signup
-  const tenantId = generateTenantId();
+  // Use "public" tenant for all signups (temporary - will generate random tenant_id in future)
+  const tenantId = "public";
 
   const response = await httpClient.post<SignUpResponse>(
     "/auth/signup",
