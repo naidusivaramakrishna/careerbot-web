@@ -1,6 +1,7 @@
 "use client"
 
 import React, { memo, useState, useCallback } from 'react'
+import Image from 'next/image'
 import { MapPin, CirclePlay, Banknote, Briefcase } from 'lucide-react'
 import { IoHourglassOutline } from 'react-icons/io5'
 import { createJob, uploadJobLogo, type CreateJobRequest } from '@/api/adminJobsApi'
@@ -12,29 +13,40 @@ interface PreviewJobPageProps {
     data?: JobFormData | null
     onPublish: () => void
     onBack: () => void
+    jobId?: string
 }
 
-const JobPreviewHeader = memo(({ title, company, logo }: {
+const JobPreviewHeader = memo(({ title, company, logo, jobId }: {
     title: string
     company: string
     logo?: string | null
-}) => (
-    <div className="flex justify-between items-start">
-        <div>
-            <h1 className="text-xl font-semibold mb-2">{title || "Job Title"}</h1>
-            <p className="text-gray-600 mb-4">{company || "Company Name"}</p>
+    jobId?: string
+}) => {
+    // Determine logo source
+    let logoSrc = logo
+    if (jobId && logo && !logo.startsWith('data:')) {
+        // For existing jobs, use API endpoint if logo is not a data URL
+        logoSrc = `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}/api/v1/admin/jobs/${jobId}/logo`
+    }
+
+    return (
+        <div className="flex justify-between items-start">
+            <div>
+                <h1 className="text-xl font-semibold mb-2">{title || "Job Title"}</h1>
+                <p className="text-gray-600 mb-4">{company || "Company Name"}</p>
+            </div>
+            <div className="ml-6">
+                {logoSrc ? (
+                    <Image src={logoSrc} alt={company} width={64} height={64} className="rounded object-cover" priority />
+                ) : (
+                    <div className="w-16 h-16 bg-[#D9D9D9] rounded flex items-center justify-center font-semibold text-xl">
+                        {company ? company.charAt(0).toUpperCase() : "C"}
+                    </div>
+                )}
+            </div>
         </div>
-        <div className="ml-6">
-            {logo ? (
-                <img src={logo} alt={company} className="w-16 h-16 rounded object-cover" style={{ width: '64px', height: '64px' }} />
-            ) : (
-                <div className="w-16 h-16 bg-[#D9D9D9] rounded flex items-center justify-center font-semibold text-xl">
-                    {company ? company.charAt(0).toUpperCase() : "C"}
-                </div>
-            )}
-        </div>
-    </div>
-))
+    )
+})
 
 JobPreviewHeader.displayName = 'JobPreviewHeader'
 

@@ -86,24 +86,53 @@ const PRIORITY_META = {
 function extractIssueCards(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
   const cards: IssueCard[] = [];
   let idCounter = 0;
-  const seenIssues = new Set<string>();
+  const seen = new Set<string>();
 
+  // When the backend provides a suggestions array, use ONLY that — it is the authoritative list.
+  const suggestions = breakdown.Suggestions as unknown[] | undefined;
+  if (Array.isArray(suggestions) && suggestions.length > 0) {
+    suggestions.forEach((s: unknown) => {
+      const isObj = typeof s === "object" && s !== null;
+      const suggId = isObj && "id" in (s as Record<string, unknown>)
+        ? String((s as Record<string, unknown>).id) : "";
+      // Skip AI-generated summary/contribution enhancements — not actionable issues
+      if (suggId.startsWith("suggested_summary_") || /_suggested_contribution_\d+$/.test(suggId)) return;
+      const description = isObj && "message" in (s as Record<string, unknown>)
+        ? String((s as Record<string, unknown>).message)
+        : typeof s === "string" ? s : String(s);
+      const sectionName = isObj && "section" in (s as Record<string, unknown>)
+        ? String((s as Record<string, unknown>).section) : "General";
+      const key = `${sectionName}:${description}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      // Determine priority from the section's percentage in the breakdown
+      const sectionData = breakdown[sectionName] as BreakdownItem | undefined;
+      let pct = 100;
+      if (sectionData && typeof sectionData === "object") {
+        const directPct = sectionData.percentage;
+        const maxScore = sectionData.max_raw_score || sectionData.max || sectionData.max_score || 0;
+        const score = sectionData.raw_score ?? sectionData.score ?? 0;
+        pct = typeof directPct === "number" ? directPct : maxScore > 0 ? (score / maxScore) * 100 : 100;
+      }
+      const priority: IssueCard["priority"] = pct === 0 ? "critical" : pct < 80 ? "urgent" : "optional";
+      cards.push({ id: `issue-${idCounter++}`, priority, section: sectionName, description, suggestion: `Review and improve the ${sectionName} section.` });
+    });
+    return cards;
+  }
+
+  // Fallback: no suggestions array — extract from section breakdown deductions directly.
   Object.entries(breakdown).forEach(([section, data]) => {
     if (section === "Suggestions") return;
     if (section === "Formatting" && breakdown.FormattingEnhanced) return;
-
     const item = data as BreakdownItem;
     if (!item || typeof item !== "object") return;
-
     const deductions = item.deductions || [];
     const directPct = item.percentage;
     const maxScore = item.max_raw_score || item.max || item.max_score || 0;
     const score = item.raw_score ?? item.score ?? 0;
     const percentage = typeof directPct === "number" ? directPct
       : maxScore > 0 ? (score / maxScore) * 100 : 100;
-
     const displaySection = section.replace(/Enhanced$/, "");
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     deductions.forEach((deduction: any) => {
       let deductionText: string;
@@ -114,27 +143,16 @@ function extractIssueCards(breakdown: ResumeScoreData["Breakdown"]): IssueCard[]
       } else {
         return;
       }
-
       const uniqueKey = `${displaySection}:${deductionText}`;
-      if (seenIssues.has(uniqueKey)) return;
-      seenIssues.add(uniqueKey);
-      const priority = percentage === 0 || section === "Experience" ? "critical" : percentage < 80 ? "urgent" : "optional";
+      if (seen.has(uniqueKey)) return;
+      seen.add(uniqueKey);
+      const deductionPenalty = typeof deduction === "object" && deduction !== null
+        ? (deduction as Record<string, unknown>).penalty : undefined;
+      if (deductionPenalty === 0) return; // Skip zero-penalty informational notes
+      const priority: IssueCard["priority"] = percentage === 0 ? "critical" : percentage < 80 ? "urgent" : "optional";
       cards.push({ id: `issue-${idCounter++}`, priority, section: displaySection, description: deductionText, suggestion: `Review and improve the ${displaySection} section.` });
     });
   });
-
-  const suggestions = breakdown.Suggestions as string[] | undefined;
-  if (Array.isArray(suggestions)) {
-    suggestions.forEach((s: string) => {
-      const colonIdx = s.indexOf(":");
-      const sectionName = colonIdx > 0 ? s.slice(0, colonIdx).trim() : "General";
-      const description = colonIdx > 0 ? s.slice(colonIdx + 1).trim() : s;
-      const key = `${sectionName}:${description}`;
-      if (seenIssues.has(key)) return;
-      seenIssues.add(key);
-      cards.push({ id: `issue-${idCounter++}`, priority: "optional", section: sectionName, description, suggestion: `Improve ${sectionName}.` });
-    });
-  }
 
   return cards;
 }
@@ -177,7 +195,7 @@ function transformATSDataToScoreFormat(atsData: any): ResumeScoreData {
       Keywords: breakdown.Keywords || breakdown.keywords || { score: 0, max_score: 30, details: {} },
       LengthScore: breakdown.LengthScore || breakdown.length_score || { score: 0, max_score: 10, details: {} },
       StructureScore: breakdown.StructureScore || breakdown.structure_score || { score: 0, max_score: 20, details: {} },
-      Suggestions: atsData?.ats_score?.Suggestions || breakdown.Suggestions || [],
+      Suggestions: atsData?.suggestions || atsData?.Suggestions || atsData?.ats_score?.Suggestions || breakdown.Suggestions || [],
     },
     Fresher: atsData?.Fresher ?? true,
     Domain: atsData?.Domain || "General",

@@ -40,7 +40,7 @@ export const useResumePDF = (resumeId: string | null, matchId?: string | null) =
         // Include match_id to get JD-matched skills highlighted
         const matchParam = matchId ? `&match_id=${matchId}` : '';
         const resp = await httpClient.get(
-          `/parser/download/${resumeId}?format=pdf&_=${cacheBuster}${matchParam}&nocache=${cacheBuster}`,
+          `/parser/download/${resumeId}?format=pdf&template_id=minimalist_classic&preserve_template=false&_=${cacheBuster}${matchParam}&nocache=${cacheBuster}`,
           {
             responseType: "blob",
             headers: {

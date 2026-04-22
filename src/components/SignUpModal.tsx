@@ -64,6 +64,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
         setErrors({ email: "", username: "", password: "", login: "" })
         setLoading((prev) => ({ ...prev, signUp: true }))
         try {
+            // Tenant ID is auto-generated and set in context
+            // httpClient will add X-Tenant-Id header automatically
             await signUp(signUpForm)
 
             // Show email verification message instead of auto-login
@@ -82,8 +84,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
         setErrors((prev) => ({ ...prev, login: "" }))
         setLoading((prev) => ({ ...prev, login: true }))
         try {
-            // ✅ Tokens are in httpOnly cookies - browser manages them automatically
-            // ❌ No need to manually store tokens
+            // Tenant ID is auto-generated and set in context
+            // httpClient will add X-Tenant-Id header automatically
             await signIn(loginForm)
             toast.success("Login successful")
             setLoginForm({ email: "", password: "" })

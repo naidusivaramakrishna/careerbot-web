@@ -15,8 +15,8 @@ function cbIconFallback(parent, size) { // safe: static SVG, no user data
   parent.replaceChildren(svg);
 }
 
-const BASE_URL  = 'http://localhost:8000/api/v1';
-const PORTAL_URL = 'http://localhost:3000';
+const BASE_URL   = CAREERBOT_CONFIG.BASE_URL;
+const PORTAL_URL = CAREERBOT_CONFIG.PORTAL_URL;
 
 // ─── State refs ───────────────────────────────────────────────────────────────
 const states = {

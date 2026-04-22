@@ -13,7 +13,25 @@ interface JobMatchTemplateProps {
   fontFamily?: string;
 }
 
-const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection, editOverrides, addedFields, onEditSection, onDeleteSection, deletedSections, fontFamily }) => {
+// Deep-sanitize parser {value,source} wrappers so no object reaches JSX as a child
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deepSanitize(val: any): any {
+  if (val === null || val === undefined) return val;
+  if (typeof val !== 'object') return val;
+  if (Array.isArray(val)) return val.map(deepSanitize);
+  if ('source' in val && 'value' in val) {
+    const v = val.value;
+    if (v === null || v === undefined) return '';
+    return deepSanitize(v);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: Record<string, any> = {};
+  for (const key of Object.keys(val)) result[key] = deepSanitize(val[key]);
+  return result;
+}
+
+const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, activeSection, editOverrides, addedFields, onEditSection, onDeleteSection, deletedSections, fontFamily }) => {
+  const data = deepSanitize(rawData);
   const deleted = deletedSections ?? [];
   const af = addedFields ?? {};
 
@@ -69,12 +87,24 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
   const parsedData = data?.parsed_data || data || {};
   const llmData = parsedData?.llm_data || {};
 
+  // Helper: unwrap {value, source} objects emitted by some resume parsers
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const toStr = (v: any): string => {
+    if (typeof v === "string") return v;
+    if (v && typeof v === "object") {
+      if (typeof v.value === "string") return v.value;
+      if (typeof v.text === "string") return v.text;
+      if (typeof v.name === "string") return v.name;
+    }
+    return "";
+  };
+
   // ============================================
   // PERSONAL INFO / CONTACT
   // ============================================
   const contact = data?.contact || parsedData.contact || llmData.contact || llmData.personal_info || {};
 
-  const name =
+  const name = toStr(
     ov.contact?.name ||
     data?.contact?.name ||
     data?.contact?.full_name ||
@@ -91,30 +121,30 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
     llmData.personal_info?.name ||
     llmData.personal_info?.full_name ||
     llmData.personal_info?.fullName ||
-    parsedData.personalInfo?.fullName ||
-    "Your Name";
+    parsedData.personalInfo?.fullName
+  ) || "Your Name";
 
-  const title =
+  const title = toStr(
     ov.contact?.title ||
     contact.title ||
     contact.role ||
     contact.designation ||
     contact.job_title ||
     parsedData.title ||
-    llmData.title ||
-    "";
+    llmData.title
+  );
 
-  const email =
+  const email = toStr(
     ov.contact?.email ||
     data?.contact?.email ||
     contact.email ||
     parsedData.email ||
     llmData.email ||
     llmData.personal_info?.email ||
-    parsedData.personalInfo?.email ||
-    "";
+    parsedData.personalInfo?.email
+  );
 
-  const phone =
+  const phone = toStr(
     ov.contact?.phone ||
     data?.contact?.phone ||
     data?.contact?.phone_number ||
@@ -128,10 +158,10 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
     llmData.mobile ||
     llmData.personal_info?.phone ||
     llmData.personal_info?.mobile ||
-    parsedData.personalInfo?.phone ||
-    "";
+    parsedData.personalInfo?.phone
+  );
 
-  const location =
+  const location = toStr(
     ov.contact?.location ||
     data?.contact?.location ||
     data?.contact?.address ||
@@ -140,12 +170,11 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
     parsedData.location ||
     llmData.location ||
     llmData.personal_info?.location ||
-    parsedData.personalInfo?.location ||
-    "";
+    parsedData.personalInfo?.location
+  );
 
   // Social links
   const socialLinks = parsedData.social_links || llmData.social_links || parsedData.personalInfo || {};
-  const toStr = (v: any) => (typeof v === "string" ? v : ""); // eslint-disable-line @typescript-eslint/no-explicit-any
   const linkedin = toStr(ov.contact?.linkedin || socialLinks.linkedIn || socialLinks.linkedin || socialLinks.linkedinUrl || contact.linkedin);
   const github = toStr(ov.contact?.github || socialLinks.github || socialLinks.GitHub || socialLinks.githubUrl || contact.github);
   const portfolio = toStr(ov.contact?.portfolio || socialLinks.portfolio || socialLinks.website || socialLinks.portifolioUrl || contact.website);
@@ -166,6 +195,10 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
     llmData.summary ||
     "");
 
+  // Unwrap {value,source} objects before string checks
+  if (professionalSummary && typeof professionalSummary === 'object') {
+    professionalSummary = toStr(professionalSummary);
+  }
   if (typeof professionalSummary === 'string' && professionalSummary.startsWith('{')) {
     try {
       const parsed = JSON.parse(professionalSummary);
@@ -230,9 +263,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
   }
   skills = skills.map((s: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (typeof s === 'object' && s !== null) {
-      return s.skill || s.name || s;
+      return toStr(s.skill || s.name || s.value || s);
     }
-    return s;
+    return toStr(s);
   }).filter(Boolean);
 
   // Add newly_added_skills (TECHNICAL only) if present — skip when override is active
@@ -249,9 +282,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
   if (!Array.isArray(softSkills)) softSkills = [];
   softSkills = softSkills.map((s: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (typeof s === 'object' && s !== null) {
-      return s.skill || s.name || s;
+      return toStr(s.skill || s.name || s.value || s);
     }
-    return s;
+    return toStr(s);
   }).filter(Boolean);
 
   // Add newly_added_soft_skills (SOFT only) if present
@@ -388,10 +421,21 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
   // Parse description to array
   const parseDescription = (desc: any): string[] => { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (!desc) return [];
-    if (Array.isArray(desc)) return desc.filter(Boolean);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unwrap = (item: any): string => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object') {
+        if (typeof item.value === 'string') return item.value;
+        if (typeof item.text === 'string') return item.text;
+      }
+      return String(item ?? '');
+    };
+    if (Array.isArray(desc)) return desc.map(unwrap).filter(Boolean);
     if (typeof desc === 'string') {
-      // Try to split by common delimiters
       return desc.split(/\n+|•|\*|-(?=\s)/).map((s: string) => s.trim()).filter(Boolean);
+    }
+    if (desc && typeof desc === 'object') {
+      if (typeof desc.value === 'string') return desc.value ? [desc.value] : [];
     }
     return [];
   };
@@ -530,11 +574,11 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="experience" />
             <h2 style={headingStyle}>WORK EXPERIENCE</h2>
             {workExperience.map((exp: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const role = exp.role || exp.title || exp.position || "";
-              const company = exp.company || exp.organization || exp.employer || "";
-              const expLocation = exp.location || "";
-              const startDate = exp.startDate || exp.start_date || exp.from || exp.start || "";
-              const endDate = exp.currentlyWorking ? "Present" : (exp.endDate || exp.end_date || exp.to || exp.end || "");
+              const role = toStr(exp.role || exp.title || exp.position);
+              const company = toStr(exp.company || exp.organization || exp.employer);
+              const expLocation = toStr(exp.location);
+              const startDate = toStr(exp.startDate || exp.start_date || exp.from || exp.start);
+              const endDate = exp.currentlyWorking ? "Present" : toStr(exp.endDate || exp.end_date || exp.to || exp.end);
               const description = parseDescription(exp.description || exp.responsibilities || exp.key_contributions);
 
               const itemChanged = hlIdx('experience', idx);
@@ -570,12 +614,12 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="education" />
             <h2 style={headingStyle}>EDUCATION</h2>
             {education.map((edu: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const degree = edu.degree || edu.qualification || edu.program || "";
-              const school = edu.school || edu.institution || edu.university || edu.college || "";
-              const branch = edu.branch || edu.field || edu.specialization || "";
-              const startDate = edu.startDate || edu.start_date || edu.from || "";
-              const endDate = edu.endDate || edu.end_date || edu.to || edu.graduation_year || edu.passed_out || edu.year || "";
-              const grade = edu.grade || edu.gpa || edu.GPA || edu.cgpa || edu.CGPA || edu.percentage || "";
+              const degree = toStr(edu.degree || edu.qualification || edu.program);
+              const school = toStr(edu.school || edu.institution || edu.university || edu.college);
+              const branch = toStr(edu.branch || edu.field || edu.specialization);
+              const startDate = toStr(edu.startDate || edu.start_date || edu.from);
+              const endDate = toStr(edu.endDate || edu.end_date || edu.to || edu.graduation_year || edu.passed_out || edu.year);
+              const grade = toStr(edu.grade || edu.gpa || edu.GPA || edu.cgpa || edu.CGPA || edu.percentage);
 
               const itemChanged = hlIdx('education', idx);
               return (
@@ -606,13 +650,16 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="projects" />
             <h2 style={headingStyle}>PROJECTS</h2>
             {projects.map((proj: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const title = proj.title || proj.name || proj.projectName || "";
-              const link = proj.link || proj.url || "";
-              const startDate = proj.startDate || proj.start_date || "";
-              const endDate = proj.endDate || proj.end_date || proj.date || proj.period || "";
-              const description = proj.description || proj.summary || "";
-              const technologies = proj.technologies || proj.techStack || proj.tools || [];
-              const responsibilities = parseDescription(proj.responsibilities || proj.key_contributions || proj.contributions);
+              const title = toStr(proj.title || proj.name || proj.projectName);
+              const link = toStr(proj.link || proj.url);
+              const startDate = toStr(proj.startDate || proj.start_date);
+              const endDate = toStr(proj.endDate || proj.end_date || proj.date || proj.period);
+              const description = toStr(proj.description || proj.summary);
+              const rawTech = proj.technologies || proj.techStack || proj.tools;
+              const technologies: string[] = Array.isArray(rawTech)
+                ? rawTech.map((t: any) => toStr(t)).filter(Boolean) // eslint-disable-line @typescript-eslint/no-explicit-any
+                : rawTech ? [toStr(rawTech)].filter(Boolean) : [];
+              const responsibilities = parseDescription(proj.responsibilities || proj.key_contributions || proj.contributions || proj.bullets || proj.bullet_points || proj.points || proj.highlights || proj.details);
 
               const itemChanged = hlIdx('projects', idx);
               return (
@@ -643,7 +690,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
                   {technologies.length > 0 && (
                     <div className="text-sm text-gray-600 mt-1">
                       <span className="font-semibold">Technologies:</span>{" "}
-                      {Array.isArray(technologies) ? technologies.join(", ") : technologies}
+                      {technologies.join(", ")}
                     </div>
                   )}
                 </div>
@@ -660,11 +707,11 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="internships" />
             <h2 style={headingStyle}>INTERNSHIPS</h2>
             {internships.map((intern: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const role = intern.role || intern.title || intern.position || "";
-              const company = intern.company || intern.organization || "";
-              const internLocation = intern.location || "";
-              const startDate = intern.startDate || intern.start_date || intern.from || "";
-              const endDate = intern.currentlyWorking ? "Present" : (intern.endDate || intern.end_date || intern.to || intern.duration || "");
+              const role = toStr(intern.role || intern.title || intern.position);
+              const company = toStr(intern.company || intern.organization);
+              const internLocation = toStr(intern.location);
+              const startDate = toStr(intern.startDate || intern.start_date || intern.from);
+              const endDate = intern.currentlyWorking ? "Present" : toStr(intern.endDate || intern.end_date || intern.to || intern.duration);
               const description = parseDescription(intern.description || intern.responsibilities || intern.key_contributions);
 
               const itemChanged = hlIdx('internships', idx);
@@ -700,24 +747,33 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="certifications" />
             <h2 style={headingStyle}>CERTIFICATIONS</h2>
             {certifications.map((cert: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const certName = typeof cert === 'string' ? cert : (cert.name || cert.title || cert.certification || "");
-              const issuedBy = typeof cert === 'object' ? (cert.issuedBy || cert.issued_by || cert.issuer || "") : "";
-              const year = typeof cert === 'object' ? (cert.year || cert.date || "") : "";
-              const expiryDate = typeof cert === 'object' ? (cert.expiryDate || cert.expiry_date || "") : "";
-              const credentialId = typeof cert === 'object' ? (cert.credentialId || cert.credential_id || "") : "";
+              const certName = typeof cert === 'string' ? cert : toStr(cert.name || cert.title || cert.certification || cert.course_name || cert.course || cert.program || cert.text);
+              const issuedBy = typeof cert === 'object' ? toStr(cert.issuedBy || cert.issued_by || cert.issuer || cert.institution || cert.organization || cert.provider || cert.institute) : "";
+              const year = typeof cert === 'object' ? toStr(cert.year || cert.date || cert.completion_date || cert.issued_date) : "";
+              const expiryDate = typeof cert === 'object' ? toStr(cert.expiryDate || cert.expiry_date) : "";
+              const credentialId = typeof cert === 'object' ? toStr(cert.credentialId || cert.credential_id) : "";
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const certBullets: string[] = typeof cert === 'object' ? parseDescription(cert.bullets || cert.bullet_points || cert.points || cert.highlights || cert.responsibilities || cert.description || cert.details) : [];
 
               if (!certName) return null;
 
               const itemChanged = hlIdx('certifications', idx);
               return (
-                <div key={idx} className="mb-2 flex items-start text-sm text-gray-700" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
-                  <span className="mr-2">•</span>
-                  <div>
-                    <span className="font-medium">{certName}</span>
-                    {issuedBy && <span>{', ' + issuedBy}</span>}
-                    {year && <span className="text-xs ml-2">({year})</span>}
-                    {expiryDate && <span className="text-xs ml-2">(Expires: {expiryDate})</span>}
-                    {credentialId && <div className="text-xs text-gray-500">Credential ID: {credentialId}</div>}
+                <div key={idx} className="mb-3" style={itemChanged ? { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: "3px", padding: "2px 4px" } : undefined}>
+                  <div className="flex items-start text-sm text-gray-700">
+                    <span className="mr-2 mt-0.5">•</span>
+                    <div className="flex-1">
+                      <span className="font-medium">{certName}</span>
+                      {issuedBy && <span className="font-medium">{', ' + issuedBy}</span>}
+                      {year && <span className="text-xs ml-2 text-gray-500">({year})</span>}
+                      {expiryDate && <span className="text-xs ml-2 text-gray-500">(Expires: {expiryDate})</span>}
+                      {credentialId && <div className="text-xs text-gray-500 mt-0.5">Credential ID: {credentialId}</div>}
+                      {certBullets.length > 0 && (
+                        <ul className="list-disc pl-5 mt-1 space-y-0.5 text-sm text-gray-700">
+                          {certBullets.map((b, i) => <li key={i}>{b}</li>)}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -733,9 +789,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="achievements" />
             <h2 style={headingStyle}>ACHIEVEMENTS</h2>
             {achievements.map((achievement: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const title = typeof achievement === 'string' ? achievement : (achievement.title || achievement.name || "");
-              const description = typeof achievement === 'object' ? (achievement.description || "") : "";
-              const date = typeof achievement === 'object' ? (achievement.date || "") : "";
+              const title = typeof achievement === 'string' ? achievement : toStr(achievement.title || achievement.name);
+              const description = typeof achievement === 'object' ? toStr(achievement.description) : "";
+              const date = typeof achievement === 'object' ? toStr(achievement.date) : "";
 
               if (!title) return null;
 
@@ -761,9 +817,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="awards" />
             <h2 style={headingStyle}>AWARDS</h2>
             {awards.map((award: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const title = typeof award === 'string' ? award : (award.title || award.name || "");
-              const issuedBy = typeof award === 'object' ? (award.issuedBy || award.issued_by || award.organization || "") : "";
-              const year = typeof award === 'object' ? (award.year || award.date || "") : "";
+              const title = typeof award === 'string' ? award : toStr(award.title || award.name);
+              const issuedBy = typeof award === 'object' ? toStr(award.issuedBy || award.issued_by || award.organization) : "";
+              const year = typeof award === 'object' ? toStr(award.year || award.date) : "";
 
               if (!title) return null;
               const itemChanged = hlIdx('awards', idx);
@@ -789,11 +845,11 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="volunteering" />
             <h2 style={headingStyle}>VOLUNTEERING</h2>
             {volunteering.map((vol: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const role = vol.role || vol.title || vol.position || "";
-              const organization = vol.organization || vol.company || "";
-              const startDate = vol.startDate || vol.start_date || "";
-              const endDate = vol.endDate || vol.end_date || "";
-              const description = vol.description || "";
+              const role = toStr(vol.role || vol.title || vol.position);
+              const organization = toStr(vol.organization || vol.company);
+              const startDate = toStr(vol.startDate || vol.start_date);
+              const endDate = toStr(vol.endDate || vol.end_date);
+              const description = toStr(vol.description);
               const itemChanged = hlIdx('volunteering', idx);
               return (
                 <div key={idx} className="mb-3" style={itemChanged ? { borderLeft: "3px solid rgba(34,197,94,0.6)", paddingLeft: "8px", backgroundColor: "rgba(34,197,94,0.07)", borderRadius: "0 4px 4px 0" } : undefined}>
@@ -822,9 +878,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <h2 style={headingStyle}>HOBBIES</h2>
             <div className="text-sm text-gray-700">
               {hobbies.map((hobby: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-                const hobbyName = typeof hobby === 'string' ? hobby : (hobby.name || hobby.title || "");
-                const description = typeof hobby === 'object' ? (hobby.description || "") : "";
-                const proficiencyLevel = typeof hobby === 'object' ? (hobby.proficiencyLevel || hobby.proficiency_level || "") : "";
+                const hobbyName = typeof hobby === 'string' ? hobby : toStr(hobby.name || hobby.title);
+                const description = typeof hobby === 'object' ? toStr(hobby.description) : "";
+                const proficiencyLevel = typeof hobby === 'object' ? toStr(hobby.proficiencyLevel || hobby.proficiency_level) : "";
 
                 if (!hobbyName) return null;
                 return (
@@ -848,9 +904,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <h2 style={headingStyle}>INTERESTS</h2>
             <div className="text-sm text-gray-700">
               {interests.map((interest: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-                const interestName = typeof interest === 'string' ? interest : (interest.name || interest.title || "");
-                const category = typeof interest === 'object' ? (interest.category || "") : "";
-                const description = typeof interest === 'object' ? (interest.description || "") : "";
+                const interestName = typeof interest === 'string' ? interest : toStr(interest.name || interest.title);
+                const category = typeof interest === 'object' ? toStr(interest.category) : "";
+                const description = typeof interest === 'object' ? toStr(interest.description) : "";
 
                 if (!interestName) return null;
                 return (
@@ -874,8 +930,8 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <h2 style={headingStyle}>LANGUAGES</h2>
             <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
               {languages.map((lang: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-                const langName = typeof lang === 'string' ? lang : (lang.language || lang.name || "");
-                const proficiency = typeof lang === 'object' ? (lang.proficiency || lang.level || "") : "";
+                const langName = typeof lang === 'string' ? lang : toStr(lang.language || lang.name);
+                const proficiency = typeof lang === 'object' ? toStr(lang.proficiency || lang.level) : "";
 
                 if (!langName) return null;
 
@@ -902,11 +958,11 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="publications" />
             <h2 style={headingStyle}>PUBLICATIONS</h2>
             {publications.map((pub: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const title = pub.title || pub.name || "";
-              const authors = pub.authors || pub.author || "";
-              const publicationName = pub.publicationName || pub.publication_name || pub.journal || pub.publisher || "";
-              const date = pub.date || pub.year || "";
-              const url = pub.url || pub.link || "";
+              const title = toStr(pub.title || pub.name);
+              const authors = toStr(pub.authors || pub.author);
+              const publicationName = toStr(pub.publicationName || pub.publication_name || pub.journal || pub.publisher);
+              const date = toStr(pub.date || pub.year);
+              const url = toStr(pub.url || pub.link);
 
               if (!title) return null;
 
@@ -939,9 +995,9 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <SectionActions sectionKey="references" />
             <h2 style={headingStyle}>REFERENCES</h2>
             {references.map((ref: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-              const refName = typeof ref === 'string' ? ref : (ref.name || "");
-              const relation = typeof ref === 'object' ? (ref.relation || ref.title || ref.position || "") : "";
-              const refContact = typeof ref === 'object' ? (ref.contact || ref.email || ref.phone || "") : "";
+              const refName = typeof ref === 'string' ? ref : toStr(ref.name);
+              const relation = typeof ref === 'object' ? toStr(ref.relation || ref.title || ref.position) : "";
+              const refContact = typeof ref === 'object' ? toStr(ref.contact || ref.email || ref.phone) : "";
 
               if (!refName) return null;
 
@@ -965,7 +1021,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
             <h2 style={headingStyle}>EXTRACURRICULAR ACTIVITIES</h2>
             <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
               {participations.map((item: any, idx: number) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-                const text = typeof item === 'string' ? item : (item.name || item.title || item.description || "");
+                const text = typeof item === 'string' ? item : toStr(item.name || item.title || item.description);
                 if (!text) return null;
                 return <li key={idx}>{text}</li>;
               })}
@@ -984,19 +1040,19 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data, activeSection
                 {personalDetails.father_name && (
                   <tr>
                     <td className="pr-4 py-0.5">Father&apos;s Name</td>
-                    <td className="py-0.5">: {personalDetails.father_name}</td>
+                    <td className="py-0.5">: {toStr(personalDetails.father_name)}</td>
                   </tr>
                 )}
                 {personalDetails.mother_name && (
                   <tr>
                     <td className="pr-4 py-0.5">Mother&apos;s Name</td>
-                    <td className="py-0.5">: {personalDetails.mother_name}</td>
+                    <td className="py-0.5">: {toStr(personalDetails.mother_name)}</td>
                   </tr>
                 )}
                 {(personalDetails.dob || personalDetails.date_of_birth) && (
                   <tr>
                     <td className="pr-4 py-0.5">Date of Birth</td>
-                    <td className="py-0.5">: {personalDetails.dob || personalDetails.date_of_birth}</td>
+                    <td className="py-0.5">: {toStr(personalDetails.dob || personalDetails.date_of_birth)}</td>
                   </tr>
                 )}
               </tbody>

@@ -68,13 +68,12 @@ export const LogoUpload = memo(({
                 onDragOver={!uploading ? handleDragOver : undefined}
                 onDragLeave={!uploading ? handleDragLeave : undefined}
                 onDrop={!uploading ? handleDrop : undefined}
-                className={`border-dashed border-2 rounded-md p-3 flex items-center justify-center transition-colors ${
-                    uploading
+                className={`border-dashed border-2 rounded-md p-3 flex items-center justify-center transition-colors ${uploading
                         ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
                         : isDragging
-                        ? 'border-blue-400 bg-blue-50 cursor-pointer'
-                        : 'border-gray-300 hover:border-gray-400 cursor-pointer'
-                }`}
+                            ? 'border-blue-400 bg-blue-50 cursor-pointer'
+                            : 'border-gray-300 hover:border-gray-400 cursor-pointer'
+                    }`}
             >
                 {uploading ? (
                     <div className="flex flex-col gap-2 items-center py-6">
@@ -99,19 +98,18 @@ export const LogoUpload = memo(({
                                 priority
                             />
                         ) : (
-                            // For server-hosted logos
-                            <img
+                            // For server-hosted logos (only when job is saved with jobId)
+                            <Image
                                 src={
                                     jobId
-                                            ? `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}/api/v1/admin/jobs/${jobId}/logo`
+                                        ? `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}/api/v1/admin/jobs/${jobId}/logo`
                                         : logo || ''
                                 }
                                 alt="Company logo"
-                                className="w-24 h-24 object-cover rounded"
-                                onError={(e) => {
-                                    // If image fails to load, hide it
-                                    e.currentTarget.style.display = 'none'
-                                }}
+                                width={96}
+                                height={96}
+                                className="rounded object-cover"
+                                priority
                             />
                         )}
                         <button

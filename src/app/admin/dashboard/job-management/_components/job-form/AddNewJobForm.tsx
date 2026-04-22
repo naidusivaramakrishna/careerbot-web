@@ -22,12 +22,14 @@ const FormHeader = memo(({
     isEdit,
     onPreview,
     onCancel,
-    form
+    form,
+    jobId
 }: {
     isEdit: boolean
-    onPreview: (data: JobFormData) => void
+    onPreview: (data: JobFormData, jobId?: string) => void
     onCancel: () => void
     form: JobFormData
+    jobId?: string
 }) => (
     <div className="flex justify-between items-start mb-6 p-4">
         <div className="flex items-center gap-4">
@@ -50,7 +52,7 @@ const FormHeader = memo(({
             </div>
         </div>
         <button
-            onClick={() => onPreview(form)}
+            onClick={() => onPreview(form, jobId)}
             className="bg-white border border-gray-200 px-4 py-2 rounded-md text-sm shadow-sm hover:bg-gray-50 transition-colors"
         >
             Preview
@@ -144,7 +146,7 @@ export const AddNewJobForm = memo(({
 
     return (
         <div className="min-h-screen p-4 rounded-xl bg-white">
-            <FormHeader isEdit={isEdit} onPreview={onPreview} onCancel={onCancel} form={form} />
+            <FormHeader isEdit={isEdit} onPreview={onPreview} onCancel={onCancel} form={form} jobId={jobId} />
 
             <div className="max-w-6xl mx-auto grid grid-cols-12 gap-6">
                 {/* Left - Form Fields */}

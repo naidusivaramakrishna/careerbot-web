@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import {getSystemConfig,updateSystemConfig,resetSystemConfig} from '@/api/adminSystemConfigApi';
+import { getSystemConfig, updateSystemConfig, resetSystemConfig } from '@/api/adminSystemConfigApi';
 import { SystemConfig } from '../types';
 import { logger } from '@/lib/logger';
 

@@ -38,6 +38,32 @@
            /naukri\.com\/.+-jobs/.test(window.location.href);
   }
 
+  // Extract key skills chips as a comma-separated list so the backend
+  // can recognise each skill individually (innerText merges them without spaces).
+  function extractKeySkills() {
+    const chipSelectors = [
+      '.key-skill',
+      '[class*="key-skill"]',
+      '[class*="keySkill"]',
+      '.chip',
+      '[class*="chip"]',
+      '.styles_key-skill__GIPn_ a',
+      '[class*="skills"] a',
+      '[class*="skill-tags"] span',
+      '[class*="skillTag"]',
+    ];
+    for (const sel of chipSelectors) {
+      const chips = document.querySelectorAll(sel);
+      if (chips.length >= 2) {
+        const skills = Array.from(chips)
+          .map(c => c.innerText.trim())
+          .filter(Boolean);
+        if (skills.length >= 2) return skills.join(', ');
+      }
+    }
+    return null;
+  }
+
   function extractJobDescription() {
     const selectors = [
       '.job-desc',
@@ -48,7 +74,16 @@
     ];
     for (const sel of selectors) {
       const el = document.querySelector(sel);
-      if (el && el.innerText.trim().length > 100) return el.innerText.trim();
+      if (el && el.innerText.trim().length > 100) {
+        const jdText = el.innerText.trim();
+        // Append key skills as a clean comma-separated list so the backend
+        // can parse each skill separately instead of one merged blob.
+        const skills = extractKeySkills();
+        if (skills) {
+          return `${jdText}\n\nKey Skills: ${skills}`;
+        }
+        return jdText;
+      }
     }
     return null;
   }

@@ -353,15 +353,6 @@ export default function JobCard(props: JobCardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Debug: Log logo prop to see what's being passed
-  useEffect(() => {
-    if (props.logo) {
-      console.log(`✅ Job "${props.title}" has logo:`, props.logo);
-    } else {
-      console.log(`❌ Job "${props.title}" has NO logo (using company initial)`);
-    }
-  }, [props.title, props.logo]);
-
   // Map experience level to color classes
   const getExperienceLevelColors = (level?: string): { bg: string; text: string } => {
     if (!level) return { bg: '', text: '' };
@@ -554,149 +545,175 @@ export default function JobCard(props: JobCardProps) {
   const level = deriveExperienceLevelFromYears(props.experience) || props.experience_level;
   const levelColors = getExperienceLevelColors(level);
 
+  // Parse skills string into an array (comma-separated), show first 4
+  const skillChips = props.skills
+    ? props.skills.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 4)
+    : [];
+
+  // "New" badge if posted within last 24 hours
+  const isNew = (() => {
+    const dateStr = props.posted_date || props.created_at;
+    if (!dateStr) return false;
+    try {
+      return Date.now() - new Date(dateStr).getTime() < 24 * 60 * 60 * 1000;
+    } catch {
+      return false;
+    }
+  })();
+
+  // Source label (LinkedIn, Indeed, etc.)
+  const sourceLabel = props.source && props.source !== "portal" ? props.source : "";
+
+  // Work mode → color mapping
+  const getModeStyle = (mode?: string) => {
+    if (!mode) return null;
+    const m = mode.toLowerCase();
+    if (m.includes("remote")) return { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-400" };
+    if (m.includes("hybrid")) return { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" };
+    return { bg: "bg-slate-50", text: "text-slate-600", dot: "bg-slate-400" };
+  };
+  const modeStyle = getModeStyle(props.mode);
+
   return (
-    <div className="group bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_20px_rgba(37,87,167,0.10)] hover:border-[#2557a7]/25 transition-all duration-250 overflow-hidden">
+    <div className="group relative bg-white rounded-2xl border border-gray-100 hover:border-[#2557a7]/25 hover:shadow-[0_8px_30px_rgba(37,87,167,0.10)] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
 
-      {/* TOP ACCENT BAR — subtle brand line */}
-      <div className="h-[3px] w-full bg-gradient-to-r from-[#2557a7]/60 via-[#2557a7]/20 to-transparent" />
+      {/* Left accent bar — appears on hover */}
+      <div className="absolute left-0 top-0 bottom-0 w-0.75 bg-[#2557a7] opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-l-2xl" />
 
-      <div className="p-4">
-        {/* ROW 1: Logo + Title + Company + Save + Time */}
-        <div className="flex gap-3">
-          {/* Logo */}
-          <div className="h-10 w-10 flex-shrink-0 flex items-center justify-center rounded-lg border border-gray-100 bg-gray-50 overflow-hidden shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="p-5 pl-6">
+
+        {/* ── ROW 1: Logo · Title · Time · Save ── */}
+        <div className="flex gap-3.5">
+
+          {/* Company Logo */}
+          <div className="h-11 w-11 shrink-0 flex items-center justify-center rounded-xl border border-gray-100 bg-linear-to-br from-gray-50 to-gray-100 shadow-sm overflow-hidden">
             {props.logo && props.logo.trim() && !logoError ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={props.logo}
-                alt={props.company}
-                width={38}
-                height={38}
-                onError={() => setLogoError(true)}
-                className="max-w-full max-h-full object-contain"
-              />
+              <img src={props.logo} alt={props.company} width={40} height={40}
+                onError={() => setLogoError(true)} className="max-w-full max-h-full object-contain" />
             ) : (
-              <span className="text-[15px] font-bold text-[#2557a7] select-none">
+              <span className="text-base font-extrabold text-[#2557a7] select-none">
                 {(props.company || "J").charAt(0).toUpperCase()}
               </span>
             )}
           </div>
 
-          {/* Title + Company + meta */}
+          {/* Title + Company */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="text-[15px] font-semibold text-gray-900 leading-snug capitalize truncate group-hover:text-[#2557a7] transition-colors duration-150">
+                <h3 className="text-[15px] font-bold text-gray-900 leading-snug truncate group-hover:text-[#2557a7] transition-colors duration-150">
                   {props.title || "Job Title"}
                 </h3>
-                <p className="text-[13px] text-gray-400 mt-0.5 font-medium truncate">
+                <p className="text-[13px] text-gray-400 mt-0.5 truncate">
                   {props.company || "Company"}
                 </p>
               </div>
 
-              {/* Right: Time + Save */}
-              <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Right: New badge · Time · Save */}
+              <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                {isNew && (
+                  <span className="px-2 py-0.5 bg-emerald-500 text-white text-[9px] font-bold rounded-full tracking-widest uppercase">
+                    New
+                  </span>
+                )}
                 {(props.posted_date || props.created_at) && (
-                  <span className="text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                  <span className="flex items-center gap-1 text-[11px] text-gray-400 whitespace-nowrap">
+                    <Clock size={10} className="text-gray-300" />
                     {formatPostedTime(props.posted_date || props.created_at)}
                   </span>
                 )}
-                <button
-                  type="button"
-                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 transition-colors duration-150"
-                  title={isSaved ? "Remove from saved" : "Save job"}
-                  onClick={handleSaveJob}
-                >
-                  <Heart
-                    size={15}
-                    className={`transition-all duration-200 ${
-                      isSaved ? "fill-red-500 text-red-500" : "text-gray-300 hover:text-red-400"
-                    }`}
-                  />
+                <button type="button" onClick={handleSaveJob}
+                  className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 transition-colors ml-0.5"
+                  title={isSaved ? "Remove from saved" : "Save job"}>
+                  <Heart size={15} className={`transition-all ${isSaved ? "fill-red-500 text-red-500" : "text-gray-300 hover:text-red-400"}`} />
                 </button>
               </div>
+            </div>
+
+            {/* ── Chips row: Location · Type · Mode · Level ── */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+              {props.location && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.75 bg-gray-50 border border-gray-100 rounded-full text-[11px] text-gray-500 font-medium">
+                  <MapPin size={10} className="text-gray-400" />{props.location}
+                </span>
+              )}
+              {props.type && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.75 bg-blue-50 border border-blue-100 rounded-full text-[11px] text-[#2557a7] font-semibold">
+                  <Briefcase size={10} />{props.type}
+                </span>
+              )}
+              {props.mode && modeStyle && (
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.75 ${modeStyle.bg} border border-opacity-20 rounded-full text-[11px] ${modeStyle.text} font-semibold`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${modeStyle.dot}`} />
+                  {props.mode}
+                </span>
+              )}
+              {level && (
+                <span className={`inline-flex items-center gap-1 px-2.5 py-0.75 rounded-full text-[11px] font-semibold border border-opacity-10 ${levelColors.bg || "bg-gray-50"} ${levelColors.text || "text-gray-500"}`}>
+                  <Layers size={10} />{level}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* ROW 2: Info chips — location, type, mode */}
-        <div className="flex flex-wrap items-center gap-1.5 mt-3">
-          {props.location && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11px] text-gray-500 font-medium">
-              <MapPin size={10} className="text-gray-400" />
-              {props.location}
-            </span>
-          )}
-          {props.type && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11px] text-gray-500 font-medium">
-              <Clock size={10} className="text-gray-400" />
-              {props.type}
-            </span>
-          )}
-          {props.mode && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#2557a7]/5 border border-[#2557a7]/12 rounded-full text-[11px] text-[#2557a7] font-medium">
-              {props.mode}
-            </span>
-          )}
-          {level && (
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${levelColors.bg || "bg-gray-50"} ${levelColors.text || "text-gray-500"} border-current/10`}>
-              <Layers size={10} />
-              {level}
-            </span>
-          )}
-        </div>
-
-        {/* ROW 3: Experience + Salary */}
+        {/* ── ROW 2: Experience · Salary ── */}
         {(props.experience || props.salary) && (
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-4 mt-3 px-3 py-2 bg-gray-50 rounded-xl">
             {props.experience && (
-              <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
-                <Briefcase size={12} className="text-gray-400" />
-                {props.experience}
+              <span className="flex items-center gap-1.5 text-[12px] text-gray-600 font-medium">
+                <Briefcase size={12} className="text-gray-400 shrink-0" />{props.experience}
               </span>
             )}
             {props.salary && (
-              <span className="flex items-center gap-1 text-[12px] font-semibold text-gray-700">
-                <IndianRupee size={12} className="text-gray-500" />
-                {props.salary}
+              <span className="flex items-center gap-1 text-[13px] font-extrabold text-gray-900">
+                <IndianRupee size={13} className="text-[#2557a7] shrink-0" />
+                <span className="text-gray-800">{props.salary}</span>
+              </span>
+            )}
+            {sourceLabel && (
+              <span className="ml-auto text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                via {sourceLabel}
               </span>
             )}
           </div>
         )}
 
-        {/* ROW 4: Action Buttons */}
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-          {/* Ask Nancy */}
-          <button
-            type="button"
-            onClick={props.onBotClick}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-[#2557a7] border border-[#2557a7]/20 hover:bg-[#2557a7]/5 hover:border-[#2557a7]/40 transition-all duration-150"
-            title="Chat with Nancy"
-          >
-            <Sparkles size={12} className="text-[#2557a7]" />
-            Ask Nancy
+        {/* ── ROW 3: Skills ── */}
+        {skillChips.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {skillChips.map((skill) => (
+              <span key={skill}
+                className="px-2.5 py-0.75 bg-[#f0f4ff] text-[#2557a7] text-[11px] font-semibold rounded-full border border-[#dce8ff]">
+                {skill}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* ── ROW 4: Actions ── */}
+        <div className="flex items-center justify-between mt-4 pt-3.5 border-t border-gray-100">
+          <button type="button" onClick={props.onBotClick}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.75 rounded-xl text-[11px] font-bold text-[#2557a7] border border-[#2557a7]/20 bg-[#f5f8ff] hover:bg-[#eaf0ff] hover:border-[#2557a7]/40 transition-all"
+            title="Chat with Nancy">
+            <Sparkles size={12} />Ask Nancy
           </button>
 
-          {/* Apply Now */}
-          <button
-            type="button"
-            className={`px-5 py-1.5 rounded-lg text-[13px] font-semibold whitespace-nowrap transition-all duration-150 ${
+          <button type="button" onClick={handleApplyNow}
+            disabled={isSubmitting || isApplied}
+            className={`px-6 py-1.75 rounded-xl text-[13px] font-bold whitespace-nowrap transition-all duration-150 ${
               isSubmitting
                 ? "bg-[#2557a7]/50 text-white cursor-wait"
                 : isApplied
-                ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-default"
-                : "bg-[#2557a7] text-white hover:bg-[#1a4a96] shadow-sm hover:shadow-md"
-            }`}
-            onClick={handleApplyNow}
-            disabled={isSubmitting || isApplied}
-            title={isApplied ? "Already applied" : "Apply to this job"}
-          >
-            {isSubmitting ? "Applying..." : isApplied ? "Applied ✓" : "Apply Now"}
+                ? "bg-green-50 text-green-600 border border-green-200 cursor-default"
+                : "bg-[#2557a7] hover:bg-[#1e4a96] text-white shadow-md shadow-[#2557a7]/20 hover:shadow-[#2557a7]/30 active:scale-[0.98]"
+            }`}>
+            {isSubmitting ? "Applying…" : isApplied ? "Applied ✓" : "Apply Now"}
           </button>
         </div>
       </div>
 
-      {/* Application Modal */}
       <ApplicationModal
         isOpen={isModalOpen}
         jobTitle={props.title}

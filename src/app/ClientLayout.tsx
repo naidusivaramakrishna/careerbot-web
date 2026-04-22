@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Toaster } from "sonner";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
+import { TenantProvider } from "@/contexts/TenantContext";
 
 export default function ClientLayout({
   children,
@@ -49,8 +50,10 @@ export default function ClientLayout({
     return () => window.removeEventListener('userLoggedOut', handleTokenExpired);
   }, [isAuthenticatedRoute, pathname, router]);
 
-  return <>
-    <Toaster richColors position="bottom-right" />
-    {children}
-  </>;
+  return (
+    <TenantProvider>
+      <Toaster richColors position="bottom-right" />
+      {children}
+    </TenantProvider>
+  );
 }

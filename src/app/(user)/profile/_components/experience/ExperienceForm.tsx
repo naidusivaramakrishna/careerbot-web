@@ -91,11 +91,10 @@ export default function ExperienceForm({
                         name="job_title"
                         value={experienceForm.job_title || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("job_title")
+                        className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("job_title")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("job_title") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("job_title")}</p>
@@ -108,11 +107,10 @@ export default function ExperienceForm({
                         name="company"
                         value={experienceForm.company || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("company")
+                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("company")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("company") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("company")}</p>
@@ -124,11 +122,10 @@ export default function ExperienceForm({
                         name="job_type"
                         value={experienceForm.job_type || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("job_type")
+                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("job_type")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     >
                         <option value="">Select Job Type</option>
                         {jobTypes.map((type) => (
@@ -148,11 +145,10 @@ export default function ExperienceForm({
                         name="location"
                         value={experienceForm.location || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("location")
+                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("location")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("location") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("location")}</p>
@@ -165,11 +161,10 @@ export default function ExperienceForm({
                         name="start_date"
                         value={experienceForm.start_date || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("start_date")
+                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("start_date")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("start_date") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("start_date")}</p>
@@ -182,11 +177,10 @@ export default function ExperienceForm({
                         name="end_date"
                         value={experienceForm.end_date || ""}
                         onChange={handleChange}
-                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${
-                            getFieldError("end_date")
+                        className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("end_date")
                                 ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
                                 : "border-neutral-200"
-                        }`}
+                            }`}
                     />
                     {getFieldError("end_date") && (
                         <p className="text-red-600 text-xs mt-1">{getFieldError("end_date")}</p>

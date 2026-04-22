@@ -96,12 +96,12 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
         isFocused && newSkill.trim() === ""
             ? suggestedSkills.filter((skill) => !currentSkillNames.includes(skill))
             : newSkill.trim() === ""
-            ? []
-            : suggestedSkills.filter(
-                (skill) =>
-                    skill.toLowerCase().includes(newSkill.toLowerCase()) &&
-                    !currentSkillNames.includes(skill)
-            );
+                ? []
+                : suggestedSkills.filter(
+                    (skill) =>
+                        skill.toLowerCase().includes(newSkill.toLowerCase()) &&
+                        !currentSkillNames.includes(skill)
+                );
 
     const handleSelectSkill = async (skill: string) => {
         setIsLoading(true);

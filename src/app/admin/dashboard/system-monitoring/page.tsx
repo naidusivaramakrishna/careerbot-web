@@ -92,7 +92,7 @@ const SystemMonitoring = () => {
                 </div>
                 <div className='flex gap-4'>
                     <Dropdown
-                        options={["Auto-refresh","Off", "On"]}
+                        options={["Auto-refresh", "Off", "On"]}
                         defaultValue={autoRefresh}
                         bgColor="bg-gray-100"
                         bgOptions="bg-white"

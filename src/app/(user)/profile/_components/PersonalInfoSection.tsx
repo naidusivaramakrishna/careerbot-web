@@ -215,11 +215,10 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                 value={value}
                 onChange={handleChange}
                 disabled={disabled}
-                className={`w-full text-sm border p-2.5 rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${
-                    fieldErrors[name]
+                className={`w-full text-sm border p-2.5 rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${fieldErrors[name]
                         ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500'
                         : 'border-neutral-200'
-                } ${disabled ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
+                    } ${disabled ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
                 placeholder={placeholder}
             />
             {fieldErrors[name] && (
@@ -250,11 +249,10 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                         rows={5}
                         value={tempProfile.personalInformation?.summary || ""}
                         onChange={handleChange}
-                        className={`w-full text-sm border p-3 rounded-lg bg-gray-100 outline-neutral-500 pr-10 transition-colors ${
-                            fieldErrors['summary']
+                        className={`w-full text-sm border p-3 rounded-lg bg-gray-100 outline-neutral-500 pr-10 transition-colors ${fieldErrors['summary']
                                 ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500'
                                 : 'border-neutral-200'
-                        }`}
+                            }`}
                         name="summary"
                         id="summary"
                         placeholder="Short bio, career goals, highlights..."

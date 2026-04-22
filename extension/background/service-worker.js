@@ -56,7 +56,7 @@ async function openPopup() {
 
   const win = await chrome.windows.getCurrent().catch(() => null);
   const W = 800;
-  const H = Math.round((win?.height || screen.availHeight) * 0.90);
+  const H = 840;
   const left = (win?.left || 0) + (win?.width || screen.availWidth) - W;
   const top  = win?.top || 0;
 

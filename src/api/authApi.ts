@@ -1,4 +1,5 @@
 import { httpClient } from "@/lib/http";
+import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
 
 export interface LoginRequest {
   email: string;
@@ -10,6 +11,7 @@ export interface LoginResponse {
   refresh_token: string;
   token_type: string;
   expires_in?: number;
+  tenant_id?: string;
 }
 
 export interface SignUpRequest {
@@ -21,6 +23,7 @@ export interface SignUpRequest {
 export interface SignUpResponse {
   success: boolean;
   message?: string;
+  tenant_id?: string;
 }
 
 // ✅ Tokens are now httpOnly cookies - never accessible to JavaScript
@@ -36,24 +39,44 @@ export const isAuthenticated = async (): Promise<boolean> => {
 };
 
 export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
+  // Try to get tenant from email mapping (multi-account support)
+  let tenantId = getTenantByEmail(data.email);
+
+  // Fallback to active tenant if email not found in map
+  if (!tenantId) {
+    tenantId = getTenantId();
+  }
+
   const response = await httpClient.post<LoginResponse>(
     "/auth/signin",
     new URLSearchParams({
       username: data.email,
       password: data.password,
     }),
-    { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Tenant-Id": tenantId,
+      },
+    }
   );
 
-  // ✅ Backend sets httpOnly cookies automatically
-  // ❌ No need to manually store tokens - browser handles this
+  // Update email → tenant mapping from backend response
+  if (response.data.tenant_id) {
+    setTenantForEmail(data.email, response.data.tenant_id);
+  }
+
   return response.data;
 };
 
 export const signOut = async () => {
   await httpClient.post("/auth/signout").catch(() => {});
-  // Clear user-specific data cached in sessionStorage so the next user
-  // (or the same user after re-login) starts with a clean slate
+
+  // ✅ KEEP tenant_id in localStorage
+  // User belongs to this tenant across sessions (per backend Option C)
+  // Backend clears httpOnly cookies automatically - we don't need to clear tenant_id
+  // clearTenantId() removed - allows re-login to same tenant
+
   ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText'].forEach(
     (key) => sessionStorage.removeItem(key)
   );
@@ -71,10 +94,25 @@ export const getLinkedInLoginUrl = async (): Promise<string> => {
 };
 
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
+  // Use "public" tenant for all signups (temporary - will generate random tenant_id in future)
+  const tenantId = "public";
+
   const response = await httpClient.post<SignUpResponse>(
     "/auth/signup",
-    data  );
-  // ✅ Backend sets httpOnly cookies automatically after signup
+    data,
+    {
+      headers: {
+        "X-Tenant-Id": tenantId,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  // Store email → tenant mapping for multi-account support
+  if (response.data.tenant_id) {
+    setTenantForEmail(data.email, response.data.tenant_id);
+  }
+
   return response.data;
 };
 
@@ -232,7 +270,7 @@ export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
   try {
     const response = await httpClient.post<TokenRefreshResponse>(
       "/auth/refresh",
-      { refresh_token: "" },
+      {},
       {
         headers: {
           "Content-Type": "application/json",

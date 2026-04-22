@@ -8,12 +8,13 @@ import {
   getCorrelationId,
   clearCorrelationId,
 } from './correlationId';
+import { getTenantId, clearTenantId } from './tenantStorage';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
-  console.warn('[careerbot] NEXT_PUBLIC_BASE_URL is not set — falling back to localhost. Set this in production.');
+  console.warn('[careerbot] NEXT_PUBLIC_BASE_URL is not set — falling back to proxy. Set this in production.');
 }
 const BASE_URL =
-  process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+  process.env.NEXT_PUBLIC_BASE_URL || '/api/v1';
 
 /* --------------------------------------------------
    Helpers
@@ -29,6 +30,7 @@ const clearAllTokens = () => {
   sessionStorage.clear();
   localStorage.removeItem('token_last_refreshed_at');
   clearCorrelationId();
+  clearTenantId();
 };
 
 /* --------------------------------------------------
@@ -85,6 +87,14 @@ client.interceptors.request.use(
       config.headers['X-Correlation-ID'] = correlationId;
     }
 
+    // Only add X-Tenant-Id if not already set (signup/signin set it explicitly)
+    if (!config.headers['X-Tenant-Id']) {
+      const tenantId = getTenantId();
+      if (tenantId && config.headers) {
+        config.headers['X-Tenant-Id'] = tenantId;
+      }
+    }
+
     if (config.method?.toLowerCase() === 'get') {
       const sep = config.url?.includes('?') ? '&' : '?';
       config.url = `${config.url}${sep}_t=${Date.now()}`;
@@ -111,6 +121,11 @@ client.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const isAdmin = isAdminRequest(originalRequest?.url);
+
+    // 403 = tenant mismatch — do NOT attempt token refresh, just reject
+    if (error.response?.status === 403) {
+      return Promise.reject(error);
+    }
 
     if (error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);

@@ -14,8 +14,8 @@ interface StatusBadgeProps {
 
 const StatusBadge = memo<StatusBadgeProps>(({ enabled }) => (
     <div className={`px-4 py-2 rounded-lg font-semibold text-sm ${enabled
-            ? 'bg-green-100 text-green-700'
-            : 'bg-yellow-100 text-yellow-700'
+        ? 'bg-green-100 text-green-700'
+        : 'bg-yellow-100 text-yellow-700'
         }`}>
         {enabled ? '✓ Enabled' : '⚠ Disabled'}
     </div>

@@ -8,11 +8,11 @@ export interface CompanyInfo {
 // Valid backend slugs: accenture, capgemini, cognizant, infosys, tcs, wipro
 const COMPANY_INFO: Record<string, CompanyInfo> = {
   tcs:       { name: 'TCS NQT',            logoPath: '/assets/company_logos/Tata_Consultancy_Services.svg', initials: 'TCS', color: '#003366' },
-  infosys:   { name: 'Infosys',            logoPath: '/assets/company_logos/infosys.svg',   initials: 'INF', color: '#007cc2' },
-  cognizant: { name: 'Cognizant GenC',     logoPath: '/assets/company_logos/cognizant.svg', initials: 'COG', color: '#1a4398' },
-  wipro:     { name: 'Wipro NLTH',         logoPath: '/assets/company_logos/wipro-1.svg',   initials: 'WIP', color: '#341c5c' },
-  accenture: { name: 'Accenture',          logoPath: '/assets/company_logos/Accenture-Logo.wine.svg', initials: 'ACC', color: '#a100ff' },
-  capgemini: { name: 'Capgemini Exceller', logoPath: '/assets/company_logos/capgemini.png',             initials: 'CAP', color: '#0070ad' },
+  infosys:   { name: 'Infosys',            logoPath: '/assets/company_logos/infosys.svg',                   initials: 'INF', color: '#007cc2' },
+  cognizant: { name: 'Cognizant GenC',     logoPath: '/assets/company_logos/cognizant.svg',                 initials: 'COG', color: '#1a4398' },
+  wipro:     { name: 'Wipro NLTH',         logoPath: '/assets/company_logos/wipro-1.svg',                   initials: 'WIP', color: '#341c5c' },
+  accenture: { name: 'Accenture',          logoPath: '/assets/company_logos/Accenture-Logo.wine.svg',       initials: 'ACC', color: '#a100ff' },
+  capgemini: { name: 'Capgemini Exceller', logoPath: '/assets/company_logos/capgemini.png',                 initials: 'CAP', color: '#0070ad' },
 };
 
 // Maps URL slugs/variants → canonical backend slug

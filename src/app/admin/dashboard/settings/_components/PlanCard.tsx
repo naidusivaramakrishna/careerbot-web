@@ -16,8 +16,8 @@ const PlanCard = memo<PlanCardProps>(({ plan, onEdit }) => {
     return (
         <div
             className={`relative bg-white border rounded-xl p-4 transition-shadow hover:shadow-md ${plan.is_popular
-                    ? 'border-2 border-[#5E5EFF] shadow-md'
-                    : 'border-gray-200'
+                ? 'border-2 border-[#5E5EFF] shadow-md'
+                : 'border-gray-200'
                 }`}
         >
             {plan.is_popular && (

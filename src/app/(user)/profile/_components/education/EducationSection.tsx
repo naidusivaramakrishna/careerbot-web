@@ -12,7 +12,7 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import Modal from "@/components/common/Modal";
 import EducationEmptyState from "./EducationEmptyState";
-import {logger} from "@/lib/logger"
+import { logger } from "@/lib/logger"
 interface EducationSectionPropsWithAutoFill extends EducationSectionProps {
     isAutoFill?: boolean; // Flag to indicate if data is from resume/LinkedIn import
 }

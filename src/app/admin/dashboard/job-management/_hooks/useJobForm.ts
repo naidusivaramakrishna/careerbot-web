@@ -67,17 +67,16 @@ export const useJobForm = ({ initialData, isEdit = false, jobId }: UseJobFormPro
         try {
             setUploading(true)
 
-            // Show preview immediately
+            // Show preview immediately using data URL
             const reader = new FileReader()
             reader.onload = () => {
                 updateField("logo", reader.result as string)
             }
             reader.readAsDataURL(file)
 
-            // Upload to server immediately
-            const logoUrl = await uploadJobLogo(file)
-            // Store the uploaded URL and clear the file reference to prevent re-upload
-            updateField("logo", logoUrl)
+            // Upload to server in background to get the server-stored file
+            // But keep the data URL preview - will use API endpoint once job has jobId
+            await uploadJobLogo(file)
             updateField("logoFile", null)
         } catch (error) {
             logger.error('Error uploading logo:', error)
