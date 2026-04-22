@@ -19,14 +19,6 @@ interface TestHistory {
   time: string;
 }
 
-const fallbackHistory: TestHistory[] = [
-  { id: '1', sessionId: '', testName: 'TCS Mock-Test',        score: 36, total: 50, accuracy: 72,  grade: 'Good',      date: '03-02-2026', time: '11:00 AM' },
-  { id: '2', sessionId: '', testName: 'Infosys Mock-Test',    score: 26, total: 50, accuracy: 61,  grade: 'Average',   date: '03-02-2026', time: '10:00 AM' },
-  { id: '3', sessionId: '', testName: 'TCS Mock-Test',        score: 42, total: 50, accuracy: 82,  grade: 'Good',      date: '03-02-2026', time: '02:00 PM' },
-  { id: '4', sessionId: '', testName: 'Cognizant Mock-Test',  score: 40, total: 50, accuracy: 80,  grade: 'Good',      date: '04-02-2026', time: '10:00 AM' },
-  { id: '5', sessionId: '', testName: 'Accenture Mock-Test',  score: 50, total: 50, accuracy: 100, grade: 'Excellent', date: '05-02-2026', time: '11:00 AM' },
-  { id: '6', sessionId: '', testName: 'Wipro NLTH Mock-Test', score: 40, total: 50, accuracy: 80,  grade: 'Good',      date: '06-02-2026', time: '11:00 AM' },
-];
 
 const mapGrade = (grade: string): TestHistory['grade'] => {
   // Backend returns letter grades (A, B, C, D, F)
@@ -38,7 +30,8 @@ const mapGrade = (grade: string): TestHistory['grade'] => {
 };
 
 const formatDateTime = (isoString: string) => {
-  const d = new Date(isoString);
+  const utcString = isoString.endsWith('Z') || isoString.includes('+') ? isoString : isoString + 'Z';
+  const d = new Date(utcString);
   if (isNaN(d.getTime())) return { date: isoString, time: '' };
   const date = d.toLocaleDateString('en-GB').split('/').join('-');
   const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -100,91 +93,6 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   return null;
 };
 
-// Aggregate sessions from the same test (same company, within 5 minutes)
-const aggregateTestSessions = (history: TestHistory[]): TestHistory[] => {
-  if (history.length === 0) return [];
-
-  const aggregated: TestHistory[] = [];
-  let currentGroup: TestHistory[] = [];
-
-  for (let i = 0; i < history.length; i++) {
-    const current = history[i];
-
-    if (currentGroup.length === 0) {
-      currentGroup.push(current);
-    } else {
-      const lastInGroup = currentGroup[currentGroup.length - 1];
-
-      // Check if same company and within 5 minutes
-      const currentDate = new Date(current.date.split('-').reverse().join('-'));
-      const lastDate = new Date(lastInGroup.date.split('-').reverse().join('-'));
-      const timeDiffMinutes = (lastDate.getTime() - currentDate.getTime()) / (1000 * 60);
-
-      if (
-        current.testName === lastInGroup.testName &&
-        Math.abs(timeDiffMinutes) <= 5 &&
-        currentGroup.length < 4
-      ) {
-        // Same test, add to group
-        currentGroup.push(current);
-      } else {
-        // Different test or timeout, finalize current group
-        if (currentGroup.length > 1) {
-          // Multiple sessions from same test - aggregate them
-          const aggregatedRecord = aggregateGroup(currentGroup);
-          aggregated.push(aggregatedRecord);
-        } else {
-          // Single session - add as is
-          aggregated.push(currentGroup[0]);
-        }
-        currentGroup = [current];
-      }
-    }
-  }
-
-  // Handle last group
-  if (currentGroup.length > 0) {
-    if (currentGroup.length > 1) {
-      const aggregatedRecord = aggregateGroup(currentGroup);
-      aggregated.push(aggregatedRecord);
-    } else {
-      aggregated.push(currentGroup[0]);
-    }
-  }
-
-  return aggregated;
-};
-
-// Aggregate multiple sessions into one
-const aggregateGroup = (sessions: TestHistory[]): TestHistory => {
-  // For multi-section tests:
-  // - Sum scores from all sections
-  // - Sum totals from all sections (since each section has its own questions)
-  // - Recalculate accuracy from total score and total questions
-  const totalScore = sessions.reduce((sum, s) => sum + s.score, 0);
-  const totalQuestions = sessions.reduce((sum, s) => sum + s.total, 0);
-
-  // Recalculate accuracy correctly from total score and total questions
-  const aggregatedAccuracy = totalQuestions > 0 ? Math.round((totalScore / totalQuestions) * 100) : 0;
-
-  // Determine aggregated grade based on recalculated accuracy
-  let grade: TestHistory['grade'] = 'Needs Improvement';
-  if (aggregatedAccuracy >= 90) grade = 'Excellent';
-  else if (aggregatedAccuracy >= 80) grade = 'Good';
-  else if (aggregatedAccuracy >= 70) grade = 'Average';
-
-  return {
-    id: sessions[0].id,
-    sessionId: sessions[0].sessionId, // First session ID
-    testName: sessions[0].testName,
-    score: totalScore,
-    total: totalQuestions,
-    accuracy: aggregatedAccuracy,
-    grade,
-    date: sessions[0].date,
-    time: sessions[0].time,
-  };
-};
 
 export default function MockTestHistoryPage() {
   const router = useRouter();
@@ -203,10 +111,7 @@ export default function MockTestHistoryPage() {
         setLoading(true);
         const records = await getMockTestHistory();
         const mapped = records.map(mapRecord);
-
-        // Group consecutive sessions from the same test (same company, close timestamps)
-        const aggregated = aggregateTestSessions(mapped);
-        setHistoryData(aggregated);
+        setHistoryData(mapped);
       } catch (err: any) {
         setHistoryData([]);
       } finally {
@@ -502,7 +407,7 @@ export default function MockTestHistoryPage() {
                       {openMenu === test.id + i && (
                         <div className="absolute right-6 top-10 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-2 w-48">
                           <button
-                            onClick={() => { router.push(`/mock-test/results/${test.id}${test.sessionId ? `?session=${test.sessionId}` : ''}`); setOpenMenu(null); }}
+                            onClick={() => { router.push(`/mock-test/results/${test.id}${test.sessionId ? `?parentSession=${test.sessionId}` : ''}`); setOpenMenu(null); }}
                             className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                           >
                             <Eye size={16} className="text-slate-500" />

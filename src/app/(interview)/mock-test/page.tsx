@@ -2,15 +2,17 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Star, Play, RotateCcw, X, ArrowRight } from 'lucide-react';
+import { Search, Star, Play, RotateCcw, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getMockTestCompanies, getActiveSession, ActiveSession } from '@/api/mockTestApi';
+import { getMockTestCompanies, getActiveSession, getLeaderboard, ActiveSession } from '@/api/mockTestApi';
 import { resolveCompanyInfo } from '@/lib/mockTestConstants';
 
 interface MockTest {
   id: string;
   company: string;
   logoPath: string;
+  initials: string;
+  color: string;
   rating: number;
   categories: string[];
   questions: number;
@@ -22,78 +24,12 @@ interface MockTest {
 
 
 const fallbackTests: MockTest[] = [
-  {
-    id: '1',
-    company: 'TCS Mock Test',
-    logoPath: '/assets/icons/company_logo_icons/Tata_Consultancy_Services.svg',
-    rating: 4.8,
-    categories: ['Verbal', 'Logical', 'Aptitude'],
-    questions: 92,
-    duration: 190,
-    difficulty: 'Medium',
-    attempts: 12800,
-    badge: 'tcs',
-  },
-  {
-    id: '2',
-    company: 'IBM Mock Test',
-    logoPath: '/assets/icons/company_logo_icons/Vector-2.svg',
-    rating: 4.7,
-    categories: ['Verbal', 'Logical', 'Aptitude'],
-    questions: 50,
-    duration: 60,
-    difficulty: 'Hard',
-    attempts: 8900,
-    badge: 'ibm',
-  },
-  {
-    id: '3',
-    company: 'Infosys Mock Test',
-    logoPath: '/assets/icons/company_logo_icons/Vector-1.svg',
-    rating: 4.6,
-    categories: ['Verbal', 'Logical', 'Aptitude'],
-    questions: 55,
-    duration: 125,
-    difficulty: 'Medium',
-    attempts: 11200,
-    badge: 'infosys',
-  },
-  {
-    id: '4',
-    company: 'Cognizant Mock Test',
-    logoPath: '/assets/icons/company_logo_icons/Vector.svg',
-    rating: 4.5,
-    categories: ['Verbal', 'Logical', 'Aptitude'],
-    questions: 60,
-    duration: 120,
-    difficulty: 'Easy',
-    attempts: 7500,
-    badge: 'cognizant',
-  },
-  {
-    id: '5',
-    company: 'L&T Mock Test',
-    logoPath: '/assets/icons/company_logo_icons/Larsen___Toubro.svg',
-    rating: 4.4,
-    categories: ['Verbal', 'Logical', 'Aptitude'],
-    questions: 50,
-    duration: 75,
-    difficulty: 'Medium',
-    attempts: 5700,
-    badge: 'lt',
-  },
-  {
-    id: '6',
-    company: 'Wipro Mock Test',
-    logoPath: '/assets/icons/company_logo_icons/wipro-1.svg',
-    rating: 4.6,
-    categories: ['Verbal', 'Logical', 'Aptitude'],
-    questions: 60,
-    duration: 75,
-    difficulty: 'Easy',
-    attempts: 9100,
-    badge: 'wipro',
-  },
+  { id: 'tcs',       company: 'TCS NQT',            logoPath: '/assets/company_logos/Tata_Consultancy_Services.svg', initials: 'TCS', color: '#003366', rating: 4.8, categories: ['Arithmetic', 'Aptitude', 'Reasoning', 'Technical'], questions: 92, duration: 190, difficulty: 'Medium', attempts: 0, badge: 'tcs' },
+  { id: 'infosys',   company: 'Infosys',             logoPath: '/assets/company_logos/infosys.svg',   initials: 'INF', color: '#007cc2', rating: 4.6, categories: ['Arithmetic', 'Aptitude', 'Reasoning', 'Technical'], questions: 55, duration: 125, difficulty: 'Medium', attempts: 0, badge: 'infosys' },
+  { id: 'cognizant', company: 'Cognizant GenC',      logoPath: '/assets/company_logos/cognizant.svg', initials: 'COG', color: '#1a4398', rating: 4.5, categories: ['Arithmetic', 'Aptitude', 'Reasoning', 'Technical'], questions: 60, duration: 120, difficulty: 'Easy',   attempts: 0, badge: 'cognizant' },
+  { id: 'wipro',     company: 'Wipro NLTH',          logoPath: '/assets/company_logos/wipro-1.svg',   initials: 'WIP', color: '#341c5c', rating: 4.6, categories: ['Arithmetic', 'Aptitude', 'Reasoning', 'Technical'], questions: 60, duration: 75,  difficulty: 'Easy',   attempts: 0, badge: 'wipro' },
+  { id: 'accenture', company: 'Accenture',           logoPath: '/assets/company_logos/Accenture-Logo.wine.svg', initials: 'ACC', color: '#a100ff', rating: 4.7, categories: ['Arithmetic', 'Aptitude', 'Reasoning', 'Technical'], questions: 90, duration: 120, difficulty: 'Medium', attempts: 0, badge: 'accenture' },
+  { id: 'capgemini', company: 'Capgemini Exceller',  logoPath: '/assets/company_logos/capgemini.png',             initials: 'CAP', color: '#0070ad', rating: 4.5, categories: ['Arithmetic', 'Aptitude', 'Reasoning', 'Technical'], questions: 72, duration: 115, difficulty: 'Medium', attempts: 0, badge: 'capgemini' },
 ];
 
 export default function MockTestPage() {
@@ -101,32 +37,43 @@ export default function MockTestPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [tests, setTests] = useState<MockTest[]>(fallbackTests);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
+  const [totalParticipants, setTotalParticipants] = useState<number | null>(null);
 
   useEffect(() => {
     getMockTestCompanies()
       .then((companies: any[]) => {
         const mapped: MockTest[] = companies.map((c: any) => {
-          // Handle both old and new backend formats
-          const id = c.id || c.company_id;
-          const name = c.name || c.company_name;
+          const id = c.company_id || c.id;
+          const name = c.company_name || c.name;
+          const categories = Array.isArray(c.sections) && c.sections.length > 0
+            ? c.sections.map((s: any) => s.section_name)
+            : ['Arithmetic', 'Aptitude', 'Reasoning', 'Technical'];
 
+          const info = resolveCompanyInfo(id);
           return {
-            id: id,
+            id,
             company: name,
-            logoPath: resolveCompanyInfo(id).logoPath,
+            logoPath: info.logoPath,
+            initials: info.initials,
+            color: info.color,
             rating: c.rating ?? 4.5,
-            categories: c.categories ?? ['Verbal', 'Logical', 'Aptitude'],
-            questions: c.questions || c.total_questions || 50,
-            duration: c.duration || c.total_duration_minutes || 60,
+            categories,
+            questions: c.total_questions || c.questions || 50,
+            duration: c.total_duration_minutes || c.duration || 60,
             difficulty: c.difficulty ?? 'Medium',
-            attempts: c.attempts ?? 0,
+            attempts: c.attempts ?? c.total_attempts ?? 0,
             badge: id,
           };
         });
         setTests(mapped);
       })
-      .catch((err) => {
-      });
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getLeaderboard()
+      .then(data => setTotalParticipants(data.total_participants))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -181,22 +128,26 @@ export default function MockTestPage() {
           <div>
             <h1 className="text-4xl font-bold mb-3 text-slate-900">Mock Test</h1>
             <p className="text-slate-600 text-lg">
-              Practice company-specific aptitude tests used in real hiring exams.
+              Practice company-specific mock tests used in real hiring exams.
             </p>
           </div>
 
           {/* Stats */}
           <div className="flex gap-12">
             <div>
-              <div className="text-3xl font-bold text-slate-900">6</div>
+              <div className="text-3xl font-bold text-slate-900">{tests.length}</div>
               <div className="text-slate-600">Companies</div>
             </div>
             <div>
-              <div className="text-3xl font-bold text-slate-900">300+</div>
+              <div className="text-3xl font-bold text-slate-900">{tests.reduce((sum, t) => sum + t.questions, 0)}+</div>
               <div className="text-slate-600">Questions</div>
             </div>
             <div>
-              <div className="text-3xl font-bold text-slate-900">55K+</div>
+              <div className="text-3xl font-bold text-slate-900">
+                {totalParticipants !== null
+                  ? totalParticipants >= 1000 ? `${(totalParticipants / 1000).toFixed(1)}K+` : `${totalParticipants}+`
+                  : '55K+'}
+              </div>
               <div className="text-slate-600">Participants</div>
             </div>
           </div>
@@ -278,9 +229,23 @@ export default function MockTestPage() {
                 >
                   {/* Logo, Company Name & Rating */}
                   <div className="flex items-start justify-between gap-4 mb-4">
-                    <div className="w-16 h-12 flex items-center justify-center flex-shrink-0">
-                      <img src={test.logoPath} alt={test.company} className="max-h-10 max-w-full object-contain" />
-                    </div>
+                    {test.logoPath ? (
+                      <div className="w-16 h-16 rounded-xl bg-white border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                        <img
+                          src={test.logoPath}
+                          alt={test.company}
+                          className="w-full h-full object-contain"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.parentElement as HTMLElement).style.backgroundColor = test.color; (e.currentTarget.parentElement as HTMLElement).innerHTML = `<span class="text-white font-bold text-sm tracking-wide">${test.initials}</span>`; }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 text-white font-bold text-sm tracking-wide"
+                        style={{ backgroundColor: test.color }}
+                      >
+                        {test.initials}
+                      </div>
+                    )}
                     <div className="flex-1 flex flex-col justify-between">
                       <h3 className="text-lg font-bold text-slate-900">{test.company}</h3>
                       <div className="flex items-center gap-1">
@@ -328,34 +293,6 @@ export default function MockTestPage() {
             </div>
           </motion.div>
 
-          {/* Build Custom Test CTA */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-gradient-to-br from-[#2557a7] to-[#1a3d73] rounded-2xl p-8 text-white"
-          >
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">Build Custom Test</h2>
-                <p className="text-blue-200 mb-4">Choose your own topics, difficulty, and question count</p>
-                <div className="flex flex-wrap gap-2">
-                  {['Aptitude', 'Arithmetic', 'Reasoning', 'Technical'].map(tag => (
-                    <span key={tag} className="text-xs font-semibold px-3 py-1.5 bg-white/20 rounded-full text-white">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <button
-                onClick={() => router.push('/mock-test/custom')}
-                className="flex items-center gap-2 bg-white text-[#2557a7] font-bold px-8 py-3.5 rounded-xl hover:bg-blue-50 transition whitespace-nowrap text-sm flex-shrink-0"
-              >
-                Start Building
-                <ArrowRight size={18} />
-              </button>
-            </div>
-          </motion.div>
         </div>
       </div>
     </div>

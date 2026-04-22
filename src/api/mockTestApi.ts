@@ -55,6 +55,7 @@ export const getMockTestCompanies = async (): Promise<MockTestCompany[]> => {
     }
 
 
+    console.log('[getMockTestCompanies] raw:', JSON.stringify(companies, null, 2));
     return companies;
   } catch (err: any) {
     throw err;
@@ -90,13 +91,14 @@ export const generateMockTest = async (
   parentSessionId?: string,
   timeoutMs: number = 60000
 ): Promise<MockTestSession> => {
+  const resolvedSubcategories = subcategories.length > 0 ? subcategories : categories;
   const payload: Record<string, any> = {
     count: 10,
     time_limit: 20,
     type: 'mcq',
     company_context: companyId,
-    category: categories,
-    subcategory: subcategories.length > 0 ? subcategories : categories,
+    category: categories.length === 1 ? categories[0] : categories,
+    subcategory: resolvedSubcategories.length === 1 ? resolvedSubcategories[0] : resolvedSubcategories,
     difficulty: 'medium',
     cross_verify: true,
     exclude_question_ids: [],
@@ -520,22 +522,21 @@ export const getMockTestHistory = async (): Promise<HistoryRecord[]> => {
     // Map backend response to HistoryRecord format
     if (Array.isArray(history)) {
       const mapped = history.map((record: any) => {
-        // Backend already provides score, total, accuracy, and grade
-        // but handle both old format (overall_score, total_marks) and new format (score, total)
-        const score = record.score !== undefined ? record.score : Math.round(record.overall_score || 0);
-        const total = record.total !== undefined ? record.total : record.total_marks || 100;
+        // overall_marks = raw correct answers, overall_score = percentage, total_marks = total questions
+        const score = record.score ?? record.overall_marks ?? Math.round(record.overall_score || 0);
+        const total = record.total ?? record.total_marks ?? record.question_count ?? 100;
         const accuracy = record.accuracy !== undefined
           ? (typeof record.accuracy === 'number' ? record.accuracy : parseInt(record.accuracy) || 0)
-          : (total > 0 ? Math.round((score / total) * 100) : 0);
+          : record.overall_score !== undefined
+            ? Math.round(record.overall_score)
+            : (total > 0 ? Math.round((score / total) * 100) : 0);
 
-        // Backend may provide grade, or calculate from accuracy
         let grade = record.grade || 'F';
         if (!record.grade) {
-          const gradeValue = accuracy;
-          if (gradeValue >= 90) grade = 'A';
-          else if (gradeValue >= 80) grade = 'B';
-          else if (gradeValue >= 70) grade = 'C';
-          else if (gradeValue >= 60) grade = 'D';
+          if (accuracy >= 90) grade = 'A';
+          else if (accuracy >= 80) grade = 'B';
+          else if (accuracy >= 70) grade = 'C';
+          else if (accuracy >= 60) grade = 'D';
         }
 
         return {
@@ -797,35 +798,31 @@ export const getLeaderboard = async (): Promise<Leaderboard> => {
 
     let leaderboardData: Leaderboard | null = null;
 
-    // Map backend response format to frontend Leaderboard format
-    if (response.data?.data && Array.isArray(response.data.data)) {
+    const raw = response.data;
 
-      // Transform backend format { rank, score, is_current_user }
-      // to frontend format { rank, name, score, accuracy, tests_completed }
-      const entries: LeaderboardEntry[] = response.data.data.map((item: any, idx: number) => {
-        const entry = {
-          rank: item.rank || idx + 1,
-          name: item.is_current_user ? 'You' : `Rank ${item.rank}`,
-          score: Math.round(item.score * 10) / 10 || 0, // Round to 1 decimal place
-          accuracy: 0, // Not provided by backend
-          tests_completed: 0, // Not provided by backend
-        };
-        if (item.is_current_user) {
-        }
-        return entry;
-      });
+    // Handle flat response: { total_users, rank, top_10, ... }
+    if (raw && typeof raw === 'object') {
+      const list: any[] = Array.isArray(raw.top_10) ? raw.top_10
+        : Array.isArray(raw.data) ? raw.data
+        : Array.isArray(raw.entries) ? raw.entries
+        : [];
 
-      const summary = response.data.summary || {};
+      const entries: LeaderboardEntry[] = list.map((item: any, idx: number) => ({
+        rank: item.rank || idx + 1,
+        name: item.display_name || (item.is_current_user ? 'You' : `Rank ${idx + 1}`),
+        score: Math.round((item.score ?? 0) * 10) / 10,
+        accuracy: 0,
+        tests_completed: 0,
+        last_test_date: item.date,
+      }));
 
       leaderboardData = {
-        period: summary.period || 'This Week',
-        total_participants: summary.total_users || 1,
-        your_rank: summary.rank,
-        your_score: summary.user_score,
-        entries: entries
+        period: raw.period || 'All Time',
+        total_participants: raw.total_attempts ?? raw.total_users ?? raw.total_participants ?? entries.length,
+        your_rank: raw.rank,
+        your_score: raw.avg_score,
+        entries,
       };
-    } else if (response.data?.entries && Array.isArray(response.data.entries)) {
-      leaderboardData = response.data;
     }
 
     if (!leaderboardData) {

@@ -375,9 +375,8 @@ export default function MockTestResultsPage() {
           >
             {[
               { label: 'Total Tests',    value: progressAnalytics.total_tests ?? 0,         color: 'text-slate-900' },
-              { label: 'Avg Score',      value: typeof progressAnalytics.average_score === 'number' && progressAnalytics.average_score > 0 ? progressAnalytics.average_score.toFixed(1) : (progressAnalytics.average_score === 0 ? '0.0' : '—'), color: 'text-[#2557a7]' },
+              { label: 'Avg Score',      value: result && result.total_questions > 0 ? `${Math.round((result.total_score / result.total_questions) * 100)}%` : '—', color: 'text-[#2557a7]' },
               { label: 'Avg Accuracy',   value: typeof progressAnalytics.average_accuracy === 'number' ? progressAnalytics.average_accuracy.toFixed(1) + '%' : (typeof progressAnalytics.average_score === 'number' && progressAnalytics.average_score > 0 ? progressAnalytics.average_score.toFixed(1) + '%' : '—'), color: 'text-emerald-600' },
-              { label: 'Best Score',     value: progressAnalytics.best_score ?? 0,           color: 'text-purple-600' },
               { label: 'Overall Grade',  value: progressAnalytics.overall_grade ?? 'N/A',    color: 'text-slate-900' },
             ].map(item => (
               <div key={item.label} className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">

@@ -532,7 +532,7 @@ export default function CompanyDetailPage() {
                   const arithmeticSubcategories = ['percentages', 'time_and_work', 'profit_and_loss', 'ratios', 'number_systems'];
                   const randomSubcategory = arithmeticSubcategories[Math.floor(Math.random() * arithmeticSubcategories.length)];
 
-                  const session = await generateMockTest(backendCompanyId, ['arithmetic'], [randomSubcategory], 30000);
+                  const session = await generateMockTest(backendCompanyId, ['arithmetic'], [randomSubcategory], undefined, 30000);
 
                   router.push(`/mock-test/${companyId}?sessionId=${session.session_id}`);
                 } catch (err: any) {
