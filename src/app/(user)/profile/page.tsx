@@ -3,29 +3,31 @@ import React from "react";
 import RightSection from "./_components/RightSection";
 import MainSection from "./_components/MainSection";
 import { ProfileContextProvider } from "./context/ProfileContext";
-import { ProfileData } from "./_types/ProfileData";
+import { useDashboard } from "@/contexts/DashboardContext";
 
-const ProfileContent = ({ initialData }: { initialData?: ProfileData }) => {
+const ProfileContent = () => {
+    const { data: dashboardData } = useDashboard();
+
     return (
         <div className="ml-4">
             <h1 className="text-2xl font-bold mt-4">Profile</h1>
             <div className="min-h-screen  bg-gray-200 px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
                 <div className="flex gap-4">
-                    <MainSection initialData={initialData} />
-                    <RightSection />
+                    <MainSection />
+                    <RightSection
+                        completeness={dashboardData?.profile?.completeness ?? 0}
+                        missingFields={dashboardData?.profile?.missing_fields ?? []}
+                    />
                 </div>
             </div>
         </div>
     );
 };
 
-//  Main page component
-const ProfilePage = ({ initialData }: { initialData?: ProfileData }) => {
+export default function ProfilePage() {
     return (
         <ProfileContextProvider>
-            <ProfileContent initialData={initialData} />
+            <ProfileContent />
         </ProfileContextProvider>
     );
-};
-
-export default ProfilePage;
+}

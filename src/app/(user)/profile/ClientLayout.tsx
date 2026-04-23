@@ -13,7 +13,7 @@ export default function ClientLayout({
     return (
         <DashboardProvider>
             <div className="flex">
-                <div className="fixed top-0 left-0 h-full transition-all duration-300" style={{ width: 'var(--sidebar-width, 64px)' }}>
+                <div className="fixed top-0 left-0 h-full transition-all duration-300 z-30" style={{ width: 'var(--sidebar-width, 64px)' }}>
                     <Sidebar />
                 </div>
                 <div className="flex-1 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 64px)' }}>

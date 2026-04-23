@@ -54,6 +54,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   // Prevent state updates after unmount
   const mountedRef = useRef(true);
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -65,16 +66,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       const summary = await getDashboardSummary();
-      if (!mountedRef.current) return;
       setData(summary);
       setCreditsRemaining(summary.plan.credits_remaining);
       logger.info('DashboardContext: data loaded');
     } catch (err) {
-      if (!mountedRef.current) return;
       logger.error('DashboardContext: fetch failed', err);
       setError(err as Error);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      setLoading(false);
     }
   }, []);
 

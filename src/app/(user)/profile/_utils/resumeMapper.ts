@@ -3,6 +3,27 @@ import { ProfileData } from '../_types/ProfileData';
 import { normalizeDegree, normalizeStream } from './education-normalizer';
 
 /**
+ * Consolidate achievements and responsibilities into a single description
+ * Combines both arrays with bullets, ordered by tier priority
+ */
+const buildDescription = (
+    achievements?: Array<{ text: string; tier?: string; tier_confidence?: number }>,
+    responsibilities?: Array<{ text: string; tier?: string; tier_confidence?: number }>
+): string => {
+    const items: string[] = [];
+
+    if (achievements?.length) {
+        items.push(...achievements.map(a => `• ${a.text}`));
+    }
+
+    if (responsibilities?.length) {
+        items.push(...responsibilities.map(r => `• ${r.text}`));
+    }
+
+    return items.join('\n').trim();
+};
+
+/**
  * Format phone number - returns as-is for backend validation
  * Backend will validate phone number format and return error if invalid
  */
@@ -140,7 +161,7 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                     location: exp.location || 'India',
                     start_date: start,
                     end_date: end,
-                    description: exp.key_contributions?.join('\n') || '',
+                    description: buildDescription(exp.achievements, exp.responsibilities),
                     currently_working: !end,
                 };
             });
@@ -157,7 +178,7 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
                 location: '',
                 start_date: start,
                 end_date: end,
-                description: intern.key_contributions?.join('\n') || '',
+                description: buildDescription(intern.achievements, intern.responsibilities),
                 currently_working: false,
             };
         });
@@ -199,8 +220,8 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     if (llm.projects?.length > 0) {
         profileData.projects = llm.projects.map((project) => ({
             project_name: project.title || '',
-            description: project.key_contributions?.join('\n') || '',
-            technologies: '',
+            description: buildDescription(project.achievements, project.responsibilities) || project.key_contributions?.join('\n') || '',
+            technologies: project.tech_stack?.join(', ') || '',
             role: '',
             project_link: '',
             start_date: '',

@@ -357,53 +357,64 @@ export default function ATSLoginPage() {
       )}
 
       {/* ══ HERO ══ */}
-      <section style={{ background: "linear-gradient(160deg,#eef2ff 0%,#f0f7ff 55%,#ffffff 100%)" }} className="py-16 lg:py-24">
+      <section style={{ background: "#eef2ff" }} className="py-16 lg:py-24">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-14 items-center">
 
             {/* Left: copy */}
-            <div className="max-w-xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6" style={{ background: "rgba(37,87,167,0.08)" }}>
+            <div className="max-w-xl flex flex-col gap-6">
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full w-fit" style={{ background: "rgba(37,87,167,0.08)" }}>
                 <Sparkles className="w-3.5 h-3.5" style={{ color: "#2557a7" }} />
                 <span className="text-xs font-semibold tracking-wide" style={{ color: "#2557a7" }}>ATS Resume Checker · CareerBot</span>
               </div>
-              <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 leading-[1.15] mb-5">
-                Will Your Resume Pass<br />
-                <span style={{ color: "#2557a7" }}>the ATS Filter?</span>
-              </h1>
-              <p className="text-base text-gray-500 leading-relaxed mb-8">
+
+              {/* Heading — strong hierarchy */}
+              <div className="flex flex-col gap-1">
+                <h1 className="text-4xl lg:text-5xl font-extrabold leading-[1.15]" style={{ color: "#111827" }}>
+                  Will Your Resume Pass
+                </h1>
+                <h1 className="text-4xl lg:text-5xl font-extrabold leading-[1.15]" style={{ background: "linear-gradient(90deg,#2557a7,#6366f1)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                  the ATS Filter?
+                </h1>
+              </div>
+
+              {/* Subtext */}
+              <p className="text-base text-gray-500 leading-relaxed">
                 75% of qualified candidates never reach the interview stage because their resumes fail ATS scans.
                 Upload yours and get an instant score — free, no sign-up required.
               </p>
 
-              {/* Trust stats */}
-              <div className="flex flex-wrap gap-6">
+              {/* Primary CTA */}
+              <label
+                htmlFor="hero-file-upload"
+                className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl text-white font-bold text-base cursor-pointer w-fit transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-100"
+                style={{ background: "linear-gradient(135deg,#2557a7,#6366f1)", boxShadow: "0 6px 20px rgba(37,87,167,0.35)" }}
+              >
+                <Upload className="w-4 h-4" />
+                Upload Resume — It&apos;s Free
+              </label>
+
+              {/* Stats */}
+              <div className="flex flex-wrap gap-8 mt-2">
                 {[
-                  { value: "60s", label: "Average scan time" },
-                  { value: "10+", label: "Sections analysed" },
-                  { value: "100%", label: "Free to use" },
+                  { icon: "⚡", value: "60s", label: "Average scan time" },
+                  { icon: "📋", value: "10+", label: "Sections analysed" },
+                  { icon: "✅", value: "100%", label: "Free to use" },
                 ].map(s => (
-                  <div key={s.label}>
-                    <p className="text-2xl font-black leading-none" style={{ color: "#2557a7" }}>{s.value}</p>
-                    <p className="text-xs text-gray-400 font-medium mt-0.5">{s.label}</p>
+                  <div key={s.label} className="flex items-center gap-2">
+                    <span className="text-xl">{s.icon}</span>
+                    <div>
+                      <p className="text-2xl font-black leading-none" style={{ color: "#2557a7" }}>{s.value}</p>
+                      <p className="text-xs text-gray-400 font-medium mt-0.5">{s.label}</p>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Right: upload card */}
-            <div className="bg-white rounded-2xl p-8" style={{ border: "1px solid #e2e8f2", boxShadow: "0 8px 32px rgba(37,87,167,0.10), 0 1px 4px rgba(0,0,0,0.04)" }}>
-
-              {/* Card header */}
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#2557a7" }}>
-                  <FileText className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900 leading-tight">Check Your ATS Score</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">PDF, DOCX or DOC · max 10 MB</p>
-                </div>
-              </div>
+            <div className="relative rounded-3xl p-3 overflow-visible" style={{ background: "#ffffff", boxShadow: "0 8px 40px rgba(0,0,0,0.10)", minWidth: 520 }}>
 
               <input
                 type="file"
@@ -414,85 +425,176 @@ export default function ATSLoginPage() {
               />
 
               {!file ? (
-                /* Drop zone */
-                <label
-                  htmlFor="hero-file-upload"
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`flex flex-col items-center justify-center gap-3 w-full border-2 border-dashed rounded-xl py-10 px-6 cursor-pointer transition-all duration-200 ${
-                    isDragging ? "scale-[0.99]" : ""
-                  }`}
-                  style={{
-                    borderColor: isDragging ? "#2557a7" : "#d1dbe8",
-                    background: isDragging ? "rgba(37,87,167,0.04)" : undefined,
-                  }}
-                >
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(37,87,167,0.08)" }}>
-                    <Upload className="w-5 h-5" style={{ color: "#2557a7" }} />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-semibold text-gray-800">Drop your resume here</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      or <span className="font-semibold" style={{ color: "#2557a7" }}>click to browse</span>
-                    </p>
-                  </div>
-                  <p className="text-[11px] text-gray-300 mt-1">PDF · DOCX · DOC · max 10 MB</p>
-                </label>
-              ) : (
-                /* File selected state */
-                <div className="flex flex-col gap-4">
-                  {/* File row */}
-                  <div className="flex items-center gap-3 p-3.5 rounded-xl" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
-                    <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                      <Check className="w-4 h-4 text-emerald-600" strokeWidth={2.5} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{file.name}</p>
-                      <p className="text-xs text-emerald-600 font-medium">Ready to scan</p>
-                    </div>
-                    <button
-                      onClick={handleRemoveFile}
-                      disabled={isLoading}
-                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition-colors disabled:opacity-40"
-                      title="Remove file"
+                /* Hero Drop zone */
+                <div className="relative" style={{ minHeight: 380 }}>
+
+                  {/* === Main layout: dashed box + badges === */}
+                  <div className="relative flex gap-4 items-stretch">
+
+                    {/* Dashed drop box */}
+                    <label
+                      htmlFor="hero-file-upload"
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={`relative flex-1 flex flex-col items-center justify-between cursor-pointer rounded-2xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.01] ${isDragging ? "scale-[0.99]" : ""}`}
+                      style={{
+                        border: `2px dashed ${isDragging ? "#6366f1" : "#d1d5db"}`,
+                        background: isDragging ? "rgba(99,102,241,0.04)" : "#ffffff",
+                        minHeight: 380,
+                        overflow: "visible",
+                      }}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                      {/* Upload icon — top center */}
+                      <div className="flex justify-center items-center w-full pt-12">
+                        <div className="relative flex items-center justify-center">
+                          <div
+                            className="relative w-24 h-24 rounded-2xl flex items-center justify-center"
+                            style={{ background: "#f3f4f6", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
+                          >
+                            <Upload className="w-11 h-11" style={{ color: "#6366f1" }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Title + subtitle — bottom center */}
+                      <div className="flex flex-col items-center gap-2 pb-12 px-6">
+                        <p className="text-[1.85rem] font-extrabold text-gray-900 whitespace-nowrap tracking-tight text-center">
+                          Upload Your Resume
+                        </p>
+                        <p className="text-sm text-gray-400 text-center">
+                          Drag &amp; drop or click to upload · PDF, DOCX, DOC
+                        </p>
+                      </div>
+
+                      {/* Person — bottom-right, outside dashed box */}
+                      <img
+                        src="/images/atsloginhero.png"
+                        alt=""
+                        className="absolute object-contain pointer-events-none select-none"
+                        style={{ height: 210, right: -115, bottom: -55, zIndex: 5 }}
+                        draggable={false}
+                      />
+                    </label>
+
+                    {/* File type badges — right column */}
+                    <div className="flex flex-col justify-start gap-3 pt-2 -ml-2" style={{ width: 96, flexShrink: 0 }}>
+                      {[
+                        { label: "PDF", bg: "#c4b5fd", color: "#4c1d95" },
+                        { label: "DOCX", bg: "#a5b4fc", color: "#312e81" },
+                      ].map(({ label, bg, color }) => (
+                        <span
+                          key={label}
+                          className="text-sm font-bold px-4 py-2.5 rounded-xl text-center block transition-transform hover:scale-105"
+                          style={{ background: bg, color, boxShadow: "0 2px 8px rgba(139,92,246,0.18)" }}
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+
+                  </div>
+                </div>
+              ) : (
+                /* File selected state — full-card layout matching upload card */
+                <div className="relative flex gap-4 items-stretch" style={{ minHeight: 380 }}>
+
+                  {/* Main card */}
+                  <div
+                    className="flex-1 flex flex-col items-center justify-between rounded-2xl"
+                    style={{ border: "2px dashed #d1d5db", background: "#ffffff", minHeight: 380, overflow: "visible" }}
+                  >
+                    {/* Top: file icon + ready badge */}
+                    <div className="flex flex-col items-center gap-3 pt-12">
+                      <div className="relative">
+                        <div
+                          className="w-24 h-24 rounded-2xl flex items-center justify-center"
+                          style={{ background: "#f0fdf4", boxShadow: "0 2px 12px rgba(16,185,129,0.15)" }}
+                        >
+                          <FileText className="w-11 h-11 text-emerald-500" />
+                        </div>
+                        <div
+                          className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full flex items-center justify-center"
+                          style={{ background: "#10b981", boxShadow: "0 2px 8px rgba(16,185,129,0.40)" }}
+                        >
+                          <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                        </div>
+                      </div>
+                      <span
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
+                        style={{ background: "rgba(16,185,129,0.10)", color: "#059669" }}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                        Ready to scan
+                      </span>
+                    </div>
+
+                    {/* Middle: file info */}
+                    <div className="flex flex-col items-center gap-1 px-8 text-center">
+                      <p className="text-lg font-bold text-gray-900 truncate max-w-xs">{file.name}</p>
+                      <p className="text-sm text-gray-400">{(file.size / 1024).toFixed(0)} KB · {file.name.split(".").pop()?.toUpperCase()}</p>
+                    </div>
+
+                    {/* Bottom: terms + CTA + remove */}
+                    <div className="flex flex-col items-center gap-4 pb-10 px-8 w-full">
+                      <label className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={agreed}
+                          onChange={(e) => setAgreed(e.target.checked)}
+                          className="shrink-0 w-4 h-4 cursor-pointer"
+                          style={{ accentColor: "#2557a7" }}
+                        />
+                        <span className="text-xs text-gray-500 leading-relaxed">
+                          I agree to CareerBot&apos;s{" "}
+                          <span className="underline underline-offset-2" style={{ color: "#2557a7" }}>Terms of Service</span>
+                          {" "}and{" "}
+                          <span className="underline underline-offset-2" style={{ color: "#2557a7" }}>Privacy Policy</span>
+                        </span>
+                      </label>
+
+                      <button
+                        onClick={handleScanResume}
+                        disabled={isLoading || !agreed}
+                        className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 hover:-translate-y-px active:translate-y-0"
+                        style={{ background: "linear-gradient(135deg,#2557a7,#1a4080)", boxShadow: agreed ? "0 4px 14px rgba(37,87,167,0.30)" : undefined }}
+                      >
+                        {isLoading ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" /><span>Scanning…</span></>
+                        ) : (
+                          <><Sparkles className="w-4 h-4" /><span>Scan My Resume</span><ArrowRight className="w-4 h-4" /></>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={handleRemoveFile}
+                        disabled={isLoading}
+                        className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40 flex items-center gap-1"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Remove file
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Terms */}
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={agreed}
-                      onChange={(e) => setAgreed(e.target.checked)}
-                      className="mt-0.5 shrink-0 w-4 h-4 cursor-pointer"
-                      style={{ accentColor: "#2557a7" }}
-                    />
-                    <span className="text-xs text-gray-500 leading-relaxed">
-                      I agree to CareerBot&apos;s{" "}
-                      <span className="underline underline-offset-2" style={{ color: "#2557a7" }}>Terms of Service</span>
-                      {" "}and{" "}
-                      <span className="underline underline-offset-2" style={{ color: "#2557a7" }}>Privacy Policy</span>
-                    </span>
-                  </label>
+                  {/* File type badges — same right column as upload state */}
+                  <div className="flex flex-col justify-start gap-3 pt-2 -ml-2" style={{ width: 96, flexShrink: 0 }}>
+                    {[
+                      { label: "PDF", bg: "#c4b5fd", color: "#4c1d95" },
+                      { label: "DOCX", bg: "#a5b4fc", color: "#312e81" },
+                    ].map(({ label, bg, color }) => (
+                      <span
+                        key={label}
+                        className="text-sm font-bold px-4 py-2.5 rounded-xl text-center block"
+                        style={{ background: bg, color, boxShadow: "0 2px 8px rgba(139,92,246,0.18)" }}
+                      >
+                        {label}
+                      </span>
+                    ))}
+                  </div>
 
-                  {/* CTA */}
-                  <button
-                    onClick={handleScanResume}
-                    disabled={isLoading || !agreed}
-                    className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 hover:-translate-y-px active:translate-y-0"
-                    style={{ background: "linear-gradient(135deg,#2557a7,#1a4080)", boxShadow: agreed ? "0 4px 14px rgba(37,87,167,0.30)" : undefined }}
-                  >
-                    {isLoading ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" /><span>Scanning…</span></>
-                    ) : (
-                      <><Sparkles className="w-4 h-4" /><span>Scan My Resume</span><ArrowRight className="w-4 h-4" /></>
-                    )}
-                  </button>
                 </div>
               )}
 
