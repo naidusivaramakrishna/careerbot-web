@@ -61,6 +61,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
 
   const parsedData = data?.parsed_data || data || {};
   const llmData = parsedData?.llm_data || {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const enhancedResume: Record<string, any> = data?.enhanced_resume || {};
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const toStr = (v: any): string => {
@@ -147,9 +149,21 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     parsedData.certifications || parsedData.certificates || parsedData.certification_details ||
     parsedData.professional_certifications || parsedData.courses || parsedData.training ||
     llmData.certifications || llmData.certificates || llmData.certification_details ||
-    llmData.professional_certifications || llmData.courses || llmData.training || []
+    llmData.professional_certifications || llmData.courses || llmData.training ||
+    enhancedResume.certifications || enhancedResume.certificates || []
   );
   if (!Array.isArray(certifications)) certifications = [];
+  // Filter out items that have no extractable name (null-value placeholders from raw parse)
+  certifications = certifications.filter((c: unknown) => {
+    if (!c) return false;
+    if (typeof c === "string") return c.trim() !== "";
+    if (typeof c === "object") {
+      const o = c as Record<string, unknown>;
+      return !!(o.name || o.title || o.certification || o.course_name || o.course ||
+                o.certification_name || o.certificate_name || o.cert_name);
+    }
+    return false;
+  });
 
   let achievements = ov.achievements ?? (parsedData.achievements || llmData.achievements || []);
   if (!Array.isArray(achievements)) achievements = [];
@@ -577,7 +591,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   {certifications.map((cert: any, idx: number) => {
                     const certName = typeof cert === "string"
                       ? cert
-                      : toStr(cert.name || cert.title || cert.certification || cert.course_name || cert.course || "");
+                      : toStr(cert.name || cert.title || cert.certification || cert.course_name || cert.course || cert.certification_name || cert.certificate_name || cert.cert_name || "");
                     const issuedBy = typeof cert === "object" ? toStr(cert.issuedBy || cert.issued_by || cert.organization || cert.issuer || cert.institution || "") : "";
                     const year = typeof cert === "object" ? toStr(cert.year || cert.date || cert.issue_date || cert.completion_date || "") : "";
                     if (!certName) return null;

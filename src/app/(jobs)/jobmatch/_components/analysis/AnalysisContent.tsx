@@ -10,7 +10,7 @@ import { useResumePDF } from "../_hooks/useResumePDF";
 import { useSkillUpdate } from "../_hooks/useSkillUpdate";
 import { AnalysisContentProps } from "../_types";
 import httpClient from "@/lib/http";
-import { Eye, Plus, Check, ChevronLeft, User, AlignLeft, Code2, Heart, GraduationCap, FolderOpen, Building2, Award, Star, Globe, Edit3, Download, HelpCircle, Target, Briefcase, FileText } from "lucide-react";
+import { Eye, Check, ChevronLeft, User, AlignLeft, Code2, Heart, GraduationCap, FolderOpen, Building2, Award, Star, Globe, Edit3, Download, HelpCircle, Target, Briefcase, FileText } from "lucide-react";
 import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
 
 /* ── resume section definitions ── */
@@ -300,44 +300,46 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
     finally { setDownloading(false); }
   }, [resumeId]);
 
-  /* ── skill tag ── */
-  const Tag = ({ skill, type, hover }: { skill: string; type: "technical" | "soft"; hover: string }) => {
-    const added = localAdded.has(skill);
-    return (
-      <button
-        onClick={() => added ? removeSkill(skill, type) : addSkill(skill, type)}
-        title={added ? `Remove "${skill}"` : `Add "${skill}" to resume`}
-        className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
-          added ? "bg-emerald-50 border-emerald-300 text-emerald-700" : `border-gray-200 text-gray-600 ${hover}`
-        }`}
-      >
-        {added ? <Check className="w-2.5 h-2.5 shrink-0" /> : <Plus className="w-2.5 h-2.5 shrink-0" />}
-        {skill}
-      </button>
-    );
-  };
-
   /* ── opportunity group ── */
-  const borderMap: Record<string, string> = {
-    "text-red-500": "border-red-400",
-    "text-amber-500": "border-amber-400",
-    "text-blue-500": "border-blue-400",
-    "text-purple-500": "border-purple-400",
-  };
-  const OpGroup = ({ title, count, color, skills, type, hover }: {
+  const OpGroup = ({ title, count, skills, type, startIdx }: {
     title: string; count: number; color: string;
-    skills: string[]; type: "technical" | "soft"; hover: string;
+    skills: string[]; type: "technical" | "soft"; startIdx: number;
   }) => {
     if (!skills.length) return null;
-    const border = borderMap[color] ?? "border-gray-300";
     return (
-      <div className={`border-l-2 pl-3 ${border}`}>
-        <div className="flex items-center justify-between mb-2">
-          <span className={`text-xs font-bold ${color}`}>{title}</span>
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${color.replace("text-", "bg-").replace("-500", "-100")} ${color}`}>{count}</span>
+      <div className="mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{title}</span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{count}</span>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {skills.map(s => <Tag key={s} skill={s} type={type} hover={hover} />)}
+        <div className="space-y-3">
+          {skills.map((skill, idx) => {
+            const added = localAdded.has(skill);
+            return (
+              <button
+                key={skill}
+                onClick={() => added ? removeSkill(skill, type) : addSkill(skill, type)}
+                className="w-full text-left rounded-2xl border border-gray-100 px-4 pt-4 pb-4 hover:border-gray-200 transition-all"
+                style={{ background: "#f9fafa", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
+              >
+                {/* Number badge + title on same line */}
+                <div className="flex items-center gap-2.5 mb-3">
+                  <span className="w-6 h-6 rounded-md bg-slate-100 text-slate-500 text-[11px] font-bold flex items-center justify-center shrink-0">
+                    {startIdx + idx + 1}
+                  </span>
+                  <p className="text-[13px] font-semibold text-gray-800 leading-none">{skill}</p>
+                </div>
+                {/* Inner gray box */}
+                <div className={`rounded-xl px-4 py-3 border ${added ? "bg-emerald-50 border-emerald-100" : "bg-white border-gray-100"}`}>
+                  <p className={`text-[13px] leading-relaxed ${added ? "text-emerald-600 font-medium" : "text-[#0a818f]"}`}>
+                    {added
+                      ? "✓ Added to your resume"
+                      : `Adding "${skill}" to your resume will improve your match score for this role.`}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -648,10 +650,10 @@ const AnalysisContent: React.FC<AnalysisContentProps> = ({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <OpGroup title="High Priority"   count={missingCritical.length}   color="text-red-500"    skills={missingCritical}   type="technical" hover="hover:bg-red-50 hover:text-red-700 hover:border-red-300" />
-                  <OpGroup title="Medium Priority" count={missingImportant.length}  color="text-amber-500"  skills={missingImportant}  type="technical" hover="hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300" />
-                  <OpGroup title="Nice to Have"    count={missingNiceToHave.length} color="text-blue-500"   skills={missingNiceToHave} type="technical" hover="hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300" />
-                  <OpGroup title="Soft Skills"     count={missingSoft.length}       color="text-purple-500" skills={missingSoft}       type="soft"      hover="hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300" />
+                  <OpGroup title="High Priority"   count={missingCritical.length}   color="" skills={missingCritical}   type="technical" startIdx={0} />
+                  <OpGroup title="Medium Priority" count={missingImportant.length}  color="" skills={missingImportant}  type="technical" startIdx={missingCritical.length} />
+                  <OpGroup title="Nice to Have"    count={missingNiceToHave.length} color="" skills={missingNiceToHave} type="technical" startIdx={missingCritical.length + missingImportant.length} />
+                  <OpGroup title="Soft Skills"     count={missingSoft.length}       color="" skills={missingSoft}       type="soft"      startIdx={missingCritical.length + missingImportant.length + missingNiceToHave.length} />
                 </div>
               )}
             </div>

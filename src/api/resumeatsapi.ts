@@ -2,7 +2,7 @@ import { isAuthenticated } from "./authApi";
 import { getCorrelationId } from "@/lib/correlationId";
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import { enhanceResume } from "./enhancerApi";
-import { calculateATS } from "./parserApi";
+import { calculateATS, getResume } from "./parserApi";
 
 const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
@@ -107,6 +107,12 @@ export const processResumeComplete = async (file: File) => {
     const enhanceResult = await enhanceResume({ resume_id: resumeId });
     const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown ?? {};
 
+    // Step 3: Fetch full resume from MongoDB (has all sections after LLM enhancement)
+    let resumeData: Record<string, unknown> | null = null;
+    try {
+      resumeData = await getResume(resumeId) as Record<string, unknown>;
+    } catch { /* non-fatal — fallback to parsed_data */ }
+
     // Extract final score from ats_breakdown (try all known field names)
     const finalScore: number = Number(
       (atsBreakdown as Record<string, unknown>).FinalScore ??
@@ -121,9 +127,11 @@ export const processResumeComplete = async (file: File) => {
 
     const payload = {
       resume_id: resumeId,
-      ats_breakdown_id: null, // not needed in new flow
+      ats_breakdown_id: null,
       parsed_data: parsedData,
-      ats_score: atsBreakdown, // SectionBreakdown, Suggestions, FinalScore, etc.
+      resume_data: resumeData,        // full MongoDB doc — most complete source
+      enhanced_resume: enhanceResult.enhanced_resume || null,
+      ats_score: atsBreakdown,
       finalWeightedScore: finalScore,
       missingFields: [],
       scanned_pdf: false,

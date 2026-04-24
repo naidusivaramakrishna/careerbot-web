@@ -22,7 +22,7 @@ import {
   Trophy,
   TrendingUp,
 } from "lucide-react";
-import JobMatchTemplateThree from "@/app/(jobs)/jobmatch/_components/resume/JobMatchTemplateThree";
+import ATSResumePreview from "@/app/(resume)/atslogin/_components/ATSResumePreview";
 
 const PREVIEW_BASE = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:8000/api/v1";
 
@@ -137,9 +137,22 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
       CareerProgression:getSection(["CareerProgression","career_progression"],             0,             0),
       Suggestions:      (atsScore?.suggestions as unknown[]) || (atsScore?.Suggestions as unknown[]) || (numericBreakdown.Suggestions as unknown[]) || [],
     },
-    Fresher: !!(raw?.Fresher ?? atsScore?.Fresher) || (atsScore?.profile as string) === "Fresher",
-    Domain:  (raw?.Domain as string)  || (atsScore?.Domain as string) || "General",
-    Profile: (atsScore?.profile as string) || (raw?.Fresher ? "Fresher" : "") || "General",
+    ...(() => {
+      const parsedOverallExp = (raw?.parsed_data as Record<string, unknown> | undefined)
+        ?.llm_data as Record<string, unknown> | undefined;
+      const overallExp = parsedOverallExp?.overall_experience as Record<string, unknown> | undefined;
+      const isFresherFromParser = typeof overallExp?.is_fresher === "boolean" ? overallExp.is_fresher : null;
+      const isFresherLegacy = !!(raw?.Fresher ?? atsScore?.Fresher) || (atsScore?.profile as string) === "Fresher";
+      const isFresher = isFresherFromParser !== null ? isFresherFromParser : isFresherLegacy;
+      const atsProfile = atsScore?.profile as string | undefined;
+      return {
+        Fresher: isFresher,
+        Domain: (raw?.Domain as string) || (atsScore?.Domain as string) || "General",
+        Profile: isFresher
+          ? "Fresher"
+          : (atsProfile && atsProfile !== "Fresher" ? atsProfile : "General"),
+      };
+    })(),
   };
 }
 
@@ -354,11 +367,6 @@ function IssueCard({
   const isCritical = issue.priority === "critical";
   const isUrgent   = issue.priority === "urgent";
 
-  const palette = isCritical
-    ? { accent: "#ef4444", soft: "#fff5f5", softBorder: "rgba(239,68,68,0.18)", ptsFg: "#dc2626", ptsBg: "#fee2e2", iconRing: "rgba(239,68,68,0.12)" }
-    : isUrgent
-    ? { accent: "#f59e0b", soft: "#fffbeb", softBorder: "rgba(245,158,11,0.18)", ptsFg: "#b45309", ptsBg: "#fef3c7", iconRing: "rgba(245,158,11,0.12)" }
-    : { accent: "#8b5cf6", soft: "#faf5ff", softBorder: "rgba(139,92,246,0.18)", ptsFg: "#6d28d9", ptsBg: "#ede9fe", iconRing: "rgba(139,92,246,0.12)" };
 
   const rawPts     = SECTION_IMPACT[issue.section] ?? 5;
   const impactPts  = isCritical ? rawPts : isUrgent ? Math.floor(rawPts * 0.65) : Math.floor(rawPts * 0.35);
@@ -369,65 +377,48 @@ function IssueCard({
 
   return (
     <div
-      className="group relative bg-white rounded-xl overflow-hidden transition-all duration-150 cursor-default"
-      style={{
-        border: "1px solid #e2e8f0",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-      }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(0,0,0,0.09)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 3px rgba(0,0,0,0.05)"; (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
+      className="group relative rounded-2xl transition-all duration-150 cursor-default"
+      style={{ background: "#f9fafa", border: "1px solid #e8ecf0", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 4px rgba(0,0,0,0.04)"; }}
     >
-      <div className="px-4 py-4 flex gap-3.5">
+      <div className="px-4 pt-4 pb-4">
 
-        {/* Icon bubble */}
-        <div
-          className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center mt-0.5"
-          style={{ background: "#f8fafc", border: "1px solid #edf0f4" }}
-        >
-          <Icon style={{ width: 16, height: 16, color: "#64748b" }} />
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 min-w-0">
-
-          {/* Row 1: title + pts */}
-          <div className="flex items-start justify-between gap-2 mb-1.5">
-            <p className="text-[13px] font-bold text-gray-900 leading-snug flex-1">{title}</p>
-            <span
-              className="shrink-0 text-[11px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap mt-0.5"
-              style={{ background: "#f8fafc", color: palette.ptsFg, border: "1px solid #edf0f4" }}
-            >
-              +{impactPts} pts
-            </span>
+        {/* Row 1: icon + title + pts — all on same line */}
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#f1f5f9" }}>
+            <Icon style={{ width: 15, height: 15, color: "#64748b" }} />
           </div>
-
-          {/* Row 2: suggestion */}
-          <p className="text-[12px] text-gray-400 leading-relaxed mb-3 line-clamp-2">{issue.suggestion}</p>
-
-          {/* Row 3: action */}
-          <button
-            onClick={onFix}
-            className="inline-flex items-center gap-1.5 text-[12px] font-bold px-4 py-1.5 rounded-xl transition-all duration-150 active:scale-95"
-            style={{
-              background: "#2557a7",
-              color: "white",
-              boxShadow: "0 2px 8px rgba(37,87,167,0.28)",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 14px rgba(37,87,167,0.4)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 8px rgba(37,87,167,0.28)"; }}
-          >
-            Fix Now
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          <p className="text-[13px] font-bold text-gray-900 leading-snug flex-1">{title}</p>
+          <span className="shrink-0 text-[11px] font-bold whitespace-nowrap" style={{ color: "#2557a7" }}>
+            +{impactPts} pts
+          </span>
         </div>
+
+        {/* Inner white box — suggestion text */}
+        <div className="rounded-xl bg-white px-4 py-3 mb-3" style={{ border: "1px solid #f0f0f0" }}>
+          <p className="text-[12.5px] text-gray-500 leading-relaxed">{issue.suggestion}</p>
+        </div>
+
+        {/* Fix Now button */}
+        <button
+          onClick={onFix}
+          className="inline-flex items-center gap-1.5 text-[12px] font-bold px-4 py-1.5 rounded-xl text-white transition-all active:scale-95"
+          style={{ background: "#0f2d4e", boxShadow: "0 2px 8px rgba(15,45,78,0.25)" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+        >
+          Fix Now
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
 
-      {/* Dismiss — only visible on hover */}
+      {/* Dismiss on hover */}
       <button
         onClick={onDismiss}
-        className="absolute top-3 right-3 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all duration-150"
+        className="absolute top-3 right-3 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all"
         title="Dismiss"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -505,7 +496,7 @@ function PriorityGroup({
               const SectionIcon = sectionIcons[section] ?? Lightbulb;
               const label = section.replace(/([A-Z])/g, " $1").trim();
               return (
-                <div key={section} id={`issue-section-${section}`}>
+                <div key={section} id={`issue-section-${section}`} style={{ scrollMarginTop: "80px" }}>
                   {/* Section divider */}
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: accentBg }}>
@@ -635,7 +626,7 @@ function ATSLoginReport() {
 
   const issuesPanelRef = useRef<HTMLDivElement>(null);
 
-  // Click a breakdown bar → switch to its priority filter + scroll only the issues panel
+  // Click a breakdown bar → switch to its priority filter + scroll to that section in the issues panel
   const scrollToSection = useCallback((sectionName: string) => {
     const inCritical = grouped.critical.some(i => i.section === sectionName);
     const inUrgent   = grouped.urgent.some(i => i.section === sectionName);
@@ -643,14 +634,13 @@ function ATSLoginReport() {
     const target = inCritical ? "critical" : inUrgent ? "urgent" : inOptional ? "optional" : null;
     if (!target) return;
     setFilter(target);
+    // Wait for React to re-render with the new filter, then scrollIntoView the section
     setTimeout(() => {
-      const panel = issuesPanelRef.current;
       const el = document.getElementById(`issue-section-${sectionName}`);
-      if (panel && el) {
-        const top = el.offsetTop - panel.offsetTop;
-        panel.scrollTo({ top, behavior: "smooth" });
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-    }, 80);
+    }, 150);
   }, [grouped]);
 
   const handleFixNow = () => {
@@ -743,9 +733,9 @@ function ATSLoginReport() {
 
   const TAB_CONFIG = [
     { key: "all",      label: "All",             count: grouped.critical.length + grouped.urgent.length + grouped.optional.length },
-    { key: "critical", label: "Fix First",        count: grouped.critical.length,  color: "#ef4444" },
-    { key: "urgent",   label: "High Impact",      count: grouped.urgent.length,    color: "#f59e0b" },
-    { key: "optional", label: "Nice to Improve",  count: grouped.optional.length,  color: "#8b5cf6" },
+    { key: "critical", label: "Fix First",        count: grouped.critical.length,  color: "#00bba7" },
+    { key: "urgent",   label: "High Impact",      count: grouped.urgent.length,    color: "#00bba7" },
+    { key: "optional", label: "Nice to Improve",  count: grouped.optional.length,  color: "#00bba7" },
   ] as const;
 
   /* ── Report ──────────────────────── */
@@ -759,152 +749,138 @@ function ATSLoginReport() {
           {/* ── LEFT: Score card (3 cols, sticky) ────── */}
           <div className="lg:col-span-4 lg:sticky lg:top-6 self-start space-y-4">
 
-            {/* Score gauge card — Premium */}
+            {/* Score gauge card */}
             {(() => {
-              const scoreColor  = pct >= 70 ? "#16a34a" : pct >= 40 ? "#f59e0b" : "#ef4444";
-              const scoreBg     = pct >= 70 ? "#f0fdf4" : pct >= 40 ? "#fffbeb" : "#fff5f5";
-              const scoreBorder = pct >= 70 ? "#bbf7d0" : pct >= 40 ? "#fde68a" : "#fecaca";
-              const ptsDiff     = pct >= 90 ? 100 - pct : Math.max(0, 90 - pct);
-              return (
-            <div
-              className="rounded-3xl overflow-hidden bg-white"
-              style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.06), 0 16px 40px rgba(0,0,0,0.09)", border: "1px solid #f1f5f9" }}
-            >
-              <div className="p-6">
+              const scoreColor  = pct >= 85 ? "#22c55e" : pct >= 70 ? "#22c55e" : pct >= 40 ? "#f59e0b" : "#ef4444";
+              const scoreLight  = pct >= 70 ? "#f0fdf4" : pct >= 40 ? "#fffbeb" : "#fff5f5";
+              const scoreBorder = pct >= 70 ? "#86efac" : pct >= 40 ? "#fcd34d" : "#fca5a5";
+              const ptsDiff     = Math.max(0, 90 - pct);
 
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
-                      style={{ background: "#2557a7", boxShadow: "0 4px 12px rgba(37,87,167,0.25)" }}>
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-black text-gray-900">ATS SCORE</p>
-                      <p className="text-[11px] text-gray-400">Your resume&apos;s compatibility score</p>
-                    </div>
+              const CX = 110, CY = 95, R = 80;
+              const circumference = 2 * Math.PI * R;
+              const dashOffset = circumference * (1 - pct / 100);
+
+              const tiers = [
+                { label: "Needs Work", range: "0–40",   color: "#0f2d4e", active: pct < 40 },
+                { label: "Average",    range: "40–70",  color: "#0f2d4e", active: pct >= 40 && pct < 70 },
+                { label: "Good",       range: "70–85",  color: "#00bba7", active: pct >= 70 && pct < 85 },
+                { label: "Excellent",  range: "85–100", color: "#00bba7", active: pct >= 85 },
+              ];
+
+              return (
+            <div className="rounded-3xl bg-white overflow-hidden"
+              style={{ boxShadow: "0 2px 4px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.12)", border: "1px solid rgba(0,0,0,0.06)" }}>
+
+              <div className="px-5 pt-5 pb-5">
+
+                {/* Header row */}
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-[17px] font-extrabold text-gray-900 tracking-tight leading-none">ATS SCORE</p>
+                    <p className="text-[12px] text-gray-400 mt-0.5">Resume compatibility</p>
                   </div>
-                  <span className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase tracking-wide"
-                    style={{ background: scoreBg, color: scoreColor, border: `1.5px solid ${scoreBorder}` }}>
+                  {/* Badge with trend icon */}
+                  <span className="flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-full uppercase tracking-wide"
+                    style={{ background: scoreLight, color: scoreColor, border: `1.5px solid ${scoreBorder}` }}>
+                    <svg width="11" height="11" fill="none" stroke={scoreColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                      <path d="M23 6l-9.5 9.5-5-5L1 18" /><path d="M17 6h6v6" />
+                    </svg>
                     {gradeLabel}
                   </span>
                 </div>
 
-                {/* Score number */}
-                <div className="flex items-end gap-2 leading-none mb-3">
-                  <span className="font-black" style={{ fontSize: 80, lineHeight: 1, letterSpacing: "-3px", color: scoreColor }}>
-                    {pct}
-                  </span>
-                  <span className="text-[20px] font-semibold mb-1.5" style={{ color: "#d1d5db" }}>/100</span>
+                {/* Full circle gauge */}
+                <div className="flex justify-center mb-1">
+                  <svg viewBox="0 0 220 190" width="210" height="190">
+                    {/* Background track */}
+                    <circle cx={CX} cy={CY} r={R} fill="none" stroke="#d1d9e0" strokeWidth="16" strokeLinecap="round" />
+                    {/* Colored fill — starts at 12 o'clock */}
+                    {pct > 0 && (
+                      <circle cx={CX} cy={CY} r={R} fill="none" stroke={scoreColor} strokeWidth="16" strokeLinecap="round"
+                        strokeDasharray={`${circumference} ${circumference}`}
+                        strokeDashoffset={dashOffset}
+                        transform={`rotate(-90, ${CX}, ${CY})`}
+                        style={{ filter: `drop-shadow(0 0 5px ${scoreColor}66)` }} />
+                    )}
+                    {/* Score */}
+                    <text x={CX} y={CY - 8} textAnchor="middle" dominantBaseline="middle"
+                      fill={scoreColor} fontWeight="900" fontSize="54" letterSpacing="-2" fontFamily="inherit">
+                      {pct}
+                    </text>
+                    <text x={CX} y={CY + 22} textAnchor="middle"
+                      fill="#94a3b8" fontWeight="500" fontSize="12" fontFamily="inherit">
+                      out of 100
+                    </text>
+                  </svg>
                 </div>
 
-                {/* Boost + profile pill */}
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-5"
-                  style={{ background: scoreBg, border: `1px solid ${scoreBorder}` }}>
-                  <span className="text-[12px]">🎯</span>
-                  <span className="text-[11px] font-medium" style={{ color: scoreColor }}>
-                    Boost by <span className="font-black">+{ptsDiff}</span> to reach <span className="font-black">90</span>
-                  </span>
-                  {scoreData.Profile && (
-                    <span className="ml-auto text-[9px] font-black px-2 py-0.5 rounded-full uppercase"
-                      style={{ background: "#eff6ff", color: "#2557a7", border: "1px solid #bfdbfe" }}>
-                      {scoreData.Profile}
-                    </span>
-                  )}
-                </div>
-
-                {/* Progress bar */}
-                <div className="mb-5">
-                  <div className="relative pt-7">
-                    {/* Bubble */}
-                    <div className="absolute top-0 flex flex-col items-center"
-                      style={{ left: `clamp(16px, calc(${pct}% - 16px), calc(100% - 32px))` }}>
-                      <div className="w-8 h-6 rounded-lg flex items-center justify-center text-[11px] font-black text-white"
-                        style={{ background: scoreColor, boxShadow: `0 2px 8px ${scoreColor}55` }}>
-                        {pct}
-                      </div>
-                      <div style={{ width: 0, height: 0, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: `5px solid ${scoreColor}` }} />
+                {/* Tier strip */}
+                <div className="flex gap-1.5 mb-4">
+                  {tiers.map(t => (
+                    <div key={t.label} className="flex-1 rounded-xl py-2 px-1 text-center transition-all"
+                      style={{
+                        background: t.active ? `${t.color}12` : "transparent",
+                        border: `1.5px solid ${t.active ? `${t.color}55` : "#eef1f6"}`,
+                      }}>
+                      <p className="text-[9.5px] font-black leading-none"
+                        style={{ color: t.active ? t.color : "#94a3b8" }}>{t.label}</p>
+                      <p className="text-[8.5px] leading-none mt-0.5"
+                        style={{ color: t.active ? `${t.color}bb` : "#cbd5e1" }}>{t.range}</p>
                     </div>
-                    {/* Bar */}
-                    <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "#f1f5f9" }}>
-                      <div className="h-full rounded-full" style={{
-                        width: `${pct}%`,
-                        background: scoreColor,
-                        transition: "width 1s ease",
-                        boxShadow: `0 2px 6px ${scoreColor}44`,
-                      }} />
-                    </div>
-                  </div>
-
-                  {/* Tier labels */}
-                  <div className="grid grid-cols-4 gap-2 mt-4">
-                    {[
-                      { label: "POOR",    range: "0–40",   color: "#ef4444", bg: "#fff5f5",  emoji: "😞" },
-                      { label: "AVERAGE", range: "40–70",  color: "#f59e0b", bg: "#fffbeb",  emoji: "😐" },
-                      { label: "GOOD",    range: "70–85",  color: "#16a34a", bg: "#f0fdf4",  emoji: "😊" },
-                      { label: "BEST",    range: "85–100", color: "#2557a7", bg: "#eff6ff",  emoji: "⭐" },
-                    ].map(t => (
-                      <div key={t.label} className="flex flex-col items-center gap-1 text-center">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px]"
-                          style={{ background: t.bg, border: `1px solid ${t.color}20` }}>
-                          {t.emoji}
-                        </div>
-                        <p className="text-[9px] font-black leading-none" style={{ color: t.color }}>{t.label}</p>
-                        <p className="text-[9px] leading-none" style={{ color: "#9ca3af" }}>{t.range}</p>
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
 
-                {/* Divider */}
-                <div className="border-t border-gray-100 mb-5" />
-
-                {/* Buttons */}
-                <div className="space-y-2.5">
-                  <button onClick={handleFixNow}
-                    className="w-full px-5 py-3.5 rounded-2xl flex items-center gap-3 transition-all hover:brightness-110 active:scale-[0.98]"
-                    style={{ background: "#2557a7", boxShadow: "0 6px 20px rgba(37,87,167,0.30)" }}>
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ background: "rgba(255,255,255,0.12)" }}>
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                {/* Boost insight */}
+                {ptsDiff > 0 && (
+                  <div className="flex items-center gap-3 rounded-2xl px-4 py-3 mb-4"
+                    style={{ background: "#edf7f8", border: "1.5px solid #c5e8eb" }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ background: "linear-gradient(135deg,#0a818f,#1f4b69)" }}>
+                      <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                        <path d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                     </div>
-                    <div className="flex-1 text-left">
-                      <p className="text-[13px] font-black text-white leading-none">Fix My Resume</p>
-                      <p className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>AI-powered suggestions to improve score</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-bold leading-snug" style={{ color: "#153456" }}>
+                        {pct >= 70 ? "Great score! Just " : "Fix issues to gain "}
+                        <span className="font-extrabold" style={{ color: "#0a818f" }}>+{ptsDiff} pts</span>
+                        {pct >= 70 ? " to reach Excellent" : ""}
+                      </p>
+                      <p className="text-[11px] mt-0.5" style={{ color: "#64748b" }}>Target: 90+ for Excellent</p>
                     </div>
-                    <svg className="w-4 h-4 text-white opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-
-                  <button onClick={() => router.push("/atslogin")}
-                    className="w-full px-5 py-3 rounded-2xl flex items-center gap-3 transition-all active:scale-[0.98]"
-                    style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0" }}
-                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = "#f1f5f9")}
-                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = "#f8fafc")}>
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ background: "#eff6ff", border: "1px solid #bfdbfe" }}>
-                      <svg className="w-4 h-4" style={{ color: "#2557a7" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: "linear-gradient(135deg,#0a818f,#1f4b69)" }}>
+                      <svg width="12" height="12" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                        <path d="M9 5l7 7-7 7" />
                       </svg>
                     </div>
-                    <span className="flex-1 text-left text-[13px] font-semibold text-gray-600">Upload &amp; Rescan</span>
-                    <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </div>
+                )}
+
+                {/* Upload & Rescan — prominent blue button */}
+                <button
+                  onClick={() => router.push("/atslogin")}
+                  className="w-full px-5 py-3.5 rounded-2xl flex items-center gap-3 text-white font-bold text-[14px] transition-all hover:opacity-90 active:scale-[0.98] mb-1"
+                  style={{ background: "#153456", boxShadow: "0 4px 18px rgba(21,52,86,0.30)" }}
+                >
+                  <svg width="20" height="20" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span className="flex-1 text-left">Upload &amp; Rescan</span>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "rgba(255,255,255,0.22)" }}>
+                    <svg width="13" height="13" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                      <path d="M9 5l7 7-7 7" />
                     </svg>
-                  </button>
-                </div>
+                  </div>
+                </button>
 
                 {/* Security note */}
-                <div className="flex items-center justify-center gap-1.5 mt-4">
-                  <svg className="w-3 h-3" style={{ color: "#d1d5db" }} fill="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center justify-center gap-1.5 mt-3.5">
+                  <svg width="11" height="11" fill="#d1d5db" viewBox="0 0 24 24">
                     <path d="M12 1l9 4v6c0 5.25-3.75 10.14-9 11.25C6.75 21.14 3 16.25 3 11V5l9-4z" />
                   </svg>
-                  <p className="text-[10px] text-gray-300">Your data is secure and confidential</p>
+                  <p className="text-[10px]" style={{ color: "#c4cad4" }}>Your data is secure and confidential</p>
                 </div>
 
               </div>
@@ -913,7 +889,7 @@ function ATSLoginReport() {
             })()}
 
             {/* Score Breakdown card */}
-            <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.07)" }}>
+            <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 2px 4px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.12)", border: "1px solid rgba(0,0,0,0.06)" }}>
 
               {/* Header */}
               <div className="px-5 pt-5 pb-3" style={{ borderBottom: "1px solid #f1f5f9" }}>
@@ -927,10 +903,8 @@ function ATSLoginReport() {
                   const count     = sectionIssueCounts[item.name] ?? 0;
                   const hasIssues = count > 0;
                   const label     = item.name.replace(/([A-Z])/g, " $1").trim();
-                  const isGood    = item.score >= 80;
-                  const isMid     = item.score >= 50 && item.score < 80;
-                  const barColor  = isGood ? "#22c55e" : isMid ? "#f59e0b" : "#ef4444";
-                  const badgeBg   = item.score < 50 ? "#ef4444" : "#f59e0b";
+                  const barColor  = item.score === 100 ? "#00bba7" : "#0f2d4e";
+                  const badgeBg   = "#0f2d4e";
                   const SIcon     = SECTION_ICONS[item.name] ?? Lightbulb;
 
                   return (
@@ -963,7 +937,7 @@ function ATSLoginReport() {
                                   {count}
                                 </span>
                               ) : (
-                                <CheckCircle2 style={{ width: 13, height: 13, color: "#22c55e" }} />
+                                <CheckCircle2 style={{ width: 13, height: 13, color: "#00bba7" }} />
                               )}
                               <span className="text-[12px] font-black tabular-nums" style={{ color: barColor }}>{item.score}%</span>
                             </div>
@@ -992,7 +966,7 @@ function ATSLoginReport() {
 
             {/* Resume Preview */}
             {(parsedData || previewUrl) && (
-              <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.07)" }}>
+              <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 2px 4px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.12)", border: "1px solid rgba(0,0,0,0.06)" }}>
                 {/* Preview header bar */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                   <div className="flex items-center gap-3">
@@ -1003,20 +977,23 @@ function ATSLoginReport() {
                     </div>
                     <span className="text-[13px] font-bold text-gray-600">Resume Preview</span>
                   </div>
-                  <button
-                    onClick={handleFixNow}
-                    className="flex items-center gap-1.5 text-[12px] font-bold px-4 py-2 rounded-xl hover:opacity-90 active:scale-95 transition-all text-white"
-                    style={{ background: "#2557a7" }}
-                  >
-                    Edit Resume
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
+                  {(() => {
+                    const isFresher  = scoreData?.Fresher;
+                    const levelLabel = isFresher ? "Fresher" : "Experienced";
+                    const levelColor = "#0f2d4e";
+                    const levelBg    = "#e6f8f7";
+                    const levelBorder= "#b2ece8";
+                    return (
+                      <span className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase tracking-wide"
+                        style={{ background: levelBg, color: levelColor, border: `1.5px solid ${levelBorder}` }}>
+                        {levelLabel}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="overflow-y-auto custom-scrollbar" style={{ maxHeight: "860px" }}>
                   {parsedData
-                    ? <JobMatchTemplateThree data={parsedData} />
+                    ? <ATSResumePreview data={parsedData} />
                     : <iframe src={previewUrl!} className="w-full border-none" style={{ height: "860px" }} title="Resume Preview" />
                   }
                 </div>
@@ -1027,7 +1004,7 @@ function ATSLoginReport() {
             <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 4px 32px rgba(0,0,0,0.10)" }}>
 
               {/* Issues header */}
-              <div style={{ background: "#2557a7", padding: "22px 24px 0" }}>
+              <div style={{ background: "linear-gradient(135deg,#0f2d4e 0%,#1a3a5c 100%)", padding: "22px 24px 0" }}>
 
                 {/* Decorative glow blobs */}
                 <div className="pointer-events-none absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-10 blur-3xl" style={{ background: "#4a7fd4" }} />
@@ -1109,8 +1086,8 @@ function ATSLoginReport() {
               <div className="p-5">
                 {issues.length === 0 ? (
                   <div className="py-16 text-center">
-                    <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)" }}>
-                      <CheckCircle2 className="w-10 h-10" style={{ color: "#16a34a" }} />
+                    <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg,#e6f8f7,#b2ece8)" }}>
+                      <CheckCircle2 className="w-10 h-10" style={{ color: "#00bba7" }} />
                     </div>
                     <p className="text-lg font-black text-gray-800 mb-1.5">All Clear!</p>
                     <p className="text-sm text-gray-400">No issues detected across all resume sections.</p>
@@ -1122,8 +1099,8 @@ function ATSLoginReport() {
                       <PriorityGroup
                         title="Fix First"
                         subtitle="Blocking your ATS pass rate"
-                        accent="#ef4444"
-                        accentBg="#fff5f5"
+                        accent="#0f2d4e"
+                        accentBg="#f0f4f8"
                         issues={grouped.critical}
                         sectionIcons={SECTION_ICONS}
                         tooltip={WHY_TEXT.General}
@@ -1136,8 +1113,8 @@ function ATSLoginReport() {
                       <PriorityGroup
                         title="High Impact"
                         subtitle="Significant score improvements"
-                        accent="#f59e0b"
-                        accentBg="#fffbeb"
+                        accent="#0f2d4e"
+                        accentBg="#f0f4f8"
                         issues={grouped.urgent}
                         sectionIcons={SECTION_ICONS}
                         tooltip="These issues cost meaningful ATS points. Fixing them moves your score into the competitive range."
@@ -1150,8 +1127,8 @@ function ATSLoginReport() {
                       <PriorityGroup
                         title="Nice to Improve"
                         subtitle="Polish that separates good from great"
-                        accent="#8b5cf6"
-                        accentBg="#faf5ff"
+                        accent="#00bba7"
+                        accentBg="#e6f8f7"
                         issues={grouped.optional}
                         sectionIcons={SECTION_ICONS}
                         tooltip="Low-severity polish items. Address after fixing critical and urgent issues for maximum ROI."
