@@ -92,6 +92,20 @@ export interface ProfilePictureResponse {
     source?: "google" | "linkedin" | "uploaded";
 }
 
+export interface ResumeUploadResponse {
+    message: string;
+    resume_url: string;
+    filename: string;
+}
+
+export interface ResumeResponse {
+    resume_url: string;
+}
+
+export interface ResumeDeleteResponse {
+    message: string;
+}
+
 export interface ApiResponse<T> {
     data?: T;
     message?: string;
@@ -763,4 +777,58 @@ export const addProjectAutoFill = async (projectData: ProjectAutoFillRequest): P
     }
 };
 
+// ==================== RESUME API FUNCTIONS ====================
 
+/**
+ * Upload or replace user's resume (PDF, DOCX, or DOC)
+ */
+export const uploadResume = async (file: File): Promise<ResumeUploadResponse> => {
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await httpClient.post<ResumeUploadResponse>(
+            "/profile/resume/upload",
+            formData,
+            {
+                headers: {
+                    "Content-Type": "multipart/form-data"
+                }
+            }
+        );
+
+        return response.data;
+    } catch (error) {
+        logger.error("Error uploading resume:", error);
+        throw error;
+    }
+};
+
+/**
+ * Get current user's resume URL
+ */
+export const getResume = async (): Promise<ResumeResponse> => {
+    try {
+        const response = await httpClient.get<ResumeResponse>("/profile/resume");
+        return response.data;
+    } catch (error: unknown) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError?.response?.status !== 404) {
+            logger.error("Error fetching resume:", error);
+        }
+        throw error;
+    }
+};
+
+/**
+ * Delete current user's resume
+ */
+export const deleteResume = async (): Promise<ResumeDeleteResponse> => {
+    try {
+        const response = await httpClient.delete<ResumeDeleteResponse>("/profile/resume");
+        return response.data;
+    } catch (error) {
+        logger.error("Error deleting resume:", error);
+        throw error;
+    }
+};

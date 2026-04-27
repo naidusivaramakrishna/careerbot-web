@@ -10,10 +10,12 @@ import WorkExperienceSection from "./experience/WorkExperienceSection";
 import PersonalInfoSection from "./PersonalInfoSection";
 import SkillsSection from "./SkillsSection";
 import EmploymentInfoSection from "./employmentInfo/EmploymentInfoSection";
+import ResumeSection from "./ResumeSection";
 import logger from "@/lib/logger";
 import ProjectsSection from "./projects/ProjectsSection";
 import { FaAward, FaBriefcase, FaFolderOpen, FaStar, FaUserCircle, FaUserGraduate } from "react-icons/fa";
 import { FiFileText } from "react-icons/fi";
+import { FileUp } from "lucide-react";
 
 interface ProfileTabsProps {
   profile: ProfileData;
@@ -77,6 +79,12 @@ export default function ProfileTabs({
       text: "Projects",
       icon: <FaFolderOpen />,
       content: <ProjectsSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
+    },
+    {
+      label: "Resume",
+      text: "Resume",
+      icon: <FileUp />,
+      content: <ResumeSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
     }
   ];
 
