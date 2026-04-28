@@ -38,7 +38,7 @@ export async function middleware(request: NextRequest) {
             ? '/admin/login'
             : pathname.startsWith(RECRUITER_PREFIX)
             ? '/recruiter/auth'
-            : '/';
+            : '/?showLogin=true';
         return NextResponse.redirect(new URL(loginUrl, request.url));
     }
 
@@ -58,8 +58,18 @@ export async function middleware(request: NextRequest) {
                 return NextResponse.redirect(new URL('/403', request.url));
             }
         } catch {
-            // Token invalid or expired — redirect to login, interceptor will attempt refresh
-            const loginUrl = pathname.startsWith(ADMIN_PREFIX) ? '/admin/login' : '/';
+            // Token invalid or expired.
+            // If a refresh token exists, let the request through — the HTTP interceptor
+            // on the client will detect the 401 and call /auth/refresh automatically.
+            // Only redirect immediately when there is truly no way to recover the session.
+            if (refreshToken) {
+                return NextResponse.next();
+            }
+            const loginUrl = pathname.startsWith(ADMIN_PREFIX)
+                ? '/admin/login'
+                : pathname.startsWith(RECRUITER_PREFIX)
+                ? '/recruiter/auth'
+                : '/?showLogin=true';
             return NextResponse.redirect(new URL(loginUrl, request.url));
         }
     }

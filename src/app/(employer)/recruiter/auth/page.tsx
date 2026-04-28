@@ -213,8 +213,9 @@ export default function AuthPage() {
         // Redirect on success with a small delay to ensure data is saved
         if (typeof window !== "undefined") {
           logger.debug('Redirecting to dashboard in 500ms...');
+          // Reset refresh timestamp so useTokenRefresh doesn't fire a stale refresh on mount
+          localStorage.setItem('token_last_refreshed_at', Date.now().toString());
 
-          // Small delay to ensure localStorage is written and available
           setTimeout(() => {
             logger.debug('Executing redirect to dashboard');
             window.location.href = "/recruiter/dashboard";

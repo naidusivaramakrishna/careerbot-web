@@ -97,10 +97,10 @@ export const generateMockTest = async (
     time_limit: 20,
     type: 'mcq',
     company_context: companyId,
-    category: categories.length === 1 ? categories[0] : categories,
-    subcategory: resolvedSubcategories.length === 1 ? resolvedSubcategories[0] : resolvedSubcategories,
+    category: categories,
+    subcategory: resolvedSubcategories,
     difficulty: 'medium',
-    cross_verify: true,
+    cross_verify: false,
     exclude_question_ids: [],
   };
 

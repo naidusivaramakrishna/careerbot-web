@@ -47,15 +47,14 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     tenantId = getTenantId();
   }
 
+  // Use server-side route to avoid sending stale browser cookies to the backend
   const response = await httpClient.post<LoginResponse>(
-    "/auth/signin",
-    new URLSearchParams({
-      username: data.email,
-      password: data.password,
-    }),
+    "/api/backend/auth/signin",
+    { username: data.email, password: data.password },
     {
+      baseURL: "",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json",
         "X-Tenant-Id": tenantId,
       },
     }

@@ -162,6 +162,7 @@ const AdminLoginPage = () => {
                     });
 
                     // Step 3: Redirect to admin dashboard
+                    localStorage.setItem('token_last_refreshed_at', Date.now().toString());
                     router.push('/admin/dashboard');
                 }
             } else {
@@ -177,6 +178,7 @@ const AdminLoginPage = () => {
                 toast.success("Login successful");
 
                 // Redirect to admin dashboard on successful login
+                localStorage.setItem('token_last_refreshed_at', Date.now().toString());
                 router.push('/admin/dashboard');
             }
         } catch (err: unknown) {

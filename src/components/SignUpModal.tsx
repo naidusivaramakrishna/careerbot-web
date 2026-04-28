@@ -89,6 +89,9 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
             await signIn(loginForm)
             toast.success("Login successful")
             setLoginForm({ email: "", password: "" })
+            // Reset the refresh timestamp so useTokenRefresh doesn't immediately
+            // fire a refresh attempt on dashboard mount due to a stale previous-session timestamp.
+            localStorage.setItem('token_last_refreshed_at', Date.now().toString())
             window.location.href = "/dashboard"
             onClose()
         } catch (err) {
@@ -138,9 +141,15 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
             }
             // Handle generic error messages
             else {
-                const detail = res?.data?.error?.message || res?.data?.detail || "Something went wrong"
+                // error field can be a plain string (e.g. rate-limit) or an object with .message
+                const errorField = res?.data?.error
+                const detail = (typeof errorField === "string" ? errorField : errorField?.message)
+                    || res?.data?.detail
+                    || "Something went wrong"
                 if (typeof detail === "string") {
-                    if (detail.toLowerCase().includes("email")) newErrors.email = detail
+                    if (detail.toLowerCase().includes("rate limit") || res?.status === 429) {
+                        newErrors.login = detail
+                    } else if (detail.toLowerCase().includes("email")) newErrors.email = detail
                     else if (detail.toLowerCase().includes("username")) newErrors.username = detail
                     else if (detail.toLowerCase().includes("password")) newErrors.password = detail
                     else newErrors.login = detail

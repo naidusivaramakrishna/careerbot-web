@@ -250,7 +250,8 @@ export default function CompanyDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [company, setCompany] = useState<any>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     getMockTestCompanyById(companyId)
@@ -258,7 +259,7 @@ export default function CompanyDetailPage() {
         const transformed = transformCompanyData(data);
         setCompany(transformed);
       })
-      .catch((err) => {
+      .catch(() => {
         // Fall back to hardcoded data
         const fallback = companyTemplates[companyId];
         if (fallback) {
@@ -521,14 +522,22 @@ export default function CompanyDetailPage() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
-            className="flex justify-center"
+            className="flex flex-col items-center gap-4"
           >
+            {startError && (
+              <div className="mb-4 w-full max-w-lg bg-red-50 border border-red-300 rounded-xl px-5 py-4 text-sm text-red-800 flex items-start gap-3">
+                <AlertTriangle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <span>{startError}</span>
+              </div>
+            )}
             <button
+              disabled={starting}
               onClick={async () => {
+                setStartError(null);
+                setStarting(true);
                 try {
                   const backendCompanyId = resolveCompanyId(companyId);
 
-                  // Generate first section (Arithmetic)
                   const arithmeticSubcategories = ['percentages', 'time_and_work', 'profit_and_loss', 'ratios', 'number_systems'];
                   const randomSubcategory = arithmeticSubcategories[Math.floor(Math.random() * arithmeticSubcategories.length)];
 
@@ -536,14 +545,33 @@ export default function CompanyDetailPage() {
 
                   router.push(`/mock-test/${companyId}?sessionId=${session.session_id}`);
                 } catch (err: any) {
-                  // Fallback: navigate without sessionId, test page will generate one
-                  router.push(`/mock-test/${companyId}`);
+                  const data = err?.response?.data;
+                  const isCreditsError =
+                    err?.response?.status === 402 ||
+                    data?.error_code === 'HTTP_402' ||
+                    data?.details?.error === 'INSUFFICIENT_CREDITS';
+                  if (isCreditsError) {
+                    setStartError('You do not have enough credits to start this test.');
+                    return;
+                  }
+                  const errorCode = data?.error_code;
+                  if (errorCode === 'AI_SERVICE_UNAVAILABLE') {
+                    setStartError('The AI service is temporarily unavailable. Please wait a moment and try again.');
+                  } else {
+                    setStartError(data?.message || 'Failed to start the test. Please try again.');
+                  }
+                } finally {
+                  setStarting(false);
                 }
               }}
-              className="bg-[#2557a7] hover:bg-[#1a3d73] text-white font-bold px-12 py-4 rounded-xl transition-colors flex items-center gap-3 text-lg shadow-md hover:shadow-lg"
+              className="bg-[#2557a7] hover:bg-[#1a3d73] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-12 py-4 rounded-xl transition-colors flex items-center gap-3 text-lg shadow-md hover:shadow-lg"
             >
-              <Play size={20} className="fill-white" />
-              Start Test
+              {starting ? (
+                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Play size={20} className="fill-white" />
+              )}
+              {starting ? 'Starting...' : 'Start Test'}
             </button>
           </motion.div>
         </div>

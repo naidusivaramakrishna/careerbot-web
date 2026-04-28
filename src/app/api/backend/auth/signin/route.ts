@@ -5,6 +5,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
+    const tenantId = request.headers.get('X-Tenant-Id') || 'public';
 
     const formData = new URLSearchParams();
     formData.append('username', username);
@@ -12,9 +13,10 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(`${BACKEND_URL}/api/v1/auth/signin`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'accept': 'application/json'
+        'accept': 'application/json',
+        'X-Tenant-Id': tenantId,
       },
       body: formData.toString(),
     });
@@ -25,7 +27,14 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    const res = NextResponse.json(data);
+
+    // Forward Set-Cookie headers from backend so the browser receives auth cookies
+    response.headers.getSetCookie().forEach((cookie) => {
+      res.headers.append('Set-Cookie', cookie);
+    });
+
+    return res;
 
   } catch (error) {
     return NextResponse.json(

@@ -23,6 +23,24 @@ const BASE_URL =
 const isAdminRequest = (url?: string): boolean =>
   url?.includes('/admin/') || false;
 
+const bodyContains = (data: unknown, str: string): boolean => {
+  if (typeof data === 'string') return data.includes(str);
+  if (data && typeof data === 'object') {
+    try { return JSON.stringify(data).includes(str); } catch { /* ignore */ }
+  }
+  return false;
+};
+
+// True if the user logged in (or last refreshed) within the past 2 minutes.
+// A failed refresh within this window is almost certainly a transient backend
+// issue, not real session expiry — so we skip the logout redirect.
+const LAST_REFRESH_KEY = 'token_last_refreshed_at';
+const isSessionFresh = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const ts = parseInt(localStorage.getItem(LAST_REFRESH_KEY) || '0', 10);
+  return ts > 0 && Date.now() - ts < 2 * 60 * 1000;
+};
+
 const clearAllTokens = () => {
   if (typeof window === 'undefined') return;
   // ✅ Backend clears httpOnly cookies automatically
@@ -88,10 +106,10 @@ client.interceptors.request.use(
     }
 
     // Only add X-Tenant-Id if not already set (signup/signin set it explicitly)
-    if (!config.headers['X-Tenant-Id']) {
+    if (!config.headers.get('X-Tenant-Id')) {
       const tenantId = getTenantId();
-      if (tenantId && config.headers) {
-        config.headers['X-Tenant-Id'] = tenantId;
+      if (tenantId) {
+        config.headers.set('X-Tenant-Id', tenantId);
       }
     }
 
@@ -127,7 +145,30 @@ client.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (error.response?.status !== 401 || originalRequest._retry) {
+    // 503 with AI_SERVICE_UNAVAILABLE = AI/LLM service is temporarily down.
+    // Retry the original request once directly — no token refresh needed.
+    const isAiServiceError =
+      (error.response?.status === 500 || error.response?.status === 503) &&
+      bodyContains(error.response?.data, 'AI_SERVICE_UNAVAILABLE') &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/') &&
+      !originalRequest.url?.includes('/admin/auth/');
+
+    if (isAiServiceError) {
+      originalRequest._retry = true;
+      return client(originalRequest);
+    }
+
+    // Backend sometimes crashes with 500 (plain text) instead of returning 401
+    // when it receives an expired/invalid token. Treat this as an auth failure.
+    const isBackendCrash =
+      error.response?.status === 500 &&
+      typeof error.response?.data === 'string' &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/') &&
+      !originalRequest.url?.includes('/admin/auth/');
+
+    if ((error.response?.status !== 401 && !isBackendCrash) || originalRequest._retry) {
       return Promise.reject(error);
     }
 
@@ -139,11 +180,16 @@ client.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Refresh token 401 = session expired — clear tokens and redirect to login
+    // Refresh token 401 = session expired — clear tokens and redirect to login.
+    // Exception: if the user just signed in (tokens are fresh), the 401 is almost
+    // certainly a transient backend crash, not real expiry — skip the redirect.
     if (
       originalRequest.url?.includes('/auth/refresh') ||
       originalRequest.url?.includes('/admin/auth/refresh')
     ) {
+      if (isSessionFresh()) {
+        return Promise.reject(error);
+      }
       clearAllTokens();
       if (isAdmin) {
         window.location.href = '/admin/login';
@@ -173,7 +219,7 @@ client.interceptors.response.use(
       const endpoint = isAdmin
         ? '/admin/auth/refresh'
         : '/auth/refresh';
-      await client.post(endpoint);
+      await client.post(endpoint, {});
       window.dispatchEvent(
         new Event(isAdmin ? 'adminTokenUpdated' : 'tokenUpdated')
       );
@@ -182,7 +228,22 @@ client.interceptors.response.use(
 
       // ✅ Retry original request with new httpOnly cookie
       return client(originalRequest);
-    } catch (refreshError) {
+    } catch (refreshError: unknown) {
+      const refreshStatus =
+        (refreshError as { response?: { status?: number } })?.response?.status;
+      const refreshBody =
+        (refreshError as { response?: { data?: unknown } })?.response?.data;
+      // 500 with a plain-string body = backend maintenance_mode crash (not real auth failure)
+      const isRefreshBackendCrash =
+        refreshStatus === 500 && typeof refreshBody === 'string';
+
+      // Don't redirect if the failure is a transient backend crash OR if the tokens
+      // are fresh (user just logged in) — in both cases the session is still valid.
+      if (isRefreshBackendCrash || isSessionFresh()) {
+        processQueue(refreshError, null, isAdmin);
+        return Promise.reject(refreshError);
+      }
+
       processQueue(refreshError, null, isAdmin);
       clearAllTokens();
       if (isAdmin) {
