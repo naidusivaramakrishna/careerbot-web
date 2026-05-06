@@ -1,16 +1,15 @@
 "use client"
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { RiArrowLeftLine } from 'react-icons/ri';
-import logger from "@/lib/logger";
 
 const Header: React.FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isEnhanced = searchParams.get("source") === "enhanced";
 
   const handleBackClick = () => {
-    logger.info('Navigating to: /builder/start/list');
-
-    // ✅ Clear localStorage resume data to force fresh fetch
+    // Clear localStorage resume data to force fresh fetch
     localStorage.removeItem('resumeData');
 
     // ✅ Add timestamp to force page refresh
@@ -33,7 +32,7 @@ const Header: React.FC = () => {
           <RiArrowLeftLine className="text-gray-600" size={24} />
         </button>
         <span className="font-bold text-lg text-[#2557a7]">
-          Resume Builder
+          {isEnhanced ? "Resume Enhancer" : "Resume Builder"}
         </span>
       </div>
     </header>

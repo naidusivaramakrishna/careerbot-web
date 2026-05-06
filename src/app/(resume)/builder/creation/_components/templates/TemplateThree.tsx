@@ -116,60 +116,27 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
     switch (section) {
       case "Personal Info":
         return (
-          <header className="mb-6 page-break-inside-avoid" data-section="personal-info">
-            <div className="mb-2">
-              <h1 className="uppercase font-bold" style={nameStyle}>
-                {personalInfo.fullname || "FULL NAME"}
-              </h1>
-            </div>
-
-            <div className="flex items-center text-sm mb-4 flex-wrap" style={baseTextStyle}>
-              {personalInfo.email && (
-                <>
-                  <span>{personalInfo.email}</span>
-                </>
-              )}
-              {personalInfo.phone && (
-                <>
-                  {personalInfo.email && <span className="mx-2">|</span>}
-                  <span>{personalInfo.countryCode}{personalInfo.phone}</span>
-                </>
-              )}
-              {personalInfo.location && (
-                <>
-                  {(personalInfo.email || personalInfo.phone) && <span className="mx-2">|</span>}
-                  <span>{personalInfo.location}</span>
-                </>
-              )}
-              {personalInfo.linkedinUrl && (
-                <>
-                  {(personalInfo.email || personalInfo.phone || personalInfo.location) && <span className="mx-2">|</span>}
-                  {/* <span>in</span> */}
-                  <a
-                    href={personalInfo.linkedinUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={linkStyle}
-                    className="hover:underline ml-1"
-                  >
-                    {personalInfo.linkedinUrl.replace('https://', '').replace('http://', '')}
-                  </a>
-                </>
-              )}
-              {personalInfo.portfolioUrl && (
-                <>
-                  {(personalInfo.email || personalInfo.phone || personalInfo.location || personalInfo.linkedinUrl) && <span className="mx-2">|</span>}
-                  <a
-                    href={personalInfo.portfolioUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={linkStyle}
-                    className="hover:underline"
-                  >
-                    {personalInfo.portfolioUrl.replace('https://', '').replace('http://', '')}
-                  </a>
-                </>
-              )}
+          // centered_header: name and contact both centered (matches backend minimalist_classic)
+          <header className="mb-6 page-break-inside-avoid text-center" data-section="personal-info">
+            <h1 className="uppercase font-bold mb-2" style={nameStyle}>
+              {personalInfo.fullname || "FULL NAME"}
+            </h1>
+            <div className="flex items-center justify-center flex-wrap gap-x-1 text-sm" style={baseTextStyle}>
+              {[
+                personalInfo.email,
+                personalInfo.phone && `${personalInfo.countryCode}${personalInfo.phone}`,
+                personalInfo.location,
+                personalInfo.linkedinUrl,
+                personalInfo.githubUrl,
+                personalInfo.portfolioUrl,
+              ]
+                .filter(Boolean)
+                .map((item, index, array) => (
+                  <React.Fragment key={index}>
+                    <span>{item}</span>
+                    {index < array.length - 1 && <span className="mx-1">|</span>}
+                  </React.Fragment>
+                ))}
             </div>
           </header>
         );
@@ -244,7 +211,7 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                       )}
                     </div>
                     <div className="text-sm whitespace-nowrap ml-4" style={baseTextStyle}>
-                      {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
+                      {edu.startDate ? `${formatDate(edu.startDate)} – ${formatDate(edu.endDate)}` : formatDate(edu.endDate)}
                     </div>
                   </div>
                 </div>
@@ -302,17 +269,42 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
 
       case "Skills":
         return (
-          skills.length > 0 && (
+          (skills.length > 0 || !!data.categorizedSkills) && (
             <section className="mb-6 page-break-inside-avoid" data-section="skills">
               <div style={headingContainerStyle}>
                 <h2 style={headingStyle}>SKILLS</h2>
                 <div style={headingLineStyle}></div>
               </div>
-              <ul className="list-disc pl-5 grid grid-cols-2 gap-x-6 gap-y-1" style={baseTextStyle}>
-                {skills.map((skill, idx) => (
-                  <li key={idx}>{skill}</li>
-                ))}
-              </ul>
+              {data.categorizedSkills ? (
+                <div className="space-y-1" style={baseTextStyle}>
+                  {(["programming_languages","frameworks","databases","tools","cloud_platforms","soft_skills"] as const).map((key) => {
+                    const categorySkills = data.categorizedSkills![key];
+                    if (!categorySkills || categorySkills.length === 0) return null;
+                    const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                    return (
+                      <div key={key}>
+                        <span className="font-semibold">{label}: </span>
+                        <span>{categorySkills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                  {(data.categorizedSkills.custom_categories || []).map((custom) => {
+                    if (!custom.skills || custom.skills.length === 0) return null;
+                    return (
+                      <div key={custom.id}>
+                        <span className="font-semibold">{custom.name || "Other"}: </span>
+                        <span>{custom.skills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <ul className="list-disc pl-5 grid grid-cols-2 gap-x-6 gap-y-1" style={baseTextStyle}>
+                  {skills.map((skill, idx) => (
+                    <li key={idx}>{skill}</li>
+                  ))}
+                </ul>
+              )}
             </section>
           )
         );
@@ -362,10 +354,10 @@ const TemplateThree: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <div style={baseTextStyle}>
                     <div>
                       <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      <span style={baseTextStyle}> - {cert.issuedBy}</span>
+                      {cert.issuer && <span style={baseTextStyle}> - {cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
-                      <span>Issued: {cert.year}</span>
+                      {cert.issueDate && <span>Issued: {cert.issueDate}</span>}
                       {cert.expiryDate && (
                         <span className="ml-3">
                           Expires: {cert.expiryDate}

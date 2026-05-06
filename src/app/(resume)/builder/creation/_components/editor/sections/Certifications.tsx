@@ -2,26 +2,28 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
-import logger from "@/lib/logger";
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import SectionTipsPanel from "../SectionTipsPanel";
 
 interface CertificationEntry {
   name: string;
-  issuedBy: string;
-  year: string;
+  issuer: string;
+  issueDate: string;
   expiryDate?: string;
   credentialId?: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  credentialUrl?: string;
+  id?: string;
 }
 
 const emptyCertification = (): CertificationEntry => ({
   name: "",
-  issuedBy: "",
-  year: "",
+  issuer: "",
+  issueDate: "",
   expiryDate: "",
   credentialId: "",
+  credentialUrl: "",
 });
 
 const Certifications: React.FC = () => {
@@ -37,12 +39,14 @@ const Certifications: React.FC = () => {
 
   const [showTips] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<CertificationEntry | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
 
   const hasValidData = (entry: CertificationEntry): boolean => {
-    return !!(entry.name || entry.issuedBy || entry.year || entry.expiryDate || entry.credentialId);
+    return !!(entry.name || entry.issuer || entry.issueDate || entry.expiryDate || entry.credentialId);
   };
 
   const [savedEntries, setSavedEntries] = useState<CertificationEntry[]>(() => {
@@ -61,7 +65,7 @@ const Certifications: React.FC = () => {
   });
 
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     if (JSON.stringify(resumeData.certifications) !== JSON.stringify(allEntries)) {
       setResumeData({ ...resumeData, certifications: allEntries });
     }
@@ -83,13 +87,25 @@ const Certifications: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyCertification()]);
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyCertification()]);
   };
 
@@ -97,11 +113,11 @@ const Certifications: React.FC = () => {
   const removeCertification = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const certificationToDelete = savedEntries[index];
-    const itemId = certificationToDelete._id;
+    const itemId = certificationToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -112,12 +128,12 @@ const Certifications: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("Deleting certification item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting certification item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "certifications", itemId);
 
-      logger.info("Certification item deleted from backend successfully");
+      // // console.log("✅ Certification item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -127,7 +143,7 @@ const Certifications: React.FC = () => {
       reindexErrors("certification", index);
 
     } catch (error) {
-      logger.error("Failed to delete certification item:", error);
+      // // console.error("❌ Failed to delete certification item:", error);
       alert("Failed to delete certification. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -136,10 +152,25 @@ const Certifications: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
+  };
+
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   return (
@@ -157,16 +188,16 @@ const Certifications: React.FC = () => {
                   </div>
                   
                   {/* Issued By */}
-                  {certification.issuedBy && (
+                  {certification.issuer && (
                     <div className="text-sm text-gray-700">
-                      {certification.issuedBy}
+                      {certification.issuer}
                     </div>
                   )}
-                  
-                  {/* Year and Expiry Date */}
+
+                  {/* Issue Date and Expiry Date */}
                   <div className="flex gap-2 text-xs text-gray-600">
-                    {certification.year && (
-                      <span>Issued: {certification.year}</span>
+                    {certification.issueDate && (
+                      <span>Issued: {certification.issueDate}</span>
                     )}
                     {certification.expiryDate && (
                       <span>• Expires: {certification.expiryDate}</span>
@@ -232,6 +263,15 @@ const Certifications: React.FC = () => {
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((certification, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -263,23 +303,23 @@ const Certifications: React.FC = () => {
                         </label>
                         <input
                           type="text"
-                          value={certification.issuedBy}
+                          value={certification.issuer}
                           placeholder="Organization Name"
-                          onChange={(e) => handleChange(editIndex, "issuedBy", e.target.value)}
+                          onChange={(e) => handleChange(editIndex, "issuer", e.target.value)}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]`}
                         />
                       </div>
                     </div>
 
-                    {/* Year & Expiry Date */}
+                    {/* Issue Date & Expiry Date */}
                     <div className="flex gap-4">
                       <div className="flex flex-col gap-1 flex-1">
-                        <label className="text-sm font-semibold text-[#3b3b3b]">Year</label>
+                        <label className="text-sm font-semibold text-[#3b3b3b]">Issue Date</label>
                         <input
                           type="text"
-                          value={certification.year}
-                          placeholder="YYYY"
-                          onChange={(e) => handleChange(editIndex, "year", e.target.value)}
+                          value={certification.issueDate}
+                          placeholder="MMM YY"
+                          onChange={(e) => handleChange(editIndex, "issueDate", e.target.value)}
                           className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]"
                         />
                       </div>
@@ -333,24 +373,30 @@ const Certifications: React.FC = () => {
           {/* Right Side: Fixed Tips Section */}
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Certifications validate your expertise and commitment to professional development. List relevant certifications that align with your career goals and industry standards.
-                  </p>
-                  <p>
-                    Include the full certification name, issuing organization, and year obtained. Add credential IDs and expiry dates when applicable to verify authenticity and currency.
-                  </p>
-                  <p>
-                    Prioritize recent and industry-recognized certifications that demonstrate your qualifications and keep your credentials current.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *80% of hiring managers consider certifications when evaluating candidates.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Certifications"
+                entryContent={[editingEntries[0]?.name, editingEntries[0]?.issuer].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Certifications validate your expertise and commitment to professional development. List relevant certifications that align with your career goals and industry standards.
+                      </p>
+                      <p>
+                        Include the full certification name, issuing organization, and year obtained. Add credential IDs and expiry dates when applicable to verify authenticity and currency.
+                      </p>
+                      <p>
+                        Prioritize recent and industry-recognized certifications that demonstrate your qualifications and keep your credentials current.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *80% of hiring managers consider certifications when evaluating candidates.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

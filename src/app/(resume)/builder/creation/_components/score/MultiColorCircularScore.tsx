@@ -22,13 +22,16 @@ export default function MultiColorCircularScore({
   // Animate on value change
   useEffect(() => {
     let start: number | null = null;
-    const from = animatedValue; // capture current value once
+    const from = animatedValue;
     const to = value;
 
     const step = (timestamp: number) => {
       if (!start) start = timestamp;
       const progress = Math.min((timestamp - start) / duration, 1);
-      const current = Math.floor(from + (to - from) * progress);
+      // Keep one decimal place during animation, settle to exact value at end
+      const current = progress < 1
+        ? Math.round((from + (to - from) * progress) * 10) / 10
+        : to;
       setAnimatedValue(current);
       if (progress < 1) {
         requestAnimationFrame(step);
@@ -36,7 +39,7 @@ export default function MultiColorCircularScore({
     };
     requestAnimationFrame(step);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, duration]); // only re-run when target value or duration changes
+  }, [value, duration]);
 
   // Segment cutoffs
   const greenMax = 70;

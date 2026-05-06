@@ -3,15 +3,15 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
-import logger from "@/lib/logger";
+import SectionTipsPanel from "../SectionTipsPanel";
 
 interface LanguageEntry {
   language: string;
   proficiency: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ NEW: Add item ID for backend tracking
 }
 
 const emptyLanguage = (): LanguageEntry => ({
@@ -25,6 +25,9 @@ const Languages: React.FC = () => {
 
   const [showTips] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<LanguageEntry | null>(null);
+
   const formScrollRef = useRef<HTMLDivElement>(null);
 
   const hasValidData = (entry: LanguageEntry): boolean => {
@@ -47,7 +50,7 @@ const Languages: React.FC = () => {
   });
 
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     if (JSON.stringify(resumeData.languages) !== JSON.stringify(allEntries)) {
       setResumeData({ ...resumeData, languages: allEntries });
     }
@@ -69,13 +72,25 @@ const Languages: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyLanguage()]);
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyLanguage()]);
   };
 
@@ -83,11 +98,11 @@ const Languages: React.FC = () => {
   const removeLanguage = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const languageToDelete = savedEntries[index];
-    const itemId = languageToDelete._id;
+    const itemId = languageToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -98,12 +113,12 @@ const Languages: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("🗑️ Deleting language item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting language item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "languages", itemId);
 
-      logger.info("✅ Language item deleted from backend successfully");
+      // // console.log("✅ Language item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -113,7 +128,7 @@ const Languages: React.FC = () => {
       reindexErrors("language", index);
 
     } catch (error) {
-      logger.error("❌ Failed to delete language item:", error);
+      // // console.error("❌ Failed to delete language item:", error);
       alert("Failed to delete language. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -122,10 +137,25 @@ const Languages: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
+  };
+
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   const proficiencyLevels = [
@@ -203,6 +233,15 @@ const Languages: React.FC = () => {
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((language, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -267,21 +306,27 @@ const Languages: React.FC = () => {
 
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    List the languages you speak and your proficiency level for each. Be honest about your abilities - recruiters often conduct interviews in listed languages.
-                  </p>
-                  <p>
-                    Use standard proficiency levels: Native, Fluent, Advanced, Intermediate, or Beginner. This helps employers quickly assess your communication capabilities.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *Multilingual candidates are 50% more likely to get international job opportunities.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Languages"
+                entryContent={[editingEntries[0]?.language].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        List the languages you speak and your proficiency level for each. Be honest about your abilities - recruiters often conduct interviews in listed languages.
+                      </p>
+                      <p>
+                        Use standard proficiency levels: Native, Fluent, Advanced, Intermediate, or Beginner. This helps employers quickly assess your communication capabilities.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *Multilingual candidates are 50% more likely to get international job opportunities.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

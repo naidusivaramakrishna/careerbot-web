@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { getAllResumes } from '@/api/resumeApi';
+import { getAllResumesUnified } from '@/api/resumeApi';
 import EmptyState from './_components/EmptyState';
 
 export interface Resume {
@@ -29,10 +29,9 @@ const ResumePage = () => {
 
       // ✅ No manual token check needed - httpClient sends cookies automatically
       // ✅ If not authenticated, API will return 401 (handled in catch block)
-      const data = await getAllResumes();
+      const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
 
-      if (data && data.length > 0) {
-        // Resumes exist - redirect to list page
+      if (builder_resumes.length > 0 || enhanced_resumes.length > 0) {
         router.push('/builder/start/list');
         return;
       }

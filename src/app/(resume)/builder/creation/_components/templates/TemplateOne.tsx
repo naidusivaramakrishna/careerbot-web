@@ -127,14 +127,27 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                 )}
                 {personalInfo.linkedinUrl && (
                   <div className="flex items-center justify-end text-sm" style={baseTextStyle}>
-                    <a 
-                      href={personalInfo.linkedinUrl} 
-                      target="_blank" 
+                    <a
+                      href={personalInfo.linkedinUrl}
+                      target="_blank"
                       rel="noopener noreferrer"
                       style={linkStyle}
                       className="hover:underline"
                     >
                       LinkedIn
+                    </a>
+                  </div>
+                )}
+                {personalInfo.githubUrl && (
+                  <div className="flex items-center justify-end text-sm" style={baseTextStyle}>
+                    <a
+                      href={personalInfo.githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={linkStyle}
+                      className="hover:underline"
+                    >
+                      GitHub
                     </a>
                   </div>
                 )}
@@ -257,16 +270,44 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
 
       case "Skills":
         return (
-          skills.length > 0 && (
+          (skills.length > 0 || !!data.categorizedSkills) && (
             <section className="mb-4 page-break-inside-avoid" data-section="skills">
               <h3 className="mb-3.5 border-b border-gray-300" style={headingStyle}>
                 SKILLS
               </h3>
-              <ul className="list-disc pl-5 grid grid-cols-3 gap-x-4 gap-y-1" style={baseTextStyle}>
-                {skills.map((skill, idx) => (
-                  <li key={idx} className="text-sm">{skill}</li>
-                ))}
-              </ul>
+              {data.categorizedSkills ? (
+                <div className="space-y-0.5" style={baseTextStyle}>
+                  {(["programming_languages","frameworks","databases","tools","cloud_platforms","soft_skills"] as const).map((key) => {
+                    const categorySkills = data.categorizedSkills![key];
+                    if (!categorySkills || categorySkills.length === 0) return null;
+                    const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                    return (
+                      <div key={key} className="flex items-start gap-1">
+                        <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                        <span><span className="font-semibold">{label}: </span>{categorySkills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                  {(data.categorizedSkills.custom_categories || []).map((custom) => {
+                    if (!custom.skills || custom.skills.length === 0) return null;
+                    return (
+                      <div key={custom.id} className="flex items-start gap-1">
+                        <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                        <span><span className="font-semibold">{custom.name || "Other"}: </span>{custom.skills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-0.5" style={baseTextStyle}>
+                  {skills.map((skill, idx) => (
+                    <div key={idx} className="flex items-start gap-1">
+                      <span style={{ color: resumeStyle.headingColor, fontSize: "8px", marginTop: "2px" }}>▸</span>
+                      <span>{skill}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )
         );
@@ -352,7 +393,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                       )}
                     </div>
                     <span className="text-sm text-right ml-4" style={baseTextStyle}>
-                      {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
+                      {edu.startDate ? `${formatDate(edu.startDate)} – ${formatDate(edu.endDate)}` : formatDate(edu.endDate)}
                     </span>
                   </div>
                 </div>
@@ -417,10 +458,10 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div style={baseTextStyle}>
                     <div>
                       <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      <span style={baseTextStyle}> - {cert.issuedBy}</span>
+                      {cert.issuer && <span style={baseTextStyle}> - {cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
-                      <span>Issued: {cert.year}</span>
+                      {cert.issueDate && <span>Issued: {cert.issueDate}</span>}
                       {cert.expiryDate && (
                         <span className="ml-3">
                           Expires: {cert.expiryDate}

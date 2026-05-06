@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { mapResumeToProfile } from "../_utils/resumeMapper";
 import { logger } from "@/lib/logger";
@@ -38,6 +39,7 @@ interface RightSectionProps {
 }
 
 const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
+    const router = useRouter();
     const { setProfileData } = useProfileContext();
     const { refreshDashboard } = useDashboard();
     const completionPercentage = completeness;
@@ -282,13 +284,32 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // ✅ FIRST: Update profile context with all new data BEFORE refreshing dashboard
             // This prevents multiple re-renders and toast notifications
 
-            // ✅ PRESERVE EDUCATION ORDER FROM RESUME
-            // Map fetched education by institution to maintain resume order
-            const educationMap = new Map(fetchedEducation.map(edu => [edu.institution, edu]));
-            const updatedEducation = mapped.education
-                ?.filter((resumeEdu) => resumeEdu.institution !== undefined)
-                .map(resumeEdu => educationMap.get(resumeEdu.institution as string))
-                .filter((edu): edu is typeof fetchedEducation[0] => edu !== undefined) || fetchedEducation;
+            // ✅ SORT EDUCATION BY RECENCY (most recent first)
+            // First maintain resume order from mapped.education, then sort by end_date
+            const educationOrder = new Map(
+                mapped.education?.map((edu, index) => [
+                    `${edu.institution}|${edu.degree}`,
+                    index
+                ]) || []
+            );
+
+            const updatedEducation = [...fetchedEducation].sort((a, b) => {
+                const aKey = `${a.institution}|${a.degree}`;
+                const bKey = `${b.institution}|${b.degree}`;
+                const aIndex = educationOrder.get(aKey) ?? Infinity;
+                const bIndex = educationOrder.get(bKey) ?? Infinity;
+
+                // If both have indices from mapped education, maintain that order
+                if (aIndex !== Infinity && bIndex !== Infinity) {
+                    return aIndex - bIndex;
+                }
+
+                // Otherwise sort by end_date (most recent first)
+                if (!a.end_date && !b.end_date) return 0;
+                if (!a.end_date) return -1; // Ongoing education first
+                if (!b.end_date) return 1;
+                return new Date(b.end_date).getTime() - new Date(a.end_date).getTime();
+            });
 
             // ---------------------------------------
             // 9️⃣ UPDATE CONTEXT → UI auto-fills
@@ -633,9 +654,9 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     <div className='w-14 h-14 text-white rounded-full flex items-center justify-center bg-linear-to-r from-[#2200FF] to-[#1800B3]'>
                         <Crown className='w-8 h-8' />
                     </div>
-                    <h3 className='my-4 font-semibold text-lg'>Upgrade to CareerBot Pro</h3>
-                    <p className='text-center text-[#818798] text-sm'>Get unlimited job applications, AI resume optimization, and priority support.</p>
-                    <button className='rounded-lg my-4 text-sm text-white border border-neutral-200 gap-2 cursor-pointer bg-linear-to-r from-[#2200FF] to-[#1800B3] w-full px-4 py-2.5'>
+                    <h3 className='my-4 font-semibold text-lg'>Upgrade Your Plan</h3>
+                    <p className='text-center text-[#818798] text-sm'>Get unlimited ats scans, job applications, AI resume optimization, and priority support.</p>
+                    <button onClick={() => router.push('/pricing')} className='rounded-lg my-4 text-sm text-white border border-neutral-200 gap-2 cursor-pointer bg-linear-to-r from-[#2200FF] to-[#1800B3] w-full px-4 py-2.5'>
                         <span>Upgrade Now</span>
                     </button>
                     <p className='text-sm text-[#818798]'>30 day money back guarantee</p>

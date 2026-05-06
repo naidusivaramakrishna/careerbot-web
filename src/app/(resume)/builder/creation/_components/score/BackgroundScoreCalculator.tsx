@@ -3,7 +3,6 @@ import { useEffect, useRef } from "react";
 import { getResumeScore } from "@/api/resumeApi";
 import { useScore } from "../../_context/ScoreContext";
 import { useResume } from "../../_context/ResumeContext";
-import logger from "@/lib/logger";
 
 /**
  * ✅ Background component that calculates score automatically
@@ -22,20 +21,20 @@ export default function BackgroundScoreCalculator() {
   const fetchScore = async () => {
     // Prevent multiple simultaneous calls
     if (isCalculatingRef.current) {
-      logger.info("Score calculation already in progress, skipping...");
+      // // console.log("⏸️ Score calculation already in progress, skipping...");
       return;
     }
 
     const resumeId = localStorage.getItem("current_resume_id");
-
+    
     if (!resumeId || resumeId === 'null' || resumeId === 'undefined') {
-      logger.warn("No resume ID found for background score calculation");
+      // // console.warn("⚠️ No resume ID found for background score calculation");
       return;
     }
 
     // ✅ Check if resume ID changed (new resume created)
     if (previousResumeIdRef.current !== null && previousResumeIdRef.current !== resumeId) {
-      logger.info("New resume detected in background, resetting score to 0");
+      // // console.log("🆕 New resume detected in background, resetting score to 0");
       resetScore();
       previousDataRef.current = ""; // Reset data comparison
     }
@@ -44,15 +43,15 @@ export default function BackgroundScoreCalculator() {
 
     try {
       isCalculatingRef.current = true;
-      logger.info("[Background] Fetching ATS score for resume:", resumeId);
-
+      // // console.log("📊 [Background] Fetching ATS score for resume:", resumeId);
+      
       const data = await getResumeScore(resumeId);
       setOverallScore(data.overall_score);
-
-      logger.info("[Background] Score updated successfully:", data.overall_score);
-
+      
+      // // console.log("✅ [Background] Score updated successfully:", data.overall_score);
+      
     } catch (err) {
-      logger.error("[Background] Error fetching score:", err);
+      // // console.error("❌ [Background] Error fetching score:", err);
       // Don't show error toast for background calculations
     } finally {
       isCalculatingRef.current = false;
@@ -61,8 +60,8 @@ export default function BackgroundScoreCalculator() {
 
   // ✅ Initial score fetch on mount
   useEffect(() => {
-    logger.info("[Background] Score calculator mounted");
-
+    // // console.log("🎬 [Background] Score calculator mounted");
+    
     // Delay initial fetch by 2 seconds to allow page to load
     const initialTimer = setTimeout(() => {
       fetchScore();
@@ -105,8 +104,8 @@ export default function BackgroundScoreCalculator() {
 
     // Check if data actually changed
     if (currentDataString !== previousDataRef.current) {
-      logger.info("[Background] Resume data changed - scheduling score refresh...");
-
+      // // console.log("🔄 [Background] Resume data changed - scheduling score refresh...");
+      
       // Clear existing timer
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
@@ -114,7 +113,7 @@ export default function BackgroundScoreCalculator() {
 
       // Set new timer (wait 5 seconds after last change)
       debounceTimerRef.current = setTimeout(() => {
-        logger.info("[Background] Debounce complete - fetching new score...");
+        // // console.log("⏱️ [Background] Debounce complete - fetching new score...");
         fetchScore();
       }, 5000); // 5 second delay to avoid too many API calls
 

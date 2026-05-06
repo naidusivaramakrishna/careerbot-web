@@ -3,10 +3,7 @@ import axios from "axios";
 import type { AxiosRequestConfig } from 'axios';
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import logger from "@/lib/logger";
-import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeResponse, UpdateEnhancedResumeRequest, Improvement } from '@/types/api.types';
-
-// Re-export types that consumers import from this module
-export type { EnhancedResumeHistoryItem, EnhanceResumeResponse, Improvement };
+import type { ParseResumeResponse, EnhancedResumeHistoryItem, EnhanceResumeResponse, UpdateEnhancedResumeRequest } from '@/types/api.types';
 
 /* ========== SAFE HELPERS ========== */
 interface ApiErrorWithRaw extends Error {
@@ -57,15 +54,15 @@ async function safeGet<T = unknown>(url: string, config?: AxiosRequestConfig): P
 }
 
 
-async function safePut<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+async function safePatch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   try {
-    logApiRequest('PUT', url, data);
+    logApiRequest('PATCH', url, data);
     const typedData = data as Record<string, unknown> | undefined;
-    const response = await httpClient.put<T>(url, typedData, config);
-    logApiResponse('PUT', url, response.status, response.headers['x-trace-id']);
+    const response = await httpClient.patch<T>(url, typedData, config);
+    logApiResponse('PATCH', url, response.status, response.headers['x-trace-id']);
     return response.data;
   } catch (err: unknown) {
-    logApiError('PUT', url, err);
+    logApiError('PATCH', url, err);
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data ?? err.message;
       const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
@@ -156,9 +153,9 @@ export async function enhanceResume(request: EnhanceResumeRequest): Promise<Enha
 
   // Normalize any oddly formatted summary variants returned by backend.
   try {
-    const enhanced = response?.enhanced_resume as Record<string, unknown> | undefined;
+    const enhanced = response?.enhanced_resume as unknown as Record<string, unknown> | undefined;
     if (enhanced && Array.isArray(enhanced.summary_variants)) {
-      enhanced.summary_variants = (enhanced.summary_variants as unknown[]).map((v: unknown) => {
+      enhanced.summary_variants = enhanced.summary_variants.map((v: unknown) => {
         const out = { ...(v as Record<string, unknown>) } as Record<string, unknown>;
         const raw = out.summary;
         if (typeof raw === 'string') {
@@ -193,7 +190,7 @@ export async function enhanceResume(request: EnhanceResumeRequest): Promise<Enha
         return out;
       });
       // copy back to typed structure
-      (enhanced as Record<string, unknown>).summary_variants = enhanced.summary_variants;
+      (response.enhanced_resume as unknown as Record<string, unknown>).summary_variants = enhanced.summary_variants;
     }
   } catch (err) {
     // Don't fail the whole call if normalization fails — log and continue
@@ -235,9 +232,32 @@ export async function updateEnhancedResume(
   enhanced_id: string,
   request: UpdateEnhancedResumeRequest
 ): Promise<EnhanceResumeResponse> {
-  // Backend supports PUT (not PATCH) on this endpoint
-  const response = await safePut<EnhanceResumeResponse>(`/resume/enhance/${enhanced_id}`, request);
+  const response = await safePatch<EnhanceResumeResponse>(`/resume/enhance/${enhanced_id}`, request);
   return response;
+}
+
+/**
+ * Auto-save Enhanced Resume (partial section update)
+ * PATCH /api/v1/resume/enhance/{enhanced_id}/autosave
+ *
+ * @param enhanced_id - ID of enhanced resume
+ * @param sections - camelCase section payload (e.g. { personalInfo: {...} })
+ */
+export async function autoSaveEnhancedResume(
+  enhanced_id: string,
+  sections: Record<string, unknown>
+): Promise<void> {
+  try {
+    logApiRequest('PATCH', `/resume/enhance/${enhanced_id}/autosave`, sections);
+    const response = await httpClient.patch(
+      `/resume/enhance/${enhanced_id}/autosave`,
+      sections
+    );
+    logApiResponse('PATCH', `/resume/enhance/${enhanced_id}/autosave`, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('PATCH', `/resume/enhance/${enhanced_id}/autosave`, err);
+    throw err;
+  }
 }
 
 /**
@@ -447,7 +467,7 @@ export async function processResumeEnhancement(
   // enhancer_state.resume replaces the old enhanced_resume field
   const resumeData = enhanceResult.enhancer_state?.resume;
   if (resumeData && !enhanceResult.enhanced_resume) {
-    enhanceResult.enhanced_resume = resumeData as import('@/types/api.types').ResumeData;
+    (enhanceResult as unknown as Record<string, unknown>).enhanced_resume = resumeData;
   }
 
   // Set parsed_data from enhancer_state.resume if not already present

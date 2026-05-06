@@ -43,7 +43,7 @@ export default function ResumeLayout({
 }) {
   return (
     <html lang="en">
-      <body className="antialiased font-montserrat">
+      <body className="antialiased">
         <DashboardProvider>
           <Header />
           <div className="flex pt-14 bg-white min-h-screen">

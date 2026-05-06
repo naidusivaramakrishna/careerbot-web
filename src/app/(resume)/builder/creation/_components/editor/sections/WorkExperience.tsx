@@ -1,11 +1,10 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
-import SafeHTML from "@/components/common/SafeHTML";
-import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import MonthYearPicker from "../MonthYearPicker";
+import SectionTipsPanel from "../SectionTipsPanel";
 import AutocompleteInput from "../AutocompleteInput";
 import { companies } from "../../../../../../../types/companies";
 import { locations } from "../../../../../../../types/locations";
@@ -21,11 +20,10 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
-import logger from "@/lib/logger";
 
 interface WorkEntry {
   company: string;
@@ -35,7 +33,7 @@ interface WorkEntry {
   currentlyWorking: boolean;
   description: string;
   location: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ Backend uses "id" field, not "_id"
 }
 
 const emptyWork = (): WorkEntry => ({
@@ -90,6 +88,8 @@ const WorkExperience: React.FC = () => {
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<WorkEntry | null>(null);
 
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -117,9 +117,13 @@ const WorkExperience: React.FC = () => {
   });
 
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.workExperience) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, workExperience: allEntries });
+    // Only include entries with actual data (filter out empty editing placeholders)
+    const validEntries = [
+      ...savedEntries,
+      ...editingEntries.filter(hasValidData)
+    ];
+    if (JSON.stringify(resumeData.workExperience) !== JSON.stringify(validEntries)) {
+      setResumeData({ ...resumeData, workExperience: validEntries });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -139,7 +143,21 @@ const WorkExperience: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      // ✅ UPDATED: Check if editing existing entry or adding new
+      if (editingOriginalIndex !== null && editingOriginalEntry !== null) {
+        // Editing existing entry - preserve ID and replace at the original index
+        const editedEntry = { ...validEditingEntries[0], id: editingOriginalEntry.id };
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, editedEntry);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        // Adding new entries (no ID yet)
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyWork()]);
@@ -151,6 +169,8 @@ const WorkExperience: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyWork()]);
 
     setTimeout(() => {
@@ -163,11 +183,11 @@ const WorkExperience: React.FC = () => {
   const removeWork = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const workToDelete = savedEntries[index];
-    const itemId = workToDelete._id;
+    const itemId = workToDelete.id; // ✅ Use "id" not "_id"
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -178,12 +198,12 @@ const WorkExperience: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("🗑️ Deleting work experience item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting work experience item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "workExperience", itemId);
 
-      logger.info("✅ Work experience item deleted from backend successfully");
+      // // console.log("✅ Work experience item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -193,7 +213,7 @@ const WorkExperience: React.FC = () => {
       reindexErrors("work", index);
 
     } catch (error) {
-      logger.error("❌ Failed to delete work experience item:", error);
+      // // console.error("❌ Failed to delete work experience item:", error);
       alert("Failed to delete work experience. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -202,6 +222,8 @@ const WorkExperience: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
@@ -223,6 +245,19 @@ const WorkExperience: React.FC = () => {
     }, 0);
   };
 
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
+  };
+
   const exec = (idx: number, command: string, value?: string) => {
     const editor = editorRefs.current[idx];
     if (!editor) return;
@@ -241,11 +276,14 @@ const WorkExperience: React.FC = () => {
     handleChange(idx, "description", el.innerHTML || "");
   };
 
-  function startToLabel(val: string) {
+  function startToLabel(val: string): string {
     if (!val) return "";
+    if (/^[A-Za-z]{3}\s\d{2}$/.test(val)) return val;
     const [y, m] = val.split("-");
+    if (!y || !m) return val;
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mIdx = parseInt(m, 10) - 1;
+    if (mIdx < 0 || mIdx > 11) return val;
     return `${monthNames[mIdx]} ${y.slice(-2)}`;
   }
 
@@ -303,7 +341,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      setSafeInnerHTML(el, suggestion);
+      el.innerHTML = suggestion;
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -343,7 +381,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
     editingEntries.forEach((work, idx) => {
       const el = editorRefs.current[idx];
       if (el && work.description && el.innerHTML !== work.description) {
-        setSafeInnerHTML(el, work.description);
+        el.innerHTML = work.description;
       }
     });
   }, [editingEntries]);
@@ -378,9 +416,9 @@ Spearheaded migration of legacy monolithic application to microservices architec
                   )}
                   
                   {work.description && (
-                    <SafeHTML
-                      content={work.description}
-                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                    <div 
+                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
+                      dangerouslySetInnerHTML={{ __html: work.description }} 
                     />
                   )}
                 </div>
@@ -434,6 +472,15 @@ Spearheaded migration of legacy monolithic application to microservices architec
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((work, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -566,14 +613,27 @@ Spearheaded migration of legacy monolithic application to microservices architec
 
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && activePopup === null ? (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>Details can differentiate your resume. More than three out of four employers think that descriptions of experience must always be present on a resume.</p>
-                  <p>Show that you create value with your work by listing your responsibilities and quantifiable achievements in the experience section of your resume to help you catch their eye.</p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="WorkExperience"
+                entryContent={[
+                  editingEntries[0]?.company,
+                  editingEntries[0]?.role,
+                  ...(editingEntries[0]?.description || '')
+                    .split('\n')
+                    .map((l) => l.trim().slice(0, 60))
+                    .filter(Boolean),
+                ].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>Details can differentiate your resume. More than three out of four employers think that descriptions of experience must always be present on a resume.</p>
+                      <p>Show that you create value with your work by listing your responsibilities and quantifiable achievements in the experience section of your resume to help you catch their eye.</p>
+                    </div>
+                  </div>
+                }
+              />
             ) : (
               activePopup !== null && suggestions[activePopup] && (
                 <AISuggestions

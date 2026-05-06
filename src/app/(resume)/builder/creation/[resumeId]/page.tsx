@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect, use, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Header from "../_components/Header";
 import ResumeSide from "../_components/resumeSidebar/ResumeSide";
 import TemplatesSidebar from "../_components/templateSidebar/TemplatesSidebar";
@@ -12,11 +13,14 @@ interface BuilderPageProps {
   }>;
 }
 
-const BuilderPage: React.FC<BuilderPageProps> = ({ params }) => {
-  const { resumeId } = use(params);
+function BuilderPageInner({ resumeId }: { resumeId: string }) {
+  const searchParams = useSearchParams();
+  const fromAts = searchParams.get("from_ats") === "true";
+  const initialTab = fromAts ? "Enhance" : undefined;
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   // ✅ Get loading state from context to prevent rendering before data loads
-  const { isLoadingResume, resumeData } = useResume();
+  const { isLoadingResume } = useResume();
 
   // ✅ Always start with sidebar closed when page loads
   const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(false);
@@ -41,7 +45,6 @@ const BuilderPage: React.FC<BuilderPageProps> = ({ params }) => {
     setActiveTab(tab);
     setIsTemplateSidebarOpen(true);
   };
-
 
   // ✅ Show loading state while resume data is being fetched from backend
   // This prevents form components from initializing with empty data
@@ -68,6 +71,7 @@ const BuilderPage: React.FC<BuilderPageProps> = ({ params }) => {
           isTemplateSidebarOpen={isTemplateSidebarOpen}
           onToggleTemplateSidebar={handleToggleTemplateSidebar}
           resumeId={resumeId}
+          initialTab={initialTab}
         />
 
         <main className="flex-1 bg-gray-50 ">
@@ -75,6 +79,7 @@ const BuilderPage: React.FC<BuilderPageProps> = ({ params }) => {
             isTemplateSidebarOpen={isTemplateSidebarOpen}
             onTabClick={handleTabClickFromToolbar}
             resumeId={resumeId}
+            isEnhancedResume={isEnhancedResume}
           />
         </main>
 
@@ -87,6 +92,15 @@ const BuilderPage: React.FC<BuilderPageProps> = ({ params }) => {
         />
       </div>
     </>
+  );
+}
+
+const BuilderPage: React.FC<BuilderPageProps> = ({ params }) => {
+  const { resumeId } = use(params);
+  return (
+    <Suspense>
+      <BuilderPageInner resumeId={resumeId} />
+    </Suspense>
   );
 };
 

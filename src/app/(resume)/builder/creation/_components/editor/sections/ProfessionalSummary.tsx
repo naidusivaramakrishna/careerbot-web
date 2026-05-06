@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
+import SectionTipsPanel from "../SectionTipsPanel";
 import { useValidation } from "../../../_hooks/useValidation";
-import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import AISuggestions from "../AISuggestions";
 import AutocompleteInput from "../AutocompleteInput";
 import { roles } from "../../../../../../../types/roles";
@@ -163,7 +163,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
-      setSafeInnerHTML(el, suggestion);
+      el.innerHTML = suggestion;
       handleChange(suggestion);
       
       setTimeout(() => {
@@ -205,7 +205,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   useEffect(() => {
     const el = editorRef.current;
     if (el && resumeData.professionalSummary.summary && el.innerHTML !== resumeData.professionalSummary.summary) {
-      setSafeInnerHTML(el, resumeData.professionalSummary.summary);
+      el.innerHTML = resumeData.professionalSummary.summary;
     }
   }, [resumeData.professionalSummary.summary]);
 
@@ -224,7 +224,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
             <AutocompleteInput
               label="Target Role"
               required
-              value={resumeData.professionalSummary.targetRole ?? ""}
+              value={resumeData.professionalSummary.targetRole}
               onChange={(val) => handleTargetRoleChange(val)}
               onBlur={() => validateRequired("summary", 0, { targetRole: resumeData.professionalSummary.targetRole })}
               placeholder="e.g., Frontend Developer, Data Analyst"
@@ -285,21 +285,26 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
         {/* Right Side: Fixed Tips Section */}
         <div className="w-80 flex-shrink-0 sticky top-2">
           {showTips && activePopup === null ? (
-            <div className="bg-[#faf9f8] rounded-lg p-5">
-              <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-              <div className="border-t border-gray-300 mb-3"></div>
-              <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                <p>
-                  Your professional summary is a brief overview highlighting your experience, skills, and career achievements. Keep it concise, focused, and tailored to your target role.*
-                </p>
-                <p>
-                  Include years of experience, key competencies, measurable achievements, and industry-specific keywords. Start with a strong professional descriptor and emphasize your unique value proposition.
-                </p>
-                <p className="text-xs text-gray-500 italic mt-6">
-                  *Recruiters spend an average of 6 seconds reviewing a resume—make your summary count.
-                </p>
-              </div>
-            </div>
+            <SectionTipsPanel
+              sectionKey="ProfessionalSummary"
+              staticTips={
+                <div className="bg-[#faf9f8] rounded-lg p-5">
+                  <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                  <div className="border-t border-gray-300 mb-3"></div>
+                  <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                    <p>
+                      Your professional summary is a brief overview highlighting your experience, skills, and career achievements. Keep it concise, focused, and tailored to your target role.*
+                    </p>
+                    <p>
+                      Include years of experience, key competencies, measurable achievements, and industry-specific keywords. Start with a strong professional descriptor and emphasize your unique value proposition.
+                    </p>
+                    <p className="text-xs text-gray-500 italic mt-6">
+                      *Recruiters spend an average of 6 seconds reviewing a resume—make your summary count.
+                    </p>
+                  </div>
+                </div>
+              }
+            />
           ) : (
             activePopup !== null && suggestions[activePopup] && (
               <AISuggestions

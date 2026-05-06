@@ -2,16 +2,16 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
-import logger from "@/lib/logger";
+import SectionTipsPanel from "../SectionTipsPanel";
 
 interface ReferenceEntry {
   name: string;
   relation: string;
   contact: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ NEW: Add item ID for backend tracking
 }
 
 const emptyReference = (): ReferenceEntry => ({
@@ -33,6 +33,8 @@ const References: React.FC = () => {
 
   const [showTips] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<ReferenceEntry | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
@@ -57,7 +59,7 @@ const References: React.FC = () => {
   });
 
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     if (JSON.stringify(resumeData.references) !== JSON.stringify(allEntries)) {
       setResumeData({ ...resumeData, references: allEntries });
     }
@@ -79,13 +81,25 @@ const References: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyReference()]);
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyReference()]);
   };
 
@@ -93,11 +107,11 @@ const References: React.FC = () => {
   const removeReference = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const referenceToDelete = savedEntries[index];
-    const itemId = referenceToDelete._id;
+    const itemId = referenceToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -108,12 +122,12 @@ const References: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("🗑️ Deleting reference item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting reference item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "references", itemId);
 
-      logger.info("✅ Reference item deleted from backend successfully");
+      // // console.log("✅ Reference item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -123,7 +137,7 @@ const References: React.FC = () => {
       reindexErrors("reference", index);
 
     } catch (error) {
-      logger.error("❌ Failed to delete reference item:", error);
+      // // console.error("❌ Failed to delete reference item:", error);
       alert("Failed to delete reference. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -132,10 +146,25 @@ const References: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
+  };
+
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   return (
@@ -218,6 +247,15 @@ const References: React.FC = () => {
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((reference, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -290,21 +328,27 @@ const References: React.FC = () => {
           {/* Right Side: Fixed Tips Section */}
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Professional references strengthen your application by providing third-party validation of your skills and work ethic. Choose references who can speak knowledgeably about your qualifications.
-                  </p>
-                  <p>
-                    Include their full name, professional relationship to you, and contact information. Always ask permission before listing someone as a reference and keep them informed about your job search.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *90% of employers contact references during the hiring process.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="References"
+                entryContent={[editingEntries[0]?.name, editingEntries[0]?.relation].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Professional references strengthen your application by providing third-party validation of your skills and work ethic. Choose references who can speak knowledgeably about your qualifications.
+                      </p>
+                      <p>
+                        Include their full name, professional relationship to you, and contact information. Always ask permission before listing someone as a reference and keep them informed about your job search.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *90% of employers contact references during the hiring process.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

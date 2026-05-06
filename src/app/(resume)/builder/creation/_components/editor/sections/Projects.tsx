@@ -1,12 +1,11 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
-import SafeHTML from "@/components/common/SafeHTML";
-import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
 import MonthYearPicker from "../MonthYearPicker";
 import TechnologyChipsInput from "../TechnologyChipsInput";
+import SectionTipsPanel from "../SectionTipsPanel";
 import { technologies } from "../../../../../../../types/technologies";
 import {
   FaSpellCheck,
@@ -19,11 +18,10 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
-import logger from "@/lib/logger";
 
 interface ProjectEntry {
   title: string;
@@ -32,7 +30,7 @@ interface ProjectEntry {
   startDate: string;
   endDate: string;
   link: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ Backend uses "id" field, not "_id"
 }
 
 const emptyProject = (): ProjectEntry => ({
@@ -86,6 +84,8 @@ const Projects: React.FC = () => {
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<ProjectEntry | null>(null);
 
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -120,13 +120,17 @@ const Projects: React.FC = () => {
 
   // ✅ Sync technologies to skills whenever projects change
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.projects) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, projects: allEntries });
+    // Only include entries with actual data (filter out empty editing placeholders)
+    const validEntries = [
+      ...savedEntries,
+      ...editingEntries.filter(hasValidData)
+    ];
+    if (JSON.stringify(resumeData.projects) !== JSON.stringify(validEntries)) {
+      setResumeData({ ...resumeData, projects: validEntries });
     }
 
     // Extract all unique technologies from all projects
-    const allTechnologies = allEntries.flatMap(entry => entry.technologies);
+    const allTechnologies = validEntries.flatMap(entry => entry.technologies);
     const uniqueTechnologies = Array.from(new Set(allTechnologies));
 
     // Merge with existing skills (keep existing skills that aren't from projects)
@@ -135,7 +139,7 @@ const Projects: React.FC = () => {
 
     // Only update if there's a change to avoid infinite loops
     if (JSON.stringify(currentSkills.sort()) !== JSON.stringify(mergedSkills.sort())) {
-      setResumeData({ ...resumeData, projects: allEntries, skills: mergedSkills });
+      setResumeData({ ...resumeData, projects: validEntries, skills: mergedSkills });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -155,7 +159,17 @@ const Projects: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyProject()]);
@@ -167,6 +181,8 @@ const Projects: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyProject()]);
 
     setTimeout(() => {
@@ -179,11 +195,11 @@ const Projects: React.FC = () => {
   const removeProject = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const projectToDelete = savedEntries[index];
-    const itemId = projectToDelete._id;
+    const itemId = projectToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -194,12 +210,12 @@ const Projects: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("🗑️ Deleting project item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting project item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "projects", itemId);
 
-      logger.info("✅ Project item deleted from backend successfully");
+      // // console.log("✅ Project item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -209,7 +225,7 @@ const Projects: React.FC = () => {
       reindexErrors("project", index);
 
     } catch (error) {
-      logger.error("❌ Failed to delete project item:", error);
+      // // console.error("❌ Failed to delete project item:", error);
       alert("Failed to delete project. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -218,6 +234,8 @@ const Projects: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
@@ -239,6 +257,19 @@ const Projects: React.FC = () => {
     }, 0);
   };
 
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
+  };
+
   const exec = (idx: number, command: string, value?: string) => {
     const editor = editorRefs.current[idx];
     if (!editor) return;
@@ -257,11 +288,14 @@ const Projects: React.FC = () => {
     handleChange(idx, "description", el.innerHTML || "");
   };
 
-  function startToLabel(val: string) {
+  function startToLabel(val: string): string {
     if (!val) return "";
+    if (/^[A-Za-z]{3}\s\d{2}$/.test(val)) return val;
     const [y, m] = val.split("-");
+    if (!y || !m) return val;
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mIdx = parseInt(m, 10) - 1;
+    if (mIdx < 0 || mIdx > 11) return val;
     return `${monthNames[mIdx]} ${y.slice(-2)}`;
   }
 
@@ -319,7 +353,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      setSafeInnerHTML(el, suggestion);
+      el.innerHTML = suggestion;
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -359,7 +393,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
     editingEntries.forEach((project, idx) => {
       const el = editorRefs.current[idx];
       if (el && project.description && el.innerHTML !== project.description) {
-        setSafeInnerHTML(el, project.description);
+        el.innerHTML = project.description;
       }
     });
   }, [editingEntries]);
@@ -405,9 +439,9 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                   )}
                   
                   {project.description && (
-                    <SafeHTML
-                      content={project.description}
-                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                    <div 
+                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
+                      dangerouslySetInnerHTML={{ __html: project.description }} 
                     />
                   )}
                 </div>
@@ -461,6 +495,15 @@ Engineered machine learning recommendation system using Python and TensorFlow th
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((project, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -592,21 +635,33 @@ Engineered machine learning recommendation system using Python and TensorFlow th
           {/* Tips Panel */}
           <div className="w-80 flex-shrink-0 overflow-y-auto scrollbar-hide sticky top-2">
             {showTips && activePopup === null ? (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Projects showcase your practical skills and initiative. Highlight technical challenges solved, technologies used, and measurable outcomes achieved.
-                  </p>
-                  <p>
-                    Include relevant metrics like performance improvements, user engagement, or code efficiency. Link to live demos or GitHub repositories when possible to demonstrate your work.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *Personal projects are valued by 75% of employers when evaluating candidates.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Projects"
+                entryContent={[
+                  editingEntries[0]?.title,
+                  ...(editingEntries[0]?.description || '')
+                    .split('\n')
+                    .map((l) => l.trim().slice(0, 60))
+                    .filter(Boolean),
+                ].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Projects showcase your practical skills and initiative. Highlight technical challenges solved, technologies used, and measurable outcomes achieved.
+                      </p>
+                      <p>
+                        Include relevant metrics like performance improvements, user engagement, or code efficiency. Link to live demos or GitHub repositories when possible to demonstrate your work.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *Personal projects are valued by 75% of employers when evaluating candidates.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             ) : (
               activePopup !== null && suggestions[activePopup] && (
                 <AISuggestions

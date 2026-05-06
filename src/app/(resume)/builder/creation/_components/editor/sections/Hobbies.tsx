@@ -2,10 +2,9 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
-import SafeHTML from "@/components/common/SafeHTML";
-import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import SectionTipsPanel from "../SectionTipsPanel";
 import {
   FaSpellCheck,
   FaListUl,
@@ -17,18 +16,17 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
-import logger from "@/lib/logger";
 
 interface HobbyEntry {
   name: string;
   description: string;
   proficiencyLevel?: string;
   achievement?: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ NEW: Add item ID for backend tracking
 }
 
 const emptyHobby = (): HobbyEntry => ({
@@ -71,6 +69,8 @@ const Hobbies: React.FC = () => {
 
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<HobbyEntry | null>(null);
 
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
   const descriptionRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -96,7 +96,7 @@ const Hobbies: React.FC = () => {
   });
 
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     if (JSON.stringify(resumeData.hobbies) !== JSON.stringify(allEntries)) {
       setResumeData({ ...resumeData, hobbies: allEntries });
     }
@@ -118,7 +118,17 @@ const Hobbies: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyHobby()]);
@@ -130,6 +140,8 @@ const Hobbies: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyHobby()]);
 
     setTimeout(() => {
@@ -142,11 +154,11 @@ const Hobbies: React.FC = () => {
   const removeHobby = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const hobbyToDelete = savedEntries[index];
-    const itemId = hobbyToDelete._id;
+    const itemId = hobbyToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -157,12 +169,12 @@ const Hobbies: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("🗑️ Deleting hobby item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting hobby item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "hobbies", itemId);
 
-      logger.info("✅ Hobby item deleted from backend successfully");
+      // // console.log("✅ Hobby item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -172,7 +184,7 @@ const Hobbies: React.FC = () => {
       reindexErrors("hobby", index);
 
     } catch (error) {
-      logger.error("❌ Failed to delete hobby item:", error);
+      // // console.error("❌ Failed to delete hobby item:", error);
       alert("Failed to delete hobby. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -181,6 +193,8 @@ const Hobbies: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
@@ -200,6 +214,19 @@ const Hobbies: React.FC = () => {
         }
       }
     }, 0);
+  };
+
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   const exec = (idx: number, command: string, value?: string) => {
@@ -279,7 +306,7 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      setSafeInnerHTML(el, suggestion);
+      el.innerHTML = suggestion;
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -311,7 +338,7 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
     editingEntries.forEach((hobby, idx) => {
       const el = editorRefs.current[idx];
       if (el && hobby.description && el.innerHTML !== hobby.description) {
-        setSafeInnerHTML(el, hobby.description);
+        el.innerHTML = hobby.description;
       }
     });
   }, [editingEntries]);
@@ -336,9 +363,9 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                   )}
                   
                   {hobby.description && (
-                    <SafeHTML
-                      content={hobby.description}
-                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                    <div 
+                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
+                      dangerouslySetInnerHTML={{ __html: hobby.description }} 
                     />
                   )}
                   
@@ -398,6 +425,15 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((hobby, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -521,21 +557,27 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                 }}
               />
             ) : (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Hobbies demonstrate your personality and soft skills. Choose hobbies that show dedication, creativity, or leadership qualities relevant to your field.
-                  </p>
-                  <p>
-                    Include the hobby name, your proficiency level, and any achievements or recognition you have gained. Be honest about your skill level - it builds credibility.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *Including relevant hobbies can increase candidate engagement by 25%.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Hobbies"
+                entryContent={[editingEntries[0]?.name].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Hobbies demonstrate your personality and soft skills. Choose hobbies that show dedication, creativity, or leadership qualities relevant to your field.
+                      </p>
+                      <p>
+                        Include the hobby name, your proficiency level, and any achievements or recognition you have gained. Be honest about your skill level - it builds credibility.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *Including relevant hobbies can increase candidate engagement by 25%.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

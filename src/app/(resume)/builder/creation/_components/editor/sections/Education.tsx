@@ -2,25 +2,33 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import MonthYearPicker from "../MonthYearPicker";
-import logger from "@/lib/logger";
+import SectionTipsPanel from "../SectionTipsPanel";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+
+type ScoreType = "CGPA" | "Marks" | "GPA" | "Percentage";
 
 interface EducationEntry {
   school: string;
   degree: string;
   startDate: string;
   endDate: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  scoreType?: ScoreType; // ✅ Type of score (CGPA, Marks, GPA, Percentage)
+  scoreValue?: string; // ✅ Score value (e.g., 3.8, 85, etc.)
+  id?: string; // ✅ Backend uses "id" field, not "_id"
 }
+
+const SCORE_TYPES: ScoreType[] = ["CGPA", "Marks", "GPA", "Percentage"];
 
 const emptyEducation = (): EducationEntry => ({
   school: "",
   degree: "",
   startDate: "",
   endDate: "",
+  scoreType: undefined,
+  scoreValue: "",
 });
 
 const Education: React.FC = () => {
@@ -35,7 +43,9 @@ const Education: React.FC = () => {
   } = useValidation();
 
   const [showTips] = useState(true);
-  const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<EducationEntry | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
@@ -60,9 +70,13 @@ const Education: React.FC = () => {
   });
 
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
-    if (JSON.stringify(resumeData.education) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, education: allEntries });
+    // Only include entries with actual data (filter out empty editing placeholders)
+    const validEntries = [
+      ...savedEntries,
+      ...editingEntries.filter(hasValidData)
+    ];
+    if (JSON.stringify(resumeData.education) !== JSON.stringify(validEntries)) {
+      setResumeData({ ...resumeData, education: validEntries });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
@@ -110,25 +124,53 @@ const Education: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        // Editing an existing entry — re-insert at the original position
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+      } else {
+        // Adding a new entry — append to end
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyEducation()]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyEducation()]);
+  };
+
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      // Restore the original entry back to its position in the list
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   // ✅ UPDATED: Delete with API call
   const removeEducation = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const educationToDelete = savedEntries[index];
-    const itemId = educationToDelete._id;
+    const itemId = educationToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -139,12 +181,12 @@ const Education: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("Deleting education item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting education item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "education", itemId);
 
-      logger.info("Education item deleted from backend successfully");
+      // // console.log("✅ Education item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -154,7 +196,7 @@ const Education: React.FC = () => {
       reindexErrors("education", index);
 
     } catch (error) {
-      logger.error("Failed to delete education item:", error);
+      // // console.error("❌ Failed to delete education item:", error);
       alert("Failed to delete education entry. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -163,17 +205,24 @@ const Education: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
   };
 
-  function startToLabel(val: string) {
+  function startToLabel(val: string): string {
     if (!val) return "";
+    // Already in "MMM YY" format from the picker (e.g. "Jun 24") — return as-is
+    if (/^[A-Za-z]{3}\s\d{2}$/.test(val)) return val;
+    // Backend "YYYY-MM" format (e.g. "2024-06")
     const [y, m] = val.split("-");
+    if (!y || !m) return val;
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mIdx = parseInt(m, 10) - 1;
+    if (mIdx < 0 || mIdx > 11) return val;
     return `${monthNames[mIdx]} ${y.slice(-2)}`;
   }
 
@@ -198,10 +247,17 @@ const Education: React.FC = () => {
                   
                   {/* Dates */}
                   <div className="text-xs text-gray-600">
-                    {education.startDate ? startToLabel(education.startDate) : ""} 
+                    {education.startDate ? startToLabel(education.startDate) : ""}
                     {education.startDate && education.endDate && " - "}
                     {education.endDate ? startToLabel(education.endDate) : ""}
                   </div>
+
+                  {/* Score */}
+                  {education.scoreType && education.scoreValue && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {education.scoreType}: {education.scoreValue}{education.scoreType === "Percentage" ? "%" : ""}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3">
@@ -250,10 +306,22 @@ const Education: React.FC = () => {
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
           {/* Left Side: Scrollable Form Fields Section */}
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
           >
+            {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="flex items-center gap-1 text-xs font-semibold text-black mb-3"
+              >
+                <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                  <ArrowLeft size={18} />
+                </span>
+                Back
+              </button>
+            )}
             <div className="flex flex-col gap-3">
               {editingEntries.map((education, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
@@ -320,6 +388,40 @@ const Education: React.FC = () => {
                         />
                       </div>
                     </div>
+
+                    {/* Combined Score Field with Dropdown */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-sm font-semibold text-[#3b3b3b]">Score</label>
+                      <div className="flex items-center rounded-md bg-[#faf9f8] border-b-2 border-transparent focus-within:border-blue-500 hover:bg-gray-100">
+                        {/* Score Value Input */}
+                        <input
+                          type="text"
+                          value={education.scoreValue || ""}
+                          placeholder={education.scoreType === "Percentage" ? "e.g., 85" : "e.g., 3.8"}
+                          onChange={(e) => handleChange(editIndex, "scoreValue", e.target.value)}
+                          className="flex-1 px-3 py-3.5 text-sm bg-transparent text-black outline-none"
+                        />
+
+                        {/* Vertical Separator */}
+                        <div className="w-px h-6 bg-gray-300 ml-1 mr-8" />
+
+                        {/* Score Type Dropdown */}
+                        <select
+                          value={education.scoreType || ""}
+                          onChange={(e) => handleChange(editIndex, "scoreType", e.target.value as ScoreType)}
+                          className="pl-6 pr-3 py-3.5 text-sm bg-transparent text-black outline-none cursor-pointer font-medium appearance-none bg-left bg-no-repeat"
+                          style={{
+                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23000' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                            backgroundPosition: "0.5rem center"
+                          }}
+                        >
+                          <option value="">Type</option>
+                          {SCORE_TYPES.map((type) => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -340,21 +442,27 @@ const Education: React.FC = () => {
           {/* Right Side: Fixed Tips Section */}
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Education credentials validate your qualifications and academic foundation. List your most recent and relevant educational achievements in reverse chronological order.
-                  </p>
-                  <p>
-                    Include the institution name, degree earned, and dates attended. Highlight honors, relevant coursework, or academic achievements that strengthen your candidacy.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *95% of employers verify education credentials during the hiring process.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Education"
+                entryContent={[editingEntries[0]?.school, editingEntries[0]?.degree].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Education credentials validate your qualifications and academic foundation. List your most recent and relevant educational achievements in reverse chronological order.
+                      </p>
+                      <p>
+                        Include the institution name, degree earned, and dates attended. Highlight honors, relevant coursework, or academic achievements that strengthen your candidacy.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *95% of employers verify education credentials during the hiring process.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

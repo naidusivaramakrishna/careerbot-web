@@ -135,15 +135,27 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                 )}
                 {personalInfo.linkedinUrl && (
                   <div className="flex items-center gap-2">
-                    {/* <span>in</span> */}
-                    <a 
-                      href={personalInfo.linkedinUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      href={personalInfo.linkedinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       style={linkStyle}
                       className="hover:underline"
                     >
                       {personalInfo.linkedinUrl.replace('https://', '').replace('http://', '')}
+                    </a>
+                  </div>
+                )}
+                {personalInfo.githubUrl && (
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={personalInfo.githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={linkStyle}
+                      className="hover:underline"
+                    >
+                      {personalInfo.githubUrl.replace('https://', '').replace('http://', '')}
                     </a>
                   </div>
                 )}
@@ -188,7 +200,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
           professionalSummary?.summary && (
             <section className="mb-6 page-break-inside-avoid" data-section="summary">
               <h2 className="mb-3 " style={headingStyle}>
-                SUMMARY
+                PROFESSIONAL SUMMARY
               </h2>
               {/* ✅ Changed to support HTML formatting */}
               <SafeHTML content={professionalSummary.summary} className="text-justify resume-description" />
@@ -202,7 +214,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
           workExperience.length > 0 && (
             <section className="mb-6" data-section="work-experience">
               <h2 className="mb-3 page-break-after-avoid" style={headingStyle}>
-                EXPERIENCE
+                PROFESSIONAL EXPERIENCE
               </h2>
               {workExperience.map((exp, idx) => (
                 <div key={idx} className="mb-4 page-break-inside-avoid">
@@ -254,7 +266,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                       )}
                     </div>
                     <div className="text-sm whitespace-nowrap ml-4" style={baseTextStyle}>
-                      {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
+                      {edu.startDate ? `${formatDate(edu.startDate)} – ${formatDate(edu.endDate)}` : formatDate(edu.endDate)}
                     </div>
                   </div>
                 </div>
@@ -351,49 +363,43 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
       //     )
       //   );
       case "Skills":
-  return (
-    skills.length > 0 && (
-      <section className="mb-6 page-break-inside-avoid" data-section="skills">
-        <h2 className="mb-3" style={headingStyle}>
-          SKILLS
-        </h2>
-        
-        {data.categorizedSkills ? (
-          <div className="space-y-3">
-            {Object.entries(data.categorizedSkills).map(([category, categorySkills]) => {
-              if (!categorySkills || categorySkills.length === 0) return null;
-              
-              const categoryLabel = category
-                .split('_')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-              
-              return (
-                <div key={category}>
-                  <div className="mb-1">
-                    <span className="font-semibold" style={titleStyle}>
-                      {categoryLabel}:
-                    </span>
-                    <span style={baseTextStyle}>
-                      {" "}{(categorySkills as string[]).join(", ")}
-                    </span>
-                  </div>
+        return (
+          skills.length > 0 && (
+            <section className="mb-6 page-break-inside-avoid" data-section="skills">
+              <h2 className="mb-3" style={headingStyle}>
+                TECHNICAL SKILLS
+              </h2>
+              {/* comma_separated: each category on its own line as "Label: item1, item2" */}
+              {data.categorizedSkills ? (
+                <div style={baseTextStyle}>
+                  {(["programming_languages","frameworks","databases","tools","cloud_platforms","soft_skills"] as const).map((key) => {
+                    const categorySkills = data.categorizedSkills![key];
+                    if (!categorySkills || categorySkills.length === 0) return null;
+                    const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                    return (
+                      <div key={key} className="mb-0.5">
+                        <span className="font-semibold" style={titleStyle}>{label}: </span>
+                        <span>{categorySkills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                  {(data.categorizedSkills.custom_categories || []).map((custom) => {
+                    if (!custom.skills || custom.skills.length === 0) return null;
+                    return (
+                      <div key={custom.id} className="mb-0.5">
+                        <span className="font-semibold" style={titleStyle}>{custom.name || "Other"}: </span>
+                        <span>{custom.skills.join(", ")}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <ul className="list-disc pl-5 grid grid-cols-2 gap-x-6 gap-y-1" style={baseTextStyle}>
-            {skills.map((skill, idx) => (
-              <li key={idx}>{skill}</li>
-            ))}
-          </ul>
-        )}
-        
-        <hr className="border-t border-gray-400 mt-4" />
-      </section>
-    )
-  );
+              ) : (
+                <div style={baseTextStyle}>{skills.join(", ")}</div>
+              )}
+              <hr className="border-t border-gray-400 mt-4" />
+            </section>
+          )
+        );
 
 
       case "Internships":
@@ -440,10 +446,10 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <div style={baseTextStyle}>
                     <div>
                       <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                      <span style={baseTextStyle}> - {cert.issuedBy}</span>
+                      {cert.issuer && <span style={baseTextStyle}> - {cert.issuer}</span>}
                     </div>
                     <div className="text-xs mt-1">
-                      <span>Issued: {cert.year}</span>
+                      {cert.issueDate && <span>Issued: {cert.issueDate}</span>}
                       {cert.expiryDate && (
                         <span className="ml-3">
                           Expires: {cert.expiryDate}

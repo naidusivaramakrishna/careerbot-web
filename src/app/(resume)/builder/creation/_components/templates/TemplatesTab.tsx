@@ -6,6 +6,10 @@ import { useResume } from "../../_context/ResumeContext";
 import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, TemplateResponse } from "@/api/resumeApi";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
+import { TEMPLATE_DEFAULT_STYLES } from "../../_utils/templateStyles";
+import { getProfile } from "@/api/userApi";
+import { useRouter } from "next/navigation";
+import { getSectionOrder } from "@/app/(resume)/templates/_utils/sectionOrder";
 
 // Interface updated with mongoId (_id)
 interface TransformedTemplate {
@@ -24,7 +28,7 @@ interface TransformedTemplate {
 const DEFAULT_TEMPLATES: TransformedTemplate[] = [
   {
     id: "compact_professional",
-    mongoId: "6971ce1b4c0df89e108ce5b3",
+    mongoId: "698c12085d07f07c24604031",
     template_id: "compact_professional",
     name: "Compact Professional",
     subtitle: "Modern",
@@ -35,7 +39,7 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
   },
   {
     id: "clean_simple",
-    mongoId: "6971cbe74c0df89e108ce5b0",
+    mongoId: "698c12085d07f07c24604033",
     template_id: "clean_simple",
     name: "Clean Simple",
     subtitle: "Minimalist",
@@ -46,24 +50,35 @@ const DEFAULT_TEMPLATES: TransformedTemplate[] = [
   },
   {
     id: "minimalist_classic",
-    mongoId: "6971ccb34c0df89e108ce5b1",
-    template_id: "minimalist_classic",
-    name: "Minimalist Classic",
-    subtitle: "Minimalist",
+    mongoId: "69bcda650380c25aee737346",
+    template_id: "classic_horizontal_dividers",
+    name: "Classic Horizontal Dividers",
+    subtitle: "Modern",
     preview_url: "/assets/templates/template-3.png",
     atsFriendly: true,
-    description: "Clean and simple layout with understated elegance",
-    category: "minimalist"
+    description: "Modern professional resume with horizontal line dividers",
+    category: "modern"
   },
   {
     id: "professional_classic",
-    mongoId: "6971cd7c4c0df89e108ce5b2",
-    template_id: "professional_classic",
-    name: "Professional Classic",
+    mongoId: "697ca4b084d83306028ce5b0",
+    template_id: "classic_professional",
+    name: "Classic Professional",
     subtitle: "Professional",
     preview_url: "/assets/templates/template-4.png",
     atsFriendly: true,
-    description: "Traditional layout ideal for corporate professionals",
+    description: "Clean professional layout with left-aligned header, strong section dividers, and structured single-column format",
+    category: "professional"
+  },
+  {
+    id: "classic_professional",
+    mongoId: "698b4219fb7a5d9a92ce520a",
+    template_id: "classic_professional_variant",
+    name: "Classic Professional",
+    subtitle: "Professional",
+    preview_url: "/assets/templates/template-4.png",
+    atsFriendly: true,
+    description: "Clean professional layout with left-aligned header, strong section dividers, and structured single-column format",
     category: "professional"
   }
 ];
@@ -74,6 +89,7 @@ interface TemplatesTabProps {
 }
 
 const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId }) => {
+  const router = useRouter();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [activePanel, setActivePanel] = useState<"templates" | "style">("templates");
@@ -83,9 +99,93 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<string[]>(["All"]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
+  const [careerLevelData, setCareerLevelData] = useState<Array<{
+    id: string;
+    name: string;
+    preview_url: string;
+    description?: string;
+    ats_friendly?: boolean;
+    subtitle?: string;
+    domain_family?: string;
+  }> | null>(null);
+  const [previewImageError, setPreviewImageError] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   const { selectedTemplate, setSelectedTemplate, resumeStyle, setResumeStyle } = useResume();
+
+  // Get user email for scoped localStorage keys
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      try {
+        const profile = await getProfile();
+        if (profile.email) {
+          setUserEmail(profile.email);
+          logger.info('User email set for scoped storage:', profile.email);
+        }
+      } catch (err) {
+        logger.warn('Failed to get user email for scoped storage', err);
+      }
+    };
+
+    fetchUserEmail();
+  }, []);
+
+  // Check for applied template from templates page
+  useEffect(() => {
+    if (typeof window === 'undefined' || !userEmail) return; // Wait for userEmail to be set
+
+    // Create user-scoped localStorage keys
+    const selectedTemplateKey = `selectedTemplateId_${userEmail}`;
+    const careerLevelKey = `careerLevelTemplates_${userEmail}`;
+
+    const storedTemplateId = localStorage.getItem(selectedTemplateKey);
+    const storedCareerLevels = localStorage.getItem(careerLevelKey);
+
+    logger.info('TemplatesTab mount - checking localStorage with email:', userEmail);
+    logger.info('Keys being used:', {
+      selectedTemplateKey,
+      careerLevelKey
+    });
+    logger.info('Values found in localStorage:', {
+      storedTemplateId,
+      storedCareerLevels: storedCareerLevels ? 'exists' : 'null'
+    });
+
+    if (storedTemplateId) {
+      setAppliedTemplateId(storedTemplateId);
+      logger.info('✓ Applied template ID set to:', storedTemplateId);
+    } else {
+      setAppliedTemplateId(null);
+      logger.info('⚠ No template ID found in localStorage');
+    }
+
+    if (storedCareerLevels) {
+      try {
+        const careerLevels = JSON.parse(storedCareerLevels) as Array<{
+          id: string;
+          name: string;
+          preview_url: string;
+          description?: string;
+          ats_friendly?: boolean;
+          subtitle?: string;
+          domain_family?: string;
+        }>;
+        logger.info('Career level templates loaded from storage:');
+        careerLevels.forEach((tpl, idx) => {
+          logger.info(`  [${idx}] ${tpl.name} (id: ${tpl.id})`);
+        });
+        setCareerLevelData(careerLevels);
+      } catch (err) {
+        logger.error('Failed to parse career level templates', err);
+        setCareerLevelData(null);
+      }
+    } else {
+      setCareerLevelData(null);
+      logger.info('⚠ No career level data found in localStorage');
+    }
+  }, [userEmail]);
 
   // Fetch templates from API
   useEffect(() => {
@@ -109,22 +209,43 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         logger.info("Templates fetched from API:", data?.length || 0, data);
 
         if (data && Array.isArray(data) && data.length > 0) {
-          const transformedTemplates: TransformedTemplate[] = data.map((tpl: TemplateResponse) => {
-            return {
-              id: tpl.id?.toString() || tpl.template_id || "0",
-              // ✅ mongoId should contain the 'id' from API response for backend calls
-              mongoId: tpl.id?.toString() || tpl._id || "0",
-              template_id: tpl.template_id || tpl.id?.toString() || "0",
-              name: tpl.name || "Template",
-              subtitle: tpl.category ? (tpl.category.charAt(0).toUpperCase() + tpl.category.slice(1)) : "Template",
-              preview_url: tpl.preview_url || `/assets/templates/template-${tpl.template_id || tpl.id}.png`,
-              atsFriendly: tpl.ats_friendly ?? true,
-              description: tpl.description || "Professional resume template",
-              category: tpl.category || "modern"
-            };
-          });
+          // ✅ Map template_id to correct image paths
+          const templateImageMap: Record<string, string> = {
+            'compact_professional': '/assets/templates/template-1.png',
+            'clean_simple': '/assets/templates/template-2.png',
+            'minimalist_classic': '/assets/templates/template-3.png',
+            'professional_classic': '/assets/templates/template-4.png',
+            'classic_professional': '/assets/templates/template-4.png',
+          };
+
+          // ✅ Only show templates that have valid image mappings (filter out unknown templates)
+          const knownTemplateIds = Object.keys(templateImageMap);
+
+          const transformedTemplates: TransformedTemplate[] = data
+            .filter((tpl: TemplateResponse) => {
+              const templateId = tpl.template_id || tpl.id?.toString() || "0";
+              return knownTemplateIds.includes(templateId);
+            })
+            .map((tpl: TemplateResponse) => {
+              const templateId = tpl.template_id || tpl.id?.toString() || "0";
+
+              // ✅ Use mapped path (guaranteed to exist after filter)
+              const previewUrl = templateImageMap[templateId];
+
+              return {
+                id: tpl.id?.toString() || tpl.template_id || "0",
+                // ✅ mongoId should contain the 'id' from API response for backend calls
+                mongoId: tpl.id?.toString() || tpl._id || "0",
+                template_id: templateId,
+                name: tpl.name || "Template",
+                subtitle: tpl.category ? (tpl.category.charAt(0).toUpperCase() + tpl.category.slice(1)) : "Template",
+                preview_url: previewUrl, // ✅ Use correct mapped path, ignore API preview_url
+                atsFriendly: tpl.ats_friendly ?? true,
+                description: tpl.description || "Professional resume template",
+                category: tpl.category || "modern"
+              };
+            });
           logger.info("Templates transformed:", transformedTemplates.length, transformedTemplates);
-          setTemplates(transformedTemplates);
         } else {
           logger.warn("No templates returned from API for category:", selectedCategory);
           // Only use defaults if category is "All", otherwise show empty
@@ -143,7 +264,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       }
     };
     fetchTemplates();
-  }, [selectedCategory]);
+  }, [selectedCategory, appliedTemplateId, setSelectedTemplate]);
 
   const filteredTemplates = templates.filter((tpl) => {
     const matchSearch = tpl.subtitle?.toLowerCase().includes(searchQuery.toLowerCase()) || tpl.name?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -197,8 +318,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   const handleTemplateClick = (tpl: TransformedTemplate) => {
     // Update selected template immediately for live preview
     setSelectedTemplate(tpl.template_id);
+    setAppliedTemplateId(null);
     logger.info("Template selected for preview:", tpl.template_id);
-    
+
     // Also open the modal for more details
     setPreviewTemplate(tpl);
   };
@@ -222,10 +344,44 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         }
 
         // ✅ CORRECTED: Pass 'id' from templates list API response as template_id
-        const result = await applyTemplateToResume(resumeId, templateId);
+        await applyTemplateToResume(resumeId, templateId);
+
+        // Only set selectedTemplate for regular templates (not career level)
+        if (previewTemplate.category !== 'career-level') {
+          setSelectedTemplate(previewTemplate.template_id);
+          setAppliedTemplateId(null); // Clear career level template selection
+
+          // Clear career level template data from localStorage to prevent interference
+          const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+          const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
+          localStorage.removeItem(selectedTemplateKey);
+          localStorage.removeItem(careerLevelKey);
+          setCareerLevelData(null);
+
+          // Sync resumeStyle with the backend's template config so preview matches download
+          const templateDefaults = TEMPLATE_DEFAULT_STYLES[previewTemplate.template_id];
+          if (templateDefaults) {
+            setResumeStyle(prev => ({ ...prev, ...templateDefaults }));
+          }
+        } else {
+          // For career level templates, clear selectedTemplate to avoid highlighting other templates
+          setSelectedTemplate(null);
+          setAppliedTemplateId(previewTemplate.id);
+
+          // Persist career level template selection to localStorage
+          const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+          localStorage.setItem(selectedTemplateKey, previewTemplate.id);
+        }
 
         // Keep the template selected for UI
         setSelectedTemplate(previewTemplate.template_id);
+
+        // Sync resumeStyle with the backend's template config so preview matches download
+        const templateDefaults = TEMPLATE_DEFAULT_STYLES[previewTemplate.template_id];
+        if (templateDefaults) {
+          setResumeStyle(prev => ({ ...prev, ...templateDefaults }));
+        }
+
         setPreviewTemplate(null);
 
         if (onTemplateSelect) onTemplateSelect();
@@ -251,7 +407,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           />
         </div>
       )}
-      
+
       <div className="flex items-center gap-8 mb-4 relative">
         <div className="relative" ref={dropdownRef}>
           <button
@@ -259,11 +415,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
               setDropdownOpen(!dropdownOpen);
               setActivePanel("templates");
             }}
-            className={`bg-gray-50 border border-gray-400 rounded px-9 py-1 text-xs font-semibold ${
-              activePanel === "templates"
-                ? "bg-blue-50 text-[#2557a7] border-blue-200"
-                : "text-gray-700 hover:text-[#2557a7] hover:bg-blue-100 hover:border-blue-200"
-            }`}
+            className={`bg-gray-50 border border-gray-400 rounded px-9 py-1 text-xs font-semibold ${activePanel === "templates"
+              ? "bg-blue-50 text-[#2557a7] border-blue-200"
+              : "text-gray-700 hover:text-[#2557a7] hover:bg-blue-100 hover:border-blue-200"
+              }`}
           >
             {selectedCategory} ▼
           </button>
@@ -284,9 +439,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                       setDropdownOpen(false);
                       setActivePanel("templates");
                     }}
-                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-100 ${
-                      selectedCategory === cat ? "bg-blue-50 text-[#2557a7]" : "text-gray-700"
-                    }`}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-100 ${selectedCategory === cat ? "bg-blue-50 text-[#2557a7]" : "text-gray-700"
+                      }`}
                   >
                     {cat}
                   </div>
@@ -295,65 +449,171 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             </div>
           )}
         </div>
-        
+
         <button
           onClick={() => {
             setActivePanel("style");
             setDropdownOpen(false);
           }}
-          className={`bg-gray-50 border border-gray-400 rounded px-9 py-1 text-xs font-semibold ${
-            activePanel === "style"
-              ? "bg-blue-50 text-[#2557a7] border-blue-200"
-              : "text-gray-700 hover:text-[#2557a7] hover:bg-blue-100 hover:border-blue-200"
-          }`}
+          className={`bg-gray-50 border border-gray-400 rounded px-9 py-1 text-xs font-semibold ${activePanel === "style"
+            ? "bg-blue-50 text-[#2557a7] border-blue-200"
+            : "text-gray-700 hover:text-[#2557a7] hover:bg-blue-100 hover:border-blue-200"
+            }`}
         >
           Style
         </button>
       </div>
-      
+
       {activePanel === "templates" ? (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-6">
-          {loading ? (
-            <div className="col-span-2 flex items-center justify-center py-12">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm text-gray-600">Loading templates...</p>
-              </div>
-            </div>
-          ) : filteredTemplates.length > 0 ? (
-            filteredTemplates.map((tpl) => (
-              <div
-                key={tpl.template_id}
-                onClick={() => handleTemplateClick(tpl)}
-                className={`relative flex flex-col items-center rounded-lg shadow-sm border ${
-                  String(selectedTemplate) === tpl.template_id ? "border-[#2557a7]" : "border-gray-200"
-                } bg-white overflow-hidden cursor-pointer hover:shadow-md transition-all duration-200`}
-              >
-                {tpl.atsFriendly && (
-                  <span className="absolute top-2 right-2 bg-[#2557a7] text-white text-[10px] font-semibold px-1 rounded-full shadow-sm border border-[#2557a7]">
-                    100% ATS Friendly
-                  </span>
-                )}
-                <Image
-                  src={tpl.preview_url}
-                  alt={`template-${tpl.template_id}`}
-                  width={160}
-                  height={200}
-                  className="w-full h-44 mt-6 object-contain bg-gray-100"
-                />
-                <div className="w-full px-2 py-2 flex flex-col items-center">
-                  <p className="text-xs font-semibold text-gray-700">{tpl.subtitle}</p>
-                  {String(selectedTemplate) === tpl.template_id && (
-                    <span className="mt-1 text-[10px] text-[#2557a7] font-semibold">✓ Selected</span>
-                  )}
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="col-span-2 text-sm text-gray-500 text-center py-8">
-              No templates found for &quot;{selectedCategory}&quot;
+        <div>
+          {/* Debug: Show if no career level data */}
+          {!careerLevelData && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+              <p>No career level templates in storage</p>
             </div>
           )}
+          {careerLevelData && careerLevelData.length === 0 && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+              <p>Career level templates array is empty</p>
+            </div>
+          )}
+
+          {/* Career Level Templates Display */}
+          {careerLevelData && careerLevelData.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Career Level Templates for Your Selection</h3>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                {careerLevelData.map((careerTpl, index) => {
+                  // Match by template name AND ID for safety
+                  const isSelected = (appliedTemplateId === careerTpl.id || appliedTemplateId === String(careerTpl.id)) && careerTpl.name;
+                  const templateImages = ['/assets/templates/template-1.jpg', '/assets/templates/template-2.jpg', '/assets/templates/template-3.jpg', '/assets/templates/template-4.jpg'];
+                  const careerLevels = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level'];
+                  const imageIndex = index % templateImages.length;
+                  const careerLevel = careerLevels[index] || 'Custom';
+                  return (
+                    <div
+                      key={`career-${careerTpl.id}-${index}`}
+                      onClick={() => {
+                        setAppliedTemplateId(careerTpl.id);
+                        setSelectedTemplate(null);
+
+                        // ✅ Update sectionOrder in localStorage when career level changes
+                        try {
+                          const templateName = careerTpl.name.toLowerCase();
+                          let careerLevel: string | undefined;
+                          if (templateName.includes('early') && templateName.includes('career')) {
+                            careerLevel = 'early career';
+                          } else if (templateName.includes('senior')) {
+                            careerLevel = 'senior-level';
+                          } else if (templateName.includes('mid')) {
+                            careerLevel = 'mid-level';
+                          } else if (templateName.includes('fresher')) {
+                            careerLevel = 'fresher';
+                          }
+
+                          const newSectionOrder = getSectionOrder(careerLevel);
+                          const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+                          localStorage.setItem(sectionOrderKey, JSON.stringify(newSectionOrder));
+                          logger.info('Updated sectionOrder for career level:', careerLevel, 'Order:', newSectionOrder);
+                        } catch (err) {
+                          logger.warn('Error updating sectionOrder:', err);
+                        }
+
+                        // Open preview modal for career level template
+                        const previewData: TransformedTemplate = {
+                          id: careerTpl.id,
+                          mongoId: careerTpl.id,
+                          template_id: careerTpl.id,
+                          name: careerTpl.name,
+                          subtitle: careerTpl.subtitle || 'Template',
+                          preview_url: careerTpl.preview_url,
+                          atsFriendly: careerTpl.ats_friendly ?? true,
+                          description: careerTpl.description || 'Professional resume template',
+                          category: 'career-level'
+                        };
+                        setPreviewTemplate(previewData);
+                        logger.info('Career level template selected:', careerTpl.name, 'ID:', careerTpl.id);
+                      }}
+                      className={`relative flex flex-col items-center rounded-lg shadow-sm border transition-all duration-200 cursor-pointer ${isSelected
+                        ? "border-[#2557a7]"
+                        : "border-gray-200 hover:shadow-md"
+                        } bg-white overflow-hidden`}
+                    >
+                      <span className="absolute top-2 right-2 bg-[#2557a7] text-white text-[10px] font-semibold px-2 py-1 rounded-full shadow-sm">
+                        100% ATS Friendly
+                      </span>
+                      <Image
+                        src={templateImages[imageIndex]}
+                        alt={careerLevel}
+                        width={160}
+                        height={200}
+                        className="w-full h-44 mt-6 object-contain bg-gray-100"
+                      />
+                      <div className="w-full px-2 py-2 flex flex-col items-center">
+                        <p className="text-xs font-semibold text-gray-700 text-center">{careerTpl.name}</p>
+                        {isSelected && (
+                          <span className="mt-1 text-[10px] text-[#2557a7] font-semibold">✓ Selected</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-6">
+            {loading ? (
+              <div className="col-span-2 flex items-center justify-center py-12">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-sm text-gray-600">Loading templates...</p>
+                </div>
+              </div>
+            ) : filteredTemplates.length > 0 ? (
+              filteredTemplates.map((tpl) => (
+                <div
+                  key={tpl.template_id}
+                  onClick={() => handleTemplateClick(tpl)}
+                  className={`relative flex flex-col items-center rounded-lg shadow-sm border ${String(selectedTemplate) === tpl.template_id ? "border-[#2557a7]" : "border-gray-200"
+                    } bg-white overflow-hidden cursor-pointer hover:shadow-md transition-all duration-200`}
+                >
+                  {tpl.atsFriendly && (
+                    <span className="absolute top-2 right-2 bg-[#2557a7] text-white text-[10px] font-semibold px-1 rounded-full shadow-sm border border-[#2557a7]">
+                      100% ATS Friendly
+                    </span>
+                  )}
+                  <Image
+                    src={tpl.preview_url}
+                    alt={`template-${tpl.template_id}`}
+                    width={160}
+                    height={200}
+                    className="w-full h-44 mt-6 object-contain bg-gray-100"
+                  />
+                  <div className="w-full px-2 py-2 flex flex-col items-center">
+                    <p className="text-xs font-semibold text-gray-700">{tpl.subtitle}</p>
+                    {String(selectedTemplate) === tpl.template_id && (
+                      <span className="mt-1 text-[10px] text-[#2557a7] font-semibold">✓ Selected</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-2 text-sm text-gray-500 text-center py-8">
+                No templates found for &quot;{selectedCategory}&quot;
+              </div>
+            )}
+          </div>
+
+          {/* More Templates Button */}
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={() => router.push('/templates')}
+              className="px-6 py-2.5 bg-[#2557a7] hover:bg-[#1f4e98] text-white font-semibold cursor-pointer rounded-lg transition-all duration-200 text-sm"
+            >
+              Browse More Templates
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-4 text-gray-700">
@@ -363,11 +623,11 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             <select
               value={resumeStyle.fontFamily}
               onChange={(e) => setResumeStyle({ ...resumeStyle, fontFamily: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-blue-400 focus:outline-none transition-all duration-200 hover:border-gray-300"
+              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-[#72b880] focus:outline-none transition-all duration-200 hover:border-gray-300"
             >
               <option value="times-new-roman">Times New Roman</option>
               <option value="arial">Arial</option>
-              <option value="monospace">Monospace</option>                            
+              <option value="monospace">Monospace</option>
               <option value="calibri">Calibri</option>
             </select>
           </div>
@@ -376,7 +636,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
             <h4 className="text-xs font-semibold text-gray-800 mb-3 flex items-center gap-2">
               Typography Scale
-            </h4>        
+            </h4>
             <div className="grid grid-cols-1 gap-3">
               {/* Name Font Size */}
               <div>
@@ -394,7 +654,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                     type="text"
                     value={resumeStyle.nameFontSize}
                     onChange={(e) => setResumeStyle({ ...resumeStyle, nameFontSize: e.target.value })}
-                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-blue-400 focus:outline-none"
+                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-[#72b880] focus:outline-none"
                   />
                 </div>
               </div>
@@ -415,7 +675,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                     type="text"
                     value={resumeStyle.headingFontSize}
                     onChange={(e) => setResumeStyle({ ...resumeStyle, headingFontSize: e.target.value })}
-                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-blue-400 focus:outline-none"
+                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-[#72b880] focus:outline-none"
                   />
                 </div>
               </div>
@@ -436,7 +696,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                     type="text"
                     value={resumeStyle.bodyFontSize}
                     onChange={(e) => setResumeStyle({ ...resumeStyle, bodyFontSize: e.target.value })}
-                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-blue-400 focus:outline-none"
+                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-[#72b880] focus:outline-none"
                   />
                 </div>
               </div>
@@ -449,21 +709,19 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             <div className="flex gap-2">
               <button
                 onClick={() => setResumeStyle({ ...resumeStyle, bold: !resumeStyle.bold })}
-                className={`flex items-center justify-center w-10 h-10 border-2 rounded-lg text-sm font-bold transition-all duration-200 ${
-                  resumeStyle.bold 
-                    ? "bg-blue-100 border-blue-300 text-blue-500" 
-                    : "bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                }`}
+                className={`flex items-center justify-center w-10 h-10 border-2 rounded-lg text-sm font-bold transition-all duration-200 ${resumeStyle.bold
+                  ? "bg-blue-100 border-blue-300 text-[#2557a7]"
+                  : "bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
               >
                 B
               </button>
               <button
                 onClick={() => setResumeStyle({ ...resumeStyle, italic: !resumeStyle.italic })}
-                className={`flex items-center justify-center w-10 h-10 border-2 rounded-lg text-sm italic transition-all duration-200 ${
-                  resumeStyle.italic 
-                    ? "bg-blue-100 border-blue-300 text-blue-500" 
-                    : "bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                }`}
+                className={`flex items-center justify-center w-10 h-10 border-2 rounded-lg text-sm italic transition-all duration-200 ${resumeStyle.italic
+                  ? "bg-blue-100 border-blue-300 text-[#2557a7]"
+                  : "bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
               >
                 I
               </button>
@@ -487,7 +745,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                 type="text"
                 value={resumeStyle.lineSpacing}
                 onChange={(e) => setResumeStyle({ ...resumeStyle, lineSpacing: e.target.value })}
-                className="w-16 border-2 border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:border-blue-400 focus:outline-none transition-all duration-200"
+                className="w-16 border-2 border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:border-[#72b880] focus:outline-none transition-all duration-200"
               />
             </div>
             <div className="flex justify-between text-xs text-gray-500 mt-1">
@@ -501,7 +759,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
             <h4 className="text-xs font-semibold text-gray-800 mb-3 flex items-center gap-2">
               Color Palette
-            </h4>        
+            </h4>
             <div className="grid grid-cols-1 gap-3">
               {/* Heading Color */}
               <div>
@@ -511,14 +769,14 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                     type="color"
                     value={resumeStyle.headingColor}
                     onChange={(e) => setResumeStyle({ ...resumeStyle, headingColor: e.target.value })}
-                    className="w-12 h-10 border-2 border-gray-200 rounded-lg cursor-pointer focus:border-blue-400 transition-all duration-200"
+                    className="w-12 h-10 border-2 border-gray-200 rounded-lg cursor-pointer focus:border-[#72b880] transition-all duration-200"
                   />
                   <input
                     type="text"
                     value={resumeStyle.headingColor}
                     placeholder="#000000"
                     onChange={(e) => setResumeStyle({ ...resumeStyle, headingColor: e.target.value })}
-                    className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:border-blue-400 focus:outline-none transition-all duration-200"
+                    className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:border-[#72b880] focus:outline-none transition-all duration-200"
                   />
                 </div>
                 <div className="flex gap-1 mt-2">
@@ -541,14 +799,14 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                     type="color"
                     value={resumeStyle.bodyColor}
                     onChange={(e) => setResumeStyle({ ...resumeStyle, bodyColor: e.target.value })}
-                    className="w-12 h-10 border-2 border-gray-200 rounded-lg cursor-pointer focus:border-blue-400 transition-all duration-200"
+                    className="w-12 h-10 border-2 border-gray-200 rounded-lg cursor-pointer focus:border-[#72b880] transition-all duration-200"
                   />
                   <input
                     type="text"
                     value={resumeStyle.bodyColor}
                     placeholder="#000000"
                     onChange={(e) => setResumeStyle({ ...resumeStyle, bodyColor: e.target.value })}
-                    className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:border-blue-400 focus:outline-none transition-all duration-200"
+                    className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:border-[#72b880] focus:outline-none transition-all duration-200"
                   />
                 </div>
                 <div className="flex gap-1 mt-2">
@@ -633,20 +891,23 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           </div>
         </div>
       )}
-      
+
       {previewTemplate && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-800">Template Preview</h2>
               <button
-                onClick={() => setPreviewTemplate(null)}
+                onClick={() => {
+                  setPreviewTemplate(null);
+                  setPreviewImageError(false);
+                }}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X size={24} className="text-gray-600" />
               </button>
             </div>
-            
+
             <div className="flex flex-1 overflow-hidden">
               <div className="flex-1 bg-gray-100 p-6 overflow-y-auto">
                 <div className="bg-white rounded-lg shadow-lg mx-auto" style={{ maxWidth: '600px' }}>
@@ -656,10 +917,13 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                     width={600}
                     height={800}
                     className="w-full h-auto object-contain"
+                    onError={() => {
+                      setPreviewImageError(true);
+                    }}
                   />
                 </div>
               </div>
-              
+
               <div className="w-80 bg-white p-6 border-l border-gray-200 overflow-y-auto">
                 <div className="space-y-4">
                   <div>
@@ -670,12 +934,12 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                       </span>
                     )}
                   </div>
-                  
+
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Description</h4>
                     <p className="text-sm text-gray-600 leading-relaxed">{previewTemplate.description}</p>
                   </div>
-                  
+
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Features</h4>
                     <ul className="space-y-2">
@@ -697,7 +961,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                       </li>
                     </ul>
                   </div>
-                  
+
                   <div className="pt-6">
                     <button
                       onClick={handleApplyTemplate}

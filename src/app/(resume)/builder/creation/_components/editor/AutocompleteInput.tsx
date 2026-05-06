@@ -15,7 +15,7 @@ interface AutocompleteInputProps {
 
 
 const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
-  value: valueProp,
+  value,
   onChange,
   onBlur,
   placeholder,
@@ -25,7 +25,6 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   error,
   className = "",
 }) => {
-  const value = valueProp ?? "";
   const [isOpen, setIsOpen] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -36,7 +35,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
 
   // Filter suggestions based on input value - ONLY ITEMS THAT START WITH THE INPUT
   useEffect(() => {
-    if (value.trim() && !justSelected) {
+    if (value && value.trim() && !justSelected) {
       // ✅ FIXED: Check if value exactly matches a suggestion (already selected)
       const isExactMatch = suggestions.some(item =>
         item.toLowerCase() === value.toLowerCase()
@@ -139,7 +138,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
 
     // ✅ FIXED: Don't show dropdown if value exactly matches a suggestion (already selected)
     // Only show suggestions when actively filtering
-    if (value.trim()) {
+    if (value && value.trim()) {
       const isExactMatch = suggestions.some(item =>
         item.toLowerCase() === value.toLowerCase()
       );
@@ -217,16 +216,12 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       {isOpen && filteredSuggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          role="listbox"
           className="absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
           style={{ top: "100%", marginTop: "4px" }}
         >
           {filteredSuggestions.map((suggestion, index) => (
             <div
               key={index}
-              role="option"
-              aria-selected={index === highlightedIndex}
-              tabIndex={-1}
               onClick={() => handleSelect(suggestion)}
               onMouseEnter={() => setHighlightedIndex(index)}
               onMouseLeave={() => setHighlightedIndex(-1)}

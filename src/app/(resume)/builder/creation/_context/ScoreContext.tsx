@@ -26,11 +26,12 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // ✅ Initialize score - Start at 0
   const [overallScore, setOverallScoreState] = useState<number>(0);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [currentResumeId, setCurrentResumeId] = useState<string | null>(null);
 
   // ✅ Initialize score after component mounts
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const resumeId = getCurrentResumeId();
     setCurrentResumeId(resumeId);
 
@@ -39,7 +40,7 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const stored = localStorage.getItem(scoreKey);
       
       if (stored) {
-        const parsed = parseInt(stored, 10);
+        const parsed = parseFloat(stored);
         const score = isNaN(parsed) ? 0 : parsed;
         // // console.log(`📊 Loaded cached score for resume ${resumeId}:`, score);
         setOverallScoreState(score);
@@ -100,7 +101,7 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const stored = localStorage.getItem(scoreKey);
           
           if (stored) {
-            const parsed = parseInt(stored, 10);
+            const parsed = parseFloat(stored);
             const newScore = isNaN(parsed) ? 0 : parsed;
             // // console.log(`📊 Loaded cached score for resume ${newResumeId}:`, newScore);
             setOverallScoreState(newScore);
@@ -140,7 +141,7 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const stored = localStorage.getItem(scoreKey);
             
             if (stored) {
-              const parsed = parseInt(stored, 10);
+              const parsed = parseFloat(stored);
               const newScore = isNaN(parsed) ? 0 : parsed;
               // // console.log(`📊 Loaded cached score for resume ${newResumeId}:`, newScore);
               setOverallScoreState(newScore);
@@ -164,7 +165,7 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [currentResumeId, getCurrentResumeId, getScoreKey]);
 
   const refreshScore = useCallback(() => {
-    setRefreshTrigger(prev => prev + 1);
+    // no-op: consumers re-fetch on their own trigger
   }, []);
 
   return (

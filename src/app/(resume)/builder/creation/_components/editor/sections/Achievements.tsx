@@ -1,11 +1,9 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
-import SafeHTML from "@/components/common/SafeHTML";
-import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
-import logger from "@/lib/logger";
+import SectionTipsPanel from "../SectionTipsPanel";
 import {
   FaSpellCheck,
   FaListUl,
@@ -17,7 +15,7 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
@@ -26,7 +24,7 @@ interface AchievementEntry {
   title: string;
   date: string;
   description: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ NEW: Add item ID for backend tracking
 }
 
 const emptyAchievement = (): AchievementEntry => ({
@@ -77,6 +75,8 @@ const Achievements: React.FC = () => {
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<AchievementEntry | null>(null);
 
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -104,7 +104,7 @@ const Achievements: React.FC = () => {
   });
 
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     if (JSON.stringify(resumeData.achievements) !== JSON.stringify(allEntries)) {
       setResumeData({ ...resumeData, achievements: allEntries });
     }
@@ -126,7 +126,17 @@ const Achievements: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyAchievement()]);
@@ -138,6 +148,8 @@ const Achievements: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyAchievement()]);
 
     setTimeout(() => {
@@ -150,11 +162,11 @@ const Achievements: React.FC = () => {
   const removeAchievement = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const achievementToDelete = savedEntries[index];
-    const itemId = achievementToDelete._id;
+    const itemId = achievementToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -165,12 +177,12 @@ const Achievements: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("Deleting achievement item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting achievement item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "achievements", itemId);
 
-      logger.info("Achievement item deleted from backend successfully");
+      // // console.log("✅ Achievement item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -180,7 +192,7 @@ const Achievements: React.FC = () => {
       reindexErrors("achievement", index);
 
     } catch (error) {
-      logger.error("Failed to delete achievement item:", error);
+      // // console.error("❌ Failed to delete achievement item:", error);
       alert("Failed to delete achievement. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -189,6 +201,8 @@ const Achievements: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
@@ -208,6 +222,19 @@ const Achievements: React.FC = () => {
         }
       }
     }, 0);
+  };
+
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   const exec = (idx: number, command: string, value?: string) => {
@@ -281,7 +308,7 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      setSafeInnerHTML(el, suggestion);
+      el.innerHTML = suggestion;
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -321,7 +348,7 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
     editingEntries.forEach((achievement, idx) => {
       const el = editorRefs.current[idx];
       if (el && achievement.description && el.innerHTML !== achievement.description) {
-        setSafeInnerHTML(el, achievement.description);
+        el.innerHTML = achievement.description;
       }
     });
   }, [editingEntries]);
@@ -346,9 +373,9 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
                   )}
                   
                   {achievement.description && (
-                    <SafeHTML
-                      content={achievement.description}
-                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                    <div 
+                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
+                      dangerouslySetInnerHTML={{ __html: achievement.description }} 
                     />
                   )}
                 </div>
@@ -402,6 +429,15 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((achievement, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -502,21 +538,27 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
 
           <div className="w-80 flex-shrink-0 sticky top-2">
             {showTips && activePopup === null ? (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Achievements and awards demonstrate excellence and recognition in your field. Highlight specific accomplishments that set you apart from other candidates.
-                  </p>
-                  <p>
-                    Include the achievement title, date received, and a brief description of its significance. Quantify your achievements with rankings, percentages, or competitive metrics whenever possible.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *70% of hiring managers value recognition and awards when evaluating candidates.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Achievements"
+                entryContent={[editingEntries[0]?.title, editingEntries[0]?.description?.slice(0, 60)].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Achievements and awards demonstrate excellence and recognition in your field. Highlight specific accomplishments that set you apart from other candidates.
+                      </p>
+                      <p>
+                        Include the achievement title, date received, and a brief description of its significance. Quantify your achievements with rankings, percentages, or competitive metrics whenever possible.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *70% of hiring managers value recognition and awards when evaluating candidates.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             ) : (
               activePopup !== null && suggestions[activePopup] && (
                 <AISuggestions

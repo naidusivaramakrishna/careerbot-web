@@ -14,7 +14,6 @@ export interface CategorizedSkills {
 
 export interface ResumeResponse {
   id: string;
-  _id?: string;
   personalInfo?: {
     fullname?: string;
     email?: string;
@@ -33,6 +32,8 @@ export interface ResumeResponse {
     degree: string;
     startDate: string;
     endDate: string;
+    scoreType?: "CGPA" | "Marks" | "GPA" | "Percentage";
+    scoreValue?: string;
   }>;
   workExperience?: Array<{
     company: string;
@@ -44,34 +45,40 @@ export interface ResumeResponse {
     description: string;
   }>;
   projects?: Array<{
+    id?: string;
     title: string;
     description: string;
     technologies: string[];
     startDate: string;
     endDate: string;
-    link: string;
+    projectUrl: string;
   }>;
   skills?: string[];
   categorizedSkills?: CategorizedSkills;
   certifications?: Array<{
+    id?: string;
     name: string;
-    issuedBy: string;
-    year: string;
+    issuer: string;
+    issueDate: string;
     expiryDate?: string;
     credentialId?: string;
+    credentialUrl?: string;
   }>;
   achievements?: Array<{
+    id?: string;
     title: string;
-    date: string;
     description: string;
   }>;
   volunteering?: Array<{
+    id?: string;
     organization: string;
     role: string;
     startDate: string;
     endDate: string;
+    description: string;
   }>;
   internships?: Array<{
+    id?: string;
     company: string;
     role: string;
     location: string;
@@ -81,36 +88,40 @@ export interface ResumeResponse {
     description: string;
   }>;
   awards?: Array<{
+    id?: string;
     title: string;
-    issuedBy: string;
-    year: string;
+    issuer: string;
+    date: string;
+    description: string;
   }>;
   hobbies?: Array<{
+    id?: string;
     name: string;
-    description: string;
-    proficiencyLevel?: string;
-    achievement?: string;
   }>;
   interests?: Array<{
+    id?: string;
     name: string;
-    description: string;
-    category?: string;
   }>;
   languages?: Array<{
-    language: string;
+    id?: string;
+    name: string;
     proficiency: string;
   }>;
   publications?: Array<{
+    id?: string;
     title: string;
-    authors: string;
-    publicationName: string;
+    publisher: string;
     date: string;
     url: string;
+    description: string;
   }>;
   references?: Array<{
+    id?: string;
     name: string;
-    relation: string;
-    contact: string;
+    position: string;
+    company: string;
+    email: string;
+    phone: string;
   }>;
   work_experience?: Array<{
     role?: string;
@@ -152,10 +163,8 @@ export interface TemplateResponse {
     body_size: number;
     line_height: number;
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sections?: Record<string, any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  styling?: Record<string, any>;
+  sections?: Record<string, unknown>;
+  styling?: Record<string, unknown>;
   is_premium?: boolean;
   is_active?: boolean;
   is_default?: boolean;
@@ -212,7 +221,7 @@ export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
       resumeData
     );
 
-    const resumeId = response.data.id || response.data._id;
+    const resumeId = response.data.id || (response.data as unknown as Record<string, unknown>)._id as string;
 
     logger.info("✅ Resume created with ID:", resumeId);
 
@@ -239,6 +248,51 @@ export const createResumeWithAuth = async (): Promise<ResumeResponse> => {
     logger.error("❌ Error creating resume:", error);
     throw error;
   }
+};
+
+// ==================== CREATE RESUME FROM PARSED DATA ====================
+// Used by Upload flow: parser output mapped → builder format → saved to MongoDB.
+// POST /resumes/ only accepts personalInfo at creation time; all other sections
+// are written via a PATCH immediately after so the builder opens with data pre-filled.
+export const createResumeFromParsed = async (
+  data: Partial<ResumeResponse>
+): Promise<ResumeResponse> => {
+  try {
+    logger.debug("📤 Creating resume from parsed data...");
+
+    // Step 1 — create with the minimal payload the backend accepts on POST
+    const createResponse = await httpClient.post<ResumeResponse>('/resumes/', {
+      personalInfo: data.personalInfo,
+    });
+
+    const resumeId =
+      createResponse.data.id ||
+      (createResponse.data as unknown as Record<string, unknown>)._id as string;
+
+    if (!resumeId) throw new Error("Resume created but no ID returned");
+
+    localStorage.setItem("current_resume_id", resumeId);
+    logger.info("✅ Resume created, ID:", resumeId);
+
+    // Step 2 — patch all parsed sections onto the new resume
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { personalInfo: _pi, ...sections } = data;
+    if (Object.keys(sections).length > 0) {
+      await httpClient.patch(`/resumes/${resumeId}`, sections);
+      logger.info("✅ Parsed sections patched onto resume");
+    }
+
+    return { ...createResponse.data, id: resumeId };
+  } catch (error) {
+    logger.error("❌ Error creating resume from parsed data:", error);
+    throw error;
+  }
+};
+
+// ==================== GET ALL RESUMES (UNIFIED) ====================
+export const getAllResumesUnified = async (): Promise<import('@/types/api.types').AllResumesResponse> => {
+  const response = await httpClient.get<import('@/types/api.types').AllResumesResponse>('/resumes/all');
+  return response.data;
 };
 
 // ==================== GET ALL RESUMES ====================
@@ -275,8 +329,7 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
         logger.debug("🔍 First resume personalInfo:", response.data[0]?.personalInfo);
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const transformedResumes = response.data.map((resume: any) => {
+      const transformedResumes = response.data.map((resume: ResumeResponse & { _id?: string }) => {
         const resumeId = resume.id || resume._id;
 
         if (!resumeId) {
@@ -304,9 +357,7 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
     }
     
     if (response.data && typeof response.data === 'object') {
-      // Backend occasionally returns a single object instead of an array
-      const singleResume = response.data as unknown as ResumeResponse;
-      const resumeId = singleResume.id || singleResume._id;
+      const resumeId = (response.data as ResumeResponse & { _id?: string }).id || (response.data as ResumeResponse & { _id?: string })._id;
 
       if (resumeId) {
         logger.info("✅ Single resume received");
@@ -330,15 +381,34 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
 
 // ==================== HELPER FUNCTIONS ====================
 
+// Type for backend custom section item
+interface BackendCustomSectionItem {
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  url?: string;
+  tags?: string[];
+  location?: string;
+  [key: string]: string | string[] | undefined;
+}
+
+// Type for backend custom section
+interface BackendCustomSection {
+  id?: string;
+  sectionName: string;
+  icon: string;
+  items: BackendCustomSectionItem[];
+}
+
 /**
  * Transform frontend customSections (fields-based) to backend format (items-based)
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const transformCustomSectionsForBackend = (customSections: CustomSection[]): any[] => {
+const transformCustomSectionsForBackend = (customSections: CustomSection[]): BackendCustomSection[] => {
   return customSections.map((section) => {
     // Create an item from the fields
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const item: any = {
+    const item: BackendCustomSectionItem = {
       title: '',
       subtitle: '',
       description: '',
@@ -350,7 +420,7 @@ const transformCustomSectionsForBackend = (customSections: CustomSection[]): any
     };
 
     // Map fields to backend structure
-    section.fields.forEach((field) => {
+    section.fields?.forEach((field) => {
       const fieldValue = field.value;
 
       // Smart mapping based on field name and type
@@ -388,10 +458,24 @@ const transformCustomSectionsForBackend = (customSections: CustomSection[]): any
       }
     });
 
+    // ✅ FIXED: Remove empty fields to avoid backend validation errors
+    // Only include fields that have actual values
+    const cleanedItem: BackendCustomSectionItem = {};
+    Object.keys(item).forEach((key) => {
+      const value = item[key];
+      // Include field if it has a non-empty value
+      if (value !== '' && !(Array.isArray(value) && value.length === 0)) {
+        cleanedItem[key] = value;
+      }
+    });
+
     return {
+      // Include backend ID when it's a real UUID (not a frontend-generated `custom_*` id)
+      // This allows the backend to UPDATE the existing record instead of INSERTing a new one
+      ...(section.id && !section.id.startsWith('custom_') ? { id: section.id } : {}),
       sectionName: section.sectionName,
       icon: 'custom', // Default icon
-      items: [item], // Single item per section for now
+      items: [cleanedItem], // Single item per section for now
     };
   });
 };
@@ -399,8 +483,7 @@ const transformCustomSectionsForBackend = (customSections: CustomSection[]): any
 /**
  * Transform backend customSections (items-based) to frontend format (fields-based)
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const transformCustomSectionsFromBackend = (backendSections: any[]): CustomSection[] => {
+const transformCustomSectionsFromBackend = (backendSections: BackendCustomSection[]): CustomSection[] => {
   if (!backendSections || backendSections.length === 0) return [];
 
   return backendSections.map((section, sectionIndex) => {
@@ -493,21 +576,43 @@ const transformCustomSectionsFromBackend = (backendSections: any[]): CustomSecti
 };
 
 /**
- * Transform professionalSummary from object to string for backward compatibility
- * TODO: Remove this once backend is updated to handle object format
+ * Transform professionalSummary to include both summary and targetRole
+ * ✅ Backend now accepts object format with summary and targetRole
  */
 const transformResumeDataForBackend = (resumeData: Partial<ResumeResponse>): Partial<ResumeResponse> => {
   const transformed = { ...resumeData };
 
-  // If professionalSummary is an object, extract just the summary string
+  // ✅ Send full professionalSummary object (summary + targetRole) to backend
   if (transformed.professionalSummary && typeof transformed.professionalSummary === 'object') {
-    transformed.professionalSummary = transformed.professionalSummary.summary || '';
+    transformed.professionalSummary = {
+      summary: transformed.professionalSummary.summary || '',
+      targetRole: transformed.professionalSummary.targetRole || ''
+    };
+  }
+
+  // ✅ Transform categorizedSkills to keep structure intact
+  if (transformed.categorizedSkills && typeof transformed.categorizedSkills === 'object') {
+    // Ensure all categories exist, defaulting empty arrays if missing
+    const categorizedSkills: CategorizedSkills = {
+      programming_languages: transformed.categorizedSkills.programming_languages || [],
+      frameworks: transformed.categorizedSkills.frameworks || [],
+      databases: transformed.categorizedSkills.databases || [],
+      tools: transformed.categorizedSkills.tools || [],
+      cloud_platforms: transformed.categorizedSkills.cloud_platforms || [],
+      soft_skills: transformed.categorizedSkills.soft_skills || []
+    };
+
+    transformed.categorizedSkills = categorizedSkills;
+    logger.info("✅ Categorized skills prepared for backend:", categorizedSkills);
   }
 
   // Transform customSections from fields-based to items-based structure
   if (transformed.customSections && Array.isArray(transformed.customSections) && transformed.customSections.length > 0) {
     logger.info("🔄 Transforming customSections from fields to items format...");
-    transformed.customSections = transformCustomSectionsForBackend(transformed.customSections!) as CustomSection[];
+    const backendFormatted = transformCustomSectionsForBackend(transformed.customSections);
+    transformed.customSections = backendFormatted as unknown as CustomSection[];
+    // Also populate snake_case field — backend PDF generator reads custom_sections
+    (transformed as Record<string, unknown>).custom_sections = backendFormatted;
     logger.info("✅ Transformed customSections:", transformed.customSections);
   }
 
@@ -536,9 +641,15 @@ export const updateResume = async (
       transformedData
     );
 
+    // Transform response customSections back to frontend format (same as getResumeById)
+    // so callers can sync the real backend UUIDs back into React context
+    if (response.data.customSections && Array.isArray(response.data.customSections) && response.data.customSections.length > 0) {
+      response.data.customSections = transformCustomSectionsFromBackend(response.data.customSections as unknown as BackendCustomSection[]);
+    }
+
     logger.info("✅ Resume updated successfully");
     return response.data;
-    
+
   } catch (error) {
     logger.error("❌ Error updating resume:", error);
     throw error;
@@ -556,7 +667,7 @@ export const getResumeById = async (resumeId: string): Promise<ResumeResponse> =
     // Transform backend customSections (items) to frontend format (fields)
     if (response.data.customSections && Array.isArray(response.data.customSections) && response.data.customSections.length > 0) {
       logger.info("🔄 Transforming backend customSections to frontend format...");
-      response.data.customSections = transformCustomSectionsFromBackend(response.data.customSections);
+      response.data.customSections = transformCustomSectionsFromBackend(response.data.customSections as unknown as BackendCustomSection[]);
       logger.info("✅ Transformed customSections:", response.data.customSections);
     }
 
@@ -644,8 +755,11 @@ export const getBuilderScore = async (resumeId: string): Promise<BuilderScoreRes
 };
 
 // ==================== GET RESUME SCORE WITH POLLING ====================
-export const getResumeScore = async (resumeId: string): Promise<ResumeScoreResponse> => {
-  
+export const getResumeScore = async (
+  resumeId: string,
+  onProgress?: (attempt: number, max: number) => void
+): Promise<ResumeScoreResponse> => {
+
   try {
     logger.debug("⭐ Starting score calculation flow for resume:", resumeId);
 
@@ -656,6 +770,7 @@ export const getResumeScore = async (resumeId: string): Promise<ResumeScoreRespo
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       logger.debug(`📊 Polling attempt ${attempt}/${maxAttempts}...`);
+      onProgress?.(attempt, maxAttempts);
 
       await new Promise(resolve => setTimeout(resolve, pollInterval));
 
@@ -719,7 +834,7 @@ export const deleteResume = async (resumeId: string): Promise<void> => {
 export const autoSaveResume = async (
   resumeId: string,
   resumeData: Partial<ResumeResponse>
-): Promise<ResumeResponse> => {
+): Promise<ResumeResponse | null> => {
 
   try {
     logger.debug("💾 Auto-saving resume:", resumeId);
@@ -728,9 +843,20 @@ export const autoSaveResume = async (
     const transformedData = transformResumeDataForBackend(resumeData);
 
     const response = await httpClient.patch<ResumeResponse>(
-      `/resumes/${resumeId}/autosave`,
-      transformedData
+      `/resumes/${resumeId}`,
+      transformedData,
+      {
+        headers: {
+          'X-Save-Mode': 'autosave',
+        },
+      }
     );
+
+    // 204 No Content = clean autosave, no body returned
+    if (response.status === 204) {
+      logger.info("✅ Auto-save successful (no content)");
+      return null;
+    }
 
     logger.info("✅ Auto-save successful");
     return response.data;
@@ -814,7 +940,7 @@ export const downloadResume = async (
     logger.info("✅ Download response received:", {
       status: response.status,
       contentType: response.headers['content-type'],
-      size: (response.data as Blob).size
+      size: response.data.size
     });
 
     return response.data;
@@ -942,12 +1068,12 @@ export const getTemplateCategories = async (): Promise<string[]> => {
 /**
  * Get the default template
  */
-export const getDefaultTemplate = async (): Promise<unknown> => {
+export const getDefaultTemplate = async (): Promise<{ template_id?: string; id?: string }> => {
   
   try {
     logger.debug("📋 Fetching default template");
 
-    const response = await httpClient.get(
+    const response = await httpClient.get<{ template_id?: string; id?: string }>(
       `/templates/default`
     );
 

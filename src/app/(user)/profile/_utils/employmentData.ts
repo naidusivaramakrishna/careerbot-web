@@ -23,6 +23,8 @@ export const industries = [
 ];
 
 export const roles = [
+    "Software Developer",
+    "Software Engineer",
     "Frontend Developer",
     "React Developer",
     "Next.js Developer",
@@ -39,6 +41,7 @@ export const roles = [
     "QA Engineer",
     "Quality Assurance",
     "Data Scientist",
+    "Data Analyst",
     "Data Engineer",
     "Machine Learning Engineer",
     "Product Manager",

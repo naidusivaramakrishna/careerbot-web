@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
 import debounce from "lodash.debounce";
+import { logger } from "@/lib/logger";
 import { ResumeData } from "../_context/ResumeContext";
-import logger from "@/lib/logger";
 
 interface ATSDetails {
   keywords_score: number;

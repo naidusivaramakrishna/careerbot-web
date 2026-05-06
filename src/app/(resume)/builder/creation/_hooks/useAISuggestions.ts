@@ -1,6 +1,5 @@
 import { useState } from "react";
 import logger from "@/lib/logger";
-
 export function useAISuggestions() {
   const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<Record<number, string[]>>({});

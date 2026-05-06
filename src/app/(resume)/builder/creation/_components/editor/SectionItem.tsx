@@ -5,7 +5,6 @@ import { FaCheckCircle } from 'react-icons/fa';
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
 import { RiSparkling2Fill } from 'react-icons/ri';
 import { deleteResumeSection } from "@/api/resumeApi"; // ✅ Import the delete API
-import logger from "@/lib/logger";
 
 interface Props {
   title: string;
@@ -15,11 +14,12 @@ interface Props {
   isActive: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  onDeleteAsync?: () => Promise<void>; // overrides built-in API call for custom sections
   disableDelete?: boolean;
   isComplete?: boolean;
   isDragging?: boolean;
-  resumeId?: string; // ✅ NEW: Resume ID for API call
-  sectionKey?: string; // ✅ NEW: Section key for API call
+  resumeId?: string;
+  sectionKey?: string;
 }
 
 const SectionItem: React.FC<Props> = ({
@@ -30,20 +30,19 @@ const SectionItem: React.FC<Props> = ({
   isActive,
   onToggle,
   onDelete,
+  onDeleteAsync,
   disableDelete,
   isComplete,
   isDragging,
-  resumeId, // ✅ NEW
-  sectionKey, // ✅ NEW
+  resumeId,
+  sectionKey,
 }) => {
   const [hovered, setHovered] = useState(false);
   const [deleteHovered, setDeleteHovered] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false); // ✅ NEW: Loading state
+  const [showConfirmModal, setShowConfirmModal] = useState(false); // ✅ NEW: Confirmation modal state
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => { setIsMounted(true); }, []);
 
   const handleHeaderClick = () => {
     if (isDragging) return;
@@ -52,62 +51,42 @@ const SectionItem: React.FC<Props> = ({
 
   const showDelete = !disableDelete && hovered && !isActive;
 
-  // ✅ NEW: Handle delete with API call
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setShowConfirmModal(true); // ✅ Show confirmation modal instead of deleting immediately
+  };
 
-    if (!resumeId || !sectionKey) {
-      logger.error("Missing resumeId or sectionKey for deletion");
+  const handleConfirmDelete = async () => {
+    // Custom sections provide their own async delete handler
+    if (onDeleteAsync) {
+      try {
+        setIsDeleting(true);
+        await onDeleteAsync();
+        setShowConfirmModal(false);
+      } catch {
+        alert("Failed to delete section. Please try again.");
+      } finally {
+        setIsDeleting(false);
+      }
       return;
     }
 
+    if (!resumeId || !sectionKey) return;
+
     try {
       setIsDeleting(true);
-      logger.info("Deleting section:", { resumeId, sectionKey, title });
-
-      // ✅ List of standard sections that use the DELETE API
-      const standardSections = [
-        "personal_info",
-        "professional_summary",
-        "skills",
-        "education",
-        "work_experience",
-        "projects",
-        "certifications",
-        "achievements",
-        "volunteering",
-        "internships",
-        "awards",
-        "hobbies",
-        "interests",
-        "languages",
-        "publications",
-        "references",
-      ];
-
-      // ✅ Check if this is a standard section or custom section
-      const isStandardSection = standardSections.includes(sectionKey);
-
-      if (isStandardSection) {
-        // ✅ Standard section: Call the DELETE API
-        await deleteResumeSection(resumeId, sectionKey);
-        logger.info("Section deleted successfully from backend");
-      } else {
-        // ✅ Custom section: Just call onDelete() without API call
-        // The parent component will handle removing it from customSections array
-        logger.info("Custom section detected, delegating to parent handler");
-      }
-
-      // ✅ Call parent's onDelete to update UI
+      await deleteResumeSection(resumeId, sectionKey);
       onDelete();
-
-    } catch (error) {
-      logger.error("Failed to delete section:", error);
-      // You can add toast notification here
+      setShowConfirmModal(false);
+    } catch {
       alert("Failed to delete section. Please try again.");
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setShowConfirmModal(false);
   };
 
   // Update tooltip position when hovering
@@ -221,7 +200,7 @@ const SectionItem: React.FC<Props> = ({
       </div>
 
       {/* Tooltip - Rendered via Portal outside sidebar */}
-      {deleteHovered && isMounted && createPortal(
+      {deleteHovered && typeof window !== 'undefined' && createPortal(
         <div
           className="fixed px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded whitespace-nowrap shadow-xl pointer-events-none"
           style={{
@@ -232,6 +211,51 @@ const SectionItem: React.FC<Props> = ({
           }}
         >
           {isDeleting ? "Deleting..." : "Delete"}
+        </div>,
+        document.body
+      )}
+
+      {/* ✅ Confirmation Modal with Blur Background */}
+      {showConfirmModal && typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center z-[10000]">
+          {/* Blur Background */}
+          <div
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            onClick={handleCancelDelete}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-lg shadow-xl p-6 max-w-sm w-[90%]">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Section?</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this section? This action cannot be undone.
+            </p>
+
+            {/* Buttons */}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleCancelDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-red-500 text-white font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       )}

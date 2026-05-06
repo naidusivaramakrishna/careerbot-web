@@ -2,10 +2,9 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
-import SafeHTML from "@/components/common/SafeHTML";
-import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import SectionTipsPanel from "../SectionTipsPanel";
 import {
   FaSpellCheck,
   FaListUl,
@@ -17,17 +16,16 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import { RiEdit2Fill } from 'react-icons/ri';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
-import logger from "@/lib/logger";
 
 interface InterestEntry {
   name: string;
   description: string;
   category?: string;
-  _id?: string; // ✅ NEW: Add item ID for backend tracking
+  id?: string; // ✅ NEW: Add item ID for backend tracking
 }
 
 const emptyInterest = (): InterestEntry => ({
@@ -69,6 +67,8 @@ const Interests: React.FC = () => {
 
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
+  const [editingOriginalEntry, setEditingOriginalEntry] = useState<InterestEntry | null>(null);
 
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
   const descriptionRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -94,7 +94,7 @@ const Interests: React.FC = () => {
   });
 
   useEffect(() => {
-    const allEntries = [...savedEntries, ...editingEntries];
+    const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     if (JSON.stringify(resumeData.interests) !== JSON.stringify(allEntries)) {
       setResumeData({ ...resumeData, interests: allEntries });
     }
@@ -116,7 +116,17 @@ const Interests: React.FC = () => {
     const validEditingEntries = editingEntries.filter(hasValidData);
 
     if (validEditingEntries.length > 0) {
-      setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      if (editingOriginalIndex !== null) {
+        setSavedEntries((prev) => {
+          const updated = [...prev];
+          updated.splice(editingOriginalIndex, 0, ...validEditingEntries);
+          return updated;
+        });
+        setEditingOriginalIndex(null);
+        setEditingOriginalEntry(null);
+      } else {
+        setSavedEntries((prev) => [...prev, ...validEditingEntries]);
+      }
     }
 
     setEditingEntries([emptyInterest()]);
@@ -128,6 +138,8 @@ const Interests: React.FC = () => {
   };
 
   const addNewEntry = () => {
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
     setEditingEntries([emptyInterest()]);
 
     setTimeout(() => {
@@ -140,11 +152,11 @@ const Interests: React.FC = () => {
   const removeInterest = async (index: number) => {
     const resumeId = localStorage.getItem("current_resume_id");
     const interestToDelete = savedEntries[index];
-    const itemId = interestToDelete._id;
+    const itemId = interestToDelete.id;
 
     // If no resumeId or itemId, just do local deletion
     if (!resumeId || !itemId) {
-      logger.warn("⚠️ No resume ID or item ID found, performing local deletion only");
+      // // console.warn("⚠️ No resume ID or item ID found, performing local deletion only");
       const updated = [...savedEntries];
       updated.splice(index, 1);
       setSavedEntries(updated);
@@ -155,12 +167,12 @@ const Interests: React.FC = () => {
 
     try {
       setDeletingIndex(index);
-      logger.info("🗑️ Deleting interest item:", { resumeId, itemId, index });
+      // // console.log("🗑️ Deleting interest item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
       await deleteResumeSectionItem(resumeId, "interests", itemId);
 
-      logger.info("✅ Interest item deleted from backend successfully");
+      // // console.log("✅ Interest item deleted from backend successfully");
 
       // ✅ Update local state after successful API call
       const updated = [...savedEntries];
@@ -170,7 +182,7 @@ const Interests: React.FC = () => {
       reindexErrors("interest", index);
 
     } catch (error) {
-      logger.error("❌ Failed to delete interest item:", error);
+      // // console.error("❌ Failed to delete interest item:", error);
       alert("Failed to delete interest. Please try again.");
     } finally {
       setDeletingIndex(null);
@@ -179,6 +191,8 @@ const Interests: React.FC = () => {
 
   const editEntry = (index: number) => {
     const entryToEdit = savedEntries[index];
+    setEditingOriginalIndex(index);
+    setEditingOriginalEntry(entryToEdit);
     const updatedSaved = [...savedEntries];
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
@@ -198,6 +212,19 @@ const Interests: React.FC = () => {
         }
       }
     }, 0);
+  };
+
+  const cancelEdit = () => {
+    if (editingOriginalEntry !== null && editingOriginalIndex !== null) {
+      setSavedEntries(prev => {
+        const restored = [...prev];
+        restored.splice(editingOriginalIndex, 0, editingOriginalEntry);
+        return restored;
+      });
+    }
+    setEditingEntries([]);
+    setEditingOriginalIndex(null);
+    setEditingOriginalEntry(null);
   };
 
   const exec = (idx: number, command: string, value?: string) => {
@@ -276,7 +303,7 @@ Master blockchain technologies and distributed systems architecture, contributin
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      setSafeInnerHTML(el, suggestion);
+      el.innerHTML = suggestion;
       handleChange(editIndex, "description", suggestion);
 
       setTimeout(() => {
@@ -308,7 +335,7 @@ Master blockchain technologies and distributed systems architecture, contributin
     editingEntries.forEach((interest, idx) => {
       const el = editorRefs.current[idx];
       if (el && interest.description && el.innerHTML !== interest.description) {
-        setSafeInnerHTML(el, interest.description);
+        el.innerHTML = interest.description;
       }
     });
   }, [editingEntries]);
@@ -346,9 +373,9 @@ Master blockchain technologies and distributed systems architecture, contributin
                   )}
                   
                   {interest.description && (
-                    <SafeHTML
-                      content={interest.description}
-                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                    <div 
+                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
+                      dangerouslySetInnerHTML={{ __html: interest.description }} 
                     />
                   )}
                 </div>
@@ -402,6 +429,15 @@ Master blockchain technologies and distributed systems architecture, contributin
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2"
           >
             <div className="flex flex-col gap-3">
+              {(editingOriginalEntry !== null || savedEntries.length > 0) && (
+                <button type="button" onClick={cancelEdit}
+                  className="flex items-center gap-1 text-xs font-semibold text-black mb-3">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-gray-200 transition-colors">
+                    <ArrowLeft size={18} />
+                  </span>
+                  Back
+                </button>
+              )}
               {editingEntries.map((interest, editIndex) => {
                 const globalIndex = savedEntries.length + editIndex;
                 return (
@@ -509,21 +545,27 @@ Master blockchain technologies and distributed systems architecture, contributin
                 }}
               />
             ) : (
-              <div className="bg-[#faf9f8] rounded-lg p-5">
-                <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
-                <div className="border-t border-gray-300 mb-3"></div>
-                <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
-                  <p>
-                    Interests show your intellectual curiosity and how you stay current in your field. Include interests that demonstrate professional growth and industry awareness.
-                  </p>
-                  <p>
-                    Select appropriate categories to help ATS systems better understand the relevance of your interests. Describe how you engage with these interests actively.
-                  </p>
-                  <p className="text-xs text-gray-500 italic mt-6">
-                    *Relevant interests can highlight cultural fit and industry alignment to potential employers.
-                  </p>
-                </div>
-              </div>
+              <SectionTipsPanel
+                sectionKey="Interests"
+                entryContent={[editingEntries[0]?.name].filter(Boolean) as string[]}
+                staticTips={
+                  <div className="bg-[#faf9f8] rounded-lg p-5">
+                    <h3 className="text-base font-bold text-[#2d2d2d] mb-3">Tips</h3>
+                    <div className="border-t border-gray-300 mb-3"></div>
+                    <div className="space-y-4 text-sm text-[#3b3b3b] leading-relaxed">
+                      <p>
+                        Interests show your intellectual curiosity and how you stay current in your field. Include interests that demonstrate professional growth and industry awareness.
+                      </p>
+                      <p>
+                        Select appropriate categories to help ATS systems better understand the relevance of your interests. Describe how you engage with these interests actively.
+                      </p>
+                      <p className="text-xs text-gray-500 italic mt-6">
+                        *Relevant interests can highlight cultural fit and industry alignment to potential employers.
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
             )}
           </div>
         </div>

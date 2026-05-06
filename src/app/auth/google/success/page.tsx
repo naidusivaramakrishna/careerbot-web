@@ -20,7 +20,7 @@ const GoogleSuccessContent = () => {
 
         // Redirect to dashboard after a brief moment
         setTimeout(() => {
-          router.push('/profile')
+          router.push('/dashboard')
         }, 1000)
 
       } catch (error: unknown) {

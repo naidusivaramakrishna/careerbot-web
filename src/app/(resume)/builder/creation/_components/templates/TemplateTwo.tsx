@@ -119,13 +119,23 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
                 personalInfo.phone && `${personalInfo.countryCode}${personalInfo.phone}`,
                 personalInfo.location,
                 personalInfo.linkedinUrl && (
-                  <a 
-                    href={personalInfo.linkedinUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
+                  <a
+                    href={personalInfo.linkedinUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     style={linkStyle}
                   >
                     LinkedIn
+                  </a>
+                ),
+                personalInfo.githubUrl && (
+                  <a
+                    href={personalInfo.githubUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={linkStyle}
+                  >
+                    GitHub
                   </a>
                 ),
                 personalInfo.portfolioUrl && (
@@ -213,7 +223,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
                       )}
                     </div>
                     <div className="text-sm whitespace-nowrap ml-4" style={baseTextStyle}>
-                      {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
+                      {edu.startDate ? `${formatDate(edu.startDate)} – ${formatDate(edu.endDate)}` : formatDate(edu.endDate)}
                     </div>
                   </div>
                 </div>
@@ -298,24 +308,23 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
         
         {data.categorizedSkills ? (
           <div className="space-y-0">
-            {Object.entries(data.categorizedSkills).map(([category, categorySkills]) => {
+            {(["programming_languages","frameworks","databases","tools","cloud_platforms","soft_skills"] as const).map((key) => {
+              const categorySkills = data.categorizedSkills![key];
               if (!categorySkills || categorySkills.length === 0) return null;
-              
-              const categoryLabel = category
-                .split('_')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-              
+              const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
               return (
-                <div key={category}>
-                  <div className="mb-1">
-                    <span className="font-semibold" style={titleStyle}>
-                      {categoryLabel}:
-                    </span>
-                    <span style={baseTextStyle}>
-                      {" "}{(categorySkills as string[]).join(", ")}
-                    </span>
-                  </div>
+                <div key={key} className="mb-1">
+                  <span className="font-semibold" style={titleStyle}>{label}: </span>
+                  <span style={baseTextStyle}>{categorySkills.join(", ")}</span>
+                </div>
+              );
+            })}
+            {(data.categorizedSkills.custom_categories || []).map((custom) => {
+              if (!custom.skills || custom.skills.length === 0) return null;
+              return (
+                <div key={custom.id} className="mb-1">
+                  <span className="font-semibold" style={titleStyle}>{custom.name || "Other"}: </span>
+                  <span style={baseTextStyle}>{custom.skills.join(", ")}</span>
                 </div>
               );
             })}
@@ -376,10 +385,10 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
                     <div style={baseTextStyle}>
                       <div>
                         <span className="font-medium" style={titleStyle}>{cert.name}</span>
-                        <span style={baseTextStyle}> - {cert.issuedBy}</span>
+                        {cert.issuer && <span style={baseTextStyle}> - {cert.issuer}</span>}
                       </div>
                       <div className="text-xs mt-1">
-                        <span>Issued: {cert.year}</span>
+                        {cert.issueDate && <span>Issued: {cert.issueDate}</span>}
                         {cert.expiryDate && (
                           <span className="ml-3">
                             Expires: {cert.expiryDate}

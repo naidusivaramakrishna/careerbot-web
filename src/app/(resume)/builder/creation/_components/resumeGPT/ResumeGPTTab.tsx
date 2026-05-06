@@ -5,7 +5,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useResume } from "../../_context/ResumeContext";
 import MessageBubble from "./MessageBubble";
 import SectionButtons from "./SectionButtons";
-import logger from "@/lib/logger";
 // Import forms
 import ProfessionalSummaryForm from "./forms/ProfessionalSummaryForm";
 import EducationForm from "./forms/EducationForm";
@@ -83,248 +82,6 @@ export default function ResumeGPT() {
     "portfolioUrl",
   ];
 
-  // Personal info prompts mapping
-  const personalPrompts: Record<keyof typeof resumeData.personalInfo, string> = {
-    fullname: "Hi! Let's build your resume. What's your full name?",
-    email: "Great! Now, what's your email?",
-    phone: "Nice! What's your phone number?",
-    location: "Thanks! Where are you located?",
-    linkedinUrl: "Finally, What's your LinkedIn URL?",
-    portfolioUrl: "What's your Portfolio link?",
-    countryCode: "",
-  };
-
-  // ✅ Initialize conversation with existing data from resumeData
-  useEffect(() => {
-    if (isInitialized) return; // Only run once
-
-    const initialMessages: Message[] = [];
-    const filledSections: SectionName[] = [];
-
-    // Check each personal info step in order and show filled data as conversation
-    let lastFilledIndex = -1;
-
-    stepOrder.forEach((step, index) => {
-      const value = resumeData.personalInfo[step];
-      if (value && value.trim()) {
-
-        // For the first message, include greeting
-        if (index === 0 && step === "fullname") {
-          initialMessages.push({
-            sender: "bot",
-            text: "Hi! Let's build your resume. What's your full name?"
-          });
-        } else {
-          // For subsequent messages, use the standard prompt
-          const promptWithoutGreeting = step === "fullname"
-            ? "What's your full name?"
-            : personalPrompts[step];
-          initialMessages.push({
-            sender: "bot",
-            text: promptWithoutGreeting
-          });
-        }
-
-        // Add user's answer
-        initialMessages.push({
-          sender: "user",
-          text: value
-        });
-
-        lastFilledIndex = index;
-      }
-    });
-
-    // Check if sections have data and add them to disabled/filled sections
-    if (resumeData.professionalSummary?.summary?.trim()) {
-      filledSections.push("Professional Summary");
-      initialMessages.push({ sender: "bot", text: "Please enter details for Professional Summary." });
-      initialMessages.push({ sender: "user", text: resumeData.professionalSummary.summary });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Professional Summary? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.education && resumeData.education.length > 0) {
-      filledSections.push("Education");
-      resumeData.education.forEach((edu) => {
-        const eduText = `${edu.degree} at ${edu.school} (${edu.startDate} - ${edu.endDate})`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Education." });
-        initialMessages.push({ sender: "user", text: eduText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Education? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.workExperience && resumeData.workExperience.length > 0) {
-      filledSections.push("Work Experience");
-      resumeData.workExperience.forEach((work) => {
-        const workText = `${work.role} at ${work.company} (${work.startDate} - ${work.currentlyWorking ? 'Present' : work.endDate})`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Work Experience." });
-        initialMessages.push({ sender: "user", text: workText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Work Experience? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.projects && resumeData.projects.length > 0) {
-      filledSections.push("Projects");
-      resumeData.projects.forEach((project) => {
-        const projectText = `${project.title}: ${project.description}`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Projects." });
-        initialMessages.push({ sender: "user", text: projectText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Projects? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.skills && resumeData.skills.length > 0) {
-      filledSections.push("Skills");
-      const skillsText = resumeData.skills.join(", ");
-      initialMessages.push({ sender: "bot", text: "Please enter details for Skills." });
-      initialMessages.push({ sender: "user", text: skillsText });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Skills? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.certifications && resumeData.certifications.length > 0) {
-      filledSections.push("Certifications");
-      resumeData.certifications.forEach((cert) => {
-        const certText = `${cert.name} by ${cert.issuedBy} (${cert.year})`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Certifications." });
-        initialMessages.push({ sender: "user", text: certText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Certifications? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.achievements && resumeData.achievements.length > 0) {
-      filledSections.push("Achievements");
-      resumeData.achievements.forEach((ach) => {
-        const achText = `${ach.title} (${ach.date})`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Achievements." });
-        initialMessages.push({ sender: "user", text: achText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Achievements? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.volunteering && resumeData.volunteering.length > 0) {
-      filledSections.push("Volunteering");
-      resumeData.volunteering.forEach((vol) => {
-        const volText = `${vol.role} at ${vol.organization} (${vol.startDate} - ${vol.endDate})`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Volunteering." });
-        initialMessages.push({ sender: "user", text: volText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Volunteering? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.internships && resumeData.internships.length > 0) {
-      filledSections.push("Internships");
-      resumeData.internships.forEach((intern) => {
-        const internText = `${intern.role} at ${intern.company} (${intern.startDate} - ${intern.currentlyWorking ? 'Present' : intern.endDate})`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Internships." });
-        initialMessages.push({ sender: "user", text: internText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Internships? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.awards && resumeData.awards.length > 0) {
-      filledSections.push("Awards");
-      resumeData.awards.forEach((award) => {
-        const awardText = `${award.title} by ${award.issuedBy} (${award.year})`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Awards." });
-        initialMessages.push({ sender: "user", text: awardText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Awards? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.references && resumeData.references.length > 0) {
-      filledSections.push("References");
-      resumeData.references.forEach((ref) => {
-        const refText = `${ref.name} (${ref.relation}): ${ref.contact}`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for References." });
-        initialMessages.push({ sender: "user", text: refText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to References? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.languages && resumeData.languages.length > 0) {
-      filledSections.push("Languages");
-      resumeData.languages.forEach((lang) => {
-        const langText = `${lang.language}: ${lang.proficiency}`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Languages." });
-        initialMessages.push({ sender: "user", text: langText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Languages? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.hobbies && resumeData.hobbies.length > 0) {
-      filledSections.push("Hobbies");
-      resumeData.hobbies.forEach((hobby) => {
-        const hobbyText = `${hobby.name}: ${hobby.description}`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Hobbies." });
-        initialMessages.push({ sender: "user", text: hobbyText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Hobbies? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.interests && resumeData.interests.length > 0) {
-      filledSections.push("Interests");
-      resumeData.interests.forEach((interest) => {
-        const interestText = `${interest.name}: ${interest.description}`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Interests." });
-        initialMessages.push({ sender: "user", text: interestText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Interests? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    if (resumeData.publications && resumeData.publications.length > 0) {
-      filledSections.push("Publications");
-      resumeData.publications.forEach((pub) => {
-        const pubText = `${pub.title} in ${pub.publicationName} (${pub.date})`;
-        initialMessages.push({ sender: "bot", text: "Please enter details for Publications." });
-        initialMessages.push({ sender: "user", text: pubText });
-      });
-      initialMessages.push({ sender: "bot", text: "Would you like to add another entry to Publications? (Yes/No)" });
-      initialMessages.push({ sender: "user", text: "No" });
-    }
-
-    // Determine next step based on filled data
-    const nextStep = stepOrder[lastFilledIndex + 1];
-
-    if (lastFilledIndex === -1 && filledSections.length === 0) {
-      // No data filled at all, keep default greeting
-      setMessages([{ sender: "bot", text: personalPrompts.fullname }]);
-      setCurrentStep("fullname");
-    } else if (nextStep) {
-      // Some personal info filled, continue from next step
-      initialMessages.push({
-        sender: "bot",
-        text: personalPrompts[nextStep]
-      });
-      setMessages(initialMessages);
-      setCurrentStep(nextStep);
-    } else {
-      // All personal info filled, show section buttons
-      initialMessages.push({
-        sender: "bot",
-        text: "Details added! Now select the section you want to add to your resume."
-      });
-      setMessages(initialMessages);
-      setShowSectionButtons(true);
-      setDisabledSections(filledSections);
-    }
-
-    setIsInitialized(true);
-  }, [resumeData, isInitialized]);
-
   // Function to send message to Rasa
   const sendToRasa = async (message: string): Promise<void> => {
     try {
@@ -355,7 +112,7 @@ export default function ResumeGPT() {
         });
       }
     } catch (error) {
-      logger.error("Rasa connection error:", error);
+      console.error("Rasa connection error:", error);
       setIsRasaConnected(false);
       // Don't call handleLocalFallback here to avoid duplicate messages
     }
@@ -363,6 +120,16 @@ export default function ResumeGPT() {
 
   // Local fallback logic when Rasa is unavailable
   const handleLocalFallback = (text: string) => {
+    const personalPrompts: Record<keyof typeof resumeData.personalInfo, string> = {
+      fullname: "What's your full name?",
+      email: "Great! Now, what's your email?",
+      phone: "Nice! What's your phone number?",
+      location: "Thanks! Where are you located?",
+      countryCode: "What's your country code?",
+      linkedinUrl: "Finally, What's your LinkedIn URL?",
+      portfolioUrl: "What's your Portfolio link?",
+    };
+
     // Handle "Add more?" logic
     if (awaitingAddMore) {
       if (text.toLowerCase() === "yes") {
@@ -410,27 +177,12 @@ export default function ResumeGPT() {
     }
   };
 
-  // Initialize conversation with Rasa (disabled when we have existing data)
+  // Initialize conversation with Rasa
   const initializeRasaConversation = useCallback(async () => {
-    // Don't initialize Rasa if we already have data initialized
-    if (isInitialized) return;
-
-    // Check if resumeData has any existing data
-    const hasPersonalInfo = Object.values(resumeData.personalInfo).some(v => v && v.trim());
-    const hasSectionData =
-      (resumeData.education && resumeData.education.length > 0) ||
-      (resumeData.workExperience && resumeData.workExperience.length > 0) ||
-      (resumeData.projects && resumeData.projects.length > 0) ||
-      (resumeData.skills && resumeData.skills.length > 0);
-
-    // If we have existing data, don't try to initialize Rasa
-    // The data initialization useEffect will handle it
-    if (hasPersonalInfo || hasSectionData) {
-      return;
-    }
-
+    if (isInitialized) return; // Prevent multiple initializations
+    
     setIsInitialized(true);
-
+    
     try {
       const response = await fetch(RASA_API_URL, {
         method: "POST",
@@ -448,20 +200,20 @@ export default function ResumeGPT() {
       }
 
       const botResponses: RasaResponse[] = await response.json();
-
+      
       if (botResponses && botResponses.length > 0) {
         setIsRasaConnected(true);
         // Clear default message and add Rasa's response
         setMessages(botResponses.map(msg => ({ sender: "bot" as const, text: msg.text })));
       }
     } catch (error) {
-      logger.error("Failed to connect to Rasa:", error);
+      console.error("Failed to connect to Rasa:", error);
       setIsRasaConnected(false);
       // Keep the default greeting message that was set in useState
     }
-  }, [sessionId, isInitialized, resumeData]);
+  }, [sessionId, isInitialized]);
 
-  // Initialize conversation with Rasa on mount (only if no existing data)
+  // Initialize conversation with Rasa on mount
   useEffect(() => {
     initializeRasaConversation();
   }, [initializeRasaConversation]);
@@ -532,9 +284,7 @@ export default function ResumeGPT() {
       const updated = { ...prev };
       switch (section) {
         case "Professional Summary":
-          updated.professionalSummary = typeof data === "string"
-            ? { summary: data, targetRole: prev.professionalSummary.targetRole }
-            : data as { summary: string; targetRole: string };
+          updated.professionalSummary = data as { summary: string; targetRole: string; };
           break;
         case "Education":
           updated.education = [...prev.education, ...(Array.isArray(data) ? data : [data])];

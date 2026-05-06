@@ -85,8 +85,10 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     // EDUCATION
     // -------------------------
     function splitResumeDateRange(dateRange: string) {
-        if (!dateRange.includes("-")) return { start: "", end: "" };
-        const [startStr, endStr] = dateRange.split("-").map(s => s.trim());
+        // Handle both hyphen (-) and en-dash (–)
+        if (!dateRange.includes("-") && !dateRange.includes("–")) return { start: "", end: "" };
+        const separator = dateRange.includes("–") ? "–" : "-";
+        const [startStr, endStr] = dateRange.split(separator).map(s => s.trim());
         const start = parseResumeDate(startStr);
         const end = parseResumeDate(endStr);
         return { start, end };
@@ -110,13 +112,11 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
 
 
     if (llm.education?.length > 0) {
-        // ✅ Keep education in resume order (don't sort)
-        // Display education as it appears in the resume
         profileData.education = llm.education.map((edu) => {
             let start, end;
 
-            if (edu.duration?.includes("to") || edu.duration?.includes("-")) {
-                // Normal range "Aug 2019 - Jul 2023"
+            if (edu.duration?.includes("to") || edu.duration?.includes("-") || edu.duration?.includes("–")) {
+                // Normal range "Aug 2019 - Jul 2023" or "2022–2024" (with en-dash)
                 ({ start, end } = splitResumeDateRange(edu.duration));
             } else {
                 // Single date "March 2017"
@@ -245,29 +245,31 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     // -------------------------
     if (parsed.certifications?.length > 0) {
         profileData.certifications = parsed.certifications.map((cert) => {
-            let certName = cert || '';
+            // Convert cert to string safely, handling objects, null, undefined
+            const certStr = String(cert || '').trim();
+            let certName = certStr;
             let issuer = '';
 
             // Parse certification string to extract issuer and name
             // Patterns: "Certified by {issuer} in {name}", "{name} from {issuer}"
 
-            const fromMatch = cert.match(/from\s+([^,\.]*)(?:[,\.]|$)/i);
+            const fromMatch = certStr.match(/from\s+([^,\.]*)(?:[,\.]|$)/i);
             if (fromMatch && fromMatch[1]) {
                 issuer = fromMatch[1].trim();
-                certName = cert.replace(/\s+from\s+[^,\.]*/i, '').trim();
+                certName = certStr.replace(/\s+from\s+[^,\.]*/i, '').trim();
             }
 
-            const byInMatch = cert.match(/by\s+([^,\.]+?)\s+(?:in|on)\s+([^,\.]*)/i);
+            const byInMatch = certStr.match(/by\s+([^,\.]+?)\s+(?:in|on)\s+([^,\.]*)/i);
             if (byInMatch && byInMatch[1]) {
                 issuer = byInMatch[1].trim();
-                certName = (byInMatch[2] || cert).trim();
+                certName = (byInMatch[2] || certStr).trim();
             }
 
             // Remove "Certified" prefix if present
             certName = certName.replace(/^Certified\s+(?:as\s+)?(?:an?\s+)?/i, '').trim();
 
             return {
-                certification_name: certName || cert,
+                certification_name: certName || certStr,
                 issuer: issuer,
                 start_date: '',
                 end_date: '',
