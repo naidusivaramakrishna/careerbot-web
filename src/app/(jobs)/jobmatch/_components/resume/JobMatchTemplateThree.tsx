@@ -318,7 +318,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
         .ats-desc li { font-size: 13.5px; line-height: 1.65; margin-bottom: 2px; color: #1f2937; }
       `}</style>
 
-      <div style={{ background: "#f0f2f5", fontFamily: baseFont, padding: "32px 24px" }}>
+      <div style={{ background: "#f0f2f5", fontFamily: baseFont, padding: "12px 24px 32px" }}>
         <div style={{
           maxWidth: "760px",
           margin: "0 auto",

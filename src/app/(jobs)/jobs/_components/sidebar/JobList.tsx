@@ -1,91 +1,3 @@
-
-// import JobCard from "../job-cards/JobCard";
-
-// export default function JobList({ jobs }: { jobs: any[] }) {
-
-//   return (
-//     <div className="space-y-4">
-//       {jobs.map((job) => (
-//         <JobCard
-//   key={job.id}
-//   id={job.id}           // ✅ ADD THIS
-//   title={job.title}
-//   company={job.company}
-//   location={job.location}
-//   logo={job.logo}
-//   type={job.type}
-//   salary={job.salary}
-//   time={job.time}
-//   matchScore={job.matchScore}
-//   matchText={job.matchText}
-// />
-//       ))}
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-// import JobCard from "../job-cards/JobCard";
-
-// export default function JobList({ jobs }: { jobs: any[] }) {
-//   return (
-//     <div className="space-y-4">
-//       {jobs.map((job) => (
-//         <JobCard
-//           key={job.id}
-//           id={job.id}
-//           title={job.title}
-//           company={job.company}
-//           location={job.location}
-//           logo={job.logo}
-//           type={job.type}
-//           salary={job.salary}
-//           time={job.time}
-//           matchScore={job.matchScore}
-//           matchText={job.matchText}
-//           roleTrending={job.roleTrending}
-//           highHiring={job.highHiring}
-//         />
-//       ))}
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-// // app/jobs/_components/sidebar/JobList.tsx
-
-// import JobCard from "../job-cards/JobCard";
-
-// export default function JobList({ jobs, onBotClick }: { jobs: any[]; onBotClick: (job: any) => void }) {
-//   return (
-//     <div className="space-y-4">
-//       {jobs.map((job) => (
-//         <JobCard
-//           key={job.id}
-//           {...job}
-//           onBotClick={() => onBotClick(job)}
-//         />
-//       ))}
-//     </div>
-//   );
-// }
-// 
-
-
-
-
-
-
 "use client";
 
 import JobCard from "../job-cards/JobCard";
@@ -101,11 +13,7 @@ export default function JobList({ jobs, onBotClick }: JobListProps) {
   return (
     <div className="space-y-4">
       {jobs.map((job) => (
-        <JobCard
-          key={job.id}
-          {...job}
-          onBotClick={() => onBotClick(job)}
-        />
+        <JobCard key={job.id} {...job} onBotClick={() => onBotClick(job)} />
       ))}
     </div>
   );

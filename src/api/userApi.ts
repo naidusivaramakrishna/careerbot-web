@@ -100,6 +100,9 @@ export interface ResumeUploadResponse {
 
 export interface ResumeResponse {
     resume_url: string;
+    resume_id?: string;
+    id?: string;
+    filename?: string;
 }
 
 export interface ResumeDeleteResponse {

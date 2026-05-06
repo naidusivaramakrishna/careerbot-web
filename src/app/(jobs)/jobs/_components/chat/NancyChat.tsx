@@ -1,24 +1,28 @@
 "use client";
 
-import { Send, Loader, X, HelpCircle, RotateCcw } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
-import JobInsightCard from "./InsightCard";
-import SkillGapAnalyzer from "./SkillGapAnalyzer";
-import InterviewReadiness from "./InterviewReadiness";
-import SmartSuggestions from "./SmartSuggestions";
+import { Send, Loader, X, HelpCircle, Sparkles, Lock } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import NancyGuideModal from "./NancyGuideModal";
-import NancyBirdIconMinimal from "./NancyBirdIconMinimal";
+import { chatAboutJob } from "@/api/jobsApi";
+import type { JobChatSuggestedAction } from "@/api/jobsApi";
+
+function BotAvatar() {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/assets/images/login_bot.svg"
+      alt="Nancy"
+      className="w-full h-full object-contain"
+    />
+  );
+}
 
 interface Message {
-  type: 'user' | 'bot';
+  type: "user" | "bot";
   text: string;
-  timestamp?: number;
-  insightCard?: boolean;
-  skillGap?: boolean;
-  interviewReadiness?: boolean;
-  suggestions?: boolean;
-  messageId?: string;
-  wordCount?: number;
+  timestamp: number;
+  intent_type?: "free" | "premium" | "unknown";
+  suggestedAction?: JobChatSuggestedAction;
 }
 
 export interface JobType {
@@ -33,15 +37,26 @@ export interface JobType {
   [key: string]: unknown;
 }
 
-// Helper function to generate unique message ID
-const generateMessageId = (): string => {
-  return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-};
+const FREE_ACTIONS = [
+  "Do I qualify for this role?",
+  "What skills am I missing?",
+  "What are the key requirements?",
+  "How can I improve my match score?",
+  "Is my experience enough?",
+  "What education is required?",
+  "What's the salary for this role?",
+  "Is this remote or onsite?",
+  "Tell me about the company",
+  "How does this compare to other jobs?",
+];
 
-// Helper function to determine if message should show regenerate button
-const shouldShowRegenerate = (msg: Message): boolean => {
-  return msg.type === 'bot' && !!msg.wordCount && msg.wordCount > 30;
-};
+const PREMIUM_ACTIONS: { label: string; credits: number }[] = [
+  { label: "Tailor my resume for this job", credits: 5 },
+  { label: "Enhance and rewrite my resume", credits: 10 },
+  { label: "Write a cover letter for this job", credits: 3 },
+  { label: "Help me prepare for interview", credits: 5 },
+  { label: "Salary negotiation advice", credits: 3 },
+];
 
 export default function NancyChat({
   job,
@@ -51,221 +66,88 @@ export default function NancyChat({
   onClose: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([
-    { type: 'bot', text: 'Hi! I\'m Nancy, your personal job assistant. How can I help you today?', timestamp: Date.now(), messageId: generateMessageId(), wordCount: 0 }
+    {
+      type: "bot",
+      text: `Hi! I'm Nancy, your AI job assistant. Ask me anything about the ${job?.title || "this"} role — I can check your qualification, skill gaps, requirements, and more.`,
+      timestamp: Date.now(),
+    },
   ]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Optimized auto-scroll: runs once per message addition
   useEffect(() => {
     const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 50);
     return () => clearTimeout(timer);
   }, [messages.length]);
 
-  // Generate dynamic quick actions based on job title
-  const getDynamicQuickActions = () => {
-    if (!job?.title) {
-      return [
-        'Give me a quick summary of this job role',
-        'Find similar jobs that match my skills and preferences',
-        'Generate interview questions I should prepare for this role',
-        'Compare this job with my resume and highlight missing skills'
-      ];
-    }
+  const sendMessage = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || isTyping) return;
 
-    const title = job.title.toLowerCase();
-
-    // Customize based on job title
-    if (title.includes('frontend') || title.includes('react') || title.includes('javascript')) {
-      return [
-        'What are common frontend interview questions for this role?',
-        'Frontend skill gaps - what should I improve?',
-        'React best practices for this role',
-        'Portfolio projects to impress this company'
-      ];
-    } else if (title.includes('backend') || title.includes('python') || title.includes('node')) {
-      return [
-        'Backend architecture questions for interviews?',
-        'What database skills does this role require?',
-        'API design questions they might ask',
-        'Scaling challenges for this backend role'
-      ];
-    } else if (title.includes('full stack')) {
-      return [
-        'Full stack project ideas to prepare?',
-        'Frontend vs Backend focus for this role?',
-        'DevOps skills needed?',
-        'System design questions for this role'
-      ];
-    } else if (title.includes('product') || title.includes('manager')) {
-      return [
-        'Product sense questions for interviews?',
-        'How to structure my PM portfolio?',
-        'Data analysis skills needed?',
-        'Leadership qualities they\'re seeking'
-      ];
-    } else if (title.includes('design') || title.includes('ux') || title.includes('ui')) {
-      return [
-        'Design portfolio tips for this company?',
-        'UX research methods they use?',
-        'Design tools I should learn?',
-        'Case study projects to showcase'
-      ];
-    } else {
-      return [
-        `Summary of ${job.title} role`,
-        'Key skills required for this position',
-        'Interview preparation tips',
-        'How my background matches this role'
-      ];
-    }
-  };
-
-  const addMessage = (
-    type: 'user' | 'bot',
-    text: string,
-    metadata?: Partial<Message>
-  ) => {
-    const wordCount = text.split(/\s+/).length;
-    const messageId = generateMessageId();
-
-    setMessages(prev => [
-      ...prev,
-      {
-        type,
-        text,
-        timestamp: Date.now(),
-        messageId,
-        wordCount,
-        ...metadata
-      }
-    ]);
-  };
-
-  const handleQuickAction = (action: string) => {
-    addMessage('user', action);
+    setMessages((prev) => [...prev, { type: "user", text: trimmed, timestamp: Date.now() }]);
+    setInput("");
     setIsTyping(true);
 
-    // Minimum 700ms typing delay to feel natural
-    const typingDuration = Math.max(700, Math.random() * 400 + 700);
-    setTimeout(() => {
+    try {
+      const jobId = job?.id as string;
+      if (!jobId) throw new Error("Job ID missing");
+
+      const result = await chatAboutJob(jobId, trimmed, sessionId);
+
+      if (result.session_id) setSessionId(result.session_id);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "bot",
+          text: result.response,
+          timestamp: Date.now(),
+          intent_type: result.intent_type,
+          suggestedAction: result.suggested_action ?? undefined,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "bot",
+          text: "Sorry, I couldn't process that. Please try again.",
+          timestamp: Date.now(),
+        },
+      ]);
+    } finally {
       setIsTyping(false);
-      let response = '';
-      let metadata: Partial<Message> = {};
-
-      if (action.includes('summary')) {
-        response = job ? `Here's a summary of the ${job.title} role at ${job.company}: ${job.description?.substring(0, 200)}...` : 'Please select a job first.';
-        metadata = { insightCard: true };
-      } else if (action.includes('similar')) {
-        response = 'I can help find similar jobs. Based on your current job, here are some similar positions that match your profile.';
-      } else if (action.includes('interview') || action.includes('question')) {
-        response = 'Common interview questions for this role include:\n\n• Tell me about yourself and your experience\n• Why are you interested in this role?\n• What are your key strengths and achievements?\n• How do you handle challenges?\n• Where do you see yourself in 5 years?';
-        metadata = { interviewReadiness: true };
-      } else if (action.includes('compare') || action.includes('gap') || action.includes('skill')) {
-        response = 'Based on the job description, here are areas to focus on:\n\n✓ Strong matches: Your experience aligns well\n⚠ Areas to improve: Consider developing these skills';
-        metadata = { skillGap: true };
-      } else if (action.includes('portfolio') || action.includes('project')) {
-        response = 'Great question! Here are project ideas that showcase the skills this company values. Would you like me to elaborate on any specific project type?';
-        metadata = { suggestions: true };
-      } else if (action.includes('architecture') || action.includes('design') || action.includes('database')) {
-        response = 'This role likely expects knowledge of:\n\n• System design principles\n• Database optimization\n• Scaling strategies\n• Performance considerations\n\nLet\'s dive deeper into any of these areas!';
-      } else {
-        response = 'I\'m here to help with job-related questions! Ask me anything about this role, interview prep, or your skills match.';
-      }
-
-      addMessage('bot', response, metadata);
-    }, typingDuration);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
-
-    addMessage('user', input);
-    setInput('');
-    setIsTyping(true);
-
-    // Minimum 700ms typing delay to feel natural (prevents jarring instant responses)
-    const typingDuration = Math.max(700, Math.random() * 400 + 700);
-    setTimeout(() => {
-      setIsTyping(false);
-      const response = input.toLowerCase().includes('resume')
-        ? 'To compare with your resume, I\'d need to know more about your background. What\'s your main area of expertise?'
-        : input.toLowerCase().includes('salary')
-        ? 'Great question about compensation! This role typically offers competitive packages. Would you like tips on negotiation?'
-        : 'Thanks for your question! Based on the job description and your interest, here\'s what I recommend...';
-
-      addMessage('bot', response);
-    }, typingDuration);
+    sendMessage(input);
   };
-
-  const handleRegenerate = () => {
-    // Find the last bot message with regenerate capability
-    const lastBotMsgIdx = messages.length - 1 - [...messages].reverse().findIndex(msg => shouldShowRegenerate(msg));
-    if (lastBotMsgIdx === -1) return;
-
-    const lastBotMsg = messages[lastBotMsgIdx];
-    setIsRegenerating(true);
-
-    // Simulate regeneration delay
-    const typingDuration = Math.max(700, Math.random() * 400 + 700);
-    setTimeout(() => {
-      setIsRegenerating(false);
-
-      const responses = [
-        'Here\'s another perspective on this: Consider exploring different angles of this opportunity.',
-        'Let me provide a different take: This role offers unique advantages you might not have considered.',
-        'Another way to think about this: The key differentiators include strong team dynamics and growth potential.',
-        'Fresh insights: This position aligns well with emerging trends in the industry.'
-      ];
-
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-
-      // Replace the bot message in-place instead of appending
-      setMessages(prev => {
-        const updatedMessages = [...prev];
-        const targetIdx = updatedMessages.findIndex(msg => msg.messageId === lastBotMsg.messageId);
-        if (targetIdx !== -1) {
-          updatedMessages[targetIdx] = {
-            ...updatedMessages[targetIdx],
-            text: randomResponse,
-            wordCount: randomResponse.split(/\s+/).length,
-            timestamp: Date.now(),
-          };
-        }
-        return updatedMessages;
-      });
-
-      // Scroll to updated message
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 50);
-    }, typingDuration);
-  };
-
-  const quickActions = getDynamicQuickActions();
 
   return (
     <>
-      <div className="w-96 h-[550px] bg-white flex flex-col overflow-hidden border-none">
-        {/* HEADER - Minimal, Clean */}
-        <div className="shrink-0 px-4 py-3 border-b border-gray-200 border-l-4 border-l-blue-600 bg-blue-50 flex items-center justify-between">
+      <div className="w-107.5 h-160 bg-white flex flex-col overflow-hidden rounded-2xl border border-gray-100 shadow-xl shadow-black/8">
+        {/* HEADER */}
+        <div className="shrink-0 px-5 py-3.5 bg-linear-to-r from-[#2557a7] to-[#1a409e] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <NancyBirdIconMinimal size={24} />
+            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center ring-2 ring-white/30 overflow-hidden shadow-md p-0.5">
+              <BotAvatar />
+            </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="font-semibold text-sm text-gray-900">Nancy</p>
+                <p className="font-bold text-sm text-white">Nancy</p>
                 <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                  <span className="text-xs text-gray-500">Online</span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-300" />
+                  <span className="text-[11px] text-white/70">Online</span>
                 </div>
               </div>
-              <p className="text-xs text-gray-500">AI Career Assistant</p>
+              <p className="text-[11px] text-white/60">AI Career Assistant</p>
             </div>
           </div>
 
@@ -275,9 +157,9 @@ export default function NancyChat({
               type="button"
               title="Open Nancy quick guidance"
               aria-label="Open Nancy quick guidance"
-              className="px-3 py-1.5 rounded-md border border-gray-200 text-gray-900 text-xs font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-all duration-150 flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg border border-white/20 text-white text-xs font-medium hover:bg-white/10 focus:outline-none transition-all duration-150 flex items-center gap-1.5"
             >
-              <HelpCircle size={14} />
+              <HelpCircle size={13} />
               Guide
             </button>
             <button
@@ -285,99 +167,148 @@ export default function NancyChat({
               type="button"
               title="Close Nancy chat"
               aria-label="Close Nancy chat"
-              className="w-8 h-8 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-all duration-150"
+              className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-white/80 hover:text-white focus:outline-none transition-all duration-150"
             >
-              <X size={18} />
+              <X size={17} />
             </button>
           </div>
         </div>
 
-        {/* CHAT BODY - Minimal, Clean */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
-          {/* Messages */}
+        {/* Job context strip */}
+        {job?.title && (
+          <div className="shrink-0 px-5 py-2 bg-[#f0f4ff] border-b border-[#dce8ff]">
+            <p className="text-[11px] text-[#2557a7] font-medium truncate">
+              Chatting about: <span className="font-bold">{job.title}</span>
+              {job.company ? ` · ${job.company}` : ""}
+            </p>
+          </div>
+        )}
+
+        {/* CHAT BODY */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-[#f8f9fc]">
           {messages.map((msg, idx) => (
             <div
               key={idx}
-              className={`flex gap-3 animate-fade-in-slide flex-col ${
-                msg.type === 'user' ? 'items-end' : 'items-start'
-              }`}
+              className={`flex flex-col gap-1.5 ${msg.type === "user" ? "items-end" : "items-start"}`}
             >
               <div className="flex gap-2 w-full items-end">
-                {msg.type === 'bot' && (
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0">
-                    <NancyBirdIconMinimal size={16} />
+                {msg.type === "bot" && (
+                  <div className="w-10 h-10 rounded-full bg-[#e8f0fe] border border-[#c7d9ff] flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1">
+                    <BotAvatar />
                   </div>
                 )}
-                <div className={`max-w-xs px-4 py-2 rounded-lg whitespace-pre-wrap ${
-                  msg.type === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-none shadow-md shadow-blue-300/30'
-                    : 'bg-blue-50 text-gray-900 border border-blue-200 rounded-bl-none shadow-sm shadow-blue-100/40'
-                }`}>
-                {msg.text}
-              </div>
+                <div
+                  className={`max-w-[320px] px-4 py-2.5 rounded-2xl whitespace-pre-wrap text-sm leading-relaxed ${
+                    msg.type === "user"
+                      ? "bg-[#2557a7] text-white rounded-br-sm shadow-md shadow-[#2557a7]/20"
+                      : "bg-white text-gray-800 border border-gray-100 rounded-bl-sm shadow-sm"
+                  }`}
+                >
+                  {msg.text}
+                </div>
               </div>
 
-              {/* Insight Cards */}
-              {msg.insightCard && job && (
-                <div className="w-full max-w-xs">
-                  <JobInsightCard job={job} />
-                </div>
-              )}
-              {msg.skillGap && job?.skills_required && (
-                <div className="w-full max-w-xs">
-                  <SkillGapAnalyzer skills={job.skills_required as string[]} />
-                </div>
-              )}
-              {msg.interviewReadiness && (
-                <div className="w-full max-w-xs">
-                  <InterviewReadiness />
-                </div>
-              )}
-              {msg.suggestions && (
-                <div className="w-full max-w-xs">
-                  <SmartSuggestions onSuggestionClick={handleQuickAction} />
-                </div>
-              )}
+              {/* Premium feature upgrade card */}
+              {msg.type === "bot" &&
+                msg.intent_type === "premium" &&
+                msg.suggestedAction && (
+                  <div className="ml-9 max-w-75 w-full bg-linear-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3.5">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Lock size={13} className="text-amber-600" />
+                      <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wide">
+                        Premium Feature
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-700 mb-3">
+                      Costs{" "}
+                      <strong className="text-amber-900">
+                        {msg.suggestedAction.credits} credits
+                      </strong>
+                    </p>
+                    <a
+                      href="/pricing"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                    >
+                      <Sparkles size={12} />
+                      Upgrade to Unlock
+                    </a>
+                  </div>
+                )}
             </div>
           ))}
 
-          {/* Typing Indicator */}
+          {/* Typing indicator */}
           {isTyping && (
-            <div className="flex gap-3 animate-fade-in-slide">
-              <div className="max-w-xs px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 shadow-sm shadow-blue-100/40 flex items-center gap-1.5">
-                <span className="text-sm text-gray-600">Nancy is thinking</span>
+            <div className="flex gap-2 items-end">
+              <div className="w-10 h-10 rounded-full bg-[#e8f0fe] border border-[#c7d9ff] flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1">
+                <BotAvatar />
+              </div>
+              <div className="px-4 py-2.5 rounded-2xl rounded-bl-sm bg-white border border-gray-100 shadow-sm flex items-center gap-2">
+                <span className="text-sm text-gray-500">Nancy is thinking</span>
                 <div className="flex gap-1">
                   {[0, 1, 2].map((i) => (
                     <div
                       key={i}
-                      className="w-2 h-2 rounded-full bg-gray-400"
+                      className="w-1.5 h-1.5 rounded-full bg-gray-400"
                       style={{
-                        animation: `pulse 1.4s ease-in-out infinite`,
+                        animation: "pulse 1.4s ease-in-out infinite",
                         animationDelay: `${i * 0.2}s`,
                       }}
-                    ></div>
+                    />
                   ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Quick Actions */}
+          {/* Quick actions */}
           {!isTyping && messages.length <= 1 && (
-            <div className="mt-4 pt-3 border-t border-gray-200">
-              <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Quick Actions</p>
-              <div className="space-y-2">
-                {quickActions.map((action, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleQuickAction(action)}
-                    disabled={isTyping}
-                    className="w-full text-left px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-md text-sm text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-300/50 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {action}
-                  </button>
-                ))}
+            <div className="mt-3 space-y-4">
+              {/* Free intents */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest px-1">
+                  Ask Nancy — Free
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {FREE_ACTIONS.map((action: string, idx: number) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => sendMessage(action)}
+                      disabled={isTyping}
+                      className="text-left px-3 py-2 bg-white border border-gray-100 rounded-xl text-[12px] text-gray-700 hover:bg-[#f0f4ff] hover:border-[#2557a7]/30 hover:text-[#2557a7] shadow-sm focus:outline-none active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {action}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Premium intents */}
+              <div>
+                <p className="text-[10px] font-bold text-amber-500 mb-2 uppercase tracking-widest px-1 flex items-center gap-1">
+                  <Sparkles size={10} />
+                  Premium Features
+                </p>
+                <div className="space-y-1.5">
+                  {PREMIUM_ACTIONS.map((item: { label: string; credits: number }, idx: number) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => sendMessage(item.label)}
+                      disabled={isTyping}
+                      className="w-full text-left px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl text-[12px] text-amber-800 hover:bg-amber-100 hover:border-amber-300 shadow-sm focus:outline-none active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-2"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Lock size={10} className="text-amber-500 shrink-0" />
+                        {item.label}
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-600 bg-white border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
+                        {item.credits} cr
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -385,54 +316,34 @@ export default function NancyChat({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* INPUT SECTION - Minimal */}
-        <div className="shrink-0 px-3 py-2 border-t border-gray-200 bg-white">
-          {/* Try Again Button - Smart Visibility */}
-          {messages.length > 1 && shouldShowRegenerate(messages[messages.length - 1]) && (
-            <div className="flex justify-center mb-2">
-              <button
-                onClick={handleRegenerate}
-                disabled={isRegenerating || isTyping}
-                type="button"
-                className="py-1.5 px-3 bg-emerald-50 border border-emerald-200 rounded-full text-xs text-emerald-600 font-medium hover:bg-emerald-100 hover:border-emerald-300 transition-all duration-150 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <RotateCcw size={12} />
-                {isRegenerating ? 'Generating...' : 'Try Again'}
-              </button>
-            </div>
-          )}
+        {/* INPUT */}
+        <div className="shrink-0 px-4 py-3 border-t border-gray-100 bg-white">
           <form onSubmit={handleSubmit} className="flex gap-2 items-center">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={isTyping}
-              placeholder="Ask Nancy..."
+              placeholder="Ask Nancy anything..."
               aria-label="Message Nancy"
-              className="flex-1 bg-white border-2 border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-600 focus:ring-0 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 bg-[#f8f9fc] border border-gray-200 rounded-full px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#2557a7] focus:bg-white focus:ring-2 focus:ring-[#2557a7]/10 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-
             <button
               type="submit"
               aria-label="Send message"
               disabled={!input.trim() || isTyping}
-              className="shrink-0 w-8 h-8 rounded-md bg-blue-600 text-white flex items-center justify-center hover:shadow-sm hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500/30 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
+              className="shrink-0 w-9 h-9 rounded-full bg-[#2557a7] text-white flex items-center justify-center hover:bg-[#1e4a96] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#2557a7]/30 active:scale-95 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#2557a7] disabled:hover:shadow-none"
             >
-              {isTyping ? (
-                <Loader size={16} className="animate-spin" />
-              ) : (
-                <Send size={16} />
-              )}
+              {isTyping ? <Loader size={15} className="animate-spin" /> : <Send size={15} />}
             </button>
           </form>
-          <p className="text-xs text-gray-400 mt-1.5 text-center">Powered by AI</p>
+          <p className="text-[11px] text-gray-400 mt-1.5 text-center">Powered by AI · Free answers from your profile</p>
         </div>
       </div>
 
-      {/* Quick Guide Modal */}
       <NancyGuideModal
         isOpen={isGuideOpen}
         onClose={() => setIsGuideOpen(false)}
-        onPromptClick={handleQuickAction}
+        onPromptClick={sendMessage}
       />
     </>
   );

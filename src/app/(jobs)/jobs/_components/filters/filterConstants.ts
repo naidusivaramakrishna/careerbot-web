@@ -8,7 +8,28 @@ export interface FilterParams {
   years_max?: number;
   job_type?: string;
   work_model?: string;
+  location?: string;
+  source?: string;
+  date_from?: string;
+  date_to?: string;
 }
+
+export const DATE_PRESETS = [
+  { label: "Any time", days: null },
+  { label: "Last 24 hours", days: 1 },
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 3 months", days: 90 },
+] as const;
+
+export const JOB_SOURCES = [
+  "Naukri",
+  "LinkedIn",
+  "Indeed",
+  "Internshala",
+  "Glassdoor",
+  "Company Website",
+];
 
 export const WORK_MODELS = ["Onsite", "Hybrid", "Remote anywhere in the India"];
 

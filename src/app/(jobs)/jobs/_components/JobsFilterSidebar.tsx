@@ -8,14 +8,17 @@ import {
   GraduationCap,
   IndianRupee,
   Check,
-  RotateCcw,
   X,
   MapPin,
   BookOpen,
+  Calendar,
+  Globe2,
 } from "lucide-react";
 import {
   WORK_MODELS,
   JOB_TYPES,
+  DATE_PRESETS,
+  JOB_SOURCES,
   type FilterParams,
 } from "./filters/filterConstants";
 
@@ -27,7 +30,7 @@ interface JobsFilterPanelProps {
   jobs: any[];
 }
 
-type DropdownKey = "workModel" | "jobType" | "experience" | "salary" | "location" | "education" | null;
+type DropdownKey = "workModel" | "jobType" | "experience" | "salary" | "location" | "education" | "datePosted" | "source" | null;
 
 export default function JobsFilterSidebar({
   selectedFilters,
@@ -185,11 +188,14 @@ export default function JobsFilterSidebar({
   const hasLocFilter = activeLocFilters.length > 0;
   const activeEduFilters = selectedFilters.filter((f) => f.startsWith("education:")).map((f) => f.replace("education:", ""));
   const hasEduFilter = activeEduFilters.length > 0;
+  const activeDateFilter = selectedFilters.find((f) => f.startsWith("date:")) ?? null;
+  const hasDateFilter = activeDateFilter !== null;
+  const activeSourceFilter = selectedFilters.find((f) => f.startsWith("source:")) ?? null;
+  const hasSourceFilter = activeSourceFilter !== null;
 
   const selectedExpFilter = selectedFilters.find((f) => f.startsWith("years:"));
   const selectedExpValue = selectedExpFilter ? selectedExpFilter.replace("years:", "") : null;
   const selectedSalaryFilter = selectedFilters.find((f) => f.startsWith("salary:"));
-  const selectedSalaryLabel = selectedSalaryFilter ? selectedSalaryFilter.replace("salary:", "") : null;
 
   const visibleExpOptions = showAllExp ? experienceOptions : experienceOptions.slice(0, 5);
 
@@ -209,20 +215,6 @@ export default function JobsFilterSidebar({
   const fmtCount = (count: number) =>
     count >= 1000 ? `${(count / 1000).toFixed(count >= 10000 ? 1 : 2)}k` : String(count);
 
-  const totalActiveCount =
-    activeWorkModels.length +
-    activeJobTypes.length +
-    (hasExpFilter ? 1 : 0) +
-    (hasSalaryFilter ? 1 : 0);
-
-  const handleClearAll = () => {
-    selectedFilters.forEach((filter) => onFilterToggle(filter));
-    setSalarySliderIndex(salarySteps.length - 1);
-    setPendingExpLabel(null);
-    setPendingLocations([]);
-    setPendingEducation([]);
-  };
-
   const handleEduApply = () => {
     activeEduFilters.forEach((e) => onFilterToggle(`education:${e}`));
     pendingEducation.forEach((e) => onFilterToggle(`education:${e}`));
@@ -230,10 +222,13 @@ export default function JobsFilterSidebar({
   };
 
   const handleLocApply = () => {
-    // Remove all existing location filters
     activeLocFilters.forEach((loc) => onFilterToggle(`location:${loc}`));
-    // Add each pending location
-    pendingLocations.forEach((loc) => onFilterToggle(`location:${loc}`));
+    if (pendingLocations.length > 0) {
+      pendingLocations.forEach((loc) => onFilterToggle(`location:${loc}`));
+    } else if (locSearch.trim()) {
+      // User typed a location but no matching chip exists — send typed text to API
+      onFilterToggle(`location:${locSearch.trim()}`);
+    }
     setOpenDropdown(null);
   };
 
@@ -287,18 +282,7 @@ export default function JobsFilterSidebar({
     setOpenDropdown(next);
   };
 
-  // Get summary text for active filters in each category
-  const getWorkModelSummary = () => {
-    if (activeWorkModels.length === 0) return null;
-    if (activeWorkModels.length === 1) return activeWorkModels[0].replace(" anywhere in the India", "");
-    return `${activeWorkModels.length} selected`;
-  };
 
-  const getJobTypeSummary = () => {
-    if (activeJobTypes.length === 0) return null;
-    if (activeJobTypes.length === 1) return activeJobTypes[0];
-    return `${activeJobTypes.length} selected`;
-  };
 
   return (
     <div className="mt-4 pt-3.5 border-t border-gray-100" ref={containerRef}>
@@ -945,6 +929,137 @@ export default function JobsFilterSidebar({
           )}
         </div>
 
+        {/* ── DATE POSTED PILL ── */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => toggleDropdown("datePosted")}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
+              hasDateFilter
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                : openDropdown === "datePosted"
+                ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
+                : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
+            }`}
+          >
+            <Calendar size={14} className={hasDateFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#2557a7]"} />
+            <span>{activeDateFilter ? activeDateFilter.replace("date:", "") : "Date Posted"}</span>
+            <ChevronDown
+              size={13}
+              className={`transition-transform duration-200 ${openDropdown === "datePosted" ? "rotate-180" : ""} ${
+                hasDateFilter ? "text-white/60" : "text-gray-400"
+              }`}
+            />
+          </button>
+
+          {openDropdown === "datePosted" && (
+            <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="px-4 py-2 flex items-center justify-between">
+                <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Date Posted</p>
+                {hasDateFilter && (
+                  <button
+                    type="button"
+                    onClick={() => { if (activeDateFilter) onFilterToggle(activeDateFilter); setOpenDropdown(null); }}
+                    className="text-[11px] text-[#2557a7] hover:text-[#1a4a96] font-semibold"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mx-3" />
+              <div className="p-1.5">
+                {DATE_PRESETS.slice(1).map((preset) => {
+                  const filterVal = `date:${preset.label}`;
+                  const isChecked = activeDateFilter === filterVal;
+                  return (
+                    <label
+                      key={preset.label}
+                      onClick={() => { onFilterToggle(filterVal); setOpenDropdown(null); }}
+                      className={`flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer transition-all ${
+                        isChecked ? "bg-[#f0f4ff]" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
+                        isChecked ? "border-[#2557a7]" : "border-gray-300"
+                      }`}>
+                        {isChecked && <div className="w-2 h-2 rounded-full bg-[#2557a7]" />}
+                      </div>
+                      <span className={`text-[13px] ${isChecked ? "text-[#2557a7] font-semibold" : "text-gray-700"}`}>
+                        {preset.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── SOURCE PILL ── */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => toggleDropdown("source")}
+            className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
+              hasSourceFilter
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                : openDropdown === "source"
+                ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
+                : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
+            }`}
+          >
+            <Globe2 size={14} className={hasSourceFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#2557a7]"} />
+            <span>{activeSourceFilter ? activeSourceFilter.replace("source:", "") : "Source"}</span>
+            <ChevronDown
+              size={13}
+              className={`transition-transform duration-200 ${openDropdown === "source" ? "rotate-180" : ""} ${
+                hasSourceFilter ? "text-white/60" : "text-gray-400"
+              }`}
+            />
+          </button>
+
+          {openDropdown === "source" && (
+            <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="px-4 py-2 flex items-center justify-between">
+                <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Source</p>
+                {hasSourceFilter && (
+                  <button
+                    type="button"
+                    onClick={() => { if (activeSourceFilter) onFilterToggle(activeSourceFilter); setOpenDropdown(null); }}
+                    className="text-[11px] text-[#2557a7] hover:text-[#1a4a96] font-semibold"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mx-3" />
+              <div className="p-1.5">
+                {JOB_SOURCES.map((source) => {
+                  const filterVal = `source:${source}`;
+                  const isChecked = activeSourceFilter === filterVal;
+                  return (
+                    <label
+                      key={source}
+                      onClick={() => { onFilterToggle(filterVal); setOpenDropdown(null); }}
+                      className={`flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer transition-all ${
+                        isChecked ? "bg-[#f0f4ff]" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
+                        isChecked ? "border-[#2557a7]" : "border-gray-300"
+                      }`}>
+                        {isChecked && <div className="w-2 h-2 rounded-full bg-[#2557a7]" />}
+                      </div>
+                      <span className={`text-[13px] ${isChecked ? "text-[#2557a7] font-semibold" : "text-gray-700"}`}>
+                        {source}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
       </div>
     </div>
