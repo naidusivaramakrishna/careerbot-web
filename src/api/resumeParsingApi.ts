@@ -21,6 +21,12 @@ export interface EducationItem {
 }
 
 // ========== EXPERIENCE (empty array in your sample) ==========
+export interface AchievementItem {
+    text: string;
+    tier?: string;
+    tier_confidence?: number;
+}
+
 export interface ExperienceItem {
     client?: string | null;
     company?: string | null;
@@ -29,21 +35,28 @@ export interface ExperienceItem {
     location?: string | null;
     role?: string | null;
     years?: number | null;
+    achievements?: AchievementItem[];
+    responsibilities?: AchievementItem[];
 }
 
 // ========== INTERNSHIPS (inside llm_data now!) ==========
 export interface InternshipItem {
     company: string;
     duration: string;
-    key_contributions: string[];
+    key_contributions?: string[];
     role: string;
+    achievements?: AchievementItem[];
+    responsibilities?: AchievementItem[];
 }
 
 // ========== PROJECTS ==========
 export interface ProjectItem {
-    client: string | null;
-    key_contributions: string[];
+    client?: string | null;
+    key_contributions?: string[];
     title: string;
+    achievements?: AchievementItem[];
+    responsibilities?: AchievementItem[];
+    tech_stack?: string[];
 }
 
 // ========== OVERALL EXPERIENCE ==========

@@ -53,7 +53,7 @@ function formatDateRange(start?: string | Date, end?: string | Date): string {
 
 export default function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
     const sanitizedDescription = pro.description
-        ? DOMPurify.sanitize(pro.description)
+        ? DOMPurify.sanitize(pro.description.replace(/\n/g, '<br />'))
         : '';
     return (
         <div

@@ -19,8 +19,10 @@ import {
   BookOpen,
   ScanLine,
   Lightbulb,
+  Trophy,
+  TrendingUp,
 } from "lucide-react";
-import JobMatchTemplateThree from "@/app/(jobs)/jobmatch/_components/resume/JobMatchTemplateThree";
+import ATSResumePreview from "@/app/(resume)/atslogin/_components/ATSResumePreview";
 
 const PREVIEW_BASE = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:8000/api/v1";
 
@@ -44,6 +46,7 @@ interface ResumeScoreData {
   Breakdown: Record<string, unknown>;
   Fresher: boolean;
   Domain: string;
+  Profile: string;
 }
 
 interface IssueCard {
@@ -130,10 +133,26 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
       Keywords:         getSection(["Keywords",         "keywords"],                       numericKeyword, 30),
       LengthScore:      getSection(["LengthScore",      "length_score"],                   0,             10),
       StructureScore:   getSection(["StructureScore",   "structure_score"],                0,             20),
-      Suggestions:      (atsScore?.Suggestions as unknown[]) || (numericBreakdown.Suggestions as unknown[]) || [],
+      Leadership:       getSection(["Leadership",       "leadership"],                     0,             4),
+      CareerProgression:getSection(["CareerProgression","career_progression"],             0,             0),
+      Suggestions:      (atsScore?.suggestions as unknown[]) || (atsScore?.Suggestions as unknown[]) || (numericBreakdown.Suggestions as unknown[]) || [],
     },
-    Fresher: (raw?.Fresher as boolean) ?? (atsScore?.Fresher as boolean) ?? true,
-    Domain:  (raw?.Domain as string)  || (atsScore?.Domain as string) || "General",
+    ...(() => {
+      const parsedOverallExp = (raw?.parsed_data as Record<string, unknown> | undefined)
+        ?.llm_data as Record<string, unknown> | undefined;
+      const overallExp = parsedOverallExp?.overall_experience as Record<string, unknown> | undefined;
+      const isFresherFromParser = typeof overallExp?.is_fresher === "boolean" ? overallExp.is_fresher : null;
+      const isFresherLegacy = !!(raw?.Fresher ?? atsScore?.Fresher) || (atsScore?.profile as string) === "Fresher";
+      const isFresher = isFresherFromParser !== null ? isFresherFromParser : isFresherLegacy;
+      const atsProfile = atsScore?.profile as string | undefined;
+      return {
+        Fresher: isFresher,
+        Domain: (raw?.Domain as string) || (atsScore?.Domain as string) || "General",
+        Profile: isFresher
+          ? "Fresher"
+          : (atsProfile && atsProfile !== "Fresher" ? atsProfile : "General"),
+      };
+    })(),
   };
 }
 
@@ -348,11 +367,6 @@ function IssueCard({
   const isCritical = issue.priority === "critical";
   const isUrgent   = issue.priority === "urgent";
 
-  const palette = isCritical
-    ? { accent: "#ef4444", soft: "#fff5f5", softBorder: "rgba(239,68,68,0.18)", ptsFg: "#dc2626", ptsBg: "#fee2e2", iconRing: "rgba(239,68,68,0.12)" }
-    : isUrgent
-    ? { accent: "#f59e0b", soft: "#fffbeb", softBorder: "rgba(245,158,11,0.18)", ptsFg: "#b45309", ptsBg: "#fef3c7", iconRing: "rgba(245,158,11,0.12)" }
-    : { accent: "#8b5cf6", soft: "#faf5ff", softBorder: "rgba(139,92,246,0.18)", ptsFg: "#6d28d9", ptsBg: "#ede9fe", iconRing: "rgba(139,92,246,0.12)" };
 
   const rawPts     = SECTION_IMPACT[issue.section] ?? 5;
   const impactPts  = isCritical ? rawPts : isUrgent ? Math.floor(rawPts * 0.65) : Math.floor(rawPts * 0.35);
@@ -363,65 +377,48 @@ function IssueCard({
 
   return (
     <div
-      className="group relative bg-white rounded-xl overflow-hidden transition-all duration-150 cursor-default"
-      style={{
-        border: "1px solid #e2e8f0",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-      }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(0,0,0,0.09)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 3px rgba(0,0,0,0.05)"; (e.currentTarget as HTMLDivElement).style.transform = "none"; }}
+      className="group relative rounded-2xl transition-all duration-150 cursor-default"
+      style={{ background: "#f9fafa", border: "1px solid #e8ecf0", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 4px rgba(0,0,0,0.04)"; }}
     >
-      <div className="px-4 py-4 flex gap-3.5">
+      <div className="px-4 pt-4 pb-4">
 
-        {/* Icon bubble */}
-        <div
-          className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center mt-0.5"
-          style={{ background: "#f8fafc", border: "1px solid #edf0f4" }}
-        >
-          <Icon style={{ width: 16, height: 16, color: "#64748b" }} />
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 min-w-0">
-
-          {/* Row 1: title + pts */}
-          <div className="flex items-start justify-between gap-2 mb-1.5">
-            <p className="text-[13px] font-bold text-gray-900 leading-snug flex-1">{title}</p>
-            <span
-              className="shrink-0 text-[11px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap mt-0.5"
-              style={{ background: "#f8fafc", color: palette.ptsFg, border: "1px solid #edf0f4" }}
-            >
-              +{impactPts} pts
-            </span>
+        {/* Row 1: icon + title + pts — all on same line */}
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#f1f5f9" }}>
+            <Icon style={{ width: 15, height: 15, color: "#64748b" }} />
           </div>
-
-          {/* Row 2: suggestion */}
-          <p className="text-[12px] text-gray-400 leading-relaxed mb-3 line-clamp-2">{issue.suggestion}</p>
-
-          {/* Row 3: action */}
-          <button
-            onClick={onFix}
-            className="inline-flex items-center gap-1.5 text-[12px] font-bold px-4 py-1.5 rounded-xl transition-all duration-150 active:scale-95"
-            style={{
-              background: "#2557a7",
-              color: "white",
-              boxShadow: "0 2px 8px rgba(37,87,167,0.28)",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 14px rgba(37,87,167,0.4)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 8px rgba(37,87,167,0.28)"; }}
-          >
-            Fix Now
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          <p className="text-[13px] font-bold text-gray-900 leading-snug flex-1">{title}</p>
+          <span className="shrink-0 text-[11px] font-bold whitespace-nowrap" style={{ color: "#2557a7" }}>
+            +{impactPts} pts
+          </span>
         </div>
+
+        {/* Inner white box — suggestion text */}
+        <div className="rounded-xl bg-white px-4 py-3 mb-3" style={{ border: "1px solid #f0f0f0" }}>
+          <p className="text-[12.5px] text-gray-500 leading-relaxed">{issue.suggestion}</p>
+        </div>
+
+        {/* Fix Now button */}
+        <button
+          onClick={onFix}
+          className="inline-flex items-center gap-1.5 text-[12px] font-bold px-4 py-1.5 rounded-xl text-white transition-all active:scale-95"
+          style={{ background: "#0f2d4e", boxShadow: "0 2px 8px rgba(15,45,78,0.25)" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+        >
+          Fix Now
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
 
-      {/* Dismiss — only visible on hover */}
+      {/* Dismiss on hover */}
       <button
         onClick={onDismiss}
-        className="absolute top-3 right-3 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all duration-150"
+        className="absolute top-3 right-3 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all"
         title="Dismiss"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -499,7 +496,7 @@ function PriorityGroup({
               const SectionIcon = sectionIcons[section] ?? Lightbulb;
               const label = section.replace(/([A-Z])/g, " $1").trim();
               return (
-                <div key={section} id={`issue-section-${section}`}>
+                <div key={section} id={`issue-section-${section}`} style={{ scrollMarginTop: "80px" }}>
                   {/* Section divider */}
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: accentBg }}>
@@ -612,7 +609,7 @@ function ATSLoginReport() {
     return [
       "Contact","Education","Experience","Projects","Skills",
       "Certifications","Summary","Internships","Keywords",
-      "Formatting","ContentQuality","ATSCompatibility","LengthScore","StructureScore",
+      "Formatting","ContentQuality","ATSCompatibility","Leadership","CareerProgression","LengthScore","StructureScore",
     ]
       .filter(k => isRealSection(k))
       .map(k => ({ name: k, score: Math.max(0, calcPct(k)) }));
@@ -629,7 +626,7 @@ function ATSLoginReport() {
 
   const issuesPanelRef = useRef<HTMLDivElement>(null);
 
-  // Click a breakdown bar → switch to its priority filter + scroll only the issues panel
+  // Click a breakdown bar → switch to its priority filter + scroll to that section in the issues panel
   const scrollToSection = useCallback((sectionName: string) => {
     const inCritical = grouped.critical.some(i => i.section === sectionName);
     const inUrgent   = grouped.urgent.some(i => i.section === sectionName);
@@ -637,14 +634,13 @@ function ATSLoginReport() {
     const target = inCritical ? "critical" : inUrgent ? "urgent" : inOptional ? "optional" : null;
     if (!target) return;
     setFilter(target);
+    // Wait for React to re-render with the new filter, then scrollIntoView the section
     setTimeout(() => {
-      const panel = issuesPanelRef.current;
       const el = document.getElementById(`issue-section-${sectionName}`);
-      if (panel && el) {
-        const top = el.offsetTop - panel.offsetTop;
-        panel.scrollTo({ top, behavior: "smooth" });
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-    }, 80);
+    }, 150);
   }, [grouped]);
 
   const handleFixNow = () => {
@@ -698,7 +694,6 @@ function ATSLoginReport() {
   );
 
   /* ── gauge helpers ── */
-  const gaugeColor  = pct >= 70 ? "#22c55e" : pct >= 40 ? "#f59e0b" : "#ef4444";
   const gradeLabel  = pct >= 85 ? "EXCELLENT" : pct >= 70 ? "GOOD" : pct >= 50 ? "AVERAGE" : "NEEDS WORK";
 
   const SECTION_ICONS: Record<string, React.ElementType> = {
@@ -714,6 +709,8 @@ function ATSLoginReport() {
     Formatting: LayoutTemplate,
     ContentQuality: BookOpen,
     ATSCompatibility: ScanLine,
+    Leadership: Trophy,
+    CareerProgression: TrendingUp,
     General: Lightbulb,
   };
   const WHY_TEXT: Record<string, string> = {
@@ -729,14 +726,16 @@ function ATSLoginReport() {
     Projects: "Projects prove applied skills, especially for candidates with limited work experience. Generic descriptions add no signal.",
     Internships: "Internship entries are evaluated the same way as full roles. Incomplete entries weaken the section.",
     ATSCompatibility: "Even a perfect resume gets rejected if the ATS cannot parse it. Compatibility issues are silent failures.",
+    Leadership: "Leadership signals — Led, Managed, Coordinated — show ownership and initiative. Resumes without them score lower on impact.",
+    CareerProgression: "Clear career growth shows ambition and consistency. Stagnant or unclear progression reduces your overall profile score.",
     General: "General improvements that strengthen overall readability and professionalism across all sections.",
   };
 
   const TAB_CONFIG = [
     { key: "all",      label: "All",             count: grouped.critical.length + grouped.urgent.length + grouped.optional.length },
-    { key: "critical", label: "Fix First",        count: grouped.critical.length,  color: "#ef4444" },
-    { key: "urgent",   label: "High Impact",      count: grouped.urgent.length,    color: "#f59e0b" },
-    { key: "optional", label: "Nice to Improve",  count: grouped.optional.length,  color: "#8b5cf6" },
+    { key: "critical", label: "Fix First",        count: grouped.critical.length,  color: "#00bba7" },
+    { key: "urgent",   label: "High Impact",      count: grouped.urgent.length,    color: "#00bba7" },
+    { key: "optional", label: "Nice to Improve",  count: grouped.optional.length,  color: "#00bba7" },
   ] as const;
 
   /* ── Report ──────────────────────── */
@@ -751,102 +750,146 @@ function ATSLoginReport() {
           <div className="lg:col-span-4 lg:sticky lg:top-6 self-start space-y-4">
 
             {/* Score gauge card */}
-            <div
-              className="rounded-3xl overflow-hidden bg-white"
-              style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.07)" }}
-            >
-              {/* Colored top accent bar */}
-              <div className="h-[4px] w-full" style={{ background: gaugeColor }} />
+            {(() => {
+              const scoreColor  = pct >= 85 ? "#22c55e" : pct >= 70 ? "#22c55e" : pct >= 40 ? "#f59e0b" : "#ef4444";
+              const scoreLight  = pct >= 70 ? "#f0fdf4" : pct >= 40 ? "#fffbeb" : "#fff5f5";
+              const scoreBorder = pct >= 70 ? "#86efac" : pct >= 40 ? "#fcd34d" : "#fca5a5";
+              const ptsDiff     = Math.max(0, 90 - pct);
 
-              {/* Score hero */}
-              <div className="px-6 pt-5 pb-0">
+              const CX = 110, CY = 95, R = 80;
+              const circumference = 2 * Math.PI * R;
+              const dashOffset = circumference * (1 - pct / 100);
 
-                {/* Label row */}
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[10px] font-black tracking-[0.18em] uppercase text-gray-400">ATS Score</span>
-                  <span
-                    className="text-[10px] font-black tracking-[0.12em] px-2.5 py-1 rounded-full uppercase"
-                    style={{ background: `${gaugeColor}14`, color: gaugeColor, border: `1.5px solid ${gaugeColor}30` }}
-                  >
+              const tiers = [
+                { label: "Needs Work", range: "0–40",   color: "#0f2d4e", active: pct < 40 },
+                { label: "Average",    range: "40–70",  color: "#0f2d4e", active: pct >= 40 && pct < 70 },
+                { label: "Good",       range: "70–85",  color: "#00bba7", active: pct >= 70 && pct < 85 },
+                { label: "Excellent",  range: "85–100", color: "#00bba7", active: pct >= 85 },
+              ];
+
+              return (
+            <div className="rounded-3xl bg-white overflow-hidden"
+              style={{ boxShadow: "0 2px 4px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.12)", border: "1px solid rgba(0,0,0,0.06)" }}>
+
+              <div className="px-5 pt-5 pb-5">
+
+                {/* Header row */}
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-[17px] font-extrabold text-gray-900 tracking-tight leading-none">ATS SCORE</p>
+                    <p className="text-[12px] text-gray-400 mt-0.5">Resume compatibility</p>
+                  </div>
+                  {/* Badge with trend icon */}
+                  <span className="flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-full uppercase tracking-wide"
+                    style={{ background: scoreLight, color: scoreColor, border: `1.5px solid ${scoreBorder}` }}>
+                    <svg width="11" height="11" fill="none" stroke={scoreColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                      <path d="M23 6l-9.5 9.5-5-5L1 18" /><path d="M17 6h6v6" />
+                    </svg>
                     {gradeLabel}
                   </span>
                 </div>
 
-                {/* Big number */}
-                <div className="flex items-end gap-1 mb-1">
-                  <span
-                    className="font-black leading-none"
-                    style={{ fontSize: 72, color: gaugeColor, letterSpacing: "-4px", lineHeight: 1 }}
-                  >
-                    {pct}
-                  </span>
-                  <span className="text-[20px] font-bold pb-2" style={{ color: "#cbd5e1" }}>/100</span>
+                {/* Full circle gauge */}
+                <div className="flex justify-center mb-1">
+                  <svg viewBox="0 0 220 190" width="210" height="190">
+                    {/* Background track */}
+                    <circle cx={CX} cy={CY} r={R} fill="none" stroke="#d1d9e0" strokeWidth="16" strokeLinecap="round" />
+                    {/* Colored fill — starts at 12 o'clock */}
+                    {pct > 0 && (
+                      <circle cx={CX} cy={CY} r={R} fill="none" stroke={scoreColor} strokeWidth="16" strokeLinecap="round"
+                        strokeDasharray={`${circumference} ${circumference}`}
+                        strokeDashoffset={dashOffset}
+                        transform={`rotate(-90, ${CX}, ${CY})`}
+                        style={{ filter: `drop-shadow(0 0 5px ${scoreColor}66)` }} />
+                    )}
+                    {/* Score */}
+                    <text x={CX} y={CY - 8} textAnchor="middle" dominantBaseline="middle"
+                      fill={scoreColor} fontWeight="900" fontSize="54" letterSpacing="-2" fontFamily="inherit">
+                      {pct}
+                    </text>
+                    <text x={CX} y={CY + 22} textAnchor="middle"
+                      fill="#94a3b8" fontWeight="500" fontSize="12" fontFamily="inherit">
+                      out of 100
+                    </text>
+                  </svg>
                 </div>
 
-                {/* Pts hint */}
-                {pct < 100 && (
-                  <p className="text-[11.5px] font-semibold mb-5" style={{ color: "#94a3b8" }}>
-                    +{pct >= 90 ? 100 - pct : Math.max(0, 90 - pct)} pts to reach {pct >= 90 ? "perfect score" : "90"}
-                  </p>
+                {/* Tier strip */}
+                <div className="flex gap-1.5 mb-4">
+                  {tiers.map(t => (
+                    <div key={t.label} className="flex-1 rounded-xl py-2 px-1 text-center transition-all"
+                      style={{
+                        background: t.active ? `${t.color}12` : "transparent",
+                        border: `1.5px solid ${t.active ? `${t.color}55` : "#eef1f6"}`,
+                      }}>
+                      <p className="text-[9.5px] font-black leading-none"
+                        style={{ color: t.active ? t.color : "#94a3b8" }}>{t.label}</p>
+                      <p className="text-[8.5px] leading-none mt-0.5"
+                        style={{ color: t.active ? `${t.color}bb` : "#cbd5e1" }}>{t.range}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Boost insight */}
+                {ptsDiff > 0 && (
+                  <div className="flex items-center gap-3 rounded-2xl px-4 py-3 mb-4"
+                    style={{ background: "#edf7f8", border: "1.5px solid #c5e8eb" }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ background: "linear-gradient(135deg,#0a818f,#1f4b69)" }}>
+                      <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                        <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-bold leading-snug" style={{ color: "#153456" }}>
+                        {pct >= 70 ? "Great score! Just " : "Fix issues to gain "}
+                        <span className="font-extrabold" style={{ color: "#0a818f" }}>+{ptsDiff} pts</span>
+                        {pct >= 70 ? " to reach Excellent" : ""}
+                      </p>
+                      <p className="text-[11px] mt-0.5" style={{ color: "#64748b" }}>Target: 90+ for Excellent</p>
+                    </div>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: "linear-gradient(135deg,#0a818f,#1f4b69)" }}>
+                      <svg width="12" height="12" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                        <path d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
                 )}
 
-                {/* Tiered track */}
-                <div className="mb-2">
-                  <div className="relative h-[10px] flex gap-[3px] rounded-full overflow-visible">
-                    {/* Poor 0–40 */}
-                    <div className="rounded-full overflow-hidden" style={{ width: "40%", background: "#f1f5f9" }}>
-                      <div className="h-full rounded-full" style={{ width: pct > 0 ? `${Math.min(100, (pct / 40) * 100)}%` : "0%", background: "#ef4444", transition: "width 1s ease" }} />
-                    </div>
-                    {/* Average 40–70 */}
-                    <div className="rounded-full overflow-hidden" style={{ width: "30%", background: "#f1f5f9" }}>
-                      <div className="h-full rounded-full" style={{ width: pct > 40 ? `${Math.min(100, ((pct - 40) / 30) * 100)}%` : "0%", background: "#f59e0b", transition: "width 1s ease 0.1s" }} />
-                    </div>
-                    {/* Good 70–90 */}
-                    <div className="rounded-full overflow-hidden" style={{ width: "20%", background: "#f1f5f9" }}>
-                      <div className="h-full rounded-full" style={{ width: pct > 70 ? `${Math.min(100, ((pct - 70) / 20) * 100)}%` : "0%", background: "#22c55e", transition: "width 1s ease 0.2s" }} />
-                    </div>
-                    {/* Best 90–100 */}
-                    <div className="rounded-full overflow-hidden" style={{ width: "10%", background: "#f1f5f9" }}>
-                      <div className="h-full rounded-full" style={{ width: pct > 90 ? `${Math.min(100, ((pct - 90) / 10) * 100)}%` : "0%", background: "#2557a7", transition: "width 1s ease 0.3s" }} />
-                    </div>
-                  </div>
-
-                  {/* Tier labels */}
-                  <div className="flex mt-1.5" style={{ gap: "3px" }}>
-                    <span className="text-[9px] font-bold text-center" style={{ width: "40%", color: "#ef4444" }}>Poor</span>
-                    <span className="text-[9px] font-bold text-center" style={{ width: "30%", color: "#f59e0b" }}>Average</span>
-                    <span className="text-[9px] font-bold text-center" style={{ width: "20%", color: "#22c55e" }}>Good</span>
-                    <span className="text-[9px] font-bold text-center" style={{ width: "10%", color: "#2557a7" }}>Best</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="mx-5 my-4 border-t border-gray-100" />
-
-              {/* CTA buttons */}
-              <div className="px-5 pb-6 space-y-2.5">
-                <button
-                  onClick={handleFixNow}
-                  className="w-full py-3 rounded-2xl text-sm font-bold text-white transition-all hover:brightness-110 active:scale-95"
-                  style={{ background: "#2557a7", boxShadow: "0 4px 14px rgba(37,87,167,0.30)" }}
-                >
-                  Fix My Resume
-                </button>
+                {/* Upload & Rescan — prominent blue button */}
                 <button
                   onClick={() => router.push("/atslogin")}
-                  className="w-full py-2.5 rounded-2xl text-sm font-semibold transition-all active:scale-95"
-                  style={{ background: "white", border: "1px solid #e2e8f0", color: "#94a3b8" }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = "#f8fafc")}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = "white")}
+                  className="w-full px-5 py-3.5 rounded-2xl flex items-center gap-3 text-white font-bold text-[14px] transition-all hover:opacity-90 active:scale-[0.98] mb-1"
+                  style={{ background: "#153456", boxShadow: "0 4px 18px rgba(21,52,86,0.30)" }}
                 >
-                  Upload &amp; Rescan
+                  <svg width="20" height="20" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span className="flex-1 text-left">Upload &amp; Rescan</span>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "rgba(255,255,255,0.22)" }}>
+                    <svg width="13" height="13" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                      <path d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
                 </button>
+
+                {/* Security note */}
+                <div className="flex items-center justify-center gap-1.5 mt-3.5">
+                  <svg width="11" height="11" fill="#d1d5db" viewBox="0 0 24 24">
+                    <path d="M12 1l9 4v6c0 5.25-3.75 10.14-9 11.25C6.75 21.14 3 16.25 3 11V5l9-4z" />
+                  </svg>
+                  <p className="text-[10px]" style={{ color: "#c4cad4" }}>Your data is secure and confidential</p>
+                </div>
+
               </div>
             </div>
+              );
+            })()}
 
             {/* Score Breakdown card */}
-            <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.07)" }}>
+            <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 2px 4px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.12)", border: "1px solid rgba(0,0,0,0.06)" }}>
 
               {/* Header */}
               <div className="px-5 pt-5 pb-3" style={{ borderBottom: "1px solid #f1f5f9" }}>
@@ -860,10 +903,8 @@ function ATSLoginReport() {
                   const count     = sectionIssueCounts[item.name] ?? 0;
                   const hasIssues = count > 0;
                   const label     = item.name.replace(/([A-Z])/g, " $1").trim();
-                  const isGood    = item.score >= 80;
-                  const isMid     = item.score >= 50 && item.score < 80;
-                  const barColor  = isGood ? "#22c55e" : isMid ? "#f59e0b" : "#ef4444";
-                  const badgeBg   = item.score < 50 ? "#ef4444" : "#f59e0b";
+                  const barColor  = item.score === 100 ? "#00bba7" : "#0f2d4e";
+                  const badgeBg   = "#0f2d4e";
                   const SIcon     = SECTION_ICONS[item.name] ?? Lightbulb;
 
                   return (
@@ -896,7 +937,7 @@ function ATSLoginReport() {
                                   {count}
                                 </span>
                               ) : (
-                                <CheckCircle2 style={{ width: 13, height: 13, color: "#22c55e" }} />
+                                <CheckCircle2 style={{ width: 13, height: 13, color: "#00bba7" }} />
                               )}
                               <span className="text-[12px] font-black tabular-nums" style={{ color: barColor }}>{item.score}%</span>
                             </div>
@@ -925,7 +966,7 @@ function ATSLoginReport() {
 
             {/* Resume Preview */}
             {(parsedData || previewUrl) && (
-              <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.07)" }}>
+              <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 2px 4px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.12)", border: "1px solid rgba(0,0,0,0.06)" }}>
                 {/* Preview header bar */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                   <div className="flex items-center gap-3">
@@ -936,20 +977,23 @@ function ATSLoginReport() {
                     </div>
                     <span className="text-[13px] font-bold text-gray-600">Resume Preview</span>
                   </div>
-                  <button
-                    onClick={handleFixNow}
-                    className="flex items-center gap-1.5 text-[12px] font-bold px-4 py-2 rounded-xl hover:opacity-90 active:scale-95 transition-all text-white"
-                    style={{ background: "#1a2e5a" }}
-                  >
-                    Edit Resume
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
+                  {(() => {
+                    const isFresher  = scoreData?.Fresher;
+                    const levelLabel = isFresher ? "Fresher" : "Experienced";
+                    const levelColor = "#0f2d4e";
+                    const levelBg    = "#e6f8f7";
+                    const levelBorder= "#b2ece8";
+                    return (
+                      <span className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase tracking-wide"
+                        style={{ background: levelBg, color: levelColor, border: `1.5px solid ${levelBorder}` }}>
+                        {levelLabel}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="overflow-y-auto custom-scrollbar" style={{ maxHeight: "860px" }}>
                   {parsedData
-                    ? <JobMatchTemplateThree data={parsedData} />
+                    ? <ATSResumePreview data={parsedData} />
                     : <iframe src={previewUrl!} className="w-full border-none" style={{ height: "860px" }} title="Resume Preview" />
                   }
                 </div>
@@ -960,7 +1004,7 @@ function ATSLoginReport() {
             <div className="bg-white rounded-3xl overflow-hidden" style={{ boxShadow: "0 4px 32px rgba(0,0,0,0.10)" }}>
 
               {/* Issues header */}
-              <div style={{ background: "#2557a7", padding: "22px 24px 0" }}>
+              <div style={{ background: "linear-gradient(135deg,#0f2d4e 0%,#1a3a5c 100%)", padding: "22px 24px 0" }}>
 
                 {/* Decorative glow blobs */}
                 <div className="pointer-events-none absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-10 blur-3xl" style={{ background: "#4a7fd4" }} />
@@ -1042,8 +1086,8 @@ function ATSLoginReport() {
               <div className="p-5">
                 {issues.length === 0 ? (
                   <div className="py-16 text-center">
-                    <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)" }}>
-                      <CheckCircle2 className="w-10 h-10" style={{ color: "#16a34a" }} />
+                    <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg,#e6f8f7,#b2ece8)" }}>
+                      <CheckCircle2 className="w-10 h-10" style={{ color: "#00bba7" }} />
                     </div>
                     <p className="text-lg font-black text-gray-800 mb-1.5">All Clear!</p>
                     <p className="text-sm text-gray-400">No issues detected across all resume sections.</p>
@@ -1055,8 +1099,8 @@ function ATSLoginReport() {
                       <PriorityGroup
                         title="Fix First"
                         subtitle="Blocking your ATS pass rate"
-                        accent="#ef4444"
-                        accentBg="#fff5f5"
+                        accent="#0f2d4e"
+                        accentBg="#f0f4f8"
                         issues={grouped.critical}
                         sectionIcons={SECTION_ICONS}
                         tooltip={WHY_TEXT.General}
@@ -1069,8 +1113,8 @@ function ATSLoginReport() {
                       <PriorityGroup
                         title="High Impact"
                         subtitle="Significant score improvements"
-                        accent="#f59e0b"
-                        accentBg="#fffbeb"
+                        accent="#0f2d4e"
+                        accentBg="#f0f4f8"
                         issues={grouped.urgent}
                         sectionIcons={SECTION_ICONS}
                         tooltip="These issues cost meaningful ATS points. Fixing them moves your score into the competitive range."
@@ -1083,8 +1127,8 @@ function ATSLoginReport() {
                       <PriorityGroup
                         title="Nice to Improve"
                         subtitle="Polish that separates good from great"
-                        accent="#8b5cf6"
-                        accentBg="#faf5ff"
+                        accent="#00bba7"
+                        accentBg="#e6f8f7"
                         issues={grouped.optional}
                         sectionIcons={SECTION_ICONS}
                         tooltip="Low-severity polish items. Address after fixing critical and urgent issues for maximum ROI."

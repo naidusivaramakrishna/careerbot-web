@@ -116,8 +116,17 @@ export const generateMockTest = async (
     const session = response.data?.data ?? response.data;
     return session;
   } catch (err: any) {
-    console.error('[generateMockTest] error status:', err?.response?.status);
-    console.error('[generateMockTest] error body:', JSON.stringify(err?.response?.data));
+    const d = err?.response?.data;
+    console.error('[generateMockTest] FAILED', {
+      status: err?.response?.status,
+      error_code: d?.error_code,
+      message: d?.message,
+      error_id: d?.error_id,
+      request_id: d?.request_id,
+      timestamp: d?.timestamp,
+      path: d?.path,
+      payload,
+    });
     throw err;
   }
 };
@@ -466,11 +475,12 @@ function calculateGrade(score: number, total: number): string {
   return 'F';
 }
 
-export const reportIssue = async (sessionId: string, questionId: string | number, reason: string): Promise<void> => {
+export const reportIssue = async (sessionId: string, questionId: string | number, description: string, issueType: string = 'other'): Promise<void> => {
   try {
     await httpClient.post(`/mock-test/${sessionId}/report-issue`, {
       question_id: questionId,
-      reason
+      issue_type: issueType,
+      description,
     });
   } catch (err: any) {
     throw err;
@@ -705,59 +715,35 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
 
     let analyticsData: WeakAreasAnalytics | null = null;
 
+    // Determine if an item should be treated as a weak area.
+    // Backend sets is_weak: true/false, but for new users it may be absent or false
+    // even when average_score is low. Fall back to score < 60 as the threshold.
+    const isWeakItem = (item: any): boolean =>
+      item.is_weak === true || (item.is_weak !== false && typeof item.average_score === 'number' && item.average_score < 60);
+
+    const toWeakArea = (item: any) => ({
+      topic: item.category || 'Unknown',
+      accuracy: Math.round(item.average_score ?? 0),
+      suggestion: `Improve your ${item.category} skills. You scored ${typeof item.average_score === 'number' ? item.average_score.toFixed(1) : item.average_score}% on average across ${item.attempts || 0} attempts.`,
+    });
+
+    const buildResult = (items: any[]): WeakAreasAnalytics => {
+      const weakAreas = items.filter(isWeakItem).map(toWeakArea);
+      return {
+        weak_areas: weakAreas,
+        recommendations: weakAreas.length > 0
+          ? [`Focus on ${weakAreas.map((w: any) => w.topic).join(', ')}`, 'Practice weak areas regularly', 'Take topic-specific mock tests to improve']
+          : ['Keep practicing all sections', 'Take more mock tests'],
+      };
+    };
+
     // Map backend response format to frontend WeakAreasAnalytics format
     if (response.data?.data && Array.isArray(response.data.data)) {
-
-      // Transform backend format { category, average_score, attempts, is_weak }
-      // to frontend format { topic, accuracy, suggestion }
-      const weakAreas = response.data.data
-        .filter((item: any) => {
-          const isWeak = item.is_weak === true;
-          return isWeak;
-        })
-        .map((item: any) => ({
-          topic: item.category || 'Unknown',
-          accuracy: Math.round(item.average_score) || 0,
-          suggestion: `Improve your ${item.category} skills. You scored ${typeof item.average_score === 'number' ? item.average_score.toFixed(1) : item.average_score}% on average across ${item.attempts || 0} attempts.`
-        }));
-
-      const recommendations = weakAreas.length > 0
-        ? [
-            `Focus on ${weakAreas.map((w: any) => w.topic).join(', ')}`,
-            'Practice weak areas regularly',
-            'Take topic-specific mock tests to improve'
-          ]
-        : ['Keep practicing all sections', 'Take more mock tests'];
-
-      analyticsData = {
-        weak_areas: weakAreas,
-        recommendations: recommendations
-      };
-
+      analyticsData = buildResult(response.data.data);
     } else if (response.data?.weak_areas && Array.isArray(response.data.weak_areas)) {
       analyticsData = response.data;
     } else if (Array.isArray(response.data)) {
-      // Handle case where response is directly an array
-      const weakAreas = response.data
-        .filter((item: any) => item.is_weak === true)
-        .map((item: any) => ({
-          topic: item.category || 'Unknown',
-          accuracy: Math.round(item.average_score) || 0,
-          suggestion: `Improve your ${item.category} skills. You scored ${typeof item.average_score === 'number' ? item.average_score.toFixed(1) : item.average_score}% on average across ${item.attempts || 0} attempts.`
-        }));
-
-      const recommendations = weakAreas.length > 0
-        ? [
-            `Focus on ${weakAreas.map((w: any) => w.topic).join(', ')}`,
-            'Practice weak areas regularly',
-            'Take topic-specific mock tests to improve'
-          ]
-        : ['Keep practicing all sections', 'Take more mock tests'];
-
-      analyticsData = {
-        weak_areas: weakAreas,
-        recommendations: recommendations
-      };
+      analyticsData = buildResult(response.data);
     }
 
     if (!analyticsData) {
@@ -775,9 +761,9 @@ export interface LeaderboardEntry {
   rank: number;
   user_id?: string;
   name: string;
-  score: number;
-  accuracy: number;
-  tests_completed: number;
+  score?: number;
+  accuracy?: number;
+  tests_completed?: number;
   last_test_date?: string;
   badge?: string;
 }
@@ -807,20 +793,30 @@ export const getLeaderboard = async (): Promise<Leaderboard> => {
         : Array.isArray(raw.entries) ? raw.entries
         : [];
 
-      const entries: LeaderboardEntry[] = list.map((item: any, idx: number) => ({
-        rank: item.rank || idx + 1,
-        name: item.display_name || (item.is_current_user ? 'You' : `Rank ${idx + 1}`),
-        score: Math.round((item.score ?? 0) * 10) / 10,
-        accuracy: 0,
-        tests_completed: 0,
-        last_test_date: item.date,
-      }));
+      const entries: LeaderboardEntry[] = list.map((item: any, idx: number) => {
+        const rawAcc = item.accuracy ?? item.accuracy_pct ?? item.accuracy_percentage;
+        const rawTests = item.tests_completed ?? item.total_tests ?? item.tests;
+        return {
+          rank: item.rank ?? idx + 1,
+          name: item.display_name ?? item.username ?? item.name ?? item.user_name
+            ?? (item.is_current_user ? 'You' : `Rank ${idx + 1}`),
+          score: (item.score ?? item.total_score ?? item.avg_score) != null
+            ? Math.round((item.score ?? item.total_score ?? item.avg_score) * 10) / 10
+            : undefined,
+          accuracy: rawAcc != null ? Math.round(rawAcc) : undefined,
+          tests_completed: rawTests != null ? rawTests : undefined,
+          last_test_date: item.last_test_date ?? item.date ?? item.last_attempt,
+          badge: item.badge ?? undefined,
+        };
+      });
 
       leaderboardData = {
         period: raw.period || 'All Time',
-        total_participants: raw.total_attempts ?? raw.total_users ?? raw.total_participants ?? entries.length,
-        your_rank: raw.rank,
-        your_score: raw.avg_score,
+        total_participants: raw.total_participants ?? raw.total_users ?? raw.total_attempts ?? entries.length,
+        your_rank: raw.your_rank ?? raw.rank,
+        your_score: (raw.your_score ?? raw.your_avg_score ?? raw.avg_score) != null
+          ? Math.round((raw.your_score ?? raw.your_avg_score ?? raw.avg_score) * 10) / 10
+          : undefined,
         entries,
       };
     }

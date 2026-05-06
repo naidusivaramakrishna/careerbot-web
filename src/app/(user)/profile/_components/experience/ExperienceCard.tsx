@@ -12,7 +12,7 @@ interface Props {
 
 export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) {
     const sanitizedDescription = exp.description
-        ? DOMPurify.sanitize(exp.description)
+        ? DOMPurify.sanitize(exp.description.replace(/\n/g, '<br />'))
         : '';
     return (
         <div

@@ -92,4 +92,6 @@ export interface ProfileData {
         name?: string;
         description?: string;
     }[];
+
+    resume_url?: string;
 }

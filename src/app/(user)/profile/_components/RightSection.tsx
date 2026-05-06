@@ -32,11 +32,15 @@ import { importLinkedInProfile } from "@/api/linkedinParsingApi";
 import { mapLinkedinToProfile } from "../_utils/linkedinMapper";
 import LinkedinImportModal from "./LinkedinImportModal";
 
-const RightSection = () => {
+interface RightSectionProps {
+    completeness: number;
+    missingFields: string[];
+}
+
+const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
     const { setProfileData } = useProfileContext();
-    const { data: dashboardData, refreshDashboard } = useDashboard();
-    const completionPercentage = dashboardData?.profile?.completeness ?? 0;
-    const missingFields = dashboardData?.profile?.missing_fields ?? [];
+    const { refreshDashboard } = useDashboard();
+    const completionPercentage = completeness;
     const [uploading, setUploading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [linkedinModalOpen, setLinkedinModalOpen] = useState(false);

@@ -105,6 +105,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
     const handleApiError = (err: unknown, isLogin = false) => {
         if (axios.isAxiosError(err)) {
             const res = err.response
+            console.error(`[auth:${isLogin ? 'signin' : 'signup'}] status=${res?.status}`, res?.data)
             const newErrors: ErrorState = { email: "", username: "", password: "", login: "" }
 
             // Handle new backend validation error format - show only first error
@@ -322,7 +323,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                     </div>
 
                     {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
-                    {errors.login && formType === "signin" && <p className="text-red-500 text-sm">{errors.login}</p>}
+                    {errors.login && <p className="text-red-500 text-sm">{errors.login}</p>}
                 </div>
 
                 {formType === "signin" && (

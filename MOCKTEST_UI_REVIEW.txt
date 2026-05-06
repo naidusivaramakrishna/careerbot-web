@@ -1,0 +1,450 @@
+CareerBot -- Mock Test Feature: End-to-End UI/UX & Code Review Template
+========================================================================
+
+ROLE:
+You are a top 1% Senior UI/UX Designer + Senior Full-Stack Web Developer with expertise in
+Next.js 14 App Router, Tailwind CSS, Framer Motion, WCAG 2.1 accessibility, and enterprise-grade
+SaaS product design. You are reviewing the CareerBot mock test feature for premium global standards.
+
+STACK:
+Next.js 14 · TypeScript · Tailwind CSS · Framer Motion · Lucide Icons · Sonner toasts · REST API
+
+FILES UNDER REVIEW:
+- src/app/(interview)/mock-test/[id]/page.tsx        -- Test runner (5 phases)
+- src/app/(interview)/mock-test/results/[id]/page.tsx -- Results & analytics
+- src/api/mockTestApi.ts                              -- API layer
+
+--------------------------------------------------------------------------------
+
+SECTION 1 -- CONTEXT & PRODUCT GOAL
+=====================================
+
+The mock test feature is a multi-section timed online assessment tool used by job seekers to
+practice aptitude, reasoning, and technical skills before company placement tests.
+
+USER JOURNEY:
+  Landing -> Loading -> Section Intro -> [Section Testing x N] -> Results Summary -> Submit -> Results Page
+
+FIVE PHASES IN [id]/page.tsx:
+
+  Phase              | Trigger                    | Purpose
+  -------------------|----------------------------|-----------------------------
+  loading            | Page mount                 | Session init / question gen
+  section_intro      | After each section loads   | Rules + start card
+  section_testing    | After "Start Now" clicked  | Live timed test
+  results_summary    | After all sections done    | Pre-submit review
+  submitting         | After final submit click   | Score calculation wait
+
+DESIGN SYSTEM:
+  Primary:    #0f2044 (deep navy) -> #2557a7 (mid navy) gradient
+  Success:    emerald-500
+  Warning:    amber-400
+  Error:      red-500
+  Background: slate-50 / #f0f4f8
+  Font scale: text-xs -> text-5xl, weights font-medium -> font-black
+
+--------------------------------------------------------------------------------
+
+SECTION 2 -- CRITICAL BUGS TO FIX (Severity: HIGH)
+====================================================
+
+BUG-01 · No empty questions guard
+  File:    [id]/page.tsx · Lines 301-307
+  Problem: If backend returns 0 questions, currentQuestion is undefined and the test
+           rendering crashes silently.
+  Fix:     Add after setQuestions(questions):
+             if (questions.length === 0) {
+               toast.error('No questions returned. Please try again.');
+               setPhase('section_intro');
+               return;
+             }
+
+BUG-02 · No error screen if final submit fails
+  File:    [id]/page.tsx · Lines 519-540 (finalSubmit)
+  Problem: If submitParentSession throws, the user sees a blank/stuck screen.
+  Fix:     Wrap finalSubmit in try/catch and call setPhase('results_summary') on error.
+           Show toast.error('Submission failed. Please try again.')
+
+BUG-03 · Five silent API failures on results page mount
+  File:    results/[id]/page.tsx · Lines 92-148
+  Problem: getWeakAreasAnalytics, getLeaderboard, getMockTestHistory,
+           getProgressAnalytics, getSessionById -- all catch blocks are empty.
+           If any fails the tab shows blank content with zero user feedback.
+  Fix:     Each catch block should at minimum:
+             catch (err) {
+               console.error('[fetchXxx] failed:', err);
+               // Optionally: set an error flag per-tab to show inline error state
+             }
+
+BUG-04 · derivedWeakAreas recalculated every render
+  File:    results/[id]/page.tsx · Lines 165-194
+  Problem: Complex array computation runs on every re-render.
+  Fix:     Wrap in useMemo:
+             const derivedWeakAreas = useMemo(() => { ... }, [weakAreas, sections]);
+
+BUG-05 · Strength/improvement derivation not memoized
+  File:    results/[id]/page.tsx · Lines 68-78
+  Problem: result.strengths and result.improvements are mutated inside a useEffect
+           and re-derived on every refreshKey change even when data has not changed.
+  Fix:     Extract derived fields into useMemo after result is set, not mutating result directly.
+
+--------------------------------------------------------------------------------
+
+SECTION 3 -- DESIGN ISSUES (Severity: MEDIUM)
+===============================================
+
+DES-01 · Inconsistent color system -- too many one-off colors
+  Files:   Both
+  Problem: #7eb3f8, #0a1628, #1a3560 are used inline without being part of the
+           defined design token system. This causes visual inconsistency at scale.
+  Fix:     Define all colors in tailwind.config.ts as named tokens:
+             colors: {
+               navy: { 950: '#0a1628', 900: '#0f2044', 700: '#1a3560',
+                       500: '#2557a7', 300: '#7eb3f8' }
+             }
+           Then replace all hardcoded hex with text-navy-900, bg-navy-500, etc.
+
+DES-02 · Typography scale is inconsistent
+  Files:   Both
+  Problem: Mix of text-[10px], text-xs, text-sm, text-base, text-lg, text-xl,
+           text-2xl, text-3xl, text-4xl, text-5xl -- 10 different sizes in 2 files.
+           A premium product uses max 5-6 type levels.
+  Fix:     Standardize to:
+
+    Token    | Size                   | Use
+    ---------|------------------------|------------------
+    display  | text-4xl font-black    | Hero headings
+    heading  | text-2xl font-bold     | Section titles
+    title    | text-lg font-semibold  | Card titles
+    body     | text-base font-medium  | Body text
+    caption  | text-sm                | Labels, hints
+    micro    | text-xs font-semibold  | Badges, tags
+
+DES-03 · Section testing question area padding too large on mobile
+  File:    [id]/page.tsx · Line 1209
+  Problem: p-8 (32px) on a mobile screen wastes 64px horizontally.
+  Fix:     Change: className="flex-1 overflow-y-auto p-8"
+           To:     className="flex-1 overflow-y-auto p-4 md:p-8"
+
+DES-04 · Answer options have no minimum tap target size on mobile
+  File:    [id]/page.tsx · Lines 1246-1283
+  Problem: Options use p-4 padding but no explicit min-h. On small screens
+           options can be < 44px tall (Apple HIG / WCAG 2.5.5 minimum).
+  Fix:     Add: className="... min-h-[52px]"
+
+DES-05 · Results page hero SVG circle does not scale on mobile
+  File:    results/[id]/page.tsx · Line 314
+  Problem: width="120" height="120" is fixed. On screens < 360px this clips.
+  Fix:     Replace fixed size with responsive viewBox:
+             <svg viewBox="0 0 120 120" className="w-24 h-24 md:w-32 md:h-32">
+
+DES-06 · Question palette grid breaks for >25 questions
+  File:    [id]/page.tsx · Line 1478
+  Problem: grid-cols-5 with w-10 h-10 buttons = max ~5 rows comfortably.
+           For 30+ questions the palette becomes unusable.
+  Fix:     Use auto-fit grid:
+             className="grid gap-1.5 mb-6"
+             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))' }}
+
+DES-07 · Empty loading skeleton -- all phases show plain spinners
+  Files:   Both
+  Problem: Premium SaaS products (Vercel, Linear, Notion) use skeleton loaders
+           instead of blank spinners. This reduces perceived load time.
+  Fix:     Add skeleton shimmer for the results page hero and section breakdown cards.
+
+DES-08 · No smooth page transition between phases
+  File:    [id]/page.tsx
+  Problem: Phase changes (setPhase(...)) cause instant full-page swaps.
+           Competitors (HackerRank, Coderbyte) animate between test phases.
+  Fix:     Wrap phase renders in <AnimatePresence mode="wait"> with per-phase motion.div.
+
+--------------------------------------------------------------------------------
+
+SECTION 4 -- ACCESSIBILITY ISSUES (WCAG 2.1 AA)
+=================================================
+
+A11Y-01 · No ARIA roles on tab bar
+  File:    results/[id]/page.tsx · Lines 375-392
+  Fix:     <div role="tablist" aria-label="Result sections">
+             <button role="tab" aria-selected={activeTab === t.id} aria-controls={`panel-${t.id}`}>
+           Tab panels:
+             <div role="tabpanel" id={`panel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
+
+A11Y-02 · Progress bars not semantic
+  Files:   Both · Multiple lines
+  Fix:     Every progress bar div needs:
+             <div
+               role="progressbar"
+               aria-valuenow={pct}
+               aria-valuemin={0}
+               aria-valuemax={100}
+               aria-label={`${result.name} progress`}
+             >
+
+A11Y-03 · SVG score ring has no accessible label
+  File:    results/[id]/page.tsx · Line 314
+  Fix:     Add inside SVG:
+             <title>Test score: {accuracy}%</title>
+             <desc>Circular progress indicator showing {accuracy}% accuracy</desc>
+           And on the svg element: role="img" aria-labelledby="score-title"
+
+A11Y-04 · Modal dialogs missing focus trap + ARIA
+  File:    [id]/page.tsx · Lines 844-890, 1540-1560
+  Fix:     Each modal needs:
+             - role="dialog"
+             - aria-modal="true"
+             - aria-labelledby pointing to the modal title
+             - Focus trap (use focus-trap-react or manual tabIndex management)
+             - ESC key to close (add useEffect with keydown listener)
+
+A11Y-05 · Radio inputs not grouped with fieldset/legend
+  File:    [id]/page.tsx · Lines 1246-1283
+  Fix:     Wrap options in:
+             <fieldset>
+               <legend className="sr-only">Choose answer for Question {currentQ + 1}</legend>
+               {/* options */}
+             </fieldset>
+
+A11Y-06 · Timer has no live region announcement
+  File:    [id]/page.tsx · Line 1181
+  Fix:     When timer enters warning/critical zone, announce to screen readers:
+             <div
+               aria-live="assertive"
+               aria-atomic="true"
+               className="sr-only"
+             >
+               {isTimerCritical ? `Warning: ${formatTime(timeRemaining)} remaining` : ''}
+             </div>
+
+A11Y-07 · Question text has userSelect:none -- blocks accessibility tools
+  File:    [id]/page.tsx · Line 1232
+  Problem: userSelect:'none' blocks screen readers, text-to-speech, and dyslexia
+           tools from selecting question text.
+  Fix:     Remove userSelect:'none' from question box div entirely.
+           Anti-cheating is handled server-side; blocking selection is poor UX.
+
+--------------------------------------------------------------------------------
+
+SECTION 5 -- PERFORMANCE ISSUES
+=================================
+
+PERF-01 · Five uncoordinated API calls on results page mount
+  File:    results/[id]/page.tsx · Lines 56-148
+  Problem: 5 separate useEffect hooks fire independently, causing 5 network
+           waterfalls instead of a coordinated parallel fetch.
+  Fix:     Consolidate with Promise.allSettled:
+             useEffect(() => {
+               Promise.allSettled([
+                 getWeakAreasAnalytics(),
+                 getLeaderboard(),
+                 getMockTestHistory(),
+                 getProgressAnalytics(),
+               ]).then(([weak, lb, hist, prog]) => {
+                 if (weak.status === 'fulfilled') setWeakAreas(weak.value);
+                 if (lb.status === 'fulfilled')   setLeaderboard(lb.value);
+                 if (hist.status === 'fulfilled') setHistory(hist.value);
+                 if (prog.status === 'fulfilled') setProgressAnalytics(prog.value);
+               });
+             }, []);
+
+PERF-02 · Framer Motion imported in full on test page
+  Files:   Both
+  Problem: framer-motion full bundle (~35kb gzip) loaded for simple animations.
+  Fix:     Use LazyMotion for production:
+             import { LazyMotion, domAnimation, m } from 'framer-motion';
+             Replace <motion.div> with <m.div> inside <LazyMotion features={domAnimation}>
+
+PERF-03 · sectionColors array with gradient strings concatenated every render
+  File:    [id]/page.tsx · Lines 53-59
+  Problem: NAVY_BTN and NAVY_PROGRESS constants are long className strings
+           concatenated on every render cycle.
+  Fix:     Move to CSS modules or Tailwind @apply for reuse without string concatenation.
+
+PERF-04 · Question transitions re-mount entire question component
+  File:    [id]/page.tsx · Line 1207
+  Problem: key={currentQ} causes full unmount/remount on every question navigation,
+           resetting all DOM state. Use layout animations instead.
+  Fix:     Replace key={currentQ} with:
+             <motion.div layout animate={{ opacity: 1, x: 0 }} initial={{ opacity: 0, x: 12 }}>
+
+PERF-05 · handleSectionSubmit and finalSubmit not wrapped in useCallback
+  File:    [id]/page.tsx
+  Problem: Functions recreated on every render, causing child re-renders.
+  Fix:     const handleSectionSubmit = useCallback(async () => { ... }, [sessionId, questions, ...deps]);
+
+--------------------------------------------------------------------------------
+
+SECTION 6 -- PREMIUM & GLOBAL STANDARD GAPS
+============================================
+
+STANDARD-01 · No empty state illustrations
+  Status:    MISSING
+  Benchmark: HackerRank, LeetCode, Coderbyte all use illustrated empty states.
+  Fix:       Add SVG illustrations for:
+               - No test history
+               - No leaderboard entries
+               - All areas strong (weak areas tab)
+
+STANDARD-02 · No keyboard shortcut help overlay
+  Status:    MISSING
+  Benchmark: All premium assessment platforms show a "?" help panel with shortcuts.
+             Current shortcuts exist (arrow keys, F for flag) but are invisible to users.
+  Fix:       Add "?" icon button in header -> shows modal with all keyboard shortcuts.
+
+STANDARD-03 · No sound/haptic feedback on answer submit
+  Status:    MISSING (web haptic API available)
+  Benchmark: Duolingo, Khan Academy use subtle audio + haptic cues.
+  Fix:       (optional) navigator.vibrate(50) on correct,
+                        navigator.vibrate([50,30,50]) on wrong.
+
+STANDARD-04 · No test pause / resume (anti-cheat aware)
+  Status:    MISSING
+  Benchmark: Mercer Mettl, AMCAT allow limited pauses.
+  Note:      Timer is intentionally strict -- acceptable for placement test style.
+
+STANDARD-05 · No confidence indicator per question
+  Status:    MISSING
+  Benchmark: Some premium platforms let users mark confidence (Sure / Unsure).
+             This is data useful for post-test analytics.
+
+STANDARD-06 · Results page lacks share / certificate feature
+  Status:    MISSING
+  Benchmark: HackerRank, LinkedIn Assessments have shareable result cards.
+  Fix:       Add "Share Score" button that generates an OG image or PDF certificate.
+
+STANDARD-07 · No dark mode support
+  Status:    MISSING
+  Benchmark: All global-standard SaaS products support system dark mode.
+  Fix:       Add Tailwind dark: variants for all backgrounds, text, and borders.
+
+STANDARD-08 · No progress persistence if browser closes mid-test
+  Status:    MISSING (partial -- backend holds session)
+  Fix:       Save currentQ and answers to localStorage keyed by sessionId
+             and restore on remount.
+
+STANDARD-09 · Mobile experience rating: 6/10
+  Current issues on mobile:
+    - Question text p-4 padding         OK
+    - Sidebar now drawer                OK
+    - Section names show abbreviations  OK
+    - Options tap target borderline (44px minimum)
+    - Results SVG clips on small screens
+    - Leaderboard table overflows horizontally on < 360px
+
+STANDARD-10 · Desktop experience rating: 8.5/10
+  Strengths:
+    - Dark navy gradient hero is premium   OK
+    - Animated section breakdown           OK
+    - Question palette sidebar             OK
+    - Framer Motion transitions            OK
+    - Confirmation modal                   OK
+  Gaps:
+    - No keyboard shortcut overlay
+    - No skeleton loaders
+    - No phase transition animations
+
+--------------------------------------------------------------------------------
+
+SECTION 7 -- ACTIONABLE TASK LIST FOR AI AGENTS
+=================================================
+
+Use this list as a direct task queue. Each item is self-contained and safe to implement
+independently. Provide the file path and line context to the agent.
+
+TIER 1 -- Fix Now (Breaks UX)
+------------------------------
+[ ] BUG-01: Add empty questions guard after setQuestions() in handleStartSection
+            File: [id]/page.tsx · After line 301
+[ ] BUG-02: Add try/catch + error toast + phase rollback in finalSubmit()
+            File: [id]/page.tsx · Lines 519-540
+[ ] BUG-03: Add console.error to all 5 empty catch blocks in results page
+            File: results/[id]/page.tsx · Lines 98, 110, 121, 134, 145
+[ ] DES-03: Change question area padding from p-8 to p-4 md:p-8
+            File: [id]/page.tsx · Line 1209
+[ ] DES-04: Add min-h-[52px] to answer option labels for tap target compliance
+            File: [id]/page.tsx · Lines 1246-1283
+[ ] A11Y-07: Remove userSelect:'none' from question box
+            File: [id]/page.tsx · Line 1232
+
+TIER 2 -- Fix Soon (Degrades Quality)
+--------------------------------------
+[ ] PERF-01: Consolidate 5 mount-time API calls into Promise.allSettled
+             File: results/[id]/page.tsx · Lines 92-148
+[ ] PERF-04: Remove key={currentQ} from question motion.div, use layout animation
+             File: [id]/page.tsx · Line 1207
+[ ] BUG-04:  Wrap derivedWeakAreas in useMemo
+             File: results/[id]/page.tsx · Line 165
+[ ] DES-05:  Make score SVG responsive with viewBox + Tailwind sizing class
+             File: results/[id]/page.tsx · Line 314
+[ ] A11Y-01: Add role="tablist", role="tab", role="tabpanel" to results tabs
+             File: results/[id]/page.tsx · Lines 375-445
+[ ] A11Y-04: Add role="dialog", aria-modal, aria-labelledby, ESC key to modals
+             File: [id]/page.tsx · Lines 844-890 and 1540-1560
+[ ] A11Y-05: Wrap radio options in fieldset + sr-only legend
+             File: [id]/page.tsx · Lines 1246-1283
+
+TIER 3 -- Polish (Premium Gaps)
+--------------------------------
+[ ] STANDARD-02: Add keyboard shortcut help panel triggered by ? key or icon button
+[ ] STANDARD-07: Add Tailwind dark: variants to all major backgrounds and text
+[ ] STANDARD-08: Persist currentQ + answers to localStorage keyed by sessionId
+[ ] DES-07:      Add skeleton shimmer loaders to results hero and section breakdown
+[ ] DES-08:      Add AnimatePresence with exit animations between phases
+[ ] DES-01:      Move all hex colors to tailwind.config.ts as named navy tokens
+[ ] A11Y-02:     Add role="progressbar" aria-valuenow to all progress bar divs
+[ ] A11Y-03:     Add SVG title/desc and role="img" to score ring
+[ ] A11Y-06:     Add aria-live="assertive" region for timer critical warning
+
+--------------------------------------------------------------------------------
+
+SECTION 8 -- PREMIUM SCORE CARD
+=================================
+
+  Category          | Current Score | Target | Gap
+  ------------------|---------------|--------|----------------------------------------------
+  Visual Design     | 7.5 / 10      | 9.5    | Skeleton loaders, dark mode, illustrations
+  Mobile UX         | 6.5 / 10      | 9.0    | Tap targets, SVG scaling, overflow
+  Desktop UX        | 8.5 / 10      | 9.5    | Keyboard shortcuts, phase animations
+  Accessibility     | 4.0 / 10      | 8.0    | ARIA roles, focus traps, live regions
+  Performance       | 6.5 / 10      | 9.0    | Promise.allSettled, LazyMotion, memoization
+  Error Handling    | 6.0 / 10      | 9.0    | Empty states, silent catches, retry flows
+  Global Standards  | 6.5 / 10      | 8.5    | Dark mode, share, persistence
+  ------------------|---------------|--------|----------------------------------------------
+  OVERALL           | 6.5 / 10      | 9.0    |
+
+--------------------------------------------------------------------------------
+
+SECTION 9 -- PROMPT TEMPLATE FOR AI AGENTS
+===========================================
+
+Copy-paste this prompt when delegating any fix from Section 7 to Claude/Codex:
+
+--------------------------------------------------------------------------
+You are a senior Next.js/TypeScript developer working on the CareerBot mock test feature.
+
+CONTEXT:
+- File: src/app/(interview)/mock-test/[id]/page.tsx  (or results/[id]/page.tsx)
+- Stack: Next.js 14, TypeScript, Tailwind CSS, Framer Motion, Lucide Icons
+- Design system: Navy gradient (from-[#0f2044] to-[#2557a7]), emerald success, red error
+- Tailwind constants at top of file: NAVY_BTN, NAVY_PROGRESS, sectionColors
+
+TASK:
+[Paste the specific task from Tier 1/2/3 above]
+
+RULES:
+1. Do not change any other behavior -- surgical fix only
+2. Keep all existing Tailwind classes and Framer Motion patterns
+3. Match the existing code style (no comments, no console.logs unless replacing existing ones)
+4. TypeScript strict -- no `any` unless already present in that file
+5. Test the change mentally against: mobile (375px), tablet (768px), desktop (1440px)
+6. Do not add new dependencies
+
+VERIFY:
+- Run: npx tsc --noEmit
+- Confirm no TypeScript errors introduced
+--------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+
+Generated: 2026-05-05 | CareerBot Mock Test Feature | Version 1.0
+For internal engineering use -- do not commit this file to production branches

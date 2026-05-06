@@ -145,17 +145,25 @@ client.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 503 with AI_SERVICE_UNAVAILABLE = AI/LLM service is temporarily down.
-    // Retry the original request once directly — no token refresh needed.
+    // 500/503 with AI_SERVICE_UNAVAILABLE = AI/LLM service is temporarily down.
+    // Retry up to 3 times with increasing delay — uses separate _aiRetryCount
+    // so it does not interfere with the 401 token-refresh _retry flag.
+    const AI_MAX_RETRIES = 3;
     const isAiServiceError =
       (error.response?.status === 500 || error.response?.status === 503) &&
       bodyContains(error.response?.data, 'AI_SERVICE_UNAVAILABLE') &&
-      !originalRequest._retry &&
+      (originalRequest._aiRetryCount ?? 0) < AI_MAX_RETRIES &&
       !originalRequest.url?.includes('/auth/') &&
       !originalRequest.url?.includes('/admin/auth/');
 
     if (isAiServiceError) {
-      originalRequest._retry = true;
+      originalRequest._aiRetryCount = (originalRequest._aiRetryCount ?? 0) + 1;
+      const delaySec = originalRequest._aiRetryCount * 2; // 2s, 4s, 6s
+      console.warn(
+        `[http] AI_SERVICE_UNAVAILABLE — retry ${originalRequest._aiRetryCount}/${AI_MAX_RETRIES} in ${delaySec}s`,
+        { url: originalRequest.url, status: error.response?.status }
+      );
+      await new Promise(resolve => setTimeout(resolve, delaySec * 1000));
       return client(originalRequest);
     }
 
