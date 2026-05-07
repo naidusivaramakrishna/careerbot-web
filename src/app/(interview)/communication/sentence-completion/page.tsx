@@ -124,17 +124,18 @@ export default function SentenceCompletionPage() {
       }
 
       logger.info('➡️ Staying in Sentence Completion section, showing next question');
-      setCurrentQuestion(response);
-      setSelectedAnswer(null); // Reset selected answer
-      setAnswerSaved(false); // Reset answer saved state
-
-      // ✅ Increment section-specific question number for display
+      setCurrentQuestion({
+        ...response,
+        question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : response.question_number,
+      });
+      setSelectedAnswer(null);
+      setAnswerSaved(false);
       setSectionQuestionNumber((prev) => prev + 1);
+      setLoading(false);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to fetch next question');
       logger.error('❌ Error fetching next question:', err);
       setError(error.message);
-    } finally {
       setLoading(false);
     }
   };

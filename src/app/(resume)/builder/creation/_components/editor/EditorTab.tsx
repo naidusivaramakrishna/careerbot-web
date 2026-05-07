@@ -393,6 +393,16 @@ const EditorTab: React.FC<Props> = ({
     const isCustom = (resumeData.customSections || []).some(cs => cs.sectionName === openModalSection);
     if (isCustom) return { isValid: true, newErrors: {} };
 
+    // ProfessionalSummary writes directly to resumeData context, not formData
+    if (openModalSection === "Professional Summary") {
+      const targetRole = resumeData.professionalSummary?.targetRole?.trim() || "";
+      const summary = resumeData.professionalSummary?.summary?.trim() || "";
+      const newErrors: Record<string, string> = {};
+      if (!targetRole) newErrors["targetRole"] = "This field is required";
+      if (!summary) newErrors["summary"] = "This field is required";
+      return { isValid: !targetRole ? false : !summary ? false : true, newErrors };
+    }
+
     const sectionFields = getSectionFields(openModalSection);
     const newErrors: Record<string, string> = {};
     let hasEmptyRequiredFields = false;
@@ -409,9 +419,9 @@ const EditorTab: React.FC<Props> = ({
     });
 
 
-    return { 
-      isValid: !hasEmptyRequiredFields, 
-      newErrors 
+    return {
+      isValid: !hasEmptyRequiredFields,
+      newErrors
     };
   };
 
@@ -453,8 +463,8 @@ const EditorTab: React.FC<Props> = ({
 
     if (sectionName === "Professional Summary") {
       return {
-        summary: formData["professionalSummary"] || formData["summary"] || "",
-        targetRole: formData["targetRole"] || "",
+        summary: resumeData.professionalSummary?.summary || "",
+        targetRole: resumeData.professionalSummary?.targetRole || "",
       };
     }
     
@@ -573,13 +583,48 @@ const EditorTab: React.FC<Props> = ({
       saveResponse = await updateResume(resumeId, updatePayload);
     }
 
-    // ✅ Step 5b: Sync backend UUIDs back into context for custom sections
-    // Enhanced response nests customSections under enhanced_resume; builder puts it at top level
-    const rawResponse = saveResponse as unknown as Record<string, unknown>;
-    const rawEnhanced = rawResponse?.enhanced_resume as Record<string, unknown> | undefined;
-    const syncedCustomSections = (rawResponse?.customSections ?? rawEnhanced?.customSections) as typeof resumeData.customSections | undefined;
-    if (isCustomSection && syncedCustomSections && syncedCustomSections.length > 0) {
-      setResumeData(prev => ({ ...prev, customSections: syncedCustomSections }));
+    // ✅ Step 5b: Sync backend-assigned IDs back into context (builder only — enhancer has no IDs)
+    if (!isEnhancedResume && saveResponse && openModalSection) {
+      const resp = saveResponse as unknown as Record<string, unknown>;
+      const sectionToRespKey: Record<string, string> = {
+        "Education": "education",
+        "Work Experience": "workExperience",
+        "Projects": "projects",
+        "Certifications": "certifications",
+        "Internships": "internships",
+        "Achievements": "achievements",
+        "Awards": "awards",
+        "Volunteering": "volunteering",
+        "Publications": "publications",
+        "References": "references",
+        "Hobbies": "hobbies",
+        "Interests": "interests",
+        "Languages": "languages",
+      };
+      const respKey = sectionToRespKey[openModalSection];
+      if (respKey && Array.isArray(resp[respKey])) {
+        const backendItems = resp[respKey] as Array<{ id?: string; _id?: string }>;
+        setResumeData(prev => {
+          const currentItems = prev[respKey as keyof typeof prev];
+          if (!Array.isArray(currentItems)) return prev;
+          const merged = (currentItems as Array<Record<string, unknown>>).map((item, idx) => {
+            const backendId = backendItems[idx]?.id || backendItems[idx]?._id;
+            return backendId ? { ...item, id: backendId } : item;
+          });
+          return { ...prev, [respKey]: merged };
+        });
+      }
+      if (isCustomSection && Array.isArray(resp.customSections) && (resp.customSections as unknown[]).length > 0) {
+        setResumeData(prev => ({ ...prev, customSections: resp.customSections as typeof resumeData.customSections }));
+      }
+    } else if (isEnhancedResume) {
+      // Enhanced response nests customSections under enhanced_resume
+      const rawResponse = saveResponse as unknown as Record<string, unknown>;
+      const rawEnhanced = rawResponse?.enhanced_resume as Record<string, unknown> | undefined;
+      const syncedCustomSections = (rawResponse?.customSections ?? rawEnhanced?.customSections) as typeof resumeData.customSections | undefined;
+      if (isCustomSection && syncedCustomSections && syncedCustomSections.length > 0) {
+        setResumeData(prev => ({ ...prev, customSections: syncedCustomSections }));
+      }
     }
 
     // ✅ Step 6: Mark section complete + clear all validation

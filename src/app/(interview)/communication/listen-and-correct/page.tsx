@@ -231,11 +231,11 @@ export default function ListenAndCorrectPage() {
         // Reset audio completion for new question
         setAudioCompleted(false);
       }
+      setLoading(false);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to upload audio or fetch next question');
       logger.error('❌ Error uploading audio or fetching next question:', err);
       setError(error.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -324,7 +324,7 @@ export default function ListenAndCorrectPage() {
               key={currentQuestion?.question_id}
               onRecordingComplete={handleRecordingComplete}
               maxDuration={15}
-              disabled={!audioCompleted}
+              disabled={!audioCompleted || !!hasRecording}
             />
           </div>
         </div>

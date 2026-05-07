@@ -199,6 +199,7 @@ export interface ResumeData {
   social_links?: Record<string, string>;
   file_name?: string;
   success?: boolean;
+  summary_variants?: Record<string, unknown>[];
 }
 
 // ============ JOB DESCRIPTION TYPES ============
@@ -241,11 +242,51 @@ export interface MatchResult {
 }
 
 // ============ ATS TYPES ============
+
+export interface ATSSectionDeduction {
+  id: string;
+  penalty: number;
+  message: string;
+}
+
+export interface ATSSectionScore {
+  raw_score: number;
+  max_raw_score: number;
+  percentage: number;
+  weight: number;
+  weighted_contribution: number;
+  deductions: ATSSectionDeduction[];
+  details?: Record<string, unknown>;
+}
+
+export interface ATSIntelligencePenalty {
+  id: string;
+  penalty: number;
+  message: string;
+  missing_languages?: string[];
+}
+
 export interface ATSScore {
-  total_score: number;
-  keyword_score: number;
-  format_score: number;
-  section_score: number;
+  // Actual response fields:
+  final_score?: number;
+  max_score?: number;
+  Percentage?: number;
+  score_calculation?: { final_score: number; formula: string };
+  profile?: string;
+  years_of_experience?: number;
+  intelligence_penalties?: ATSIntelligencePenalty[];
+  section_breakdown?: Record<string, ATSSectionScore>;
+  suggestions?: EnhancedSuggestion[];
+  score_components?: Record<string, number>;
+  section_map?: Record<string, string>;
+  role_focus?: string | null;
+  strategy_used?: string;
+  domain?: string;
+  // Legacy fields (kept for backward compatibility):
+  total_score?: number;
+  keyword_score?: number;
+  format_score?: number;
+  section_score?: number;
   missing_keywords?: string[];
   matched_keywords?: string[];
   breakdown?: ATSBreakdown;
@@ -264,11 +305,25 @@ export interface ATSBreakdown {
   [key: string]: number | undefined;
 }
 
+export interface ATSTokensUsed {
+  total: number;
+  prompt: number;
+  completion: number;
+  cost_usd: number;
+  cost_inr: number;
+  from_cache: boolean;
+  tokens_saved?: number;
+  time_stamp?: string;
+}
+
+export interface EnhancerState {
+  resume: Record<string, unknown>;
+  ats_breakdown: ATSScore;
+}
+
 // ============ ENHANCEMENT TYPES ============
 export interface Improvement {
   id: string;
-  original_suggestion_id?: string;
-  fix_type?: string;
   category: string;
   section?: string | null;
   title: string;
@@ -322,30 +377,35 @@ export interface EnhanceResumeResponse {
   resume_id: string;
   success: boolean;
   mode?: string;
-  // New response shape (POST /api/v1/resume/enhance)
-  enhancer_state?: {
-    resume?: Record<string, unknown>;
-    ats_breakdown?: Record<string, unknown>;
-  };
-  suggestions?: Array<{
-    id: string;
-    section: string;
-    message: string;
-    fix_type: string;
-    value?: string;
-  }>;
-  // Legacy/compat fields
   from_cache?: boolean;
-  enhanced_resume?: ResumeData;
-  enhancement_report?: EnhancementReport;
+  cached_at?: number;
+  enhancer_state?: EnhancerState;
+  suggestions?: EnhancedSuggestion[];
+  suggested_summary?: string[];
+  ats_tokens_used?: ATSTokensUsed;
+  display_name?: string;
+  source?: string;
   user_id?: string;
   correlation_id?: string;
   trace_id?: string;
+  time_stamp?: string;
+  backend_cache_hit?: boolean;
+  backend_cache_source?: string;
+  // Legacy fields (some callers may still reference these):
+  enhanced_resume?: ResumeData;
+  enhancement_report?: EnhancementReport;
   Tokens_Used?: unknown;
 }
 
 export interface UpdateEnhancedResumeRequest {
   enhanced_sections: Record<string, unknown>;
+}
+
+export interface EnhancedSuggestion {
+  id: string;
+  section: string;
+  message: string;
+  fix_type: "manual" | "auto";
 }
 
 export interface EnhancedResumeHistoryItem {
@@ -357,11 +417,41 @@ export interface EnhancedResumeHistoryItem {
   original_data: ResumeData;
   ats_score?: ATSScore;
   improvements?: Improvement[];
-  enhancement_report: EnhancementReport;
+  enhancement_report?: EnhancementReport;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  enhancer_state?: Record<string, any>;
+  suggestions?: EnhancedSuggestion[];
   job_description_id?: string | null;
+  region?: string;
+  created_at?: string;
+  updated_at?: string;
+  display_name?: string;
+  source?: string;
+}
+
+// ============ UNIFIED RESUME LIST TYPES ============
+export interface EnhancedResumeSummary {
+  id: string;
+  user_id: string;
+  original_resume_id: string;
+  enhancement_type: string;
+  ats_score?: number | {
+    final_score?: number;
+    Percentage?: number;
+    MaxScore?: number;
+  };
+  enhancement_report?: Record<string, unknown>;
+  display_name?: string;
+  source: string;
   region: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface AllResumesResponse {
+  builder_resumes: Record<string, unknown>[];
+  enhanced_resumes: EnhancedResumeSummary[];
+  total: number;
 }
 
 export interface MatchAnalytics {

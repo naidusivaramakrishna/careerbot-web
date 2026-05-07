@@ -31,7 +31,7 @@ export function UserMenuDropdown({
         aria-expanded={showMenu}
       >
         {profilePicUrl ? (
-          <Image src={profilePicUrl} alt="Profile" width={32} height={32} className="object-cover w-full h-full" />
+          <Image src={profilePicUrl} alt="Profile" width={32} height={32} className="object-cover w-full h-full" unoptimized={profilePicUrl.startsWith('http')} />
         ) : (
           <span className="text-white text-xs font-bold">{displayInitial}</span>
         )}

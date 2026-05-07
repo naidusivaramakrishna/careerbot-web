@@ -3,6 +3,7 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import { toast } from "sonner";
 import MonthYearPicker from "../MonthYearPicker";
 import TechnologyChipsInput from "../TechnologyChipsInput";
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -226,7 +227,7 @@ const Projects: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete project item:", error);
-      alert("Failed to delete project. Please try again.");
+      toast.error("Failed to delete project. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

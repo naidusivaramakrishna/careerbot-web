@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getDashboardSummary } from "@/api/dashboardApi";
 import { DashboardSummary } from "@/types/dashboard.types";
 import { Loader2 } from "lucide-react";
@@ -21,529 +22,324 @@ import {
   ArrowRight,
   TrendingUp,
   Clock,
+  User,
+  BarChart3,
+  Zap,
+  X,
 } from "lucide-react";
+import ProfileFillModal from "./ProfileFillModal";
+import { useResumeProfileFill } from "@/hooks/useResumeProfileFill";
+import { toast } from "sonner";
 
+/* ── Helpers ──────────────────────────────────────────── */
 const getStatusBadge = (pct: number) => {
-  if (pct >= 100) return { label: "Complete! 🎉", color: "#1f4e98", bg: "#e8eff9" };
-  if (pct >= 75)  return { label: "Almost There!", color: "#2557a7", bg: "#f0f5fb" };
-  if (pct >= 50)  return { label: "Good Progress", color: "#5896d7", bg: "#eff6ff" };
-  if (pct >= 25)  return { label: "In Progress",   color: "#5896d7", bg: "#eff6ff" };
-  return               { label: "Just Starting",  color: "#6b7280", bg: "#f9fafb" };
+  if (pct >= 100) return { label: "Complete!", color: "#16a34a", bg: "#dcfce7", border: "#bbf7d0" };
+  if (pct >= 75)  return { label: "Almost There!", color: "#2557a7", bg: "#eff6ff", border: "#bfdbfe" };
+  if (pct >= 50)  return { label: "Good Progress", color: "#0284c7", bg: "#f0f9ff", border: "#bae6fd" };
+  if (pct >= 25)  return { label: "In Progress",   color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" };
+  return               { label: "Just Starting",  color: "#6b7280", bg: "#f9fafb", border: "#e5e7eb" };
 };
 
-/* ── Circular Progress ─────────────────────────────── */
-const CircularProgress: React.FC<{
-  percentage: number;
-  size?: number;
-  strokeWidth?: number;
-  gradientId?: string;
-}> = ({
-  percentage,
-  size = 76,
-  strokeWidth = 7,
-  gradientId = "cp-teal-default",
-}) => {
-  const r = (size - strokeWidth) / 2;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (percentage / 100) * circ;
-  const large = size >= 110;
-
-  const isUploadPanel = gradientId === "cp-upload-panel";
-
-  return (
-    <div className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90" style={{ overflow: "visible" }}>
-        <defs>
-          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={isUploadPanel ? "#5896d7" : "#0ea5e9"} />
-            <stop offset="100%" stopColor={isUploadPanel ? "#5896d7" : "#14b8a6"} />
-          </linearGradient>
-          {large && (
-            <>
-              <filter id={`${gradientId}-glow`} x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation={isUploadPanel ? "4.5" : "3"} result="blur" />
-                <feColorMatrix in="blur" type="saturate" values={isUploadPanel ? "1.3" : "1"} />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              {isUploadPanel && (
-                <filter id={`${gradientId}-shadow`} x="-50%" y="-50%" width="200%" height="200%">
-                  <feDropShadow dx="0" dy="0" stdDeviation="6" floodOpacity="0.25" floodColor="#5896d7" />
-                </filter>
-              )}
-            </>
-          )}
-        </defs>
-        {/* Track */}
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={strokeWidth} opacity="0.6" />
-        {/* Progress arc with enhanced glow */}
-        <circle
-          cx={size / 2} cy={size / 2} r={r}
-          fill="none"
-          stroke={isUploadPanel ? "#6b7280" : `url(#${gradientId})`}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          strokeDashoffset={offset}
-          style={{
-            transition: "stroke-dashoffset 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)",
-            filter: large && !isUploadPanel ? `url(#${gradientId}-glow)` : undefined,
-          }}
-        />
-      </svg>
-      {/* Centre label with premium styling */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span
-          className="font-bold leading-none"
-          style={{
-            fontSize: large ? size * 0.18 : size * 0.2,
-            ...(isUploadPanel
-              ? { color: "#6b7280" }
-              : {
-                  background: "linear-gradient(135deg, #0ea5e9, #14b8a6)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  color: "transparent",
-                }),
-          }}
-        >
-          {percentage}%
-        </span>
-        <span
-          className={large ? "text-gray-500 mt-0.5" : "text-gray-400 mt-0.5"}
-          style={{ fontSize: large ? size * 0.1 : size * 0.11 }}
-        >
-          Complete
-        </span>
-      </div>
-    </div>
-  );
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
 };
 
-/* ── Plan & Credit Card (merged) ───────────────────── */
-const PlanCreditCard: React.FC<{ planId: string; creditsRemaining: number; creditsTotal: number }> = ({
-  planId, creditsRemaining, creditsTotal,
-}) => {
+/* ── Plan & Credit Card ─────────────────────────────────── */
+const PlanCreditCard: React.FC<{
+  planId: string;
+  creditsRemaining: number;
+  creditsTotal: number;
+}> = ({ planId, creditsRemaining, creditsTotal }) => {
   const pct = creditsTotal > 0 ? (creditsRemaining / creditsTotal) * 100 : 0;
   const low = pct < 20;
 
   return (
-    <div className="relative bg-white border border-gray-200 rounded-xl p-4 shadow-sm overflow-hidden flex flex-col">
-      {/* Background glow */}
+    <div className="relative bg-white border border-gray-100 rounded-2xl p-3.5 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-shadow duration-200">
       <div
-        className="absolute -top-6 -right-6 w-36 h-36 rounded-full pointer-events-none"
-        style={{ background: "radial-gradient(circle, rgba(88,150,215,0.08) 0%, transparent 70%)" }}
+        className="absolute -top-8 -right-8 w-40 h-40 rounded-full pointer-events-none"
+        style={{ background: "radial-gradient(circle, rgba(37,87,167,0.06) 0%, transparent 70%)" }}
       />
-      {/* Dot-grid */}
-      <svg className="absolute bottom-3 right-3 pointer-events-none opacity-[0.14]" width="48" height="48" aria-hidden="true">
-        {[0,1,2,3].flatMap(row => [0,1,2,3].map(col => (
-          <circle key={`${row}-${col}`} cx={col * 12 + 4} cy={row * 12 + 4} r="1.5" fill="#5896d7" />
-        )))}
-      </svg>
 
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-1.5">
-          <Crown size={12} className="text-amber-500 shrink-0" />
-          <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">{planId} Plan</span>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm"
+            style={{ background: "linear-gradient(135deg, #5896d7, #2557a7)" }}
+          >
+            <Crown size={14} className="text-white" />
+          </div>
+          <div>
+            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider leading-none mb-0.5">Current Plan</p>
+            <p className="text-sm font-bold text-gray-900 capitalize leading-none">{planId}</p>
+          </div>
         </div>
         <span
           className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-          style={{
-            background: "linear-gradient(white,white) padding-box, linear-gradient(135deg,#5896d7,#1f4e98) border-box",
-            border: "1.5px solid transparent",
-            color: "#1f4e98",
-          }}
+          style={{ background: "#ecfdf5", color: "#16a34a", border: "1px solid #bbf7d0" }}
         >
           Active
         </span>
       </div>
 
-      {/* Credits row */}
-      <div className="mb-2">
-        <div className="flex items-baseline gap-1 mb-0.5">
-          <span className="text-3xl font-black" style={{ color: low ? "#ef4444" : "#5896d7" }}>
-            {creditsRemaining}
+      <div className="mb-1.5 my-auto">
+        <div className="flex items-baseline gap-1.5 mb-0.5">
+          <span className="text-xl font-black tabular-nums" style={{ color: low ? "#ef4444" : "#1f4e98" }}>
+            {creditsRemaining.toLocaleString()}
           </span>
-          <span className="text-xs text-gray-400">/ {creditsTotal} credits</span>
+          <span className="text-xs text-gray-400 font-medium">/ {creditsTotal.toLocaleString()}</span>
         </div>
-        <span className="text-[11px] text-gray-500">Credits Remaining</span>
+        <p className="text-[11px] text-gray-500">Credits remaining</p>
       </div>
 
-      {/* Horizontal progress bar */}
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
+      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
         <div
-          className="h-full rounded-full transition-all duration-500"
+          className="h-full rounded-full transition-all duration-700"
           style={{
             width: `${Math.min(pct, 100)}%`,
-            background: low
-              ? "linear-gradient(to right,#ef4444,#f97316)"
-              : "linear-gradient(to right,#5896d7,#2557a7,#1f4e98)",
+            background: low ? "linear-gradient(to right, #ef4444, #f97316)" : "linear-gradient(to right, #5896d7, #2557a7)",
           }}
         />
       </div>
-      <div className="flex items-center justify-between mb-1">
-        <p className="text-[10px] text-gray-400">Valid till Jan 2026</p>
-        <span className="text-[10px] font-bold" style={{ color: low ? "#ef4444" : "#5896d7" }}>
-          {Math.round(pct)}% used
-        </span>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-gray-400">{Math.round(100 - pct)}% used</span>
+        {low && (
+          <span className="text-[10px] font-semibold text-amber-500 flex items-center gap-0.5">
+            <Zap size={9} /> Low credits
+          </span>
+        )}
       </div>
-      {low && (
-        <p className="text-[10px] text-amber-500 font-medium mb-1">⚠ Credits running low</p>
-      )}
 
-      <div className="border-t border-gray-100 my-2" />
+      <div className="border-t border-gray-100 mt-3 mb-2" />
 
-      {/* Upgrade CTA */}
-      <Link
-        href="/pricing"
-        className="flex items-center justify-center gap-1.5 py-1.5 px-4 rounded-lg border border-[#5896d7] text-[#5896d7] text-xs font-semibold hover:bg-blue-50 transition-colors mt-auto self-start"
-      >
+      <Link href="/pricing" className="flex items-center gap-1.5 text-[#2557a7] text-xs font-semibold hover:gap-2.5 transition-all group/cta">
         <Crown size={12} />
         Upgrade Plan
+        <ArrowRight size={11} className="ml-auto opacity-0 group-hover/cta:opacity-100 transition-opacity" />
       </Link>
     </div>
   );
 };
 
-/* ── Job Market Insights Card ──────────────────────── */
-const TRENDING_ROLES = [
-  { title: "Full Stack Developer", growth: "+23%", tag: "Hot",    tagColor: "#ef4444", tagBg: "#fef2f2", dot: "#ef4444" },
-  { title: "Data Analyst",         growth: "+18%", tag: "Rising", tagColor: "#f59e0b", tagBg: "#fffbeb", dot: "#f59e0b" },
-  { title: "UX Designer",          growth: "+12%", tag: "Rising", tagColor: "#1f4e98", tagBg: "#eff6ff", dot: "#1f4e98" },
-];
-
-
-const JobMarketInsightsCard: React.FC = () => (
-  <div className="relative bg-white border border-gray-200 rounded-xl p-4 shadow-sm overflow-hidden flex flex-col">
-    {/* Background glow */}
-    <div
-      className="absolute -top-6 -right-6 w-32 h-32 rounded-full pointer-events-none"
-      style={{ background: "radial-gradient(circle, rgba(245,158,11,0.07) 0%, transparent 70%)" }}
-    />
-
-    {/* Header */}
+/* ── Job Market Insights Card ───────────────────────────── */
+const JobMarketInsightsCard: React.FC<{ roles: DashboardSummary["trending_roles"] }> = ({ roles }) => (
+  <div className="relative bg-white border border-gray-100 rounded-2xl p-3.5 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-shadow duration-200">
     <div className="flex items-center justify-between mb-2">
-      <div className="flex items-center gap-1.5">
-        <TrendingUp size={13} style={{ color: "#5896d7" }} />
-        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-          Job Market Insights
-        </span>
+      <div className="flex items-center gap-2">
+        <div
+          className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm"
+          style={{ background: "linear-gradient(135deg, #5896d7, #2557a7)" }}
+        >
+          <TrendingUp size={14} className="text-white" />
+        </div>
+        <div>
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider leading-none mb-0.5">Market</p>
+          <p className="text-sm font-bold text-gray-900 leading-none">Job Insights</p>
+        </div>
       </div>
       <span
-        className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-        style={{ background: "#eff6ff", color: "#1f4e98", border: "1px solid #bfdbfe" }}
+        className="text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5"
+        style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }}
       >
+        <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse inline-block" />
         LIVE
       </span>
     </div>
 
-    {/* Trending roles */}
-    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Trending Roles</p>
-    <div className="space-y-1 mb-2">
-      {TRENDING_ROLES.map((role) => (
-        <div key={role.title} className="flex items-center gap-2">
-          <span
-            className="w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ background: role.dot }}
-          />
-          <span className="flex-1 text-xs text-gray-700 font-medium truncate">{role.title}</span>
+    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Trending Roles</p>
+    <div className="space-y-0.5">
+      {roles.map((role) => (
+        <div key={role.title} className="flex items-center gap-2 py-0.5 px-2 rounded-lg hover:bg-gray-50 transition-colors">
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: role.dot }} />
+          <span className="flex-1 text-xs font-medium text-gray-700 truncate">{role.title}</span>
           <span
             className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0"
-            style={{ color: role.tagColor, background: role.tagBg }}
+            style={{ color: role.tag_color, background: role.tag_bg }}
           >
             {role.tag}
           </span>
-          <span className="text-[10px] font-black shrink-0" style={{ color: "#5896d7" }}>
+          <span className="text-[11px] font-black shrink-0" style={{ color: "#2557a7" }}>
             {role.growth}
           </span>
         </div>
       ))}
     </div>
 
-    {/* CTA */}
-    <Link
-      href="/jobs"
-      className="flex items-center justify-center gap-1.5 py-1.5 px-4 rounded-lg border border-[#5896d7] text-[#5896d7] text-xs font-semibold hover:bg-blue-50 transition-colors mt-auto self-start"
-    >
+    <div className="border-t border-gray-100 mt-2 mb-2" />
+
+    <Link href="/jobs" className="flex items-center gap-1.5 text-[#2557a7] text-xs font-semibold hover:gap-2.5 transition-all group/cta">
       <Briefcase size={12} />
       Explore Jobs
+      <ArrowRight size={11} className="ml-auto opacity-0 group-hover/cta:opacity-100 transition-opacity" />
     </Link>
   </div>
 );
 
-/* ── Profile Completeness Card ─────────────────────── */
+/* ── Profile Completeness Card ──────────────────────────── */
 const ProfileCompletenessCard: React.FC<{ profileCompleteness: number }> = ({ profileCompleteness }) => {
   const badge = getStatusBadge(profileCompleteness);
   const r = 26, sw = 6, circ = 2 * Math.PI * r;
   const offset = circ - (profileCompleteness / 100) * circ;
 
   return (
-    <div className="relative bg-white border border-gray-200 rounded-xl p-4 shadow-sm overflow-hidden flex flex-col">
-      {/* Background glow */}
-      <div
-        className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full pointer-events-none"
-        style={{ background: "radial-gradient(circle, rgba(59,130,246,0.07) 0%, transparent 70%)" }}
-      />
+    <div className="relative bg-white border border-gray-100 rounded-2xl p-3.5 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-shadow duration-200">
+      <div className="flex items-center gap-2 mb-2">
+        <div
+          className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm"
+          style={{ background: "linear-gradient(135deg, #5896d7, #2557a7)" }}
+        >
+          <User size={14} className="text-white" />
+        </div>
+        <div>
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider leading-none mb-0.5">Your</p>
+          <p className="text-sm font-bold text-gray-900 leading-none">Profile</p>
+        </div>
+      </div>
 
-      {/* Title */}
-      <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
-        Profile Completeness
-      </span>
-
-      {/* Gauge row */}
-      <div className="flex items-center gap-4 mb-3 mt-auto">
-        {/* Small donut */}
-        <div className="relative shrink-0 flex items-center justify-center" style={{ width: 64, height: 64 }}>
-          <svg width="64" height="64" className="-rotate-90" style={{ overflow: "visible" }}>
+      <div className="flex items-center gap-3 flex-1 mb-2">
+        <div className="relative shrink-0 flex items-center justify-center" style={{ width: 48, height: 48 }}>
+          <svg width="48" height="48" className="-rotate-90" style={{ overflow: "visible" }}>
             <defs>
-              <linearGradient id="pc-arc" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%"   stopColor="#5896d7" />
-                <stop offset="50%"  stopColor="#2557a7" />
+              <linearGradient id="pc-arc" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#5896d7" />
                 <stop offset="100%" stopColor="#1f4e98" />
               </linearGradient>
             </defs>
-            <circle cx="32" cy="32" r={r} fill="none" stroke="#e2e8f0" strokeWidth={sw} />
+            <circle cx="24" cy="24" r={r} fill="none" stroke="#e8f0fa" strokeWidth={sw} />
             <circle
-              cx="32" cy="32" r={r}
+              cx="24" cy="24" r={r}
               fill="none"
               stroke="url(#pc-arc)"
               strokeWidth={sw}
               strokeLinecap="round"
               strokeDasharray={circ}
               strokeDashoffset={offset}
-              style={{ transition: "stroke-dashoffset 0.7s ease" }}
+              style={{ transition: "stroke-dashoffset 0.8s ease" }}
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[13px] font-black text-gray-800">{profileCompleteness}%</span>
+            <span className="text-[11px] font-black" style={{ color: "#1f4e98" }}>{profileCompleteness}%</span>
           </div>
         </div>
 
-        {/* Text block */}
         <div>
-          <p className="text-xs text-gray-500 mb-1.5">Complete</p>
           <span
-            className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full"
-            style={{ color: badge.color, background: badge.bg }}
+            className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-0.5"
+            style={{ color: badge.color, background: badge.bg, border: `1px solid ${badge.border}` }}
           >
             {badge.label}
           </span>
+          <p className="text-[11px] text-gray-500">of profile complete</p>
         </div>
       </div>
 
-      {/* CTA */}
-      <Link
-        href="/profile"
-        className="flex items-center justify-center gap-1.5 py-1.5 px-4 rounded-lg text-xs font-semibold text-white transition-all hover:bg-[#184284] mt-auto self-start bg-[#2557a7]"
-      >
+      <div className="border-t border-gray-100 mb-2 mt-auto" />
+
+      <Link href="/profile" className="flex items-center gap-1.5 text-[#2557a7] text-xs font-semibold hover:gap-2.5 transition-all group/cta">
         Complete Profile
-        <ChevronRight size={12} />
+        <ArrowRight size={11} className="ml-auto opacity-0 group-hover/cta:opacity-100 transition-opacity" />
       </Link>
     </div>
   );
 };
 
-/* ── Upload Action Card (Row 2) ────────────────────── */
-const UploadActionCard: React.FC<{ profileCompleteness: number }> = ({ profileCompleteness }) => {
-  const [uploading, setUploading] = useState(false);
+/* ── ATS Score Popup ────────────────────────────────────────── */
+const AtsScorePopup: React.FC<{ score: number; onClose: () => void }> = ({ score, onClose }) => {
+  const pct = Math.min(Math.max(score, 0), 100);
+  const circ = 2 * Math.PI * 40;
+  const offset = circ * (1 - pct / 100);
+  const scoreColor = pct >= 70 ? "#22c55e" : pct >= 40 ? "#f59e0b" : "#ef4444";
+  const scoreLabel = pct >= 70 ? "Good" : pct >= 40 ? "Average" : "Needs Work";
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="flex flex-col md:flex-row">
-        {/* Left */}
-        <div className="flex-1 p-5 md:p-6">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-1 mb-4 text-[11px] font-medium text-gray-400">
-            <span className="font-semibold text-gray-600">Step 1 of 5</span>
-            <ChevronRight size={11} className="text-gray-400" />
-            <span>Upload Your Resume</span>
-          </div>
-
-          {/* Icon + Title + Credit badge — all in one row */}
-          <div className="flex items-center gap-2.5 mb-2 flex-wrap">
-            {/* Gradient icon */}
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm bg-[#2557a7]"
-              
-            >
-              <Upload size={17} className="text-white" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        {/* Header */}
+        <div
+          className="px-5 py-4 flex items-center justify-between"
+          style={{ background: "linear-gradient(135deg, #1f4e98, #2557a7, #5896d7)" }}
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
+              <ScanSearch size={15} className="text-white" />
             </div>
-
-            <h2 className="text-lg md:text-xl font-bold text-gray-900 leading-snug">
-              Upload Your Resume
-            </h2>
-
-            {/* Credit badge inline */}
-            <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-full shrink-0">
-              <Sparkles size={10} className="text-[#5896d7]" />
-              <span className="text-[10px] font-bold text-[#2557a7]">5 Credits</span>
+            <div>
+              <p className="text-[10px] text-white/60 font-medium uppercase tracking-wider leading-none mb-0.5">ATS Analysis</p>
+              <p className="text-sm font-bold text-white leading-none">Your ATS Score</p>
             </div>
           </div>
-
-          {/* Description */}
-          <p className="text-gray-500 text-xs leading-relaxed mb-4 max-w-sm pl-11.5">
-            Let&apos;s start by uploading your resume so we can help optimize it.
-          </p>
-
-          {/* CTA — gradient button */}
           <button
-            onClick={() => { setUploading(true); window.location.href = "/builder/start"; }}
-            disabled={uploading}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:opacity-90 hover:shadow-md disabled:opacity-60 ml-11.5"
-            style={{ background: "#2557a7" }}
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
           >
-            {uploading ? "Redirecting…" : "Upload Resume"}
-            {!uploading && <ChevronRight size={13} />}
+            <X size={14} className="text-white" />
           </button>
         </div>
 
-        {/* Right: premium green panel */}
-        <div
-          className="relative flex items-center justify-center px-10 py-8 md:py-0 md:min-w-72 overflow-hidden shrink-0"
-          style={{
-            background:
-              "linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(88,150,215,0.28) 18%, rgba(191,219,254,0.5) 50%, rgba(147,197,253,0.6) 100%)",
-          }}
-        >
-          {/* Radial light bloom centred on the circle */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background:
-                "radial-gradient(ellipse 65% 65% at 55% 50%, rgba(255,255,255,0.38) 0%, rgba(88,150,215,0.15) 45%, transparent 70%)",
-            }}
-          />
-
-          {/* SVG — white/silver lines + glowing white nodes */}
-          <svg
-            className="absolute inset-0 w-full h-full pointer-events-none"
-            viewBox="0 0 290 180"
-            preserveAspectRatio="xMidYMid slice"
-            aria-hidden="true"
-          >
-            <defs>
-              <filter id="wglow" x="-120%" y="-120%" width="340%" height="340%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="b" />
-                <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-              <filter id="halo" x="-200%" y="-200%" width="500%" height="500%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
-                <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-            </defs>
-
-            {/* Network lines */}
-            <line x1="30"  y1="12"  x2="110" y2="38"  stroke="white" strokeWidth="0.7" opacity="0.55" />
-            <line x1="110" y1="38"  x2="200" y2="15"  stroke="white" strokeWidth="0.7" opacity="0.5"  />
-            <line x1="200" y1="15"  x2="270" y2="50"  stroke="white" strokeWidth="0.6" opacity="0.45" />
-            <line x1="30"  y1="12"  x2="10"  y2="72"  stroke="white" strokeWidth="0.6" opacity="0.45" />
-            <line x1="110" y1="38"  x2="85"  y2="95"  stroke="white" strokeWidth="0.6" opacity="0.48" />
-            <line x1="10"  y1="72"  x2="85"  y2="95"  stroke="white" strokeWidth="0.7" opacity="0.52" />
-            <line x1="85"  y1="95"  x2="160" y2="112" stroke="white" strokeWidth="0.7" opacity="0.55" />
-            <line x1="160" y1="112" x2="235" y2="88"  stroke="white" strokeWidth="0.7" opacity="0.5"  />
-            <line x1="235" y1="88"  x2="270" y2="50"  stroke="white" strokeWidth="0.6" opacity="0.45" />
-            <line x1="235" y1="88"  x2="275" y2="130" stroke="white" strokeWidth="0.6" opacity="0.42" />
-            <line x1="200" y1="15"  x2="235" y2="88"  stroke="white" strokeWidth="0.55" opacity="0.38" />
-            <line x1="85"  y1="95"  x2="50"  y2="155" stroke="white" strokeWidth="0.7" opacity="0.5"  />
-            <line x1="50"  y1="155" x2="160" y2="168" stroke="white" strokeWidth="0.7" opacity="0.52" />
-            <line x1="160" y1="168" x2="248" y2="155" stroke="white" strokeWidth="0.7" opacity="0.5"  />
-            <line x1="248" y1="155" x2="275" y2="130" stroke="white" strokeWidth="0.6" opacity="0.45" />
-            <line x1="160" y1="112" x2="160" y2="168" stroke="white" strokeWidth="0.55" opacity="0.38" />
-            <line x1="160" y1="112" x2="248" y2="155" stroke="white" strokeWidth="0.5"  opacity="0.35" />
-            <line x1="10"  y1="72"  x2="50"  y2="155" stroke="white" strokeWidth="0.5"  opacity="0.35" />
-
-            {/* Glowing nodes */}
-            <circle cx="30"  cy="12"  r="3"   fill="white" opacity="0.85" filter="url(#wglow)" />
-            <circle cx="10"  cy="72"  r="4"   fill="white" opacity="0.95" filter="url(#halo)"  />
-            <circle cx="110" cy="38"  r="3"   fill="white" opacity="0.8"  filter="url(#wglow)" />
-            <circle cx="200" cy="15"  r="3.5" fill="white" opacity="0.85" filter="url(#wglow)" />
-            <circle cx="270" cy="50"  r="3"   fill="white" opacity="0.8"  filter="url(#wglow)" />
-            <circle cx="85"  cy="95"  r="4.5" fill="white" opacity="1"    filter="url(#halo)"  />
-            <circle cx="160" cy="112" r="4"   fill="white" opacity="0.9"  filter="url(#wglow)" />
-            <circle cx="235" cy="88"  r="4"   fill="white" opacity="0.9"  filter="url(#halo)"  />
-            <circle cx="275" cy="130" r="2.5" fill="white" opacity="0.75" filter="url(#wglow)" />
-            <circle cx="50"  cy="155" r="3.5" fill="white" opacity="0.85" filter="url(#wglow)" />
-            <circle cx="160" cy="168" r="3.5" fill="white" opacity="0.85" filter="url(#wglow)" />
-            <circle cx="248" cy="155" r="4"   fill="white" opacity="0.9"  filter="url(#halo)"  />
-
-            {/* Halo rings */}
-            <circle cx="10"  cy="72"  r="10" fill="none" stroke="white" strokeWidth="0.6" opacity="0.3" />
-            <circle cx="85"  cy="95"  r="12" fill="none" stroke="white" strokeWidth="0.6" opacity="0.28" />
-            <circle cx="235" cy="88"  r="10" fill="none" stroke="white" strokeWidth="0.6" opacity="0.28" />
-            <circle cx="248" cy="155" r="10" fill="none" stroke="white" strokeWidth="0.6" opacity="0.28" />
-          </svg>
-
-          {/* Flying disc assembly */}
-          <div className="relative z-10 flex items-center justify-center" style={{ padding: 24 }}>
-
-            {/* Ground shadow */}
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                bottom: 4, left: "50%", transform: "translateX(-50%)",
-                width: 130, height: 22,
-                background: "rgba(37, 87, 167, 0.28)",
-                borderRadius: "50%", filter: "blur(10px)",
-              }}
-            />
-
-            {/* Wide halo bloom */}
-            <div
-              className="absolute rounded-full pointer-events-none"
-              style={{
-                width: 210, height: 210,
-                background: "radial-gradient(circle, rgba(255,255,255,0.65) 0%, rgba(88,150,215,0.3) 40%, transparent 72%)",
-                filter: "blur(10px)",
-              }}
-            />
-
-            {/* Secondary rim glow */}
-            <div
-              className="absolute rounded-full pointer-events-none"
-              style={{
-                width: 176, height: 176,
-                background: "radial-gradient(circle, rgba(255,255,255,0.5) 30%, rgba(88,150,215,0.18) 65%, transparent 80%)",
-                filter: "blur(5px)",
-              }}
-            />
-
-            {/* White elevated platform disc */}
-            <div
-              className="absolute rounded-full pointer-events-none"
-              style={{
-                width: 158, height: 158,
-                background: "linear-gradient(155deg, rgba(255,255,255,0.97) 0%, rgba(239,246,255,0.92) 100%)",
-                boxShadow: [
-                  "0 20px 50px rgba(37, 87, 167, 0.30)",
-                  "0 6px 16px rgba(37, 87, 167, 0.18)",
-                  "inset 0 -3px 10px rgba(88, 150, 215, 0.35)",
-                  "inset 0 3px 8px rgba(255, 255, 255, 0.9)",
-                ].join(", "),
-              }}
-            />
-
-            {/* Outer rim accent ring */}
-            <div
-              className="absolute rounded-full pointer-events-none"
-              style={{
-                width: 162, height: 162,
-                border: "1.5px solid rgba(88, 150, 215, 0.35)",
-                borderRadius: "50%",
-              }}
-            />
-
-            {/* Progress arc */}
-            <div className="relative">
-              <CircularProgress
-                percentage={profileCompleteness}
-                size={152}
-                strokeWidth={12}
-                gradientId="cp-upload-panel"
+        {/* Body */}
+        <div className="p-6 flex flex-col items-center gap-5">
+          {/* Score ring */}
+          <div className="relative flex items-center justify-center" style={{ width: 120, height: 120 }}>
+            <svg width="120" height="120" className="-rotate-90">
+              <circle cx="60" cy="60" r="40" fill="none" stroke="#f1f5f9" strokeWidth="10" />
+              <circle
+                cx="60" cy="60" r="40"
+                fill="none"
+                stroke={scoreColor}
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeDasharray={circ}
+                strokeDashoffset={offset}
+                style={{ transition: "stroke-dashoffset 1s ease" }}
               />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-2xl font-black" style={{ color: scoreColor }}>{pct}</span>
+              <span className="text-[10px] font-bold text-gray-400">/ 100</span>
             </div>
+          </div>
+
+          {/* Badge */}
+          <span
+            className="text-xs font-bold px-3 py-1 rounded-full"
+            style={{ background: scoreColor + "18", color: scoreColor, border: `1px solid ${scoreColor}40` }}
+          >
+            {scoreLabel}
+          </span>
+
+          {/* Score breakdown hint */}
+          <div className="w-full rounded-xl p-4" style={{ background: "#f8faff", border: "1px solid #dbeafe" }}>
+            <p className="text-xs font-semibold text-gray-700 mb-1">
+              {pct >= 70
+                ? "Your resume is ATS-friendly and stands a good chance of passing filters."
+                : pct >= 40
+                ? "Your resume passes some ATS checks but has room for improvement."
+                : "Your resume needs optimization to pass ATS filters effectively."}
+            </p>
+            <p className="text-[11px] text-gray-400 leading-relaxed">
+              For a detailed breakdown of sections, keyword gaps, and suggestions, visit the full ATS Scan report.
+            </p>
+          </div>
+
+          {/* CTAs */}
+          <div className="flex gap-2 w-full">
+            <Link
+              href="/atslogin"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-all"
+              style={{ background: "linear-gradient(135deg, #2557a7, #1f4e98)" }}
+              onClick={onClose}
+            >
+              Full ATS Report <ArrowRight size={12} />
+            </Link>
+            <button
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
@@ -551,16 +347,169 @@ const UploadActionCard: React.FC<{ profileCompleteness: number }> = ({ profileCo
   );
 };
 
-/* ── Features Carousel ─────────────────────────────── */
+/* ── Hero Action Card (step-driven) ────────────────────────── */
+interface HeroStep {
+  stepNum: number;
+  label: string;
+  title: string;
+  description: string;
+  tags: string[];
+  ctaText: string;
+  ctaHref?: string;
+  onCtaClick?: () => void;
+  ctaLoading?: boolean;
+  rightLabel: string;
+  rightSublabel: string;
+  creditCost?: number;
+  atsScore?: number;
+}
+
+const HeroActionCard: React.FC<{
+  heroStep: HeroStep;
+  progressValue: number;
+  progressLabel: string;
+  atsScore?: number | null;
+}> = ({ heroStep, progressValue, progressLabel, atsScore }) => {
+  const hasAts = atsScore !== null && atsScore !== undefined;
+  const atsColor = hasAts
+    ? (atsScore! >= 70 ? "rgba(74,222,128,0.9)" : atsScore! >= 40 ? "rgba(251,191,36,0.9)" : "rgba(248,113,113,0.9)")
+    : "url(#hero-arc)";
+  const ringValue = hasAts ? atsScore! : progressValue;
+
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden shadow-sm border border-blue-200"
+      style={{ background: "linear-gradient(135deg, #1e3a6e 0%, #1f4e98 40%, #2557a7 70%, #3b82f6 100%)" }}
+    >
+      {/* Decorative mesh */}
+      <svg
+        className="absolute inset-0 w-full h-full pointer-events-none opacity-10"
+        viewBox="0 0 700 220"
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+      >
+        {[0,1,2,3,4,5,6].map(i => (
+          <line key={`v${i}`} x1={i * 100 + 50} y1="0" x2={i * 100 + 50} y2="220" stroke="white" strokeWidth="0.5" />
+        ))}
+        {[0,1,2,3].map(i => (
+          <line key={`h${i}`} x1="0" y1={i * 55 + 27} x2="700" y2={i * 55 + 27} stroke="white" strokeWidth="0.5" />
+        ))}
+        <line x1="500" y1="0" x2="700" y2="220" stroke="white" strokeWidth="1" opacity="0.6" />
+        <line x1="450" y1="0" x2="650" y2="220" stroke="white" strokeWidth="0.6" opacity="0.4" />
+      </svg>
+      <div
+        className="absolute right-0 top-0 bottom-0 w-72 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse 70% 80% at 60% 50%, rgba(147,197,253,0.18) 0%, transparent 70%)" }}
+      />
+
+      <div className="relative z-10 flex flex-col md:flex-row items-stretch">
+        {/* Left */}
+        <div className="flex-1 p-5 md:p-6">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full mb-3" style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)" }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-white opacity-80" />
+            <span className="text-[10px] font-bold text-white/80 tracking-wide">STEP {heroStep.stepNum} OF 5</span>
+          </div>
+
+          <h2 className="text-xl md:text-2xl font-black text-white mb-1.5 leading-tight">
+            {heroStep.title}
+          </h2>
+          <p className="text-white/70 text-xs leading-relaxed mb-3 max-w-md">
+            {heroStep.description}
+          </p>
+
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {heroStep.tags.map((f) => (
+              <span
+                key={f}
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.9)", border: "1px solid rgba(255,255,255,0.2)" }}
+              >
+                {f}
+              </span>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {heroStep.ctaHref ? (
+              <Link
+                href={heroStep.ctaHref}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: "white", color: "#1f4e98" }}
+              >
+                <ArrowRight size={14} />
+                {heroStep.ctaText}
+              </Link>
+            ) : (
+              <button
+                onClick={heroStep.onCtaClick}
+                disabled={heroStep.ctaLoading}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:scale-100"
+                style={{ background: "white", color: "#1f4e98" }}
+              >
+                {heroStep.ctaLoading
+                  ? <><Loader2 size={14} className="animate-spin" /> Scanning…</>
+                  : <><Upload size={14} /> {heroStep.ctaText}</>
+                }
+              </button>
+            )}
+            {heroStep.creditCost !== undefined && !heroStep.ctaLoading && (
+              <div className="inline-flex items-center gap-1 px-2 py-1 rounded-xl" style={{ background: "rgba(255,255,255,0.12)" }}>
+                <Sparkles size={10} className="text-yellow-300" />
+                <span className="text-[10px] font-bold text-white/90">{heroStep.creditCost} Credits</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: ring — shows ATS score after scan, profile % otherwise */}
+        <div className="flex items-center justify-center px-6 py-5 md:py-0 md:min-w-48 shrink-0" style={{ background: "rgba(0,0,0,0.15)" }}>
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative flex items-center justify-center" style={{ width: 116, height: 116 }}>
+              <svg width="116" height="116" className="-rotate-90" style={{ overflow: "visible" }}>
+                <defs>
+                  <linearGradient id="hero-arc" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="rgba(255,255,255,0.9)" />
+                    <stop offset="100%" stopColor="rgba(147,197,253,0.9)" />
+                  </linearGradient>
+                </defs>
+                <circle cx="58" cy="58" r="48" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="8" />
+                <circle
+                  cx="58" cy="58" r="48"
+                  fill="none"
+                  stroke={atsColor}
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * 48}
+                  strokeDashoffset={2 * Math.PI * 48 * (1 - ringValue / 100)}
+                  style={{ transition: "stroke-dashoffset 0.9s ease", filter: "drop-shadow(0 0 6px rgba(255,255,255,0.4))" }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xl font-black text-white">{ringValue}%</span>
+                <span className="text-[10px] text-white/60 font-medium">{hasAts ? "ATS Score" : progressLabel}</span>
+              </div>
+            </div>
+            <p className="text-white/70 text-[10px] font-medium text-center">
+              {hasAts ? `Score saved · tap for details` : heroStep.rightLabel}<br />
+              {hasAts ? "View full report on ATS page" : heroStep.rightSublabel}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── Feature Preview Card ───────────────────────────────── */
 const FEATURE_CARDS = [
   {
     icon: <ScanSearch size={17} />,
     title: "ATS Scan",
-    headline: "Improve Your ATS Score",
-    description: "Upload your resume to check your ATS compatibility score.",
-    ctaText: "Start Uploading",
+    headline: "Check ATS Compatibility",
+    description: "Upload your resume to see your ATS compatibility score and get improvement tips.",
+    ctaText: "Scan Now",
     ctaHref: "/atslogin",
-    gradient: "#2557a7",
+    color: "#2557a7",
     forceAvailable: true,
     unlockCondition: "",
     lockedCtaText: "",
@@ -570,10 +519,10 @@ const FEATURE_CARDS = [
     icon: <FileText size={17} />,
     title: "Resume Builder",
     headline: "Build a Standout Resume",
-    description: "Create a professional resume with AI-powered templates.",
+    description: "Create a professional resume with AI-powered templates and live scoring.",
     ctaText: "Start Building",
     ctaHref: "/builder/start",
-    gradient: "linear-gradient(135deg,#6366f1,#0ea5e9)",
+    color: "#6366f1",
     forceLocked: true,
     unlockCondition: "Complete your ATS scan to unlock Resume Builder.",
     lockedCtaText: "Scan Resume",
@@ -583,10 +532,10 @@ const FEATURE_CARDS = [
     icon: <Search size={17} />,
     title: "Jobs",
     headline: "Find Your Dream Job",
-    description: "Explore 150+ curated job listings matched to your profile.",
+    description: "Explore 150+ curated job listings matched to your profile and skills.",
     ctaText: "Explore Jobs",
     ctaHref: "/jobs",
-    gradient: "linear-gradient(135deg,#f59e0b,#ef4444)",
+    color: "#f59e0b",
     unlockCondition: "Complete your profile to 40% to unlock Jobs.",
     lockedCtaText: "Complete Profile",
     lockedCtaHref: "/profile",
@@ -594,11 +543,11 @@ const FEATURE_CARDS = [
   {
     icon: <Briefcase size={17} />,
     title: "Job Match",
-    headline: "Match Jobs With AI",
-    description: "Instantly compare your resume against any job description.",
+    headline: "AI-Powered Job Match",
+    description: "Instantly compare your resume against any job description with AI analysis.",
     ctaText: "Match Now",
     ctaHref: "/jobmatch",
-    gradient: "linear-gradient(135deg,#8b5cf6,#06b6d4)",
+    color: "#8b5cf6",
     unlockCondition: "Complete your profile to 60% to unlock Job Match.",
     lockedCtaText: "Complete Profile",
     lockedCtaHref: "/profile",
@@ -607,10 +556,10 @@ const FEATURE_CARDS = [
     icon: <Wand2 size={17} />,
     title: "Enhance Resume",
     headline: "AI Resume Boost",
-    description: "Let AI rewrite and strengthen your resume content.",
+    description: "Let AI rewrite and strengthen your resume content for maximum impact.",
     ctaText: "Enhance Now",
     ctaHref: "/enhancer",
-    gradient: "linear-gradient(135deg,#ec4899,#8b5cf6)",
+    color: "#ec4899",
     unlockCondition: "Build a resume first to unlock AI Enhancement.",
     lockedCtaText: "Build Resume",
     lockedCtaHref: "/builder/start",
@@ -619,24 +568,100 @@ const FEATURE_CARDS = [
     icon: <MessageSquare size={17} />,
     title: "Communication",
     headline: "Ace Your Interview",
-    description: "Practice with AI mock interviews and get real-time feedback.",
+    description: "Practice with AI mock interviews and get real-time feedback on your communication.",
     ctaText: "Start Prep",
     ctaHref: "/communication",
-    gradient: "linear-gradient(135deg,#3b82f6,#0ea5e9)",
+    color: "#0ea5e9",
     unlockCondition: "Complete all steps to unlock Interview Prep.",
     lockedCtaText: "View Steps",
     lockedCtaHref: "/profile",
   },
 ];
 
+const FeaturePreviewCard: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  headline: string;
+  status: "available" | "locked";
+  description: string;
+  ctaText: string;
+  ctaHref?: string;
+  color?: string;
+  unlockCondition?: string;
+  lockedCtaText?: string;
+  lockedCtaHref?: string;
+}> = ({ icon, title, headline, status, description, ctaText, ctaHref, color = "#2557a7", unlockCondition, lockedCtaText, lockedCtaHref }) => {
+  const isLocked = status === "locked";
+
+  if (isLocked) {
+    return (
+      <div className="relative bg-gray-50 rounded-2xl p-4 flex flex-col h-full border border-gray-200">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-gray-200">
+            <Lock size={15} className="text-gray-400" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-gray-500">{title}</span>
+            <div className="flex items-center gap-1 mt-0.5">
+              <Lock size={9} className="text-gray-400" />
+              <span className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Locked</span>
+            </div>
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-400 leading-relaxed flex-1 mb-3">{unlockCondition}</p>
+        <div className="border-t border-dashed border-gray-200 mb-3" />
+        <Link
+          href={lockedCtaHref || "#"}
+          className="flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl text-[11px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+        >
+          {lockedCtaText}
+          <ArrowRight size={11} />
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative bg-white rounded-2xl p-4 flex flex-col overflow-hidden h-full border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+      {/* Top color accent */}
+      <div
+        className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl"
+        style={{ background: color }}
+      />
+
+      <div className="flex items-center gap-2.5 mb-3 mt-1">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
+          style={{ background: color }}
+        >
+          <span className="text-white">{icon}</span>
+        </div>
+        <span className="text-xs font-bold text-gray-900">{title}</span>
+      </div>
+
+      <h3 className="text-sm font-bold leading-snug mb-1.5 text-gray-900">{headline}</h3>
+      <p className="text-[11px] leading-relaxed flex-1 mb-4 text-gray-500">{description}</p>
+
+      <Link
+        href={ctaHref || "#"}
+        className="flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl text-[11px] font-semibold text-white transition-all hover:opacity-90 hover:shadow-md"
+        style={{ background: color }}
+      >
+        {ctaText}
+        <ChevronRight size={12} />
+      </Link>
+    </div>
+  );
+};
+
+/* ── Features Carousel ──────────────────────────────────── */
 const FeaturesCarousel: React.FC<{ profileCompleteness: number }> = ({ profileCompleteness }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canLeft,  setCanLeft]  = useState(false);
   const [canRight, setCanRight] = useState(true);
 
-  /* Determine which features should be unlocked based on profile completeness */
   const getFeatureStatus = (index: number): "available" | "locked" => {
-    if (index === 0) return "available"; // First feature always available
+    if (index === 0) return "available";
     const unlockThresholds = [20, 40, 60, 80, 100];
     return profileCompleteness >= unlockThresholds[index - 1] ? "available" : "locked";
   };
@@ -649,34 +674,30 @@ const FeaturesCarousel: React.FC<{ profileCompleteness: number }> = ({ profileCo
   };
 
   const scroll = (dir: "left" | "right") => {
-    scrollRef.current?.scrollBy({ left: dir === "left" ? -220 : 220, behavior: "smooth" });
+    scrollRef.current?.scrollBy({ left: dir === "left" ? -240 : 240, behavior: "smooth" });
   };
 
   return (
     <div className="relative">
-      {/* Left arrow */}
       {canLeft && (
         <button
           onClick={() => scroll("left")}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3.5 z-10 w-7 h-7 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-all"
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-all"
           aria-label="Scroll left"
         >
           <ChevronLeft size={14} className="text-gray-600" />
         </button>
       )}
-
-      {/* Right arrow */}
       {canRight && (
         <button
           onClick={() => scroll("right")}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3.5 z-10 w-7 h-7 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-all"
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 w-8 h-8 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-all"
           aria-label="Scroll right"
         >
           <ChevronRight size={14} className="text-gray-600" />
         </button>
       )}
 
-      {/* Scrollable track — hide native scrollbar */}
       <div
         ref={scrollRef}
         onScroll={updateArrows}
@@ -686,11 +707,11 @@ const FeaturesCarousel: React.FC<{ profileCompleteness: number }> = ({ profileCo
         {FEATURE_CARDS.map((card, index) => {
           const status = card.forceAvailable
             ? "available"
-            : card.forceLocked
+            : (card as { forceLocked?: boolean }).forceLocked
             ? "locked"
             : getFeatureStatus(index);
           return (
-            <div key={card.title} className="w-66 shrink-0">
+            <div key={card.title} className="w-56 shrink-0">
               <FeaturePreviewCard {...card} status={status} />
             </div>
           );
@@ -700,445 +721,512 @@ const FeaturesCarousel: React.FC<{ profileCompleteness: number }> = ({ profileCo
   );
 };
 
-/* ── Feature Preview Card ──────────────────────────── */
-const FeaturePreviewCard: React.FC<{
-  icon: React.ReactNode;
-  title: string;
-  headline: string;
-  status: "available" | "locked";
-  description: string;
-  ctaText: string;
-  ctaHref?: string;
-  unlockCondition?: string;
-  lockedCtaText?: string;
-  lockedCtaHref?: string;
-}> = ({ icon, title, headline, status, description, ctaText, ctaHref, unlockCondition, lockedCtaText, lockedCtaHref }) => {
-  const isLocked = status === "locked";
-
-  /* ── Locked card ── */
-  if (isLocked) {
-    return (
-      <div className="relative bg-white rounded-2xl p-4 flex flex-col h-full border border-gray-200 shadow-sm">
-        {/* Icon badge + title */}
-        <div className="flex items-center gap-2.5 mb-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-gray-100/80 border border-gray-200">
-            <Lock size={16} className="text-gray-400" />
-          </div>
-          <span className="text-sm font-bold text-gray-800">{title}</span>
-        </div>
-
-        {/* Locked label + condition */}
-        <div className="flex items-center gap-1.5 mb-1">
-          <Lock size={11} className="text-gray-400 shrink-0" />
-          <span className="text-xs font-bold text-gray-600">Locked:</span>
-        </div>
-        <p className="text-[11px] text-gray-400 leading-relaxed flex-1 mb-3">
-          {unlockCondition}
-        </p>
-
-        {/* Dashed divider */}
-        <div className="border-t border-dashed border-gray-200 mb-3" />
-
-        {/* CTA */}
-        <Link
-          href={lockedCtaHref || "#"}
-          className="flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-150 transition-colors"
-        >
-          {lockedCtaText}
-          <ArrowRight size={12} />
-        </Link>
-      </div>
-    );
-  }
-
-  /* ── Available card ── */
-  return (
-    <div className="relative bg-white rounded-2xl p-4 flex flex-col overflow-hidden transition-all h-full border border-gray-100 shadow-md hover:shadow-lg hover:-translate-y-0.5">
-      {/* Top-right decorative diamonds */}
-      <div
-        className="absolute top-3 right-3 w-3.5 h-3.5 rounded-sm rotate-45 pointer-events-none"
-        style={{ background: "#5896d7", opacity: 0.55 }}
-      />
-      <div
-        className="absolute top-5 right-5 w-2 h-2 rounded-sm rotate-45 pointer-events-none"
-        style={{ background: "#5896d7", opacity: 0.35 }}
-      />
-
-      {/* Icon badge + label */}
-      <div className="flex items-center gap-2.5 mb-3">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm bg-[#2557a7]">
-          <span className="text-white">{icon}</span>
-        </div>
-        <span className="text-[11px] font-semibold tracking-wide text-black">{title}</span>
-      </div>
-
-      {/* Headline */}
-      <h3 className="text-sm font-bold leading-snug mb-1.5 text-gray-900">{headline}</h3>
-
-      {/* Description */}
-      <p className="text-xs leading-relaxed flex-1 mb-4 text-gray-500">{description}</p>
-
-      {/* CTA */}
-      <Link
-        href={ctaHref || "#"}
-        className="flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl text-xs font-semibold text-white hover:bg-[#184284] transition-colors bg-[#2557a7]"
-      >
-        {ctaText}
-        <ChevronRight size={13} />
-      </Link>
-    </div>
-  );
-};
-
-/* ── Recent Activity Section ───────────────────────── */
-const getCreditBadgeStyle = (credits: number, isFree: boolean) => {
-  if (isFree)         return { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0", label: "Free" };
-  if (credits >= 10)  return { bg: "#fff7ed", color: "#c2410c", border: "#fed7aa", label: `${credits} Credits Used` };
-  return                     { bg: "#eff6ff", color: "#1e40af", border: "#93c5fd", label: `${credits} Credits Used` };
-};
-
+/* ── Recent Activity ─────────────────────────────────────── */
 const getActivityIcon = (type: string) => {
   switch (type.toLowerCase()) {
-    case "ats_scan": return <ScanSearch size={13} />;
+    case "ats_scan":        return <ScanSearch size={13} />;
     case "resume_enhanced": return <Wand2 size={13} />;
-    case "profile_updated": return <FileText size={13} />;
-    default: return <FileText size={13} />;
+    case "profile_updated": return <User size={13} />;
+    default:                return <FileText size={13} />;
   }
 };
 
-const getActivityGradient = (type: string) => {
-  switch (type.toLowerCase()) {
-    case "ats_scan": return "linear-gradient(135deg,#0ea5e9,#14b8a6)";
-    case "resume_enhanced": return "linear-gradient(135deg,#6366f1,#8b5cf6)";
-    case "profile_updated": return "linear-gradient(135deg,#94a3b8,#64748b)";
-    default: return "linear-gradient(135deg,#5896d7,#2557a7)";
-  }
-};
-
-const getActivityDotColor = (type: string) => {
-  switch (type.toLowerCase()) {
-    case "ats_scan": return "#3b82f6";
-    case "resume_enhanced": return "#6366f1";
-    case "profile_updated": return "#94a3b8";
-    default: return "#5896d7";
-  }
-};
-
-interface RecentActivitySectionProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  activities: any[];
-}
-
-const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({ activities }) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const RecentActivitySection: React.FC<{ activities: any[] }> = ({ activities }) => {
   const formatTimeAgo = (timestamp: string): string => {
-    const now = new Date();
-    const activityDate = new Date(timestamp);
-    const diffMs = now.getTime() - activityDate.getTime();
+    const diffMs = Date.now() - new Date(timestamp).getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-    return activityDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div className="relative bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      {/* Background decoration */}
+      <div
+        className="absolute -top-6 -right-6 w-32 h-32 rounded-full pointer-events-none"
+        style={{ background: "radial-gradient(circle, rgba(37,87,167,0.05) 0%, transparent 70%)" }}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm"
+            style={{ background: "linear-gradient(135deg, #5896d7, #2557a7)" }}
+          >
+            <Clock size={14} className="text-white" />
+          </div>
+          <div>
+            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider leading-none mb-0.5">History</p>
+            <p className="text-sm font-bold text-gray-900 leading-none">Recent Activity</p>
+          </div>
+        </div>
         <Link
           href="/dashboard/recent-activity"
-          className="text-xs font-semibold text-[#5896d7] hover:underline flex items-center gap-0.5"
+          className="flex items-center gap-1 text-[11px] font-semibold hover:gap-2 transition-all"
+          style={{ color: "#2557a7" }}
         >
-          View All <ChevronRight size={13} />
+          View All <ChevronRight size={11} />
         </Link>
       </div>
 
-      {/* Activity list */}
       {activities.length === 0 ? (
-        <div className="text-center mt-12 py-8 px-5">
-          <Clock className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-          <p className="text-gray-500 text-sm font-medium">No activity yet</p>
-          <p className="text-gray-400 text-xs mt-1">Your actions will appear here</p>
+        <div className="flex flex-col items-center justify-center py-10 px-5 flex-1">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
+            style={{ background: "linear-gradient(135deg, #eff6ff, #dbeafe)" }}
+          >
+            <Clock size={20} style={{ color: "#5896d7" }} />
+          </div>
+          <p className="text-gray-600 text-sm font-semibold mb-1">No activity yet</p>
+          <p className="text-gray-400 text-xs text-center leading-relaxed">
+            Your recent actions will appear here once you start using features.
+          </p>
         </div>
       ) : (
-        <div className="divide-y divide-gray-50">
-          {activities.map((item) => {
+        <div className="flex-1">
+          {activities.slice(0, 5).map((item, idx) => {
             const isFree = item.credits_used === 0;
-            const badge = getCreditBadgeStyle(item.credits_used, isFree);
-            const gradient = getActivityGradient(item.type || 'default');
-            const dotColor = getActivityDotColor(item.type || 'default');
-            const icon = getActivityIcon(item.type || 'default');
+            const icon = getActivityIcon(item.type || "default");
 
             return (
               <div
                 key={item.id}
-                className="flex items-center gap-3.5 px-5 py-3.5 hover:bg-gray-50/70 transition-colors"
+                className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50/80 transition-colors group ${idx > 0 ? "border-t border-gray-50" : ""}`}
               >
-                {/* Presence dot */}
-                <div
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ background: dotColor }}
-                />
-
-                {/* Icon badge */}
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm"
-                  style={{ background: gradient }}
-                >
-                  <span className="text-white">{icon}</span>
+                {/* Timeline dot + connector */}
+                <div className="flex flex-col items-center shrink-0 self-stretch">
+                  <div
+                    className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe" }}
+                  >
+                    <span style={{ color: "#2557a7" }}>{icon}</span>
+                  </div>
+                  {idx < 4 && (
+                    <div className="w-px flex-1 mt-1" style={{ background: "linear-gradient(to bottom, #dbeafe, transparent)" }} />
+                  )}
                 </div>
 
-                {/* Activity label */}
-                <span className="flex-1 text-sm font-semibold text-gray-800 truncate min-w-0">
-                  {item.feature_label}
-                </span>
+                {/* Content */}
+                <div className="flex-1 min-w-0 py-0.5">
+                  <p className="text-xs font-semibold text-gray-800 truncate leading-snug">
+                    {item.feature_label}
+                  </p>
+                  <p className="text-[10px] text-gray-400 tabular-nums mt-0.5">{formatTimeAgo(item.timestamp)}</p>
+                </div>
 
-                {/* Credit chip */}
-                <span
-                  className="shrink-0 text-[10px] font-bold px-2.5 py-0.5 rounded-full border"
-                  style={{ background: badge.bg, color: badge.color, borderColor: badge.border }}
-                >
-                  {badge.label}
-                </span>
-
-                {/* Timestamp */}
-                <span className="shrink-0 text-[11px] text-gray-400 w-16 text-right">
-                  {formatTimeAgo(item.timestamp)}
-                </span>
+                {/* Credit badge */}
+                {isFree ? (
+                  <span
+                    className="shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "#f8fafc", color: "#94a3b8", border: "1px solid #e2e8f0" }}
+                  >
+                    Free
+                  </span>
+                ) : (
+                  <span
+                    className="shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "#eff6ff", color: "#1f4e98", border: "1px solid #bfdbfe" }}
+                  >
+                    {item.credits_used} cr
+                  </span>
+                )}
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Footer */}
+      {activities.length > 0 && (
+        <div className="border-t border-gray-100 px-5 py-2.5 flex items-center justify-between">
+          <span className="text-[10px] text-gray-400">Showing last {Math.min(activities.length, 5)} actions</span>
+          <Link
+            href="/dashboard/recent-activity"
+            className="text-[10px] font-semibold flex items-center gap-0.5 hover:gap-1 transition-all"
+            style={{ color: "#5896d7" }}
+          >
+            Full history <ArrowRight size={10} />
+          </Link>
         </div>
       )}
     </div>
   );
 };
 
-/* ── Feature-wise Usage Chart ─────────────────────────── */
-interface FeatureUsageData {
-  feature: string;
-  usage: number;
-}
+/* ── Feature-wise Usage Chart ───────────────────────────── */
+interface FeatureUsageData { feature: string; usage: number; }
 
 const FeatureWiseUsageChart: React.FC<{
   creditsUsed: number;
   creditsTotal: number;
   featureData?: FeatureUsageData[];
-}> = ({
-  creditsUsed, creditsTotal, featureData,
-}) => {
-  const defaultFeatureData = [
+}> = ({ creditsUsed, creditsTotal, featureData }) => {
+  const data = featureData || [
     { feature: "Resume", usage: 85 },
     { feature: "Jobs", usage: 90 },
     { feature: "Interview", usage: 60 },
     { feature: "Assessment", usage: 95 },
   ];
 
-  const data = featureData || defaultFeatureData;
-  const vW = 300, vH = 160;
-  const ml = 30, mt = 12, mb = 28, mr = 8;
-  const dW = vW - ml - mr;
-  const dH = vH - mt - mb;
-  const maxV = 100;
+  const maxV = Math.max(...data.map(d => d.usage), 1);
+  const usedPct = creditsTotal > 0 ? Math.round((creditsUsed / creditsTotal) * 100) : 0;
 
-  const sec   = dW / 4;
-  const bW    = 25;
-
-  const yS   = (v: number) => mt + dH * (1 - v / maxV);
-  const xSec = (i: number) => ml + i * sec;
-  const xMid = (i: number) => xSec(i) + sec / 2;
-
-  const gridLines = [0, 20, 40, 60, 80, 100];
+  // Brand-only opacities for bar fills
+  const barOpacities = ["1", "0.75", "0.55", "0.35"];
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 flex flex-col">
+    <div className="relative bg-white border border-gray-100 rounded-2xl shadow-sm p-5 flex flex-col overflow-hidden">
+      {/* Subtle background decoration */}
+      <div
+        className="absolute -bottom-6 -right-6 w-32 h-32 rounded-full pointer-events-none"
+        style={{ background: "radial-gradient(circle, rgba(37,87,167,0.05) 0%, transparent 70%)" }}
+      />
+      <div className="absolute bottom-0 right-0 pointer-events-none opacity-[0.04]">
+        <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
+          {[0,1,2,3,4].flatMap(r => [0,1,2,3,4].map(c => (
+            <circle key={`${r}-${c}`} cx={c * 14 + 5} cy={r * 14 + 5} r="1.8" fill="#2557a7" />
+          )))}
+        </svg>
+      </div>
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-gray-900">Feature-wise Usage</h3>
-        {/* Legend pill */}
-        <div
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px]"
-          style={{
-            background: "white",
-            border: "1px solid #e2e8f0",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
-          }}
-        >
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "#5896d7" }} />
-          <span className="text-gray-500">Total Used:</span>
-          <span className="font-black text-[#5896d7]">{creditsUsed}</span>
-          <span className="text-gray-400">/{creditsTotal}</span>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm"
+            style={{ background: "linear-gradient(135deg, #5896d7, #2557a7)" }}
+          >
+            <BarChart3 size={14} className="text-white" />
+          </div>
+          <div>
+            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider leading-none mb-0.5">Analytics</p>
+            <p className="text-sm font-bold text-gray-900 leading-none">Feature Usage</p>
+          </div>
+        </div>
+
+        {/* Credits donut summary */}
+        <div className="flex items-center gap-2.5">
+          <div className="text-right">
+            <p className="text-[10px] text-gray-400 leading-none mb-0.5">Credits Used</p>
+            <p className="text-sm font-black tabular-nums leading-none" style={{ color: "#1f4e98" }}>
+              {creditsUsed}<span className="text-[10px] font-medium text-gray-400"> / {creditsTotal}</span>
+            </p>
+          </div>
+          {/* Mini donut */}
+          <div className="relative flex items-center justify-center shrink-0" style={{ width: 36, height: 36 }}>
+            <svg width="36" height="36" className="-rotate-90">
+              <circle cx="18" cy="18" r="14" fill="none" stroke="#e8f0fa" strokeWidth="4" />
+              <circle
+                cx="18" cy="18" r="14"
+                fill="none"
+                stroke="#2557a7"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={2 * Math.PI * 14}
+                strokeDashoffset={2 * Math.PI * 14 * (1 - usedPct / 100)}
+                style={{ transition: "stroke-dashoffset 0.8s ease" }}
+              />
+            </svg>
+            <span className="absolute text-[8px] font-black" style={{ color: "#1f4e98" }}>{usedPct}%</span>
+          </div>
         </div>
       </div>
 
-      {/* SVG bar chart */}
-      <svg
-        width="100%"
-        viewBox={`0 0 ${vW} ${vH}`}
-        preserveAspectRatio="xMidYMid meet"
-        overflow="visible"
-      >
-        <defs>
-          <linearGradient id="fw-bar" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#1f4e98" />
-            <stop offset="100%" stopColor="#5896d7" />
-          </linearGradient>
-          {/* Subtle glow for bar */}
-          <filter id="bar-glow" x="-10%" y="-10%" width="120%" height="120%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="b" />
-            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-
-        {/* Horizontal grid lines + Y labels */}
-        {gridLines.map(v => (
-          <g key={v}>
-            <line
-              x1={ml} y1={yS(v)} x2={vW - mr} y2={yS(v)}
-              stroke="#e2e8f0" strokeWidth={0.8}
-              strokeDasharray={v === 0 ? "none" : "2,3"}
-            />
-            <text x={ml - 5} y={yS(v) + 3.5} textAnchor="end" fontSize={8} fill="#9ca3af">
-              {v}
-            </text>
-          </g>
-        ))}
-
-        {/* Bars + X labels */}
+      {/* Bars */}
+      <div className="space-y-3 flex-1">
         {data.map((d, i) => {
-          const h = (d.usage / maxV) * dH;
+          const widthPct = (d.usage / maxV) * 100;
           return (
-            <g key={d.feature}>
-              {/* Feature bar */}
-              <rect
-                x={xMid(i) - bW / 2} y={yS(d.usage)}
-                width={bW} height={h}
-                rx={3} ry={3}
-                fill="url(#fw-bar)"
-                filter="url(#bar-glow)"
-              />
-              {/* X axis label */}
-              <text
-                x={xMid(i)} y={vH - mb + 16}
-                textAnchor="middle" fontSize={8} fill="#9ca3af"
-              >
-                {d.feature}
-              </text>
-            </g>
+            <div key={d.feature} className="group">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: "#2557a7", opacity: parseFloat(barOpacities[i % barOpacities.length]) }}
+                  />
+                  <span className="text-[11px] font-semibold text-gray-700">{d.feature}</span>
+                </div>
+                <span className="text-[11px] font-black tabular-nums" style={{ color: "#2557a7", opacity: parseFloat(barOpacities[i % barOpacities.length]) + 0.1 }}>
+                  {d.usage}
+                </span>
+              </div>
+              <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${widthPct}%`,
+                    background: `linear-gradient(to right, #1f4e98, #5896d7)`,
+                    opacity: parseFloat(barOpacities[i % barOpacities.length]),
+                  }}
+                />
+              </div>
+            </div>
           );
         })}
-      </svg>
+      </div>
 
-      {/* Legend row */}
-      <div className="flex items-center gap-4 mt-2 justify-center">
-        <div className="flex items-center gap-1.5">
-          <span className="w-3 h-2 rounded-sm" style={{ background: "linear-gradient(to right,#1f4e98,#5896d7)", display: "inline-block" }} />
-          <span className="text-[10px] text-gray-500">Credits Used by Feature</span>
-        </div>
+      <div className="border-t border-gray-100 mt-4 pt-3 flex items-center justify-between">
+        <span className="text-[10px] text-gray-400">Credits usage by feature</span>
+        <span className="text-[10px] font-semibold" style={{ color: "#5896d7" }}>{creditsTotal - creditsUsed} remaining</span>
       </div>
     </div>
   );
 };
 
-/* ── Dashboard Content Component ───────────────────── */
-const DashboardContent: React.FC<{
-  data: DashboardSummary;
-}> = ({ data }) => {
-  const { user, plan, profile, usage_counts, recent_activity } = data;
+/* ── Dashboard Content ──────────────────────────────────── */
+const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
+  const { user, plan, profile, usage_counts, recent_activity, trending_roles } = data;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { step, error, result, resumeId, fill, reset } = useResumeProfileFill();
+  const [atsScanLoading, setAtsScanLoading] = useState(false);
+  const [atsScore, setAtsScore] = useState<number | null>(null);
+  const [showAtsPopup, setShowAtsPopup] = useState(false);
 
-  // Transform usage_counts to feature data for the chart
+  const modalOpen = step !== "idle";
+
+  const handleUploadClick = () => fileInputRef.current?.click();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) fill(file);
+    e.target.value = "";
+  };
+
+  const handleAtsScan = async () => {
+    const rid = resumeId ?? localStorage.getItem("dashboard_resume_id");
+    if (!rid) {
+      toast.error("Resume not found. Please upload your resume first.");
+      return;
+    }
+    setAtsScanLoading(true);
+    try {
+      const { enhanceResume } = await import("@/api/enhancerApi");
+      const res = await enhanceResume({ resume_id: rid });
+      const breakdown = (res as Record<string, unknown>)?.enhancer_state as Record<string, unknown> | undefined;
+      const atsBreakdown = breakdown?.ats_breakdown as Record<string, unknown> | undefined;
+      const score = Number(
+        atsBreakdown?.FinalScore ?? atsBreakdown?.Percentage ?? atsBreakdown?.overall_score ??
+        atsBreakdown?.final_score ?? atsBreakdown?.percentage ?? atsBreakdown?.score ??
+        atsBreakdown?.TotalScore ?? 0
+      );
+      localStorage.setItem("atsAnalysisData", JSON.stringify({
+        resume_id: rid,
+        ats_score: atsBreakdown ?? {},
+        finalWeightedScore: score,
+        missingFields: [],
+        scanned_pdf: false,
+      }));
+      localStorage.setItem("currentScore", String(score));
+      localStorage.setItem("isImageBased", "false");
+      setAtsScore(score);
+      setShowAtsPopup(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "ATS scan failed. Please try again.");
+    } finally {
+      setAtsScanLoading(false);
+    }
+  };
+
+  // ── Hero step logic (Option A: Value First) ──────────────
+  // Step flips immediately when fill completes (resumeFilled flag)
+  const resumeFilled = step === "done";
+  const hasResume   = usage_counts.resumes_parsed > 0 || usage_counts.resumes_created > 0 || resumeFilled;
+  const hasAtsScan  = usage_counts.ats_scans > 0;
+  const hasEnhanced = usage_counts.resumes_enhanced > 0;
+
+  const heroStep: HeroStep = !hasResume
+    ? {
+        stepNum: 1,
+        label: "Upload Resume",
+        title: "Upload Your Resume",
+        description: "Let AI analyze and optimize your resume. Get instant ATS score, keyword improvements, and tailored suggestions.",
+        tags: ["AI-Powered Analysis", "ATS Score Check", "Instant Feedback"],
+        ctaText: "Upload Resume",
+        onCtaClick: handleUploadClick,
+        creditCost: 5,
+        rightLabel: "Complete your profile",
+        rightSublabel: "to unlock all features",
+      }
+    : !hasAtsScan
+    ? {
+        stepNum: 2,
+        label: "ATS Scan",
+        title: "Check Your ATS Score",
+        description: "See how your resume performs against ATS filters. Get a detailed compatibility report and fix issues instantly.",
+        tags: ["ATS Compatibility", "Keyword Analysis", "Instant Report"],
+        ctaText: "Scan Resume",
+        onCtaClick: handleAtsScan,
+        ctaLoading: atsScanLoading,
+        creditCost: 3,
+        rightLabel: "Resume uploaded",
+        rightSublabel: "ready for scanning",
+      }
+    : !hasEnhanced
+    ? {
+        stepNum: 3,
+        label: "Enhance Resume",
+        title: "AI Resume Enhancement",
+        description: "Let AI rewrite and strengthen your resume content for maximum impact and recruiter attention.",
+        tags: ["AI Rewrite", "Stronger Bullets", "Keyword Boost"],
+        ctaText: "Enhance Now",
+        ctaHref: "/enhancer",
+        creditCost: 10,
+        rightLabel: "ATS scan done",
+        rightSublabel: "now boost your resume",
+      }
+    : profile.completeness < 80
+    ? {
+        stepNum: 4,
+        label: "Complete Profile",
+        title: "Complete Your Profile",
+        description: "A complete profile unlocks job matching, interview prep, and personalized career recommendations.",
+        tags: ["Job Matching", "Interview Prep", "Career Insights"],
+        ctaText: "Complete Profile",
+        ctaHref: "/profile",
+        rightLabel: "Almost there",
+        rightSublabel: "finish your profile",
+      }
+    : {
+        stepNum: 5,
+        label: "Browse & Apply",
+        title: "Browse & Apply to Jobs",
+        description: "You're all set! Explore curated job listings matched to your profile and start applying today.",
+        tags: ["Curated Listings", "AI Job Match", "1-Click Apply"],
+        ctaText: "Explore Jobs",
+        ctaHref: "/jobs",
+        rightLabel: "Profile complete",
+        rightSublabel: "start applying now",
+      };
+
   const featureData: FeatureUsageData[] = [
-    { feature: "Resume", usage: usage_counts.resumes_created + usage_counts.resumes_parsed },
-    { feature: "Jobs", usage: usage_counts.job_matches + usage_counts.job_applications },
+    { feature: "Resume",    usage: usage_counts.resumes_created + usage_counts.resumes_parsed },
+    { feature: "Jobs",      usage: usage_counts.job_matches + usage_counts.job_applications },
     { feature: "Interview", usage: usage_counts.assessments_taken },
-    { feature: "ATS", usage: usage_counts.ats_scans },
-  ].map(item => ({
-    ...item,
-    usage: Math.min(item.usage * 10 || 20, 100), // Scale to 0-100 range
-  }));
+    { feature: "ATS",       usage: usage_counts.ats_scans },
+  ];
 
   const creditsUsed = Math.max(0, plan.credits_total - plan.credits_remaining);
 
   return (
-    <div className="p-5 md:p-6 max-w-[1400px] mx-auto">
-      {/* Welcome */}
-      <div className="mb-5">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-0.5">
-          Welcome, {user.name}! 👋
-        </h1>
-        <p className="text-gray-400 text-sm">Let&apos;s set up your career dashboard.</p>
-      </div>
+    <>
+      <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-4">
 
-      {/* Row 1 – 3 equal cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-        <PlanCreditCard
-          planId={plan.plan_id}
-          creditsRemaining={plan.credits_remaining}
-          creditsTotal={plan.credits_total}
+        {/* Welcome banner */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl md:text-2xl font-black text-gray-900 leading-tight">
+              {getGreeting()}, <span style={{ color: "#2557a7" }}>{user.name}</span> 👋
+            </h1>
+            <p className="text-gray-400 text-sm mt-0.5">Here&apos;s your career progress at a glance.</p>
+          </div>
+          <div
+            className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold"
+            style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }}
+          >
+            <Zap size={13} />
+            {plan.credits_remaining} credits left
+          </div>
+        </div>
+
+        {/* Row 1 – 3 cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <PlanCreditCard
+            planId={plan.plan_id}
+            creditsRemaining={plan.credits_remaining}
+            creditsTotal={plan.credits_total}
+          />
+          <ProfileCompletenessCard profileCompleteness={profile.completeness} />
+          <JobMarketInsightsCard roles={trending_roles ?? []} />
+        </div>
+
+        {/* Row 2 – Step hero card */}
+        <HeroActionCard
+          heroStep={heroStep}
+          progressValue={profile.completeness}
+          progressLabel="Profile"
+          atsScore={atsScore}
         />
-        <ProfileCompletenessCard profileCompleteness={profile.completeness} />
-        <JobMarketInsightsCard />
-      </div>
-
-      {/* Row 2 – Upload action */}
-      <div className="mb-4">
-        <UploadActionCard profileCompleteness={profile.completeness} />
-      </div>
-
-      {/* Row 3 – Feature cards carousel */}
-      <p className="text-xs text-gray-400 mb-2">
-        Explore other features <span className="font-semibold text-gray-600">after uploading</span> your resume.
-      </p>
-      <FeaturesCarousel profileCompleteness={profile.completeness} />
-
-      {/* Row 4 – Recent activity + Feature-wise usage */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-        <RecentActivitySection activities={recent_activity} />
-        <FeatureWiseUsageChart
-          creditsUsed={creditsUsed}
-          creditsTotal={plan.credits_total}
-          featureData={featureData}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx"
+          className="hidden"
+          onChange={handleFileChange}
         />
+
+        {/* Row 3 – Features */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <p className="text-xs font-semibold text-gray-500">
+              Explore features · unlock more as you progress
+            </p>
+          </div>
+          <FeaturesCarousel profileCompleteness={profile.completeness} />
+        </div>
+
+        {/* Row 4 – Activity + Usage */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <RecentActivitySection activities={recent_activity} />
+          <FeatureWiseUsageChart
+            creditsUsed={creditsUsed}
+            creditsTotal={plan.credits_total}
+            featureData={featureData}
+          />
+        </div>
+
+        <div className="h-4" />
       </div>
 
-      <div className="h-6" />
-    </div>
+      <ProfileFillModal
+        isOpen={modalOpen}
+        onClose={reset}
+        step={step}
+        error={error}
+        result={result}
+      />
+      {showAtsPopup && atsScore !== null && (
+        <AtsScorePopup
+          score={atsScore}
+          onClose={() => setShowAtsPopup(false)}
+        />
+      )}
+    </>
   );
 };
 
-/* ── Main Wrapper Component ────────────────────────── */
+/* ── Main Export ─────────────────────────────────────────── */
 const FirstTimeDashboard: React.FC = () => {
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const dashboardData = await getDashboardSummary();
-        setData(dashboardData);
-      } catch (err) {
-        console.error("Failed to fetch dashboard data:", err);
-        setError(err instanceof Error ? err.message : "Failed to load dashboard");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    getDashboardSummary()
+      .then(setData)
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
     return (
-      <div className="p-5 md:p-6 max-w-[1400px] mx-auto flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-[#5896d7] animate-spin" />
-          <p className="text-gray-600">Loading your dashboard...</p>
+      <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-4 animate-pulse">
+        <div className="h-8 w-64 bg-gray-100 rounded-xl" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[1,2,3].map(i => <div key={i} className="h-44 bg-gray-100 rounded-2xl" />)}
+        </div>
+        <div className="h-40 bg-gray-100 rounded-2xl" />
+        <div className="flex gap-3 overflow-hidden">
+          {[1,2,3,4].map(i => <div key={i} className="w-56 h-44 bg-gray-100 rounded-2xl shrink-0" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="h-56 bg-gray-100 rounded-2xl" />
+          <div className="h-56 bg-gray-100 rounded-2xl" />
         </div>
       </div>
     );
@@ -1146,10 +1234,19 @@ const FirstTimeDashboard: React.FC = () => {
 
   if (error || !data) {
     return (
-      <div className="p-5 md:p-6 max-w-[1400px] mx-auto flex items-center justify-center min-h-screen">
+      <div className="p-5 md:p-6 max-w-[1400px] mx-auto flex items-center justify-center" style={{ minHeight: "60vh" }}>
         <div className="flex flex-col items-center gap-3 text-center">
-          <p className="text-red-600 font-semibold">Failed to load dashboard</p>
-          <p className="text-gray-600 text-sm">{error}</p>
+          <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-red-500" />
+          </div>
+          <p className="text-red-600 font-semibold text-sm">Failed to load dashboard</p>
+          <p className="text-gray-500 text-xs">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-xs font-semibold rounded-xl text-white bg-[#2557a7] hover:bg-[#1f4e98] transition-colors"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );

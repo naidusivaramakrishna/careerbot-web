@@ -3,6 +3,7 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import { toast } from "sonner";
 import MonthYearPicker from "../MonthYearPicker";
 import SectionTipsPanel from "../SectionTipsPanel";
 import AutocompleteInput from "../AutocompleteInput";
@@ -201,7 +202,7 @@ const WorkExperience: React.FC = () => {
       // // console.log("🗑️ Deleting work experience item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "workExperience", itemId);
+      await deleteResumeSectionItem(resumeId, "work_experience", itemId);
 
       // // console.log("✅ Work experience item deleted from backend successfully");
 
@@ -214,7 +215,7 @@ const WorkExperience: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete work experience item:", error);
-      alert("Failed to delete work experience. Please try again.");
+      toast.error("Failed to delete work experience. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

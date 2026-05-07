@@ -15,7 +15,7 @@ interface AutocompleteInputProps {
 
 
 const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
-  value,
+  value: valueProp,
   onChange,
   onBlur,
   placeholder,
@@ -25,6 +25,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   error,
   className = "",
 }) => {
+  const value = valueProp ?? "";
   const [isOpen, setIsOpen] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);

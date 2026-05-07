@@ -13,6 +13,7 @@ import {
   evaluateMcq,
 } from '@/api/communicationApi';
 import type { CurrentQuestionResponse } from '@/api/communicationApi';
+import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
 import { validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audioUtils';
 
@@ -188,7 +189,8 @@ export default function SituationExplainingPage() {
     setIsSubmitting(true);
 
     try {
-      const emailId = localStorage.getItem('userEmail') || localStorage.getItem('user_email');
+      const profile = await getProfile();
+      const emailId = profile?.email;
       const testId = localStorage.getItem('test_id');
       const sessionId = localStorage.getItem('session_id');
 
@@ -246,15 +248,10 @@ export default function SituationExplainingPage() {
 
             logger.info('✅ STEP 1.5 Complete: MCQ evaluation successful:', mcqEvalResponse);
 
-            // ✅ Store the mcq_evaluation_id
             if (mcqEvalResponse.mcq_evaluation_id) {
               localStorage.setItem('mcq_evaluation_id', mcqEvalResponse.mcq_evaluation_id);
               logger.info('✅ Stored mcq_evaluation_id:', mcqEvalResponse.mcq_evaluation_id);
             }
-
-            // ✅ Store the full MCQ evaluation response for final report
-            localStorage.setItem('mcq_evaluation_data', JSON.stringify(mcqEvalResponse));
-            logger.info('✅ Stored full MCQ evaluation data');
           } else {
             logger.warn('⚠️ No MCQ answers found for JUM, SCM, or SLF sections');
           }
@@ -301,15 +298,10 @@ export default function SituationExplainingPage() {
             logger.warn(`⚠️ Partial evaluation: ${audioEvalResponse.missing_sections?.join(', ')}`);
           }
 
-          // ✅ Store the evaluation ID
           if (audioEvalResponse.audio_evaluation_id) {
             localStorage.setItem('audio_evaluation_id', audioEvalResponse.audio_evaluation_id);
             logger.info('✅ Stored audio_evaluation_id:', audioEvalResponse.audio_evaluation_id);
           }
-
-          // ✅ Store the full audio evaluation response for final report
-          localStorage.setItem('audio_evaluation_data', JSON.stringify(audioEvalResponse));
-          logger.info('✅ Stored full audio evaluation data');
 
           return { type: 'audio', success: true, data: audioEvalResponse };
         })
@@ -345,15 +337,11 @@ export default function SituationExplainingPage() {
           .then((videoEvalResponse) => {
             logger.info('✅ Video evaluation completed');
 
-            // ✅ Store the evaluation ID (from nested data structure)
-            if (videoEvalResponse.data?.video_evaluation_id) {
-              localStorage.setItem('video_evaluation_id', videoEvalResponse.data.video_evaluation_id);
-              logger.info('✅ Stored video_evaluation_id:', videoEvalResponse.data.video_evaluation_id);
+            const videoEvalId = videoEvalResponse.data?.video_evaluation_id || videoEvalResponse.evaluation_id;
+            if (videoEvalId) {
+              localStorage.setItem('video_evaluation_id', videoEvalId);
+              logger.info('✅ Stored video_evaluation_id:', videoEvalId);
             }
-
-            // ✅ Store the full video evaluation response for final report
-            localStorage.setItem('video_evaluation_data', JSON.stringify(videoEvalResponse));
-            logger.info('✅ Stored full video evaluation data');
 
             return { type: 'video', success: true, data: videoEvalResponse };
           })
@@ -508,6 +496,7 @@ export default function SituationExplainingPage() {
                   <AudioRecorder
                     onRecordingComplete={handleRecordingComplete}
                     maxDuration={currentQuestion?.time_limit || 60}
+                    disabled={!!recordedAudio}
                   />
                 </div>
               </div>

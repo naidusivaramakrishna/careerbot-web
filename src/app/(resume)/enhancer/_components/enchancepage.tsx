@@ -684,7 +684,7 @@ const EnhancerPage: React.FC = () => {
         let category = 'content';
         let section: string | null = null;
 
-        const lowerSuggestion = suggestion.message.toLowerCase();
+        const lowerSuggestion = suggestion.toLowerCase();
 
         // High priority suggestions (missing without optional)
         if (lowerSuggestion.includes('missing') && !lowerSuggestion.includes('optional')) {
@@ -714,7 +714,7 @@ const EnhancerPage: React.FC = () => {
         }
 
         // Split suggestion into title and description
-        const parts = suggestion.message.split(' - ');
+        const parts = suggestion.split(' - ');
         const title = parts[0] || suggestion;
         const description = parts.length > 1 ? parts.slice(1).join(' - ') : suggestion;
 

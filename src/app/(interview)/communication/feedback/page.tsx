@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { submitFinalReport } from '@/api/communicationApi';
+import { getProfile } from '@/api/userApi';
 // import Sidebar from '@/components/layout/Sidebar';
 // import Header from '@/components/layout/Header';
 import logger from '@/lib/logger';
@@ -54,15 +55,12 @@ export default function FeedbackPage() {
   };
 
   const submitFinalReportAPI = async () => {
-    const emailId = localStorage.getItem('userEmail');
+    const profile = await getProfile();
+    const emailId = profile?.email;
     const testId = localStorage.getItem('test_id');
     const videoEvaluationId = localStorage.getItem('video_evaluation_id');
     const audioEvaluationId = localStorage.getItem('audio_evaluation_id');
     const mcqEvaluationId = localStorage.getItem('mcq_evaluation_id');
-
-    const videoEvaluationDataStr = localStorage.getItem('video_evaluation_data');
-    const audioEvaluationDataStr = localStorage.getItem('audio_evaluation_data');
-    const mcqEvaluationDataStr = localStorage.getItem('mcq_evaluation_data');
 
     if (!emailId || !testId) {
       throw new Error('Missing required information (email or test_id)');
@@ -74,11 +72,8 @@ export default function FeedbackPage() {
       video_evaluation_id: videoEvaluationId || '(none)',
       audio_evaluation_id: audioEvaluationId || '(none)',
       mcq_evaluation_id: mcqEvaluationId || '(none)',
+      sample_report: false,
     });
-
-    const videoEvaluationData = videoEvaluationDataStr ? JSON.parse(videoEvaluationDataStr) : undefined;
-    const audioEvaluationData = audioEvaluationDataStr ? JSON.parse(audioEvaluationDataStr) : undefined;
-    const mcqEvaluationData = mcqEvaluationDataStr ? JSON.parse(mcqEvaluationDataStr) : undefined;
 
     const response = await submitFinalReport({
       email_id: emailId,
@@ -86,9 +81,7 @@ export default function FeedbackPage() {
       video_evaluation_id: videoEvaluationId || undefined,
       audio_evaluation_id: audioEvaluationId || undefined,
       mcq_evaluation_id: mcqEvaluationId || undefined,
-      video_evaluation: videoEvaluationData ? { data: videoEvaluationData } : undefined,
-      audio_evaluation: audioEvaluationData ? { data: audioEvaluationData } : undefined,
-      mcq_evaluation: mcqEvaluationData ? { data: mcqEvaluationData } : undefined,
+      sample_report: false,
     });
 
     logger.info('✅ Final report submitted successfully:', response);

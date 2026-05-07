@@ -131,6 +131,29 @@ client.interceptors.request.use(
 );
 
 /* --------------------------------------------------
+   Backend error message extractor
+   Handles: { error: { message } }, { message }, { detail: string },
+            { detail: [{ msg }] } (FastAPI validation)
+-------------------------------------------------- */
+
+function extractBackendMessage(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+
+  if (d.error && typeof d.error === 'object') {
+    const msg = (d.error as Record<string, unknown>).message;
+    if (typeof msg === 'string' && msg) return msg;
+  }
+  if (typeof d.message === 'string' && d.message) return d.message;
+  if (typeof d.detail === 'string' && d.detail) return d.detail;
+  if (Array.isArray(d.detail) && d.detail.length > 0) {
+    const first = d.detail[0] as Record<string, unknown>;
+    if (typeof first?.msg === 'string' && first.msg) return first.msg;
+  }
+  return null;
+}
+
+/* --------------------------------------------------
    Response Interceptor
 -------------------------------------------------- */
 
@@ -145,6 +168,7 @@ client.interceptors.response.use(
       return Promise.reject(error);
     }
 
+<<<<<<< Updated upstream
     // 500/503 with AI_SERVICE_UNAVAILABLE = AI/LLM service is temporarily down.
     // Retry up to 3 times with increasing delay — uses separate _aiRetryCount
     // so it does not interfere with the 401 token-refresh _retry flag.
@@ -177,6 +201,14 @@ client.interceptors.response.use(
       !originalRequest.url?.includes('/admin/auth/');
 
     if ((error.response?.status !== 401 && !isBackendCrash) || originalRequest._retry) {
+=======
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      // Replace the generic axios message with the actual backend message
+      const backendMessage = extractBackendMessage(error.response?.data);
+      if (backendMessage && error instanceof Error) {
+        error.message = backendMessage;
+      }
+>>>>>>> Stashed changes
       return Promise.reject(error);
     }
 

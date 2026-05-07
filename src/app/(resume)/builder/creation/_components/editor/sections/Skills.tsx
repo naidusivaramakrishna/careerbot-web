@@ -86,8 +86,9 @@ const Skills: React.FC = () => {
     if (updatedSkills.length > 0) clearError("Skills", 0, categoryKey);
   };
 
-  const handleBlur = () => {
-    // Skills are optional, no validation needed
+  const handleBlur = (categoryKey: string) => {
+    const val = (categorizedSkills as unknown as Record<string, string[]>)[categoryKey] || [];
+    validateRequired("Skills", 0, { [categoryKey]: val.join(", ") });
   };
 
   // ── Custom categories ──

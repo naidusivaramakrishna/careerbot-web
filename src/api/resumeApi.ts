@@ -20,14 +20,15 @@ export interface ResumeResponse {
     phone?: string;
     location?: string;
     linkedinUrl?: string;
-    portfolioUrl?: string; // Correct spelling
-    // portifolioUrl?: string; // Backward compatibility for typo
+    githubUrl?: string;
+    portfolioUrl?: string;
   };
   professionalSummary?: {
     summary: string;
     targetRole: string;
   } | string; // Support both old string format and new object format for backward compatibility
   education?: Array<{
+    id?: string;
     school: string;
     degree: string;
     startDate: string;
@@ -36,6 +37,7 @@ export interface ResumeResponse {
     scoreValue?: string;
   }>;
   workExperience?: Array<{
+    id?: string;
     company: string;
     role: string;
     location: string;

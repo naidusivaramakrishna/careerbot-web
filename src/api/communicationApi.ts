@@ -93,11 +93,7 @@ export interface FinalReportRequest {
   video_evaluation_id?: string;
   audio_evaluation_id?: string;
   mcq_evaluation_id?: string;
-  video_evaluation?: { data: unknown };
-  audio_evaluation?: { data: unknown };
-  mcq_evaluation?: { data: unknown };
-  // Backend will retrieve evaluation data using these IDs
-  // No need to send full evaluation objects from frontend
+  sample_report: boolean;
 }
 
 export interface FinalReportResponse {
@@ -643,7 +639,7 @@ export interface EvaluateMcqResponse {
 
 export const evaluateMcq = async (data: EvaluateMcqRequest): Promise<EvaluateMcqResponse> => {
   try {
-    const response = await httpClient.post<EvaluateMcqResponse>('/ai-assessment/evaluate-mcq', data);
+    const response = await httpClient.post<EvaluateMcqResponse>('/ai-assessment/mcq-evaluation', data);
     return response.data;
   } catch (error) {
     logger.error('❌ Error evaluating MCQ:', error);

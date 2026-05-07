@@ -86,11 +86,19 @@ export default function SectionsPage() {
 
       logger.info('Session ID stored in localStorage:', localStorage.getItem('session_id'));
       logger.info('Verified session_id in localStorage:', localStorage.getItem('session_id'));
-      localStorage.setItem('test_start_date', new Date().toISOString());
+      const startDate = new Date().toISOString();
+      localStorage.setItem('test_start_date', startDate);
+      window.dispatchEvent(new CustomEvent('assessment-timer-start', { detail: startDate }));
 
       try {
         await startRecording();
         logger.info('✅ Video recording started');
+        // Stop the preview stream — the recording context owns its own stream from here on.
+        // Without this, the preview stream keeps the camera LED on even after stopRecording() is called.
+        if (videoRef.current && videoRef.current.srcObject) {
+          (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+          videoRef.current.srcObject = null;
+        }
       } catch (recordingError) {
         logger.error('Failed to start video recording:', recordingError);
       }

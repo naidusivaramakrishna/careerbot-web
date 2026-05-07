@@ -63,7 +63,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       setOverallScore(score);
     }
   }, [resumeSource, enhancedAtsScore, setOverallScore]);
-
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -219,8 +218,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       'professional_classic': <TemplateFour data={resumeData} style={resumeStyle} />,
       'classic_professional': <TemplateFive data={resumeData} style={resumeStyle} />,
       // Numeric IDs for backward compatibility
-      '1': <TemplateOne data={resumeData} style={resumeStyle} />,
-      '2': <TemplateTwo data={resumeData} style={resumeStyle} />,
+      '1': <TemplateOne  data={resumeData} style={resumeStyle} />,
+      '2': <TemplateTwo  data={resumeData} style={resumeStyle} />,
       '3': <TemplateThree data={resumeData} style={resumeStyle} />,
       '4': <TemplateFour data={resumeData} style={resumeStyle} />,
       '5': <TemplateFive data={resumeData} style={resumeStyle} />,

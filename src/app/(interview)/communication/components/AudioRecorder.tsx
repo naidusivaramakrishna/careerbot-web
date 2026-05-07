@@ -8,12 +8,11 @@ import logger from '@/lib/logger';
 //   maxDuration?: number;
 // }
 interface AudioRecorderProps {
-  onRecordingComplete?: (audioBlob: Blob) => void;
+  onRecordingComplete?: (audioBlob: Blob, durationMs?: number) => void;
   maxDuration?: number;
   // NEW: For progressive upload
   sessionId?: string;
   questionId?: string;
-  testId?: string; // Assessment test session ID for backend correlation
   onUploadStatusChange?: (
     questionId: string,
     status: 'uploading' | 'completed' | 'failed',
@@ -29,7 +28,6 @@ export default function AudioRecorder({
   maxDuration = 15,
   sessionId,
   questionId,
-  testId,
   onUploadStatusChange,
   enableProgressiveUpload = false,
   disabled = false,
@@ -52,6 +50,8 @@ export default function AudioRecorder({
 
   // ➡️ scrolling position for silence line
   const silentOffsetRef = useRef<number>(0);
+  // Track recording start time for duration calculation
+  const recordingStartRef = useRef<number | null>(null);
 
   const getSupportedMimeType = () => {
     const types = [
@@ -86,7 +86,9 @@ export default function AudioRecorder({
     // };
     recorder.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: mimeType });
-      onRecordingComplete?.(blob);
+      const durationMs = recordingStartRef.current != null ? Date.now() - recordingStartRef.current : undefined;
+      recordingStartRef.current = null;
+      onRecordingComplete?.(blob, durationMs);
       chunksRef.current = [];
 
       // NEW: Progressive upload if enabled
@@ -100,7 +102,7 @@ export default function AudioRecorder({
           const result = await uploadAudio({
             session_id: sessionId,
             question_id: questionId,
-            test_id: testId ?? '',
+            test_id: '', // This should be passed as a prop if needed
             audio_file: blob
           });
 
@@ -202,6 +204,7 @@ export default function AudioRecorder({
     if (!recorder || recorder.state === 'recording') return;
 
     recorder.start();
+    recordingStartRef.current = Date.now();
     setIsRecording(true);
     setTimeLeft(maxDuration);
     silentOffsetRef.current = canvasRef.current?.width || 0;

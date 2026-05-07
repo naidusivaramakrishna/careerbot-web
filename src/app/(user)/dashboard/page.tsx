@@ -1,28 +1,7 @@
 "use client";
 
-/**
- * Dashboard Home Page
- *
- * Rendering logic (per design spec):
- *   resume_uploaded === false → First-Time Dashboard (onboarding)
- *   resume_uploaded === true  → Full Analytics Dashboard
- *
- * Data is provided by DashboardContext (set up in ClientLayout).
- */
-
 import React from 'react';
 import { useDashboard } from '@/contexts/DashboardContext';
-import { PlanStatusCard } from './_components/PlanStatusCard';
-import { CreditBalanceCard } from './_components/CreditBalanceCard';
-import { ProfileCompletenessCard } from './_components/ProfileCompletenessCard';
-import { RecommendedNextStep } from './_components/RecommendedNextStep';
-import { QuickActionsGrid } from './_components/QuickActionsGrid';
-import { RecentActivityPanel } from './_components/RecentActivityPanel';
-import { ScoreSummaryPanel } from './_components/ScoreSummaryPanel';
-import { StatsRowSkeleton } from './_components/skeletons/StatsRowSkeleton';
-import { NextStepSkeleton } from './_components/skeletons/NextStepSkeleton';
-import { QuickActionsSkeleton } from './_components/skeletons/QuickActionsSkeleton';
-import { ActivityScoreSkeleton } from './_components/skeletons/ActivityScoreSkeleton';
 import FirstTimeDashboard from './_components/FirstTimeDashboard';
 import { toast } from 'sonner';
 
@@ -32,11 +11,18 @@ const DashboardPage: React.FC = () => {
   /* Loading */
   if (loading) {
     return (
-      <div className="p-6 max-w-[1400px] mx-auto space-y-6">
-        <StatsRowSkeleton />
-        <NextStepSkeleton />
-        <QuickActionsSkeleton />
-        <ActivityScoreSkeleton />
+      <div className="p-6 max-w-[1400px] mx-auto space-y-6 animate-pulse">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => <div key={i} className="h-32 bg-gray-100 rounded-xl" />)}
+        </div>
+        <div className="h-28 bg-gray-100 rounded-xl" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => <div key={i} className="h-24 bg-gray-100 rounded-xl" />)}
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+          <div className="xl:col-span-2 h-64 bg-gray-100 rounded-xl" />
+          <div className="h-64 bg-gray-100 rounded-xl" />
+        </div>
       </div>
     );
   }
@@ -61,61 +47,7 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  /* First-Time User: no resume uploaded */
-  if (!dashboardData.progress.resume_uploaded) {
-    return <FirstTimeDashboard />;
-  }
-
-  /* Full Analytics Dashboard */
-  return (
-    <div className="p-5 md:p-7 max-w-[1400px] mx-auto">
-      <div className="mb-7">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
-          Welcome back, {dashboardData.user.name}! 👋
-        </h1>
-        <p className="text-gray-500 text-sm">Your AI Career Command Center</p>
-      </div>
-
-      <div className="space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          <PlanStatusCard
-            planName={dashboardData.plan.plan_name}
-            planId={dashboardData.plan.plan_id}
-            creditsTotal={dashboardData.plan.credits_total}
-            planExpiresAt={dashboardData.plan.plan_expires_at}
-          />
-          <CreditBalanceCard
-            creditsRemaining={dashboardData.plan.credits_remaining}
-            creditsTotal={dashboardData.plan.credits_total}
-          />
-          <ProfileCompletenessCard
-            completeness={dashboardData.profile.completeness}
-            missingFields={dashboardData.profile.missing_fields}
-          />
-        </div>
-
-        <RecommendedNextStep
-          recommendedStep={dashboardData.recommended_step}
-          progress={dashboardData.progress}
-        />
-
-        <QuickActionsGrid usageCounts={dashboardData.usage_counts} />
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <div className="xl:col-span-2">
-            <RecentActivityPanel activities={dashboardData.recent_activity} />
-          </div>
-          <ScoreSummaryPanel
-            atsScore={dashboardData.best_scores.ats_score}
-            jobMatchScore={dashboardData.best_scores.job_match_score}
-            interviewScore={dashboardData.best_scores.interview_score}
-          />
-        </div>
-      </div>
-
-      <div className="h-8" />
-    </div>
-  );
+  return <FirstTimeDashboard />;
 };
 
 export default DashboardPage;

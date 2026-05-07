@@ -1,4 +1,5 @@
-import { Linkedin, Sparkles, Upload } from "lucide-react";
+import { Sparkles, Upload } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 interface AddResumeModalProps {
   isOpen: boolean;
@@ -13,6 +14,19 @@ const AddResumeModal = ({
   onCreateWithAI,
   onUploadExisting,
 }: AddResumeModalProps) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleItem = (action: () => void) => {
@@ -22,40 +36,55 @@ const AddResumeModal = ({
 
   return (
     <div
-      className="absolute bg-white rounded-2xl w-80 p-5 shadow-xl border border-neutral-200 z-50"
-      style={{ top: "calc(100% + 10px)", right: 0 }}
+      ref={ref}
+      className="absolute right-0 z-50"
+      style={{ top: "calc(100% + 8px)" }}
     >
-      <ul className="space-y-2">
-        <li
-          onClick={() => handleItem(onCreateWithAI)}
-          className="flex items-center gap-3 px-4 py-1 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50"
-        >
-          <Sparkles className="w-4 h-4" />
-          <div>
-            <p className="font-medium text-sm">Create with AI</p>
-            <p className="text-xs text-gray-500">Build from scratch</p>
-          </div>
-        </li>
+      {/* Arrow */}
+      <div className="absolute right-4 -top-1.5 w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45 z-10" />
 
-        <li
-          onClick={() => handleItem(onUploadExisting)}
-          className="flex items-center gap-3 px-4 py-1 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50"
-        >
-          <Upload className="w-4 h-4" />
-          <div>
-            <p className="font-medium text-sm">Upload Existing</p>
-            <p className="text-xs text-gray-500">PDF or DOCX supported</p>
-          </div>
-        </li>
+      <div className="relative bg-white rounded-2xl w-72 overflow-hidden border border-gray-200"
+        style={{ boxShadow: "0 20px 60px -10px rgba(0,0,0,0.15), 0 8px 24px -6px rgba(0,0,0,0.08)" }}
+      >
+        {/* Header */}
+        <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">New Resume</p>
+        </div>
 
-        <li className="flex items-center gap-3 px-4 py-1 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 opacity-50 pointer-events-none">
-          <Linkedin className="w-4 h-4" />
-          <div>
-            <p className="font-medium text-sm">Import from LinkedIn</p>
-            <p className="text-xs text-gray-500">Coming soon</p>
-          </div>
-        </li>
-      </ul>
+        <div className="p-2">
+          {/* Create with AI */}
+          <button
+            onClick={() => handleItem(onCreateWithAI)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors group text-left"
+          >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)" }}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-gray-900 group-hover:text-[#1f4e98] transition-colors">
+                Create with AI
+              </p>
+              <p className="text-xs text-gray-400">Build a tailored resume from scratch</p>
+            </div>
+          </button>
+
+          {/* Upload Existing */}
+          <button
+            onClick={() => handleItem(onUploadExisting)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors group text-left"
+          >
+            <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 group-hover:bg-gray-200 transition-colors">
+              <Upload className="w-3.5 h-3.5 text-gray-500" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-gray-900">Upload Existing</p>
+              <p className="text-xs text-gray-400">PDF or DOCX supported</p>
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

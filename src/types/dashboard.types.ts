@@ -42,6 +42,18 @@ export interface DashboardSummary {
     interview_score?: number; // 0-100
   };
   recent_activity: Activity[];
+  trending_roles: TrendingRole[];
+}
+
+export interface TrendingRole {
+  title: string;
+  growth: string;
+  tag: string;
+  tag_color: string;
+  tag_bg: string;
+  dot: string;
+  job_count?: number;
+  vacancies?: number;
 }
 
 export interface RecommendedStep {

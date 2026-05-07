@@ -24,6 +24,9 @@ export default function CommunicationEntryPage() {
   const { clearRecordedVideo } = useVideoRecording();
 
   useEffect(() => {
+    // Clear timer state so header doesn't show stale timer from a previous session
+    localStorage.removeItem('test_start_date');
+
     const fetchEmail = async () => {
       try {
         logger.info('Fetching user email from profile API...');

@@ -3,6 +3,7 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import { toast } from "sonner";
 import MonthYearPicker from "../MonthYearPicker";
 import AutocompleteInput from "../AutocompleteInput";
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -206,7 +207,7 @@ const Internships: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete internship item:", error);
-      alert("Failed to delete internship. Please try again.");
+      toast.error("Failed to delete internship. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

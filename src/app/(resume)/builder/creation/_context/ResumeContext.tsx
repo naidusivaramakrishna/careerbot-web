@@ -1,6 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { getResumeById } from "@/api/resumeApi";
+import { getProfile } from "@/api/userApi";
 import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
 import type { ATSScore, EnhancedSuggestion } from "@/types/api.types";
@@ -613,26 +614,50 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
         // Continue with resume data processing...
         data = processedData;
+        // Fetch user profile as fallback for empty personalInfo fields
+        let profileName = "";
+        let profileEmail = "";
+        let profilePhone = "";
+        let profileLocation = "";
+        let profileLinkedin = "";
+        let profileGithub = "";
+        try {
+          const profile = await getProfile();
+          profileName = profile.full_name || "";
+          profileEmail = profile.email || "";
+          profilePhone = profile.phone_number || "";
+          profileLocation = profile.location || "";
+          profileLinkedin = profile.linkedin_url || "";
+          profileGithub = profile.github_url || "";
+        } catch {
+          // Profile fetch is best-effort — don't block resume loading
+        }
+
+        // Split combined phone (e.g. "+911234567890") into countryCode and phone
         const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(data.personalInfo?.phone || "");
+
+        // Normalize MongoDB's _id to id for all section items
+        const normalizeId = <T extends Record<string, unknown>>(items: T[]): T[] =>
+          items.map(item => (!item.id && item._id) ? { ...item, id: item._id } : item);
 
         const loadedData: ResumeData = {
           resume_id: data.id,
           personalInfo: {
-            fullname: data.personalInfo?.fullname || data.personalInfo?.name || data.personalInfo?.full_name || "",
-            email: data.personalInfo?.email || "",
+            fullname: data.personalInfo?.fullname || data.personalInfo?.name || data.personalInfo?.full_name || profileName,
+            email: data.personalInfo?.email || profileEmail,
             countryCode: data.personalInfo?.countryCode || parsedCode,
-            phone: parsedPhone,
-            location: data.personalInfo?.location || "",
-            linkedinUrl: data.personalInfo?.linkedinUrl || "",
-            githubUrl: data.personalInfo?.githubUrl || "",
+            phone: parsedPhone || profilePhone,
+            location: data.personalInfo?.location || profileLocation,
+            linkedinUrl: data.personalInfo?.linkedinUrl || profileLinkedin,
+            githubUrl: data.personalInfo?.githubUrl || profileGithub,
             portfolioUrl: (data.personalInfo as Record<string, string>)?.portfolioUrl || data.personalInfo?.portifolioUrl || "",
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
             : (data.professionalSummary || { summary: "", targetRole: "" }),
-          education: data.education || [],
-          workExperience: data.workExperience || [],
-          projects: data.projects || [],
+          education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
+          workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
+          projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
           skills: data.skills || [],
           categorizedSkills: data.categorizedSkills || {
             programming_languages: [],
@@ -643,7 +668,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             soft_skills: []
           },
           certifications: (data.certifications || []).map((cert: Record<string, string | undefined>) => ({
-            id: cert.id,
+            id: cert.id || cert._id,
             name: cert.name || "",
             issuer: cert.issuer || cert.issuedBy || cert.issued_by || "",
             issueDate: cert.issueDate || cert.year || "",
@@ -651,15 +676,15 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             credentialId: cert.credentialId || cert.credential_id || "",
             credentialUrl: cert.credentialUrl || "",
           })),
-          achievements: data.achievements || [],
-          volunteering: data.volunteering || [],
-          references: data.references || [],
-          internships: data.internships || [],
-          awards: data.awards || [],
-          hobbies: data.hobbies || [],
-          interests: data.interests || [],
-          languages: data.languages || [],
-          publications: data.publications || [],
+          achievements: normalizeId((data.achievements || []) as Record<string, unknown>[]) as ResumeData["achievements"],
+          volunteering: normalizeId((data.volunteering || []) as Record<string, unknown>[]) as ResumeData["volunteering"],
+          references: normalizeId((data.references || []) as Record<string, unknown>[]) as ResumeData["references"],
+          internships: normalizeId((data.internships || []) as Record<string, unknown>[]) as ResumeData["internships"],
+          awards: normalizeId((data.awards || []) as Record<string, unknown>[]) as ResumeData["awards"],
+          hobbies: normalizeId((data.hobbies || []) as Record<string, unknown>[]) as ResumeData["hobbies"],
+          interests: normalizeId((data.interests || []) as Record<string, unknown>[]) as ResumeData["interests"],
+          languages: normalizeId((data.languages || []) as Record<string, unknown>[]) as ResumeData["languages"],
+          publications: normalizeId((data.publications || []) as Record<string, unknown>[]) as ResumeData["publications"],
           customSections: data.customSections || [],
         };
 

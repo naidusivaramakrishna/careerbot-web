@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
+import { toast } from "sonner";
 import AISuggestions from "../AISuggestions";
 import SectionTipsPanel from "../SectionTipsPanel";
 import {
@@ -185,7 +186,7 @@ const Hobbies: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete hobby item:", error);
-      alert("Failed to delete hobby. Please try again.");
+      toast.error("Failed to delete hobby. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

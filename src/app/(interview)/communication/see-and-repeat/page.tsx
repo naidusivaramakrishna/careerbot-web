@@ -212,6 +212,7 @@ export default function AssessmentMain() {
         setCurrentQuestion(response);
         setSectionQuestionNumber((prev) => prev + 1);
       }
+      setLoading(false);
     } catch (err) {
       logger.error('❌ Error in handleNext:', err);
       const error = err as { message?: string; response?: { data?: { message?: string; error?: string }; status?: number } };
@@ -224,7 +225,6 @@ export default function AssessmentMain() {
 
       setError(errorMessage);
       logger.error('❌ Showing error to user:', errorMessage);
-    } finally {
       setLoading(false);
     }
   };
@@ -307,6 +307,7 @@ export default function AssessmentMain() {
                 key={currentQuestion?.question_id}
                 maxDuration={15}
                 onRecordingComplete={handleRecordingComplete}
+                disabled={!!hasRecording}
               />
             </div>
           </div>

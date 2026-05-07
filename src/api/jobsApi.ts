@@ -52,7 +52,6 @@ export interface JobListMinimal {
   location?: string;
   job_type?: string;
 }
-
 export interface JobAnalytics {
   total_jobs?: number;
   jobs_by_type?: Record<string, number>;
@@ -77,7 +76,6 @@ export interface Pagination {
   has_next: boolean;
   has_prev: boolean;
 }
-
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;

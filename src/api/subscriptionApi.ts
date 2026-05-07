@@ -26,9 +26,6 @@ export interface SubscriptionPlan {
   popular: boolean;
   recommended: boolean;
   features: PlanFeatures;
-  resume_builder_limit: number;
-  job_matches_limit: number;
-  english_assessments_limit: number;
 }
 
 export interface SubscriptionPlansResponse {

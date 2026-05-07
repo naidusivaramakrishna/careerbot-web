@@ -54,7 +54,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   // Prevent state updates after unmount
   const mountedRef = useRef(true);
   useEffect(() => {
-    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -66,14 +65,16 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       const summary = await getDashboardSummary();
+      if (!mountedRef.current) return;
       setData(summary);
       setCreditsRemaining(summary.plan.credits_remaining);
       logger.info('DashboardContext: data loaded');
     } catch (err) {
+      if (!mountedRef.current) return;
       logger.error('DashboardContext: fetch failed', err);
       setError(err as Error);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
@@ -174,7 +175,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 /*  Hook                                                                */
 /* ------------------------------------------------------------------ */
 
-const DASHBOARD_DEFAULT: DashboardContextValue = {
+const DASHBOARD_FALLBACK: DashboardContextValue = {
   data: null,
   loading: false,
   error: null,
@@ -184,5 +185,6 @@ const DASHBOARD_DEFAULT: DashboardContextValue = {
 
 export function useDashboard(): DashboardContextValue {
   const ctx = useContext(DashboardContext);
-  return ctx ?? DASHBOARD_DEFAULT;
+  // Return safe defaults when used outside DashboardProvider (e.g. ATS login, public pages)
+  return ctx ?? DASHBOARD_FALLBACK;
 }

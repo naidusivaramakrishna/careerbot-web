@@ -644,6 +644,7 @@ function ATSLoginReport() {
     const target = inCritical ? "critical" : inUrgent ? "urgent" : inOptional ? "optional" : null;
     if (!target) return;
     setFilter(target);
+    // Wait for React to re-render with the new filter, then scrollIntoView the section
     setTimeout(() => {
       const el = document.getElementById(`issue-section-${sectionName}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });

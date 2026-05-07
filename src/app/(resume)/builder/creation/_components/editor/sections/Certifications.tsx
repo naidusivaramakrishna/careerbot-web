@@ -3,6 +3,7 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
+import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -144,7 +145,7 @@ const Certifications: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete certification item:", error);
-      alert("Failed to delete certification. Please try again.");
+      toast.error("Failed to delete certification. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

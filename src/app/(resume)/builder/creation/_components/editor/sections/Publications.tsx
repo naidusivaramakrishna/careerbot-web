@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import MonthYearPicker from "../MonthYearPicker";
+import { toast } from "sonner";
 import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
@@ -135,7 +136,7 @@ const Publications: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete publication item:", error);
-      alert("Failed to delete publication. Please try again.");
+      toast.error("Failed to delete publication. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

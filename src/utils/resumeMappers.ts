@@ -1,7 +1,7 @@
 // Maps resume parser output OR enhanced_resume response → builder ResumeData format.
 // Handles both raw snake_case parser fields AND camelCase enhanced_resume fields.
 
-import type { ResumeData, CategorizedSkills, CustomSection, CustomField } from "@/app/(resume)/builder/creation/_context/ResumeContext";
+import type { ResumeData, CategorizedSkills, CustomSection, CustomField, CustomCategory } from "@/app/(resume)/builder/creation/_context/ResumeContext";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
@@ -14,6 +14,18 @@ function str(v: unknown, fallback = ""): string {
 
 function arr<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
+}
+
+/** Extract text from an array that may contain plain strings OR { text, ... } objects */
+function bulletTexts(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return (v as unknown[])
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (typeof item === "object" && item !== null) return str((item as AnyRecord).text);
+      return "";
+    })
+    .filter(Boolean);
 }
 
 function strArr(v: unknown): string[] {
@@ -50,9 +62,12 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   const piCamel: AnyRecord = (p.personalInfo as AnyRecord) || {};
   const catSkills: AnyRecord = (p.categorizedSkills as AnyRecord) || {};
 
-  // enhanced_data: llm_data.technical_skills is a flat array of {skill, category} objects
-  // Group them by category into buckets the builder understands
-  const llmTechArr = arr<AnyRecord>(llm.technical_skills);
+  // enhanced_data: technical_skills is a flat array of {skill, category} objects
+  // It lives in llm_data.technical_skills OR top-level p.technical_skills (both are the same data)
+  const llmTechArr = arr<AnyRecord>(
+    llm.technical_skills ||
+    (Array.isArray(p.technical_skills) ? p.technical_skills : null)
+  );
   const llmByCategory: Record<string, string[]> = {};
   for (const s of llmTechArr) {
     const cat = str(s.category);
@@ -64,6 +79,31 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   }
   const llmCat = (...cats: string[]): string[] =>
     cats.flatMap((c) => llmByCategory[c] || []);
+
+  // Categories that map to one of the 6 standard buckets
+  const STANDARD_LLM_CATEGORIES = new Set([
+    "programming_language", "frontend",
+    "framework", "backend",
+    "database",
+    "tools", "tool",
+    "cloud", "cloud_platform", "cloud_platforms",
+    "soft_skill", "soft_skills",
+  ]);
+
+  // Skills in unmapped categories → auto-create named CustomCategory entries
+  const unmappedByCategory: Record<string, string[]> = {};
+  for (const [cat, catSkillsList] of Object.entries(llmByCategory)) {
+    if (!STANDARD_LLM_CATEGORIES.has(cat)) {
+      unmappedByCategory[cat] = catSkillsList;
+    }
+  }
+  const customCategoriesFromLlm: CustomCategory[] = Object.entries(unmappedByCategory).map(
+    ([cat, catSkillsList]) => ({
+      id: Math.random().toString(36).slice(2, 10),
+      name: cat.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      skills: catSkillsList,
+    })
+  );
 
   /* ── Personal Info ── */
   const fullname =
@@ -100,6 +140,13 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     str(piCamel.linkedinUrl) ||
     "";
 
+  const githubUrl =
+    str(social.github) ||
+    str(contact.github) ||
+    str(contact.github_url) ||
+    str(piCamel.githubUrl) ||
+    "";
+
   const portfolioRaw = social.portfolio;
   const portfolioUrl =
     (Array.isArray(portfolioRaw) ? str(portfolioRaw[0]) : str(portfolioRaw)) ||
@@ -132,54 +179,66 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     p.experience ||
     p.professional_experience ||
     p.workExperience   // camelCase from enhanced_resume
-  ).map((exp) => ({
-    company: str(exp.company) || str(exp.organization),
-    role: str(exp.role) || str(exp.title) || str(exp.position),
-    location: str(exp.location),
-    startDate: str(exp.start_date) || str(exp.from) || str(exp.startDate),
-    endDate:
-      str(exp.end_date) || str(exp.to) || str(exp.endDate) ||
-      (exp.is_current || exp.currently_working || exp.currentlyWorking ? "Present" : ""),
-    currentlyWorking: Boolean(
+  ).map((exp) => {
+    // explicit null end_date from the enhancer API means currently working
+    const isCurrent = Boolean(
       exp.is_current ||
       exp.currently_working ||
       exp.currentlyWorking ||
+      exp.end_date === null ||
       str(exp.end_date || exp.endDate).toLowerCase() === "present"
-    ),
-    description: Array.isArray(exp.key_contributions)
-      ? (exp.key_contributions as string[]).join("\n")
-      : Array.isArray(exp.contributions)
-      ? (exp.contributions as string[]).join("\n")
-      : str(exp.description) || str(exp.responsibilities),
-  }));
+    );
+    return {
+      company: str(exp.company) || str(exp.organization),
+      role: str(exp.role) || str(exp.title) || str(exp.position),
+      location: str(exp.location),
+      startDate: str(exp.start_date) || str(exp.from) || str(exp.startDate),
+      endDate: str(exp.end_date) || str(exp.to) || str(exp.endDate) || (isCurrent ? "Present" : ""),
+      currentlyWorking: isCurrent,
+      description:
+        [
+          ...bulletTexts(exp.key_contributions),
+          ...bulletTexts(exp.achievements),
+          ...bulletTexts(exp.responsibilities),
+          ...bulletTexts(exp.contributions),
+        ].join("\n") ||
+        str(exp.description),
+    };
+  });
 
   /* ── Education ── */
   const education = arr<AnyRecord>(
     llm.education || p.education || p.educational_qualifications
-  ).map((edu) => ({
-    school:
-      str(edu.institution) ||
-      str(edu.school) ||
-      str(edu.university) ||
-      str(edu.college),
-    degree:
-      str(edu.degree) ||
-      str(edu.qualification) ||
-      str(edu.program) ||
-      [str(edu.field_of_study || edu.branch), str(edu.specialization)]
-        .filter(Boolean)
-        .join(" "),
-    startDate: str(edu.start_date) || str(edu.from) || str(edu.startDate),
-    endDate:
-      str(edu.end_date) ||
-      str(edu.to) ||
-      str(edu.endDate) ||
-      str(edu.graduation_year) ||
-      str(edu.passed_out) ||
-      str(edu.year),
-    scoreType: "CGPA" as const,
-    scoreValue: str(edu.gpa) || str(edu.grade) || str(edu.percentage) || str(edu.scoreValue),
-  }));
+  ).map((edu) => {
+    // Parse start/end dates from "Jun 2020 – May 2022" when explicit fields are absent
+    const durationStr = str(edu.duration);
+    const durationParts = durationStr ? durationStr.split(/\s*[–—-]\s*/) : [];
+    const startFromDuration = durationParts[0]?.trim() || "";
+    const endFromDuration = durationParts[1]?.trim() || "";
+    return {
+      school:
+        str(edu.institution) ||
+        str(edu.school) ||
+        str(edu.university) ||
+        str(edu.college),
+      // Combine degree + branch so "M.Sc." + "Software Engineering" → "M.Sc. Software Engineering"
+      degree:
+        [
+          str(edu.degree) || str(edu.qualification) || str(edu.program),
+          str(edu.branch) || str(edu.field_of_study) || str(edu.specialization),
+        ]
+          .filter(Boolean)
+          .join(" ") || "",
+      startDate: str(edu.start_date) || str(edu.from) || str(edu.startDate) || startFromDuration,
+      endDate:
+        str(edu.end_date) ||
+        str(edu.to) ||
+        str(edu.endDate) ||
+        endFromDuration,
+      scoreType: "CGPA" as const,
+      scoreValue: str(edu.gpa) || str(edu.grade) || str(edu.percentage) || str(edu.scoreValue),
+    };
+  });
 
   /* ── Projects ── */
   const projects = arr<AnyRecord>(
@@ -190,11 +249,11 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       str(proj.description) ||
       str(proj.summary) ||
       [
-        ...(Array.isArray(proj.key_contributions) ? (proj.key_contributions as string[]) : []),
-        ...(Array.isArray(proj.achievements) ? (proj.achievements as string[]) : []),
-        ...(Array.isArray(proj.contributions) ? (proj.contributions as string[]) : []),
-        ...(Array.isArray(proj.responsibilities) ? (proj.responsibilities as string[]) : []),
-      ].filter(Boolean).join("\n") ||
+        ...bulletTexts(proj.key_contributions),
+        ...bulletTexts(proj.achievements),
+        ...bulletTexts(proj.contributions),
+        ...bulletTexts(proj.responsibilities),
+      ].join("\n") ||
       "",
     technologies:
       strArr(proj.technologies).length > 0
@@ -210,17 +269,31 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   }));
 
   /* ── Internships ── */
-  const internships = arr<AnyRecord>(llm.internships || p.internships).map((intern) => ({
-    company: str(intern.company) || str(intern.organization),
-    role: str(intern.role) || str(intern.title),
-    location: str(intern.location),
-    startDate: str(intern.start_date) || str(intern.from) || str(intern.startDate),
-    endDate: str(intern.end_date) || str(intern.to) || str(intern.endDate),
-    currentlyWorking: Boolean(intern.is_current || intern.currently_working || intern.currentlyWorking),
-    description: Array.isArray(intern.key_contributions)
-      ? (intern.key_contributions as string[]).join("\n")
-      : str(intern.description),
-  }));
+  const internships = arr<AnyRecord>(llm.internships || p.internships).map((intern) => {
+    const isCurrentIntern = Boolean(
+      intern.is_current ||
+      intern.currently_working ||
+      intern.currentlyWorking ||
+      intern.end_date === null ||
+      str(intern.end_date || intern.endDate).toLowerCase() === "present"
+    );
+    return {
+      company: str(intern.company) || str(intern.organization),
+      role: str(intern.role) || str(intern.title),
+      location: str(intern.location),
+      startDate: str(intern.start_date) || str(intern.from) || str(intern.startDate),
+      endDate: str(intern.end_date) || str(intern.to) || str(intern.endDate) || (isCurrentIntern ? "Present" : ""),
+      currentlyWorking: isCurrentIntern,
+      description:
+        [
+          ...bulletTexts(intern.key_contributions),
+          ...bulletTexts(intern.achievements),
+          ...bulletTexts(intern.responsibilities),
+          ...bulletTexts(intern.contributions),
+        ].join("\n") ||
+        str(intern.description),
+    };
+  });
 
   /* ── Skills ── */
   // enhanced_data stores skills as p.skills = { programming_languages: [...], frameworks: [...] }
@@ -282,6 +355,13 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
         : strArr(skillsObj.soft_skills).length > 0
         ? strArr(skillsObj.soft_skills)
         : llmCat("soft_skill", "soft_skills"),
+    // Prefer existing custom_categories (camelCase source), then auto-generate from unmapped llm categories
+    custom_categories:
+      Array.isArray(catSkills.custom_categories) && catSkills.custom_categories.length > 0
+        ? (catSkills.custom_categories as CustomCategory[])
+        : customCategoriesFromLlm.length > 0
+        ? customCategoriesFromLlm
+        : undefined,
   };
 
   // Flat skills array: prefer flat p.skills array, else build from categorized
@@ -292,6 +372,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     ...categorizedSkills.tools,
     ...categorizedSkills.cloud_platforms,
     ...categorizedSkills.soft_skills,
+    ...(categorizedSkills.custom_categories || []).flatMap((c) => c.skills),
   ];
   const skills: string[] =
     Array.isArray(p.skills) && strArr(p.skills).length > 0
@@ -431,6 +512,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       phone,
       location,
       linkedinUrl,
+      githubUrl,
       portfolioUrl,
     },
     professionalSummary: {

@@ -23,7 +23,6 @@ export interface PersonalInfoData {
   career_stage: CareerStage;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface PersonalInfoFormData extends PersonalInfoData {
   // Form-specific validation
 }

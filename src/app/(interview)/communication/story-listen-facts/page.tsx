@@ -217,6 +217,7 @@ export default function StoryListenFactsPage() {
       setCurrentQuestion({
         ...response,
         section_name: 'Story Listen Facts', // ✅ Normalize to match backend
+        question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : response.question_number,
       });
       setSelectedAnswer(null);
       setAnswerSaved(false); // Reset answer saved state
@@ -228,14 +229,11 @@ export default function StoryListenFactsPage() {
 
       // ✅ Increment section-specific question number for display
       setSectionQuestionNumber((prev) => prev + 1);
-
-      // Note: playedStories Set is preserved
-      // shouldShowStoryAudio will check if this new question's story has been played
+      setLoading(false);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to fetch next question');
       logger.error('❌ Error fetching next question:', err);
       setError(error.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -371,10 +369,14 @@ export default function StoryListenFactsPage() {
                           <div
                             key={option.id}
                             onClick={() => handleOptionSelect(option.text)}
-                            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border cursor-pointer transition-all ${
+                            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all ${
+                              answerSaved ? 'cursor-not-allowed' : 'cursor-pointer'
+                            } ${
                               selectedAnswer === option.text
                                 ? 'border-[#2557a7] bg-[#2557a7]/5'
-                                : 'border-gray-200 hover:border-[#2557a7]/40 hover:bg-gray-50'
+                                : answerSaved
+                                  ? 'border-gray-100 bg-gray-50 opacity-50'
+                                  : 'border-gray-200 hover:border-[#2557a7]/40 hover:bg-gray-50'
                             }`}
                           >
                             <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${

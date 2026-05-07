@@ -69,7 +69,7 @@ export default function JumbledSentencesPage() {
   const backendOptions = currentQuestion?.options || [];
 
   const handleOptionSelect = (optionOrdering: string) => {
-    if (!currentQuestion?.question_id) return;
+    if (!currentQuestion?.question_id || answerSaved) return;
     setSelectedAnswer(optionOrdering);
     saveTextAnswer(currentQuestion.question_id, optionOrdering);
     logger.info('✅ Selected ordering:', optionOrdering);
@@ -116,14 +116,17 @@ export default function JumbledSentencesPage() {
       }
 
       logger.info('➡️ Staying in Jumbled Sentence section, showing next question');
-      setCurrentQuestion(response);
+      setCurrentQuestion({
+        ...response,
+        question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : response.question_number,
+      });
       setSelectedAnswer(null);
       setAnswerSaved(false);
       setSectionQuestionNumber((prev) => prev + 1);
+      setLoading(false);
     } catch (err: unknown) {
       logger.error('❌ Error fetching next question:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch next question');
-    } finally {
       setLoading(false);
     }
   };
@@ -232,11 +235,16 @@ export default function JumbledSentencesPage() {
                     <button
                       key={index}
                       type="button"
+                      disabled={answerSaved}
                       onClick={() => handleOptionSelect(optionOrdering)}
                       className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center gap-3 ${
+                        answerSaved ? 'cursor-not-allowed' : 'cursor-pointer'
+                      } ${
                         selectedAnswer === optionOrdering
                           ? 'border-[#2557a7] bg-[#2557a7]/5'
-                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                          : answerSaved
+                            ? 'border-gray-100 bg-gray-50 opacity-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
                       }`}
                     >
                       {/* Letter badge */}

@@ -3,6 +3,7 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
 import AISuggestions from "../AISuggestions";
+import { toast } from "sonner";
 import SectionTipsPanel from "../SectionTipsPanel";
 import {
   FaSpellCheck,
@@ -193,7 +194,7 @@ const Achievements: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete achievement item:", error);
-      alert("Failed to delete achievement. Please try again.");
+      toast.error("Failed to delete achievement. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

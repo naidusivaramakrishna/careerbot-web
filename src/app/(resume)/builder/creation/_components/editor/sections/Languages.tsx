@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
+import { toast } from "sonner";
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
@@ -129,7 +130,7 @@ const Languages: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete language item:", error);
-      alert("Failed to delete language. Please try again.");
+      toast.error("Failed to delete language. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

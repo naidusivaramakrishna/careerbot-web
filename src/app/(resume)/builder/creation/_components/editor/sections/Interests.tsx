@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
+import { toast } from "sonner";
 import AISuggestions from "../AISuggestions";
 import SectionTipsPanel from "../SectionTipsPanel";
 import {
@@ -183,7 +184,7 @@ const Interests: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete interest item:", error);
-      alert("Failed to delete interest. Please try again.");
+      toast.error("Failed to delete interest. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

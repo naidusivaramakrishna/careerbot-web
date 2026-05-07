@@ -32,21 +32,10 @@ export interface NotificationEvent {
  * Connect to the real-time notification stream
  * Returns an EventSource that emits notifications
  */
-export function subscribeToNotifications(
-  onNotification: (notification: Notification) => void,
-  onError?: (error: Event) => void,
-  onOpen?: () => void,
-): EventSource {
-  if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_BASE_URL) {
-    console.warn('[careerbot] NEXT_PUBLIC_BASE_URL is not set — SSE notifications will not connect in production.');
-  }
+export function subscribeToNotifications(onNotification: (notification: Notification) => void, onError?: (error: Event) => void): EventSource {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
   const eventSource = new EventSource(`${baseUrl}/notifications/stream`, {
     withCredentials: true,
-  });
-
-  eventSource.addEventListener('open', () => {
-    onOpen?.();
   });
 
   eventSource.addEventListener('notification', (event: Event) => {
@@ -64,14 +53,11 @@ export function subscribeToNotifications(
   });
 
   eventSource.addEventListener('error', (event: Event) => {
-    const es = event.target as EventSource;
-    const state = es?.readyState === EventSource.CLOSED ? 'CLOSED'
-                : es?.readyState === EventSource.CONNECTING ? 'CONNECTING'
-                : 'OPEN';
-    console.warn(`Notification stream error (readyState: ${state})`);
+    console.error('Notification stream error:', event);
     if (onError) {
       onError(event);
     }
+    // EventSource will automatically attempt to reconnect
   });
 
   return eventSource;

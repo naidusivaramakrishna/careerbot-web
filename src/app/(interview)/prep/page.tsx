@@ -1,165 +1,358 @@
-"use client";
+'use client';
 
-import React from "react";
-import Link from "next/link";
-import { MessageSquare, Briefcase, ChevronRight, ArrowLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter } from 'next/navigation';
+import {
+  ArrowLeft, ChevronRight, Mic, BookOpen, Headphones,
+  FileText, Video, Zap, BarChart2, AlignLeft, MessageSquare,
+  ClipboardList, Timer, Brain, CheckSquare, Check,
+  Sparkles, Clock, Users,
+} from 'lucide-react';
+
+const BRAND = '#2557a7';
+const BRAND_HOVER = '#1e4a94';
+const BRAND_LIGHT = 'rgba(37,87,167,0.06)';
+const BRAND_BORDER = 'rgba(37,87,167,0.14)';
+
+const cards = [
+  {
+    id: 'communication',
+    href: '/communication',
+    eyebrow: 'English Proficiency',
+    badge: 'Recommended',
+    title: 'Communication Assessment',
+    tagline: 'Evaluate spoken English across 7 skill dimensions with AI-powered scoring.',
+    stats: [
+      { value: '44', label: 'Questions' },
+      { value: '7',  label: 'Sections'  },
+      { value: '20m',label: 'Duration'  },
+    ],
+    features: [
+      { icon: Mic,           label: 'See & Repeat'        },
+      { icon: Headphones,    label: 'Listen & Repeat'     },
+      { icon: AlignLeft,     label: 'Jumbled Sentences'   },
+      { icon: MessageSquare, label: 'Sentence Completion' },
+      { icon: Headphones,    label: 'Listen & Correct'    },
+      { icon: BookOpen,      label: 'Story Comprehension' },
+    ],
+    cta: 'Start Assessment',
+    Icon: Mic,
+  },
+  {
+    id: 'mock-test',
+    href: '/mock-test',
+    eyebrow: 'Timed Practice Test',
+    badge: 'New',
+    title: 'Mock Test',
+    tagline: 'Simulate real exam conditions with timed MCQ sections scored instantly.',
+    stats: [
+      { value: '40', label: 'Questions' },
+      { value: '4',  label: 'Sections'  },
+      { value: '30m',label: 'Duration'  },
+    ],
+    features: [
+      { icon: Brain,         label: 'Aptitude'         },
+      { icon: ClipboardList, label: 'Reasoning'        },
+      { icon: CheckSquare,   label: 'Domain Knowledge' },
+      { icon: Timer,         label: 'Timed Sections'   },
+      { icon: BarChart2,     label: 'Score Breakdown'  },
+      { icon: Zap,           label: 'Instant Results'  },
+    ],
+    cta: 'Take Mock Test',
+    Icon: ClipboardList,
+  },
+  {
+    id: 'mock-interview',
+    href: '/mock-interview',
+    eyebrow: 'AI Interview Simulation',
+    badge: 'Advanced',
+    title: 'Mock Interview',
+    tagline: 'A 5-stage guided journey — from prep notes to a live AI voice interview.',
+    stats: [
+      { value: '5',   label: 'Stages'   },
+      { value: '10',  label: 'Practice' },
+      { value: '60m', label: 'Duration' },
+    ],
+    features: [
+      { icon: FileText, label: 'Interview Notes'    },
+      { icon: BookOpen, label: 'English Essentials' },
+      { icon: Mic,      label: 'Practice Rounds'    },
+      { icon: Video,    label: 'Live AI Interview'  },
+      { icon: BarChart2,label: 'Score Report'       },
+      { icon: Zap,      label: 'AI Feedback'        },
+    ],
+    cta: 'Begin Preparation',
+    Icon: Video,
+  },
+];
+
+const steps = {
+  communication: [
+    'Open Sections Overview and click Start Assessment',
+    'Complete each section — AI scores in real time',
+    'Receive your full score report on completion',
+  ],
+  'mock-test': [
+    'Select your test category and difficulty level',
+    'Answer 40 questions across 4 auto-timed sections',
+    'Review instant score breakdown and explanations',
+  ],
+  'mock-interview': [
+    'Generate personalised notes from your resume',
+    'Practice answers across 3 progressive rounds',
+    'Pass the readiness gate → live AI voice interview',
+  ],
+};
+
+const tableRows: [string, string, string, string][] = [
+  ['Best for',      'English fluency',      'Aptitude & reasoning',  'Full interview sim'  ],
+  ['Format',        '7 structured sections','4 timed MCQ sections',  '5-stage journey'     ],
+  ['Duration',      '~20 min',              '~30 min',               '~45–60 min'          ],
+  ['AI Evaluation', '✓',                    '—',                     '✓'                   ],
+  ['Score Report',  '✓',                    '✓',                     '✓'                   ],
+  ['Difficulty',    'Beginner → Advanced',  'Beginner → Advanced',   'Advanced'            ],
+];
 
 export default function InterviewPrepHub() {
   const router = useRouter();
 
-  const options = [
-    {
-      id: "communication-assessment",
-      title: "Communication Assessment",
-      description: "Practice communication skills with AI-powered exercises and get real-time feedback.",
-      icon: MessageSquare,
-      href: "/communication",
-      gradient: "linear-gradient(135deg, #4e80c4, #2557a7, #1a3f80)",
-      badge: "Recommended",
-    },
-    {
-      id: "mock-interview",
-      title: "Mock Interview",
-      description: "Participate in AI-powered mock interviews and receive comprehensive performance analysis.",
-      icon: Briefcase,
-      href: "/mock-interview",
-      gradient: "linear-gradient(135deg, #4e80c4, #2557a7, #1a3f80)",
-      badge: "Advanced",
-    },
-  ];
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-5xl mx-auto">
-        {/* Header with back button */}
-        <div className="mb-8">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-4 transition-colors"
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-5xl mx-auto px-6 py-5">
 
-          <div className="mb-3">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-              Interview Prep
-            </h1>
-            <p className="text-gray-600 text-lg">
-              Choose your interview preparation method and start practicing today.
-            </p>
+        {/* ── Back ─────────────────────────────────────────── */}
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-700 mb-4 transition-colors"
+        >
+          <ArrowLeft size={13} />
+          Back
+        </button>
+
+        {/* ── Hero ─────────────────────────────────────────── */}
+        <div className="mb-5">
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white mb-2"
+            style={{ backgroundColor: BRAND }}
+          >
+            <Sparkles size={9} />
+            Interview Preparation
+          </span>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight mb-1">
+            Choose Your Preparation Path
+          </h1>
+          <p className="text-sm text-gray-500 max-w-lg leading-relaxed">
+            Three AI-powered tools to sharpen every dimension of your interview performance.
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-4">
+            {[
+              { icon: Users, label: '3 Preparation Tools'   },
+              { icon: Zap,   label: 'AI-Powered Evaluation' },
+              { icon: Clock, label: 'Self-Paced'            },
+            ].map(({ icon: Icon, label }) => (
+              <span key={label} className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+                <Icon size={12} style={{ color: BRAND }} />
+                {label}
+              </span>
+            ))}
           </div>
         </div>
 
-        {/* Options Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {options.map((option) => {
-            const Icon = option.icon;
+        {/* ── Cards ────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          {cards.map((card) => {
+            const CardIcon = card.Icon;
             return (
-              <Link
-                key={option.id}
-                href={option.href}
-                className="group relative bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+              <div
+                key={card.id}
+                className="group bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
               >
-                {/* Background gradient accent */}
-                <div
-                  className="absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300"
-                  style={{ background: option.gradient }}
-                />
+                {/* Brand accent bar */}
+                <div className="h-0.75 shrink-0" style={{ backgroundColor: BRAND }} />
 
-                {/* Top accent bar */}
-                <div
-                  className="h-1 w-full"
-                  style={{ background: option.gradient }}
-                />
+                <div className="flex flex-col flex-1 p-4 gap-3">
 
-                {/* Content */}
-                <div className="relative p-6 flex flex-col h-full">
-                  {/* Badge */}
-                  <div className="mb-4 flex items-start justify-between">
+                  {/* Row 1: icon + badge */}
+                  <div className="flex items-center justify-between">
                     <div
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
-                      style={{
-                        background: "rgba(37, 87, 167, 0.1)",
-                        color: "#2557a7",
-                      }}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center"
+                      style={{ backgroundColor: BRAND_LIGHT }}
                     >
-                      <span>✓</span>
-                      {option.badge}
+                      <CardIcon size={17} style={{ color: BRAND }} />
                     </div>
+                    <span
+                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-white"
+                      style={{ backgroundColor: BRAND }}
+                    >
+                      {card.badge}
+                    </span>
                   </div>
 
-                  {/* Icon */}
-                  <div className="mb-4">
-                    <div
-                      className="w-14 h-14 rounded-xl flex items-center justify-center shadow-sm mb-3"
-                      style={{ background: option.gradient }}
-                    >
-                      <Icon size={24} className="text-white" />
-                    </div>
-                  </div>
-
-                  {/* Title and Description */}
-                  <div className="flex-1">
-                    <h2 className="text-xl font-bold text-gray-900 mb-2">
-                      {option.title}
+                  {/* Row 2: title + tagline */}
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                      {card.eyebrow}
+                    </p>
+                    <h2 className="text-[15px] font-extrabold text-gray-900 leading-snug mb-1.5">
+                      {card.title}
                     </h2>
-                    <p className="text-sm text-gray-600 leading-relaxed mb-4">
-                      {option.description}
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      {card.tagline}
                     </p>
                   </div>
 
-                  {/* CTA */}
-                  <div className="flex items-center gap-2 text-sm font-semibold text-[#2557a7] pt-4 border-t border-gray-100 group-hover:gap-3 transition-all">
-                    <span>Get Started</span>
-                    <ChevronRight
-                      size={16}
-                      className="group-hover:translate-x-1 transition-transform"
-                    />
+                  {/* Row 3: stats */}
+                  <div
+                    className="grid grid-cols-3 divide-x divide-[rgba(37,87,167,0.1)] rounded-xl overflow-hidden"
+                    style={{ backgroundColor: BRAND_LIGHT }}
+                  >
+                    {card.stats.map(({ value, label }) => (
+                      <div key={label} className="flex flex-col items-center py-2 px-1">
+                        <span className="text-base font-extrabold text-gray-900 leading-none">{value}</span>
+                        <span className="text-[9px] text-gray-400 font-semibold mt-0.5 uppercase tracking-wide">{label}</span>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Gradient CTA background */}
-                  <div
-                    className="absolute bottom-0 left-0 right-0 h-12 opacity-0 group-hover:opacity-10 transition-opacity duration-300"
-                    style={{ background: option.gradient }}
-                  />
-                </div>
+                  {/* Row 4: features */}
+                  <div>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                      What&apos;s Covered
+                    </p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                      {card.features.map(({ label }) => (
+                        <div key={label} className="flex items-center gap-1.5">
+                          <Check size={9} className="shrink-0" style={{ color: BRAND }} />
+                          <span className="text-[11px] text-gray-600 truncate">{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-                {/* Hover glow effect */}
-                <div
-                  className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-5 transition-opacity duration-300 pointer-events-none"
-                  style={{ background: option.gradient }}
-                />
-              </Link>
+                  {/* Row 5: CTA */}
+                  <button
+                    onClick={() => router.push(card.href)}
+                    className="mt-auto w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm text-white transition-colors duration-150 active:scale-[0.98]"
+                    style={{ backgroundColor: BRAND }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = BRAND_HOVER)}
+                    onMouseOut={(e)  => (e.currentTarget.style.backgroundColor = BRAND)}
+                  >
+                    {card.cta}
+                    <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+
+                </div>
+              </div>
             );
           })}
         </div>
 
-        {/* Info section */}
-        <div className="mt-12 bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-bold text-gray-900 mb-3">Which option is right for you?</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                <MessageSquare size={16} className="text-[#2557a7]" />
-                Communication Assessment
-              </h4>
-              <p className="text-sm text-gray-600">
-                Best for improving your communication skills, pronunciation, and confidence. Perfect for practicing specific communication scenarios and receiving targeted feedback.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                <Briefcase size={16} className="text-[#2557a7]" />
-                Mock Interview
-              </h4>
-              <p className="text-sm text-gray-600">
-                Best for full interview practice with realistic questions and scenarios. Get comprehensive analysis of your performance including technical and behavioral aspects.
-              </p>
-            </div>
+        {/* ── How it works ─────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-4">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
+            How It Works
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {cards.map((card) => {
+              const CardIcon = card.Icon;
+              const cardSteps = steps[card.id as keyof typeof steps];
+              return (
+                <div key={card.id}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: BRAND_LIGHT }}
+                    >
+                      <CardIcon size={12} style={{ color: BRAND }} />
+                    </div>
+                    <p className="text-xs font-bold text-gray-800">{card.title}</p>
+                  </div>
+                  <ol className="space-y-1.5">
+                    {cardSteps.map((step, i) => (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <span
+                          className="shrink-0 w-4 h-4 rounded-full text-white text-[9px] font-extrabold flex items-center justify-center mt-0.5"
+                          style={{ backgroundColor: BRAND }}
+                        >
+                          {i + 1}
+                        </span>
+                        <span className="text-[11px] text-gray-500 leading-relaxed">{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              );
+            })}
           </div>
         </div>
+
+        {/* ── Comparison table ─────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+          <div className="px-5 py-3 border-b border-gray-100">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              Side-by-Side Comparison
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-400 w-[28%]" />
+                  {cards.map((c) => (
+                    <th
+                      key={c.id}
+                      className="text-center px-4 py-2.5 text-xs font-bold w-[24%]"
+                      style={{ color: BRAND }}
+                    >
+                      {c.title}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tableRows.map(([attr, ...vals], i) => (
+                  <tr key={attr} className={i % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'}>
+                    <td className="px-5 py-2 text-xs font-semibold text-gray-600">{attr}</td>
+                    {vals.map((val, j) => (
+                      <td key={j} className="px-4 py-2 text-xs text-center text-gray-500">
+                        {val === '✓' ? (
+                          <Check size={13} className="mx-auto" style={{ color: BRAND }} />
+                        ) : val === '—' ? (
+                          <span className="text-gray-300">—</span>
+                        ) : val}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── Guidance callout ─────────────────────────────── */}
+        <div
+          className="flex items-start gap-3.5 px-5 py-3.5 rounded-2xl border"
+          style={{ backgroundColor: BRAND_LIGHT, borderColor: BRAND_BORDER }}
+        >
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: BRAND }}
+          >
+            <Sparkles size={14} className="text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-gray-900 mb-0.5">Recommended learning path</p>
+            <p className="text-xs text-gray-500 leading-relaxed max-w-2xl">
+              Start with{' '}
+              <span className="font-semibold" style={{ color: BRAND }}>Communication Assessment</span>
+              {' '}→ then{' '}
+              <span className="font-semibold" style={{ color: BRAND }}>Mock Test</span>
+              {' '}→ finally the{' '}
+              <span className="font-semibold" style={{ color: BRAND }}>Mock Interview</span>
+              {' '}for the full interview experience with AI voice feedback.
+            </p>
+          </div>
+        </div>
+
       </div>
     </div>
   );

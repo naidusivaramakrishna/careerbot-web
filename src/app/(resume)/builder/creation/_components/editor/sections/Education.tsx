@@ -3,6 +3,7 @@ import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import MonthYearPicker from "../MonthYearPicker";
 import SectionTipsPanel from "../SectionTipsPanel";
+import { toast } from "sonner";
 import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
@@ -197,7 +198,7 @@ const Education: React.FC = () => {
 
     } catch (error) {
       // // console.error("❌ Failed to delete education item:", error);
-      alert("Failed to delete education entry. Please try again.");
+      toast.error("Failed to delete education entry. Please try again.");
     } finally {
       setDeletingIndex(null);
     }

@@ -12,18 +12,34 @@ export default function CommunicationHeader() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   useEffect(() => {
-    const startTime = localStorage.getItem('test_start_date');
-    if (!startTime) return;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    const updateTimer = () => {
-      const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
-      const remaining = Math.max(0, TOTAL_SECONDS - elapsed);
-      setTimeLeft(remaining);
+    const startCountdown = (startTime: string) => {
+      if (interval) clearInterval(interval);
+      const updateTimer = () => {
+        const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
+        const remaining = Math.max(0, TOTAL_SECONDS - elapsed);
+        setTimeLeft(remaining);
+      };
+      updateTimer();
+      interval = setInterval(updateTimer, 1000);
     };
 
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
+    // Check if timer already started (e.g. page refresh)
+    const existing = localStorage.getItem('test_start_date');
+    if (existing) startCountdown(existing);
+
+    // Listen for timer start from same tab (custom event)
+    const handleTimerStart = (e: Event) => {
+      const startTime = (e as CustomEvent<string>).detail;
+      if (startTime) startCountdown(startTime);
+    };
+    window.addEventListener('assessment-timer-start', handleTimerStart);
+
+    return () => {
+      if (interval) clearInterval(interval);
+      window.removeEventListener('assessment-timer-start', handleTimerStart);
+    };
   }, []);
 
   const formatTime = (seconds: number) => {
@@ -49,7 +65,7 @@ export default function CommunicationHeader() {
         : 'bg-gray-100 border border-gray-200';
 
   const handleExit = () => setShowConfirm(true);
-  const handleConfirmExit = () => router.push('/communication');
+  const handleConfirmExit = () => router.push('/dashboard');
   const handleCancel = () => setShowConfirm(false);
 
   return (

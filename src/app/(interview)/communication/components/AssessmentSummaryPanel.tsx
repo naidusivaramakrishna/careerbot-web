@@ -100,7 +100,7 @@ export default function AssessmentSummaryPanel({
       logger.info(`📊 Transcription status: ${status.completed}/${status.total_expected} completed, ${status.processing} processing, ${status.failed} failed`);
 
       // Check if all transcriptions are complete
-      if (status.overall_status === 'complete' && status.completed === status.total_expected) {
+      if (status.overall_status === 'completed' && status.completed === status.total_expected) {
         setIsTranscriptionReady(true);
         setWaitingTimeLeft(0);
         logger.info('✅ All audio transcriptions are complete');

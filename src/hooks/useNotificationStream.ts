@@ -10,6 +10,7 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   deleteNotification,
+  getNotifications,
   Notification,
 } from '@/api/notificationsApi';
 
@@ -25,10 +26,6 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
   const [isConnected, setIsConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  // Keep onNotification in a ref so connect() doesn't need it as a dependency
-  const onNotificationRef = useRef(onNotification);
-  onNotificationRef.current = onNotification;
 
   // Connect to notification stream
   const connect = useCallback(() => {
@@ -41,32 +38,22 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
         (notification: Notification) => {
           setNotifications((prev) => [notification, ...prev]);
           setUnreadCount((prev) => prev + 1);
-          onNotificationRef.current?.(notification);
+          onNotification?.(notification);
         },
         () => {
-          // Close and clear the dead connection so the next connect() call works
-          eventSourceRef.current?.close();
-          eventSourceRef.current = null;
           setIsConnected(false);
-
-          // Exponential backoff: 5s, 10s, 20s, capped at 30s
-          const delay = Math.min(5000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-          reconnectAttemptsRef.current += 1;
+          // Attempt to reconnect after 5 seconds
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, delay);
-        },
-        () => {
-          // Successfully opened — reset backoff counter
-          reconnectAttemptsRef.current = 0;
-          setIsConnected(true);
-        },
+          }, 5000);
+        }
       );
+      setIsConnected(true);
     } catch (err) {
       console.error('Failed to connect to notification stream:', err);
       setIsConnected(false);
     }
-  }, []);
+  }, [onNotification]);
 
   // Disconnect from notification stream
   const disconnect = useCallback(() => {
@@ -81,7 +68,17 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
     setIsConnected(false);
   }, []);
 
-  // Auto-connect on mount — connect/disconnect are stable (no changing deps)
+  // Fetch existing notifications on mount
+  useEffect(() => {
+    getNotifications(1, 4)
+      .then(({ items, unread_count }) => {
+        setNotifications(items);
+        setUnreadCount(unread_count);
+      })
+      .catch(() => {/* non-fatal */});
+  }, []);
+
+  // Auto-connect on mount
   useEffect(() => {
     if (autoConnect) {
       connect();
@@ -89,8 +86,7 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
     return () => {
       disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConnect]);
+  }, [autoConnect, connect, disconnect]);
 
   // Mark notification as read
   const markAsRead = useCallback(async (notificationId: string) => {

@@ -250,16 +250,15 @@ export default function ListenAndRepeatPage() {
         // Reset audio completion for new question
         setAudioCompleted(false);
       }
+      setLoading(false);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to upload audio or fetch next question');
       const errorMessage = error.message;
       logger.error('❌ Error in handleSubmit:', errorMessage);
       logger.error('❌ Full error:', err);
 
-      // ✅ Show error to user
       setError(errorMessage);
       alert(`⚠️ Upload Failed!\n\n${errorMessage}\n\nPlease try recording again.`);
-    } finally {
       setLoading(false);
     }
   };
@@ -337,14 +336,6 @@ export default function ListenAndRepeatPage() {
                     </div>
                   )}
 
-                  {hasRecording && !validationWarning && (
-                    <div className="mt-4 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-xl">
-                      <svg className="w-4 h-4 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="text-sm font-medium text-green-800">Valid Recording Saved</span>
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -362,7 +353,7 @@ export default function ListenAndRepeatPage() {
                 key={currentQuestion?.question_id}
                 maxDuration={15}
                 onRecordingComplete={handleRecordingComplete}
-                disabled={!audioCompleted}
+                disabled={!audioCompleted || !!hasRecording}
               />
             </div>
           </div>
