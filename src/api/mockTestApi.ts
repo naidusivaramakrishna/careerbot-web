@@ -715,24 +715,43 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
 
     let analyticsData: WeakAreasAnalytics | null = null;
 
-    // Determine if an item should be treated as a weak area.
-    // Backend sets is_weak: true/false, but for new users it may be absent or false
-    // even when average_score is low. Fall back to score < 60 as the threshold.
-    const isWeakItem = (item: any): boolean =>
-      item.is_weak === true || (item.is_weak !== false && typeof item.average_score === 'number' && item.average_score < 60);
+    // Pick the best accuracy value from an item regardless of exact field name.
+    // Backend may send 0–1 decimal (e.g. 0.10) or 0–100 percentage (e.g. 10).
+    const extractAccuracy = (item: any): number => {
+      // Dynamic scan: prefer any numeric field whose key contains "accuracy", then "score"
+      const entries = Object.entries(item as Record<string, unknown>)
+        .filter(([, v]) => typeof v === 'number' && !isNaN(v as number))
+        .map(([k, v]) => ({ k, v: v as number }));
+      const pick = (re: RegExp) => entries.find(e => re.test(e.k) && e.v !== 0);
+      const found = pick(/accuracy/i) ?? pick(/score/i) ?? pick(/rate|pct|percent/i) ?? entries.find(e => e.v !== 0);
+      const raw = found?.v ?? 0;
+      // Normalise: if value is in 0–1 range it's a decimal fraction → multiply by 100
+      return Math.round(raw > 0 && raw <= 1 ? raw * 100 : raw);
+    };
 
-    const toWeakArea = (item: any) => ({
-      topic: item.category || 'Unknown',
-      accuracy: Math.round(item.average_score ?? 0),
-      suggestion: `Improve your ${item.category} skills. You scored ${typeof item.average_score === 'number' ? item.average_score.toFixed(1) : item.average_score}% on average across ${item.attempts || 0} attempts.`,
-    });
+    const isWeakItem = (item: any): boolean => {
+      const acc = extractAccuracy(item);
+      return item.is_weak === true || (item.is_weak !== false && acc < 70);
+    };
+
+    const toWeakArea = (item: any): WeakArea => {
+      const topic: string = item.topic ?? item.category ?? item.subcategory ?? item.section ?? item.name ?? 'Unknown';
+      const accuracy = extractAccuracy(item);
+      const attempts: number = item.attempts ?? item.total_attempts ?? item.count ?? 0;
+      const suggestion: string =
+        item.suggestion ?? item.recommendation ??
+        `Work on ${topic} — ${accuracy}% accuracy across ${attempts} attempt${attempts !== 1 ? 's' : ''}.`;
+      return { topic, accuracy, suggestion };
+    };
 
     const buildResult = (items: any[]): WeakAreasAnalytics => {
-      const weakAreas = items.filter(isWeakItem).map(toWeakArea);
+      let weakItems = items.filter(isWeakItem);
+      if (weakItems.length === 0) weakItems = items; // show all if nothing flagged
+      const weakAreas = weakItems.map(toWeakArea).sort((a, b) => a.accuracy - b.accuracy);
       return {
         weak_areas: weakAreas,
         recommendations: weakAreas.length > 0
-          ? [`Focus on ${weakAreas.map((w: any) => w.topic).join(', ')}`, 'Practice weak areas regularly', 'Take topic-specific mock tests to improve']
+          ? [`Focus on: ${weakAreas.slice(0, 3).map((w: any) => w.topic).join(', ')}`, 'Practice weak areas regularly', 'Take topic-specific mock tests to improve']
           : ['Keep practicing all sections', 'Take more mock tests'],
       };
     };
@@ -741,7 +760,8 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
     if (response.data?.data && Array.isArray(response.data.data)) {
       analyticsData = buildResult(response.data.data);
     } else if (response.data?.weak_areas && Array.isArray(response.data.weak_areas)) {
-      analyticsData = response.data;
+      // Don't pass through raw — normalise accuracy values
+      analyticsData = buildResult(response.data.weak_areas);
     } else if (Array.isArray(response.data)) {
       analyticsData = buildResult(response.data);
     }

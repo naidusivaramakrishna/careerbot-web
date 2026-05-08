@@ -1,3 +1,14 @@
+// Valid subcategories accepted by the backend /mock-test/generate endpoint.
+// abstract, algebra, analytical, dsa, geometry, java, logical, oops,
+// percentages, profit_loss, python, ratios, simple_interest, sql,
+// statistics, time_and_work, trigonometry, verbal, web
+export const CATEGORY_SUBCATEGORIES: Record<string, string[]> = {
+  arithmetic: ['percentages', 'profit_loss', 'ratios', 'simple_interest', 'time_and_work', 'algebra'],
+  aptitude:   ['verbal', 'abstract', 'analytical', 'statistics', 'geometry', 'trigonometry'],
+  reasoning:  ['logical'],
+  technical:  ['python', 'java', 'dsa', 'sql', 'oops', 'web'],
+};
+
 export interface CompanyInfo {
   name: string;
   logoPath: string;
@@ -25,6 +36,9 @@ const SLUG_TO_BACKEND: Record<string, string> = {
   capgemini: 'capgemini', capgemini_exceller: 'capgemini',
   '2': 'tcs',
   '5': 'wipro',
+  // Custom tests use tcs as the company context (broadest question bank)
+  'custom-test': 'tcs',
+  'custom': 'tcs',
 };
 
 const FALLBACK_INFO: CompanyInfo = {
