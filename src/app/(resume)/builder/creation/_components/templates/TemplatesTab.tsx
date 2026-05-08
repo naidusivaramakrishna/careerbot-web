@@ -11,6 +11,25 @@ import { getProfile } from "@/api/userApi";
 import { useRouter } from "next/navigation";
 import { getSectionOrder } from "@/app/(resume)/templates/_utils/sectionOrder";
 
+const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
+  core_engineering: '/assets/templates/core-engineering.png',
+  software_engineering: '/assets/templates/software_engineering.png',
+  healthcare: '/assets/templates/healthcare.png',
+  finance: '/assets/templates/finance.png',
+  education: '/assets/templates/education.png',
+  cybersecurity: '/assets/templates/cybersecurity.png',
+  electronics_and_vlsi: '/assets/templates/electronics_vlsi.png',
+  government_standard: '/assets/templates/government_standard.png',
+  legal: '/assets/templates/legal.png',
+  logistics_warehouse_operations: '/assets/templates/logistics.png',
+  marine_merchant_navy: '/assets/templates/marine_merchant.png',
+  modern_minimal_template: '/assets/templates/modern_minimal.png',
+  research_scholar: '/assets/templates/research_scholar.png',
+  sales_business_development: '/assets/templates/sales_business.png',
+};
+
+const DEFAULT_CAREER_IMAGE = '/assets/templates/template-1.jpg';
+
 // Interface updated with mongoId (_id)
 interface TransformedTemplate {
   id: string;
@@ -22,6 +41,8 @@ interface TransformedTemplate {
   atsFriendly: boolean;
   description: string;
   category: string;
+  domain_family?: string;
+  domain_display_name?: string;
 }
 
 // Default templates using MongoDB _ids
@@ -108,8 +129,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
     ats_friendly?: boolean;
     subtitle?: string;
     domain_family?: string;
+    domain_display_name?: string;
   }> | null>(null);
-  const [previewImageError, setPreviewImageError] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -155,6 +176,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
 
     if (storedTemplateId) {
       setAppliedTemplateId(storedTemplateId);
+      setSelectedTemplate(null); // Clear regular template selection when loading career level
       logger.info('✓ Applied template ID set to:', storedTemplateId);
     } else {
       setAppliedTemplateId(null);
@@ -185,7 +207,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       setCareerLevelData(null);
       logger.info('⚠ No career level data found in localStorage');
     }
-  }, [userEmail]);
+  }, [userEmail, setSelectedTemplate]);
 
   // Fetch templates from API
   useEffect(() => {
@@ -264,7 +286,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       }
     };
     fetchTemplates();
-  }, [selectedCategory, appliedTemplateId, setSelectedTemplate]);
+  }, [selectedCategory]);
 
   const filteredTemplates = templates.filter((tpl) => {
     const matchSearch = tpl.subtitle?.toLowerCase().includes(searchQuery.toLowerCase()) || tpl.name?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -373,15 +395,6 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           localStorage.setItem(selectedTemplateKey, previewTemplate.id);
         }
 
-        // Keep the template selected for UI
-        setSelectedTemplate(previewTemplate.template_id);
-
-        // Sync resumeStyle with the backend's template config so preview matches download
-        const templateDefaults = TEMPLATE_DEFAULT_STYLES[previewTemplate.template_id];
-        if (templateDefaults) {
-          setResumeStyle(prev => ({ ...prev, ...templateDefaults }));
-        }
-
         setPreviewTemplate(null);
 
         if (onTemplateSelect) onTemplateSelect();
@@ -486,10 +499,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                 {careerLevelData.map((careerTpl, index) => {
                   // Match by template name AND ID for safety
                   const isSelected = (appliedTemplateId === careerTpl.id || appliedTemplateId === String(careerTpl.id)) && careerTpl.name;
-                  const templateImages = ['/assets/templates/template-1.jpg', '/assets/templates/template-2.jpg', '/assets/templates/template-3.jpg', '/assets/templates/template-4.jpg'];
                   const careerLevels = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level'];
-                  const imageIndex = index % templateImages.length;
                   const careerLevel = careerLevels[index] || 'Custom';
+                  const familyImage = DOMAIN_FAMILY_IMAGES[careerTpl.domain_family || ''] || DEFAULT_CAREER_IMAGE;
                   return (
                     <div
                       key={`career-${careerTpl.id}-${index}`}
@@ -529,7 +541,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                           preview_url: careerTpl.preview_url,
                           atsFriendly: careerTpl.ats_friendly ?? true,
                           description: careerTpl.description || 'Professional resume template',
-                          category: 'career-level'
+                          category: 'career-level',
+                          domain_family: careerTpl.domain_family,
+                          domain_display_name: careerTpl.domain_display_name
                         };
                         setPreviewTemplate(previewData);
                         logger.info('Career level template selected:', careerTpl.name, 'ID:', careerTpl.id);
@@ -543,14 +557,38 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                         100% ATS Friendly
                       </span>
                       <Image
-                        src={templateImages[imageIndex]}
+                        src={familyImage}
                         alt={careerLevel}
                         width={160}
                         height={200}
                         className="w-full h-44 mt-6 object-contain bg-gray-100"
                       />
                       <div className="w-full px-2 py-2 flex flex-col items-center">
-                        <p className="text-xs font-semibold text-gray-700 text-center">{careerTpl.name}</p>
+                        <p className="text-xs font-semibold text-gray-700 text-center">
+                          {(() => {
+                            const templateName = careerTpl.name || '';
+                            const nameStr = templateName.toLowerCase();
+
+                            let careerLevel = '';
+                            if (nameStr.includes('early') && nameStr.includes('career')) {
+                              careerLevel = 'Early Career';
+                            } else if (nameStr.includes('senior')) {
+                              careerLevel = 'Senior-Level';
+                            } else if (nameStr.includes('mid')) {
+                              careerLevel = 'Mid-Level';
+                            } else if (nameStr.includes('fresher')) {
+                              careerLevel = 'Fresher';
+                            } else if (nameStr.includes('manager')) {
+                              careerLevel = 'Manager';
+                            }
+
+                            if (careerLevel && careerTpl.domain_display_name) {
+                              return `${careerTpl.domain_display_name} ${careerLevel} Template`;
+                            }
+
+                            return careerTpl.domain_display_name || careerTpl.name;
+                          })()}
+                        </p>
                         {isSelected && (
                           <span className="mt-1 text-[10px] text-[#2557a7] font-semibold">✓ Selected</span>
                         )}
@@ -900,7 +938,6 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
               <button
                 onClick={() => {
                   setPreviewTemplate(null);
-                  setPreviewImageError(false);
                 }}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
@@ -912,14 +949,11 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
               <div className="flex-1 bg-gray-100 p-6 overflow-y-auto">
                 <div className="bg-white rounded-lg shadow-lg mx-auto" style={{ maxWidth: '600px' }}>
                   <Image
-                    src={previewTemplate.preview_url}
+                    src={previewTemplate.category === 'career-level' ? (DOMAIN_FAMILY_IMAGES[previewTemplate.domain_family || ''] || DEFAULT_CAREER_IMAGE) : previewTemplate.preview_url}
                     alt={previewTemplate.name}
                     width={600}
                     height={800}
                     className="w-full h-auto object-contain"
-                    onError={() => {
-                      setPreviewImageError(true);
-                    }}
                   />
                 </div>
               </div>
@@ -927,7 +961,35 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
               <div className="w-80 bg-white p-6 border-l border-gray-200 overflow-y-auto">
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-800 mb-2">{previewTemplate.name}</h3>
+                    <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                      {(() => {
+                        if (previewTemplate.category !== 'career-level') {
+                          return previewTemplate.name;
+                        }
+
+                        const templateName = previewTemplate.name || '';
+                        const nameStr = templateName.toLowerCase();
+
+                        let careerLevel = '';
+                        if (nameStr.includes('early') && nameStr.includes('career')) {
+                          careerLevel = 'Early Career';
+                        } else if (nameStr.includes('senior')) {
+                          careerLevel = 'Senior-Level';
+                        } else if (nameStr.includes('mid')) {
+                          careerLevel = 'Mid-Level';
+                        } else if (nameStr.includes('fresher')) {
+                          careerLevel = 'Fresher';
+                        } else if (nameStr.includes('manager')) {
+                          careerLevel = 'Manager';
+                        }
+
+                        if (careerLevel && previewTemplate.domain_display_name) {
+                          return `${previewTemplate.domain_display_name} ${careerLevel} Template`;
+                        }
+
+                        return previewTemplate.domain_display_name || previewTemplate.name;
+                      })()}
+                    </h3>
                     {previewTemplate.atsFriendly && (
                       <span className="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
                         ✓ 100% ATS Friendly

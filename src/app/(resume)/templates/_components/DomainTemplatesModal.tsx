@@ -6,9 +6,9 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { type TemplateResponse, getAllResumes, createResumeWithAuth } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
-import { Button } from '@/components/common';
 import logger from '@/lib/logger';
 import { getSectionOrder } from '../_utils/sectionOrder';
+import { Button } from '@/components/ui/Button';
 
 interface DomainTemplatesModalProps {
   domainName: string;
@@ -155,6 +155,7 @@ export default function DomainTemplatesModal({
           ats_friendly: t.ats_friendly || true,
           subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
           domain_family: ((t as unknown) as Record<string, unknown>).domain_family as string || correctDomainFamily,
+          domain_display_name: domainName,
         }));
         logger.info('Career level data to store:', careerLevelData);
         localStorage.setItem(careerLevelKey, JSON.stringify(careerLevelData));
@@ -193,8 +194,6 @@ export default function DomainTemplatesModal({
       if (resumeId) {
         router.push(`/builder/creation/${resumeId}`);
       }
-
-      onClose();
     } catch (error) {
       logger.error('Error applying template:', error);
       setIsLoading(false);
@@ -308,7 +307,29 @@ export default function DomainTemplatesModal({
                 {/* Title and ATS Badge */}
                 <div>
                   <h3 className="text-lg font-bold tracking-tight text-slate-900 mb-3">
-                    {selectedTemplate.name}
+                    {(() => {
+                      const templateName = selectedTemplate.name || '';
+                      const nameStr = templateName.toLowerCase();
+
+                      let careerLevel = '';
+                      if (nameStr.includes('early') && nameStr.includes('career')) {
+                        careerLevel = 'Early Career';
+                      } else if (nameStr.includes('senior')) {
+                        careerLevel = 'Senior-Level';
+                      } else if (nameStr.includes('mid')) {
+                        careerLevel = 'Mid-Level';
+                      } else if (nameStr.includes('fresher')) {
+                        careerLevel = 'Fresher';
+                      } else if (nameStr.includes('manager')) {
+                        careerLevel = 'Manager';
+                      }
+
+                      if (careerLevel) {
+                        return `${domainName} ${careerLevel} Template`;
+                      }
+
+                      return selectedTemplate.name;
+                    })()}
                   </h3>
                   <div className="inline-block bg-emerald-50 text-emerald-700 text-xs font-semibold px-4 py-1.5 rounded-full ring-1 ring-emerald-200">
                     ✓ 100% ATS Friendly

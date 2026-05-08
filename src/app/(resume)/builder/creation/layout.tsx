@@ -46,12 +46,8 @@ function BuilderLayoutInner({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="antialiased">
-        <Suspense>
-          <BuilderLayoutInner>{children}</BuilderLayoutInner>
-        </Suspense>
-      </body>
-    </html>
+    <Suspense>
+      <BuilderLayoutInner>{children}</BuilderLayoutInner>
+    </Suspense>
   );
 }

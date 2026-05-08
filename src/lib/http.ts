@@ -168,7 +168,6 @@ client.interceptors.response.use(
       return Promise.reject(error);
     }
 
-<<<<<<< Updated upstream
     // 500/503 with AI_SERVICE_UNAVAILABLE = AI/LLM service is temporarily down.
     // Retry up to 3 times with increasing delay — uses separate _aiRetryCount
     // so it does not interfere with the 401 token-refresh _retry flag.
@@ -201,14 +200,11 @@ client.interceptors.response.use(
       !originalRequest.url?.includes('/admin/auth/');
 
     if ((error.response?.status !== 401 && !isBackendCrash) || originalRequest._retry) {
-=======
-    if (error.response?.status !== 401 || originalRequest._retry) {
       // Replace the generic axios message with the actual backend message
       const backendMessage = extractBackendMessage(error.response?.data);
       if (backendMessage && error instanceof Error) {
         error.message = backendMessage;
       }
->>>>>>> Stashed changes
       return Promise.reject(error);
     }
 

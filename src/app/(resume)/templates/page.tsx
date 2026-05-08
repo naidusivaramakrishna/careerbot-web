@@ -208,24 +208,23 @@ export default function TemplatesPage() {
   }, []);
 
   // Fetch all templates on mount
-  const fetchTemplates = useCallback(async () => {
-    try {
-      setLoading(true);
-      // Fetch all templates (no category filter to API)
-      const tmps = await getTemplatesByCategory();
-      setTemplates(tmps);
-      logger.debug('Templates: fetched all templates', { count: tmps.length });
-    } catch (err) {
-      logger.error('Templates: failed to fetch templates', err);
-      setTemplates([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        setLoading(true);
+        // Fetch all templates (no category filter to API)
+        const tmps = await getTemplatesByCategory();
+        setTemplates(tmps);
+        logger.debug('Templates: fetched all templates', { count: tmps.length });
+      } catch (err) {
+        logger.error('Templates: failed to fetch templates', err);
+        setTemplates([]);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchTemplates();
-  }, [fetchTemplates]);
+  }, []);
 
   // Group templates by domain family and domain
   const groupedTemplates = useMemo(() => {

@@ -181,10 +181,15 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 2️⃣ Map to ProfileData format
             const mapped = mapResumeToProfile(result);
 
+            // Ensure mapped is defined
+            if (!mapped) {
+                throw new Error('Failed to parse resume data');
+            }
+
             // ---------------------------------------
             // 3️⃣ UPDATE PERSONAL INFO IN DB
             // ---------------------------------------
-            if (mapped.personalInformation) {
+            if (mapped?.personalInformation) {
                 const personalPayload = {
                     full_name: mapped.personalInformation.fullName,
                     email: mapped.personalInformation.email,
@@ -287,15 +292,15 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // ✅ SORT EDUCATION BY RECENCY (most recent first)
             // First maintain resume order from mapped.education, then sort by end_date
             const educationOrder = new Map(
-                mapped.education?.map((edu, index) => [
-                    `${edu.institution}|${edu.degree}`,
+                (mapped?.education || []).map((edu, index) => [
+                    `${edu?.institution || ''}|${edu?.degree || ''}`,
                     index
                 ]) || []
             );
 
-            const updatedEducation = [...fetchedEducation].sort((a, b) => {
-                const aKey = `${a.institution}|${a.degree}`;
-                const bKey = `${b.institution}|${b.degree}`;
+            const updatedEducation = [...(fetchedEducation || [])].sort((a, b) => {
+                const aKey = `${a?.institution || ''}|${a?.degree || ''}`;
+                const bKey = `${b?.institution || ''}|${b?.degree || ''}`;
                 const aIndex = educationOrder.get(aKey) ?? Infinity;
                 const bIndex = educationOrder.get(bKey) ?? Infinity;
 
@@ -305,10 +310,10 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 }
 
                 // Otherwise sort by end_date (most recent first)
-                if (!a.end_date && !b.end_date) return 0;
-                if (!a.end_date) return -1; // Ongoing education first
-                if (!b.end_date) return 1;
-                return new Date(b.end_date).getTime() - new Date(a.end_date).getTime();
+                if (!a?.end_date && !b?.end_date) return 0;
+                if (!a?.end_date) return -1; // Ongoing education first
+                if (!b?.end_date) return 1;
+                return new Date(b?.end_date || '').getTime() - new Date(a?.end_date || '').getTime();
             });
 
             // ---------------------------------------
@@ -317,23 +322,23 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             setProfileData((prev) => ({
                 ...prev,
                 personalInformation: {
-                    ...prev.personalInformation,
-                    ...mapped.personalInformation,
+                    ...prev?.personalInformation,
+                    ...(mapped?.personalInformation || {}),
                 },
                 education: updatedEducation,
-                workExperience: updatedExp,
-                skills: updatedSkills.map((s) => s.name),
-                projects: updatedProjects.map((p) => ({
-                    id: p.id,
-                    project_name: p.project_name,
-                    role: p.role,
-                    technologies: p.technologies || '',
-                    start_date: p.start_date,
-                    end_date: p.end_date,
-                    description: p.description,
-                    project_link: p.project_link,
+                workExperience: updatedExp || [],
+                skills: (updatedSkills || []).map((s) => s?.name || ''),
+                projects: (updatedProjects || []).map((p) => ({
+                    id: p?.id,
+                    project_name: p?.project_name || '',
+                    role: p?.role || '',
+                    technologies: p?.technologies || '',
+                    start_date: p?.start_date || '',
+                    end_date: p?.end_date || '',
+                    description: p?.description || '',
+                    project_link: p?.project_link || '',
                 })),
-                certifications: updatedCertifications,
+                certifications: updatedCertifications || [],
             }));
 
             toast.success("Resume imported successfully!", { id: "resume-upload" });
@@ -344,8 +349,9 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 refreshDashboard();
             }, 100);
         } catch (err) {
-            logger.error("Error during resume import:", err);
-            toast.error("Failed to extract resume", { id: "resume-upload" });
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            logger.error("Error during resume import:", errorMessage, err);
+            toast.error(errorMessage || "Failed to extract resume", { id: "resume-upload" });
         } finally {
             setUploading(false);
         }
@@ -408,10 +414,15 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
 
             const mapped = mapLinkedinToProfile(res);
 
+            // Ensure mapped is defined
+            if (!mapped) {
+                throw new Error('Failed to parse LinkedIn data');
+            }
+
             // -------------------------------
             // 1️⃣ UPDATE PERSONAL INFO
             // -------------------------------
-            if (mapped.personalInformation) {
+            if (mapped?.personalInformation) {
                 await updateProfile({
                     full_name: mapped.personalInformation.fullName,
                     email: mapped.personalInformation.email,
@@ -496,21 +507,21 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             setProfileData((prev) => ({
                 ...prev,
                 personalInformation: {
-                    ...prev.personalInformation,
-                    ...mapped.personalInformation,
+                    ...prev?.personalInformation,
+                    ...(mapped?.personalInformation || {}),
                 },
-                education: updatedEducation,
-                workExperience: updatedExp,
-                skills: updatedSkills.map((s) => s.name),
-                projects: updatedProjects.map((p) => ({
-                    id: p.id,
-                    project_name: p.project_name,
-                    role: p.role,
-                    technologies: p.technologies || '',
-                    start_date: p.start_date,
-                    end_date: p.end_date,
-                    description: p.description,
-                    project_link: p.project_link,
+                education: updatedEducation || [],
+                workExperience: updatedExp || [],
+                skills: (updatedSkills || []).map((s) => s?.name || ''),
+                projects: (updatedProjects || []).map((p) => ({
+                    id: p?.id,
+                    project_name: p?.project_name || '',
+                    role: p?.role || '',
+                    technologies: p?.technologies || '',
+                    start_date: p?.start_date || '',
+                    end_date: p?.end_date || '',
+                    description: p?.description || '',
+                    project_link: p?.project_link || '',
                 })),
             }));
 

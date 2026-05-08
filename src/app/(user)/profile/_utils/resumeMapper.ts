@@ -1,4 +1,4 @@
-import { ResumeExtractResponse } from '@/api/resumeParsingApi';
+import { ResumeExtractResponse, ContactField, SocialLinkField, TechnicalSkillItem, CertificationItem } from '@/api/resumeParsingApi';
 import { ProfileData } from '../_types/ProfileData';
 import { normalizeDegree, normalizeStream } from './education-normalizer';
 
@@ -51,32 +51,56 @@ export const formatPhoneNumberFromResume = (value: string): string => {
 * @returns ProfileData object ready to be used in the application
   */
 export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<ProfileData> => {
-    const profileData: Partial<ProfileData> = {};
-    const parsed = resumeData.parsed_data;
-    const llm = parsed.llm_data;
+    try {
+        const profileData: Partial<ProfileData> = {};
+
+        if (!resumeData || !resumeData.parsed_data) {
+            console.warn('Resume data is missing or invalid');
+            return profileData;
+        }
+
+        const parsed = resumeData.parsed_data;
+        const llm = parsed.llm_data || {};
 
     // -------------------------
     // PERSONAL INFORMATION
     // -------------------------
     if (parsed.contact) {
-        let phoneNumber = parsed.contact.phone || '';
+        // Extract name, email, location, and phone from nested objects
+        const extractContactField = (field: ContactField): string => {
+            if (typeof field === 'string') return field;
+            return field?.value || '';
+        };
 
-        if (phoneNumber) {
-            // Add +91 prefix for resume-extracted phone numbers
-            phoneNumber = formatPhoneNumberFromResume(phoneNumber);
+        const name = extractContactField(parsed.contact.name);
+        const location = extractContactField(parsed.contact.location);
+        const phoneValue = extractContactField(parsed.contact.phone);
+
+        let phoneNumber = '';
+        if (phoneValue) {
+            phoneNumber = formatPhoneNumberFromResume(phoneValue);
         }
 
+        // Extract social links from nested url property
+        const extractSocialLink = (field: SocialLinkField | undefined): string => {
+            if (!field) return '';
+            if (typeof field === 'string') return field;
+            return field?.url || '';
+        };
+
+        const linkedinUrl = extractSocialLink(parsed.social_links?.linkedin);
+        const githubUrl = extractSocialLink(parsed.social_links?.github);
+
         profileData.personalInformation = {
-            fullName: parsed.contact.name || '',
-            email: parsed.contact.email || '',
+            fullName: name?.trim() || '',
             phone: phoneNumber,
-            location: parsed.contact.location || '',
-            linkedin: parsed.social_links?.linkedin || '',
-            github: parsed.social_links?.github || '',
+            location: location?.trim() || '',
+            linkedin: linkedinUrl?.trim() || '',
+            github: githubUrl?.trim() || '',
             // Ensure summary is always a string, handle if it's accidentally an array
             summary: Array.isArray(parsed.summary)
                 ? parsed.summary.join(' ').trim()
-                : (parsed.summary || ''),
+                : (parsed.summary?.trim() || ''),
             headline: '',
         };
     }
@@ -111,8 +135,12 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     };
 
 
-    if (llm.education?.length > 0) {
-        profileData.education = llm.education.map((edu) => {
+    // Check both llm.education and parsed.education
+    const parsedData = parsed as Record<string, unknown>;
+    const educationData = llm.education || (parsedData.education as Array<Record<string, unknown>>) || [];
+
+    if (Array.isArray(educationData) && educationData?.length > 0) {
+        profileData.education = educationData.map((edu) => {
             let start, end;
 
             if (edu.duration?.includes("to") || edu.duration?.includes("-") || edu.duration?.includes("–")) {
@@ -149,9 +177,12 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     // -------------------------
     const allWorkExperience = [];
 
+    // Check both llm.experience and parsed.experience
+    const experienceData = llm.experience || (parsedData.experience as Array<Record<string, unknown>>) || [];
+
     // Add work experience
-    if (llm.experience?.length > 0) {
-        const experience = llm.experience
+    if (Array.isArray(experienceData) && experienceData?.length > 0) {
+        const experience = experienceData
             .filter((exp) => exp.company || exp.role)
             .map((exp) => {
                 const { start, end } = splitResumeDateRange(exp.duration || '');
@@ -169,8 +200,9 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     }
 
     // Add internships
-    if (llm.internships?.length > 0) {
-        const internships = llm.internships.map((intern) => {
+    const internshipsData = llm.internships || (parsedData.internships as Array<Record<string, unknown>>) || [];
+    if (Array.isArray(internshipsData) && internshipsData?.length > 0) {
+        const internships = internshipsData.map((intern) => {
             const { start, end } = splitResumeDateRange(intern.duration || '');
             return {
                 company: intern.company || '',
@@ -200,14 +232,18 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     // -------------------------
     const allSkills: string[] = [];
 
-    // Add technical skills
-    if (llm.technical_skills?.length > 0) {
-        allSkills.push(...llm.technical_skills.map((item) => item.skill));
+    // Add technical skills - check both llm and parsed
+    const technicalSkillsData = llm.technical_skills || (parsedData.technical_skills as TechnicalSkillItem[]) || [];
+    if (Array.isArray(technicalSkillsData) && technicalSkillsData?.length > 0) {
+        allSkills.push(...technicalSkillsData.map((item: TechnicalSkillItem) => {
+            return typeof item === 'string' ? item : item.skill;
+        }));
     }
 
-    // Add soft skills
-    if (parsed.soft_skills && parsed.soft_skills.length > 0) {
-        allSkills.push(...parsed.soft_skills);
+    // Add soft skills - check both llm and parsed
+    const softSkillsData = parsed.soft_skills || (parsedData.soft_skills as string[]) || [];
+    if (Array.isArray(softSkillsData) && softSkillsData?.length > 0) {
+        allSkills.push(...softSkillsData.map((skill: string) => String(skill)));
     }
 
     if (allSkills.length > 0) {
@@ -217,8 +253,9 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     // -------------------------
     // PROJECTS
     // -------------------------
-    if (llm.projects?.length > 0) {
-        profileData.projects = llm.projects.map((project) => ({
+    const projectsData = llm.projects || (parsedData.projects as Array<Record<string, unknown>>) || [];
+    if (Array.isArray(projectsData) && projectsData?.length > 0) {
+        profileData.projects = projectsData.map((project) => ({
             project_name: project.title || '',
             description: buildDescription(project.achievements, project.responsibilities) || project.key_contributions?.join('\n') || '',
             technologies: project.tech_stack?.join(', ') || '',
@@ -243,9 +280,21 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
     // -------------------------
     // CERTIFICATIONS
     // -------------------------
-    if (parsed.certifications?.length > 0) {
-        profileData.certifications = parsed.certifications.map((cert) => {
-            // Convert cert to string safely, handling objects, null, undefined
+    const certificationsData = (parsedData.certifications as CertificationItem[]) || [];
+    if (Array.isArray(certificationsData) && certificationsData?.length > 0) {
+        profileData.certifications = certificationsData.map((cert: CertificationItem) => {
+            // If cert is an object with full_name property, use it directly
+            if (typeof cert === 'object' && cert && 'full_name' in cert) {
+                return {
+                    certification_name: cert.full_name || '',
+                    issuer: cert.issuing_organization || '',
+                    start_date: '',
+                    end_date: cert.year || '',
+                    credential_id: cert.code || '',
+                };
+            }
+
+            // Otherwise, treat as string and parse
             const certStr = String(cert || '').trim();
             let certName = certStr;
             let issuer = '';
@@ -278,7 +327,11 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
         });
     }
 
-    return profileData;
+        return profileData;
+    } catch (error) {
+        console.error('Error mapping resume to profile:', error);
+        return {};
+    }
 };
 
 /**

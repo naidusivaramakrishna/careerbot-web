@@ -1,12 +1,15 @@
 import httpClient from "@/lib/http";
 import logger from "@/lib/logger";
 
+// ========== CONTACT FIELD (can be string or nested object) ==========
+export type ContactField = string | { value?: string; source?: string };
+
 // ========== CONTACT ==========
 export interface ContactInfo {
-    name: string;
-    email: string;
-    phone: string;
-    location: string;
+    name: ContactField;
+    email: ContactField;
+    phone: ContactField;
+    location: ContactField;
     link_warnings?: string[];
 }
 
@@ -66,6 +69,14 @@ export interface OverallExperience {
     years: number | null;
 }
 
+// ========== CERTIFICATION ==========
+export type CertificationItem = string | {
+    full_name?: string;
+    issuing_organization?: string;
+    year?: string;
+    code?: string;
+};
+
 // ========== LLM DATA ==========
 export interface LLMData {
     education: EducationItem[];
@@ -74,8 +85,11 @@ export interface LLMData {
     overall_experience: OverallExperience;
     projects: ProjectItem[];
     soft_skills: string[];
-    technical_skills: TechnicalSkill[];
+    technical_skills: TechnicalSkillItem[];
 }
+
+// ========== TECH SKILL (can be object or string) ==========
+export type TechnicalSkillItem = string | { skill: string; category?: string; count?: number };
 
 // ========== TECH SKILLS ==========
 export interface TechnicalSkill {
@@ -84,10 +98,13 @@ export interface TechnicalSkill {
     count: number;
 }
 
+// ========== SOCIAL LINK (can be string or nested object) ==========
+export type SocialLinkField = string | { url?: string };
+
 // ========== SOCIAL LINKS ==========
 export interface SocialLinks {
-    linkedin?: string;
-    github?: string;
+    linkedin?: SocialLinkField;
+    github?: SocialLinkField;
     hackerrank?: string | null;
     hackerearth?: string | null;
     codechef?: string | null;
@@ -192,7 +209,7 @@ export interface ResumeExtractResponse {
         image_message?: string | null;
         achievements: string[];
         awards?: string[];
-        certifications: string[];
+        certifications: CertificationItem[];
         languages?: string[];
         declaration?: string[];
         personal_details?: string[];

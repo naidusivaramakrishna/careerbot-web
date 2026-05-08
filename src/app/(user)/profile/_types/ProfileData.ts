@@ -10,6 +10,7 @@ export interface ProfileData {
         github?: string;
         summary?: string;
     };
+
     education?: {
         id?: string;
         institution?: string;
@@ -18,6 +19,7 @@ export interface ProfileData {
         cgpa?: number;
         start_date?: string;
         end_date?: string;
+        currently_studying?: boolean;
     }[];
 
     workExperience?: {
@@ -28,7 +30,18 @@ export interface ProfileData {
         location?: string;
         start_date?: string;
         end_date?: string;
-        description?: string
+        description?: string;
+        currently_working?: boolean;
+    }[];
+
+    internships?: {
+        id?: string;
+        job_title?: string;
+        company?: string;
+        location?: string;
+        start_date?: string;
+        end_date?: string;
+        description?: string;
     }[];
 
     certifications?: {
@@ -37,9 +50,11 @@ export interface ProfileData {
         issuer?: string;
         start_date?: string;
         end_date?: string;
+        credential_id?: string;
     }[];
 
     employmentInfo?: {
+        id?: string;
         authorized_to_work?: boolean;
         disability_status?: string;
         gender?: string;
@@ -60,7 +75,7 @@ export interface ProfileData {
         strengths?: string[];
         improvementAreas?: string[];
         preferredRoles?: string[];
-        workPreference?: "Onsite" | "Remote" | "Hybrid";
+        workPreference?: "onsite" | "remote" | "hybrid";
         careerHighlights?: string;
         futurePlans?: string;
     };
@@ -77,18 +92,24 @@ export interface ProfileData {
     }[];
 
     achievements?: {
+        id?: string;
         title?: string;
         description?: string;
         date?: string;
-        issuer?: string; // e.g., competition, award organization
+        issuer?: string;
+        source_section?: string;
     }[];
 
     languages?: {
+        id?: string;
         language?: string;
-        proficiency?: "Beginner" | "Intermediate" | "Advanced" | "Fluent" | "Native";
+        proficiency?: "beginner" | "intermediate" | "advanced" | "fluent" | "native";
     }[];
 
+    softSkills?: string[];
+
     hobbies?: {
+        id?: string;
         name?: string;
         description?: string;
     }[];
