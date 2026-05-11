@@ -277,7 +277,13 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         location: "",
         linkedinUrl: "",
         githubUrl: "",
-        portfolioUrl: ""
+        portfolioUrl: "",
+        dateOfBirth: "",
+        nationality: "",
+        category: "",
+        languages: "",
+        titlePrefix: "",
+        qualifications: ""
       },
       professionalSummary: {
         summary: "",
@@ -651,6 +657,12 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             linkedinUrl: data.personalInfo?.linkedinUrl || profileLinkedin,
             githubUrl: data.personalInfo?.githubUrl || profileGithub,
             portfolioUrl: (data.personalInfo as Record<string, string>)?.portfolioUrl || data.personalInfo?.portifolioUrl || "",
+            dateOfBirth: data.personalInfo?.dateOfBirth || null,
+            nationality: data.personalInfo?.nationality || null,
+            category: data.personalInfo?.category || null,
+            languages: data.personalInfo?.languages || null,
+            titlePrefix: data.personalInfo?.titlePrefix || null,
+            qualifications: data.personalInfo?.qualifications || null,
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }

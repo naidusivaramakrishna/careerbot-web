@@ -165,6 +165,16 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       newFormData["linkedinUrl"] = resumeData.personalInfo?.linkedinUrl || "";
       newFormData["githubUrl"] = resumeData.personalInfo?.githubUrl || "";
       newFormData["portfolioUrl"] = resumeData.personalInfo?.portfolioUrl || "";
+
+      // Government Standard Fields
+      newFormData["dateOfBirth"] = resumeData.personalInfo?.dateOfBirth || "";
+      newFormData["nationality"] = resumeData.personalInfo?.nationality || "";
+      newFormData["category"] = resumeData.personalInfo?.category || "";
+      newFormData["languages"] = resumeData.personalInfo?.languages || "";
+
+      // Healthcare Fields
+      newFormData["titlePrefix"] = resumeData.personalInfo?.titlePrefix || "";
+      newFormData["qualifications"] = resumeData.personalInfo?.qualifications || "";
       
       // Professional Summary
       newFormData["professionalSummary"] = resumeData.professionalSummary.summary || "";

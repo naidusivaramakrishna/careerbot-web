@@ -29,6 +29,10 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   // Get domain from localStorage to check if it's government_standard or healthcare
   useEffect(() => {
     try {
+      let isGov = false;
+      let isHealthcare = false;
+
+      // First, try localStorage
       const userEmail = resumeData.personalInfo?.email || '';
       const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
       const careerLevelStorage = localStorage.getItem(careerLevelKey);
@@ -37,17 +41,26 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         const careerLevels = JSON.parse(careerLevelStorage) as Array<{
           domain_family?: string;
         }>;
-        const isGov = careerLevels.some(t => t.domain_family === 'government_standard');
-        const isHealthcare = careerLevels.some(t => t.domain_family === 'healthcare');
-        setIsGovernmentTemplate(isGov);
-        setIsHealthcareTemplate(isHealthcare);
-        logger.info('Government template detected:', isGov);
-        logger.info('Healthcare template detected:', isHealthcare);
+        isGov = careerLevels.some(t => t.domain_family === 'government_standard');
+        isHealthcare = careerLevels.some(t => t.domain_family === 'healthcare');
       }
+
+      // If not found in localStorage, check if government/healthcare fields exist in formData
+      if (!isGov && !isHealthcare) {
+        const hasGovFields = formData['dateOfBirth'] || formData['nationality'] || formData['category'] || formData['languages'];
+        const hasHealthcareFields = formData['titlePrefix'] || formData['qualifications'];
+        isGov = !!hasGovFields;
+        isHealthcare = !!hasHealthcareFields;
+      }
+
+      setIsGovernmentTemplate(isGov);
+      setIsHealthcareTemplate(isHealthcare);
+      logger.info('Government template detected:', isGov);
+      logger.info('Healthcare template detected:', isHealthcare);
     } catch (err) {
       logger.warn('Error checking template domain:', err);
     }
-  }, [resumeData.personalInfo?.email]);
+  }, [resumeData.personalInfo?.email, formData]);
 
   // Close dropdown on outside click
   useEffect(() => {

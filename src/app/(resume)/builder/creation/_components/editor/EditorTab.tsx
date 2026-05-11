@@ -498,6 +498,12 @@ const EditorTab: React.FC<Props> = ({
         linkedinUrl: formData["linkedinUrl"] || "",
         githubUrl: formData["githubUrl"] || "",
         portfolioUrl: formData["portfolioUrl"] || "",
+        dateOfBirth: formData["dateOfBirth"] || null,
+        nationality: formData["nationality"] || null,
+        category: formData["category"] || null,
+        languages: formData["languages"] || null,
+        titlePrefix: formData["titlePrefix"] || null,
+        qualifications: formData["qualifications"] || null,
       };
     }
     

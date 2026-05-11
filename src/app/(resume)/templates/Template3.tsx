@@ -34,6 +34,11 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     customSections,
   } = data;
 
+  // Debug: Log personalInfo to check if government fields are populated
+  React.useEffect(() => {
+    console.warn("Template3 - personalInfo:", personalInfo);
+  }, [personalInfo]);
+
   const getSectionTitle = (section: string): string => {
     if (section === "Professional Summary") {
       return careerLevel === "Fresher" ? "OBJECTIVE" : "PROFESSIONAL SUMMARY";
@@ -585,38 +590,40 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       ))}
 
       {/* PERSONAL DETAILS - Government Standard Template */}
-      <div style={{ marginBottom: "16px" }}>
-        <h2 style={headingStyle}>PERSONAL DETAILS</h2>
-        <div style={{ borderBottom: `1px solid ${style.headingColor}`, marginBottom: "12px" }}></div>
-        <div style={{ ...baseTextStyle }}>
-          {personalInfo.dateOfBirth && (
-            <div style={{ marginBottom: "6px", fontSize: "12px" }}>
-              <span style={{ fontWeight: "600" }}>Date of Birth:</span>
-              <span style={{ marginLeft: "4px" }}>{personalInfo.dateOfBirth}</span>
-            </div>
-          )}
-          {personalInfo.nationality && (
-            <div style={{ marginBottom: "6px", fontSize: "12px" }}>
-              <span style={{ fontWeight: "600" }}>Nationality:</span>
-              <span style={{ marginLeft: "4px" }}>{personalInfo.nationality}</span>
-            </div>
-          )}
-          {(personalInfo.languages || languages.length > 0) && (
-            <div style={{ marginBottom: "6px", fontSize: "12px" }}>
-              <span style={{ fontWeight: "600" }}>Languages Known:</span>
-              <span style={{ marginLeft: "4px" }}>
-                {personalInfo.languages || languages.map(lang => lang.language).join(", ")}
-              </span>
-            </div>
-          )}
-          {personalInfo.category && (
-            <div style={{ marginBottom: "6px", fontSize: "12px" }}>
-              <span style={{ fontWeight: "600" }}>Category:</span>
-              <span style={{ marginLeft: "4px" }}>{personalInfo.category}</span>
-            </div>
-          )}
+      {(personalInfo?.dateOfBirth || personalInfo?.nationality || personalInfo?.category || personalInfo?.languages) && (
+        <div style={{ marginBottom: "16px" }}>
+          <h2 style={headingStyle}>PERSONAL DETAILS</h2>
+          <div style={{ borderBottom: `1px solid ${style.headingColor}`, marginBottom: "12px" }}></div>
+          <div style={{ ...baseTextStyle }}>
+            {personalInfo?.dateOfBirth && (
+              <div style={{ marginBottom: "6px", fontSize: "12px" }}>
+                <span style={{ fontWeight: "600" }}>Date of Birth:</span>
+                <span style={{ marginLeft: "4px" }}>{personalInfo.dateOfBirth}</span>
+              </div>
+            )}
+            {personalInfo?.nationality && (
+              <div style={{ marginBottom: "6px", fontSize: "12px" }}>
+                <span style={{ fontWeight: "600" }}>Nationality:</span>
+                <span style={{ marginLeft: "4px" }}>{personalInfo.nationality}</span>
+              </div>
+            )}
+            {(personalInfo?.languages || languages?.length > 0) && (
+              <div style={{ marginBottom: "6px", fontSize: "12px" }}>
+                <span style={{ fontWeight: "600" }}>Languages Known:</span>
+                <span style={{ marginLeft: "4px" }}>
+                  {personalInfo?.languages || languages?.map((lang: any) => lang.language).join(", ")}
+                </span>
+              </div>
+            )}
+            {personalInfo?.category && (
+              <div style={{ marginBottom: "6px", fontSize: "12px" }}>
+                <span style={{ fontWeight: "600" }}>Category:</span>
+                <span style={{ marginLeft: "4px" }}>{personalInfo.category}</span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
