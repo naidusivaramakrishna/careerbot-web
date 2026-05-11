@@ -1,51 +1,41 @@
 import { httpClient } from '@/lib/http';
-import { getAllResumes } from './resumeatsapi';
 
-// ── JD Parse ─────────────────────────────────────────────
+// ── Parse resume from profile ────────────────────────────────────────────────
 
-export interface ParsedJDItem {
-  id?: string;
-  jd_id?: string;
-  job_id?: string;
-  [key: string]: unknown;
+export interface ParseFromProfileResponse {
+  resume_id: string;
+  from_cache: boolean;
+  source: string;
+  must_parse?: boolean; // present on 409 — user must run ATS parse first
 }
 
-export const parseJobDescriptionForId = async (
-  jobId: string,
-  text: string
-): Promise<string> => {
-  try {
-    const response = await httpClient.post<ParsedJDItem[] | ParsedJDItem>(
-      '/jd/parse',
-      [{ job_id: jobId, text }]
-    );
-    const data = response.data;
-    const item: ParsedJDItem = Array.isArray(data) ? data[0] : data;
-    const id = item?.jd_id ?? item?.id ?? item?.job_id;
-    if (id) return String(id);
-  } catch {
-    // JD parse failed — fall back to job_id as jd_id (per API example)
-  }
-  return jobId;
+export const parseResumeFromProfile = async (): Promise<ParseFromProfileResponse> => {
+  const response = await httpClient.post<ParseFromProfileResponse>(
+    '/parser/parse-from-profile',
+    {}
+  );
+  return response.data;
 };
 
-// ── Resume ID from parsed resumes (GET /api/v1/resumes/) ──
+// ── Parse JD by job_id ────────────────────────────────────────────────────────
 
-export const getActiveResumeId = async (): Promise<string> => {
-  const resumes = await getAllResumes();
-  if (!resumes || resumes.length === 0)
-    throw new Error('No analyzed resume found. Please complete an ATS scan first.');
-  const sorted = [...resumes].sort((a, b) => {
-    const da = new Date(a.updatedAt ?? a.createdAt ?? 0).getTime();
-    const db = new Date(b.updatedAt ?? b.createdAt ?? 0).getTime();
-    return db - da;
-  });
-  const id = sorted[0].id;
-  if (!id) throw new Error('Could not determine resume ID. Please re-upload your resume.');
-  return id;
+export interface ParseJdByJobResponse {
+  success: boolean;
+  from_cache: boolean;
+  source: string;
+  jd_id: string;
+  job_id: string;
+}
+
+export const parseJdByJob = async (jobId: string): Promise<ParseJdByJobResponse> => {
+  const response = await httpClient.post<ParseJdByJobResponse>(
+    `/jd/parse-by-job/${jobId}`,
+    {}
+  );
+  return response.data;
 };
 
-// ── Premium Actions ───────────────────────────────────────
+// ── Premium Actions ───────────────────────────────────────────────────────────
 
 export interface PremiumActionPayload {
   action_type: string;
@@ -60,13 +50,31 @@ export interface PendingActionResponse {
   quoted_credits: number;
   user_credits_remaining: number;
   expires_at: string;
-  status: 'pending';
+  status: 'pending' | 'refunded' | 'executed' | 'failed';
 }
 
 export interface ExecuteActionResponse {
   action_id: string;
   status: string;
-  result?: Record<string, unknown>;
+  credits_used: number;
+  user_credits_remaining: number;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  completed_at: string;
+}
+
+export interface ActionStatusResponse {
+  action_id: string;
+  action_type: string;
+  status: 'pending' | 'executed' | 'refunded' | 'failed';
+  quoted_credits: number;
+  job_id: string;
+  created_at: string;
+  expires_at: string;
+  executed_at: string | null;
+  completed_at: string | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
 }
 
 export const createPremiumAction = async (
@@ -82,6 +90,15 @@ export const executePremiumAction = async (
   const response = await httpClient.post<ExecuteActionResponse>(
     `/premium/actions/${actionId}/execute`,
     {}
+  );
+  return response.data;
+};
+
+export const getPremiumActionStatus = async (
+  actionId: string
+): Promise<ActionStatusResponse> => {
+  const response = await httpClient.get<ActionStatusResponse>(
+    `/premium/actions/${actionId}`
   );
   return response.data;
 };

@@ -1,33 +1,5 @@
 import { httpClient } from '@/lib/http';
 
-// ==================== SKILL GAPS ====================
-
-export interface SkillGapItem {
-  skill: string;
-  in_jobs_pct: number;
-  priority: 'high' | 'low';
-}
-
-export interface SkillGapsResponse {
-  user_skills: string[];
-  target_title: string | null;
-  missing_critical: SkillGapItem[];
-  missing_nice_to_have: SkillGapItem[];
-  strongest_skills: SkillGapItem[];
-  jobs_analyzed: number;
-  avg_match_band: 'strong' | 'good' | 'partial' | 'low';
-}
-
-export interface SkillGapsParams {
-  top_n?: number;
-  target_title?: string;
-}
-
-export const getSkillGaps = async (params: SkillGapsParams = {}): Promise<SkillGapsResponse> => {
-  const response = await httpClient.get<SkillGapsResponse>('/insights/skill-gaps', { params });
-  return response.data;
-};
-
 // ==================== TRENDING SKILLS ====================
 
 export interface TrendingSkillItem {
@@ -104,7 +76,6 @@ export const getMatchExplanation = async (jobId: string): Promise<MatchExplanati
 };
 
 const insightsApi = {
-  getSkillGaps,
   getTrendingSkills,
   getMatchExplanation,
 };

@@ -168,38 +168,7 @@ client.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 500/503 with AI_SERVICE_UNAVAILABLE = AI/LLM service is temporarily down.
-    // Retry up to 3 times with increasing delay — uses separate _aiRetryCount
-    // so it does not interfere with the 401 token-refresh _retry flag.
-    const AI_MAX_RETRIES = 3;
-    const isAiServiceError =
-      (error.response?.status === 500 || error.response?.status === 503) &&
-      bodyContains(error.response?.data, 'AI_SERVICE_UNAVAILABLE') &&
-      (originalRequest._aiRetryCount ?? 0) < AI_MAX_RETRIES &&
-      !originalRequest.url?.includes('/auth/') &&
-      !originalRequest.url?.includes('/admin/auth/');
-
-    if (isAiServiceError) {
-      originalRequest._aiRetryCount = (originalRequest._aiRetryCount ?? 0) + 1;
-      const delaySec = originalRequest._aiRetryCount * 2; // 2s, 4s, 6s
-      console.warn(
-        `[http] AI_SERVICE_UNAVAILABLE — retry ${originalRequest._aiRetryCount}/${AI_MAX_RETRIES} in ${delaySec}s`,
-        { url: originalRequest.url, status: error.response?.status }
-      );
-      await new Promise(resolve => setTimeout(resolve, delaySec * 1000));
-      return client(originalRequest);
-    }
-
-    // Backend sometimes crashes with 500 (plain text) instead of returning 401
-    // when it receives an expired/invalid token. Treat this as an auth failure.
-    const isBackendCrash =
-      error.response?.status === 500 &&
-      typeof error.response?.data === 'string' &&
-      !originalRequest._retry &&
-      !originalRequest.url?.includes('/auth/') &&
-      !originalRequest.url?.includes('/admin/auth/');
-
-    if ((error.response?.status !== 401 && !isBackendCrash) || originalRequest._retry) {
+    if (error.response?.status !== 401 || originalRequest._retry) {
       // Replace the generic axios message with the actual backend message
       const backendMessage = extractBackendMessage(error.response?.data);
       if (backendMessage && error instanceof Error) {

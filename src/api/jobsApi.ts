@@ -127,6 +127,7 @@ export interface SmartMatchParams {
   min_score?: number;
   location?: string;
   mode?: string;
+  force_refresh?: boolean;
 }
 
 // ==================== APPLICATION TYPES ====================

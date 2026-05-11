@@ -11,7 +11,7 @@ type JobListProps = {
 
 export default function JobList({ jobs, onBotClick }: JobListProps) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {jobs.map((job) => (
         <JobCard key={job.id} {...job} onBotClick={() => onBotClick(job)} />
       ))}

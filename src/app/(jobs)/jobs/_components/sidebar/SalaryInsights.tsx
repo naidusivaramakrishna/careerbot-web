@@ -118,31 +118,35 @@ export default function SalaryInsights({ jobs = [] }: SalaryInsightsProps) {
   }, [jobs]);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">
-          <TrendingUp size={13} className="text-emerald-600" />
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
+        <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center">
+          <TrendingUp size={11} className="text-emerald-600" />
         </div>
-        <h3 className="text-sm font-semibold text-gray-900">Salary Insights</h3>
-      </div>
-      <p className="text-xs text-gray-400 mb-5 ml-9 truncate">{subtitle}</p>
-
-      <div className="flex items-end justify-between gap-1 h-[110px] px-2">
-        {bars.map((bar) => (
-          <div key={bar.label} className="flex flex-col items-center gap-1.5 flex-1">
-            <span className="text-[9px] text-gray-400 font-medium">{bar.value}</span>
-            <div
-              className={`w-full rounded-t-md transition-all ${bar.color} ${!bar.hasData ? "opacity-40" : ""}`}
-              style={{ height: bar.height }}
-            />
-            <span className="text-[9px] text-gray-500 whitespace-nowrap">{bar.label}</span>
-          </div>
-        ))}
+        <div className="min-w-0">
+          <h3 className="text-[12.5px] font-semibold text-gray-900 leading-tight">Salary Insights</h3>
+          <p className="text-[10px] text-gray-400 truncate">{subtitle}</p>
+        </div>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between">
-        <span className="text-xs text-gray-400">Market median</span>
-        <span className="text-sm font-bold text-gray-900">{median}</span>
+      <div className="px-4 pt-3 pb-2">
+        <div className="flex items-end justify-between gap-1 h-22.5">
+          {bars.map((bar) => (
+            <div key={bar.label} className="flex flex-col items-center gap-1 flex-1">
+              <span className="text-[8px] text-gray-400 font-medium">{bar.value}</span>
+              <div
+                className={`w-full rounded-t transition-all ${bar.color} ${!bar.hasData ? "opacity-35" : ""}`}
+                style={{ height: bar.height }}
+              />
+              <span className="text-[8px] text-gray-500 whitespace-nowrap">{bar.label}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 pt-2.5 border-t border-gray-50 flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">Market median</span>
+          <span className="text-[12px] font-bold text-gray-900">{median}</span>
+        </div>
       </div>
     </div>
   );

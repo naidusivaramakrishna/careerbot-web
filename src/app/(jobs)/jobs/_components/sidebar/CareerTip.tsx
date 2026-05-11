@@ -1,181 +1,120 @@
 "use client";
 
-import { Lightbulb, TrendingUp, Zap, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getSkillGaps, getTrendingSkills } from "@/api/insightsApi";
+import { getSkillGaps } from "@/api/insightsApi";
 
-interface InsightCard {
-  icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-  label: string;
-  labelColor: string;
-  text: string;
-  badge?: string;
-  badgeColor?: string;
-}
-
-function SkeletonCard() {
-  return (
-    <div className="flex gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100 animate-pulse">
-      <div className="w-7 h-7 rounded-lg bg-gray-200 shrink-0 mt-0.5" />
-      <div className="flex-1 space-y-1.5 pt-0.5">
-        <div className="h-2.5 w-20 bg-gray-200 rounded" />
-        <div className="h-2 w-full bg-gray-100 rounded" />
-        <div className="h-2 w-3/4 bg-gray-100 rounded" />
-      </div>
-    </div>
-  );
+interface SkillGapData {
+  skill: string;
+  in_jobs_pct: number;
+  priority?: string;
 }
 
 export default function CareerTip() {
-  const [cards, setCards] = useState<InsightCard[]>([]);
+  const [gap, setGap] = useState<SkillGapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const fetchInsights = async () => {
     setLoading(true);
     setError(false);
-
-    const results = await Promise.allSettled([
-      getSkillGaps({ top_n: 5 }),
-      getTrendingSkills({ top_n: 5 }),
-    ]);
-
-    const newCards: InsightCard[] = [];
-
-    // Skill Gap card — from skill-gaps API
-    const gapsResult = results[0];
-    if (gapsResult.status === 'fulfilled') {
-      const data = gapsResult.value;
+    try {
+      const data = await getSkillGaps({ top_n: 5 });
       const topMissing = data.missing_critical[0] ?? data.missing_nice_to_have[0];
-      const topStrong = data.strongest_skills[0];
-
       if (topMissing) {
-        newCards.push({
-          icon: Lightbulb,
-          iconBg: "bg-amber-50",
-          iconColor: "text-amber-500",
-          label: "Skill Gap",
-          labelColor: "text-amber-700",
-          text: `Adding "${topMissing.skill}" could boost your match rate — required by ${Math.round(topMissing.in_jobs_pct)}% of your matched jobs.`,
-          badge: topMissing.priority === 'high' ? 'High priority' : undefined,
-          badgeColor: "bg-amber-100 text-amber-600",
-        });
+        setGap(topMissing);
+      } else {
+        setError(true);
       }
-
-      if (topStrong) {
-        newCards.push({
-          icon: Zap,
-          iconBg: "bg-blue-50",
-          iconColor: "text-[#2557a7]",
-          label: "Top Skill",
-          labelColor: "text-[#2557a7]",
-          text: `"${topStrong.skill}" is your strongest skill — matched in ${Math.round(topStrong.in_jobs_pct)}% of relevant jobs.`,
-        });
-      }
-    }
-
-    // Trending skills card — from trending-skills API
-    const trendingResult = results[1];
-    if (trendingResult.status === 'fulfilled') {
-      const data = trendingResult.value;
-      const topSkill = data.skills[0];
-      const secondSkill = data.skills[1];
-
-      if (topSkill) {
-        const skillText = secondSkill
-          ? `"${topSkill.skill}" and "${secondSkill.skill}" are trending this week — demanded by ${Math.round(topSkill.demand_pct)}%+ of current job postings.`
-          : `"${topSkill.skill}" is trending — demanded by ${Math.round(topSkill.demand_pct)}% of current job postings.`;
-
-        newCards.push({
-          icon: TrendingUp,
-          iconBg: "bg-emerald-50",
-          iconColor: "text-emerald-500",
-          label: "Market Trend",
-          labelColor: "text-emerald-700",
-          text: skillText,
-          badge: data.period === 'last_7_days' ? 'This week' : undefined,
-          badgeColor: "bg-emerald-100 text-emerald-600",
-        });
-      }
-    }
-
-    if (newCards.length === 0) {
+    } catch {
       setError(true);
-    } else {
-      setCards(newCards);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
-  useEffect(() => {
-    fetchInsights();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { fetchInsights(); }, []);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-900">Career Insights</h3>
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center">
+            <Plus size={11} className="text-[#2557a7]" />
+          </div>
+          <div>
+            <h3 className="text-[12.5px] font-semibold text-gray-900 leading-tight">Skill gap suggestion</h3>
+            {gap && !loading && (
+              <p className="text-[10px] text-gray-400">
+                Closes ~{Math.round(gap.in_jobs_pct)}% of matches
+              </p>
+            )}
+          </div>
+        </div>
         {!loading && (
           <button
             type="button"
             onClick={fetchInsights}
-            title="Refresh insights"
+            title="Refresh"
             className="w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            <RefreshCw size={12} />
+            <RefreshCw size={11} />
           </button>
         )}
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-      ) : error ? (
-        <div className="text-center py-4">
-          <p className="text-xs text-gray-400">Upload your resume to unlock personalised insights.</p>
-          <button
-            type="button"
-            onClick={fetchInsights}
-            className="mt-2 text-xs text-[#2557a7] font-medium hover:underline"
-          >
-            Try again
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {cards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <div
-                key={card.label}
-                className="flex gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100"
+      {/* Body */}
+      <div className="px-4 py-3">
+        {loading ? (
+          <div className="space-y-2 animate-pulse">
+            <div className="h-3.5 bg-gray-200 rounded w-3/4" />
+            <div className="h-2.5 bg-gray-100 rounded w-full" />
+            <div className="h-2.5 bg-gray-100 rounded w-5/6" />
+            <div className="flex gap-2 mt-3">
+              <div className="h-7 bg-gray-200 rounded-lg w-24" />
+              <div className="h-7 bg-gray-100 rounded-lg w-24" />
+            </div>
+          </div>
+        ) : error || !gap ? (
+          <div className="text-center py-3">
+            <p className="text-[11px] text-gray-400">Upload your resume to get skill gap suggestions.</p>
+            <button
+              type="button"
+              onClick={fetchInsights}
+              className="mt-1 text-[11px] text-[#2557a7] font-semibold hover:underline"
+            >
+              Try again
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-[13px] font-semibold text-gray-900 leading-snug">
+              Add{" "}
+              <span className="text-[#2557a7]">{gap.skill}</span>{" "}
+              to your profile
+            </p>
+            <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
+              It appears in {Math.round(gap.in_jobs_pct)}% of your top-matched jobs but is missing from your resume.
+              {gap.priority === "high" ? " Estimated effort: 2 weekends." : ""}
+            </p>
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                type="button"
+                className="px-3.5 py-1.5 bg-[#2557a7] hover:bg-[#1e4a96] text-white text-[11px] font-bold rounded-lg transition-colors"
               >
-                <div className={`w-7 h-7 rounded-lg ${card.iconBg} flex items-center justify-center shrink-0 mt-0.5`}>
-                  <Icon size={13} className={card.iconColor} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <p className={`text-xs font-semibold ${card.labelColor}`}>{card.label}</p>
-                    {card.badge && (
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${card.badgeColor}`}>
-                        {card.badge}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 leading-relaxed">{card.text}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                Start course
+              </button>
+              <button
+                type="button"
+                className="px-3.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+              >
+                Add to profile
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

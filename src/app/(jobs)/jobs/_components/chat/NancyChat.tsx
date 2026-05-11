@@ -50,13 +50,6 @@ const FREE_ACTIONS = [
   "How does this compare to other jobs?",
 ];
 
-const PREMIUM_ACTIONS: { label: string; credits: number }[] = [
-  { label: "Tailor my resume for this job", credits: 5 },
-  { label: "Enhance and rewrite my resume", credits: 10 },
-  { label: "Write a cover letter for this job", credits: 3 },
-  { label: "Help me prepare for interview", credits: 5 },
-  { label: "Salary negotiation advice", credits: 3 },
-];
 
 export default function NancyChat({
   job,
@@ -284,32 +277,6 @@ export default function NancyChat({
                 </div>
               </div>
 
-              {/* Premium intents */}
-              <div>
-                <p className="text-[10px] font-bold text-amber-500 mb-2 uppercase tracking-widest px-1 flex items-center gap-1">
-                  <Sparkles size={10} />
-                  Premium Features
-                </p>
-                <div className="space-y-1.5">
-                  {PREMIUM_ACTIONS.map((item: { label: string; credits: number }, idx: number) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => sendMessage(item.label)}
-                      disabled={isTyping}
-                      className="w-full text-left px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl text-[12px] text-amber-800 hover:bg-amber-100 hover:border-amber-300 shadow-sm focus:outline-none active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-2"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Lock size={10} className="text-amber-500 shrink-0" />
-                        {item.label}
-                      </span>
-                      <span className="text-[10px] font-bold text-amber-600 bg-white border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
-                        {item.credits} cr
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 

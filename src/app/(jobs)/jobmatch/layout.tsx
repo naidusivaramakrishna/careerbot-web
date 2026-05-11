@@ -10,7 +10,7 @@ export default function JobMatchLayout({ children }: { children: React.ReactNode
       <div className="flex min-h-screen bg-gray-50">
         <Header />
         <Sidebar />
-        <main className="flex-1 mt-14" style={{ marginLeft: "var(--sidebar-width, 64px)", transition: "margin 300ms" }}>
+        <main className="flex-1 mt-14" style={{ marginLeft: "var(--sidebar-width, 64px)", transition: "margin 300ms", overflowX: "hidden", minWidth: 0 }}>
           {children}
         </main>
       </div>

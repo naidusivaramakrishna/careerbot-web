@@ -8,11 +8,12 @@ import { toast } from "sonner";
 import { getSavedJobIds, getSavedJobsCount } from "@/utils/jobTracking";
 import { getJobId } from "@/utils/jobIdHelper";
 
-import JobsTabs, { TabType } from "./JobsTabs";
+import JobsTabs, { TabType, SortType } from "./JobsTabs";
 import JobList from "./sidebar/JobList";
 import Pagination from "./Pagination";
 import TopPickCard from "./sidebar/TopPickCard";
 import SalaryInsights from "./sidebar/SalaryInsights";
+import TrendingSkillsCard from "./sidebar/TrendingSkillsCard";
 import CareerTip from "./sidebar/CareerTip";
 import NancyChat from "./chat/NancyChat";
 import JobSkeleton from "./JobSkeleton";
@@ -138,6 +139,10 @@ export default function JobsContents() {
   const [activeFilters, setActiveFilters] = useState<FilterParams>({});
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
+  const [cityFilter, setCityFilter] = useState("");
+  const [experienceFilter, setExperienceFilter] = useState("");
+  const [sortBy, setSortBy] = useState<SortType>("relevance");
+  const [totalJobs, setTotalJobs] = useState<number | undefined>(undefined);
 
   const [showLanding, setShowLanding] = useState(true);
   const [openChat, setOpenChat] = useState(false);
@@ -256,6 +261,7 @@ export default function JobsContents() {
           response.pagination?.total_pages ||
           (total > 0 ? Math.ceil(total / JOBS_PER_PAGE) : hasNext ? page + 1 : page);
         setTotalPages(calcPages);
+        setTotalJobs(response.pagination?.total ?? undefined);
 
         if (normalized.length === 0) {
           toast.info("No jobs found matching your criteria");
@@ -278,7 +284,7 @@ export default function JobsContents() {
     setMatchedLoading(true);
     setMatchedNoResume(false);
     try {
-      const data = await getSmartMatchedJobs({ limit: 50 });
+      const data = await getSmartMatchedJobs({ limit: 50, ...(force && { force_refresh: true }) });
       const normalized = (data.jobs || []).map((item) =>
         normalizeJob(item.job, item.match.score, item.match)
       );
@@ -573,9 +579,9 @@ export default function JobsContents() {
   const matchedCount = matchedJobs.length;
 
   return (
-    <div className="flex min-h-screen bg-[#f8f9fc]">
+    <div className="flex min-h-screen bg-[#f4f6fb]">
       {/* CENTER PANEL */}
-      <main className="flex-1 overflow-y-scroll">
+      <main className="flex-1 min-w-0 overflow-y-auto">
         {/* LANDING VIEW */}
         {showLanding && (
           <JobsLandingSection
@@ -588,7 +594,7 @@ export default function JobsContents() {
         {!showLanding && (
           <div>
             {/* TOP BAR */}
-            <div className="px-8 py-4 border-b border-gray-100 bg-white flex items-center justify-between gap-4">
+            <div className="px-6 py-3 border-b border-gray-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0">
                 <button
                   type="button"
@@ -599,10 +605,10 @@ export default function JobsContents() {
                     setSelectedLocation("All Locations");
                     setSelectedFilters([]);
                   }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all shrink-0 group"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all shrink-0 group"
                 >
                   <svg
-                    className="w-4 h-4 text-[#2557a7] group-hover:text-[#1a4a96]"
+                    className="w-3.5 h-3.5 text-[#2557a7] group-hover:text-[#1a4a96]"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -614,22 +620,27 @@ export default function JobsContents() {
                       d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
                     />
                   </svg>
-                  <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                  <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900">
                     Home
                   </span>
                 </button>
-                <div className="w-px h-5 bg-gray-200 shrink-0" />
+                <div className="w-px h-4 bg-gray-200 shrink-0" />
                 <div className="min-w-0">
-                  <h1 className="text-lg font-bold text-gray-900 truncate">
-                    {isMatchedTab
-                      ? "Smart Match Jobs"
-                      : searchQuery
-                      ? `Results for "${searchQuery}"`
-                      : roleFilter
-                      ? `${roleFilter} Jobs`
-                      : "All Jobs"}
-                  </h1>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-[15px] font-bold text-gray-900 truncate leading-tight">
+                      {isMatchedTab
+                        ? "Smart Match Jobs"
+                        : searchQuery
+                        ? `Results for "${searchQuery}"`
+                        : roleFilter
+                        ? `${roleFilter} Jobs`
+                        : "All Jobs"}
+                    </h1>
+                    <span className="shrink-0 px-1.5 py-px bg-emerald-500 text-white text-[8px] font-bold rounded uppercase tracking-widest">
+                      LIVE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-px">
                     {filteredJobs.length > 0
                       ? `${filteredJobs.length} opportunities found`
                       : displayLoading
@@ -646,35 +657,35 @@ export default function JobsContents() {
                   roleFilter ||
                   selectedLocation !== "All Locations" ||
                   selectedFilters.length > 0) && (
-                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     {roleFilter && (
-                      <span className="flex items-center gap-1 px-2.5 py-1 bg-[#0f172a] text-white rounded-full text-xs font-medium">
+                      <span className="flex items-center gap-1 px-2.5 py-1 bg-[#2557a7] text-white rounded-full text-[11px] font-semibold">
                         {roleFilter}
                         <button
                           onClick={() => setRoleFilter("")}
-                          className="ml-1 opacity-70 hover:opacity-100 leading-none"
+                          className="ml-0.5 opacity-70 hover:opacity-100 leading-none text-xs"
                         >
                           ×
                         </button>
                       </span>
                     )}
                     {searchQuery && (
-                      <span className="flex items-center gap-1 px-2.5 py-1 bg-[#0f172a] text-white rounded-full text-xs font-medium">
+                      <span className="flex items-center gap-1 px-2.5 py-1 bg-[#2557a7] text-white rounded-full text-[11px] font-semibold">
                         {searchQuery}
                         <button
                           onClick={() => setSearchQuery("")}
-                          className="ml-1 opacity-70 hover:opacity-100 leading-none"
+                          className="ml-0.5 opacity-70 hover:opacity-100 leading-none text-xs"
                         >
                           ×
                         </button>
                       </span>
                     )}
                     {selectedLocation !== "All Locations" && (
-                      <span className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                      <span className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-[11px] font-medium border border-gray-200">
                         {selectedLocation}
                         <button
                           onClick={() => setSelectedLocation("All Locations")}
-                          className="ml-1 opacity-60 hover:opacity-100 leading-none"
+                          className="ml-0.5 opacity-60 hover:opacity-100 leading-none text-xs"
                         >
                           ×
                         </button>
@@ -683,12 +694,12 @@ export default function JobsContents() {
                     {selectedFilters.map((filter) => (
                       <span
                         key={filter}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium"
+                        className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-[11px] font-medium border border-gray-200"
                       >
-                        {filter}
+                        {filter.replace(/^(years:|salary:|location:|education:|date:|source:)/, "")}
                         <button
                           onClick={() => handleFilterToggle(filter)}
-                          className="ml-1 opacity-60 hover:opacity-100 leading-none"
+                          className="ml-0.5 opacity-60 hover:opacity-100 leading-none text-xs"
                         >
                           ×
                         </button>
@@ -701,7 +712,7 @@ export default function JobsContents() {
                         setSelectedLocation("All Locations");
                         setSelectedFilters([]);
                       }}
-                      className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap"
+                      className="text-[11px] text-red-500 hover:text-red-700 font-semibold whitespace-nowrap px-1"
                     >
                       Clear all
                     </button>
@@ -709,11 +720,27 @@ export default function JobsContents() {
                 )}
             </div>
 
-            <div className="px-8 py-4">
+            <div className="px-25 py-4">
               {!isMatchedTab && (
                 <JobsHeaderSection
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
+                  cityValue={cityFilter}
+                  onCityChange={(city) => {
+                    setCityFilter(city);
+                    if (city) setSelectedLocation(city);
+                    else setSelectedLocation("All Locations");
+                  }}
+                  experienceValue={experienceFilter}
+                  onExperienceChange={(exp) => {
+                    setExperienceFilter(exp);
+                    if (exp) {
+                      setSelectedFilters((prev) => {
+                        const without = prev.filter((f) => !f.startsWith("years:"));
+                        return exp ? [...without, `years:${exp}`] : without;
+                      });
+                    }
+                  }}
                 />
               )}
 
@@ -729,12 +756,13 @@ export default function JobsContents() {
               <div className="mt-2 flex items-center justify-between gap-4">
                 <JobsTabs
                   activeTab={activeTab}
-                  onTabChange={(tab) => {
-                    setActiveTab(tab);
-                  }}
+                  onTabChange={(tab) => { setActiveTab(tab); }}
                   newCount={newJobsCount}
                   savedCount={savedJobsCount}
                   matchedCount={matchedCount}
+                  allCount={filteredJobs.length}
+                  sortBy={sortBy}
+                  onSortChange={setSortBy}
                 />
                 {isMatchedTab && matchedFetched && !matchedLoading && (
                   <button
@@ -900,6 +928,8 @@ export default function JobsContents() {
                       <Pagination
                         currentPage={currentPage}
                         totalPages={effectiveTotalPages}
+                        totalItems={totalJobs}
+                        itemsPerPage={JOBS_PER_PAGE}
                         onPageChange={handlePageChange}
                       />
                     ) : null;
@@ -912,10 +942,11 @@ export default function JobsContents() {
 
       {/* RIGHT SIDEBAR */}
       {!showLanding && (
-        <aside className="w-115 pr-6 py-6 space-y-4 sticky top-0 h-fit">
+        <aside className="w-130 shrink-0 pr-5 py-5 space-y-3 sticky top-0 h-fit">
           {!openChat && (
             <>
               <TopPickCard jobs={jobs} />
+              <TrendingSkillsCard />
               <SalaryInsights jobs={jobs} />
               <CareerTip />
             </>

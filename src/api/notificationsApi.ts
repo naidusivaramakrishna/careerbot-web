@@ -28,14 +28,30 @@ export interface NotificationEvent {
   user_id?: string;
 }
 
+export interface SSECallbacks {
+  onNotification: (notification: Notification) => void;
+  onOpen?: () => void;
+  onError?: (readyState: number) => void;
+}
+
 /**
- * Connect to the real-time notification stream
- * Returns an EventSource that emits notifications
+ * Connect to the real-time notification stream via Server-Sent Events.
+ *
+ * readyState values passed to onError:
+ *   EventSource.CONNECTING (0) — browser auto-retry in progress (transient)
+ *   EventSource.CLOSED     (2) — server rejected permanently (401, 404, etc.)
  */
-export function subscribeToNotifications(onNotification: (notification: Notification) => void, onError?: (error: Event) => void): EventSource {
+export function subscribeToNotifications(callbacks: SSECallbacks): EventSource {
+  const { onNotification, onOpen, onError } = callbacks;
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+
   const eventSource = new EventSource(`${baseUrl}/notifications/stream`, {
     withCredentials: true,
+  });
+
+  // Fires when the connection is established (or re-established after a retry)
+  eventSource.addEventListener('open', () => {
+    onOpen?.();
   });
 
   eventSource.addEventListener('notification', (event: Event) => {
@@ -43,8 +59,8 @@ export function subscribeToNotifications(onNotification: (notification: Notifica
       const messageEvent = event as MessageEvent;
       const notification: Notification = JSON.parse(messageEvent.data);
       onNotification(notification);
-    } catch (err) {
-      console.error('Failed to parse notification:', err);
+    } catch {
+      // Malformed payload — swallow silently, don't crash the stream
     }
   });
 
@@ -53,11 +69,21 @@ export function subscribeToNotifications(onNotification: (notification: Notifica
   });
 
   eventSource.addEventListener('error', (event: Event) => {
-    console.error('Notification stream error:', event);
-    if (onError) {
-      onError(event);
+    const es = event.target as EventSource;
+    const state = es.readyState;
+
+    // readyState CONNECTING (0): browser is already auto-retrying — this is
+    // normal and happens every time the connection drops momentarily. Do NOT
+    // log or reconnect manually; the browser handles it.
+    //
+    // readyState CLOSED (2): server actively rejected the connection (401, 404,
+    // stream limit exceeded, etc.). The browser will NOT retry — we must handle it.
+    if (state === EventSource.CLOSED) {
+      // Only warn on permanent closure — not on transient retries
+      console.warn('[NotificationStream] Connection closed by server (readyState=CLOSED). Will retry with backoff.');
     }
-    // EventSource will automatically attempt to reconnect
+
+    onError?.(state);
   });
 
   return eventSource;

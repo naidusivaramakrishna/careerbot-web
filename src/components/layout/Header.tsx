@@ -236,7 +236,7 @@ export default function Header() {
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-50">
-                      {notifications.map((n: Notification) => {
+                      {notifications.map((n: Notification, i: number) => {
                         const meta = getNotifMeta(n.type);
                         const handleClick = () => {
                           handleMarkRead(n.id);
@@ -247,7 +247,7 @@ export default function Header() {
                         };
                         return (
                           <div
-                            key={n.id}
+                            key={n.id ?? `notif-${i}`}
                             onClick={handleClick}
                             className={`relative flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors group ${
                               n.read ? 'bg-white hover:bg-gray-50/80' : 'bg-blue-50/50 hover:bg-blue-50/80'
