@@ -247,7 +247,7 @@ const ResumeListContent = () => {
       const newResume = await createResumeWithAuth();
       localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: newResume.id, data: newResume }));
       localStorage.setItem("current_resume_id", newResume.id);
-      router.push(`/builder/creation/${newResume.id}`);
+      router.push("/templates");
     } catch (err) {
       const error = err as { response?: { status?: number } };
       if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -255,7 +255,6 @@ const ResumeListContent = () => {
       } else {
         toast.error("Failed to create resume. Please try again.");
       }
-    } finally {
       setIsCreating(false);
     }
   };

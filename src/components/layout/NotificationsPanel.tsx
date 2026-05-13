@@ -2,6 +2,7 @@
 
 import { Bell, AlertCircle, CheckCheck, X, Briefcase, Wand2, User, ChevronRight } from 'lucide-react';
 import { Notification } from '@/api/notificationsApi';
+import { resolveNotificationRoute } from '@/lib/notificationRoute';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -88,22 +89,25 @@ export function NotificationsPanel({ notifications, unreadCount, onMarkRead, onD
           <div className="divide-y divide-gray-50">
             {notifications.map((n) => {
               const meta = getNotifMeta(n.type);
+              const route = resolveNotificationRoute(n);
+              const isClickable = route !== null;
               const handleClick = () => {
+                if (!isClickable) return;
                 onMarkRead(n.id);
-                if (n.action_url) {
-                  onClose();
-                  router.push(n.action_url);
-                }
+                onClose();
+                router.push(route!);
               };
               return (
                 <div
                   key={n.id}
-                  onClick={handleClick}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-                  className={`relative flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors group ${
-                    n.read ? 'bg-white hover:bg-gray-50/80' : 'bg-blue-50/50 hover:bg-blue-50/80'
+                  onClick={isClickable ? handleClick : undefined}
+                  role={isClickable ? 'button' : undefined}
+                  tabIndex={isClickable ? 0 : undefined}
+                  onKeyDown={isClickable ? (e) => e.key === 'Enter' && handleClick() : undefined}
+                  className={`relative flex items-start gap-3 px-4 py-3 transition-colors group ${
+                    isClickable
+                      ? `cursor-pointer ${n.read ? 'bg-white hover:bg-gray-50/80' : 'bg-blue-50/50 hover:bg-blue-50/80'}`
+                      : `cursor-default ${n.read ? 'bg-white' : 'bg-blue-50/50'}`
                   }`}
                 >
                   {!n.read && (
@@ -125,13 +129,25 @@ export function NotificationsPanel({ notifications, unreadCount, onMarkRead, onD
                     <p className="text-[11px] text-gray-500 leading-relaxed mt-0.5 line-clamp-2">{n.body}</p>
                     <p className="text-[10px] font-medium text-gray-400 mt-1">{formatTimeAgo(n.timestamp)}</p>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDismiss(n.id); }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400"
-                    aria-label="Dismiss"
-                  >
-                    <X size={11} />
-                  </button>
+                  <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
+                    {!n.read && !isClickable && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onMarkRead(n.id); }}
+                        className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-blue-100 text-[#2557a7]"
+                        aria-label="Mark as read"
+                        title="Mark as read"
+                      >
+                        <CheckCheck size={11} />
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDismiss(n.id); }}
+                      className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400"
+                      aria-label="Dismiss"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
                 </div>
               );
             })}

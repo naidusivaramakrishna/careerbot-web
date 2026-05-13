@@ -19,11 +19,11 @@ function EnhancedScoreTab({ atsScore }: { atsScore: Record<string, unknown> }) {
     max_raw_score: number;
     percentage: number;
     weighted_contribution: number;
-    deductions: { id: string; penalty: number; message: string }[];
+    deductions: { id: string; penalty: number; message?: string; after_example?: string; before_example?: string }[];
   }>;
 
   const intelligencePenalties = (atsScore.IntelligencePenalties ?? []) as {
-    id: string; penalty: number; message: string;
+    id: string; penalty: number; message?: string; after_example?: string;
   }[];
 
   useEffect(() => {
@@ -60,11 +60,15 @@ function EnhancedScoreTab({ atsScore }: { atsScore: Record<string, unknown> }) {
               <ProgressBar value={sec.percentage} label="" />
               {sec.deductions.length > 0 && (
                 <ul className="mt-1 space-y-0.5">
-                  {sec.deductions.map((d) => (
-                    <li key={d.id} className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-0.5">
-                      {d.message}
-                    </li>
-                  ))}
+                  {sec.deductions.map((d) => {
+                    const text = d.after_example || d.message;
+                    if (!text) return null;
+                    return (
+                      <li key={d.id} className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-0.5">
+                        {text}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -77,11 +81,15 @@ function EnhancedScoreTab({ atsScore }: { atsScore: Record<string, unknown> }) {
         <div>
           <h3 className="text-sm font-semibold text-gray-700 mb-1">Additional Notes</h3>
           <ul className="space-y-1">
-            {intelligencePenalties.map((p) => (
-              <li key={p.id} className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">
-                {p.message}
-              </li>
-            ))}
+            {intelligencePenalties.map((p) => {
+              const text = p.after_example || p.message;
+              if (!text) return null;
+              return (
+                <li key={p.id} className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">
+                  {text}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

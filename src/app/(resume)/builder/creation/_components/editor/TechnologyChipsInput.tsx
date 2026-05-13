@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { X } from "lucide-react";
 import { GripVertical } from "lucide-react";
 import {
@@ -29,6 +29,9 @@ interface TechnologyChipsInputProps {
   placeholder?: string;
   error?: string;
   layout?: "horizontal" | "vertical";
+  onRemoveSkill?: (skill: string) => Promise<void>;
+  onAddSkill?: (skill: string) => Promise<void>;
+  required?: boolean;
 }
 
 
@@ -94,7 +97,11 @@ const SortableChip: React.FC<SortableChipProps> = ({ technology, onRemove, fullW
 };
 
 
-const TechnologyChipsInput: React.FC<TechnologyChipsInputProps> = ({
+export interface TechnologyChipsInputHandle {
+  focus: () => void;
+}
+
+const TechnologyChipsInput = forwardRef<TechnologyChipsInputHandle, TechnologyChipsInputProps>(({
   selectedTechnologies,
   onTechnologiesChange,
   suggestions,
@@ -102,7 +109,10 @@ const TechnologyChipsInput: React.FC<TechnologyChipsInputProps> = ({
   placeholder = "Start typing...",
   error,
   layout = "horizontal",
-}) => {
+  onRemoveSkill,
+  onAddSkill,
+  required = false,
+}, ref) => {
   const [inputValue, setInputValue] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
@@ -110,6 +120,10 @@ const TechnologyChipsInput: React.FC<TechnologyChipsInputProps> = ({
   const [justSelected, setJustSelected] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }));
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -157,8 +171,15 @@ const TechnologyChipsInput: React.FC<TechnologyChipsInputProps> = ({
     setInputValue(e.target.value);
   };
 
-  const handleSelect = (technology: string) => {
+  const handleSelect = async (technology: string) => {
     if (!selectedTechnologies.includes(technology)) {
+      if (onAddSkill) {
+        try {
+          await onAddSkill(technology);
+        } catch {
+          return;
+        }
+      }
       onTechnologiesChange([...selectedTechnologies, technology]);
     }
     setInputValue("");
@@ -168,15 +189,27 @@ const TechnologyChipsInput: React.FC<TechnologyChipsInputProps> = ({
     inputRef.current?.focus();
   };
 
-  const handleRemove = (technology: string) => {
-    onTechnologiesChange(
-      selectedTechnologies.filter((t) => t !== technology)
-    );
+  const handleRemove = async (technology: string) => {
+    if (onRemoveSkill) {
+      try {
+        await onRemoveSkill(technology);
+      } catch {
+        return;
+      }
+    }
+    onTechnologiesChange(selectedTechnologies.filter((t) => t !== technology));
   };
 
-  const addCustomTechnology = (technology: string) => {
+  const addCustomTechnology = async (technology: string) => {
     const trimmedTech = technology.trim();
     if (trimmedTech && !selectedTechnologies.includes(trimmedTech)) {
+      if (onAddSkill) {
+        try {
+          await onAddSkill(trimmedTech);
+        } catch {
+          return;
+        }
+      }
       onTechnologiesChange([...selectedTechnologies, trimmedTech]);
       setInputValue("");
       setIsOpen(false);
@@ -281,7 +314,7 @@ const TechnologyChipsInput: React.FC<TechnologyChipsInputProps> = ({
     <div className="flex flex-col gap-1 flex-1 relative">
       {label && (
         <label className="text-sm font-semibold text-[#3b3b3b]">
-          {label} <span className="text-red-500">*</span>
+          {label} {required && <span className="text-red-500">*</span>}
         </label>
       )}
 
@@ -354,6 +387,8 @@ const TechnologyChipsInput: React.FC<TechnologyChipsInputProps> = ({
       )}
     </div>
   );
-};
+});
+
+TechnologyChipsInput.displayName = "TechnologyChipsInput";
 
 export default TechnologyChipsInput;

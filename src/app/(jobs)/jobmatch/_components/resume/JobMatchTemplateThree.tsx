@@ -3,7 +3,7 @@
 import React from "react";
 import { Edit3, Trash2 } from "lucide-react";
 import SafeHTML from "@/components/common/SafeHTML";
-import AutoPaginator from "@/app/(resume)/enhancer/_components/AutoPaginator";
+import AutoPaginator from "@/components/common/AutoPaginator";
 
 interface JobMatchTemplateTHREEProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

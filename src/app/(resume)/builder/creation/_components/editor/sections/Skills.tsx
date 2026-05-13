@@ -1,10 +1,21 @@
 "use client";
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useResume, type CustomCategory } from "../../../_context/ResumeContext";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { useValidation } from "../../../_hooks/useValidation";
-import TechnologyChipsInput from "../TechnologyChipsInput";
+import TechnologyChipsInput, { type TechnologyChipsInputHandle } from "../TechnologyChipsInput";
+import { addSkillToCategory, deleteSkillCategory, deleteSkillById } from "@/api/resumeApi";
+import { toast } from "sonner";
+
+const CATEGORY_KEY_MAP: Record<string, string> = {
+  programming_languages: "programmingLanguages",
+  frameworks: "frameworks",
+  databases: "databases",
+  tools: "tools",
+  cloud_platforms: "cloudPlatforms",
+  soft_skills: "softSkills",
+};
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -51,10 +62,21 @@ const SKILL_CATEGORIES = [
 
 const Skills: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
-  const { errors, clearError } = useValidation();
+  const { errors } = useValidation();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
+  const nameInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const skillsInputRefs = useRef<Record<string, TechnologyChipsInputHandle | null>>({});
+  const latestCustomIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const id = latestCustomIdRef.current;
+    if (id && nameInputRefs.current[id]) {
+      nameInputRefs.current[id]?.focus();
+      latestCustomIdRef.current = null;
+    }
+  });
 
   const categorizedSkills = resumeData.categorizedSkills || {
     programming_languages: [],
@@ -66,6 +88,7 @@ const Skills: React.FC = () => {
   };
 
   const customCategories: CustomCategory[] = categorizedSkills.custom_categories || [];
+  const hiddenPredefined: string[] = categorizedSkills.hidden_predefined_categories || [];
 
   const updateSkills = (updated: typeof categorizedSkills) => {
     const allSkills = [
@@ -80,20 +103,33 @@ const Skills: React.FC = () => {
     setResumeData({ ...resumeData, categorizedSkills: updated, skills: allSkills });
   };
 
+  const handleDeletePredefinedCategory = async (categoryKey: string) => {
+    const resumeId = resumeData.resume_id;
+    if (resumeId) {
+      try {
+        await deleteSkillCategory(resumeId, categoryKey);
+      } catch {
+        toast.error("Failed to delete category. Please try again.");
+        return;
+      }
+    }
+    updateSkills({
+      ...categorizedSkills,
+      [categoryKey]: [],
+      hidden_predefined_categories: [...hiddenPredefined, categoryKey],
+    });
+    toast.success("Category deleted successfully.");
+  };
+
   const handleCategorySkillsChange = (categoryKey: string, updatedSkills: string[]) => {
     const updated = { ...categorizedSkills, [categoryKey]: updatedSkills };
     updateSkills(updated);
-    if (updatedSkills.length > 0) clearError("Skills", 0, categoryKey);
-  };
-
-  const handleBlur = (categoryKey: string) => {
-    const val = (categorizedSkills as unknown as Record<string, string[]>)[categoryKey] || [];
-    validateRequired("Skills", 0, { [categoryKey]: val.join(", ") });
   };
 
   // ── Custom categories ──
   const handleAddCustomCategory = () => {
     const newEntry: CustomCategory = { id: uid(), name: "", skills: [] };
+    latestCustomIdRef.current = newEntry.id;
     updateSkills({
       ...categorizedSkills,
       custom_categories: [...customCategories, newEntry],
@@ -114,11 +150,22 @@ const Skills: React.FC = () => {
     });
   };
 
-  const handleDeleteCustomCategory = (id: string) => {
+  const handleDeleteCustomCategory = async (id: string) => {
+    const resumeId = resumeData.resume_id;
+    const custom = customCategories.find((c) => c.id === id);
+    if (resumeId && custom?.name) {
+      try {
+        await deleteSkillCategory(resumeId, custom.name);
+      } catch {
+        toast.error("Failed to delete category. Please try again.");
+        return;
+      }
+    }
     updateSkills({
       ...categorizedSkills,
       custom_categories: customCategories.filter((c) => c.id !== id),
     });
+    toast.success("Category deleted successfully.");
   };
 
   return (
@@ -131,53 +178,115 @@ const Skills: React.FC = () => {
         >
           <div className="flex flex-col gap-6">
             {/* Standard categories */}
-            {SKILL_CATEGORIES.map((cat) => {
+            {SKILL_CATEGORIES.filter((cat) => !hiddenPredefined.includes(cat.key)).map((cat) => {
               const currentSkills =
                 (categorizedSkills as unknown as Record<string, string[]>)[cat.key] || [];
               return (
-                <div key={cat.key} className="flex flex-col gap-1 relative">
-                  <TechnologyChipsInput
-                    label={cat.label}
-                    selectedTechnologies={currentSkills}
-                    onTechnologiesChange={(skills) => handleCategorySkillsChange(cat.key, skills)}
-                    suggestions={cat.suggestions}
-                    placeholder={cat.placeholder}
-                    error={errors[`Skills-0-${cat.key}`]}
-                  />
-                  <div onBlur={() => handleBlur(cat.key)} className="hidden" />
+                <div key={cat.key} className="flex flex-col gap-1 relative group">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <TechnologyChipsInput
+                        label={cat.label}
+                        selectedTechnologies={currentSkills}
+                        onTechnologiesChange={(skills) => handleCategorySkillsChange(cat.key, skills)}
+                        suggestions={cat.suggestions}
+                        placeholder={cat.placeholder}
+                        error={errors[`Skills-0-${cat.key}`]}
+                        onAddSkill={resumeData.resume_id ? async (skill) => {
+                          try {
+                            const apiCategory = CATEGORY_KEY_MAP[cat.key] ?? cat.key;
+                            const { id } = await addSkillToCategory(resumeData.resume_id!, apiCategory, skill);
+                            if (id) {
+                              const updatedMap = { ...(categorizedSkills.skill_id_map ?? {}), [`${cat.key}:${skill}`]: id };
+                              setResumeData({ ...resumeData, categorizedSkills: { ...categorizedSkills, skill_id_map: updatedMap } });
+                            }
+                            toast.success("Skill added successfully.");
+                          } catch {
+                            toast.error("Failed to add skill. Please try again.");
+                            throw new Error("api_failed");
+                          }
+                        } : undefined}
+                        onRemoveSkill={resumeData.resume_id ? async (skill) => {
+                          try {
+                            const skillId = categorizedSkills.skill_id_map?.[`${cat.key}:${skill}`] ?? skill;
+                            await deleteSkillById(resumeData.resume_id!, cat.key, skillId);
+                            toast.success("Skill removed successfully.");
+                          } catch {
+                            toast.error("Failed to remove skill. Please try again.");
+                            throw new Error("api_failed");
+                          }
+                        } : undefined}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePredefinedCategory(cat.key)}
+                      className="mt-6 p-1.5 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                      title={`Remove ${cat.label} category`}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
 
             {/* Custom categories */}
             {customCategories.map((custom) => (
-              <div key={custom.id} className="flex flex-col gap-2 border border-dashed border-gray-300 rounded-lg p-3">
-                {/* Category name input + delete button */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={custom.name}
-                    onChange={(e) => handleCustomCategoryNameChange(custom.id, e.target.value)}
-                    placeholder="Category name (e.g. Architecture Patterns)"
-                    className="flex-1 text-sm font-medium border border-gray-300 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
+              <div key={custom.id} className="flex flex-col gap-1 relative group">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1">
+                    {/* Editable label styled like predefined category labels */}
+                    <input
+                      type="text"
+                      value={custom.name}
+                      onChange={(e) => handleCustomCategoryNameChange(custom.id, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          skillsInputRefs.current[custom.id]?.focus();
+                        }
+                      }}
+                      ref={(el) => { nameInputRefs.current[custom.id] = el; }}
+                      placeholder="Category name (e.g. Architecture Patterns)"
+                      className="text-sm font-semibold text-[#3b3b3b] bg-transparent border-none outline-none w-full placeholder:text-gray-400 mb-1"
+                    />
+                    <TechnologyChipsInput
+                      ref={(el) => { skillsInputRefs.current[custom.id] = el; }}
+                      label=""
+                      selectedTechnologies={custom.skills}
+                      onTechnologiesChange={(skills) => handleCustomCategorySkillsChange(custom.id, skills)}
+                      suggestions={[]}
+                      placeholder={custom.name ? `Add ${custom.name} skills...` : "Add skills..."}
+                      onAddSkill={resumeData.resume_id && custom.name ? async (skill) => {
+                        try {
+                          await addSkillToCategory(resumeData.resume_id!, custom.name, skill);
+                          toast.success("Skill added successfully.");
+                        } catch {
+                          toast.error("Failed to add skill. Please try again.");
+                          throw new Error("api_failed");
+                        }
+                      } : undefined}
+                      onRemoveSkill={resumeData.resume_id && custom.name ? async (skill) => {
+                        try {
+                          await deleteSkillById(resumeData.resume_id!, custom.name, skill);
+                          toast.success("Skill removed successfully.");
+                        } catch {
+                          toast.error("Failed to remove skill. Please try again.");
+                          throw new Error("api_failed");
+                        }
+                      } : undefined}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleDeleteCustomCategory(custom.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                    className="mt-6 p-1.5 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                     title="Remove category"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={15} />
                   </button>
                 </div>
-                {/* Skills chips for this custom category */}
-                <TechnologyChipsInput
-                  label=""
-                  selectedTechnologies={custom.skills}
-                  onTechnologiesChange={(skills) => handleCustomCategorySkillsChange(custom.id, skills)}
-                  suggestions={[]}
-                  placeholder={custom.name ? `Add ${custom.name} skills...` : "Add skills..."}
-                />
               </div>
             ))}
 

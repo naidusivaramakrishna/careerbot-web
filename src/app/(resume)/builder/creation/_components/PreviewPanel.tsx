@@ -335,7 +335,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
                   PDF
                 </button>
                 <button
-                  onClick={() => handleExport("DOC")}
+                  onClick={() => handleExport("DOCX")}
                   className="w-full px-3 py-2 text-left text-sm text-[#2557a7] hover:bg-gray-100"
                 >
                   DOCX
@@ -426,7 +426,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
                     PDF
                   </button>
                   <button
-                    onClick={() => handleExport("DOC")}
+                    onClick={() => handleExport("DOCX")}
                     className="w-full px-3 py-2 text-left text-sm text-[#2557a7] hover:bg-gray-100"
                   >
                     DOCX

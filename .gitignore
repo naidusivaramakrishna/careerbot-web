@@ -15,7 +15,8 @@
 !README.md
 # testing
 /coverage
-
+*.tar
+*.7z
 # next.js
 /.next/
 /out/
@@ -32,7 +33,7 @@
 *.tar.gz
 *.gz
 *.bin
-
+*.zip
 # debug
 npm-debug.log*
 yarn-debug.log*

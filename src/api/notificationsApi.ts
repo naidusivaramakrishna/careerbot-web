@@ -28,30 +28,15 @@ export interface NotificationEvent {
   user_id?: string;
 }
 
-export interface SSECallbacks {
-  onNotification: (notification: Notification) => void;
-  onOpen?: () => void;
-  onError?: (readyState: number) => void;
-}
-
 /**
- * Connect to the real-time notification stream via Server-Sent Events.
- *
- * readyState values passed to onError:
- *   EventSource.CONNECTING (0) — browser auto-retry in progress (transient)
- *   EventSource.CLOSED     (2) — server rejected permanently (401, 404, etc.)
+ * Connect to the real-time notification stream
+ * Returns an EventSource that emits notifications
  */
-export function subscribeToNotifications(callbacks: SSECallbacks): EventSource {
-  const { onNotification, onOpen, onError } = callbacks;
+export function subscribeToNotifications(userId: string, onNotification: (notification: Notification) => void, onError?: (error: Event) => void): EventSource {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
-
-  const eventSource = new EventSource(`${baseUrl}/notifications/stream`, {
+  const url = `${baseUrl}/notifications/stream?user_id=${encodeURIComponent(userId)}`;
+  const eventSource = new EventSource(url, {
     withCredentials: true,
-  });
-
-  // Fires when the connection is established (or re-established after a retry)
-  eventSource.addEventListener('open', () => {
-    onOpen?.();
   });
 
   eventSource.addEventListener('notification', (event: Event) => {
@@ -59,8 +44,8 @@ export function subscribeToNotifications(callbacks: SSECallbacks): EventSource {
       const messageEvent = event as MessageEvent;
       const notification: Notification = JSON.parse(messageEvent.data);
       onNotification(notification);
-    } catch {
-      // Malformed payload — swallow silently, don't crash the stream
+    } catch (err) {
+      console.error('Failed to parse notification:', err);
     }
   });
 
@@ -69,21 +54,11 @@ export function subscribeToNotifications(callbacks: SSECallbacks): EventSource {
   });
 
   eventSource.addEventListener('error', (event: Event) => {
-    const es = event.target as EventSource;
-    const state = es.readyState;
-
-    // readyState CONNECTING (0): browser is already auto-retrying — this is
-    // normal and happens every time the connection drops momentarily. Do NOT
-    // log or reconnect manually; the browser handles it.
-    //
-    // readyState CLOSED (2): server actively rejected the connection (401, 404,
-    // stream limit exceeded, etc.). The browser will NOT retry — we must handle it.
-    if (state === EventSource.CLOSED) {
-      // Only warn on permanent closure — not on transient retries
-      console.warn('[NotificationStream] Connection closed by server (readyState=CLOSED). Will retry with backoff.');
+    console.error('Notification stream error:', event);
+    if (onError) {
+      onError(event);
     }
-
-    onError?.(state);
+    // EventSource will automatically attempt to reconnect
   });
 
   return eventSource;
@@ -93,7 +68,7 @@ export function subscribeToNotifications(callbacks: SSECallbacks): EventSource {
  * Mark a notification as read
  */
 export async function markNotificationAsRead(notificationId: string): Promise<void> {
-  await httpClient.patch(`/notifications/${notificationId}/read`);
+  await httpClient.patch(`/notifications/${notificationId}/read`, {});
 }
 
 /**
@@ -146,6 +121,11 @@ export interface NotificationListResponse {
 export async function getNotifications(page: number = 1, limit: number = 20): Promise<NotificationListResponse> {
   const response = await httpClient.get<NotificationListResponse>('/notifications', {
     params: { page, limit },
+  });
+  // Normalize: backend may return `_id` (MongoDB) on some notifications instead of `id`
+  response.data.items = response.data.items.map((item) => {
+    const raw = item as unknown as Record<string, string>;
+    return { ...item, id: item.id || raw._id || raw.notification_id };
   });
   return response.data;
 }

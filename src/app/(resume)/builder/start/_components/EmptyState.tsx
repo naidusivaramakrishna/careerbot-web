@@ -1,6 +1,5 @@
 "use client"
 import { CircleCheckBig, Plus, Upload } from "lucide-react";
-// import { FaLinkedinIn } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -16,6 +15,7 @@ const EmptyState = ({ selected, onSelect }: {
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+
   // const [showLinkedInModal, setShowLinkedInModal] = useState(false);
   // const [linkedInUrl, setLinkedInUrl] = useState("");
 
@@ -23,68 +23,34 @@ const EmptyState = ({ selected, onSelect }: {
   const handleBuilderClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
-    logger.info("Builder clicked");
     onSelect("builder");
-
-    // ✅ Authentication is handled via httpOnly cookies
-    // No need to check localStorage - backend will return 401 if not authenticated
-    // The browser automatically sends httpOnly cookies with API requests
-
     setIsCreating(true);
 
     try {
-      // ✅ Step 1: Check for existing resumes
-      logger.info("Checking for existing resumes...");
       const { builder_resumes } = await getAllResumesUnified();
 
       if (builder_resumes.length > 0) {
         const resume = builder_resumes[0] as { id: string };
-
-        // ✅ Cache the resume data to skip backend fetch on next page
         localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: resume.id, data: resume }));
         localStorage.setItem("current_resume_id", resume.id);
-
-        // ✅ Navigate immediately without artificial delay
-        router.push(`/builder/creation/${resume.id}`);
-        return;
+      } else {
+        const newResume = await createResumeWithAuth();
+        localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: newResume.id, data: newResume }));
+        localStorage.setItem("current_resume_id", newResume.id);
       }
 
-      // ✅ Step 2: Create new resume only if none exist
-      const newResume = await createResumeWithAuth();
-
-      // ✅ Cache the newly created resume data to skip backend fetch on next page
-      localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: newResume.id, data: newResume }));
-      localStorage.setItem("current_resume_id", newResume.id);
-
-      toast.success("Resume created!");
-
-      // ✅ Navigate immediately without artificial delay
-      router.push(`/builder/creation/${newResume.id}`);
-
+      router.push("/templates");
     } catch (error: unknown) {
       logger.error("Error:", error);
-
-      // Check if it's an authentication error (401 or 403)
       const axiosError = error as { response?: { status?: number } };
       if (axiosError?.response?.status === 401 || axiosError?.response?.status === 403) {
         toast.error("Please sign in to create a resume");
         router.push("/signup");
-        setIsCreating(false);
-        return;
-      }
-
-      if (error instanceof Error) {
-        if (error.message === "RESUME_EXISTS") {
-          toast.error("Resume already exists. Please refresh the page.");
-          setTimeout(() => window.location.reload(), 2000);
-        } else {
-          toast.error(error.message);
-        }
+      } else if (error instanceof Error) {
+        toast.error(error.message);
       } else {
         toast.error("Failed to create resume. Please try again.");
       }
-
       setIsCreating(false);
     }
   };

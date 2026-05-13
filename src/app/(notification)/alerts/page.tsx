@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { useNotificationsList } from "@/hooks/useNotificationsList";
 import { markNotificationAsRead, deleteNotification, markAllNotificationsAsRead, deleteAllNotifications } from "@/api/notificationsApi";
+import { resolveNotificationRoute } from "@/lib/notificationRoute";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 /* ── Notification type ────────────────────────────── */
@@ -64,6 +66,7 @@ const getDateGroup = (timestamp: string): string => {
 
 /* ── Page ───────────────────────────────────────────── */
 export default function AlertsPage() {
+  const router = useRouter();
   const { notifications, unreadCount, loading, error, refetch } = useNotificationsList(1, 50);
   const [activeTab, setActiveTab] = React.useState<FilterTab>("all");
 
@@ -74,7 +77,16 @@ export default function AlertsPage() {
       await markNotificationAsRead(id);
       refetch();
     } catch (err) {
-      toast.error('Failed to mark as read');
+      const msg = err instanceof Error ? err.message : 'Failed to mark as read';
+      toast.error(msg);
+    }
+  };
+
+  const handleRowClick = (n: typeof notifications[number]) => {
+    const route = resolveNotificationRoute(n);
+    if (route) {
+      handleMarkAsRead(n.id);
+      router.push(route);
     }
   };
 
@@ -277,12 +289,19 @@ export default function AlertsPage() {
                 <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden divide-y divide-gray-100">
                   {items.map((n) => {
                     const meta = getNotifMeta(n.type);
+                    const route = resolveNotificationRoute(n);
+                    const isClickable = route !== null;
                     return (
                       <div
                         key={n.id}
-                        onClick={() => handleMarkAsRead(n.id)}
-                        className={`relative flex items-start gap-3.5 px-5 py-4 cursor-pointer transition-colors group ${
-                          n.read ? "hover:bg-gray-50/70" : "bg-blue-50/40 hover:bg-blue-50/60"
+                        onClick={isClickable ? () => handleRowClick(n) : undefined}
+                        role={isClickable ? "button" : undefined}
+                        tabIndex={isClickable ? 0 : undefined}
+                        onKeyDown={isClickable ? (e) => e.key === "Enter" && handleRowClick(n) : undefined}
+                        className={`relative flex items-start gap-3.5 px-5 py-4 transition-colors group ${
+                          isClickable
+                            ? `cursor-pointer ${n.read ? "hover:bg-gray-50/70" : "bg-blue-50/40 hover:bg-blue-50/60"}`
+                            : `cursor-default ${n.read ? "" : "bg-blue-50/40"}`
                         }`}
                       >
                         {/* Unread left accent */}

@@ -7,7 +7,8 @@ import { useResume } from "../../_context/ResumeContext";
 const SUGGESTION_SECTION_MAP: Record<string, string[]> = {
   PersonalInfo: ["Contact"],
   // Formatting suggestions (e.g. low word count) are surfaced in the Summary section
-  ProfessionalSummary: ["Summary", "Formatting"],
+  // "content" covers buzzword/repetition/weak-phrase deductions from the ATS scorer
+  ProfessionalSummary: ["Summary", "Formatting", "content"],
   Skills: ["Skills", "Keywords"],
   Education: ["Education"],
   // ContentQuality covers bullet-level suggestions; entryContent filtering scopes them per-entry

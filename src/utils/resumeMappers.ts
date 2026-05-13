@@ -133,15 +133,18 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     str(piCamel.location) ||
     "";
 
+  const extractSocialUrl = (v: unknown): string =>
+    typeof v === "object" && v !== null ? str((v as AnyRecord).url) : str(v);
+
   const linkedinUrl =
-    str(social.linkedin) ||
+    extractSocialUrl(social.linkedin) ||
     str(contact.linkedin) ||
     str(contact.linkedin_url) ||
     str(piCamel.linkedinUrl) ||
     "";
 
   const githubUrl =
-    str(social.github) ||
+    extractSocialUrl(social.github) ||
     str(contact.github) ||
     str(contact.github_url) ||
     str(piCamel.githubUrl) ||
@@ -149,7 +152,9 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
 
   const portfolioRaw = social.portfolio;
   const portfolioUrl =
-    (Array.isArray(portfolioRaw) ? str(portfolioRaw[0]) : str(portfolioRaw)) ||
+    (Array.isArray(portfolioRaw)
+      ? extractSocialUrl(portfolioRaw[0])
+      : extractSocialUrl(portfolioRaw)) ||
     str(contact.portfolio) ||
     str(contact.website) ||
     str(piCamel.portfolioUrl) ||

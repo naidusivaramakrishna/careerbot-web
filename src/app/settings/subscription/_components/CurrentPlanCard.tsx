@@ -139,7 +139,7 @@ export const CurrentPlanCard: React.FC<CurrentPlanCardProps> = ({ subscription }
         {/* Upgrade CTA */}
         {nextPlans.length > 0 && (
           <button
-            onClick={() => router.push('/pricing')}
+            onClick={() => router.push('/payments')}
             className="mt-5 w-full py-2.5 px-4 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90"
             style={{ background: '#2557a7', color: 'white', boxShadow: '0 4px 14px rgba(37,87,167,0.3)' }}
           >

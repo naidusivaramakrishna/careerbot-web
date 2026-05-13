@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { logger } from '@/lib/logger';
 
 // Public routes — no auth required
 const publicRoutes = [
@@ -18,6 +19,7 @@ const ADMIN_PREFIX = '/admin';
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
+    logger.info(`[${request.method}] ${pathname}`);
 
     // Allow public routes without authentication
     const isPublicRoute = publicRoutes.some(

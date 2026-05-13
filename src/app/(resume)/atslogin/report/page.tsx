@@ -3,6 +3,9 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { Playfair_Display } from "next/font/google";
+import { enhanceResume } from "@/api/enhancerApi";
+import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
+import { toast } from "sonner";
 import {
   CheckCircle2,
   RefreshCw,
@@ -404,7 +407,7 @@ function IssueCard({
           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
         >
-          Fix Now
+          Fix Now →
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
           </svg>
@@ -563,6 +566,7 @@ function ATSLoginReport() {
   const router   = useRouter();
   const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null);
   const [loading,   setLoading]   = useState(true);
+  const [isFixing,  setIsFixing]  = useState(false);
   const [filter,       setFilter]       = useState<"all" | "critical" | "urgent" | "optional">("all");
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
@@ -651,22 +655,55 @@ function ATSLoginReport() {
     }, 150);
   }, [grouped]);
 
-  const handleFixNow = () => {
+  const handleFixNow = async () => {
+    if (isFixing) return;
     try {
       const raw = localStorage.getItem("atsAnalysisData");
-      if (raw) {
-        const d             = JSON.parse(raw) as Record<string, unknown>;
-        const resumeId      = d.resume_id as string;
-        const atsBreakdown  = d.ats_breakdown_id as string | undefined;
-        if (resumeId) {
-          const params = new URLSearchParams({ resume_id: resumeId, from_ats: "true" });
-          if (atsBreakdown) params.set("ats_breakdown", atsBreakdown);
-          router.push(`/enhancer?${params.toString()}`);
-          return;
-        }
+      if (!raw) { router.push("/builder/start"); return; }
+
+      const d            = JSON.parse(raw) as Record<string, unknown>;
+      const resumeId     = d.resume_id as string | undefined;
+      const atsBreakdown = d.ats_breakdown_id as string | undefined;
+
+      if (!resumeId) { router.push("/builder/start"); return; }
+
+      setIsFixing(true);
+      toast.loading("Preparing your resume for enhancement…", { id: "fix-now" });
+
+      const enhanceResult = await enhanceResume({
+        resume_id: resumeId,
+        ...(atsBreakdown ? { ats_breakdown: atsBreakdown } : {}),
+      });
+
+      const enhancedResumeId = enhanceResult.enhanced_resume_id;
+
+      // Cache the mapped data so ResumeContext loads it instantly on first render
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sourceData = (enhanceResult as any).enhanced_resume
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        || (enhanceResult as any).enhancer_state?.resume
+        || {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mappedData = mapParserOutputToBuilderData(sourceData as any);
+      localStorage.setItem(
+        "cached_resume_data",
+        JSON.stringify({ resumeId: enhancedResumeId, data: { ...mappedData, id: enhancedResumeId } })
+      );
+      localStorage.setItem("current_resume_id", enhancedResumeId);
+
+      // Track enhanced ID so the resume list page can find it
+      const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
+      if (!existingIds.includes(enhancedResumeId)) {
+        localStorage.setItem("enhanced_resume_ids", JSON.stringify([...existingIds, enhancedResumeId]));
       }
-    } catch { /* ignore */ }
-    router.push("/enhancer");
+
+      toast.dismiss("fix-now");
+      router.push(`/builder/creation/${enhancedResumeId}?source=enhanced&from_ats=true`);
+    } catch {
+      toast.dismiss("fix-now");
+      toast.error("Failed to open enhancer. Please try again.");
+      setIsFixing(false);
+    }
   };
 
   /* ── helpers ── */
@@ -844,11 +881,11 @@ function ATSLoginReport() {
                 </div>
 
                 {/* Primary CTA */}
-                <button onClick={handleFixNow}
-                  style={{ width: "100%", padding: "14px 20px", borderRadius: 12, background: "linear-gradient(135deg,#2557a7,#1a3a8f)", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", marginBottom: 10, transition: "opacity 0.15s", boxShadow: "0 4px 16px rgba(37,87,167,0.3)" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}>
-                  Fix My Resume →
+                <button onClick={handleFixNow} disabled={isFixing}
+                  style={{ width: "100%", padding: "14px 20px", borderRadius: 12, background: "linear-gradient(135deg,#2557a7,#1a3a8f)", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: isFixing ? "not-allowed" : "pointer", marginBottom: 10, transition: "opacity 0.15s", boxShadow: "0 4px 16px rgba(37,87,167,0.3)", opacity: isFixing ? 0.7 : 1 }}
+                  onMouseEnter={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"; }}
+                  onMouseLeave={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}>
+                  {isFixing ? "Preparing…" : "Fix My Resume →"}
                 </button>
                 <button onClick={() => router.push("/atslogin")}
                   style={{ width: "100%", padding: "11px 20px", borderRadius: 12, background: "transparent", color: "#2557a7", fontWeight: 700, fontSize: 13, border: "1.5px solid #dbeafe", cursor: "pointer", marginBottom: 0 }}
@@ -999,11 +1036,11 @@ function ATSLoginReport() {
                     </p>
                   </div>
                   {issues.length > 0 && (
-                    <button onClick={handleFixNow}
-                      style={{ padding: "10px 22px", borderRadius: 10, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0, backdropFilter: "blur(4px)", transition: "background 0.15s" }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.22)"; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.12)"; }}>
-                      Fix All Issues →
+                    <button onClick={handleFixNow} disabled={isFixing}
+                      style={{ padding: "10px 22px", borderRadius: 10, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: isFixing ? "not-allowed" : "pointer", flexShrink: 0, backdropFilter: "blur(4px)", transition: "background 0.15s", opacity: isFixing ? 0.7 : 1 }}
+                      onMouseEnter={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.22)"; }}
+                      onMouseLeave={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.12)"; }}>
+                      {isFixing ? "Preparing…" : "Fix All Issues →"}
                     </button>
                   )}
                 </div>

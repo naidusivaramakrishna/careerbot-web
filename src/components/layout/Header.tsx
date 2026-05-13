@@ -12,6 +12,7 @@ import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount
 import { getProfile, getProfilePicture, UserProfile } from '@/api/userApi';
 import { signOut } from '@/api/authApi';
 import { Notification } from '@/api/notificationsApi';
+import { resolveNotificationRoute } from '@/lib/notificationRoute';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -238,19 +239,25 @@ export default function Header() {
                     <div className="divide-y divide-gray-50">
                       {notifications.map((n: Notification, i: number) => {
                         const meta = getNotifMeta(n.type);
+                        const route = resolveNotificationRoute(n);
+                        const isClickable = route !== null;
                         const handleClick = () => {
+                          if (!isClickable) return;
                           handleMarkRead(n.id);
-                          if (n.action_url) {
-                            setShowNotifs(false);
-                            router.push(n.action_url);
-                          }
+                          setShowNotifs(false);
+                          router.push(route!);
                         };
                         return (
                           <div
-                            key={n.id ?? `notif-${i}`}
-                            onClick={handleClick}
-                            className={`relative flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors group ${
-                              n.read ? 'bg-white hover:bg-gray-50/80' : 'bg-blue-50/50 hover:bg-blue-50/80'
+                            key={n.id}
+                            onClick={isClickable ? handleClick : undefined}
+                            role={isClickable ? 'button' : undefined}
+                            tabIndex={isClickable ? 0 : undefined}
+                            onKeyDown={isClickable ? (e) => e.key === 'Enter' && handleClick() : undefined}
+                            className={`relative flex items-start gap-3 px-4 py-3 transition-colors group ${
+                              isClickable
+                                ? `cursor-pointer ${n.read ? 'bg-white hover:bg-gray-50/80' : 'bg-blue-50/50 hover:bg-blue-50/80'}`
+                                : `cursor-default ${n.read ? 'bg-white' : 'bg-blue-50/50'}`
                             }`}
                           >
                             {/* Unread dot */}
@@ -280,14 +287,26 @@ export default function Header() {
                               <p className="text-[10px] font-medium text-gray-400 mt-1">{formatTimeAgo(n.timestamp)}</p>
                             </div>
 
-                            {/* Dismiss */}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDismiss(n.id); }}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400"
-                              aria-label="Dismiss"
-                            >
-                              <X size={11} />
-                            </button>
+                            {/* Actions */}
+                            <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
+                              {!n.read && !isClickable && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
+                                  className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-blue-100 text-[#2557a7]"
+                                  aria-label="Mark as read"
+                                  title="Mark as read"
+                                >
+                                  <CheckCheck size={11} />
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDismiss(n.id); }}
+                                className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400"
+                                aria-label="Dismiss"
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}

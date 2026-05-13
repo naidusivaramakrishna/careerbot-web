@@ -1,7 +1,6 @@
 "use client";
 import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { getResumeById } from "@/api/resumeApi";
-import { getProfile } from "@/api/userApi";
 import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
 import type { ATSScore, EnhancedSuggestion } from "@/types/api.types";
@@ -38,6 +37,52 @@ export interface CategorizedSkills {
   cloud_platforms: string[];
   soft_skills: string[];
   custom_categories?: CustomCategory[];
+  hidden_predefined_categories?: string[];
+  // Maps "CategoryKey:SkillName" → backend skill ID for delete calls
+  skill_id_map?: Record<string, string>;
+}
+
+type BackendSkillItem = { id?: string; name?: string };
+type BackendSkills = Record<string, BackendSkillItem[]>;
+
+const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
+  programming_languages: [],
+  frameworks: [],
+  databases: [],
+  tools: [],
+  cloud_platforms: [],
+  soft_skills: [],
+};
+
+export function mapBackendSkillsToCategorized(backendSkills: unknown): CategorizedSkills {
+  if (!backendSkills || typeof backendSkills !== 'object' || Array.isArray(backendSkills)) {
+    return { ...EMPTY_CATEGORIZED_SKILLS };
+  }
+  const s = backendSkills as BackendSkills;
+  const extractNames = (arr?: BackendSkillItem[]) =>
+    (arr || []).map(i => i.name ?? '').filter(Boolean);
+
+  const idMap: Record<string, string> = {};
+  const buildIdMap = (key: string, arr?: BackendSkillItem[]) => {
+    (arr || []).forEach(i => { if (i.id && i.name) idMap[`${key}:${i.name}`] = i.id; });
+  };
+
+  buildIdMap('programming_languages', s.programmingLanguages);
+  buildIdMap('frameworks', s.frameworks);
+  buildIdMap('databases', s.databases);
+  buildIdMap('tools', s.tools);
+  buildIdMap('cloud_platforms', s.cloudPlatforms);
+  buildIdMap('soft_skills', s.softSkills);
+
+  return {
+    programming_languages: extractNames(s.programmingLanguages),
+    frameworks: extractNames(s.frameworks),
+    databases: extractNames(s.databases),
+    tools: extractNames(s.tools),
+    cloud_platforms: extractNames(s.cloudPlatforms),
+    soft_skills: extractNames(s.softSkills),
+    skill_id_map: idMap,
+  };
 }
 
 export interface CustomField {
@@ -428,11 +473,22 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
   // ✅ Update section order when career level changes or template is switched
   useEffect(() => {
+    // If user has a saved order in localStorage (e.g. after deleting a section), respect it
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(sectionOrderKey) : null;
+      if (stored) {
+        const parsed = JSON.parse(stored) as string[];
+        setSectionOrder(parsed);
+        return;
+      }
+    } catch { /* ignore */ }
+    // No saved order — compute from career level (first visit or after clearing storage)
     const careerLevel = getCareerLevelFromStorage();
     const newOrder = getSectionOrder(careerLevel);
-    console.warn("📋 Updating sectionOrder from career level:", careerLevel, newOrder);
     setSectionOrder(newOrder);
-  }, [resumeIdProp, selectedTemplate]); // Re-check career level when resumeId or selectedTemplate changes
+  }, [resumeIdProp, selectedTemplate]); // Re-check when resumeId or selectedTemplate changes
 
   // ✅ Monitor localStorage changes for template switches (from other components)
   useEffect(() => {
@@ -597,9 +653,21 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           if (resumeData.ats_score) {
             setEnhancedAtsScore(resumeData.ats_score);
           }
-          const rawSuggestions = resumeData.ats_score?.suggestions as EnhancedSuggestion[] | undefined;
-          if (rawSuggestions && rawSuggestions.length > 0) {
-            setEnhancedSuggestions(rawSuggestions);
+          // Convert section_breakdown deductions into EnhancedSuggestion[] (after_example is the suggestion text)
+          const derivedSuggestions: EnhancedSuggestion[] = [];
+          const sectionBreakdown = (resumeData.ats_score?.section_breakdown ?? {}) as Record<string, {
+            deductions?: { id: string; penalty: number; after_example?: string; message?: string }[];
+          }>;
+          for (const [sectionName, sec] of Object.entries(sectionBreakdown)) {
+            for (const d of (sec.deductions ?? [])) {
+              const text = d.after_example || d.message;
+              if (text) {
+                derivedSuggestions.push({ id: d.id, section: sectionName, message: text, fix_type: "manual" });
+              }
+            }
+          }
+          if (derivedSuggestions.length > 0) {
+            setEnhancedSuggestions(derivedSuggestions);
           }
         } else {
           processedData = resumeData || data;
@@ -620,24 +688,6 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
         // Continue with resume data processing...
         data = processedData;
-        // Fetch user profile as fallback for empty personalInfo fields
-        let profileName = "";
-        let profileEmail = "";
-        let profilePhone = "";
-        let profileLocation = "";
-        let profileLinkedin = "";
-        let profileGithub = "";
-        try {
-          const profile = await getProfile();
-          profileName = profile.full_name || "";
-          profileEmail = profile.email || "";
-          profilePhone = profile.phone_number || "";
-          profileLocation = profile.location || "";
-          profileLinkedin = profile.linkedin_url || "";
-          profileGithub = profile.github_url || "";
-        } catch {
-          // Profile fetch is best-effort — don't block resume loading
-        }
 
         // Split combined phone (e.g. "+911234567890") into countryCode and phone
         const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(data.personalInfo?.phone || "");
@@ -649,13 +699,13 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         const loadedData: ResumeData = {
           resume_id: data.id,
           personalInfo: {
-            fullname: data.personalInfo?.fullname || data.personalInfo?.name || data.personalInfo?.full_name || profileName,
-            email: data.personalInfo?.email || profileEmail,
+            fullname: data.personalInfo?.fullname || data.personalInfo?.name || data.personalInfo?.full_name || "",
+            email: data.personalInfo?.email || "",
             countryCode: data.personalInfo?.countryCode || parsedCode,
-            phone: parsedPhone || profilePhone,
-            location: data.personalInfo?.location || profileLocation,
-            linkedinUrl: data.personalInfo?.linkedinUrl || profileLinkedin,
-            githubUrl: data.personalInfo?.githubUrl || profileGithub,
+            phone: parsedPhone || "",
+            location: data.personalInfo?.location || "",
+            linkedinUrl: data.personalInfo?.linkedinUrl || "",
+            githubUrl: data.personalInfo?.githubUrl || "",
             portfolioUrl: (data.personalInfo as Record<string, string>)?.portfolioUrl || data.personalInfo?.portifolioUrl || "",
             dateOfBirth: data.personalInfo?.dateOfBirth || null,
             nationality: data.personalInfo?.nationality || null,
@@ -670,15 +720,26 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
           workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
           projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
-          skills: data.skills || [],
-          categorizedSkills: data.categorizedSkills || {
-            programming_languages: [],
-            frameworks: [],
-            databases: [],
-            tools: [],
-            cloud_platforms: [],
-            soft_skills: []
-          },
+          ...(() => {
+            let categorizedSkills: CategorizedSkills;
+            if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
+              // New backend format: skills is an object with camelCase keys and {id,name} arrays
+              categorizedSkills = mapBackendSkillsToCategorized(data.skills);
+            } else {
+              // Legacy format: categorizedSkills with snake_case string arrays
+              categorizedSkills = (data.categorizedSkills as CategorizedSkills) || { ...EMPTY_CATEGORIZED_SKILLS };
+            }
+            const skills = [
+              ...categorizedSkills.programming_languages,
+              ...categorizedSkills.frameworks,
+              ...categorizedSkills.databases,
+              ...categorizedSkills.tools,
+              ...categorizedSkills.cloud_platforms,
+              ...categorizedSkills.soft_skills,
+              ...(categorizedSkills.custom_categories || []).flatMap(c => c.skills),
+            ];
+            return { skills, categorizedSkills };
+          })(),
           certifications: (data.certifications || []).map((cert: Record<string, string | undefined>) => ({
             id: cert.id || cert._id,
             name: cert.name || "",

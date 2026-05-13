@@ -125,6 +125,22 @@ const Internships: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 
+  useEffect(() => {
+    if (editingEntries.length > 0) return;
+    if (!resumeData.internships?.length) return;
+    setSavedEntries(prev => {
+      if (prev.length !== resumeData.internships!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.internships![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.internships]);
+
   const handleChange = <K extends keyof InternshipEntry>(
     index: number,
     field: K,

@@ -169,7 +169,7 @@
 //         {/* Compact upgrade button */}
 //         <div className="shrink-0 px-1.5 pb-3 pt-1">
 //           <Link
-//             href="/pricing"
+//             href="/payments"
 //             title="Upgrade Plan"
 //             aria-label="Upgrade Plan"
 //             className="flex items-center justify-center p-2.5 rounded-lg transition-all hover:opacity-90 active:scale-95"
@@ -334,6 +334,8 @@ import {
   Crown,
   TrendingUp,
   ChevronRight,
+  CreditCard,
+  Receipt,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { getAllResumesUnified, getAllResumes } from "@/api/resumeApi";
@@ -356,7 +358,7 @@ const NAV_GROUPS = [
     items: [
       { id: "resume",   label: "Resume Builder",  icon: FileText,   path: "/builder", smartNav: true },
       { id: "ats",      label: "ATS Scan",         icon: ScanSearch, path: "/atslogin" },
-      { id: "enhancer", label: "Enhance Resume",   icon: Wand2,      path: "/enhancer" },
+      // { id: "enhancer", label: "Enhance Resume",   icon: Wand2,      path: "/enhancer" },
     ],
   },
   {
@@ -373,6 +375,13 @@ const NAV_GROUPS = [
       { id: "communication", label: "Interview Prep", icon: MessageSquare, path: "/prep" },
     ],
   },
+  {
+   label: "BILLING",
+   items: [
+     { id: "subscription", label: "Subscription",     icon: CreditCard, path: "/account/subscriptions" },
+     { id: "billing_history", label: "Billing History", icon: Receipt,    path: "/settings/billing" },
+   ],
+ },
 ];
 
 export default function Sidebar() {
@@ -417,6 +426,8 @@ export default function Sidebar() {
       }
     }
     if (pathname.startsWith("/settings")) return "settings";
+    if (pathname.startsWith("/account/subscriptions")) return "subscription";
+    if (pathname.startsWith("/settings/billing")) return "billing_history";
     return "";
   };
   const activeId = getActiveId();
@@ -490,16 +501,16 @@ export default function Sidebar() {
         {/* Compact upgrade button */}
         <div className="shrink-0 px-1.5 pb-3 pt-1">
           <Link
-            href="/pricing"
+            href="/payments"
             title="Upgrade Plan"
             aria-label="Upgrade Plan"
             className="flex items-center justify-center p-2.5 rounded-lg transition-all hover:opacity-90 active:scale-95"
             style={{
-              background: "#2557a7",
-              boxShadow: "0 2px 8px rgba(37,87,167,0.3)",
-            }}
+             background: balance ? 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)' : "#2557a7",
+             boxShadow: "0 2px 8px rgba(37,87,167,0.3)",
+           }}
           >
-            <TrendingUp size={15} style={{ color: "#0f172a" }} />
+            <TrendingUp size={15} style={{ color: balance ? "#fbbf24" : "#0f172a" }} />
           </Link>
         </div>
       </div>
@@ -576,12 +587,18 @@ export default function Sidebar() {
 
       {/* Bottom premium plan card */}
       <div className="shrink-0 px-3 pb-2 pt-1">
-        <div className="relative rounded-xl overflow-hidden bg-gray-200">
+        <div className="relative rounded-xl overflow-hidden" style={{
+          background: balance ? 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)' : '#f3f4f6'
+        }}>
           <div className="relative px-3.5 py-2 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Crown size={12} className="text-amber-500 shrink-0" />
-                <span className="text-gray-700 text-[11px] font-bold tracking-wide">FREE Plan</span>
+                <Crown size={12} className={`shrink-0 ${balance ? 'text-yellow-300' : 'text-gray-400'}`} />
+                <span className={`text-[11px] font-bold tracking-wide ${
+                  balance ? 'text-white' : 'text-gray-600'
+                }`}>
+                  {balance ? 'PREMIUM' : 'FREE Plan'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
                 {balance && (
@@ -606,27 +623,28 @@ export default function Sidebar() {
                 {loadingCredits ? (
                   <div className="w-10 h-3 rounded animate-pulse bg-gray-300" />
                 ) : balance ? (
-                  <span className="text-[11px] leading-none">
-                    <span className={`font-black ${creditPct < 20 ? "text-red-500" : "text-[#2557a7]"}`}>
+                  <span className="text-[11px] leading-none text-white">
+                    <span className={`font-black ${creditPct < 20 ? "text-red-200" : "text-white"}`}>
                       {balance.credits_remaining}
                     </span>
-                    <span className="text-gray-400 font-normal">/{balance.credits_total}</span>
+                    <span className="text-white/60 font-normal">/{balance.credits_total}</span>
                   </span>
                 ) : null}
               </div>
             </div>
 
             <Link
-              href="/pricing"
+              href="/payments"
               className="flex items-center justify-center gap-1.5 w-full py-1.5 px-3 rounded-lg text-[11px] font-bold transition-all hover:opacity-90 active:scale-95"
               style={{
-                background: "#2557a7",
+                background: balance ? 'rgba(255,255,255,0.2)' : "#2557a7",
                 color: "#ffffff",
-                boxShadow: "0 3px 10px rgba(37,87,167,0.28)",
+                boxShadow: balance ? 'none' : "0 3px 10px rgba(37,87,167,0.28)",
+                border: balance ? '1px solid rgba(255,255,255,0.3)' : 'none'
               }}
             >
               <TrendingUp size={11} />
-              Upgrade Now
+              {balance ? 'Manage Plan' : 'Upgrade Now'}
             </Link>
           </div>
         </div>

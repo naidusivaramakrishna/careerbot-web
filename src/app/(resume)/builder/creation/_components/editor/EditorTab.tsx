@@ -548,6 +548,14 @@ const EditorTab: React.FC<Props> = ({
       }
     }
 
+    // ✅ Step 4a: Skills are managed via individual skill endpoints — skip PATCH
+    if (openModalSection === "Skills") {
+      toast.success("Skills saved successfully!");
+      closeModal();
+      setIsSaving(false);
+      return;
+    }
+
     // ✅ Step 4: For custom sections, save customSections array directly
     const isCustomSection = (resumeData.customSections || []).some(
       cs => cs.sectionName === openModalSection

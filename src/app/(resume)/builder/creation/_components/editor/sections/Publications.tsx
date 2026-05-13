@@ -64,6 +64,22 @@ const Publications: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 
+  useEffect(() => {
+    if (editingEntries.length > 0) return;
+    if (!resumeData.publications?.length) return;
+    setSavedEntries(prev => {
+      if (prev.length !== resumeData.publications!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.publications![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.publications]);
+
   const handleChange = <K extends keyof PublicationEntry>(
     index: number,
     field: K,

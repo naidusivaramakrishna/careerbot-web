@@ -145,6 +145,22 @@ const Projects: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 
+  useEffect(() => {
+    if (editingEntries.length > 0) return;
+    if (!resumeData.projects?.length) return;
+    setSavedEntries(prev => {
+      if (prev.length !== resumeData.projects!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.projects![idx]?.id;
+        if (backendId && !entry.id) { changed = true; return { ...entry, id: backendId }; }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.projects]);
+
   const handleChange = <K extends keyof ProjectEntry>(
     index: number,
     field: K,

@@ -76,30 +76,15 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   // ✅ Get context first
   const {
     resumeData,
+    setResumeData,
     isLoadingResume,
     completionStatus,
     setCompletionStatus,
     sectionOrder,
+    setSectionOrder,
   } = useResume();
 
-  const [sections, setSections] = useState(() => {
-    // Initialize sections in sectionOrder if available
-    if (!sectionOrder || sectionOrder.length === 0) {
-      return initialSections;
-    }
-
-    const sectionMap = new Map(initialSections.map(s => [s.name, s]));
-    const reordered = sectionOrder
-      .filter(name => sectionMap.has(name))
-      .map(name => sectionMap.get(name)!)
-      .filter(s => s !== undefined);
-
-    const orderedNames = new Set(reordered.map(s => s.name));
-    const remaining = initialSections.filter(s => !orderedNames.has(s.name));
-
-    return [...reordered, ...remaining];
-  });
-  
+  // Defined before sections useState so both initializers can reference it
   const defaultExtraSections: { name: string; ai: boolean }[] = [
     { name: "Achievements", ai: true },
     { name: "Publications", ai: false },
@@ -111,22 +96,60 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     { name: "References", ai: false },
   ];
 
+  const [sections, setSections] = useState(() => {
+    if (!sectionOrder || sectionOrder.length === 0) {
+      return initialSections;
+    }
+
+    const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+    const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+    const hasSavedOrder = typeof window !== 'undefined' && !!localStorage.getItem(sectionOrderKey);
+
+    if (hasSavedOrder) {
+      // localStorage sectionOrder = exact main list (core + any extras the user added).
+      // Use the full known-sections map so restored extra sections resolve correctly.
+      const allKnownSections = [...initialSections, ...defaultExtraSections];
+      const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
+      return sectionOrder
+        .filter(name => sectionMap.has(name))
+        .map(name => sectionMap.get(name)!)
+        .filter(Boolean);
+    }
+
+    // No saved order: sectionOrder comes from getSectionOrder() which lists ALL sections.
+    // Only pick initialSections from it — extras stay in "Add New Sections".
+    const sectionMap = new Map(initialSections.map(s => [s.name, s]));
+    const reordered = sectionOrder
+      .filter(name => sectionMap.has(name))
+      .map(name => sectionMap.get(name)!)
+      .filter(Boolean);
+    const orderedNames = new Set(reordered.map(s => s.name));
+    const remaining = initialSections.filter(s => !orderedNames.has(s.name));
+    return [...reordered, ...remaining];
+  });
+
   const [extraSections, setExtraSections] = useState(() => {
-    // Initialize extra sections in sectionOrder if available
     if (!sectionOrder || sectionOrder.length === 0) {
       return defaultExtraSections;
     }
 
-    const sectionMap = new Map(defaultExtraSections.map(s => [s.name, s]));
-    const reordered = sectionOrder
-      .filter(name => sectionMap.has(name))
-      .map(name => sectionMap.get(name)!)
-      .filter(s => s !== undefined);
+    const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+    const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+    const hasSavedOrder = typeof window !== 'undefined' && !!localStorage.getItem(sectionOrderKey);
 
-    const orderedNames = new Set(reordered.map(s => s.name));
-    const remaining = defaultExtraSections.filter(s => !orderedNames.has(s.name));
+    if (hasSavedOrder) {
+      // localStorage sectionOrder = exact main list. Show everything NOT in it.
+      const mainNames = new Set(sectionOrder);
+      const allKnown = [
+        ...defaultExtraSections,
+        ...initialSections.filter(s => !defaultExtraSections.some(d => d.name === s.name)),
+      ];
+      return allKnown.filter(s => !mainNames.has(s.name));
+    }
 
-    return [...reordered, ...remaining];
+    // No saved order: sectionOrder = getSectionOrder() which includes ALL sections.
+    // The main list only has initialSections, so all defaultExtraSections are available.
+    return defaultExtraSections;
   });
 
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -323,6 +346,23 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     setSections(items);
   };
 
+  const SECTION_DATA_KEY_MAP: Record<string, string> = {
+    "Work Experience": "workExperience",
+    "Education": "education",
+    "Projects": "projects",
+    "Certifications": "certifications",
+    "Internships": "internships",
+    "Achievements": "achievements",
+    "Awards": "awards",
+    "Volunteering": "volunteering",
+    "Publications": "publications",
+    "References": "references",
+    "Hobbies": "hobbies",
+    "Interests": "interests",
+    "Languages": "languages",
+    "Skills": "categorizedSkills",
+  };
+
   const handleDeleteSection = (index: number) => {
     const removed = sections[index];
     setSections((prev) => prev.filter((_, i) => i !== index));
@@ -331,11 +371,39 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       setExtraSections((prev) => [...prev, removed]);
     }
     if (activeSection === index) setActiveSection(null);
+
+    // Clear section data from resumeData so the preview updates immediately
+    const dataKey = SECTION_DATA_KEY_MAP[removed.name];
+    if (dataKey) {
+      const emptyValue = dataKey === "categorizedSkills"
+        ? { programming_languages: [], frameworks: [], databases: [], tools: [], cloud_platforms: [], soft_skills: [] }
+        : [];
+      setResumeData((prev) => ({ ...prev, [dataKey]: emptyValue }));
+    }
+
+    // Remove from sectionOrder so it doesn't come back on refresh
+    const updatedOrder = (sectionOrder || []).filter(n => n !== removed.name);
+    setSectionOrder(updatedOrder);
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+      localStorage.setItem(key, JSON.stringify(updatedOrder));
+    } catch { /* ignore */ }
   };
 
   const handleAddSection = (section: { name: string; ai: boolean }) => {
     setSections((prev) => [...prev, section]);
     setExtraSections((prev) => prev.filter((s) => s.name !== section.name));
+
+    // Build order from the current sections state (accurate main list) + new section.
+    // Do NOT use sectionOrder context here — it may contain ALL sections from getSectionOrder().
+    const updatedOrder = [...sections.map(s => s.name), section.name];
+    setSectionOrder(updatedOrder);
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+      localStorage.setItem(key, JSON.stringify(updatedOrder));
+    } catch { /* ignore */ }
   };
 
   // const handleChange = (key: string, value: string) => {

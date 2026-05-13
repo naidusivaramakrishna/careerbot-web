@@ -157,7 +157,10 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   {Object.entries(data.categorizedSkills)
                     .filter(([category]) => category !== 'custom_categories')
                     .map(([category, categorySkills]) => {
-                      if (!categorySkills || categorySkills.length === 0) return null;
+                      const skillArr = Array.isArray(categorySkills)
+                        ? (categorySkills as string[]).filter(s => typeof s === "string")
+                        : [];
+                      if (skillArr.length === 0) return null;
                       const categoryLabel = category
                         .split('_')
                         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -165,7 +168,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                       return (
                         <div key={category} style={{ marginBottom: "6px" }}>
                           <span style={{ fontWeight: "600", fontSize: "10px" }}>{categoryLabel}:</span>
-                          <span style={{ marginLeft: "4px", fontSize: "10px" }}>{(categorySkills as string[]).join(", ")}</span>
+                          <span style={{ marginLeft: "4px", fontSize: "10px" }}>{skillArr.join(", ")}</span>
                         </div>
                       );
                     })}

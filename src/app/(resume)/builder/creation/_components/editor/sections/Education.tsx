@@ -82,6 +82,28 @@ const Education: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 
+  // After save, EditorTab merges backend-assigned IDs into resumeData.education.
+  // Sync those IDs back into savedEntries so that subsequent deletes hit the API
+  // rather than silently falling back to local-only deletion.
+  useEffect(() => {
+    if (editingEntries.length > 0) return; // don't disturb mid-edit state
+    if (!resumeData.education?.length) return;
+    setSavedEntries(prev => {
+      if (prev.length !== resumeData.education!.length) return prev;
+      let changed = false;
+      const updated = prev.map((entry, idx) => {
+        const backendId = resumeData.education![idx]?.id;
+        if (backendId && !entry.id) {
+          changed = true;
+          return { ...entry, id: backendId };
+        }
+        return entry;
+      });
+      return changed ? updated : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeData.education]);
+
   const handleChange = <K extends keyof EducationEntry>(
     index: number,
     field: K,
