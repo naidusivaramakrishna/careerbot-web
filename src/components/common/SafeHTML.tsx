@@ -1,47 +1,39 @@
 "use client";
 
 import React from "react";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 
-// dompurify is browser-only; the "isomorphic" wrapper pulled in jsdom which breaks
-// Next.js builds (jsdom 29 → @asamuzakjp/css-color is ESM-with-top-level-await).
-// SafeHTML is only used inside "use client" templates so we can guard with typeof window.
-// On the server SSR pass, React escapes the raw string automatically (no XSS path).
-
-const ALLOWED_TAGS = ["b", "i", "em", "strong", "p", "ul", "ol", "li", "br", "span"];
-const SANITIZE_OPTS = {
-  ALLOWED_TAGS,
-  ALLOWED_ATTR: [] as string[],
-  FORBID_TAGS: ["iframe", "object", "embed", "script", "style"],
-  FORBID_ATTR: ["onerror", "onload", "onclick", "srcdoc"],
-};
+// SafeHTML renders rich-text resume content with the shared allowlist defined in
+// src/lib/sanitizeHtml.ts. On the server SSR pass there is no DOM, so we render
+// the raw string as escaped text (React escapes by default — no XSS path).
 
 interface SafeHTMLProps {
   content: string;
   className?: string;
+  style?: React.CSSProperties;
   as?: keyof React.JSX.IntrinsicElements;
 }
 
 export default function SafeHTML({
   content,
   className,
+  style,
   as: Tag = "div",
 }: SafeHTMLProps) {
   const raw = content ?? "";
 
-  // Server-side: no DOM available — render as plain escaped text (React escapes by default).
-  // This avoids importing jsdom and the ERR_REQUIRE_ASYNC_MODULE build failure.
+  // Server-side: no DOM available — render as plain escaped text.
   if (typeof window === "undefined") {
-    return <Tag className={className}>{raw}</Tag>;
+    return <Tag className={className} style={style}>{raw}</Tag>;
   }
 
-  // Client-side: sanitize with browser-native DOMPurify before injecting HTML.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const DOMPurify = require("dompurify") as typeof import("dompurify").default;
-  const clean = DOMPurify.sanitize(raw, SANITIZE_OPTS) as string;
+  // Client-side: sanitize against the shared allowlist before injecting HTML.
+  const clean = sanitizeHtml(raw);
 
   return (
     <Tag
       className={className}
+      style={style}
       dangerouslySetInnerHTML={{ __html: clean }}
     />
   );

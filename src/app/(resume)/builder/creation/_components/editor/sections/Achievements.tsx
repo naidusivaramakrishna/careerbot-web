@@ -1,4 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -325,7 +327,7 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      el.innerHTML = sanitizeHtml(suggestion);
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -365,7 +367,7 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
     editingEntries.forEach((achievement, idx) => {
       const el = editorRefs.current[idx];
       if (el && achievement.description && el.innerHTML !== achievement.description) {
-        el.innerHTML = achievement.description;
+        el.innerHTML = sanitizeHtml(achievement.description);
       }
     });
   }, [editingEntries]);
@@ -390,9 +392,9 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
                   )}
                   
                   {achievement.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: achievement.description }} 
+                    <SafeHTML
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      content={achievement.description}
                     />
                   )}
                 </div>

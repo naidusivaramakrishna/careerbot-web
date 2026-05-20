@@ -1,4 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -345,7 +347,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      el.innerHTML = sanitizeHtml(suggestion);
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -385,7 +387,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
     editingEntries.forEach((internship, idx) => {
       const el = editorRefs.current[idx];
       if (el && internship.description && el.innerHTML !== internship.description) {
-        el.innerHTML = internship.description;
+        el.innerHTML = sanitizeHtml(internship.description);
       }
     });
   }, [editingEntries]);
@@ -420,9 +422,9 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                   )}
                   
                   {internship.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: internship.description }} 
+                    <SafeHTML
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      content={internship.description}
                     />
                   )}
                 </div>

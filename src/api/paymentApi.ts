@@ -14,9 +14,11 @@ export interface Plan {
 }
 
 export interface CreatePaymentOrderRequest {
-  amount_inr: number;
+  // The server prices the order from plan_id + billing_cycle. The client must
+  // NOT send an amount — that would be tamperable.
+  plan_id: string;
+  billing_cycle: 'monthly' | 'yearly';
   purpose: string;
-  plan_id?: string;
 }
 
 export interface CreatePaymentOrderResponse {
@@ -27,9 +29,9 @@ export interface CreatePaymentOrderResponse {
 }
 
 export interface VerifyPaymentRequest {
-  order_id: string;
-  payment_id: string;
-  signature: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
 }
 
 export interface VerifyPaymentResponse {

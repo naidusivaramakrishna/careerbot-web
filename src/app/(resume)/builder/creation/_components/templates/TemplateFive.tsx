@@ -4,6 +4,7 @@ import { ResumeData, ResumeStyle } from "../../_context/ResumeContext";
 import { useResume } from "../../_context/ResumeContext";
 import AutoPaginator from "./AutoPaginator";
 import { ExternalLink } from "lucide-react";
+import SafeHTML from "@/components/common/SafeHTML";
 
 // TemplateFive — classic_professional
 // Backend config: Times-Roman, 18pt name, 12pt section heading, 11pt body, 1.6 line-height
@@ -142,10 +143,10 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
           professionalSummary?.summary && (
             <section className="mb-5 page-break-inside-avoid" data-section="summary">
               <h2 style={headingStyle}>SUMMARY</h2>
-              <div
+              <SafeHTML
                 className="resume-description"
                 style={baseTextStyle}
-                dangerouslySetInnerHTML={{ __html: professionalSummary.summary }}
+                content={professionalSummary.summary}
               />
             </section>
           )
@@ -206,7 +207,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                   </div>
                   <div className="font-semibold mb-1" style={baseTextStyle}>{exp.company}</div>
                   {exp.description && (
-                    <div className="resume-description" style={descriptionStyle} dangerouslySetInnerHTML={{ __html: exp.description }} />
+                    <SafeHTML className="resume-description" style={descriptionStyle} content={exp.description} />
                   )}
                 </div>
               ))}
@@ -264,7 +265,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                     )}
                   </div>
                   {proj.description && (
-                    <div className="resume-description" style={descriptionStyle} dangerouslySetInnerHTML={{ __html: proj.description }} />
+                    <SafeHTML className="resume-description" style={descriptionStyle} content={proj.description} />
                   )}
                   {proj.technologies && proj.technologies.length > 0 && (
                     <div style={baseTextStyle}>
@@ -292,7 +293,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                   </div>
                   <div className="font-semibold mb-1" style={baseTextStyle}>{intern.company}</div>
                   {intern.description && (
-                    <div className="resume-description" style={descriptionStyle} dangerouslySetInnerHTML={{ __html: intern.description }} />
+                    <SafeHTML className="resume-description" style={descriptionStyle} content={intern.description} />
                   )}
                 </div>
               ))}
@@ -335,7 +336,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                     )}
                   </div>
                   {achievement.description && (
-                    <div className="resume-description" style={baseTextStyle} dangerouslySetInnerHTML={{ __html: achievement.description }} />
+                    <SafeHTML className="resume-description" style={baseTextStyle} content={achievement.description} />
                   )}
                 </div>
               ))}
@@ -411,7 +412,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                 <div key={idx} className="mb-1">
                   <span className="font-semibold" style={titleStyle}>{hobby.name}</span>
                   {hobby.description && (
-                    <span className="resume-description" style={baseTextStyle} dangerouslySetInnerHTML={{ __html: ` — ${hobby.description}` }} />
+                    <SafeHTML as="span" className="resume-description" style={baseTextStyle} content={` — ${hobby.description}`} />
                   )}
                 </div>
               ))}
@@ -429,7 +430,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <span className="font-semibold" style={titleStyle}>{interest.name}</span>
                   {interest.category && <span style={baseTextStyle}> ({interest.category})</span>}
                   {interest.description && (
-                    <span className="resume-description" style={baseTextStyle} dangerouslySetInnerHTML={{ __html: ` — ${interest.description}` }} />
+                    <SafeHTML as="span" className="resume-description" style={baseTextStyle} content={` — ${interest.description}`} />
                   )}
                 </div>
               ))}
@@ -504,7 +505,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                           {field.value as string}
                         </a>
                       ) : field.fieldType === "textarea" ? (
-                        <div className="resume-description" style={descriptionStyle} dangerouslySetInnerHTML={{ __html: field.value as string }} />
+                        <SafeHTML className="resume-description" style={descriptionStyle} content={field.value as string} />
                       ) : (
                         <div style={baseTextStyle}>{field.value as string}</div>
                       )}

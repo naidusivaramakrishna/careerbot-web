@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -163,7 +164,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
-      el.innerHTML = suggestion;
+      el.innerHTML = sanitizeHtml(suggestion);
       handleChange(suggestion);
       
       setTimeout(() => {
@@ -205,7 +206,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   useEffect(() => {
     const el = editorRef.current;
     if (el && resumeData.professionalSummary.summary && el.innerHTML !== resumeData.professionalSummary.summary) {
-      el.innerHTML = resumeData.professionalSummary.summary;
+      el.innerHTML = sanitizeHtml(resumeData.professionalSummary.summary);
     }
   }, [resumeData.professionalSummary.summary]);
 

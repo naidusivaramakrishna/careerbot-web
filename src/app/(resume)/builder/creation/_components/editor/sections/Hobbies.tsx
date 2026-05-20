@@ -1,5 +1,7 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -323,7 +325,7 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      el.innerHTML = sanitizeHtml(suggestion);
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -355,7 +357,7 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
     editingEntries.forEach((hobby, idx) => {
       const el = editorRefs.current[idx];
       if (el && hobby.description && el.innerHTML !== hobby.description) {
-        el.innerHTML = hobby.description;
+        el.innerHTML = sanitizeHtml(hobby.description);
       }
     });
   }, [editingEntries]);
@@ -380,9 +382,9 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                   )}
                   
                   {hobby.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: hobby.description }} 
+                    <SafeHTML
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      content={hobby.description}
                     />
                   )}
                   

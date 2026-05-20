@@ -1,5 +1,7 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -320,7 +322,7 @@ Master blockchain technologies and distributed systems architecture, contributin
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      el.innerHTML = sanitizeHtml(suggestion);
       handleChange(editIndex, "description", suggestion);
 
       setTimeout(() => {
@@ -352,7 +354,7 @@ Master blockchain technologies and distributed systems architecture, contributin
     editingEntries.forEach((interest, idx) => {
       const el = editorRefs.current[idx];
       if (el && interest.description && el.innerHTML !== interest.description) {
-        el.innerHTML = interest.description;
+        el.innerHTML = sanitizeHtml(interest.description);
       }
     });
   }, [editingEntries]);
@@ -390,9 +392,9 @@ Master blockchain technologies and distributed systems architecture, contributin
                   )}
                   
                   {interest.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: interest.description }} 
+                    <SafeHTML
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      content={interest.description}
                     />
                   )}
                 </div>

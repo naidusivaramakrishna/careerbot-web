@@ -1,4 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -358,7 +360,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      el.innerHTML = sanitizeHtml(suggestion);
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -398,7 +400,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
     editingEntries.forEach((work, idx) => {
       const el = editorRefs.current[idx];
       if (el && work.description && el.innerHTML !== work.description) {
-        el.innerHTML = work.description;
+        el.innerHTML = sanitizeHtml(work.description);
       }
     });
   }, [editingEntries]);
@@ -433,9 +435,9 @@ Spearheaded migration of legacy monolithic application to microservices architec
                   )}
                   
                   {work.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: work.description }} 
+                    <SafeHTML
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      content={work.description}
                     />
                   )}
                 </div>

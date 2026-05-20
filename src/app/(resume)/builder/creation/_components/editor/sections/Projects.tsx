@@ -1,4 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -370,7 +372,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
+      el.innerHTML = sanitizeHtml(suggestion);
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -410,7 +412,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
     editingEntries.forEach((project, idx) => {
       const el = editorRefs.current[idx];
       if (el && project.description && el.innerHTML !== project.description) {
-        el.innerHTML = project.description;
+        el.innerHTML = sanitizeHtml(project.description);
       }
     });
   }, [editingEntries]);
@@ -456,9 +458,9 @@ Engineered machine learning recommendation system using Python and TensorFlow th
                   )}
                   
                   {project.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: project.description }} 
+                    <SafeHTML
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      content={project.description}
                     />
                   )}
                 </div>

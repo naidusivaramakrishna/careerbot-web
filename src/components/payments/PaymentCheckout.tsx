@@ -67,12 +67,12 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
       setLoading(true);
       setError(null);
 
-      const amount = billingCycle === 'yearly' ? plan.price_inr_yearly : plan.price_inr_monthly;
-
+      // The server prices the order from plan_id + billing_cycle — never send
+      // a client-computed amount (it would be tamperable).
       const orderResponse = await createPaymentOrder({
-        amount_inr: amount,
-        purpose: `subscription_${billingCycle}`,
         plan_id: plan.id,
+        billing_cycle: billingCycle,
+        purpose: `subscription_${billingCycle}`,
       });
 
       const options = {
@@ -84,22 +84,13 @@ export function PaymentCheckout({ plan, billingCycle }: PaymentCheckoutProps) {
         order_id: orderResponse.order_id,
         handler: async (response: any) => {
           try {
-            console.log('[Checkout] Razorpay payment callback received:', {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature ? '***' : 'MISSING',
-            });
-
             const verifyResponse = await verifyPayment({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             });
 
-            console.log('[Checkout] Verification response:', verifyResponse);
-
             if (verifyResponse.success) {
-              console.log('[Checkout] Payment verified successfully, redirecting to success page');
               // Use window.location for reliable redirect from inside Razorpay callback
               window.location.href = `/payments/success?order_id=${response.razorpay_order_id}`;
             } else {
