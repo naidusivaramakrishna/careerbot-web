@@ -191,7 +191,7 @@ const ResumeSection = ({ tempProfile, setTempProfile }: ResumeSectionProps) => {
                                 <button
                                     onClick={() => setIsReplacing(true)}
                                     disabled={isLoading}
-                                    className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full inline-flex items-center justify-center gap-2 bg-[#2257a7] text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Upload className="w-4 h-4" />
                                     {isLoading ? 'Uploading...' : 'Replace'}
@@ -221,7 +221,7 @@ const ResumeSection = ({ tempProfile, setTempProfile }: ResumeSectionProps) => {
                             <button
                                 onClick={(e) => e.currentTarget.previousElementSibling?.dispatchEvent(new MouseEvent('click', { bubbles: true }))}
                                 disabled={isLoading}
-                                className="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                                    className="bg-[#2257a7] text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                             >
                                 <Upload className="w-4 h-4" />
                                 {isLoading ? 'Uploading...' : 'Choose Resume'}

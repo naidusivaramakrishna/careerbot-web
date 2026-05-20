@@ -24,13 +24,15 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false);
   const [isGovernmentTemplate, setIsGovernmentTemplate] = useState(false);
   const [isHealthcareTemplate, setIsHealthcareTemplate] = useState(false);
+  const [isLegalTemplate, setIsLegalTemplate] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Get domain from localStorage to check if it's government_standard or healthcare
+  // Get domain from localStorage to check if it's government_standard, healthcare, or legal
   useEffect(() => {
     try {
       let isGov = false;
       let isHealthcare = false;
+      let isLegal = false;
 
       // First, try localStorage
       const userEmail = resumeData.personalInfo?.email || '';
@@ -43,20 +45,15 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         }>;
         isGov = careerLevels.some(t => t.domain_family === 'government_standard');
         isHealthcare = careerLevels.some(t => t.domain_family === 'healthcare');
-      }
-
-      // If not found in localStorage, check if government/healthcare fields exist in formData
-      if (!isGov && !isHealthcare) {
-        const hasGovFields = formData['dateOfBirth'] || formData['nationality'] || formData['category'] || formData['languages'];
-        const hasHealthcareFields = formData['titlePrefix'] || formData['qualifications'];
-        isGov = !!hasGovFields;
-        isHealthcare = !!hasHealthcareFields;
+        isLegal = careerLevels.some(t => t.domain_family === 'legal');
       }
 
       setIsGovernmentTemplate(isGov);
       setIsHealthcareTemplate(isHealthcare);
+      setIsLegalTemplate(isLegal);
       logger.info('Government template detected:', isGov);
       logger.info('Healthcare template detected:', isHealthcare);
+      logger.info('Legal template detected:', isLegal);
     } catch (err) {
       logger.warn('Error checking template domain:', err);
     }
@@ -315,6 +312,22 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
             <div className="flex gap-10">
               {renderGovField("titlePrefix", "Title/Prefix", "e.g., DR., PROF., MR.")}
               {renderGovField("qualifications", "Qualifications", "e.g., MBBS, MD, DM, MS")}
+            </div>
+          </>
+        )}
+
+        {/* Legal Template Fields */}
+        {isLegalTemplate && (
+          <>
+            {/* Divider */}
+            <div className="my-2 border-t border-gray-300 w-full"></div>
+
+            {/* Legal-Specific Section Label */}
+            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Legal - Professional Details</p>
+
+            {/* Row 5: Qualifications */}
+            <div className="flex gap-10">
+              {renderGovField("qualifications", "Qualifications", "e.g., LLB, LLM, Bar License")}
             </div>
           </>
         )}

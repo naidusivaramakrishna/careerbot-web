@@ -363,7 +363,7 @@ export default function TemplatesPage() {
           {/* Icon and Title */}
           <div className="flex items-start gap-4 mb-5">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-linear-to-br from-teal-50 to-sky-100 ring-1 ring-sky-200/60 shadow-sm shrink-0">
-              <LayoutTemplate className="w-6 h-6 text-teal-700" />
+              <LayoutTemplate className="w-6 h-6 text-[#2257a7]" />
             </div>
             <div className="flex-1">
               <h1 className="text-4xl font-bold tracking-tight bg-linear-to-r from-slate-900 via-slate-800 to-teal-700 bg-clip-text text-transparent mb-2">
@@ -452,12 +452,12 @@ export default function TemplatesPage() {
                   {/* Domain Family Header */}
                   <div className="mb-5">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="inline-block w-1 h-6 rounded-full bg-linear-to-b from-teal-500 to-sky-500" />
+                      <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
                       <h2 className="text-2xl font-bold tracking-tight text-slate-900">
                         {DOMAIN_NAMES[family] || family}
                       </h2>
-                      <span className="px-2.5 py-0.5 bg-teal-50 text-teal-700 text-xs font-semibold rounded-full ring-1 ring-teal-200/70">
-                        {Object.values(domains).reduce((sum, tmps) => sum + tmps.length, 0)} templates
+                      <span className="px-2.5 py-0.5 bg-[#c9dcf2] text-[#2257a7] text-xs font-semibold rounded-full ring-1 ring-[#a5c6eb]">
+                        {Object.keys(domains).length} templates
                       </span>
                     </div>
                     {idx > 0 && <div className="h-px bg-linear-to-r from-slate-200 via-slate-100 to-transparent mt-4 -mb-4" />}

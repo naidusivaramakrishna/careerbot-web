@@ -122,7 +122,7 @@ const VerifyEmailContent = () => {
             </div>
             <button
               onClick={() => window.location.href = "/?showLogin=true&verified=true"}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
+              className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
             >
               Go to Sign In
             </button>
@@ -159,7 +159,7 @@ const VerifyEmailContent = () => {
                     verifyEmailToken();
                   }
                 }}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
+                className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
               >
                 Try Again
               </button>
@@ -198,7 +198,7 @@ const VerifyEmailContent = () => {
               </p>
               <button
                 onClick={() => router.push("/?showLogin=true")}
-                className="text-sm text-blue-600 hover:text-blue-700 font-semibold underline"
+                className="text-sm text-[#2257a7] hover:text-[#184284] font-semibold underline"
               >
                 Click here to request a new verification email
               </button>

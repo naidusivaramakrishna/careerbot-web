@@ -208,7 +208,7 @@ export default function ProjectsForm({
                         type="button"
                         onClick={onSave}
                         disabled={loading}
-                        className="bg-[#155DFC] text-white px-4 py-1.5 cursor-pointer rounded"
+                        className="bg-[#2257a7] text-white px-4 py-1.5 cursor-pointer rounded"
                     >
                         {loading ? "Saving..." : "Save"}
                     </button>

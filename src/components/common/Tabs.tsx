@@ -21,7 +21,7 @@ export default function Tabs({ tabs, active, onChange }: TabsProps) {
                     <button
                         key={tab.label}
                         className={`flex items-center gap-2 px-3 py-4 cursor-pointer text-sm font-medium  transition ${active === tab.label
-                                ? "bg-[#b0a6f0] text-black font-semibold border-b-[2.6px] border-[#11017b]"
+                            ? "bg-[#a5c6eb] text-black font-semibold border-b-[2.6px] border-[#2257a7]"
                                 : "text-gray-600 hover:text-black"
                             }`}
                         onClick={() => onChange(tab.label)}

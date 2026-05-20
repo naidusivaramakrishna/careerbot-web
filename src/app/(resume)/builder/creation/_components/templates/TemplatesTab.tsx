@@ -10,6 +10,7 @@ import { TEMPLATE_DEFAULT_STYLES } from "../../_utils/templateStyles";
 import { getProfile } from "@/api/userApi";
 import { useRouter } from "next/navigation";
 import { getSectionOrder } from "@/app/(resume)/templates/_utils/sectionOrder";
+import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder";
 
 const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
   core_engineering: '/assets/templates/core-engineering.png',
@@ -134,7 +135,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   const [userEmail, setUserEmail] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const { selectedTemplate, setSelectedTemplate, resumeStyle, setResumeStyle } = useResume();
+  const { selectedTemplate, setSelectedTemplate, resumeStyle, setResumeStyle, sectionOrder, setSectionOrder } = useResume();
 
   // Get user email for scoped localStorage keys
   useEffect(() => {
@@ -497,7 +498,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                         setAppliedTemplateId(careerTpl.id);
                         setSelectedTemplate(null);
 
-                        // ✅ Update sectionOrder in localStorage when career level changes
+                        // ✅ Update sectionOrder in localStorage AND context when career level changes
                         try {
                           const templateName = careerTpl.name.toLowerCase();
                           let careerLevel: string | undefined;
@@ -509,12 +510,20 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                             careerLevel = 'mid-level';
                           } else if (templateName.includes('fresher')) {
                             careerLevel = 'fresher';
+                          } else if (templateName.includes('manager')) {
+                            careerLevel = 'manager';
                           }
 
-                          const newSectionOrder = getSectionOrder(careerLevel);
+                          // Get section order based on both career level AND domain family
+                          const newSectionOrder = getSectionOrderByDomainAndCareer(careerTpl.domain_family, careerLevel);
                           const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+                          const domainFamilyKey = userEmail ? `domainFamily_${userEmail}` : 'domainFamily';
+
                           localStorage.setItem(sectionOrderKey, JSON.stringify(newSectionOrder));
-                          logger.info('Updated sectionOrder for career level:', careerLevel, 'Order:', newSectionOrder);
+                          localStorage.setItem(domainFamilyKey, careerTpl.domain_family || '');
+                          setSectionOrder(newSectionOrder);
+
+                          logger.info('Updated sectionOrder for career level:', careerLevel, 'domain:', careerTpl.domain_family, 'Order:', newSectionOrder);
                         } catch (err) {
                           logger.warn('Error updating sectionOrder:', err);
                         }

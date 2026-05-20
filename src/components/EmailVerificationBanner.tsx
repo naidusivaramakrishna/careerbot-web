@@ -39,7 +39,7 @@ export const EmailVerificationBanner: React.FC<EmailVerificationBannerProps> = (
   };
 
   return (
-    <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg shadow-sm">
+    <div className="bg-blue-50 border-l-4 border-[#2257a7] p-4 mb-6 rounded-r-lg shadow-sm">
       <div className="flex items-start justify-between gap-4">
         {/* Content */}
         <div className="flex items-start gap-3 flex-1">

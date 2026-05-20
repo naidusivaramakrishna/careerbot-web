@@ -1,6 +1,72 @@
 export const getSectionOrder = (careerLevel?: string): string[] => {
-  // Only return main sections (initialSections), not extra sections.
-  // Extra sections (Awards, Languages, Achievements, etc.) should be in the "Add New Section" list.
+  const level = careerLevel?.toLowerCase() || '';
+
+  if (level.includes('fresher')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Education',
+      'Certifications',
+      'Internships',
+    ];
+  }
+
+  if (level.includes('early')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Education',
+      'Certifications',
+      'Internships',
+    ];
+  }
+
+  if (level.includes('mid')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Certifications',
+      'Internships',
+      'Education',
+    ];
+  }
+
+  if (level.includes('senior')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Certifications',
+      'Internships',
+      'Education',
+    ];
+  }
+
+  if (level.includes('manager')) {
+    return [
+      'Personal Info',
+      'Professional Summary',
+      'Skills',
+      'Work Experience',
+      'Projects',
+      'Certifications',
+      'Internships',
+      'Education',
+    ];
+  }
+
+  // Default order for unknown levels
   return [
     'Personal Info',
     'Professional Summary',

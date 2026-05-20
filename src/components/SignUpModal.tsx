@@ -341,7 +341,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                 <button
                     onClick={formType === "signup" ? handleSignUp : handleLogin}
                     disabled={formType === "signup" ? loading.signUp : loading.login}
-                    className="w-full mt-5 py-3 rounded-xl font-semibold text-white text-sm bg-linear-to-r from-[#F977E8] via-[#9255Ef] to-[#7794FF]  transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-purple-400"
+                    className="w-full mt-5 py-3 rounded-xl font-semibold text-white text-sm bg-[#2257a7] hover:bg-[#184284]  transition-all disabled:opacity-50 cursor-pointer"
                 >
                     {formType === "signup"
                         ? loading.signUp

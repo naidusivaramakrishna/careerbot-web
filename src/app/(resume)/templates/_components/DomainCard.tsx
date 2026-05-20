@@ -22,7 +22,7 @@ export default function DomainCard({
   return (
     <button
       onClick={onClick}
-      className="relative bg-white rounded-xl ring-1 ring-slate-200 overflow-hidden shadow-sm hover:ring-teal-300 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group cursor-pointer text-left flex flex-col"
+      className="relative bg-white rounded-xl ring-1 ring-slate-200 overflow-hidden shadow-sm hover:ring-[#2257a7] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group cursor-pointer text-left flex flex-col"
     >
       {/* Resume Preview Container */}
       <div className="relative w-full bg-linear-to-br from-slate-50 to-slate-100/60 overflow-hidden">
@@ -40,7 +40,7 @@ export default function DomainCard({
       </div>
 
       {/* Card Footer */}
-      <h3 className="font-semibold text-slate-800 group-hover:text-teal-700 transition-colors text-xs leading-tight text-center py-2 px-2 border-t border-slate-100">
+      <h3 className="font-semibold text-slate-800 group-hover:text-[#2257a7] transition-colors text-xs leading-tight text-center py-2 px-2 border-t border-slate-100">
         {domainName}
       </h3>
     </button>

@@ -198,7 +198,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
             onMouseEnter={() => setIsHoveringImage(true)}
             onMouseLeave={() => setIsHoveringImage(false)}
           >
-            <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#1099C6] overflow-hidden">
+            <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#2257a7] overflow-hidden">
               {selectedImage ? (
                 <Image
                   src={selectedImage}
@@ -230,7 +230,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
             {/* Camera icon */}
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="bg-[#1099C6] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
+              className="bg-[#2257a7] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
             >
               <Camera className="w-4 h-4 text-white" />
             </div>
@@ -266,7 +266,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 onMouseEnter={() => setIsHoveringImage(true)}
                 onMouseLeave={() => setIsHoveringImage(false)}
               >
-                <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#1099C6] overflow-hidden">
+                <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#2257a7] overflow-hidden">
                   {selectedImage ? (
                     <Image
                       src={selectedImage}
@@ -297,7 +297,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
 
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="bg-[#1099C6] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
+                  className="bg-[#2257a7] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
                 >
                   <Camera className="w-4 h-4 text-white" />
                 </div>

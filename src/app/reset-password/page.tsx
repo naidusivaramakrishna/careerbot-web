@@ -160,7 +160,7 @@ const ResetPasswordContent = () => {
             </div>
             <button
               onClick={() => router.push("/?showLogin=true")}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
+              className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
             >
               Go to Sign In
             </button>
@@ -185,7 +185,7 @@ const ResetPasswordContent = () => {
                     setFormData({ password: "", confirmPassword: "" });
                   }
                 }}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
+                className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
               >
                 Try Again
               </button>
@@ -218,7 +218,7 @@ const ResetPasswordContent = () => {
                     value={formData.password}
                     onChange={(e) => { setFormData({ ...formData, password: e.target.value }); setFieldErrors(p => ({ ...p, password: "" })); }}
                     placeholder="Enter new password"
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${fieldErrors.password ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-blue-500"}`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${fieldErrors.password ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-[#2257a7]"}`}
                     disabled={status === "loading"}
                     required
                   />
@@ -285,7 +285,7 @@ const ResetPasswordContent = () => {
               <button
                 type="submit"
                 disabled={status === "loading"}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-lg transition-colors"
+                className="w-full bg-[#2257a7] hover:bg-[#184284] disabled:bg-[#2557a7] text-white font-semibold py-3 rounded-lg transition-colors"
               >
                 {status === "loading" ? (
                   <span className="flex items-center cursor-pointer justify-center gap-2">

@@ -279,7 +279,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="bg-[#155DFC] text-white flex gap-2 cursor-pointer items-center justify-self-end my-4 px-4 py-2 text-sm rounded-lg hover:bg-[#0d4acc] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-[#2257a7] text-white flex gap-2 cursor-pointer items-center justify-self-end my-4 px-4 py-2 text-sm rounded-lg hover:bg-[#0d4acc] transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {saving ? (
                         <>

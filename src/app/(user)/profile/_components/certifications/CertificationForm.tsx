@@ -111,7 +111,7 @@ export default function CertificationForm({
                     type="button"
                     onClick={onSave}
                     disabled={loading}
-                    className="bg-[#155DFC] text-white px-4 py-1.5 cursor-pointer rounded disabled:opacity-50"
+                    className="bg-[#2257a7] text-white px-4 py-1.5 cursor-pointer rounded disabled:opacity-50"
                 >
                     {loading ? "Saving..." : "Save"}
                 </button>

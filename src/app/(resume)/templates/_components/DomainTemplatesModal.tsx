@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { type TemplateResponse, getAllResumes, createResumeWithAuth } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
-import { getSectionOrder } from '../_utils/sectionOrder';
+import { getSectionOrderByDomainAndCareer } from '../_utils/domainSectionOrder';
 import { Button } from '@/components/ui/Button';
 
 interface DomainTemplatesModalProps {
@@ -146,7 +146,11 @@ export default function DomainTemplatesModal({
         logger.info('Stored selectedTemplateId:', templateId, 'with key:', selectedTemplateKey);
 
         // Also store all career level templates for the builder to display
-        const correctDomainFamily = DOMAIN_NAME_MAP[domainName] || DOMAIN_NAME_MAP[domainName.toLowerCase()] || domainName.toLowerCase() || 'core_engineering';
+        // Use domainFamily prop directly (already correctly set from page.tsx)
+        const correctDomainFamily = domainFamily;
+        console.warn("🔥 DomainTemplatesModal - domainName:", domainName);
+        console.warn("🔥 DomainTemplatesModal - correctDomainFamily:", correctDomainFamily);
+
         const careerLevelData = sortedTemplates.map(t => ({
           id: t.id?.toString() || t._id || '',
           name: t.name,
@@ -161,7 +165,7 @@ export default function DomainTemplatesModal({
         localStorage.setItem(careerLevelKey, JSON.stringify(careerLevelData));
         logger.info('Stored careerLevelTemplates successfully with key:', careerLevelKey);
 
-        // ✅ ALSO: Compute and store sectionOrder based on career level from template name
+        // ✅ ALSO: Compute and store sectionOrder based on career level AND domain family
         const templateName = selectedTemplate.name || '';
         let careerLevel: string | undefined;
         const nameStr = templateName.toLowerCase();
@@ -173,10 +177,12 @@ export default function DomainTemplatesModal({
           careerLevel = 'mid-level';
         } else if (nameStr.includes('fresher')) {
           careerLevel = 'fresher';
+        } else if (nameStr.includes('manager')) {
+          careerLevel = 'manager';
         }
-        const sectionOrder = getSectionOrder(careerLevel);
+        const sectionOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
         localStorage.setItem(sectionOrderKey, JSON.stringify(sectionOrder));
-        logger.info('Stored sectionOrder:', sectionOrder, 'with key:', sectionOrderKey, 'for career level:', careerLevel);
+        logger.info('Stored sectionOrder with domain:', correctDomainFamily, 'career level:', careerLevel, 'Order:', sectionOrder);
       }
 
       // Get user's resumes or create a new one
@@ -206,11 +212,11 @@ export default function DomainTemplatesModal({
     <>
       {/* Full-screen loading overlay during navigation */}
       {isLoading && (
-        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-60 backdrop-blur-md">
+        <div className="fixed inset-0 bg-slate-950/30 flex items-center justify-center z-60 backdrop-blur-lg">
           <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-white/30 border-t-teal-400 rounded-full animate-spin" />
-            <p className="text-white text-lg font-semibold">Loading Resume Builder...</p>
-            <p className="text-white/70 text-sm">Setting up your template</p>
+            <div className="w-12 h-12 border-4 border-white/30 border-t-blue-500 rounded-full animate-spin" />
+            <p className="text-black text-lg font-semibold">Loading Resume Builder...</p>
+            <p className="text-black/70 text-sm">Setting up your template</p>
           </div>
         </div>
       )}
@@ -246,7 +252,7 @@ export default function DomainTemplatesModal({
             {/* Header */}
             <div className="mb-6 relative">
               <div className="flex items-center gap-2 mb-2">
-                <span className="inline-block w-1 h-6 rounded-full bg-linear-to-b from-teal-500 to-sky-500" />
+                  <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
                 <h2 className="text-2xl font-bold tracking-tight text-slate-900">
                   {domainName}
                 </h2>
@@ -268,8 +274,8 @@ export default function DomainTemplatesModal({
                       onClick={() => handleSelectTemplate(index)}
                       className={`relative rounded-lg overflow-hidden ring-1 transition-all cursor-pointer group bg-linear-to-br from-slate-50 to-slate-100/60 p-2 ${
                         isSelected
-                          ? 'ring-2 ring-teal-500 shadow-md'
-                          : 'ring-slate-200 hover:ring-teal-300 hover:shadow-sm'
+                          ? 'ring-2 ring-[#2257a7] shadow-md'
+                        : 'ring-slate-200 hover:ring-[#5896d7] hover:shadow-sm'
                       }`}
                     >
                       {/* Card Preview Image - Full template preview */}
@@ -292,7 +298,7 @@ export default function DomainTemplatesModal({
 
                     {/* Career Level Below Card */}
                     <p className={`text-sm font-semibold mt-2 text-center transition-colors ${
-                      isSelected ? 'text-teal-700' : 'text-slate-700'
+                      isSelected ? 'text-[#2257a7]' : 'text-slate-700'
                     }`}>
                       {careerLevel}
                     </p>
@@ -351,16 +357,16 @@ export default function DomainTemplatesModal({
                   <h4 className="text-sm font-bold text-slate-800 mb-2">Features</h4>
                   <ul className="space-y-1.5">
                     <li className="text-xs text-slate-700 flex items-center gap-2">
-                      <span className="text-teal-600">✓</span> Professional layout
+                        <span className="text-[#2257a7]">✓</span> Professional layout
                     </li>
                     <li className="text-xs text-slate-700 flex items-center gap-2">
-                      <span className="text-teal-600">✓</span> Easy to customize
+                        <span className="text-[#2257a7]">✓</span> Easy to customize
                     </li>
                     <li className="text-xs text-slate-700 flex items-center gap-2">
-                      <span className="text-teal-600">✓</span> ATS optimized
+                        <span className="text-[#2257a7]">✓</span> ATS optimized
                     </li>
                     <li className="text-xs text-slate-700 flex items-center gap-2">
-                      <span className="text-teal-600">✓</span> Print friendly
+                        <span className="text-[#2257a7]">✓</span> Print friendly
                     </li>
                   </ul>
                 </div>
@@ -373,7 +379,7 @@ export default function DomainTemplatesModal({
                     className={`w-full text-white font-semibold py-3 rounded-lg cursor-pointer transition-all shadow-sm ${
                       isLoading
                         ? 'bg-slate-300 cursor-not-allowed'
-                        : 'bg-linear-to-r from-teal-600 to-sky-600 hover:from-teal-700 hover:to-sky-700 hover:shadow-md'
+                      : 'bg-[#2257a7] hover:bg-[#184284] '
                     }`}
                   >
                     {isLoading ? (

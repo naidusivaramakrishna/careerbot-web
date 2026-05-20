@@ -516,6 +516,11 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             ? `${personalInfo.fullname}, ${personalInfo.qualifications}`
             : personalInfo.fullname || "Full Name"}
         </h1>
+        {professionalSummary?.targetRole && (
+          <p style={{ ...baseTextStyle, fontSize: "12px", margin: 0, textAlign: "center", fontWeight: "500", marginBottom: "8px" }}>
+            {professionalSummary.targetRole}
+          </p>
+        )}
         <p style={{ ...baseTextStyle, fontSize: "10px", margin: 0, textAlign: "center" }}>
           {getContactInfo()}
         </p>

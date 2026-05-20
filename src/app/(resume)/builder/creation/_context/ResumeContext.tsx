@@ -7,7 +7,7 @@ import type { ATSScore, EnhancedSuggestion } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
-import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
+import { getSectionOrderByDomainAndCareer } from "../../../templates/_utils/domainSectionOrder";
 import logger from "@/lib/logger";
 
 // Extract country code from a combined phone string like "+911234567890"
@@ -401,7 +401,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   // ✅ Get career level from localStorage to set initial section order
   const getCareerLevelFromStorage = (): string | undefined => {
     try {
-      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      if (typeof window === 'undefined') return undefined;
+
+      const userEmail = localStorage.getItem('userEmail');
       const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
       const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
 
@@ -448,9 +450,29 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     return undefined;
   };
 
+  // ✅ Get domain family from localStorage for two-dimensional section ordering
+  const getDomainFamilyFromStorage = (): string | undefined => {
+    try {
+      if (typeof window === 'undefined') return undefined;
+
+      const userEmail = localStorage.getItem('userEmail');
+      const domainFamilyKey = userEmail ? `domainFamily_${userEmail}` : 'domainFamily';
+      const domainFamily = localStorage.getItem(domainFamilyKey);
+
+      console.warn("🔍 getDomainFamilyFromStorage - email:", userEmail, "key:", domainFamilyKey, "domain:", domainFamily);
+      if (!domainFamily) {
+        console.warn("🔍 No domain family found in localStorage!");
+      }
+      return domainFamily || undefined;
+    } catch (err) {
+      console.warn("🔍 Error in getDomainFamilyFromStorage:", err);
+    }
+    return undefined;
+  };
+
   const [sectionOrder, setSectionOrder] = useState<string[]>(() => {
     try {
-      // Try to load sectionOrder directly from localStorage first (set by DomainTemplatesModal)
+      // Try to load sectionOrder directly from localStorage first (set by TemplatesTab/DomainTemplatesModal)
       const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
       const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
       const stored = typeof window !== 'undefined' ? localStorage.getItem(sectionOrderKey) : null;
@@ -464,14 +486,15 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       console.warn("🎯 Error loading sectionOrder from localStorage:", err);
     }
 
-    // Fallback: compute from career level
+    // Fallback: compute from career level and domain family
     const careerLevel = getCareerLevelFromStorage();
-    const order = getSectionOrder(careerLevel);
-    console.warn("🎯 Initial sectionOrder from career level:", careerLevel, "Order:", order);
+    const domainFamily = getDomainFamilyFromStorage();
+    const order = getSectionOrderByDomainAndCareer(domainFamily, careerLevel);
+    console.warn("🎯 Initial sectionOrder from domain:", domainFamily, "career level:", careerLevel, "Order:", order);
     return order;
   });
 
-  // ✅ Update section order when career level changes or template is switched
+  // ✅ Update section order when career level or domain changes or template is switched
   useEffect(() => {
     // If user has a saved order in localStorage (e.g. after deleting a section), respect it
     try {
@@ -484,9 +507,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         return;
       }
     } catch { /* ignore */ }
-    // No saved order — compute from career level (first visit or after clearing storage)
+    // No saved order — compute from career level and domain (first visit or after clearing storage)
     const careerLevel = getCareerLevelFromStorage();
-    const newOrder = getSectionOrder(careerLevel);
+    const domainFamily = getDomainFamilyFromStorage();
+    const newOrder = getSectionOrderByDomainAndCareer(domainFamily, careerLevel);
     setSectionOrder(newOrder);
   }, [resumeIdProp, selectedTemplate]); // Re-check when resumeId or selectedTemplate changes
 
@@ -516,10 +540,11 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         console.warn("📋 Error loading sectionOrder from localStorage:", err);
       }
 
-      // Fallback: compute from career level
+      // Fallback: compute from career level and domain
       const careerLevel = getCareerLevelFromStorage();
-      const newOrder = getSectionOrder(careerLevel);
-      console.warn("📋 Storage check - careerLevel:", careerLevel, "newOrder:", newOrder);
+      const domainFamily = getDomainFamilyFromStorage();
+      const newOrder = getSectionOrderByDomainAndCareer(domainFamily, careerLevel);
+      console.warn("📋 Storage check - domain:", domainFamily, "careerLevel:", careerLevel, "newOrder:", newOrder);
       setSectionOrder(newOrder);
     };
 
@@ -716,7 +741,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
-            : (data.professionalSummary || { summary: "", targetRole: "" }),
+            : {
+                summary: (data.professionalSummary?.summary || data.professionalSummary?.["summary"] || ""),
+                targetRole: (data.professionalSummary?.targetRole || data.professionalSummary?.["target_role"] || "")
+              },
           education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
           workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
           projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],

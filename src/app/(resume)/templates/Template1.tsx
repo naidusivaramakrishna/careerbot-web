@@ -333,7 +333,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={{ borderBottom: `1px solid ${style.headingColor}`, marginBottom: "12px" }}></div>
             <div className="grid grid-cols-2 gap-2">
               {languages.map((lang, idx) => (
-                <div key={idx} style={{ display: "flex", alignItems: "flex-start", fontSize:"11px", ...baseTextStyle }}>
+                <div key={idx} style={{ display: "flex", alignItems: "flex-start", fontSize: "11px", ...baseTextStyle }}>
                   <span style={{ marginRight: "6px" }}>•</span>
                   <span>
                     <span style={{ fontWeight: "600", fontSize: "11px" }}>{lang.language} </span> <span style={{ fontSize: "11px" }}> - {lang.proficiency}</span>
@@ -464,7 +464,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                     )}
                   </div>
                   {interest.description && (
-                    <div style={{ marginTop: "4px",paddingLeft:"20px" }}>
+                    <div style={{ marginTop: "4px", paddingLeft: "20px" }}>
                       {extractTextFromHTML(interest.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
                         <div key={lineIdx} style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>
                           • {line.trim()}
@@ -526,6 +526,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       {/* Header */}
       <div style={{ marginBottom: "16px" }}>
         <h1 className="text-4xl font-bold uppercase" style={nameStyle}>{personalInfo.fullname || "Full Name"}</h1>
+        {professionalSummary?.targetRole && (
+          <p style={{ ...baseTextStyle, fontSize: "12px", margin: 0, textAlign: "center", fontWeight: "500", marginBottom: "8px" }}>
+            {professionalSummary.targetRole}
+          </p>
+        )}
         <p style={{ ...baseTextStyle, fontSize: "10px", margin: 0, textAlign: "center" }}>
           {getContactInfo()}
         </p>
@@ -534,8 +539,8 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       {/* Render sections in order */}
       {sectionOrder && sectionOrder.length > 0
         ? sectionOrder.filter(s => s !== "Personal Info").map(section => (
-            <div key={section}>{renderSection(section)}</div>
-          ))
+          <div key={section}>{renderSection(section)}</div>
+        ))
         : null
       }
 
