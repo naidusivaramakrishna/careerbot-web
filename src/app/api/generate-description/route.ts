@@ -24,7 +24,9 @@ export async function POST(req: Request) {
     // Read the body as text first so the size cap holds even when
     // Content-Length is absent, chunked, or spoofed.
     const rawBody = await req.text();
-    if (rawBody.length > MAX_BODY_BYTES) {
+    // Measure actual UTF-8 byte length — rawBody.length counts UTF-16 code
+    // units, which undercounts multibyte payloads and would let the cap slip.
+    if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
       return NextResponse.json({ error: "Request too large" }, { status: 413 });
     }
     const body = JSON.parse(rawBody);

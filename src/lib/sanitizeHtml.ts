@@ -36,7 +36,12 @@ export function sanitizeHtml(input: string | null | undefined): string {
  * Pure string operation — safe on the server too.
  */
 export function escapeHtml(input: string | null | undefined): string {
-  return (input ?? '').replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
-  ));
+  return (input ?? '')
+    // Escape "&" only when it does not already begin a valid entity, so
+    // already-escaped text is not double-escaped ("&lt;" stays "&lt;").
+    .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
