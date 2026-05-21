@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileText, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
+import { escapeHtml } from "@/lib/sanitizeHtml";
 
 interface TranscriptDisplayProps {
   transcript: string;
@@ -25,7 +26,9 @@ export default function TranscriptDisplay({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const highlightedTranscript = transcript.replace(
+  // escapeHtml first so only the static <mark> tags below are real HTML —
+  // any markup in the transcript text renders as inert text.
+  const highlightedTranscript = escapeHtml(transcript).replace(
     /\b(umm|uhh|basically|you know|actually|like|so|I mean)\b/gi,
     (m) => `<mark class="bg-gray-200 text-gray-700 rounded px-0.5">${m}</mark>`
   );

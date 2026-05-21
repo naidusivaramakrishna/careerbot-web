@@ -204,7 +204,10 @@ export default function CompanyDetailPage() {
                     (e.currentTarget as HTMLImageElement).style.display = 'none';
                     const p = e.currentTarget.parentElement as HTMLElement;
                     p.style.background = companyColor;
-                    p.innerHTML = `<span style="color:white;font-weight:900;font-size:16px">${initials}</span>`;
+                    const s = document.createElement('span');
+                    s.style.cssText = 'color:white;font-weight:900;font-size:16px';
+                    s.textContent = initials;
+                    p.replaceChildren(s);
                   }}
                 />
               ) : (

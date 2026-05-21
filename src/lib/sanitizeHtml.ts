@@ -28,3 +28,15 @@ export function sanitizeHtml(input: string | null | undefined): string {
   const DOMPurify = require('dompurify') as typeof import('dompurify').default;
   return DOMPurify.sanitize(raw, SANITIZE_OPTS) as string;
 }
+
+/**
+ * Escape the HTML-significant characters so a string is safe to place inside
+ * HTML. Use when building a small HTML string (e.g. wrapping regex matches in
+ * <mark>) where the surrounding text must NOT be interpreted as HTML.
+ * Pure string operation — safe on the server too.
+ */
+export function escapeHtml(input: string | null | undefined): string {
+  return (input ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ));
+}

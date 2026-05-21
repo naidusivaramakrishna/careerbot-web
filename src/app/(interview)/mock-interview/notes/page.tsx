@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { generateNotes, getNotes, updateNotes } from "@/api/mockInterviewApi";
 import { getAllResumes } from "@/api/resumeApi";
+import { escapeHtml } from "@/lib/sanitizeHtml";
 import { useMockInterview } from "../_context/MockInterviewContext";
 import {
   FileText,
@@ -168,7 +169,9 @@ function EditableBlock({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
-  const highlighted = value
+  // escapeHtml first so the bracket markers below are the only real HTML —
+  // any markup inside a [CONFIRM:...] / note body renders as inert text.
+  const highlighted = escapeHtml(value)
     .replace(
       /\[CONFIRM:[^\]]+\]/g,
       (m) => `<mark class="bg-gray-200 text-gray-700 rounded px-1 cursor-pointer">${m}</mark>`

@@ -129,9 +129,10 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       .replace(/<\/li>/g, ' ')
       .replace(/<br\s*\/?>/g, ' ');
 
-    const div = document.createElement('div');
-    div.innerHTML = text;
-    return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+    // Parse inertly — DOMParser does NOT execute scripts or load resources,
+    // so a malicious <img onerror> in resume HTML cannot fire here.
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
   };
 
   const renderSection = (sectionName: string) => {

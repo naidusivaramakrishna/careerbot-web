@@ -226,7 +226,10 @@ export default function MockTestPage() {
                             (e.currentTarget as HTMLImageElement).style.display = 'none';
                             const p = e.currentTarget.parentElement as HTMLElement;
                             p.style.background = test.color;
-                            p.innerHTML = `<span style="color:white;font-weight:900;font-size:9px">${test.initials}</span>`;
+                            const s = document.createElement('span');
+                            s.style.cssText = 'color:white;font-weight:900;font-size:9px';
+                            s.textContent = test.initials;
+                            p.replaceChildren(s);
                           }}
                         />
                       ) : (
