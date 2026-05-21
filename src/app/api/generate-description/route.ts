@@ -1,11 +1,33 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
 
 const AZURE_ENDPOINT = "https://veliv-mgtcnqad-uaenorth.services.ai.azure.com";
 const DEPLOYMENT = "Llama-3.3-70B-Instruct";
+const MAX_BODY_BYTES = 256 * 1024; // 256 KB — generate-description bodies are small
 
 export async function POST(req: Request) {
+  // Require a VERIFIED session — this route spends the server-side Azure API
+  // key, so cookie *presence* is not enough: the JWT signature must check out.
+  const cookieStore = await cookies();
+  const token = cookieStore.get("access_token")?.value;
+  if (!token || !process.env.JWT_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
-    const body = await req.json();
+    await jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET));
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    // Read the body as text first so the size cap holds even when
+    // Content-Length is absent, chunked, or spoofed.
+    const rawBody = await req.text();
+    if (rawBody.length > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Request too large" }, { status: 413 });
+    }
+    const body = JSON.parse(rawBody);
     const { type } = body;
     const apiKey = process.env.AZURE_OPENAI_API_KEY;
 
