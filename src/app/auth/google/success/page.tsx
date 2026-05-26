@@ -2,6 +2,7 @@
 import React, { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
+import { isAuthenticated } from "@/api/authApi"
 
 const GoogleSuccessContent = () => {
   const router = useRouter()
@@ -9,19 +10,27 @@ const GoogleSuccessContent = () => {
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
 
   useEffect(() => {
-    const redirectAfterSuccess = async () => {
+    const verifyAndRedirect = async () => {
       try {
-        // ✅ Backend handles httpOnly cookie setting automatically
-        // ❌ No need to manually extract or store tokens from URL
-        // The backend redirects here after setting cookies
+        const authenticated = await isAuthenticated()
 
-        setStatus('success')
-        toast.success('Successfully signed in with Google!')
+        if (authenticated) {
+          setStatus('success')
+          toast.success('Successfully signed in with Google!')
 
-        // Redirect to dashboard after a brief moment
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 1000)
+          // Redirect to dashboard after a brief moment
+          setTimeout(() => {
+            router.push('/dashboard')
+          }, 1000)
+        } else {
+          setStatus('error')
+          toast.error('Session verification failed. Please try again.')
+
+          // Redirect to home page after error
+          setTimeout(() => {
+            router.push('/')
+          }, 2000)
+        }
 
       } catch (error: unknown) {
         console.error('Sign in error:', error)
@@ -35,7 +44,7 @@ const GoogleSuccessContent = () => {
       }
     }
 
-    redirectAfterSuccess()
+    verifyAndRedirect()
   }, [searchParams, router])
 
   return (

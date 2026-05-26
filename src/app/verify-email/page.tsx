@@ -17,10 +17,17 @@ const VerifyEmailContent = () => {
   const [status, setStatus] = useState<VerificationStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [countdown, setCountdown] = useState(5);
+  const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Auto-verify if token exists
     if (token) {
+      // Strip token from URL after reading to prevent leakage via:
+      // - Browser history
+      // - Referer headers
+      // - Server access logs
+      window.history.replaceState({}, document.title, window.location.pathname);
+
       verifyEmailToken();
     } else {
       setStatus("error");
@@ -35,11 +42,13 @@ const VerifyEmailContent = () => {
       const timer = setTimeout(() => {
         window.location.href = "/?showLogin=true&verified=true";
       }, 2000);
+      setRedirectTimer(timer);
       return () => clearTimeout(timer);
     }
 
     if (status === "error" && countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      setRedirectTimer(timer);
       return () => clearTimeout(timer);
     }
 
@@ -49,16 +58,24 @@ const VerifyEmailContent = () => {
     }
   }, [countdown, status, router]);
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (redirectTimer) {
+        clearTimeout(redirectTimer);
+      }
+    };
+  }, [redirectTimer]);
+
   const verifyEmailToken = async () => {
     if (!token) return;
 
     try {
       setStatus("loading");
-      logger.info("Verifying email with token:", token.substring(0, 10) + "...");
 
       const response = await verifyEmail({ token });
 
-      logger.info("Email verification response:", response);
+      logger.info("Email verification response received");
 
       // Backend returns success if API call completes without error
       // Response contains: { message: "Email verified successfully" } or similar
@@ -73,8 +90,6 @@ const VerifyEmailContent = () => {
     } catch (error: unknown) {
       logger.error("Email verification error:", error);
 
-      setStatus("error");
-
       let errorMsg = "Email verification failed. Please try again.";
       if (typeof error === "object" && error !== null) {
         const apiError = error as { response?: { data?: { error?: { message?: string }; detail?: string } } };
@@ -86,8 +101,16 @@ const VerifyEmailContent = () => {
         errorMsg = error.message;
       }
 
-      setErrorMessage(errorMsg);
-      toast.error(errorMsg);
+      // Treat "already verified" as success since the email IS verified
+      if (errorMsg.toLowerCase().includes("already verified")) {
+        setStatus("success");
+        setErrorMessage("");
+        toast.success("Your email is already verified. You can sign in now.");
+      } else {
+        setStatus("error");
+        setErrorMessage(errorMsg);
+        toast.error(errorMsg);
+      }
     }
   };
 
@@ -120,12 +143,14 @@ const VerifyEmailContent = () => {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-700">Redirecting to Sign In page...</p>
             </div>
-            <button
-              onClick={() => window.location.href = "/?showLogin=true&verified=true"}
-              className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
-            >
-              Go to Sign In
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => window.location.href = "/?showLogin=true&verified=true"}
+                className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
+              >
+                Go to Sign In
+              </button>
+            </div>
           </>
         )}
 

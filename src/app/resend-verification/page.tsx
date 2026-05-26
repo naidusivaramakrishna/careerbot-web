@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, CheckCircle } from "lucide-react";
 import { resendVerificationEmail } from "@/api/authApi";
+import { mapAuthError } from "@/lib/authMessages";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
 
@@ -46,17 +47,7 @@ const ResendVerificationPage = () => {
     } catch (error: unknown) {
       logger.error("Error resending verification email:", error);
 
-      let errorMsg = "Failed to resend verification email. Please try again.";
-      if (typeof error === "object" && error !== null) {
-        const apiError = error as { response?: { data?: { error?: { message?: string }; detail?: string } } };
-        errorMsg =
-          apiError.response?.data?.error?.message ||
-          apiError.response?.data?.detail ||
-          "Failed to resend verification email. Please try again.";
-      } else if (error instanceof Error) {
-        errorMsg = error.message;
-      }
-
+      const errorMsg = mapAuthError(error, 'email_verify');
       setStatus("idle");
       setEmailError(errorMsg);
     }

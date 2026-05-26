@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation"
 import { signUp, signIn } from "@/api/authApi"
 import { SignUpForm as ISignUpForm, LoginForm, ErrorState, LoadingState, FormType } from "@/types/authTypes"
 import SocialLoginButtons from "./SocialLoginButtons"
-import { EmailSentScreen } from "./EmailSentScreen"
+import { mapAuthError } from "@/lib/authMessages"
+import { validatePassword } from "@/lib/passwordPolicy"
 
 interface Props {
     open: boolean
@@ -15,15 +16,11 @@ interface Props {
     initialFormType?: FormType
 }
 
-type SignUpStatus = "form" | "loading" | "email_sent";
-
 const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" }) => {
     const router = useRouter()
 
     const [formType, setFormType] = useState<FormType>(initialFormType)
     const [showPassword, setShowPassword] = useState(false)
-    const [signUpStatus, setSignUpStatus] = useState<SignUpStatus>("form")
-    const [signUpEmail, setSignUpEmail] = useState("")
     const [isEmailVerified, setIsEmailVerified] = useState(false)
 
     const [signUpForm, setSignUpForm] = useState<ISignUpForm>({ email: "", username: "", password: "" })
@@ -68,10 +65,14 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
             // httpClient will add X-Tenant-Id header automatically
             await signUp(signUpForm)
 
-            // Show email verification message instead of auto-login
-            setSignUpEmail(signUpForm.email)
-            setSignUpStatus("email_sent")
-            toast.success("Account created! Please verify your email to continue.")
+            // Sign in immediately after signup to get access_token and refresh_token
+            await signIn({ email: signUpForm.email, password: signUpForm.password })
+
+            // Verification email is sent automatically by backend
+            // User can verify email from profile/settings later
+            toast.success("Account created! Redirecting to dashboard...")
+            localStorage.setItem('token_last_refreshed_at', Date.now().toString())
+            window.location.href = "/dashboard"
         } catch (err) {
             handleApiError(err)
         } finally {
@@ -108,7 +109,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
             console.error(`[auth:${isLogin ? 'signin' : 'signup'}] status=${res?.status}`, res?.data)
             const newErrors: ErrorState = { email: "", username: "", password: "", login: "" }
 
-            // Handle new backend validation error format - show only first error
+            // Handle new backend validation error format - show first error to prevent overflow
             if (res?.data?.error?.details?.validation_errors) {
                 const validationErrors = res.data.error.details.validation_errors
                 if (validationErrors.length > 0) {
@@ -116,13 +117,13 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                     const field = firstError.field
                     if (field in newErrors) {
                         let message = firstError.message
-                        // Simplify email error message
-                        if (field === 'email' && message.includes(':')) {
-                            message = message.split(':')[0]
-                        }
-                        // Simplify password error message - extract only the main message
-                        if (field === 'password' && message.includes('Value error,')) {
+                        // Remove "Value error," prefix
+                        if (message.includes('Value error,')) {
                             message = message.replace('Value error,', '').trim()
+                        }
+                        // Extract just the error message after colon if present
+                        if (message.includes(':')) {
+                            message = message.split(':').slice(1).join(':').trim()
                         }
                         newErrors[field as keyof ErrorState] = message
                     }
@@ -140,21 +141,16 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                 }
                 setErrors(newErrors)
             }
-            // Handle generic error messages
+            // Handle direct error message from backend
+            else if (res?.data?.error?.message) {
+                newErrors.login = res.data.error.message
+                setErrors(newErrors)
+            }
+            // Handle generic error messages with safe, user-friendly mapping
             else {
-                // error field can be a plain string (e.g. rate-limit) or an object with .message
-                const errorField = res?.data?.error
-                const detail = (typeof errorField === "string" ? errorField : errorField?.message)
-                    || res?.data?.detail
-                    || "Something went wrong"
-                if (typeof detail === "string") {
-                    if (detail.toLowerCase().includes("rate limit") || res?.status === 429) {
-                        newErrors.login = detail
-                    } else if (detail.toLowerCase().includes("email")) newErrors.email = detail
-                    else if (detail.toLowerCase().includes("username")) newErrors.username = detail
-                    else if (detail.toLowerCase().includes("password")) newErrors.password = detail
-                    else newErrors.login = detail
-                }
+                const context = isLogin ? 'login' : 'signup'
+                const safeMessage = mapAuthError(res?.data || err, context)
+                newErrors.login = safeMessage
                 setErrors(newErrors)
             }
         } else {
@@ -163,14 +159,16 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
     }
 
     const renderLoginForm = () => (
-        <div className="flex flex-col gap-4">
+        <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="flex flex-col gap-4">
             <input
                 type="email"
                 name="email"
+                autoFocus
                 placeholder="Email Address"
                 value={loginForm.email}
                 onChange={handleChange}
                 className="w-full bg-violet-50 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-purple-200 transition-all"
+                required
             />
             {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
 
@@ -182,6 +180,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                     value={loginForm.password}
                     onChange={handleChange}
                     className="w-full bg-violet-50 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-purple-200 transition-all"
+                    required
                 />
                 <button
                     type="button"
@@ -206,13 +205,20 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
             </p>
 
             <button
-                onClick={handleLogin}
+                type="submit"
                 disabled={loading.login}
-                className="w-full py-3 rounded-xl font-semibold text-white text-sm bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 hover:opacity-90 transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-purple-200"
+                className="w-full py-3 rounded-xl font-semibold text-white text-sm bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 hover:opacity-90 transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-purple-200 flex items-center justify-center gap-2"
             >
-                {loading.login ? "Signing in..." : "Sign in"}
+                {loading.login ? (
+                    <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Signing in...
+                    </>
+                ) : (
+                    "Sign in"
+                )}
             </button>
-        </div>
+        </form>
     )
 
     const renderAuthForm = () => {
@@ -233,21 +239,6 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                     </div>
                     {renderLoginForm()}
                 </>
-            )
-        }
-
-        // Show email verification message after signup (only if no errors)
-        if (formType === "signup" && signUpStatus === "email_sent" && !errors.email && !errors.username && !errors.password) {
-            return (
-                <EmailSentScreen
-                    email={signUpEmail}
-                    onGoToSignIn={() => {
-                        setFormType("signin")
-                        setSignUpStatus("form")
-                        setSignUpForm({ email: "", username: "", password: "" })
-                    }}
-                    onClose={onClose}
-                />
             )
         }
 
@@ -282,6 +273,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                             <input
                                 type="text"
                                 name="username"
+                                autoFocus
                                 placeholder="Username"
                                 value={signUpForm.username}
                                 onChange={handleChange}
@@ -318,7 +310,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                             onClick={() => setShowPassword((p) => !p)}
                             className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                         >
-                            {showPassword ? <Eye size={20} /> : <EyeClosed size={20} />}
+                            {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
                         </button>
                     </div>
 
@@ -341,15 +333,25 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                 <button
                     onClick={formType === "signup" ? handleSignUp : handleLogin}
                     disabled={formType === "signup" ? loading.signUp : loading.login}
-                    className="w-full mt-5 py-3 rounded-xl font-semibold text-white text-sm bg-[#2257a7] hover:bg-[#184284]  transition-all disabled:opacity-50 cursor-pointer"
+                    className="w-full mt-5 py-3 rounded-xl font-semibold text-white text-sm bg-[#2257a7] hover:bg-[#184284] transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                 >
-                    {formType === "signup"
-                        ? loading.signUp
-                            ? "Signing up..."
-                            : "Create Account"
-                        : loading.login
-                            ? "Signing in..."
-                            : "Sign in"}
+                    {formType === "signup" ? (
+                        loading.signUp ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                Signing up...
+                            </>
+                        ) : (
+                            "Create Account"
+                        )
+                    ) : loading.login ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            Signing in...
+                        </>
+                    ) : (
+                        "Sign in"
+                    )}
                 </button>
 
                 <div className="text-xs text-center text-[#7B698F] mt-4 space-y-1">

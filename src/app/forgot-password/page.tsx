@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, CheckCircle } from "lucide-react";
 import { requestPasswordReset } from "@/api/authApi";
+import { mapAuthError } from "@/lib/authMessages";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
 
@@ -14,6 +15,18 @@ const ForgotPasswordPage = () => {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<ForgotPasswordStatus>("idle");
   const [emailError, setEmailError] = useState("");
+  const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
+  const [lastAttemptTime, setLastAttemptTime] = useState(0);
+  const RATE_LIMIT_SECONDS = 60;
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (redirectTimer) {
+        clearTimeout(redirectTimer);
+      }
+    };
+  }, [redirectTimer]);
 
   const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,6 +34,14 @@ const ForgotPasswordPage = () => {
     // Validate email
     if (!email || !email.includes("@")) {
       setEmailError("Please enter a valid email address");
+      return;
+    }
+
+    // Check rate limiting - prevent rapid retries
+    const now = Date.now();
+    if (lastAttemptTime > 0 && now - lastAttemptTime < RATE_LIMIT_SECONDS * 1000) {
+      const secondsRemaining = Math.ceil((RATE_LIMIT_SECONDS * 1000 - (now - lastAttemptTime)) / 1000);
+      setEmailError(`Please wait ${secondsRemaining}s before trying again`);
       return;
     }
 
@@ -34,30 +55,23 @@ const ForgotPasswordPage = () => {
       logger.info("Password reset request response:", response);
 
       setStatus("success");
+      setLastAttemptTime(now);
       toast.success(response.message || "Password reset email sent successfully!");
 
       // Clear form
       setEmail("");
 
-      // Redirect after 5 seconds
-      setTimeout(() => {
+      // Redirect after 5 seconds (with ability to cancel)
+      const timer = setTimeout(() => {
         router.push("/?showLogin=true");
       }, 5000);
+      setRedirectTimer(timer);
     } catch (error: unknown) {
       logger.error("Error requesting password reset:", error);
 
-      let errorMsg = "Failed to request password reset. Please try again.";
-      if (typeof error === "object" && error !== null) {
-        const apiError = error as { response?: { data?: { error?: { message?: string }; detail?: string } } };
-        errorMsg =
-          apiError.response?.data?.error?.message ||
-          apiError.response?.data?.detail ||
-          "Failed to request password reset. Please try again.";
-      } else if (error instanceof Error) {
-        errorMsg = error.message;
-      }
-
+      const errorMsg = mapAuthError(error, 'password_reset');
       setStatus("idle");
+      setLastAttemptTime(now);
       setEmailError(errorMsg);
     }
   };
@@ -88,12 +102,14 @@ const ForgotPasswordPage = () => {
                 <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-green-600 mb-2 text-center">Email Sent!</h1>
+            <h1 className="text-2xl font-bold text-green-600 mb-2 text-center">Check Your Email</h1>
             <p className="text-gray-600 text-center mb-6">
-              A password reset link has been sent to <strong>{email}</strong>. Check your email and follow the instructions.
+              If an account exists with this email address, a password reset link will be sent. Check your email and spam folder for instructions.
             </p>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-gray-700">Redirecting to Sign In in 5 seconds...</p>
+              <p className="text-sm text-gray-700">
+                Redirecting to Sign In in <span aria-live="polite" aria-atomic="true">5 seconds</span>...
+              </p>
             </div>
           </>
         )}
@@ -108,6 +124,7 @@ const ForgotPasswordPage = () => {
               <input
                 id="email"
                 type="email"
+                autoFocus
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
                 placeholder="your@email.com"
