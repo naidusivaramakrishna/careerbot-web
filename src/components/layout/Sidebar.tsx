@@ -325,6 +325,7 @@ import {
   LayoutDashboard,
   User,
   FileText,
+  FileSignature,
   ScanSearch,
   Wand2,
   Briefcase,
@@ -369,6 +370,16 @@ const NAV_GROUPS = [
       { id: "tracker",  label: "Track Applications", icon: Briefcase,    path: "/tracker" },
     ],
   },
+  // GENERATE — AI-driven artifact generators (top-level peer to RESUME
+  // and CAREER per the cover-letter wireframes route-group decision,
+  // 2026-05-25). Items are conditionally pruned below by NEXT_PUBLIC_*
+  // flags so disabled features don't even appear in nav.
+  {
+    label: "GENERATE",
+    items: [
+      { id: "cover_letter", label: "Cover Letter",   icon: FileSignature, path: "/cover-letter", flag: "NEXT_PUBLIC_COVER_LETTER_ENABLED" },
+    ],
+  },
   {
     label: "PREPARE",
     items: [
@@ -383,6 +394,43 @@ const NAV_GROUPS = [
    ],
  },
 ];
+
+// Feature-flag pruning for nav items.
+//
+// IMPORTANT (Codex WEB-1.1 P2): Next only statically inlines
+// `process.env.NEXT_PUBLIC_*` when the reference is a LITERAL property
+// access (e.g. `process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED`). A
+// dynamic lookup like `process.env[someVarName]` is NOT inlined into
+// the client bundle and evaluates to `undefined` at runtime in the
+// browser — which would silently hide every flagged item even when
+// the env var IS set, AND cause an SSR/CSR hydration mismatch
+// (server reads env fine, client doesn't).
+//
+// Fix: maintain a STATIC map keyed by flag name. Each value is read
+// via a literal property access so Next can inline it. To add a new
+// flag, add a row here AND set `flag: "..."` on the nav item.
+const STATIC_FLAGS: Record<string, boolean> = {
+  NEXT_PUBLIC_COVER_LETTER_ENABLED:
+    process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED === "true",
+};
+
+type NavItem = {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  path: string;
+  smartNav?: boolean;
+  showBadge?: boolean;
+  flag?: string;
+};
+const isItemEnabled = (item: NavItem): boolean =>
+  !item.flag || STATIC_FLAGS[item.flag] === true;
+
+// Computed at module scope: NEXT_PUBLIC_* is baked at build time,
+// so the result is stable for the whole client session.
+const VISIBLE_NAV_GROUPS = NAV_GROUPS
+  .map((group) => ({ ...group, items: group.items.filter(isItemEnabled) }))
+  .filter((group) => group.items.length > 0);
 
 export default function Sidebar() {
   const router   = useRouter();
@@ -418,7 +466,7 @@ export default function Sidebar() {
   const profileCompleteness = dashboardData?.profile.completeness ?? 0;
 
   const getActiveId = () => {
-    for (const group of NAV_GROUPS) {
+    for (const group of VISIBLE_NAV_GROUPS) {
       for (const item of group.items) {
         if (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path))) {
           return item.id;
@@ -468,7 +516,7 @@ export default function Sidebar() {
 
         {/* Icon-only nav */}
         <nav className="flex-1 overflow-y-auto scrollbar-hide py-1 px-1.5">
-          {NAV_GROUPS.map((group, groupIndex) => (
+          {VISIBLE_NAV_GROUPS.map((group, groupIndex) => (
             <div key={group.label}>
               {groupIndex > 0 && (
                 <div className="mx-2 my-2 border-t border-gray-400" />
@@ -567,7 +615,7 @@ export default function Sidebar() {
 
       {/* Navigation groups */}
       <nav className="flex-1 overflow-y-auto scrollbar-hide px-3 pb-2 space-y-2">
-        {NAV_GROUPS.map((group) => (
+        {VISIBLE_NAV_GROUPS.map((group) => (
           <div key={group.label}>
             <p className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase px-3 mb-1">
               {group.label}

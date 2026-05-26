@@ -1,0 +1,53 @@
+{
+  "letter_id": "abc123ready1234567890abcdef12345",
+  "created_at": "2026-05-25T11:00:00.000000+00:00",
+  "status": "ready_to_review",
+  "cover_letter": {
+    "greeting": "Dear Hiring Manager,",
+    "opening": "I am writing to apply for the Senior Backend Engineer role at TestCo.",
+    "body": [
+      "Over the past six years, I have built Python and FastAPI services handling 10K+ requests per second.",
+      "I designed multi-tenant MongoDB indexing patterns and led the migration from a monolith to an event-driven architecture at Acme Corp.",
+      "My background fits the requirements you've described, especially around multi-tenant SaaS architecture and asyncio expertise."
+    ],
+    "closing": "Thank you for considering my application.",
+    "signature": "Sincerely,\nClaude Smoke"
+  },
+  "plain_text": "Dear Hiring Manager,\n\nI am writing to apply for the Senior Backend Engineer role at TestCo.\n\nOver the past six years, I have built Python and FastAPI services handling 10K+ requests per second. I designed multi-tenant MongoDB indexing patterns and led the migration from a monolith to an event-driven architecture at Acme Corp. My background fits the requirements you've described, especially around multi-tenant SaaS architecture and asyncio expertise.\n\nThank you for considering my application.\n\nSincerely,\nClaude Smoke",
+  "generation_status": {
+    "status": "ready_to_review",
+    "degraded": false,
+    "fallback_used": false,
+    "sentences_regenerated": 0,
+    "sentences_stripped": 0,
+    "generic_intent_sentences_inserted": 0,
+    "requires_user_review": true,
+    "reasons": []
+  },
+  "jd_match_matrix": [
+    {"requirement": "5+ years Python", "status": "met", "supporting_claim_ids": ["c1"], "used_in_letter": true},
+    {"requirement": "FastAPI experience", "status": "met", "supporting_claim_ids": ["c2"], "used_in_letter": true},
+    {"requirement": "MongoDB at scale", "status": "met", "supporting_claim_ids": ["c3"], "used_in_letter": true},
+    {"requirement": "Multi-tenant SaaS", "status": "met", "supporting_claim_ids": ["c4"], "used_in_letter": true},
+    {"requirement": "Kubernetes", "status": "not_found", "supporting_claim_ids": [], "used_in_letter": false},
+    {"requirement": "Observability tooling", "status": "partial", "supporting_claim_ids": [], "used_in_letter": false}
+  ],
+  "grounding": {
+    "claim_catalog_size": 14,
+    "high_confidence_claims": 14,
+    "low_confidence_claims_used": 0,
+    "parser_warnings_used": [],
+    "coverage_status": "sufficient"
+  },
+  "metadata": {
+    "word_count": 412,
+    "tone": "professional",
+    "prompt_version": "cl-v1",
+    "verification_policy_version": "cl-verify-v1",
+    "tokens_used": 3120,
+    "llm_calls": 2,
+    "model": "gpt-4o-mini"
+  },
+  "warnings": [],
+  "reason": null
+}

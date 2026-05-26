@@ -1,0 +1,52 @@
+{
+  "letter_id": "failed1234567890abcdef1234567890",
+  "created_at": "2026-05-25T11:05:00.000000+00:00",
+  "status": "failed",
+  "cover_letter": null,
+  "plain_text": null,
+  "generation_status": {
+    "status": "failed",
+    "degraded": true,
+    "fallback_used": false,
+    "sentences_regenerated": 0,
+    "sentences_stripped": 0,
+    "generic_intent_sentences_inserted": 0,
+    "requires_user_review": true,
+    "reasons": ["low_jd_match", "thin_claim_catalog"]
+  },
+  "jd_match_matrix": [
+    {"requirement": "PhD in Computer Science", "status": "not_found", "supporting_claim_ids": [], "used_in_letter": false},
+    {"requirement": "10+ years quantum computing", "status": "not_found", "supporting_claim_ids": [], "used_in_letter": false}
+  ],
+  "grounding": {
+    "claim_catalog_size": 2,
+    "high_confidence_claims": 0,
+    "low_confidence_claims_used": 0,
+    "parser_warnings_used": [],
+    "coverage_status": "low_confidence"
+  },
+  "metadata": {
+    "word_count": 0,
+    "tone": "professional",
+    "prompt_version": "cl-v1",
+    "verification_policy_version": "cl-verify-v1",
+    "tokens_used": 0,
+    "llm_calls": 0,
+    "model": "gpt-4o-mini"
+  },
+  "warnings": [
+    {
+      "code": "W_COVER_LETTER_LOW_JD_MATCH",
+      "severity": "warning",
+      "message": "JD match below 15%",
+      "field": null
+    },
+    {
+      "code": "W_COVER_LETTER_THIN_RESUME",
+      "severity": "warning",
+      "message": "Claim catalog has only 2 claims for this JD",
+      "field": null
+    }
+  ],
+  "reason": "low_jd_match"
+}
