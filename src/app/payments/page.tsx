@@ -24,8 +24,8 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <div className="max-w-7xl mx-auto px-4 py-12">
+    <div className="min-h-screen bg-white">
+      <div className="max-w-6xl mx-auto px-4 py-16 pb-24">
         <PricingPlans onSelectPlan={handleSelectPlan} />
       </div>
     </div>

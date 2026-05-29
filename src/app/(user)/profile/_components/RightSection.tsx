@@ -62,9 +62,9 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             return {
                 label: 'Almost There!',
                 color: 'text-blue-600',
-                ringColor: 'stroke-[#2257a7]',
+                ringColor: 'stroke-blue-500',
                 bgColor: 'bg-blue-50',
-                icon: <User className="w-5 h-5 text-[#2257a7]" />,
+                icon: <User className="w-5 h-5 text-blue-600" />,
             };
         }
         if (completionPercentage >= 60) {
@@ -662,15 +662,15 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     </div>
                 </div>
                 <div className="flex flex-col items-center p-4 rounded-xl border border-[#2200FF33]/20 my-4 shadow bg-[#DAD5F9]">
-                    <div className='w-14 h-14 text-white rounded-full flex items-center justify-center bg-[#2257a7]'>
+                    <div className='w-14 h-14 text-white rounded-full flex items-center justify-center bg-linear-to-r from-[#2200FF] to-[#1800B3]'>
                         <Crown className='w-8 h-8' />
                     </div>
                     <h3 className='my-4 font-semibold text-lg'>Upgrade Your Plan</h3>
                     <p className='text-center text-[#818798] text-sm'>Get unlimited ats scans, job applications, AI resume optimization, and priority support.</p>
-                    <button onClick={() => router.push('/pricing')} className='rounded-lg my-4 text-sm text-white border border-neutral-200 gap-2 cursor-pointer bg-[#2257a7] w-full px-4 py-2.5'>
+                    <button onClick={() => router.push('/payments')} className='rounded-lg my-4 text-sm text-white border border-neutral-200 gap-2 cursor-pointer bg-linear-to-r from-[#2200FF] to-[#1800B3] w-full px-4 py-2.5'>
                         <span>Upgrade Now</span>
                     </button>
-                    <p className='text-sm text-[#818798]'>30 day money back guarantee</p>
+
                 </div>
                 <div className="flex flex-col items-center p-4 rounded-xl my-4 shadow bg-white">
                     <MessageSquare className='w-8 h-8 text-[#7B899D]' />

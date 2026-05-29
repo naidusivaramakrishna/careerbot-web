@@ -357,7 +357,7 @@ const NAV_GROUPS = [
   {
     label: "RESUME",
     items: [
-      { id: "resume",   label: "Resume Builder",  icon: FileText,   path: "/builder", smartNav: true },
+      { id: "resume",   label: "Resume Builder",  icon: FileText,   path: "/builder" },
       { id: "ats",      label: "ATS Scan",         icon: ScanSearch, path: "/atslogin" },
       // { id: "enhancer", label: "Enhance Resume",   icon: Wand2,      path: "/enhancer" },
     ],

@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { Download, CheckCircle, XCircle, Clock, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Invoice } from '@/types/subscription.types';
 
 /* ------------------------------------------------------------------ */
@@ -39,7 +39,7 @@ const MOCK_INVOICES: Invoice[] = [
     invoice_number: 'CB-2025-1201',
     plan_name: 'Pro Plan',
     amount_inr: 999,
-    status: 'refunded',
+    status: 'paid',
     payment_date: new Date(Date.now() - 89 * 24 * 60 * 60 * 1000).toISOString(),
     payment_method: 'Card ending in 4242',
   },
@@ -60,10 +60,9 @@ function formatDate(iso: string): string {
 }
 
 const STATUS_CONFIG = {
-  paid:     { icon: CheckCircle, color: '#16a34a', bg: '#f0fdf4', label: 'Paid' },
-  pending:  { icon: Clock,       color: '#d97706', bg: '#fffbeb', label: 'Pending' },
-  failed:   { icon: XCircle,     color: '#dc2626', bg: '#fff5f5', label: 'Failed' },
-  refunded: { icon: RefreshCw,   color: '#64748b', bg: '#f8fafc', label: 'Refunded' },
+  paid:    { icon: CheckCircle, color: '#16a34a', bg: '#f0fdf4', label: 'Paid' },
+  pending: { icon: Clock,       color: '#d97706', bg: '#fffbeb', label: 'Pending' },
+  failed:  { icon: XCircle,     color: '#dc2626', bg: '#fff5f5', label: 'Failed' },
 };
 
 /* ------------------------------------------------------------------ */

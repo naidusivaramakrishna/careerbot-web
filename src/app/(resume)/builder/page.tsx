@@ -18,7 +18,7 @@ import {
   Upload,
   Wand2,
 } from "lucide-react";
-import LandingFooter from "@/app/_components/LandingFooter";
+import LandingFooter from "@/app/(landing)/_components/LandingFooter";
 import SignUpModal from "@/components/SignUpModal";
 
 const proofStats = [

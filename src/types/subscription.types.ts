@@ -1,7 +1,7 @@
 // Subscription and Pricing Type Definitions
 // Based on CAREERBOT_USER_DASHBOARD_DESIGN_V3.txt Section 9
 
-export type PlanId = 'FREE' | 'PRO' | 'MAX';
+export type PlanId = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE';
 
 export interface SubscriptionPlan {
   plan_id: PlanId;
@@ -26,7 +26,7 @@ export interface PlanFeatures {
   additional?: string[]; // Extra features like "Priority support", "API access"
 }
 
-// Static plan configuration
+// Static plan configuration — must stay in sync with backend plans.py
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     plan_id: 'FREE',
@@ -38,18 +38,34 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       resumes_limit: 3,
       exports_limit: 1,
       ats_scans_limit: 5,
-      job_matches_limit: 5,
+      job_matches_limit: 3,
       assessments_limit: 1,
       ai_features: 'limited',
       support: 'community',
     },
   },
   {
+    plan_id: 'BASIC',
+    plan_name: 'Basic',
+    price_inr: 499,
+    price_display: 'Rs.499/mo',
+    credits: 200,
+    features: {
+      resumes_limit: 'unlimited',
+      exports_limit: 'unlimited',
+      ats_scans_limit: 50,
+      job_matches_limit: 30,
+      assessments_limit: 10,
+      ai_features: 'basic',
+      support: 'email',
+    },
+  },
+  {
     plan_id: 'PRO',
     plan_name: 'Pro',
-    price_inr: 999,
-    price_display: 'Rs.999/mo',
-    credits: 500,
+    price_inr: 899,
+    price_display: 'Rs.899/mo',
+    credits: 1000,
     popular: true,
     recommended: true,
     features: {
@@ -64,11 +80,11 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     },
   },
   {
-    plan_id: 'MAX',
-    plan_name: 'Max',
-    price_inr: 2499,
-    price_display: 'Rs.2,499/mo',
-    credits: 2000,
+    plan_id: 'ENTERPRISE',
+    plan_name: 'Enterprise',
+    price_inr: 4999,
+    price_display: 'Rs.4,999/mo',
+    credits: 999999,
     features: {
       resumes_limit: 'unlimited',
       exports_limit: 'unlimited',
@@ -102,7 +118,7 @@ export interface Invoice {
   invoice_number: string;
   plan_name: string;
   amount_inr: number;
-  status: 'paid' | 'pending' | 'failed' | 'refunded';
+  status: 'paid' | 'pending' | 'failed';
   payment_date: string; // ISO date
   payment_method?: string; // "Razorpay", "Card ending in 1234"
   invoice_pdf_url?: string;
@@ -136,7 +152,7 @@ export function getFeatureLimit(
 }
 
 export function isUpgrade(currentPlanId: PlanId, targetPlanId: PlanId): boolean {
-  const planOrder: PlanId[] = ['FREE', 'PRO', 'MAX'];
+  const planOrder: PlanId[] = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'];
   const currentIndex = planOrder.indexOf(currentPlanId);
   const targetIndex = planOrder.indexOf(targetPlanId);
   return targetIndex > currentIndex;
