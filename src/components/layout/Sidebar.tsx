@@ -377,7 +377,7 @@ const NAV_GROUPS = [
   {
     label: "GENERATE",
     items: [
-      { id: "cover_letter", label: "Cover Letter",   icon: FileSignature, path: "/cover-letter", flag: "NEXT_PUBLIC_COVER_LETTER_ENABLED" },
+      { id: "cover_letter", label: "Cover Letter",   icon: FileSignature, path: "/cover-letter/history", flag: "NEXT_PUBLIC_COVER_LETTER_ENABLED" },
     ],
   },
   {

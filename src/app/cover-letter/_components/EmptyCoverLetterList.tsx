@@ -14,7 +14,7 @@ export default function EmptyCoverLetterList() {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
       <div className="bg-blue-50 rounded-full p-5 mb-6">
-        <FileSignature className="w-10 h-10 text-[#2257a7]" aria-hidden="true" />
+        <FileSignature className="w-10 h-10 text-[#2557a7]" aria-hidden="true" />
       </div>
       <h2 className="text-xl font-bold text-gray-900 mb-2">
         No cover letters yet
@@ -25,7 +25,7 @@ export default function EmptyCoverLetterList() {
       </p>
       <Link
         href="/cover-letter/new"
-        className="inline-flex items-center gap-2 bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:ring-offset-2"
+        className="inline-flex items-center gap-2 bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
       >
         Generate your first letter
       </Link>

@@ -11,7 +11,7 @@ export default function CoverLetterTopBar() {
       {/* Mobile only — desktop shows the sidebar button */}
       <Link
         href="/cover-letter/new"
-        className="lg:hidden inline-flex items-center gap-1.5 bg-[#2257a7] hover:bg-[#184284] text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors"
+        className="lg:hidden inline-flex items-center gap-1.5 bg-[#2557a7] hover:bg-[#1e4a94] text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors"
       >
         <Plus className="w-4 h-4" />
         New Letter

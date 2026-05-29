@@ -141,7 +141,7 @@ export default function CoverLetterForm({
           disabled={isSubmitting}
           className={[
             'w-full px-4 py-3 border rounded-xl text-sm text-slate-800 placeholder-slate-400 bg-slate-50',
-            'focus:outline-none focus:ring-2 focus:ring-[#2257a7]/40 focus:border-[#2257a7] focus:bg-white',
+            'focus:outline-none focus:ring-2 focus:ring-[#2557a7]/40 focus:border-[#2557a7] focus:bg-white',
             'disabled:opacity-50 resize-y transition-colors',
             errors.jd && jd.length > 0
               ? 'border-red-300 bg-red-50/30'
@@ -211,7 +211,7 @@ export default function CoverLetterForm({
             checked={includeContact}
             onChange={(e) => setIncludeContact(e.target.checked)}
             disabled={isSubmitting}
-            className="w-4 h-4 rounded border-slate-300 text-[#2257a7] focus:ring-[#2257a7] disabled:opacity-50"
+            className="w-4 h-4 rounded border-slate-300 text-[#2557a7] focus:ring-[#2557a7] disabled:opacity-50"
           />
           Include my contact details at the top of the letter
         </label>
@@ -228,7 +228,7 @@ export default function CoverLetterForm({
         <div className="space-y-4">
           <div>
             <p className="text-xs font-medium text-slate-600 mb-2">
-              Letter length: <span className="text-[#2257a7] font-semibold">{minWords}–{maxWords} words</span>
+              Letter length: <span className="text-[#2557a7] font-semibold">{minWords}–{maxWords} words</span>
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -243,7 +243,7 @@ export default function CoverLetterForm({
                   onChange={(e) => setMinWords(Number(e.target.value))}
                   disabled={isSubmitting}
                   aria-label="Minimum word count"
-                  className="w-full accent-[#2257a7] disabled:opacity-50"
+                  className="w-full accent-[#2557a7] disabled:opacity-50"
                 />
               </div>
               <div>
@@ -257,7 +257,7 @@ export default function CoverLetterForm({
                   onChange={(e) => setMaxWords(Number(e.target.value))}
                   disabled={isSubmitting}
                   aria-label="Maximum word count"
-                  className="w-full accent-[#2257a7] disabled:opacity-50"
+                  className="w-full accent-[#2557a7] disabled:opacity-50"
                 />
               </div>
             </div>
@@ -282,7 +282,7 @@ export default function CoverLetterForm({
               placeholder='e.g. "Lean into my fintech background and leadership experience"'
               disabled={isSubmitting}
               aria-invalid={!!errors.note}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2257a7]/40 focus:border-[#2257a7] focus:bg-white disabled:opacity-50 resize-y transition-colors"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2557a7]/40 focus:border-[#2557a7] focus:bg-white disabled:opacity-50 resize-y transition-colors"
             />
             <p className="text-xs text-slate-400 mt-1">
               {note.length}/{MAX_NOTE_CHARS}
@@ -311,7 +311,7 @@ export default function CoverLetterForm({
         <button
           type="submit"
           disabled={hasErrors || isSubmitting}
-          className="w-full flex items-center justify-center gap-2.5 bg-[#2257a7] hover:bg-[#184284] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl text-base transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:ring-offset-2"
+          className="w-full flex items-center justify-center gap-2.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl text-base transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
         >
           {isSubmitting ? (
             <>
@@ -355,7 +355,7 @@ function CollapsibleCard({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#2257a7]/30"
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#2557a7]/30"
       >
         <div className="flex items-center gap-2.5">
           {icon}
@@ -406,7 +406,7 @@ function TextField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2257a7]/40 focus:border-[#2257a7] focus:bg-white disabled:opacity-50 transition-colors"
+        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2557a7]/40 focus:border-[#2557a7] focus:bg-white disabled:opacity-50 transition-colors"
       />
     </div>
   );

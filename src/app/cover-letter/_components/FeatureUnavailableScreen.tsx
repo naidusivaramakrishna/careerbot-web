@@ -32,7 +32,7 @@ export default function FeatureUnavailableScreen() {
         </p>
         <Link
           href="/dashboard"
-          className="inline-block w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
+          className="inline-block w-full bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-3 rounded-lg transition-colors"
         >
           Back to dashboard
         </Link>

@@ -49,7 +49,7 @@ export default function CoverLetterSidebar({
       <div className="p-3 border-b border-slate-100">
         <Link
           href="/cover-letter/new"
-          className="flex items-center justify-center gap-2 w-full bg-[#2257a7] hover:bg-[#184284] text-white text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors"
+          className="flex items-center justify-center gap-2 w-full bg-[#2557a7] hover:bg-[#1e4a94] text-white text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Letter
@@ -65,7 +65,7 @@ export default function CoverLetterSidebar({
             placeholder="Search letters..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2257a7]/30 focus:border-[#2257a7] transition-colors"
+            className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2557a7]/30 focus:border-[#2557a7] transition-colors"
           />
         </div>
       </div>

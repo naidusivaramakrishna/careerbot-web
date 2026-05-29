@@ -58,7 +58,7 @@ export default function CopyButton({
         "inline-flex items-center gap-2 px-4 py-2",
         "text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200",
         "rounded-lg transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:ring-offset-2",
+        "focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2",
         className ?? "",
       ].join(" ")}
     >

@@ -1,11 +1,15 @@
 'use client';
 
 import type { ReactNode } from "react";
+import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import FeatureUnavailableScreen from "./_components/FeatureUnavailableScreen";
-import Header from "@/components/layout/Header";
-import Sidebar from "@/components/layout/Sidebar";
-import { DashboardProvider } from "@/contexts/DashboardContext";
 import "@/app/globals.css";
+
+const CoverLetterDashboardShell = dynamic(
+  () => import("./_components/CoverLetterDashboardShell"),
+  { ssr: false }
+);
 
 /**
  * Cover-letter route group — top-level (no Next route group).
@@ -20,20 +24,19 @@ import "@/app/globals.css";
  */
 export default function CoverLetterLayout({ children }: { children: ReactNode }) {
   const enabled = process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED === "true";
+  const pathname = usePathname();
 
   if (!enabled) {
     return <FeatureUnavailableScreen />;
   }
 
+  if (pathname === "/cover-letter") {
+    return <>{children}</>;
+  }
+
   return (
-    <DashboardProvider>
-      <Header />
-      <div className="flex pt-14 bg-white min-h-screen">
-        <Sidebar />
-        <div className="flex-1 overflow-auto" style={{ marginLeft: "var(--sidebar-width, 64px)", transition: "margin 300ms" }}>
-          {children}
-        </div>
-      </div>
-    </DashboardProvider>
+    <CoverLetterDashboardShell>
+      {children}
+    </CoverLetterDashboardShell>
   );
 }

@@ -51,7 +51,7 @@ export default function CoverLetterListRow({
       <div className="flex-1 min-w-0">
         <Link
           href={`/cover-letter/${encodeURIComponent(item.letter_id)}`}
-          className="block hover:underline focus:outline-none focus:ring-2 focus:ring-[#2257a7] rounded"
+          className="block hover:underline focus:outline-none focus:ring-2 focus:ring-[#2557a7] rounded"
         >
           <h3 className="text-sm font-semibold text-gray-900 truncate">
             {titleLine}
@@ -71,7 +71,7 @@ export default function CoverLetterListRow({
       <div className="flex items-start gap-2 shrink-0">
         <Link
           href={`/cover-letter/${encodeURIComponent(item.letter_id)}`}
-          className="text-sm font-medium text-[#2257a7] hover:text-[#184284] px-3 py-1.5 rounded-md hover:bg-blue-50 transition-colors"
+          className="text-sm font-medium text-[#2557a7] hover:text-[#1e4a94] px-3 py-1.5 rounded-md hover:bg-blue-50 transition-colors"
         >
           Open
         </Link>
@@ -126,7 +126,7 @@ function RowMenu({
         aria-expanded={open}
         aria-label="More actions"
         onClick={() => setOpen((v) => !v)}
-        className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-[#2257a7]"
+        className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-[#2557a7]"
       >
         <MoreVertical className="w-4 h-4" />
       </button>

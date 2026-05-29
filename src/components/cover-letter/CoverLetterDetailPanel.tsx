@@ -14,7 +14,7 @@ export default function CoverLetterDetailPanel({ letterId }: CoverLetterDetailPa
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-[#2257a7]" />
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-[#2557a7]" />
         <span className="sr-only">Loading letter…</span>
       </div>
     );
@@ -27,7 +27,7 @@ export default function CoverLetterDetailPanel({ letterId }: CoverLetterDetailPa
           <p className="text-slate-500 mb-4 text-sm">Could not load this letter.</p>
           <Link
             href={`/cover-letter/${encodeURIComponent(letterId)}`}
-            className="text-sm text-[#2257a7] hover:underline"
+            className="text-sm text-[#2557a7] hover:underline"
           >
             Open in full view →
           </Link>
@@ -57,7 +57,7 @@ export default function CoverLetterDetailPanel({ letterId }: CoverLetterDetailPa
           </div>
           <Link
             href={`/cover-letter/${encodeURIComponent(letterId)}`}
-            className="inline-flex items-center gap-1.5 text-sm text-[#2257a7] hover:text-[#184284] border border-[#2257a7]/30 hover:border-[#2257a7] rounded-lg px-3 py-1.5 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm text-[#2557a7] hover:text-[#1e4a94] border border-[#2557a7]/30 hover:border-[#2557a7] rounded-lg px-3 py-1.5 transition-colors"
           >
             Full view
             <ExternalLink className="w-3.5 h-3.5" />

@@ -20,7 +20,7 @@ export default function CoverLetterEmpty() {
       <div className="flex flex-col items-center text-center max-w-lg w-full">
         {/* Icon */}
         <div className="w-20 h-20 rounded-2xl bg-blue-50 flex items-center justify-center mb-6 flex-shrink-0">
-          <FileText className="w-9 h-9 text-[#2257a7]" />
+          <FileText className="w-9 h-9 text-[#2557a7]" />
         </div>
 
         {/* Heading */}
@@ -51,7 +51,7 @@ export default function CoverLetterEmpty() {
           {STEPS.map((step, i) => (
             <Fragment key={step.number}>
               <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-center min-w-[100px]">
-                <p className="text-xs font-bold text-[#2257a7] mb-1">{step.number}</p>
+                <p className="text-xs font-bold text-[#2557a7] mb-1">{step.number}</p>
                 <p className="text-xs font-medium text-slate-700">{step.label}</p>
               </div>
               {i < STEPS.length - 1 && (
@@ -64,7 +64,7 @@ export default function CoverLetterEmpty() {
         {/* Primary CTA */}
         <Link
           href="/cover-letter/new"
-          className="inline-flex items-center justify-center gap-2 bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3.5 px-8 rounded-xl text-base transition-all shadow-md hover:shadow-lg max-w-sm w-full"
+          className="inline-flex items-center justify-center gap-2 bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-3.5 px-8 rounded-xl text-base transition-all shadow-md hover:shadow-lg max-w-sm w-full"
         >
           <Sparkles className="w-4 h-4" />
           Generate Your First Cover Letter

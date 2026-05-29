@@ -310,10 +310,10 @@ export default function ResumeLandingPage() {
                   <ArrowRight size={16} />
                 </Link>
                 <Link
-                  href="/#template-gallery"
+                  href="#choose-path"
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-7 py-3.5 text-sm font-semibold text-slate-700 transition-all hover:border-[#2557a7] hover:bg-blue-50 hover:text-[#2557a7]"
                 >
-                  View Templates
+                  Compare Options
                 </Link>
               </div>
 
@@ -352,8 +352,8 @@ export default function ResumeLandingPage() {
               </h2>
             </div>
             <p className="max-w-2xl text-base leading-relaxed text-slate-500 lg:justify-self-end">
-              This page should not repeat the homepage. It should make one product decision easy:
-              enhance what you have, or build a clean resume from scratch.
+              Improve the resume you already have, or create a polished resume from a guided,
+              recruiter-friendly workflow.
             </p>
           </div>
 
@@ -405,7 +405,8 @@ export default function ResumeLandingPage() {
               </h2>
             </div>
             <p className="max-w-md text-sm leading-relaxed text-slate-500">
-              These cards are specific to the builder/enhancer workflow, so the page has its own purpose beyond the homepage pitch.
+              Focus on the issues recruiters and ATS systems notice first, from structure and keywords
+              to measurable impact.
             </p>
           </div>
 

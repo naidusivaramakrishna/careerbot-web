@@ -82,12 +82,12 @@ function FormHost() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen" style={{ backgroundColor: "#eef2fb" }}>
       {/* Top bar */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
           <Link
-            href="/cover-letter"
+            href="/cover-letter/history"
             aria-label="Back to cover letters"
             className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
           >
@@ -120,8 +120,8 @@ function FormHost() {
 
 function PageLoader() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="animate-spin rounded-full h-10 w-10 border-4 border-slate-200 border-t-[#2257a7]" />
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#eef2fb" }}>
+      <div className="animate-spin rounded-full h-10 w-10 border-4 border-slate-200 border-t-[#2557a7]" />
       <span className="sr-only">Loading…</span>
     </div>
   );

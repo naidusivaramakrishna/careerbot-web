@@ -84,7 +84,7 @@ export default function CoverLetterListItem({
         setMenuOpen(false);
       }}
       className={[
-        'relative flex items-start gap-3 px-3 py-3 mx-2 rounded-lg cursor-pointer transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-[#2257a7]',
+        'relative flex items-start gap-3 px-3 py-3 mx-2 rounded-lg cursor-pointer transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7]',
         isActive
           ? 'bg-blue-50 border-l-2 border-blue-600'
           : 'border-l-2 border-transparent hover:bg-slate-50',
@@ -92,7 +92,7 @@ export default function CoverLetterListItem({
     >
       {/* File icon */}
       <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center mt-0.5">
-        <FileText className="w-4 h-4 text-[#2257a7]" />
+        <FileText className="w-4 h-4 text-[#2557a7]" />
       </div>
 
       {/* Text content */}

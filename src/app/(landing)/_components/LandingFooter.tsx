@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Bot, Linkedin, Twitter } from 'lucide-react';
+import { Bot } from 'lucide-react';
 
 const columns = [
   {
@@ -10,20 +10,19 @@ const columns = [
       { label: 'Job Search', href: '/jobs' },
       { label: 'Cover Letter', href: '/cover-letter' },
       { label: 'Mock Interview', href: '/mock-interview' },
-      { label: 'Pricing', href: '/payments' },
+      { label: 'Pricing', href: '/#pricing' },
     ],
   },
   {
     heading: 'Company',
     links: [
-      { label: 'How It Works', href: '#how-it-works' },
+      { label: 'How It Works', href: '/#how-it-works' },
       { label: 'Contact', href: 'mailto:support@careerbot.com' },
     ],
   },
   {
     heading: 'Legal',
     links: [
-      { label: 'Privacy Policy', href: '#' },
       { label: 'Terms of Service', href: '/terms-of-service' },
     ],
   },
@@ -64,14 +63,6 @@ export default function LandingFooter() {
 
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-6 sm:flex-row">
           <p className="text-xs text-slate-500">Copyright 2026 CareerBot. All rights reserved.</p>
-          <div className="flex items-center gap-4">
-            <Link href="#" aria-label="LinkedIn" className="text-slate-500 transition-colors hover:text-white">
-              <Linkedin size={16} />
-            </Link>
-            <Link href="#" aria-label="Twitter" className="text-slate-500 transition-colors hover:text-white">
-              <Twitter size={16} />
-            </Link>
-          </div>
         </div>
       </div>
     </footer>

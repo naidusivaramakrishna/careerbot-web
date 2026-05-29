@@ -52,7 +52,11 @@ const ResumePage = () => {
 
   useEffect(() => {
     const action = searchParams?.get('action');
-    if (action === 'enhance') return; // Skip normal flow if action=enhance
+    if (action === 'enhance') {
+      setSelected('upload');
+      setLoading(false);
+      return;
+    }
     checkForResumes();
   }, [checkForResumes, searchParams]);
 
@@ -108,7 +112,11 @@ const ResumePage = () => {
       <div className="px-6 pt-6 pb-2 text-center">
         <p className="text-sm text-gray-400">Choose how you&apos;d like to get started</p>
       </div>
-      <EmptyState selected={selected} onSelect={setSelected} />
+      <EmptyState
+        selected={selected}
+        onSelect={setSelected}
+        initialUploadOpen={searchParams?.get('action') === 'enhance'}
+      />
     </PageShell>
   );
 };

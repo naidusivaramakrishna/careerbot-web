@@ -72,7 +72,7 @@ export default function FailureCard({ letter }: FailureCardProps) {
 
       <Link
         href="/cover-letter/new"
-        className="block w-full text-center bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:ring-offset-2"
+        className="block w-full text-center bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
       >
         Try a different JD
       </Link>
@@ -83,7 +83,7 @@ export default function FailureCard({ letter }: FailureCardProps) {
           type="button"
           onClick={() => setDiagOpen((v) => !v)}
           aria-expanded={diagOpen}
-          className="flex w-full items-center justify-between text-sm font-semibold text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2257a7] rounded"
+          className="flex w-full items-center justify-between text-sm font-semibold text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2557a7] rounded"
         >
           Diagnostic details (advanced)
           {diagOpen ? (
