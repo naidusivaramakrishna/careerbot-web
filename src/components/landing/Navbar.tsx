@@ -8,7 +8,6 @@ import {
   X,
   ChevronDown,
   FileText,
-  Wand2,
   ScanSearch,
   Mail,
   Briefcase,
@@ -16,7 +15,6 @@ import {
   Zap,
   Mic,
   ClipboardList,
-  BookOpen,
   Languages,
 } from 'lucide-react';
 
@@ -49,12 +47,6 @@ const RESUME_ITEMS: DropdownItem[] = [
     icon: <FileText size={18} />,
     label: 'Resume Builder',
     description: 'Build from scratch',
-    href: '/builder',
-  },
-  {
-    icon: <Wand2 size={18} />,
-    label: 'AI Enhancer',
-    description: 'Transform with AI',
     href: '/builder',
   },
   {

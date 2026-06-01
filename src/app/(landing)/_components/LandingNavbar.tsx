@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
-  Wand2,
   X,
 } from 'lucide-react';
 
@@ -69,12 +68,6 @@ const dropdownGroups: DropdownGroup[] = [
         label: 'Templates',
         description: 'Browse role-based designs',
         href: '/#template-gallery',
-      },
-      {
-        icon: <Wand2 size={18} />,
-        label: 'AI Enhancer',
-        description: 'Improve inside builder',
-        href: '/builder',
       },
       {
         icon: <ScanSearch size={18} />,
