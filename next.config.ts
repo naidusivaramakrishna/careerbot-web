@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
 
 
   images: {
+    minimumCacheTTL: 60,
+    // Bypass Next.js image optimization for localhost backend images — they may
+    // return empty buffers when the backend is down, causing LRUCache size=0 crash.
+    unoptimized: process.env.NODE_ENV === 'development',
     remotePatterns: [
       {
         protocol: "http",

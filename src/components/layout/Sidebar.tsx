@@ -41,7 +41,7 @@
 //   {
 //     label: "CAREER",
 //     items: [
-//       { id: "jd_match", label: "Job Match",          icon: BarChart2,    path: "/jobmatch" },
+//       { id: "jd_match", label: "Job Match",          icon: BarChart2,    path: "/jobmatch/app" },
 //       { id: "jobs",     label: "Jobs",               icon: Search,       path: "/jobs" },
 //       { id: "tracker",  label: "Track Applications", icon: Briefcase,    path: "/tracker" },
 //     ],
@@ -365,7 +365,7 @@ const NAV_GROUPS = [
   {
     label: "CAREER",
     items: [
-      { id: "jd_match", label: "Job Match",          icon: BarChart2,    path: "/jobmatch" },
+      { id: "jd_match", label: "Job Match",          icon: BarChart2,    path: "/jobmatch/app" },
       { id: "jobs",     label: "Jobs",               icon: Search,       path: "/jobs" },
       { id: "tracker",  label: "Track Applications", icon: Briefcase,    path: "/tracker" },
     ],

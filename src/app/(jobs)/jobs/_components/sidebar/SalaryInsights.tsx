@@ -16,10 +16,10 @@ interface SalaryInsightsProps {
 const LEVEL_ORDER = ["Fresher", "Entry", "Mid", "Senior", "Lead"];
 const LEVEL_COLORS = [
   "bg-gray-200",
-  "bg-[#2557a7]/30",
+  "bg-[#2557a7]/35",
   "bg-[#2557a7]",
-  "bg-[#2557a7]/70",
-  "bg-[#2557a7]/50",
+  "bg-[#2557a7]/65",
+  "bg-[#2557a7]/45",
 ];
 
 function parseSalaryValue(salary: string): number | null {
@@ -77,24 +77,19 @@ export default function SalaryInsights({ jobs = [] }: SalaryInsightsProps) {
         : null;
     });
 
-    // Fill nulls with interpolation
-    const filled = [...avgSalaries];
-    const defaults = [4, 8, 14, 22, 32];
-    filled.forEach((v, i) => {
-      if (v === null) filled[i] = defaults[i];
-    });
-
-    const maxVal = Math.max(...(filled as number[]));
+    const hasAnyData = avgSalaries.some((v) => v !== null);
+    const maxVal = hasAnyData ? Math.max(...avgSalaries.map((v) => v ?? 0)) : 1;
     const MAX_HEIGHT = 100;
 
     const bars = LEVEL_ORDER.map((label, i) => {
-      const val = filled[i] as number;
+      const val = avgSalaries[i];
+      const hasData = val !== null;
       return {
         label,
-        value: `₹${val % 1 === 0 ? val : val.toFixed(1)}L`,
-        height: Math.max(20, Math.round((val / maxVal) * MAX_HEIGHT)),
+        value: hasData ? `₹${val! % 1 === 0 ? val : val!.toFixed(1)}L` : null,
+        height: hasData ? Math.max(20, Math.round((val! / maxVal) * MAX_HEIGHT)) : 12,
         color: LEVEL_COLORS[i],
-        hasData: avgSalaries[i] !== null,
+        hasData,
       };
     });
 
@@ -112,14 +107,14 @@ export default function SalaryInsights({ jobs = [] }: SalaryInsightsProps) {
 
     return {
       bars,
-      median: median ? `₹${median % 1 === 0 ? median : median.toFixed(1)} LPA` : "₹12.0 LPA",
+      median: median ? `₹${median % 1 === 0 ? median : median.toFixed(1)} LPA` : null,
       subtitle: topTitle.length > 30 ? topTitle.slice(0, 28) + "…" : topTitle,
     };
   }, [jobs]);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2">
+    <div>
+      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
         <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center">
           <TrendingUp size={11} className="text-emerald-600" />
         </div>
@@ -133,19 +128,23 @@ export default function SalaryInsights({ jobs = [] }: SalaryInsightsProps) {
         <div className="flex items-end justify-between gap-1 h-22.5">
           {bars.map((bar) => (
             <div key={bar.label} className="flex flex-col items-center gap-1 flex-1">
-              <span className="text-[8px] text-gray-400 font-medium">{bar.value}</span>
+              <span className="text-[8.5px] font-semibold tabular-nums" style={{ color: bar.hasData ? undefined : "transparent" }}>
+                {bar.value ?? "—"}
+              </span>
               <div
-                className={`w-full rounded-t transition-all ${bar.color} ${!bar.hasData ? "opacity-35" : ""}`}
-                style={{ height: bar.height }}
+                className={`w-full rounded-t-sm transition-all ${bar.color} ${!bar.hasData ? "opacity-25" : ""}`}
+                style={{ height: bar.height, transition: "height 0.5s cubic-bezier(0.4,0,0.2,1)" }}
               />
-              <span className="text-[8px] text-gray-500 whitespace-nowrap">{bar.label}</span>
+              <span className="text-[8.5px] text-gray-500 whitespace-nowrap font-medium">{bar.label}</span>
             </div>
           ))}
         </div>
 
         <div className="mt-3 pt-2.5 border-t border-gray-50 flex items-center justify-between">
-          <span className="text-[11px] text-gray-400">Market median</span>
-          <span className="text-[12px] font-bold text-gray-900">{median}</span>
+          <span className="text-[11px] text-gray-400 font-medium">Market median</span>
+          <span className="text-[12.5px] font-bold text-gray-900 tabular-nums">
+            {median ?? <span className="text-gray-300 font-normal text-[11px]">No data yet</span>}
+          </span>
         </div>
       </div>
     </div>

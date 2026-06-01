@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import {
@@ -13,6 +13,7 @@ import {
   BookOpen,
   Calendar,
   Globe2,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   WORK_MODELS,
@@ -39,6 +40,7 @@ export default function JobsFilterSidebar({
   jobs,
 }: JobsFilterPanelProps) {
   const [openDropdown, setOpenDropdown] = useState<DropdownKey>(null);
+  const [showMoreFiltersModal, setShowMoreFiltersModal] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Salary slider state — index into salarySteps
@@ -285,7 +287,8 @@ export default function JobsFilterSidebar({
 
 
   return (
-    <div className="mt-4 pt-3.5 border-t border-gray-100" ref={containerRef}>
+    <div className="pt-3 pb-1" ref={containerRef}>
+      {/* Filter pills — all in one wrapping row */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* ── WORK MODEL PILL ── */}
         <div className="relative">
@@ -294,7 +297,7 @@ export default function JobsFilterSidebar({
             onClick={() => toggleDropdown("workModel")}
             className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
               activeWorkModels.length > 0
-                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
                 : openDropdown === "workModel"
                 ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
@@ -316,14 +319,14 @@ export default function JobsFilterSidebar({
           </button>
 
           {openDropdown === "workModel" && (
-            <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-100 rounded-2xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
               <div className="px-4 py-2 flex items-center justify-between">
                 <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Work Model</p>
                 {activeWorkModels.length > 0 && (
                   <button
                     type="button"
                     onClick={() => activeWorkModels.forEach((m) => onFilterToggle(m))}
-                    className="text-[11px] text-[#2557a7] hover:text-[#1a4a96] font-semibold"
+                    className="text-[11px] text-[#2557a7] hover:text-[#1f4e98] font-semibold"
                   >
                     Reset
                   </button>
@@ -366,7 +369,7 @@ export default function JobsFilterSidebar({
             onClick={() => toggleDropdown("jobType")}
             className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
               activeJobTypes.length > 0
-                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
                 : openDropdown === "jobType"
                 ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
@@ -388,14 +391,14 @@ export default function JobsFilterSidebar({
           </button>
 
           {openDropdown === "jobType" && (
-            <div className="absolute top-full left-0 mt-2 w-60 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full left-0 mt-2 w-60 bg-white border border-gray-100 rounded-2xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
               <div className="px-4 py-2 flex items-center justify-between">
                 <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Job Type</p>
                 {activeJobTypes.length > 0 && (
                   <button
                     type="button"
                     onClick={() => activeJobTypes.forEach((t) => onFilterToggle(t))}
-                    className="text-[11px] text-[#2557a7] hover:text-[#1a4a96] font-semibold"
+                    className="text-[11px] text-[#2557a7] hover:text-[#1f4e98] font-semibold"
                   >
                     Reset
                   </button>
@@ -438,7 +441,7 @@ export default function JobsFilterSidebar({
             onClick={() => toggleDropdown("experience")}
             className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
               hasExpFilter
-                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
                 : openDropdown === "experience"
                 ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
@@ -455,7 +458,7 @@ export default function JobsFilterSidebar({
           </button>
 
           {openDropdown === "experience" && (
-            <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-100 rounded-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
               {/* Header */}
               <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-800">Experience <span className="text-gray-400 font-normal">(yrs)</span></p>
@@ -506,7 +509,7 @@ export default function JobsFilterSidebar({
                   <button
                     type="button"
                     onClick={() => setShowAllExp(!showAllExp)}
-                    className="text-[13px] text-[#2557a7] underline hover:text-[#1a4a96] transition-colors"
+                    className="text-[12px] text-[#2557a7] font-semibold hover:text-[#1f4e98] transition-colors flex items-center gap-1"
                   >
                     {showAllExp ? "View less" : "View more"}
                   </button>
@@ -518,7 +521,7 @@ export default function JobsFilterSidebar({
                 <button
                   type="button"
                   onClick={handleExpApply}
-                  className="px-5 py-2 bg-[#2557a7] text-white rounded-xl text-xs font-bold hover:bg-[#1e4a96] active:scale-[0.98] transition-all shadow-sm"
+                  className="px-5 py-2 bg-[#2557a7] text-white rounded-full text-xs font-bold hover:bg-[#1f4e98] active:scale-[0.98] transition-all shadow-sm"
                 >
                   Apply
                 </button>
@@ -534,7 +537,7 @@ export default function JobsFilterSidebar({
             onClick={() => toggleDropdown("salary")}
             className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
               hasSalaryFilter
-                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
                 : openDropdown === "salary"
                 ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
@@ -561,7 +564,7 @@ export default function JobsFilterSidebar({
             const thumbR = 9; // 18px / 2
             const tooltipLeft = `calc(${pct}% + ${(1 - 2 * pct / 100) * thumbR}px)`;
             return (
-              <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-gray-100 rounded-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
                 {/* Header */}
                 <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-800">
@@ -581,7 +584,7 @@ export default function JobsFilterSidebar({
                   {/* Tooltip bubble — positioned above thumb */}
                   <div className="relative h-7 mb-1">
                     <div
-                      className="absolute -translate-x-1/2 bottom-0 bg-gray-700 text-white text-[11px] font-semibold rounded-md px-2 py-0.5 whitespace-nowrap pointer-events-none"
+                      className="absolute -translate-x-1/2 bottom-0 bg-[#1f4e98] text-white text-[11px] font-semibold rounded-md px-2 py-0.5 whitespace-nowrap pointer-events-none"
                       style={{ left: tooltipLeft }}
                     >
                       {step.label} ({step.count} Jobs)
@@ -596,7 +599,7 @@ export default function JobsFilterSidebar({
                       -webkit-appearance: none;
                       width: 18px; height: 18px;
                       border-radius: 50%;
-                      background: #1a1a2e;
+                      background: #2557a7;
                       cursor: pointer;
                       border: 2px solid white;
                       box-shadow: 0 1px 4px rgba(0,0,0,0.3);
@@ -605,7 +608,7 @@ export default function JobsFilterSidebar({
                     .salary-slider::-moz-range-thumb {
                       width: 18px; height: 18px;
                       border-radius: 50%;
-                      background: #1a1a2e;
+                      background: #2557a7;
                       cursor: pointer;
                       border: 2px solid white;
                       box-shadow: 0 1px 4px rgba(0,0,0,0.3);
@@ -622,7 +625,7 @@ export default function JobsFilterSidebar({
                     onChange={(e) => setSalarySliderIndex(Number(e.target.value))}
                     className="salary-slider w-full cursor-pointer"
                     style={{
-                      background: `linear-gradient(to right, #1a1a2e 0%, #1a1a2e ${pct}%, #e5e7eb ${pct}%, #e5e7eb 100%)`,
+                      background: `linear-gradient(to right, #2557a7 0%, #2557a7 ${pct}%, #e5e7eb ${pct}%, #e5e7eb 100%)`,
                     }}
                   />
 
@@ -642,7 +645,7 @@ export default function JobsFilterSidebar({
                   <button
                     type="button"
                     onClick={handleSalaryApply}
-                    className="px-5 py-2 bg-[#2557a7] text-white rounded-xl text-xs font-bold hover:bg-[#1e4a96] active:scale-[0.98] transition-all shadow-sm"
+                    className="px-5 py-2 bg-[#2557a7] text-white rounded-full text-xs font-bold hover:bg-[#1f4e98] active:scale-[0.98] transition-all shadow-sm"
                   >
                     Apply
                   </button>
@@ -659,7 +662,7 @@ export default function JobsFilterSidebar({
             onClick={() => toggleDropdown("location")}
             className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
               hasLocFilter
-                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
                 : openDropdown === "location"
                 ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
@@ -681,7 +684,7 @@ export default function JobsFilterSidebar({
           </button>
 
           {openDropdown === "location" && (
-            <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-gray-100 rounded-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
               {/* Header */}
               <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-800">Location</p>
@@ -774,7 +777,7 @@ export default function JobsFilterSidebar({
                   <button
                     type="button"
                     onClick={() => setShowAllLoc(!showAllLoc)}
-                    className="text-[13px] text-[#2557a7] underline hover:text-[#1a4a96] transition-colors"
+                    className="text-[12px] text-[#2557a7] font-semibold hover:text-[#1f4e98] transition-colors flex items-center gap-1"
                   >
                     {showAllLoc ? "View less" : "View more"}
                   </button>
@@ -786,7 +789,7 @@ export default function JobsFilterSidebar({
                 <button
                   type="button"
                   onClick={handleLocApply}
-                  className="px-5 py-2 bg-[#2557a7] text-white rounded-xl text-xs font-bold hover:bg-[#1e4a96] active:scale-[0.98] transition-all shadow-sm"
+                  className="px-5 py-2 bg-[#2557a7] text-white rounded-full text-xs font-bold hover:bg-[#1f4e98] active:scale-[0.98] transition-all shadow-sm"
                 >
                   Apply
                 </button>
@@ -802,7 +805,7 @@ export default function JobsFilterSidebar({
             onClick={() => toggleDropdown("education")}
             className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
               hasEduFilter
-                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
                 : openDropdown === "education"
                 ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
@@ -824,7 +827,7 @@ export default function JobsFilterSidebar({
           </button>
 
           {openDropdown === "education" && (
-            <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-gray-100 rounded-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
               {/* Header */}
               <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-800">Education</p>
@@ -908,7 +911,7 @@ export default function JobsFilterSidebar({
                   <button
                     type="button"
                     onClick={() => setShowAllEdu(!showAllEdu)}
-                    className="text-[13px] text-[#2557a7] underline hover:text-[#1a4a96] transition-colors"
+                    className="text-[12px] text-[#2557a7] font-semibold hover:text-[#1f4e98] transition-colors flex items-center gap-1"
                   >
                     {showAllEdu ? "View less" : "View more"}
                   </button>
@@ -920,7 +923,7 @@ export default function JobsFilterSidebar({
                 <button
                   type="button"
                   onClick={handleEduApply}
-                  className="px-5 py-2 bg-[#2557a7] text-white rounded-xl text-xs font-bold hover:bg-[#1e4a96] active:scale-[0.98] transition-all shadow-sm"
+                  className="px-5 py-2 bg-[#2557a7] text-white rounded-full text-xs font-bold hover:bg-[#1f4e98] active:scale-[0.98] transition-all shadow-sm"
                 >
                   Apply
                 </button>
@@ -936,7 +939,7 @@ export default function JobsFilterSidebar({
             onClick={() => toggleDropdown("datePosted")}
             className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
               hasDateFilter
-                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
                 : openDropdown === "datePosted"
                 ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
@@ -953,14 +956,14 @@ export default function JobsFilterSidebar({
           </button>
 
           {openDropdown === "datePosted" && (
-            <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-gray-100 rounded-2xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
               <div className="px-4 py-2 flex items-center justify-between">
                 <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Date Posted</p>
                 {hasDateFilter && (
                   <button
                     type="button"
                     onClick={() => { if (activeDateFilter) onFilterToggle(activeDateFilter); setOpenDropdown(null); }}
-                    className="text-[11px] text-[#2557a7] hover:text-[#1a4a96] font-semibold"
+                    className="text-[11px] text-[#2557a7] hover:text-[#1f4e98] font-semibold"
                   >
                     Reset
                   </button>
@@ -995,6 +998,10 @@ export default function JobsFilterSidebar({
           )}
         </div>
 
+      </div>
+
+      {/* Source + More filters — continues the same row visually on next wrap */}
+      <div className="flex items-center gap-2">
         {/* ── SOURCE PILL ── */}
         <div className="relative">
           <button
@@ -1002,7 +1009,7 @@ export default function JobsFilterSidebar({
             onClick={() => toggleDropdown("source")}
             className={`group flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
               hasSourceFilter
-                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1e4a96]"
+                ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
                 : openDropdown === "source"
                 ? "bg-[#f0f4ff] text-[#2557a7] border border-[#2557a7]/30 shadow-sm"
                 : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
@@ -1019,14 +1026,14 @@ export default function JobsFilterSidebar({
           </button>
 
           {openDropdown === "source" && (
-            <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/8 z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-gray-100 rounded-2xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-150" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)" }}>
               <div className="px-4 py-2 flex items-center justify-between">
                 <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Source</p>
                 {hasSourceFilter && (
                   <button
                     type="button"
                     onClick={() => { if (activeSourceFilter) onFilterToggle(activeSourceFilter); setOpenDropdown(null); }}
-                    className="text-[11px] text-[#2557a7] hover:text-[#1a4a96] font-semibold"
+                    className="text-[11px] text-[#2557a7] hover:text-[#1f4e98] font-semibold"
                   >
                     Reset
                   </button>
@@ -1061,6 +1068,695 @@ export default function JobsFilterSidebar({
           )}
         </div>
 
+        {/* ── MORE FILTERS BUTTON ── */}
+        <button
+          type="button"
+          onClick={() => setShowMoreFiltersModal(true)}
+          className={`flex items-center gap-2 pl-3.5 pr-3 py-2 rounded-full text-[13px] font-medium transition-all duration-200 ${
+            selectedFilters.length > 0
+              ? "bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20 hover:bg-[#1f4e98]"
+              : "bg-white text-gray-700 border border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#fafbff] hover:shadow-sm"
+          }`}
+        >
+          <SlidersHorizontal size={14} className={selectedFilters.length > 0 ? "text-white/80" : "text-gray-400"} />
+          <span>All Filters</span>
+          {selectedFilters.length > 0 && (
+            <span className="bg-white text-[#2557a7] text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+              +{selectedFilters.length}
+            </span>
+          )}
+        </button>
+
+      </div>
+
+      {/* ── ACTIVE FILTER CHIPS STRIP ── */}
+      {selectedFilters.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pt-2.5 border-t border-gray-200/70">
+          <span className="text-[10.5px] text-gray-400 font-bold uppercase tracking-widest shrink-0">Active:</span>
+          {selectedFilters.map((f) => {
+            const label = f.replace(/^(date:|source:|salary:|years:|location:|education:)/, "");
+            return (
+              <span
+                key={f}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eef3ff] text-[#1f4e98] text-[11.5px] font-semibold rounded-full border border-[#2557a7]/20 shrink-0"
+              >
+                {label}
+                <button
+                  type="button"
+                  onClick={() => onFilterToggle(f)}
+                  className="text-[#2557a7]/50 hover:text-[#1f4e98] ml-0.5 transition-colors"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => [...selectedFilters].forEach((f) => onFilterToggle(f))}
+            className="text-[11px] text-gray-400 hover:text-gray-700 ml-1 font-semibold transition-colors shrink-0"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {/* More Filters — right-side drawer */}
+      {showMoreFiltersModal && (() => {
+        const DRAWER_SECTIONS = [
+          { key: "basic",        label: "Basic Job Criteria",        sub: "Job Type / Work Model / Experience" },
+          { key: "compensation", label: "Compensation",              sub: "Annual Salary" },
+          { key: "date",         label: "Date & Source",             sub: "Date Posted / Source" },
+          { key: "education",    label: "Education",                 sub: "Qualification / Degree" },
+          { key: "location",     label: "Location",                  sub: "City / State" },
+        ] as const;
+        type DrawerSection = typeof DRAWER_SECTIONS[number]["key"];
+        return (
+          <DrawerContent
+            sections={DRAWER_SECTIONS as unknown as { key: string; label: string; sub: string }[]}
+            selectedFilters={selectedFilters}
+            onFilterToggle={onFilterToggle}
+            onClose={() => setShowMoreFiltersModal(false)}
+            workModels={WORK_MODELS}
+            jobTypes={JOB_TYPES}
+            datePresets={DATE_PRESETS}
+            jobSources={JOB_SOURCES}
+            salarySteps={salarySteps}
+            experienceOptions={experienceOptions}
+            visibleLocOptions={visibleLocOptions}
+            filteredLocOptions={filteredLocOptions}
+            visibleEduOptions={visibleEduOptions}
+            filteredEduOptions={filteredEduOptions}
+            fmtCount={fmtCount}
+            activeLocFilters={activeLocFilters}
+            activeEduFilters={activeEduFilters}
+            pendingLocations={pendingLocations}
+            setPendingLocations={setPendingLocations}
+            pendingEducation={pendingEducation}
+            setPendingEducation={setPendingEducation}
+            locSearch={locSearch}
+            setLocSearch={setLocSearch}
+            locTab={locTab}
+            setLocTab={setLocTab}
+            showAllLoc={showAllLoc}
+            setShowAllLoc={setShowAllLoc}
+            eduSearch={eduSearch}
+            setEduSearch={setEduSearch}
+            showAllEdu={showAllEdu}
+            setShowAllEdu={setShowAllEdu}
+            salarySliderIndex={salarySliderIndex}
+            setSalarySliderIndex={setSalarySliderIndex}
+            handleLocApply={handleLocApply}
+            handleEduApply={handleEduApply}
+            handleSalaryApply={handleSalaryApply}
+            pendingExpLabel={pendingExpLabel}
+            setPendingExpLabel={setPendingExpLabel}
+            showAllExp={showAllExp}
+            setShowAllExp={setShowAllExp}
+            visibleExpOptions={visibleExpOptions}
+            experienceOptionsAll={experienceOptions}
+            handleExpApply={handleExpApply}
+            handleExpSelect={handleExpSelect}
+            selectedSalaryFilter={selectedSalaryFilter ?? null}
+            activeDateFilter={activeDateFilter}
+            activeSourceFilter={activeSourceFilter}
+          />
+        );
+      })()}
+    </div>
+  );
+}
+
+// ── Checkbox item ─────────────────────────────────────────────────────────
+function CheckItem({ label, checked, onChange, helpText }: { label: string; checked: boolean; onChange: () => void; helpText?: string }) {
+  return (
+    <label onClick={onChange}
+      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border cursor-pointer transition-all select-none group ${
+        checked
+          ? "bg-[#eef3ff] border-[#2557a7]/40 shadow-[0_1px_4px_rgba(37,87,167,0.08)]"
+          : "bg-white border-gray-200/80 hover:border-[#2557a7]/30 hover:bg-[#f8faff]"
+      }`}>
+      <div className={`w-4.5 h-4.5 rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0 transition-all ${
+        checked
+          ? "bg-[#2557a7] border-[#2557a7] shadow-[0_1px_4px_rgba(37,87,167,0.3)]"
+          : "border-gray-300 group-hover:border-[#2557a7]/50"
+      }`}>
+        {checked && <Check size={10} className="text-white" strokeWidth={3} />}
+      </div>
+      <span className={`text-[13px] font-medium flex-1 leading-tight ${checked ? "text-[#1f4e98]" : "text-gray-700"}`}>{label}</span>
+      {helpText && (
+        <span title={helpText} className="w-4.5 h-4.5 rounded-full border border-gray-200 flex items-center justify-center text-[9px] text-gray-400 shrink-0 cursor-help hover:border-gray-300">?</span>
+      )}
+    </label>
+  );
+}
+
+// ── Right-side drawer ──────────────────────────────────────────────────────
+// DrawerContent receives 40+ parent-scope props (filters, state, setters).
+// Typing each individually would create a fragile 100-line interface;
+// using a broad record is the honest trade-off for this internal-only component.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function DrawerContent(props: any) {
+  const [activeSection, setActiveSection] = useState<string>("basic");
+  const [jobFunctionInput, setJobFunctionInput] = useState("");
+  const [jobFunctions, setJobFunctions] = useState<string[]>([]);
+  const [excludedTitles, setExcludedTitles] = useState<string[]>([]);
+  const [excludedInput, setExcludedInput] = useState("");
+  const [excludedOpen, setExcludedOpen] = useState(false);
+
+  // ── Staged filters — only pushed to parent on Confirm ──
+  const [localFilters, setLocalFilters] = useState<string[]>([...props.selectedFilters]);
+  const [pendingSalaryMin, setPendingSalaryMin] = useState<number | undefined>(undefined);
+
+  const localToggle = (filter: string) => {
+    setLocalFilters((prev) => {
+      if (filter.startsWith("salary:")) {
+        const without = prev.filter((f) => !f.startsWith("salary:"));
+        if (filter === "salary:Any salary" || prev.includes(filter)) return without;
+        return [...without, filter];
+      }
+      if (filter.startsWith("years:")) {
+        const without = prev.filter((f) => !f.startsWith("years:"));
+        if (filter === "years:Any requirements" || prev.includes(filter)) return without;
+        return [...without, filter];
+      }
+      if (filter.startsWith("location:") || filter.startsWith("education:")) {
+        return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
+      }
+      if (filter.startsWith("date:")) {
+        const without = prev.filter((f) => !f.startsWith("date:"));
+        return prev.includes(filter) ? without : [...without, filter];
+      }
+      if (filter.startsWith("source:")) {
+        const without = prev.filter((f) => !f.startsWith("source:"));
+        return prev.includes(filter) ? without : [...without, filter];
+      }
+      return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
+    });
+  };
+
+  const handleConfirm = () => {
+    const toAdd = localFilters.filter((f) => !props.selectedFilters.includes(f));
+    const toRemove = props.selectedFilters.filter((f: string) => !localFilters.includes(f));
+    [...toRemove, ...toAdd].forEach((f: string) => props.onFilterToggle(f));
+    if (pendingSalaryMin !== undefined) {
+      props.onFilterChange({ salary_min: pendingSalaryMin || undefined, salary_max: undefined });
+    }
+    props.onClose();
+  };
+
+  const handleResetAll = () => {
+    setLocalFilters([]);
+    setPendingSalaryMin(undefined);
+    props.setPendingExpLabel(null);
+    props.setPendingLocations([]);
+    props.setPendingEducation([]);
+  };
+
+  const handleLocalSalaryApply = () => {
+    const lastIdx = Math.max(1, props.salarySteps.length - 1);
+    const clampedIdx = Math.min(Math.max(props.salarySliderIndex, 0), lastIdx);
+    const step = props.salarySteps[clampedIdx] ?? props.salarySteps[lastIdx];
+    setLocalFilters((prev) => {
+      const without = prev.filter((f) => !f.startsWith("salary:"));
+      return step.value > 0 ? [...without, `salary:${step.label}`] : without;
+    });
+    setPendingSalaryMin(step.value > 0 ? step.value : 0);
+  };
+
+  const handleLocalExpApply = () => {
+    setLocalFilters((prev) => {
+      const without = prev.filter((f) => !f.startsWith("years:"));
+      return props.pendingExpLabel ? [...without, `years:${props.pendingExpLabel}`] : without;
+    });
+  };
+
+  const handleLocalLocApply = () => {
+    setLocalFilters((prev) => {
+      const without = prev.filter((f) => !f.startsWith("location:"));
+      const newLoc = props.pendingLocations.map((l: string) => `location:${l}`);
+      if (!newLoc.length && props.locSearch?.trim()) newLoc.push(`location:${props.locSearch.trim()}`);
+      return [...without, ...newLoc];
+    });
+  };
+
+  const handleLocalEduApply = () => {
+    setLocalFilters((prev) => {
+      const without = prev.filter((f) => !f.startsWith("education:"));
+      return [...without, ...props.pendingEducation.map((e: string) => `education:${e}`)];
+    });
+  };
+
+  const localActiveDateFilter = localFilters.find((f) => f.startsWith("date:")) ?? null;
+  const localActiveSourceFilter = localFilters.find((f) => f.startsWith("source:")) ?? null;
+  const totalActive = localFilters.length;
+
+  const addJobFunction = (val: string) => {
+    const trimmed = val.trim();
+    if (trimmed && !jobFunctions.includes(trimmed)) {
+      setJobFunctions((prev) => [...prev, trimmed]);
+    }
+    setJobFunctionInput("");
+  };
+
+  const addExcludedTitle = (val: string) => {
+    const trimmed = val.trim();
+    if (trimmed && !excludedTitles.includes(trimmed)) {
+      setExcludedTitles((prev) => [...prev, trimmed]);
+    }
+    setExcludedInput("");
+  };
+
+  const EXP_HELP: Record<string, string> = {
+    "Fresher":  "0 years of experience — entry-level / campus hire",
+    "1 yr":     "1 year of relevant work experience",
+    "2 yrs":    "2 years of relevant work experience",
+    "3 yrs":    "Mid-level — typically 3 years",
+    "4 yrs":    "4 years of professional experience",
+    "5 yrs":    "Senior candidate — 5 years",
+    "6 yrs":    "6 years of professional experience",
+    "7 yrs":    "7 years of professional experience",
+    "8 yrs":    "Senior / lead level — 8 years",
+    "9 yrs":    "9 years of professional experience",
+    "10 yrs":   "10 years of professional experience",
+    "11+ yrs":  "Principal / executive — 11+ years",
+  };
+
+  return (
+    <div className="fixed inset-0 z-50">
+      {/* Backdrop — covers the FULL screen so rounded corners show against dark overlay */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={props.onClose} />
+
+      {/* Animation wrapper — transform here, no clip */}
+      <div className="absolute right-0 top-14 bottom-2 w-[820px] animate-in slide-in-from-right duration-300">
+      {/* Drawer panel — rounded + clip here, no transform */}
+      <div className="h-full bg-white flex flex-col shadow-2xl rounded-l-3xl overflow-hidden">
+
+        {/* ── Top bar ── */}
+        <div className="flex items-center justify-between px-5 py-3.5 bg-white border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={props.onClose}
+              className="text-gray-400 hover:text-gray-700 transition-colors p-1 rounded-md hover:bg-gray-100">
+              <ChevronDown size={18} className="-rotate-90" />
+            </button>
+            <h2 className="text-[15px] font-bold text-gray-900">All Filters</h2>
+            {totalActive > 0 && (
+              <span className="px-2 py-0.5 bg-[#2557a7] text-white text-[11px] font-bold rounded-full">
+                {totalActive} active
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2.5">
+            {totalActive > 0 && (
+              <button
+                type="button"
+                onClick={handleResetAll}
+                className="px-4 py-1.5 text-[12.5px] font-semibold text-gray-500 hover:text-gray-800 border border-gray-200 rounded-full hover:bg-gray-50 transition-colors"
+              >
+                Reset all
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleConfirm}
+              className="px-5 py-1.5 bg-[#2557a7] hover:bg-[#1f4e98] text-white text-[13px] font-bold rounded-full transition-colors shadow-md shadow-[#2557a7]/20"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+
+        {/* ── Active filter chips ── */}
+        {totalActive > 0 && (
+          <div className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 border-b border-gray-100 overflow-x-auto">
+            <span className="text-[11px] text-gray-400 font-medium shrink-0">Active:</span>
+            {localFilters.map((f: string) => {
+              const label = f.replace(/^(date:|source:|salary:|years:|location:|education:)/, "");
+              return (
+                <span key={f} className="flex items-center gap-1.5 px-2.5 py-1 bg-[#f0f4ff] text-[#1f4e98] text-[11px] font-semibold rounded-full shrink-0 border border-[#2557a7]/30">
+                  {label}
+                  <button type="button" onClick={() => localToggle(f)} className="text-[#2557a7]/70 hover:text-[#1f4e98] transition-colors">
+                    <X size={10} />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Two-panel layout ── */}
+        <div className="flex flex-1 overflow-hidden">
+
+          {/* Left nav */}
+          <div className="w-52 shrink-0 bg-gray-50 border-r border-gray-100 py-2 overflow-y-auto">
+            {props.sections.map((sec: { key: string; label: string; sub: string }) => (
+              <button
+                key={sec.key}
+                type="button"
+                onClick={() => setActiveSection(sec.key)}
+                className={`w-full text-left px-4 py-3.5 transition-all border-l-[3px] ${
+                  activeSection === sec.key
+                    ? "bg-white border-[#2557a7] shadow-sm"
+                    : "border-transparent hover:bg-white/60 hover:border-gray-200"
+                }`}
+              >
+                <p className={`text-[13px] font-semibold leading-tight ${activeSection === sec.key ? "text-[#2557a7]" : "text-gray-700"}`}>
+                  {sec.label}
+                </p>
+                <p className="text-[10.5px] text-gray-400 mt-0.5 leading-tight">{sec.sub}</p>
+              </button>
+            ))}
+          </div>
+
+          {/* Right content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6 bg-white">
+
+            {/* BASIC — Job Function + Excluded Title + Job Type + Work Model + Experience */}
+            {activeSection === "basic" && (
+              <div className="space-y-7">
+
+                {/* Job Function */}
+                <div>
+                  <p className="text-[13px] font-bold text-gray-900 mb-2">Job Function</p>
+                  <p className="text-[11.5px] text-gray-400 mb-3">Add job functions to refine your matches</p>
+                  <div className="flex flex-wrap gap-2 mb-2 min-h-[28px]">
+                    {jobFunctions.map((fn) => (
+                      <span key={fn} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0f4ff] border border-[#2557a7]/40 text-[#1f4e98] text-[12px] font-semibold rounded-lg">
+                        {fn}
+                        <button type="button" onClick={() => setJobFunctions((prev) => prev.filter((f) => f !== fn))}
+                          className="text-[#2557a7]/70 hover:text-[#1f4e98] transition-colors ml-0.5">
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Software Engineer, Product Manager…"
+                      value={jobFunctionInput}
+                      onChange={(e) => setJobFunctionInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addJobFunction(jobFunctionInput); } }}
+                      className="flex-1 px-3 py-2 text-[13px] border border-gray-200 rounded-lg placeholder-gray-400 focus:outline-none focus:border-[#2557a7] focus:ring-1 focus:ring-[#2557a7]/20 transition-colors"
+                    />
+                    <button type="button" onClick={() => addJobFunction(jobFunctionInput)}
+                      className="px-4 py-2 bg-[#2557a7] hover:bg-[#1f4e98] text-white text-[12px] font-bold rounded-lg transition-colors">
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Excluded Title */}
+                <div>
+                  <button type="button" onClick={() => setExcludedOpen((prev) => !prev)}
+                    className="w-full flex items-center justify-between py-1 group">
+                    <div>
+                      <p className="text-[13px] font-bold text-gray-900 text-left">Excluded Title</p>
+                      <p className="text-[11.5px] text-gray-400 text-left">Jobs with these titles will be hidden</p>
+                    </div>
+                    <ChevronDown size={16} className={`text-gray-400 group-hover:text-gray-600 transition-transform duration-200 ${excludedOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {excludedOpen && (
+                    <div className="mt-3">
+                      <div className="flex flex-wrap gap-2 mb-2 min-h-[28px]">
+                        {excludedTitles.map((t) => (
+                          <span key={t} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 text-[12px] font-semibold rounded-lg">
+                            {t}
+                            <button type="button" onClick={() => setExcludedTitles((prev) => prev.filter((x) => x !== t))}
+                              className="text-red-400 hover:text-red-600 transition-colors ml-0.5">
+                              <X size={11} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Intern, Manager…"
+                          value={excludedInput}
+                          onChange={(e) => setExcludedInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExcludedTitle(excludedInput); } }}
+                          className="flex-1 px-3 py-2 text-[13px] border border-gray-200 rounded-lg placeholder-gray-400 focus:outline-none focus:border-red-300 focus:ring-1 focus:ring-red-100 transition-colors"
+                        />
+                        <button type="button" onClick={() => addExcludedTitle(excludedInput)}
+                          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[12px] font-bold rounded-lg transition-colors border border-gray-200">
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="h-px bg-gray-100" />
+
+                {/* Job Type */}
+                <div>
+                  <p className="text-[13px] font-bold text-gray-900 mb-3">Job Type</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {props.jobTypes.map((type: string) => (
+                      <CheckItem
+                        key={type}
+                        label={type}
+                        checked={localFilters.includes(type)}
+                        onChange={() => localToggle(type)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Work Model */}
+                <div>
+                  <p className="text-[13px] font-bold text-gray-900 mb-3">Work Model</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {props.workModels.map((model: string) => (
+                      <CheckItem
+                        key={model}
+                        label={model}
+                        checked={localFilters.includes(model)}
+                        onChange={() => localToggle(model)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Experience Level */}
+                <div>
+                  <p className="text-[13px] font-bold text-gray-900 mb-3">Experience Level</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(props.showAllExp ? props.experienceOptionsAll : props.experienceOptionsAll.slice(0, 8)).map((opt: { label: string; count: number }) => (
+                      <CheckItem
+                        key={opt.label}
+                        label={`${opt.label}  (${props.fmtCount(opt.count)})`}
+                        checked={props.pendingExpLabel === opt.label}
+                        onChange={() => props.handleExpSelect(opt.label)}
+                        helpText={EXP_HELP[opt.label]}
+                      />
+                    ))}
+                  </div>
+                  {props.experienceOptionsAll.length > 8 && (
+                    <button type="button" onClick={() => props.setShowAllExp(!props.showAllExp)}
+                      className="mt-3 text-[12px] text-[#2557a7] font-semibold hover:underline">
+                      {props.showAllExp ? "Show less" : `Show all ${props.experienceOptionsAll.length}`}
+                    </button>
+                  )}
+                  {props.pendingExpLabel && (
+                    <div className="mt-4 flex justify-end">
+                      <button type="button" onClick={handleLocalExpApply}
+                        className="px-5 py-2 bg-[#2557a7] hover:bg-[#1f4e98] text-white rounded-xl text-[12px] font-bold transition-all shadow-sm">
+                        Apply Experience
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* COMPENSATION — Salary */}
+            {activeSection === "compensation" && (
+              <div>
+                <p className="text-[13px] font-bold text-gray-900 mb-1">Annual Salary</p>
+                <p className="text-[11.5px] text-gray-400 mb-6">Minimum salary in LPA (Lakhs Per Annum)</p>
+                {(() => {
+                  const lastIdx = Math.max(1, props.salarySteps.length - 1);
+                  const clampedIdx = Math.min(Math.max(props.salarySliderIndex, 0), lastIdx);
+                  const step = props.salarySteps[clampedIdx] ?? props.salarySteps[lastIdx];
+                  const pct = (clampedIdx / lastIdx) * 100;
+                  const thumbR = 9;
+                  const tooltipLeft = `calc(${pct}% + ${(1 - 2 * pct / 100) * thumbR}px)`;
+                  return (
+                    <div className="px-2">
+                      <div className="relative h-8 mb-1">
+                        <div className="absolute -translate-x-1/2 bottom-0 bg-[#0f172a] text-white text-[11px] font-semibold rounded-lg px-2.5 py-1 whitespace-nowrap pointer-events-none"
+                          style={{ left: tooltipLeft }}>
+                          {step.label} · {step.count} Jobs
+                          <span className="absolute left-1/2 -translate-x-1/2 top-full border-[5px] border-transparent border-t-[#0f172a]" />
+                        </div>
+                      </div>
+                      <input type="range" min={0} max={lastIdx} step={1} value={clampedIdx}
+                        onChange={(e) => props.setSalarySliderIndex(Number(e.target.value))}
+                        className="salary-slider w-full cursor-pointer"
+                        style={{ background: `linear-gradient(to right, #2557a7 0%, #2557a7 ${pct}%, #e5e7eb ${pct}%, #e5e7eb 100%)` }} />
+                      <div className="flex justify-between mt-1.5">
+                        <span className="text-[11px] text-gray-400">2 LPA</span>
+                        <span className="text-[11px] text-gray-400">Any</span>
+                      </div>
+                      <div className="mt-6 p-4 bg-[#f0f4ff] rounded-xl border border-[#2557a7]/30 flex items-center justify-between">
+                        <div>
+                          <p className="text-[11px] text-gray-500">Selected minimum</p>
+                          <p className="text-[18px] font-bold text-[#1f4e98]">{step.label}</p>
+                        </div>
+                        <button type="button" onClick={handleLocalSalaryApply}
+                          className="px-5 py-2 bg-[#2557a7] hover:bg-[#1f4e98] text-white rounded-xl text-[12px] font-bold transition-all shadow-sm">
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* DATE & SOURCE */}
+            {activeSection === "date" && (
+              <div className="space-y-7">
+                <div>
+                  <p className="text-[13px] font-bold text-gray-900 mb-3">Date Posted</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {props.datePresets.slice(1).map((preset: { label: string }) => {
+                      const filterVal = `date:${preset.label}`;
+                      return (
+                        <CheckItem
+                          key={preset.label}
+                          label={preset.label}
+                          checked={localActiveDateFilter === filterVal}
+                          onChange={() => localToggle(filterVal)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[13px] font-bold text-gray-900 mb-3">Job Source</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {props.jobSources.map((source: string) => {
+                      const filterVal = `source:${source}`;
+                      return (
+                        <CheckItem
+                          key={source}
+                          label={source}
+                          checked={localActiveSourceFilter === filterVal}
+                          onChange={() => localToggle(filterVal)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* EDUCATION */}
+            {activeSection === "education" && (
+              <div>
+                <p className="text-[13px] font-bold text-gray-900 mb-1">Education Level</p>
+                <p className="text-[11.5px] text-gray-400 mb-3">Filter by minimum qualification</p>
+                <div className="relative mb-4">
+                  <input type="text" placeholder="Search qualification…" value={props.eduSearch}
+                    onChange={(e) => { props.setEduSearch(e.target.value); props.setShowAllEdu(false); }}
+                    className="w-full px-3 py-2 pr-8 text-[13px] border border-gray-200 rounded-lg placeholder-gray-400 focus:outline-none focus:border-[#2557a7] focus:ring-1 focus:ring-[#2557a7]/20 transition-colors" />
+                  {props.eduSearch && (
+                    <button type="button" onClick={() => props.setEduSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {props.visibleEduOptions.length === 0 ? (
+                    <p className="text-[12px] text-gray-400 text-center py-4">No results found</p>
+                  ) : props.visibleEduOptions.map((opt: { label: string; count: number }) => (
+                    <CheckItem
+                      key={opt.label}
+                      label={`${opt.label}  (${props.fmtCount(opt.count)})`}
+                      checked={props.pendingEducation.includes(opt.label)}
+                      onChange={() => props.setPendingEducation((prev: string[]) =>
+                        prev.includes(opt.label) ? prev.filter((e: string) => e !== opt.label) : [...prev, opt.label]
+                      )}
+                    />
+                  ))}
+                </div>
+                {props.filteredEduOptions.length > 5 && (
+                  <button type="button" onClick={() => props.setShowAllEdu(!props.showAllEdu)}
+                    className="mt-3 text-[12px] text-[#2557a7] font-semibold hover:underline">
+                    {props.showAllEdu ? "Show less" : `Show all ${props.filteredEduOptions.length}`}
+                  </button>
+                )}
+                {props.pendingEducation.length > 0 && (
+                  <div className="mt-4 flex justify-end">
+                    <button type="button" onClick={handleLocalEduApply}
+                      className="px-5 py-2 bg-[#2557a7] hover:bg-[#1f4e98] text-white rounded-xl text-[12px] font-bold transition-all shadow-sm">
+                      Apply
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* LOCATION */}
+            {activeSection === "location" && (
+              <div>
+                <p className="text-[13px] font-bold text-gray-900 mb-1">Location</p>
+                <p className="text-[11.5px] text-gray-400 mb-3">Filter by city or state</p>
+                <div className="relative mb-3">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base leading-none select-none">🇮🇳</span>
+                  <input type="text" placeholder="Search city or state…" value={props.locSearch}
+                    onChange={(e) => { props.setLocSearch(e.target.value); props.setShowAllLoc(false); }}
+                    className="w-full pl-9 pr-3 py-2 text-[13px] border border-gray-200 rounded-lg placeholder-gray-400 focus:outline-none focus:border-[#2557a7] focus:ring-1 focus:ring-[#2557a7]/20 transition-colors" />
+                </div>
+                <div className="flex bg-gray-100 rounded-full p-0.5 mb-4 gap-0.5">
+                  {(["cities", "states"] as const).map((tab) => (
+                    <button key={tab} type="button"
+                      onClick={() => { props.setLocTab(tab); props.setShowAllLoc(false); }}
+                      className={`flex-1 py-1.5 text-[12px] font-semibold rounded-full transition-all capitalize ${
+                        props.locTab === tab ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                      }`}>
+                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {props.visibleLocOptions.length === 0 ? (
+                    <p className="text-[12px] text-gray-400 text-center py-4">No results found</p>
+                  ) : props.visibleLocOptions.map((opt: { label: string; count: number }) => (
+                    <CheckItem
+                      key={opt.label}
+                      label={`${opt.label}  (${props.fmtCount(opt.count)})`}
+                      checked={props.pendingLocations.includes(opt.label)}
+                      onChange={() => props.setPendingLocations((prev: string[]) =>
+                        prev.includes(opt.label) ? prev.filter((l: string) => l !== opt.label) : [...prev, opt.label]
+                      )}
+                    />
+                  ))}
+                </div>
+                {props.filteredLocOptions.length > 5 && (
+                  <button type="button" onClick={() => props.setShowAllLoc(!props.showAllLoc)}
+                    className="mt-3 text-[12px] text-[#2557a7] font-semibold hover:underline">
+                    {props.showAllLoc ? "Show less" : `Show all ${props.filteredLocOptions.length}`}
+                  </button>
+                )}
+                {props.pendingLocations.length > 0 && (
+                  <div className="mt-4 flex justify-end">
+                    <button type="button" onClick={handleLocalLocApply}
+                      className="px-5 py-2 bg-[#2557a7] hover:bg-[#1f4e98] text-white rounded-xl text-[12px] font-bold transition-all shadow-sm">
+                      Apply
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   );

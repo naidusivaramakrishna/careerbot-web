@@ -16,53 +16,54 @@ export function expandTokens(tokens: string[]): string[] {
 export function highlightJD(
   jd: string,
   matchedSkills: string[],
-  missingSkills: string[]
+  missingSkills: string[],
+  matchedSoftSkills: string[] = [],
+  missingSoftSkills: string[] = []
 ): HighlightSpan[] {
   if (!jd) return [{ text: "", match: false }];
-  
-  const expandedMatched = expandTokens(matchedSkills).sort((a, b) => b.length - a.length);
-  const expandedMissing = expandTokens(missingSkills).sort((a, b) => b.length - a.length);
-  const allExpanded = [...expandedMatched, ...expandedMissing];
-  
+
+  const expMatchedTech = expandTokens(matchedSkills).sort((a, b) => b.length - a.length);
+  const expMissingTech = expandTokens(missingSkills).sort((a, b) => b.length - a.length);
+  const expMatchedSoft = expandTokens(matchedSoftSkills).sort((a, b) => b.length - a.length);
+  const expMissingSoft = expandTokens(missingSoftSkills).sort((a, b) => b.length - a.length);
+  const allExpanded = [...expMatchedTech, ...expMissingTech, ...expMatchedSoft, ...expMissingSoft];
+
   if (allExpanded.length === 0) return [{ text: jd, match: false }];
-  
+
   const sources = allExpanded.map((t) => {
     const esc = escapeRegex(t);
     const isSingleWord = !/\s/.test(t);
     return isSingleWord ? `\\b${esc}\\b` : esc;
   });
-  
+
   const re = new RegExp(`(${sources.join("|")})`, "gi");
   const result: HighlightSpan[] = [];
   let lastIndex = 0;
   let m: RegExpExecArray | null;
-  
+
   while ((m = re.exec(jd)) !== null) {
     const start = m.index;
     const end = re.lastIndex;
     const matchedText = jd.slice(start, end);
-    
+    const lower = matchedText.toLowerCase();
+
     if (start > lastIndex) {
       result.push({ text: jd.slice(lastIndex, start), match: false });
     }
-    
-    const isMatched = expandedMatched.some(
-      (skill) => matchedText.toLowerCase() === skill.toLowerCase()
-    );
-    
-    result.push({
-      text: matchedText,
-      match: true,
-      matchType: isMatched ? 'matched' : 'missing'
-    });
-    
+
+    let matchType: HighlightSpan['matchType'] = 'missing-tech';
+    if (expMatchedTech.some(s => s.toLowerCase() === lower)) matchType = 'matched-tech';
+    else if (expMatchedSoft.some(s => s.toLowerCase() === lower)) matchType = 'matched-soft';
+    else if (expMissingSoft.some(s => s.toLowerCase() === lower)) matchType = 'missing-soft';
+
+    result.push({ text: matchedText, match: true, matchType });
     lastIndex = end;
   }
-  
+
   if (lastIndex < jd.length) {
     result.push({ text: jd.slice(lastIndex), match: false });
   }
-  
+
   return result;
 }
 

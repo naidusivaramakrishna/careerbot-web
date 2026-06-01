@@ -30,6 +30,12 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
+    // Landing pages accessible without auth (exact path only — sub-paths remain protected)
+    const publicLandingPages = ['/jobmatch', '/ats'];
+    if (publicLandingPages.includes(pathname)) {
+        return NextResponse.next();
+    }
+
     // Check for both regular and admin-prefixed token names
     const token = request.cookies.get('access_token')?.value ||
                   request.cookies.get('admin_access_token')?.value;

@@ -1,15 +1,43 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&display=swap');
 
+/* ─── Existing token ─────────────────────────────── */
 :root {
   --font-montserrat: 'Montserrat', sans-serif;
 }
 
-/* Base Typography */
+/* ─── Design tokens (Tailwind v4 @theme)
+     Accessible as CSS vars AND as Tailwind utilities:
+     font-display / font-body
+     bg-brand / text-brand / border-brand
+     text-brand-dark / bg-brand-light / text-brand-accent
+     text-success / text-warning
+     rounded-card / rounded-btn
+──────────────────────────────────────────────────── */
+@theme {
+  --font-display: 'Sora', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+
+  --color-brand:        #1B4FD8;
+  --color-brand-dark:   #0F172A;
+  --color-brand-light:  #EEF2FF;
+  --color-brand-accent: #4F46E5;
+  --color-success:      #22C55E;
+  --color-warning:      #F59E0B;
+
+  --radius-card: 14px;
+  --radius-btn:  10px;
+}
+
+/* ─── Base Typography ────────────────────────────── */
 body {
+  font-family: var(--font-body);
   font-weight: 400;
   font-size: 14px;
   line-height: 21px;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
 }
 
 @layer utilities {
@@ -663,6 +691,7 @@ section.docx {
 .docx-rendered-content h1,
 .docx-rendered-content h2,
 .docx-rendered-content h3 {
+  font-family: "Calibri", "Arial", sans-serif; /* preserve document font, override global h1/h2/h3 rule */
   font-weight: bold;
   margin: 0.8rem 0 0.4rem 0;
   font-size: 15px;

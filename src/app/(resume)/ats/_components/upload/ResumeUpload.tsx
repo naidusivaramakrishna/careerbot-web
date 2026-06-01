@@ -197,24 +197,24 @@ const ResumeUpload: React.FC = () => {
         // For image-based resumes, redirect to resume enhancer with parsed data
         router.push(`/enhancer/builder`);
       } else {
-        router.push(`/ats/report?score=${currentScore}`);
+        router.push(`/atslogin/report`);
       }
     }
   };
 
   return (
     <div className="w-full bg-white">
-      <div className="flex flex-col items-center justify-start font-sans py-6 px-4">
-        <div className="text-center mb-6 max-w-2xl">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-2">
+      <div className="flex flex-col items-center justify-start font-sans py-4 px-4">
+        <div className="text-center mb-4 max-w-lg">
+          <h1 className="text-xl md:text-2xl font-extrabold text-gray-900 mb-1.5">
             Get Your Free ATS Resume Score
           </h1>
-          <p className="text-sm text-gray-600">
+          <p className="text-xs text-gray-600">
             Get instant AI analysis and discover your resume&apos;s compatibility with employer ATS systems.
           </p>
         </div>
 
-        <div className="relative w-full max-w-3xl mx-auto mb-8 px-4">
+        <div className="relative w-full max-w-lg mx-auto mb-5 px-4">
           <div className="grid grid-cols-3 items-center" style={{ height: 90 }}>
             {[
               { icon: Upload, label: "Upload Resume", minStep: 1 },
@@ -271,8 +271,8 @@ const ResumeUpload: React.FC = () => {
           </div>
         </div>
 
-        <div className="w-full max-w-xl mx-auto">
-          <div className="bg-white p-6 rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#0275dd] relative transition-all duration-300 h-[26rem] flex flex-col items-center justify-center text-center">
+        <div className="w-full max-w-lg mx-auto">
+          <div className="bg-white p-6 rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#0275dd] relative transition-all duration-300 min-h-80 flex flex-col items-center justify-center text-center">
             {error && (
               <div className="absolute top-3 left-3 right-3 bg-red-50 border border-red-200 rounded-lg p-2 animate-pulse z-10">
                 <p className="text-red-600 font-semibold text-xs flex items-center gap-2 justify-center">
@@ -353,72 +353,119 @@ const ResumeUpload: React.FC = () => {
 
             {step >= 1 && step < 3 && (
               <div className="flex flex-col items-center w-full">
-                <div className="relative w-28 h-28 mb-4">
-                  <div className="absolute inset-0 rounded-full bg-blue-50 animate-pulse opacity-40"></div>
-                  <div
-                    className="absolute inset-2 rounded-full bg-blue-100/50 animate-pulse opacity-30"
-                    style={{ animationDelay: "150ms" }}
-                  ></div>
-                  <svg className="w-full h-full relative z-10" viewBox="0 0 120 120">
+
+                {/* Gradient arc ring + pulse */}
+                <div style={{ position: "relative", width: 148, height: 148, marginBottom: 18, flexShrink: 0 }}>
+
+                  {/* Expanding pulse rings */}
+                  <div style={{
+                    position: "absolute", inset: 8, borderRadius: "50%",
+                    border: "1.5px solid rgba(2,117,221,0.35)",
+                    animation: "ats-pulse 2.2s ease-out infinite",
+                  }} />
+                  <div style={{
+                    position: "absolute", inset: 8, borderRadius: "50%",
+                    border: "1.5px solid rgba(2,117,221,0.2)",
+                    animation: "ats-pulse 2.2s ease-out 0.75s infinite",
+                  }} />
+
+                  {/* Gradient progress arc */}
+                  <svg
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", transform: "rotate(-90deg)" }}
+                    viewBox="0 0 148 148"
+                  >
+                    <defs>
+                      <linearGradient id="atsArcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#0275dd" />
+                        <stop offset="100%" stopColor="#06b6d4" />
+                      </linearGradient>
+                    </defs>
+                    {/* Track */}
+                    <circle cx="74" cy="74" r="58" fill="none" stroke="#EFF6FF" strokeWidth="10" />
+                    {/* Progress */}
                     <circle
-                      cx="60"
-                      cy="60"
-                      r={radius}
+                      cx="74" cy="74" r="58"
                       fill="none"
-                      stroke="#e5e7eb"
-                      strokeWidth={strokeWidth}
-                    />
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r={radius}
-                      fill="none"
-                      stroke={PRIMARY_COLOR}
-                      strokeWidth={strokeWidth}
+                      stroke="url(#atsArcGrad)"
+                      strokeWidth="10"
                       strokeLinecap="round"
-                      transform="rotate(-90 60 60)"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={progressOffset}
-                      className="transition-all duration-700 ease-out"
+                      strokeDasharray={2 * Math.PI * 58}
+                      strokeDashoffset={2 * Math.PI * 58 * (1 - progress / 100)}
+                      style={{ transition: "stroke-dashoffset 0.7s ease-out" }}
                     />
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center z-20">
-                    <span className="text-xl font-bold text-gray-900">
-                      {Math.round(progress)}%
+
+                  {/* Center % */}
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", lineHeight: 1 }}>
+                      {Math.round(progress)}
                     </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8" }}>%</span>
                   </div>
                 </div>
-                <div className="text-center space-y-2 max-w-md">
-                  <div className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 text-[#0275dd] animate-spin" />
-                    <p className="text-sm font-semibold text-gray-900">
+
+                {/* Status message + timer */}
+                <div style={{ textAlign: "center", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 4 }}>
+                    <Loader2 className="animate-spin" style={{ width: 13, height: 13, color: "#0275dd" }} />
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", margin: 0 }}>
                       {getStatusMessage(elapsedTime)}
                     </p>
                   </div>
-                  <div className="flex items-center justify-center gap-2 text-xs text-gray-600">
-                    <Clock className="w-3 h-3" />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 11, color: "#94A3B8" }}>
+                    <Clock style={{ width: 11, height: 11 }} />
                     <span>{formatTime(elapsedTime)}</span>
                   </div>
-                  {elapsedTime > 60 && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mt-2 animate-fade-in">
-                      <p className="text-xs text-yellow-800">
-                        <strong>Deep Analysis in Progress</strong>
-                        <br />
-                        AI is performing comprehensive analysis.
-                      </p>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-center gap-1.5 pt-2">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <div
-                        key={i}
-                        className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
-                          progress > (i + 1) * 19 ? "bg-[#0275dd] scale-110" : "bg-gray-300"
-                        }`}
-                      ></div>
-                    ))}
-                  </div>
                 </div>
+
+                {/* Stage tracker */}
+                <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                  {[
+                    { label: "Upload",  pct: 8  },
+                    { label: "Parse",   pct: 35 },
+                    { label: "Analyze", pct: 65 },
+                    { label: "Score",   pct: 90 },
+                  ].map(({ label, pct }, i) => (
+                    <React.Fragment key={label}>
+                      {i > 0 && (
+                        <div style={{
+                          width: 22, height: 2, borderRadius: 2,
+                          background: progress >= pct ? "linear-gradient(90deg,#0275dd,#06b6d4)" : "#E2E8F0",
+                          transition: "background 0.3s",
+                          flexShrink: 0,
+                        }} />
+                      )}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                        <div style={{
+                          width: 9, height: 9, borderRadius: "50%",
+                          background: progress >= pct ? "#0275dd" : "#E2E8F0",
+                          boxShadow: progress >= pct ? "0 0 8px rgba(2,117,221,0.55)" : "none",
+                          transition: "all 0.35s ease",
+                        }} />
+                        <span style={{
+                          fontSize: 10, fontWeight: 600,
+                          color: progress >= pct ? "#0275dd" : "#CBD5E1",
+                          transition: "color 0.35s",
+                        }}>
+                          {label}
+                        </span>
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+
+                {elapsedTime > 60 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mt-3 animate-fade-in">
+                    <p className="text-xs text-yellow-800 text-center">
+                      <strong>Deep Analysis in Progress</strong><br />
+                      AI is performing comprehensive analysis.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -627,17 +674,15 @@ const ResumeUpload: React.FC = () => {
 
         <style jsx>{`
           @keyframes fade-in {
-            from {
-              opacity: 0;
-              transform: translateY(10px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
           }
           .animate-fade-in {
             animation: fade-in 0.4s ease-out;
+          }
+          @keyframes ats-pulse {
+            0%   { transform: scale(1);   opacity: 0.7; }
+            100% { transform: scale(1.6); opacity: 0; }
           }
         `}</style>
       </div>

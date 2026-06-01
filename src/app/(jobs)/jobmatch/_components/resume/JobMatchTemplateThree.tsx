@@ -318,13 +318,17 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
         .ats-desc li { font-size: 13.5px; line-height: 1.65; margin-bottom: 2px; color: #1f2937; }
       `}</style>
 
-      <div style={{ background: "#f0f2f5", fontFamily: baseFont, padding: "12px 24px 32px" }}>
-        <div style={{
-          maxWidth: "760px",
+      <div style={{
+          maxWidth: "100%",
+          width: "100%",
           margin: "0 auto",
-          padding: "36px 48px 40px",
-          background: "#fff",
-          boxShadow: "0 4px 6px rgba(0,0,0,0.05), 0 10px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)",
+          padding: "32px 48px",
+          background: "#ffffff",
+          fontFamily: baseFont,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
+          border: "1px solid #e5e7eb",
+          borderRadius: "12px",
+          overflow: "hidden",
         }}>
 
           {/* ══ HEADER ══ */}
@@ -828,7 +832,6 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
 
           </AutoPaginator>
         </div>
-      </div>
     </>
   );
 };

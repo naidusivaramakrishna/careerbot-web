@@ -1,5 +1,14 @@
+import axios from 'axios';
 import { httpClient } from "@/lib/http";
 import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
+
+// Dedicated axios instance for auth calls — no baseURL so relative paths resolve to the
+// Next.js frontend (avoids cross-origin CORS issues with the shared httpClient instance).
+const authAxios = axios.create({
+  withCredentials: true,
+  timeout: 15000,
+  headers: { 'Content-Type': 'application/json' },
+});
 
 export interface LoginRequest {
   email: string;
@@ -40,28 +49,16 @@ export const isAuthenticated = async (): Promise<boolean> => {
 };
 
 export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
-  // Try to get tenant from email mapping (multi-account support)
-  let tenantId = getTenantByEmail(data.email);
+  let tenantId = getTenantByEmail(data.email) || getTenantId();
 
-  // Fallback to active tenant if email not found in map
-  if (!tenantId) {
-    tenantId = getTenantId();
-  }
-
-  // Use server-side route to avoid sending stale browser cookies to the backend
-  const response = await httpClient.post<LoginResponse>(
-    "/api/backend/auth/signin",
+  // Use authAxios (no baseURL) so the relative path resolves to the Next.js
+  // server-side route, avoiding direct cross-origin calls to the backend.
+  const response = await authAxios.post<LoginResponse>(
+    '/api/backend/auth/signin',
     { username: data.email, password: data.password },
-    {
-      baseURL: "",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Tenant-Id": tenantId,
-      },
-    }
+    { headers: { 'X-Tenant-Id': tenantId } }
   );
 
-  // Update email → tenant mapping from backend response
   if (response.data.tenant_id) {
     setTenantForEmail(data.email, response.data.tenant_id);
   }

@@ -8,7 +8,7 @@
 //   return (
 //     <html>
 //       <body>
-//         <div className="flex min-h-screen bg-[#f5f6fa]">
+//         <div className="flex min-h-screen bg-[#f5f6f7]">
           
 //           {/* LEFT SIDEBAR */}
 //           <aside className="w-[72px] bg-white border-r">
@@ -38,7 +38,7 @@ export default function JobsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-[#f5f6fa]">
+    <div className="flex min-h-screen bg-[#f5f6f7]" style={{ "--header-h": "56px" } as React.CSSProperties}>
       {/* LEFT SIDEBAR */}
       <aside
         className="shrink-0 bg-white transition-[width] duration-300"
@@ -50,7 +50,7 @@ export default function JobsLayout({
       {/* PAGE CONTENT */}
       <div className="flex-1 flex flex-col">
         <Header />
-        <main className="flex-1 pt-14">{children}</main>
+        <main className="flex-1" style={{ paddingTop: "var(--header-h)" }}>{children}</main>
       </div>
     </div>
   );

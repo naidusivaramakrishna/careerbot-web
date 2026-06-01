@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Search, MapPin, Briefcase, ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -102,7 +102,7 @@ export default function JobsHeaderSection({
         <button
           type="button"
           onClick={() => onSearchChange(searchQuery)}
-          className="flex items-center gap-2 px-7 bg-[#2557a7] hover:bg-[#1e4a96] active:bg-[#1a3f84] text-white text-[13px] font-bold transition-colors whitespace-nowrap rounded-r-2xl"
+          className="flex items-center gap-2 px-7 bg-[#2557a7] hover:bg-[#1f4e98] active:bg-[#1a3f84] text-white text-[13px] font-bold transition-colors whitespace-nowrap rounded-r-2xl"
         >
           <Search size={14} />
           Search

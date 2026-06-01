@@ -1,7 +1,5 @@
-import Nav from "./_components/Navbar";
-
 export const metadata = {
-  title: "ATS Resume Analyzer - CareerBot",
+  title: "ATS Login - Resume Analyzer - CareerBot",
   description: "Analyze your resume with our ATS system",
 };
 
@@ -12,7 +10,6 @@ export default function ATSLayout({
 }) {
   return (
     <div className="antialiased font-montserrat min-h-screen">
-      <Nav />
       {children}
       <footer />
     </div>

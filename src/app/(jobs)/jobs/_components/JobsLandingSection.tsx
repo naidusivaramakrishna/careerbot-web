@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Search, MapPin, ChevronDown } from "lucide-react";
@@ -91,7 +91,7 @@ const CATEGORY_CHIPS = [
       </svg>
     ),
     query: "",
-    workModel: "Remote anywhere in the India",
+    workModel: "Remote",
   },
   {
     label: "MNC",
@@ -228,27 +228,11 @@ const POPULAR_LOCATIONS = [
   "Noida","Gurgaon","Ahmedabad","Jaipur","Kochi","Indore","Chandigarh",
 ];
 
-const ALL_ROLES = [
-  { role: "Product Manager",        count: "Explore Jobs" },
-  { role: "UI / UX Designer",       count: "Explore Jobs" },
-  { role: "Research Analyst",       count: "Explore Jobs" },
-  { role: "Branch Manager",         count: "Explore Jobs" },
-  { role: "Functional Consultant",  count: "Explore Jobs" },
-  { role: "Chartered Accountant",   count: "Explore Jobs" },
-  { role: "Software Engineer",      count: "Explore Jobs" },
-  { role: "Data Scientist",         count: "Explore Jobs" },
-  { role: "Full Stack Developer",   count: "Explore Jobs" },
-  { role: "DevOps Engineer",        count: "Explore Jobs" },
-  { role: "Business Analyst",       count: "Explore Jobs" },
-  { role: "HR Manager",             count: "Explore Jobs" },
-];
-const ROLE_PAGES = [ALL_ROLES.slice(0, 6), ALL_ROLES.slice(6, 12)];
 
 export default function JobsLandingSection({ onSearch, onCategoryClick }: JobsLandingSectionProps) {
   const [query, setQuery] = useState("");
   const [queryOpen, setQueryOpen] = useState(false);
   const [experience, setExperience] = useState("Select experience");
-  const [rolePage, setRolePage] = useState(0);
   const [location, setLocation] = useState("All Locations");
   const [expOpen, setExpOpen] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -312,30 +296,68 @@ export default function JobsLandingSection({ onSearch, onCategoryClick }: JobsLa
 
   return (
     <div className="flex-1 overflow-y-auto bg-white" style={{ scrollBehavior: "smooth" }}>
-      {/* ══ HERO — dark gradient, full bleed ══ */}
-      <div className="relative overflow-hidden px-8 pt-16 pb-14 text-center"
-        style={{ background: "linear-gradient(135deg,#0f172a 0%,#1e3a5f 55%,#1a4a96 100%)" }}>
+      {/* ══ HERO — gradient background ══ */}
+      <div className="relative overflow-hidden px-8 pt-10 pb-12 text-center" style={{ background: "linear-gradient(135deg, #0d1f4e 0%, #112266 30%, #1a3a8c 60%, #1e4fa3 100%)" }}>
 
-        {/* faint grid overlay */}
-        <div className="pointer-events-none absolute inset-0 opacity-5"
-          style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "40px 40px" }} />
+        {/* Dashboard-style grid line pattern */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {/* Grid lines */}
+          <div className="absolute inset-0" style={{
+            backgroundImage: `
+              linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)
+            `,
+            backgroundSize: "48px 48px"
+          }} />
+          {/* Diagonal lines overlay */}
+          <div className="absolute inset-0" style={{
+            backgroundImage: `repeating-linear-gradient(
+              45deg,
+              transparent,
+              transparent 23px,
+              rgba(255,255,255,0.025) 23px,
+              rgba(255,255,255,0.025) 24px
+            )`
+          }} />
+          {/* Radial glow in center */}
+          <div className="absolute inset-0" style={{
+            background: "radial-gradient(ellipse 80% 60% at 50% 40%, rgba(37,87,167,0.35) 0%, transparent 70%)"
+          }} />
+          {/* Edge fade — darker corners */}
+          <div className="absolute inset-0" style={{
+            background: "radial-gradient(ellipse 100% 100% at 50% 50%, transparent 40%, rgba(8,16,40,0.45) 100%)"
+          }} />
+        </div>
+
+        {/* Top stat badges */}
+        <div className="relative z-10 inline-flex items-center gap-4 px-5 py-2.5 rounded-full mb-6" style={{ backgroundColor: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}>
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+            <span className="text-xs font-semibold text-white/90">2,886 new jobs added today</span>
+          </div>
+          <div className="w-px h-3 bg-white/20"></div>
+          <div className="flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 text-yellow-300" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+            <span className="text-xs font-semibold text-white/90">Verified employers only</span>
+          </div>
+          <div className="w-px h-3 bg-white/20"></div>
+          <div className="flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 text-blue-300" fill="currentColor" viewBox="0 0 20 20"><path d="M11.3 1.046A1 1 0 0010 2v5H4a1 1 0 00-.82 1.573l7 10A1 1 0 0011 18v-5h6a1 1 0 00.82-1.573l-7-10z"/></svg>
+            <span className="text-xs font-semibold text-white/90">AI-matched in seconds</span>
+          </div>
+        </div>
 
         <div className="relative z-10">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white/80 text-xs font-medium mb-5 border border-white/20 backdrop-blur-sm">
-            <svg className="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-            AI-Powered Career Platform
-          </span>
-
-          <h1 className="text-5xl font-extrabold text-white tracking-tight leading-tight">
-            Your Next Job is <span className="text-[#60a5fa]">One Search Away</span>
+          <h1 className="text-5xl font-extrabold text-white tracking-tight leading-tight drop-shadow-sm">
+            Find your next opportunity.
           </h1>
-          <p className="text-white/60 mt-3 text-lg">
-            5 lakh+ jobs · Matched by AI · Applied in seconds
+          <p className="text-blue-100/80 mt-2 text-base font-medium">
+            5L+ verified jobs, matched intelligently to your skills and goals.
           </p>
         </div>
 
         {/* ── SEARCH BAR ── */}
-        <div className="relative z-50 mt-8 mx-auto max-w-4xl flex items-center bg-white rounded-full shadow-2xl transition-all focus-within:ring-4 focus-within:ring-white/30">
+        <div className="relative z-50 mt-8 mx-auto max-w-4xl flex items-center bg-white rounded-2xl transition-all focus-within:ring-2 focus-within:ring-white/60" style={{ boxShadow: "0 20px 60px -10px rgba(0,0,0,0.4), 0 4px 12px -2px rgba(0,0,0,0.2)" }}>
           {/* Skills Input */}
           <div className="relative flex-1 min-w-0" ref={queryRef}>
             <div className="flex items-center px-5 gap-2.5">
@@ -377,7 +399,7 @@ export default function JobsLandingSection({ onSearch, onCategoryClick }: JobsLa
           {/* Experience */}
           <div className="relative shrink-0" ref={expRef}>
             <button type="button" onClick={() => setExpOpen(!expOpen)}
-              className="flex items-center gap-1.5 px-4 py-4 text-sm text-gray-500 hover:bg-gray-50 whitespace-nowrap transition-colors">
+              className="flex items-center gap-1.5 px-4 py-4 text-sm text-gray-500 hover:bg-gray-50 whitespace-nowrap transition-colors rounded-r-none">
               <span>{displayExp}</span>
               <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${expOpen ? "rotate-180" : ""}`} />
             </button>
@@ -425,75 +447,48 @@ export default function JobsLandingSection({ onSearch, onCategoryClick }: JobsLa
           </div>
 
           <button type="button" onClick={handleSearch}
-            className="px-10 py-4 bg-[#2557a7] text-white text-base font-semibold hover:bg-[#1a4a96] transition-colors whitespace-nowrap rounded-r-full shrink-0">
+            className="m-1.5 px-8 py-3 text-white text-base font-semibold whitespace-nowrap rounded-xl shrink-0 transition-all"
+            style={{ background: "linear-gradient(135deg, #1f4e98 0%, #2557a7 100%)", boxShadow: "0 4px 14px rgba(37,87,167,0.45)" }}>
             Search
           </button>
         </div>
 
-        {/* ── CATEGORY CHIPS — white/transparent on dark bg ── */}
-        <div className="relative z-10 mt-6 flex flex-wrap justify-center gap-2">
-          {CATEGORY_CHIPS.map((chip) => (
-            <button key={chip.label} type="button"
-              onClick={() => { setQueryOpen(false); setLocationOpen(false); onCategoryClick(chip.query, { workModel: chip.workModel, type: (chip as { jobType?: string }).jobType }); }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/10 border border-white/20 rounded-full text-xs text-white/80 hover:bg-white/20 hover:text-white transition-all font-medium backdrop-blur-sm">
-              <span className="opacity-70">{chip.icon}</span>
-              {chip.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── STATS inside hero ── */}
-        <div className="relative z-10 mt-10 flex items-center justify-center gap-10">
-          {[
-            { value: "AI", label: "Powered Matching" },
-            { value: "1-Click", label: "Easy Apply" },
-            { value: "Smart", label: "Job Alerts" },
-            { value: "4.8★", label: "User Rating" },
-          ].map((stat, i) => (
-            <div key={stat.label} className="flex items-center gap-10">
-              <div className="text-center">
-                <div className="text-2xl font-extrabold text-white">{stat.value}</div>
-                <div className="text-xs text-white/50 mt-0.5">{stat.label}</div>
-              </div>
-              {i < 3 && <div className="w-px h-8 bg-white/15" />}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ══ BROWSE BY ROLE — pill cloud ══ */}
-      <div className="px-8 py-12 bg-white border-t border-gray-100">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <p className="text-xs font-bold text-[#2557a7] uppercase tracking-widest mb-1">Explore Roles</p>
-              <h2 className="text-2xl font-extrabold text-gray-900">Browse jobs by role</h2>
-            </div>
-            <div className="flex gap-1.5">
-              {ROLE_PAGES.map((_, i) => (
-                <button key={i} type="button" onClick={() => setRolePage(i)}
-                  className={`rounded-full transition-all duration-300 ${i === rolePage ? "w-6 h-2 bg-[#2557a7]" : "w-2 h-2 bg-gray-300 hover:bg-gray-400"}`} />
-              ))}
-            </div>
-          </div>
-
-          {/* Role pill grid — 3 columns */}
-          <div className="grid grid-cols-3 gap-3">
-            {ROLE_PAGES[rolePage].map(({ role, count }) => (
-              <button key={role} type="button" onClick={() => onCategoryClick(role)}
-                className="group flex items-center gap-3 px-5 py-4 rounded-2xl border border-gray-100 bg-gray-50 hover:bg-[#2557a7] hover:border-[#2557a7] transition-all duration-200 text-left">
-                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm shrink-0 group-hover:bg-white/20 transition-colors">
-                  <svg className="w-4 h-4 text-[#2557a7] group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 group-hover:text-white truncate">{role}</p>
-                  <p className="text-xs text-gray-400 group-hover:text-white/70 mt-0.5">{count}</p>
-                </div>
+        {/* ── POPULAR ROLES ── */}
+        <div className="relative z-10 mt-6">
+          <p className="text-[10px] font-bold text-white/40 mb-3 uppercase tracking-widest">Popular Roles</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {["Product Manager", "Data Scientist", "Frontend Engineer", "Chartered Accountant", "Sales Lead", "UX Designer"].map((role) => (
+              <button key={role} type="button"
+                onClick={() => { setQuery(role); setQueryOpen(false); setLocationOpen(false); onCategoryClick(role); }}
+                className="px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-150"
+                style={{ backgroundColor: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.85)" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(255,255,255,0.22)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(255,255,255,0.1)"; }}>
+                {role}
               </button>
             ))}
           </div>
+        </div>
+
+        {/* ── STATS CARDS ── */}
+        <div className="relative z-10 mt-8 grid grid-cols-4 gap-4 max-w-3xl mx-auto">
+          {[
+            { icon: "briefcase", label: "Verified jobs", value: "5,12,840", accent: "#60a5fa" },
+            { icon: "building", label: "Companies hiring", value: "38,200+", accent: "#34d399" },
+            { icon: "users", label: "Recruiters online", value: "1,420", accent: "#fbbf24" },
+            { icon: "lightning", label: "Avg. apply time", value: "9 sec", accent: "#a78bfa" },
+          ].map((stat) => (
+            <div key={stat.label} className="rounded-xl p-4 text-center transition-transform hover:-translate-y-0.5" style={{ backgroundColor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", backdropFilter: "blur(8px)" }}>
+              <div className="w-9 h-9 rounded-lg mx-auto mb-2.5 flex items-center justify-center" style={{ backgroundColor: `${stat.accent}25` }}>
+                {stat.icon === "briefcase" && <svg className="w-4.5 h-4.5" fill="currentColor" viewBox="0 0 20 20" style={{ color: stat.accent, width: 18, height: 18 }}><path d="M7 3a1 1 0 000 2h6a1 1 0 000-2H7zM4 7a2 2 0 012-2h8a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/></svg>}
+                {stat.icon === "building" && <svg className="w-4.5 h-4.5" fill="currentColor" viewBox="0 0 20 20" style={{ color: stat.accent, width: 18, height: 18 }}><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>}
+                {stat.icon === "users" && <svg className="w-4.5 h-4.5" fill="currentColor" viewBox="0 0 20 20" style={{ color: stat.accent, width: 18, height: 18 }}><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 11a6 6 0 00-11.86 0 3.5 3.5 0 005.858 5.858H9.1a4.5 4.5 0 008.8 0h.908a3.5 3.5 0 005.858-5.858z"/></svg>}
+                {stat.icon === "lightning" && <svg className="w-4.5 h-4.5" fill="currentColor" viewBox="0 0 20 20" style={{ color: stat.accent, width: 18, height: 18 }}><path d="M11.3 1.046A1 1 0 0010 2v5H4a1 1 0 00-.82 1.573l7 10A1 1 0 0011 18v-5h6a1 1 0 00.82-1.573l-7-10z"/></svg>}
+              </div>
+              <div className="text-lg font-bold text-white">{stat.value}</div>
+              <div className="text-xs text-white/55 mt-0.5">{stat.label}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -513,7 +508,7 @@ export default function JobsLandingSection({ onSearch, onCategoryClick }: JobsLa
               Explore opportunities matched to your skills, experience, and goals. AI filters out noise so you only see jobs that matter.
             </p>
             <button type="button" onClick={() => onCategoryClick("")}
-              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] text-white text-sm font-semibold rounded-full hover:bg-[#1a4a96] transition-colors">
+              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] text-white text-sm font-semibold rounded-full hover:bg-[#1f4e98] transition-colors">
               Explore Jobs
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
             </button>

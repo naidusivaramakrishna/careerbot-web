@@ -1,15 +1,5 @@
-import React from "react";
-import OverviewClient from "./_components/OverviewClient";
+import JobMatchHomePage from "./_components/JobMatchHomePage";
 
-export default async function JobMatchPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ session?: string }>;
-}) {
-  const params = await searchParams;
-  return (
-    <div className="w-full">
-      <OverviewClient sessionId={params.session} />
-    </div>
-  );
+export default function JobMatchPage() {
+  return <JobMatchHomePage />;
 }

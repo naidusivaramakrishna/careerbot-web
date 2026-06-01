@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 
-const WORK_MODELS = ["Onsite", "Hybrid", "Remote anywhere in the India"];
+const WORK_MODELS = ["Onsite", "Hybrid", "Remote"];
 
 const JOB_TYPES = ["Full-time", "Contract", "Part-time", "Internship"];
 

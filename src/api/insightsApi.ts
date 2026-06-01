@@ -24,6 +24,28 @@ export const getTrendingSkills = async (params: TrendingSkillsParams = {}): Prom
   return response.data;
 };
 
+// ==================== SKILL GAPS ====================
+
+export interface SkillGapData {
+  skill: string;
+  in_jobs_pct: number;
+  priority?: string;
+}
+
+export interface SkillGapsResponse {
+  missing_critical: SkillGapData[];
+  missing_nice_to_have: SkillGapData[];
+}
+
+export interface SkillGapsParams {
+  top_n?: number;
+}
+
+export const getSkillGaps = async (params: SkillGapsParams = {}): Promise<SkillGapsResponse> => {
+  const response = await httpClient.get<SkillGapsResponse>('/insights/skill-gaps', { params });
+  return response.data;
+};
+
 // ==================== MATCH EXPLANATION ====================
 
 export interface ComponentExplanation {
@@ -78,6 +100,7 @@ export const getMatchExplanation = async (jobId: string): Promise<MatchExplanati
 const insightsApi = {
   getTrendingSkills,
   getMatchExplanation,
+  getSkillGaps,
 };
 
 export default insightsApi;

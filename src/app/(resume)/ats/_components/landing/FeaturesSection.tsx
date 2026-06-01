@@ -1,378 +1,168 @@
 "use client";
 
-import {
-  Check,
-  Brain,
-  TrendingUp,
-  Lightbulb,
-  Shield,
-  Zap,
-  Users,
-  Award,
-} from "lucide-react";
-import React, { useCallback, useMemo } from "react";
+import { Brain, TrendingUp, Lightbulb, Shield, Zap, Users, Sparkles, CheckCircle2 } from "lucide-react";
+import { motion } from "framer-motion";
 
-type Category = {
-  title: string;
-  icon: React.ReactElement;
-  description?: string;
-  items: string[];
+const features = [
+  {
+    num: "01",
+    icon: Brain,
+    title: "Instant ATS Scoring",
+    label: "For Job Seekers",
+    description: "Real ATS logic to scan, score, and optimize your resume in seconds.",
+    items: ["Real ATS algorithms", "Keyword & formatting scores", "Missing keyword detection", "Top ATS compatibility"],
+  },
+  {
+    num: "02",
+    icon: Users,
+    title: "Deep Section Analysis",
+    label: "For Job Seekers",
+    description: "Comprehensive analysis of every resume section with expert insights.",
+    items: ["Structure & layout check", "Section-wise scoring", "Content gap detection"],
+  },
+  {
+    num: "03",
+    icon: Lightbulb,
+    title: "Skill Gap Detector",
+    label: "For Job Seekers",
+    description: "Uncovers hidden skill gaps directly from real job descriptions.",
+    items: ["Hard & soft skill mapping", "JD keyword alignment", "ATS match rate boost"],
+  },
+  {
+    num: "04",
+    icon: TrendingUp,
+    title: "AI Career Insights",
+    label: "For Job Seekers",
+    description: "AI pinpoints exactly what impresses recruiters — and what needs tuning.",
+    items: ["Strength & weakness detection", "Personalized skill advice", "Per-section feedback", "Trend-based updates"],
+  },
+  {
+    num: "05",
+    icon: Zap,
+    title: "Live Score Tracking",
+    label: "For Job Seekers & Recruiters",
+    description: "Watch your ATS score update in real time as you edit your resume.",
+    items: ["Live score updates", "Instant keyword matching", "Format compatibility checks"],
+  },
+  {
+    num: "06",
+    icon: Shield,
+    title: "50+ ATS Systems",
+    label: "For Recruiters",
+    description: "Optimized for over 50 global ATS platforms used by top companies.",
+    items: ["50+ ATS platforms covered", "GDPR & CCPA compliant", "Enterprise-grade encryption"],
+  },
+];
+
+const cardVariant = {
+  hidden: { opacity: 0, y: 22 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: "easeOut" as const } },
 };
 
-type ChecklistCardProps = {
-  category: Category;
-  className?: string;
-  delay?: number;
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
 };
 
-const analysisCategory: Category = {
-  title: "Instant ATS Scoring",
-  icon: <Brain className="w-6 h-6" />,
-  description:
-    "Leverages real ATS logic to scan, score, and optimize your resume instantly.",
-  items: [
-    "Analyzes your resume using real ATS algorithms",
-    "Delivers keyword and formatting scores within seconds",
-    "Identifies missing keywords and role-specific skills",
-    "Ensures high compatibility with top ATS systems",
-  ],
-};
-
-const detailedBreakdownCategory: Category = {
-  title: "Deep Section Analysis",
-  icon: <Users className="w-6 h-6" />,
-  description: "Get comprehensive analysis of every section with expert insights.",
-  items: [
-    "Analyzes structure, layout, and key sections",
-    "Provides section-wise scoring and insights",
-    "Flags formatting or content issues instantly",
-  ],
-};
-
-const skillMatcherCategory: Category = {
-  title: "Skill Gap Detector",
-  icon: <Lightbulb className="w-6 h-6" />,
-  description: "Uncovers hidden skill gaps from real job descriptions.",
-  items: [
-    "Recommends hard & soft skills for your target role",
-    "Highlights missing job description keywords",
-    "Improves ATS match rate and recruiter readability",
-  ],
-};
-
-const careerInsightsCategory: Category = {
-  title: "AI Career Insights",
-  icon: <TrendingUp className="w-6 h-6" />,
-  description: "AI pinpoints what impresses recruiters — and what needs tuning.",
-  items: [
-    "Pinpoints your resume strengths and weaknesses",
-    "Recommends personalized skill improvements",
-    "Provides actionable feedback for every section",
-    "Continuously adapts to hiring trend data",
-  ],
-};
-
-const realTimeCategory: Category = {
-  title: "Live Score Tracking",
-  icon: <Zap className="w-6 h-6" />,
-  description: "Get instant feedback as you make changes to your resume.",
-  items: [
-    "Live ATS score updates",
-    "Instant keyword matching",
-    "Format compatibility checks",
-  ],
-};
-
-const globalCompatibilityCategory: Category = {
-  title: "50+ ATS Systems",
-  icon: <Shield className="w-6 h-6" />,
-  description: "Optimized for 50+ global ATS systems worldwide.",
-  items: [
-    "Optimized for 50+ global ATS systems",
-    "GDPR & CCPA compliant",
-    "Secured with enterprise-grade encryption",
-  ],
-};
-
-const iconColor = "from-[#0275dd] to-[#0261b8]";
-
-const ChecklistCard: React.FC<ChecklistCardProps> = React.memo(
-  ({ category, className = "", delay = 0 }) => {
-    const [isVisible, setIsVisible] = React.useState(false);
-    const [isHovered, setIsHovered] = React.useState(false);
-    const cardRef = React.useRef<HTMLDivElement>(null);
-
-    React.useEffect(() => {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              const timer = setTimeout(() => setIsVisible(true), delay);
-              observer.unobserve(entry.target);
-              return () => clearTimeout(timer);
-            }
-          });
-        },
-        { threshold: 0.1, rootMargin: "50px" }
-      );
-
-      const currentCard = cardRef.current;
-      if (currentCard) observer.observe(currentCard);
-
-      return () => {
-        if (currentCard) observer.unobserve(currentCard);
-        observer.disconnect();
-      };
-    }, [delay]);
-
-    const handleMouseEnter = useCallback(() => setIsHovered(true), []);
-    const handleMouseLeave = useCallback(() => setIsHovered(false), []);
-
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        setIsHovered((prev) => !prev);
-      }
-    }, []);
-
-    return (
-      <div
-        ref={cardRef}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        onFocus={handleMouseEnter}
-        onBlur={handleMouseLeave}
-        onKeyDown={handleKeyDown}
-        tabIndex={0}
-        role="article"
-        aria-label={`${category.title} feature card`}
-        className={`relative bg-white rounded-3xl p-8 border-2 border-[#0275dd]/20 cursor-pointer group overflow-hidden transition-all duration-500 ease-out focus:outline-none focus:ring-2 focus:ring-[#0275dd] focus:ring-offset-2 h-full ${
-          isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-        } ${
-          isHovered ? "shadow-2xl -translate-y-3 scale-[1.02]" : "shadow-lg hover:shadow-xl"
-        } ${className}`}
-        style={{ transitionDelay: `${delay}ms` }}
-      >
-        <div className="flex items-start gap-5 mb-4 relative z-10">
-          <div className="relative">
-            <div
-              className={`relative flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${iconColor} flex items-center justify-center transition-all duration-500 shadow-xl ${
-                isHovered ? "scale-110 rotate-6" : "scale-100 rotate-0"
-              }`}
-              aria-hidden="true"
-            >
-              {React.cloneElement(category.icon as React.ReactElement<{ className?: string }>, {
-                className: `w-7 h-7 text-white transition-all duration-500 ${
-                  isHovered ? "scale-110" : "scale-100"
-                }`,
-              })}
-            </div>
-          </div>
-
-          <div className="flex-1">
-            <h3 className="text-xl font-black leading-tight text-[#2d2d2d] transition-colors duration-300 mb-2">
-              {category.title}
-            </h3>
-            <div
-              className={`h-1 rounded-full bg-gradient-to-r ${iconColor} transition-all duration-500 ${
-                isHovered ? "w-20" : "w-12"
-              }`}
-            />
-          </div>
-        </div>
-
-        {category.description && (
-          <p className="text-sm text-[#2d2d2d]/70 mb-6 relative z-10 leading-relaxed">
-            {category.description}
-          </p>
-        )}
-
-        <ul className="space-y-3 relative z-10" role="list">
-          {category.items.map((item, i) => (
-            <li
-              key={`${category.title}-item-${i}`}
-              className={`flex items-start gap-3 transition-all duration-500 ${
-                isVisible ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4"
-              } ${isHovered ? "translate-x-2" : ""}`}
-              style={{ transitionDelay: `${delay + 80 + i * 60}ms` }}
-            >
-              <div className="relative mt-0.5">
-                <div
-                  className={`relative flex-shrink-0 w-5 h-5 rounded-full bg-gradient-to-br ${iconColor} flex items-center justify-center transition-all duration-300 ${
-                    isHovered ? "scale-125 rotate-12" : "scale-100"
-                  }`}
-                >
-                  <Check className="w-3 h-3 text-white" strokeWidth={3} aria-hidden="true" />
-                </div>
-              </div>
-
-              <span className="text-sm leading-relaxed text-[#2d2d2d]/80 font-medium transition-all duration-300">
-                {item}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-);
-
-ChecklistCard.displayName = "ChecklistCard";
-
-function ChecklistSection() {
-  const [headerVisible, setHeaderVisible] = React.useState(false);
-  const headerRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setHeaderVisible(true);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.1, rootMargin: "30px" }
-    );
-
-    const currentHeader = headerRef.current;
-    if (currentHeader) observer.observe(currentHeader);
-
-    return () => {
-      if (currentHeader) observer.unobserve(currentHeader);
-      observer.disconnect();
-    };
-  }, []);
-
-  const memoizedCards = useMemo(
-    () => ({
-      analysis: <ChecklistCard category={analysisCategory} delay={100} />,
-      detailedBreakdown: (
-        <ChecklistCard category={detailedBreakdownCategory} delay={200} />
-      ),
-      skillMatcher: <ChecklistCard category={skillMatcherCategory} delay={250} />,
-      careerInsights: <ChecklistCard category={careerInsightsCategory} delay={300} />,
-      realTime: <ChecklistCard category={realTimeCategory} delay={350} />,
-      globalCompatibility: (
-        <ChecklistCard category={globalCompatibilityCategory} delay={400} />
-      ),
-    }),
-    []
-  );
-
+export default function FeaturesSection() {
   return (
-    <section
-      className="relative bg-white text-[#2d2d2d] py-24 overflow-hidden"
-      aria-labelledby="checklist-section-heading"
-    >
+    <section className="relative py-16 md:py-24 overflow-hidden" style={{ background: "linear-gradient(160deg, #EEF4FF 0%, #ffffff 50%, #F0F6FF 100%)" }}>
+
+      {/* Dot grid */}
       <div
-        className="absolute inset-0 bg-gradient-to-b from-[#e8f4fa]/50 via-[#f0f8fc]/30 to-transparent pointer-events-none"
-        style={{ height: "50%" }}
+        className="absolute inset-0 pointer-events-none opacity-[0.45]"
+        style={{
+          backgroundImage: "radial-gradient(circle, #2557A715 1px, transparent 1px)",
+          backgroundSize: "28px 28px",
+        }}
       />
+      <div className="absolute -top-40 right-1/4 w-140 h-140 bg-[#2557a7]/6 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 left-1/4 w-110 h-110 bg-[#2557a7]/5 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-      </div>
+      <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
 
-      <div className="max-w-[1400px] mx-auto px-6 lg:px-8 relative z-10">
-        <div
-          ref={headerRef}
-          className={`grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16 transition-all duration-700 ${
-            headerVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-          }`}
+        {/* ── Header ── */}
+        <motion.div
+          className="text-center mb-14"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.55 }}
         >
-          <div>
-            <h2
-              id="checklist-section-heading"
-              className="text-4xl md:text-5xl font-black mb-6 leading-tight text-[#2d2d2d]"
-            >
-              Why Professionals Trust Our ATS Analyzer
-            </h2>
+          <div className="inline-flex items-center gap-2 bg-[#EEF4FF] border border-[#dde8f8] text-[#2557a7] text-[11px] font-bold px-4 py-1.5 rounded-full mb-5 uppercase tracking-widest">
+            <Sparkles className="w-3 h-3" />
+            Why Choose Us
+          </div>
+          <h2 className="text-3xl md:text-4xl font-black text-[#0f172a] mb-4 leading-tight">
+            Why Professionals Trust Our ATS Analyzer
+          </h2>
+          <p className="text-base text-slate-500 max-w-xl mx-auto leading-relaxed">
+            Advanced AI-driven resume evaluation that mirrors real recruiter behavior and ATS logic.
+          </p>
+        </motion.div>
 
-            <p className="text-base text-[#2d2d2d]/70 mb-8 leading-relaxed">
-              Advanced AI-driven resume evaluation that mirrors real recruiter behavior and
-              ATS logic.
-            </p>
-
-            <div className="flex flex-wrap gap-6 mb-8">
-              {[
-                { icon: Users, value: "50K+", label: "USERS" },
-                { icon: Award, value: "99%", label: "ACCURACY" },
-                { icon: Zap, value: "10s", label: "FAST RESULTS" },
-              ].map((stat, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <stat.icon className="w-6 h-6 text-[#0275dd]" />
-                  <div>
-                    <div className="text-3xl font-black text-[#2d2d2d]">
-                      {stat.value}
-                    </div>
-                    <div className="text-xs text-[#2d2d2d]/70 font-semibold tracking-wide">
-                      {stat.label}
-                    </div>
-                  </div>
+        {/* ── 6 Cards Grid ── */}
+        <motion.div
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.05 }}
+        >
+          {features.map((feat, idx) => {
+            const Icon = feat.icon;
+            return (
+              <motion.div
+                key={idx}
+                variants={cardVariant}
+                whileHover={{ y: -4, boxShadow: "0 12px 32px rgba(37,87,167,0.18)" }}
+                transition={{ duration: 0.22 }}
+                className="rounded-2xl overflow-hidden border border-[#dde8f8] bg-white"
+                style={{ boxShadow: "0 2px 8px rgba(37,87,167,0.08), 0 8px 24px rgba(37,87,167,0.06)" }}
+              >
+                {/* Blue header bar */}
+                <div
+                  className="flex items-center gap-3 px-5 py-4"
+                  style={{ background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)" }}
+                >
+                  <span className="text-white/60 text-sm font-bold tracking-widest">{feat.num}</span>
+                  <span className="w-px h-4 bg-white/30" />
+                  <span className="text-white text-[14px] font-bold">{feat.title}</span>
                 </div>
-              ))}
-            </div>
 
-            <div className="bg-[#0275dd]/5 border-l-4 border-[#0275dd] rounded-lg p-5">
-              <p className="text-base font-semibold text-[#2d2d2d]">
-                &quot;Get clarity where your resume truly stands — powered by recruiter-trained
-                AI.&quot;
-              </p>
-            </div>
-          </div>
+                {/* Card body */}
+                <div className="p-6">
+                  {/* Icon */}
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-[#EEF4FF] mb-4">
+                    <Icon className="w-6 h-6 text-[#2557a7]" strokeWidth={1.8} />
+                  </div>
 
-          <div>{memoizedCards.analysis}</div>
-        </div>
+                  {/* Label */}
+                  <p className="text-[13px] font-semibold text-[#2557a7] mb-2">
+                    {feat.label}
+                  </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
-          {memoizedCards.detailedBreakdown}
-          {memoizedCards.skillMatcher}
-          {memoizedCards.careerInsights}
-        </div>
+                  {/* Description */}
+                  <p className="text-[13.5px] text-slate-500 leading-relaxed mb-5">
+                    {feat.description}
+                  </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {memoizedCards.realTime}
-          {memoizedCards.globalCompatibility}
+                  {/* Items */}
+                  <ul className="space-y-2.5">
+                    {feat.items.map((item, i) => (
+                      <li key={i} className="flex items-center gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-[#2557a7] shrink-0" />
+                        <span className="text-[13px] text-slate-600">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </motion.div>
+            );
+          })}
+        </motion.div>
 
-          <div className="bg-white rounded-3xl p-8 border-2 border-[#0275dd]/20 shadow-lg hover:shadow-2xl transition-all duration-500 text-center flex flex-col justify-center">
-            <h3 className="text-2xl font-black mb-4 text-[#2d2d2d] leading-tight">
-              Ready to see your resume through recruiter&apos;s eyes?
-            </h3>
-            <p className="text-lg font-bold text-[#2d2d2d] mb-6">
-              Run a deep ATS analysis now.
-            </p>
-            <button className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-[#0275dd] to-[#0261b8] text-white font-bold text-base rounded-xl hover:scale-105 hover:shadow-xl transition-all duration-300 mb-4">
-              Try ATS Analyzer Now
-              <span className="text-xl">→</span>
-            </button>
-            <p className="text-sm text-[#2d2d2d]/70">
-              Free instant scan — no signup required
-            </p>
-          </div>
-        </div>
       </div>
-
-      <style jsx>{`
-        .bg-grid-pattern {
-          background-image:
-            linear-gradient(rgba(2, 117, 221, 0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(2, 117, 221, 0.03) 1px, transparent 1px);
-          background-size: 50px 50px;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .group,
-          * {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-          }
-        }
-      `}</style>
     </section>
   );
 }
-
-export default ChecklistSection;

@@ -1,0 +1,637 @@
+"use client";
+
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import ResumePreview from "../resume/ResumePreview";
+import PDFPreviewError from "./PDFPreviewError";
+import { useMatchAnalysis } from "../_hooks/useMatchAnalysis";
+import { useResumePDF } from "../_hooks/useResumePDF";
+import { useSkillUpdate } from "../_hooks/useSkillUpdate";
+import { AnalysisContentProps } from "../_types";
+// Import Resume Builder components
+import MultiColorCircularScore from "@/app/(resume)/builder/creation/_components/score/MultiColorCircularScore";
+import ProgressBar from "@/app/(resume)/builder/creation/_components/score/ProgressBar";
+
+import { Check, User, AlignLeft, Code2, Heart, GraduationCap, FolderOpen, Building2, Award, Star, Globe, Target, Briefcase, FileText, Download, Pencil, MapPin, Calendar, Clock } from "lucide-react";
+import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
+
+/* ── resume section definitions ── */
+const RESUME_SECTIONS = [
+  { key: "contact",        label: "Contact",            Icon: User },
+  { key: "summary",        label: "Summary",            Icon: AlignLeft },
+  { key: "skills",         label: "Technical Skills",   Icon: Code2 },
+  { key: "softSkills",     label: "Soft Skills",        Icon: Heart },
+  { key: "experience",     label: "Experience",         Icon: Briefcase },
+  { key: "education",      label: "Education",          Icon: GraduationCap },
+  { key: "projects",       label: "Projects",           Icon: FolderOpen },
+  { key: "internships",    label: "Internships",        Icon: Building2 },
+  { key: "certifications", label: "Certifications",     Icon: Award },
+  { key: "achievements",   label: "Achievements",       Icon: Star },
+  { key: "awards",         label: "Awards",             Icon: Award },
+  { key: "languages",      label: "Languages",          Icon: Globe },
+  { key: "volunteering",   label: "Volunteering",       Icon: Heart },
+  { key: "publications",   label: "Publications",       Icon: FileText },
+  { key: "references",     label: "References",         Icon: User },
+  { key: "extracurricular",label: "Extracurricular",    Icon: Star },
+  { key: "hobbies",        label: "Hobbies",            Icon: Star },
+  { key: "interests",      label: "Interests",          Icon: Target },
+] as const;
+
+/* ── sections that support AI enhancement ── */
+
+/* ── helpers ── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toStrArr = (arr: any[]) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  arr.map((x: any) => (typeof x === "string" ? x : x?.skill)).filter(Boolean);
+
+const AnalysisContent: React.FC<AnalysisContentProps> = ({
+  jdText,
+  matchResults: initialMatchResults,
+  parsedResumeData,
+  parsedJDData,
+}) => {
+  const [activeResumeSection, setActiveResumeSection] = useState<string | null>(null);
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [editOverrides, setEditOverrides] = useState<Record<string, any>>({});
+  const [addedFields, setAddedFields] = useState<Record<string, string[]>>({});
+  const [deletedSections, setDeletedSections] = useState<string[]>([]);
+  const [resumeFont] = useState<string>("Inter, ui-sans-serif, sans-serif");
+
+  /* ── Right sidebar tabs (Score, Job Match, Sections) ── */
+  const [activeTab, setActiveTab] = useState<"score" | "jobmatch" | "sections">("score");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+
+  /* ── extract current section data for the editor modal ── */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getSectionData = useCallback((key: string): any => {
+    if (editOverrides[key] !== undefined) return editOverrides[key];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = ((parsedResumeData as any)?.parsed_data ?? parsedResumeData ?? {}) as any;
+    const llm = d?.llm_data ?? {};
+
+    /* safely extract a string from a value that may be a plain string or an object with a url/link/href field */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toStr = (v: any): string => {
+      if (!v) return "";
+      if (typeof v === "string") return v;
+      if (typeof v === "object") return v.url || v.link || v.href || v.value || v.label || "";
+      return "";
+    };
+
+    switch (key) {
+      case "contact": {
+        const c = d.contact || llm.contact || llm.personal_info || {};
+        const sl = d.social_links || llm.social_links || {};
+        return {
+          name: c.name || c.full_name || d.name || "",
+          title: c.title || c.role || c.designation || c.job_title || d.title || llm.title || "",
+          email: c.email || "",
+          phone: c.phone || c.phone_number || c.mobile || "",
+          location: c.location || c.address || "",
+          linkedin: toStr(sl.linkedIn || sl.linkedin || c.linkedin),
+          github: toStr(sl.github || sl.GitHub || c.github),
+          portfolio: toStr(sl.portfolio || sl.website || c.website || c.portfolio),
+        };
+      }
+      case "summary":
+        return d.professionalSummary || d.professional_summary || d.career_objective || d.objective || d.summary ||
+               llm.professionalSummary || llm.professional_summary || llm.summary || "";
+      case "skills": {
+        let s = d.skills || d.technical_skills || llm.skills || llm.technical_skills || [];
+        if (!Array.isArray(s)) s = typeof s === "object" ? Object.values(s).flat() : [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (s as any[]).map((x: any) => typeof x === "string" ? x : (x?.skill || x?.name || "")).filter(Boolean);
+      }
+      case "softSkills": {
+        let s = d.soft_skills || llm.soft_skills || [];
+        if (!Array.isArray(s)) s = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (s as any[]).map((x: any) => typeof x === "string" ? x : (x?.skill || x?.name || "")).filter(Boolean);
+      }
+      case "experience":     return d.workExperience || d.work_experience || d.experience || llm.workExperience || llm.work_experience || [];
+      case "education":      return d.education || d.educational_qualifications || llm.education || [];
+      case "projects":       return d.projects || d.project_details || llm.projects || [];
+      case "internships":    return d.internships || llm.internships || [];
+      case "certifications":  return d.certifications || d.certificates || llm.certifications || [];
+      case "achievements":    return d.achievements || llm.achievements || [];
+      case "awards":          return d.awards || llm.awards || [];
+      case "languages":       return d.languages || d.languages_known || llm.languages || [];
+      case "volunteering":    return d.volunteering || llm.volunteering || [];
+      case "publications":    return d.publications || llm.publications || [];
+      case "references":      return d.references || llm.references || [];
+      case "extracurricular": return d.certificate_of_participation || llm.certificate_of_participation || d.extracurricular_activities || llm.extracurricular_activities || d.activities || llm.activities || [];
+      case "hobbies":         return d.hobbies || llm.hobbies || d.hobbies_and_interests || llm.hobbies_and_interests || [];
+      case "interests":       return d.interests || llm.interests || [];
+      default: return null;
+    }
+  }, [parsedResumeData, editOverrides]);
+
+  /* ── show toolbar on scroll ── */
+
+  /* ── save section edits ── */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleSaveSection = useCallback((key: string, data: any) => {
+    const original = getSectionData(key);
+    setEditOverrides(prev => ({ ...prev, [key]: data }));
+
+    const changed: string[] = [];
+    if (key === 'contact') {
+      const fields = ['name', 'title', 'email', 'phone', 'location', 'linkedin', 'github', 'portfolio'];
+      for (const f of fields) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const oldVal = (original as any)?.[f] || '';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const newVal = (data as any)?.[f] || '';
+        if (newVal && newVal !== oldVal) changed.push(f);
+      }
+    } else if (key === 'summary') {
+      const oldVal = typeof original === 'string' ? original : '';
+      const newVal = typeof data === 'string' ? data : '';
+      if (newVal && newVal !== oldVal) changed.push('text');
+    } else if (key === 'skills' || key === 'softSkills') {
+      const origSet = new Set((Array.isArray(original) ? original : []).map((s: string) => s.toLowerCase()));
+      for (const skill of (Array.isArray(data) ? data : [])) {
+        if (!origSet.has(skill.toLowerCase())) changed.push(skill);
+      }
+    } else if (Array.isArray(data)) {
+      const orig = Array.isArray(original) ? original : [];
+      for (let i = 0; i < data.length; i++) {
+        if (JSON.stringify(data[i]) !== JSON.stringify(orig[i])) changed.push(String(i));
+      }
+    }
+
+    if (changed.length) {
+      setAddedFields(prev => ({
+        ...prev,
+        [key]: [...new Set([...(prev[key] || []), ...changed])],
+      }));
+    }
+  }, [getSectionData]);
+
+  /* ── delete / restore section ── */
+  const handleDeleteSection = useCallback((key: string) => {
+    setDeletedSections(prev => prev.includes(key) ? prev : [...prev, key]);
+    if (activeResumeSection === key) setActiveResumeSection(null);
+  }, [activeResumeSection]);
+
+
+  
+
+  const { matchResults, setMatchResults, resolveResumeId } = useMatchAnalysis(initialMatchResults);
+  const [resumeId, setResumeId] = useState<string | null>(null);
+  const [matchId, setMatchId]   = useState<string | null>(null);
+
+  useEffect(() => {
+    const id = resolveResumeId(parsedResumeData);
+    if (id) setResumeId(id);
+    const mid =
+      matchResults?.match_id || matchResults?.data?.match_id ||
+      initialMatchResults?.match_id || initialMatchResults?.data?.match_id || null;
+    if (mid) setMatchId(mid);
+  }, [resolveResumeId, parsedResumeData, initialMatchResults, matchResults]);
+
+  const { pdfBlobUrl, pdfError, isLoading, isDocx, docxBlob, refetch } = useResumePDF(resumeId, matchId);
+
+  // Persist matchResults to sessionStorage after every skill add/remove so reload restores correct state
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (!matchResults) return;
+    try { sessionStorage.setItem('jm_matchResults', JSON.stringify(matchResults)); } catch {}
+  }, [matchResults]);
+  const { isUpdating } = useSkillUpdate(
+    resumeId, matchResults, () => resolveResumeId(parsedResumeData), setMatchResults, refetch
+  );
+
+  /* ── skill arrays ── */
+  const missingCritical   = useMemo(() => toStrArr(matchResults?.data?.match_result?.Technical_Skills?.missing_critical_skills   || []), [matchResults]);
+  const missingImportant  = useMemo(() => toStrArr(matchResults?.data?.match_result?.Technical_Skills?.missing_important_skills  || []), [matchResults]);
+  const missingNiceToHave = useMemo(() => toStrArr(matchResults?.data?.match_result?.Technical_Skills?.missing_nice_to_have      || []), [matchResults]);
+  const missingSoft       = useMemo(() => toStrArr(matchResults?.data?.match_result?.Soft_Skills?.missing_skills                 || []), [matchResults]);
+  const matchedCritical   = useMemo(() => toStrArr(matchResults?.data?.match_result?.Technical_Skills?.matched_critical_skills   || []), [matchResults]);
+  const matchedImportant  = useMemo(() => toStrArr(matchResults?.data?.match_result?.Technical_Skills?.matched_important_skills  || []), [matchResults]);
+  const matchedNiceToHave = useMemo(() => toStrArr(matchResults?.data?.match_result?.Technical_Skills?.matched_nice_to_have      || []), [matchResults]);
+  const matchedSoft       = useMemo(() => toStrArr(matchResults?.data?.match_result?.Soft_Skills?.matched_skills                 || []), [matchResults]);
+
+  const allMissing = useMemo(() => [...missingCritical, ...missingImportant, ...missingNiceToHave, ...missingSoft], [missingCritical, missingImportant, missingNiceToHave, missingSoft]);
+
+  const resumeDataWithSkills = useMemo(() => {
+    const t = matchResults?.data?.newly_added_skills || [];
+    const s = matchResults?.data?.newly_added_soft_skills || [];
+    if (!t.length && !s.length) return parsedResumeData;
+    return { ...parsedResumeData, newly_added_skills: t, newly_added_soft_skills: s };
+  }, [parsedResumeData, matchResults?.data?.newly_added_skills, matchResults?.data?.newly_added_soft_skills]);
+
+
+
+
+
+
+
+
+  /* ── structured JD renderer ── */
+  const renderJD = () => {
+    if (!jdText) return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-[14px] text-gray-500">No job description available.</p>
+      </div>
+    );
+
+    const d = parsedJDData ?? {};
+
+    /* strip common prefixes like "Job Title:", "Location:" from raw text values */
+    const stripPrefix = (s: string) => s.replace(/^[\w\s]+:\s*/i, "").trim();
+
+    /* extract title — strip "Job Title:" prefix if present */
+    const rawTitle: string = d.job_title || d.title || d.position ||
+      (() => { const f = jdText.split('\n').find(l => l.trim().length > 0); return f?.trim() || ""; })();
+    const title = stripPrefix(rawTitle);
+
+    /* extract metadata — strip label prefixes */
+    const rawLoc = d.location || d.job_location || "";
+    const rawExp = d.experience || d.experience_required || d.exp || "";
+    const rawEmp = d.employment_type || d.job_type || d.type || "";
+    const location = stripPrefix(rawLoc);
+    const experience = stripPrefix(rawExp);
+    const empType = stripPrefix(rawEmp);
+
+    type Line = { kind: "heading" | "bullet" | "text"; content: string; isResp?: boolean };
+
+    const HEADING_RE = /^(job\s+summary|key\s+responsibilities|responsibilities|required\s+skills|qualifications|requirements|about\s+the\s+role|benefits|preferred\s+qualifications|skills\s+required|what\s+you.ll|what\s+we.re|about\s+us)/i;
+    const ALLCAPS_RE = /^[A-Z][A-Z\s&\/\-:]{3,}$/;
+    const BULLET_RE  = /^[•\-\*·▪▸➤►●○◦‣⁃]\s+/;
+    const NUM_RE     = /^\d+[.)]\s+/;
+    /* lines that are just label: value metadata — skip them in the parsed list */
+    const META_LABEL_RE = /^(job\s+title|location|experience|employment\s+type|job\s+type|salary|posted|deadline)\s*:/i;
+
+    const parsed: Line[] = [];
+    let skipFirst = !!title;
+    let currentIsResp = false;
+
+    for (const raw of jdText.split('\n')) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (skipFirst && line === rawTitle) { skipFirst = false; continue; }
+      if (META_LABEL_RE.test(line)) continue; /* skip "Location: X" label lines */
+      if (HEADING_RE.test(line) || (ALLCAPS_RE.test(line) && line.length < 70)) {
+        currentIsResp = /responsibilit|duties|what\s+you/i.test(line);
+        parsed.push({ kind: "heading", content: line.replace(/:$/, "").trim() });
+      } else if (BULLET_RE.test(line)) {
+        parsed.push({ kind: "bullet", content: line.replace(BULLET_RE, "").trim(), isResp: currentIsResp });
+      } else if (NUM_RE.test(line)) {
+        parsed.push({ kind: "bullet", content: line.replace(NUM_RE, "").trim(), isResp: currentIsResp });
+      } else {
+        parsed.push({ kind: "text", content: line });
+      }
+    }
+
+    return (
+      <div>
+        {/* Job title */}
+        {title && (
+          <h2 className="text-[17px] font-extrabold text-gray-900 leading-snug mb-3">{title}</h2>
+        )}
+
+        {/* Metadata chips with lucide icons */}
+        {(location || experience || empType) && (
+          <div className="flex flex-wrap gap-2 mb-5">
+            {location && (
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-gray-600 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm">
+                <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />{location}
+              </span>
+            )}
+            {experience && (
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-gray-600 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm">
+                <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />{experience}
+              </span>
+            )}
+            {empType && (
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-gray-600 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm">
+                <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />{empType}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Parsed content */}
+        <div className="space-y-1.5">
+          {parsed.map((line, i) => {
+            if (line.kind === "heading") {
+              return (
+                <p key={i} className="text-[14px] font-bold text-gray-900 pt-4 pb-1.5 first:pt-0">
+                  {line.content}
+                </p>
+              );
+            }
+            if (line.kind === "bullet") {
+              return (
+                <div key={i} className="flex items-start gap-2.5 py-1">
+                  {line.isResp
+                    ? <span className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+                      </span>
+                    : <span className="w-4 h-4 rounded-full border-2 border-[#0d9488] flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#0d9488]" />
+                      </span>
+                  }
+                  <span className="text-[13px] text-gray-700 leading-relaxed">{line.content}</span>
+                </div>
+              );
+            }
+            return (
+              <p key={i} className="text-[13px] text-gray-600 leading-relaxed">
+                {line.content}
+              </p>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+    <style>{`
+      .jm-scroll::-webkit-scrollbar { width: 4px; }
+      .jm-scroll::-webkit-scrollbar-track { background: transparent; }
+      .jm-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+      .jm-scroll::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+      .jm-noscroll::-webkit-scrollbar { display: none; }
+    `}</style>
+
+    {/* ── Resume Builder Style: Left Sections | Center Resume | Right Score/JobMatch ── */}
+    <div className="grid grid-cols-[auto_1fr_auto] w-full h-screen bg-gray-50" style={{ overflow: "hidden" }}>
+
+      {/* ═════════════════════════════════════════════════════════════ */}
+      {/* LEFT SIDEBAR: Resume Sections */}
+      {/* ═════════════════════════════════════════════════════════════ */}
+      <div className="w-72 border-r border-gray-200 bg-white overflow-y-auto flex flex-col">
+        <div className="p-4 border-b border-gray-200 shrink-0">
+          <p className="text-[12px] font-bold text-gray-600">RESUME SECTIONS</p>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {RESUME_SECTIONS.map(section => (
+            <button
+              key={section.key}
+              onClick={() => { setEditingSection(section.key); }}
+              className="w-full text-left px-3 py-2 text-[12px] font-medium rounded hover:bg-blue-50 transition-colors border border-gray-200 hover:border-blue-300"
+            >
+              + {section.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ═════════════════════════════════════════════════════════════ */}
+      {/* CENTER: Resume Preview (Main Content) */}
+      {/* ═════════════════════════════════════════════════════════════ */}
+      <main className="overflow-y-auto bg-gray-50 flex flex-col min-w-0">
+
+        {/* Action buttons */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 shrink-0 border-b border-gray-200 bg-white">
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-[11px] font-semibold text-gray-600 hover:bg-gray-50 transition-all">
+            <Download className="w-3.5 h-3.5" /> Download
+          </button>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-[11px] font-semibold text-gray-600 hover:bg-gray-50 transition-all">
+            <Pencil className="w-3.5 h-3.5" /> Edit Resume
+          </button>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-[11px] font-semibold text-red-600 hover:bg-red-100 transition-all">
+            🔴 Update Resume Live
+          </button>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 border border-blue-600 rounded-lg text-[11px] font-semibold text-white hover:bg-blue-700 transition-all">
+            ✓ Update Resume
+          </button>
+        </div>
+
+        {/* Resume Card */}
+        <div className="overflow-auto p-5 flex-1">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col h-fit" style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.04), 0 12px 24px rgba(0,0,0,0.06)" }}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 shrink-0" style={{ height: "auto", paddingTop: "12px", paddingBottom: "10px" }}>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[12px] font-bold tracking-widest uppercase text-gray-500">Resume Preview</span>
+                <span className="text-[11px] text-gray-400 mt-0.5">ATS Optimized Resume</span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button className="w-6 h-6 flex items-center justify-center border border-gray-200 rounded text-[13px] text-gray-500 hover:bg-gray-50">−</button>
+                <span className="text-[12px] font-semibold text-gray-500 w-10 text-center">110%</span>
+                <button className="w-6 h-6 flex items-center justify-center border border-gray-200 rounded text-[13px] text-gray-500 hover:bg-gray-50">+</button>
+              </div>
+            </div>
+            <div className="relative flex-1 overflow-auto" style={{ minHeight: 0, padding: "12px", zoom: "1.1" }}>
+              {isUpdating && (
+                <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50 backdrop-blur-sm">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#2557a7] border-t-transparent" />
+                    <p className="text-sm font-semibold text-slate-600">Updating resume…</p>
+                  </div>
+                </div>
+              )}
+              {pdfError
+                ? <div className="flex items-center justify-center p-10"><PDFPreviewError error={pdfError} /></div>
+                : <ResumePreview pdfBlobUrl={pdfBlobUrl} pdfError={pdfError} isLoading={isLoading} isUpdating={isUpdating} isDocx={isDocx} docxBlob={docxBlob} parsedData={resumeDataWithSkills} resumeId={resumeId} activeSection={activeResumeSection} editOverrides={editOverrides} addedFields={addedFields} onEditSection={key => { setActiveResumeSection(key); setEditingSection(key); }} onDeleteSection={handleDeleteSection} deletedSections={deletedSections} fontFamily={resumeFont} />
+              }
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* ═════════════════════════════════════════════════════════════ */}
+      {/* RIGHT SIDEBAR: Tabbed Panel (Score | Job Match | Sections) */}
+      {/* ═════════════════════════════════════════════════════════════ */}
+      {sidebarOpen && (
+      <div className="border-l border-gray-200 bg-white flex flex-col min-w-0">
+
+        {/* Tab Headers */}
+        <div className="flex items-center gap-0 px-4 py-3 border-b border-gray-200 bg-gray-50 shrink-0">
+          <button
+            onClick={() => setActiveTab("score")}
+            className={`px-4 py-2 text-[12px] font-semibold border-b-2 transition-colors ${
+              activeTab === "score"
+                ? "text-[#2557a7] border-[#2557a7]"
+                : "text-gray-600 border-transparent hover:text-gray-900"
+            }`}
+          >
+            Score
+          </button>
+          <button
+            onClick={() => setActiveTab("jobmatch")}
+            className={`px-4 py-2 text-[12px] font-semibold border-b-2 transition-colors ${
+              activeTab === "jobmatch"
+                ? "text-[#2557a7] border-[#2557a7]"
+                : "text-gray-600 border-transparent hover:text-gray-900"
+            }`}
+          >
+            Job Match
+          </button>
+          <div className="flex-1"></div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="text-gray-400 hover:text-gray-600 text-lg font-bold"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        <div className="flex-1 overflow-y-auto jm-scroll">
+
+          {/* SCORE TAB - Exact Resume Builder Style */}
+          {activeTab === "score" && (
+          <div className="p-6 bg-white rounded-2xl shadow-md space-y-4">
+            <h2 className="text-lg font-semibold text-gray-800">ATS Score</h2>
+
+            {/* Overall Score with MultiColorCircularScore */}
+            <div className="flex flex-col items-center">
+              <MultiColorCircularScore value={(() => { const raw = matchResults?.data?.ats_score || "0"; const p = parseFloat(String(raw).replace("%", "")); return Math.min(100, Math.max(0, isNaN(p) ? 0 : p)); })()} />
+              <p className="mt-2 text-sm text-gray-600">Overall Score</p>
+            </div>
+
+            {/* Section Breakdown */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-700">Section Breakdown</h3>
+
+              {/* Contact */}
+              <div>
+                <div className="flex justify-between text-xs text-gray-600 mb-0.5">
+                  <span className="font-medium">Contact</span>
+                  <span>0%</span>
+                </div>
+                <ProgressBar value={0} label="" />
+                <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1">Missing email address — required for recruiters</p>
+              </div>
+
+              {/* Experience */}
+              <div>
+                <div className="flex justify-between text-xs text-gray-600 mb-0.5">
+                  <span className="font-medium">Experience</span>
+                  <span>74%</span>
+                </div>
+                <ProgressBar value={74} label="" />
+              </div>
+
+              {/* Education */}
+              <div>
+                <div className="flex justify-between text-xs text-gray-600 mb-0.5">
+                  <span className="font-medium">Education</span>
+                  <span>60%</span>
+                </div>
+                <ProgressBar value={60} label="" />
+              </div>
+            </div>
+
+            {/* Missing Skills */}
+            {allMissing.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Missing Skills</h3>
+                <ul className="space-y-1">
+                  {allMissing.slice(0, 8).map((skill, i) => (
+                    <li key={i} className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">
+                      {skill}
+                    </li>
+                  ))}
+                  {allMissing.length > 8 && <li className="text-xs text-gray-400 pt-1">+{allMissing.length - 8} more skills</li>}
+                </ul>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* JOB MATCH TAB */}
+          {activeTab === "jobmatch" && (
+          <div className="p-4 space-y-4">
+            {/* CTA Card 1 */}
+            <div className="rounded-lg border border-gray-200 p-4 bg-white" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+              <div className="flex gap-3">
+                <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center shrink-0 text-xl">
+                  💼
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-gray-900">Find Jobs That Match Your Resume</p>
+                  <p className="text-[11px] text-gray-600 mt-1">Based on your resume, we will suggest opportunities tailored to your skills.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* CTA Card 2 */}
+            <div className="rounded-lg border border-gray-200 p-4 bg-white" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+              <div className="flex gap-3 items-start">
+                <div className="text-2xl">✓</div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] font-semibold text-gray-900">Your Resume is Ready</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Last updated: Jun 1, 2026</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 rounded-lg bg-gray-50">
+                <p className="text-[14px] font-bold text-orange-600">500+</p>
+                <p className="text-[10px] text-gray-600">Job Matches</p>
+              </div>
+              <div className="p-2 rounded-lg bg-gray-50">
+                <p className="text-[14px] font-bold text-blue-600">95%</p>
+                <p className="text-[10px] text-gray-600">Match Accuracy</p>
+              </div>
+              <div className="p-2 rounded-lg bg-gray-50">
+                <p className="text-[14px] font-bold text-green-600">24h</p>
+                <p className="text-[10px] text-gray-600">Response Time</p>
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <button className="w-full py-2.5 px-4 bg-blue-600 text-white rounded-lg font-semibold text-[12px] hover:bg-blue-700 transition-colors">
+              Match Me With Jobs
+            </button>
+
+            {/* Job Description */}
+            <div className="rounded-lg border border-gray-200 overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                <p className="text-[11px] font-bold text-gray-600">JOB DESCRIPTION</p>
+                <button onClick={() => { try { navigator.clipboard.writeText(jdText); } catch {} }}
+                  className="text-[10px] text-gray-400 hover:text-[#2557a7] font-medium">
+                  Copy
+                </button>
+              </div>
+              <div className="overflow-y-auto jm-scroll px-3 py-2 max-h-48 text-[11px] text-gray-700 space-y-2">
+                {renderJD()}
+              </div>
+            </div>
+          </div>
+          )}
+
+        </div>
+      </div>
+      )}
+
+      {/* Toggle Sidebar Button (when closed) */}
+      {!sidebarOpen && (
+      <div className="flex items-center justify-center p-2 border-l border-gray-200 bg-white">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 hover:bg-gray-100 rounded text-gray-600"
+          title="Open sidebar"
+        >
+          ⊳
+        </button>
+      </div>
+      )}
+
+    </div>{/* end 3-COLUMN LAYOUT */}
+
+    {editingSection && (
+      <JobMatchSectionEditor
+        sectionKey={editingSection}
+        sectionLabel={RESUME_SECTIONS.find(s => s.key === editingSection)?.label ?? editingSection}
+        initialData={getSectionData(editingSection)}
+        onSave={handleSaveSection}
+        onClose={() => setEditingSection(null)}
+      />
+    )}
+    </>
+  );
+};
+
+export default AnalysisContent;
