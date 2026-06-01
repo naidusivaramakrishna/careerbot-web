@@ -51,7 +51,7 @@ export default function GenerationProgress({
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
         <div className="flex justify-center mb-6">
           <div
-            className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-[#2257a7]"
+            className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-[#2557a7]"
             role="status"
             aria-label="Generating cover letter"
           />
@@ -145,7 +145,7 @@ function StepIcon({ status }: { status: StepStatus }) {
     return (
       <span
         aria-hidden="true"
-        className="inline-block w-5 h-5 rounded-full border-2 border-[#2257a7] border-t-transparent animate-spin"
+        className="inline-block w-5 h-5 rounded-full border-2 border-[#2557a7] border-t-transparent animate-spin"
       />
     );
   }

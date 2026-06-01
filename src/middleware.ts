@@ -15,6 +15,8 @@ const publicRoutes = [
     "/browse-templates"
 ];
 
+const publicExactRoutes = ['/builder', '/builder/start', '/cover-letter'];
+
 const RECRUITER_PREFIX = '/recruiter';
 const ADMIN_PREFIX = '/admin';
 
@@ -23,9 +25,9 @@ export async function middleware(request: NextRequest) {
     logger.info(`[${request.method}] ${pathname}`);
 
     // Allow public routes without authentication
-    const isPublicRoute = publicRoutes.some(
-        (route) => pathname === route || pathname.startsWith(route + '/')
-    );
+    const isPublicRoute =
+        publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/')) ||
+        publicExactRoutes.includes(pathname);
     if (isPublicRoute) {
         return NextResponse.next();
     }

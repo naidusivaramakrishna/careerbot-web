@@ -35,10 +35,11 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
   const deficit = requiredCredits - currentBalance;
 
   // Suggest a plan based on deficit
+  // Index 1=BASIC(200), 2=PRO(1000), 3=ENTERPRISE
   const getSuggestedPlan = () => {
-    if (deficit <= 50) return SUBSCRIPTION_PLANS[1]; // STARTER (100 credits)
-    if (deficit <= 150) return SUBSCRIPTION_PLANS[2]; // BASIC (200 credits)
-    return SUBSCRIPTION_PLANS[3]; // PRO (500 credits)
+    if (deficit <= 200) return SUBSCRIPTION_PLANS[1]; // BASIC (200 credits)
+    if (deficit <= 1000) return SUBSCRIPTION_PLANS[2]; // PRO (1000 credits)
+    return SUBSCRIPTION_PLANS[3]; // ENTERPRISE
   };
 
   const suggestedPlan = getSuggestedPlan();

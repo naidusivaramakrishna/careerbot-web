@@ -1,40 +1,24 @@
-"use client";
+'use client';
 
-/**
- * /cover-letter/new — the generate form (Screen B.1).
- *
- * Pure controlled component. Owns its form state + client-side
- * validation. On submit, builds a CoverLetterGenerateRequest and
- * hands it to the parent via `onSubmit`. NO generation logic here
- * — the parent (page.tsx) wires onSubmit → useGenerateCoverLetter
- * in WEB-3.2.
- *
- * Client-side validation matches backend `extra="forbid"`:
- *   - JD min 50 chars heuristic
- *   - candidate_note max 300 chars
- *   - min_words ≤ max_words (slider locks this; both 200–500)
- *   - we NEVER submit unknown fields
- *
- * Spec: wireframes §4.B1 + impl-blueprint §9 WEB-3.1.
- */
-import { useId, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { useId, useMemo, useState } from 'react';
+import {
+  ChevronDown,
+  CheckCircle,
+  FileText,
+  Sparkles,
+  Settings2,
+  UserCircle,
+} from 'lucide-react';
 import type {
   CoverLetterGenerateRequest,
   ResumeSchemaVersion,
-} from "@/types/coverLetter";
+} from '@/types/coverLetter';
 
 export interface CoverLetterFormProps {
-  /** The parsed resume to embed in the request (from useLatestParsedResume). */
   resume: Record<string, unknown>;
   resumeSchemaVersion: ResumeSchemaVersion;
-  /** true while a submission is in flight; disables the submit button. */
   isSubmitting?: boolean;
-  /** Called with a fully-built request body when the user submits. */
   onSubmit: (request: CoverLetterGenerateRequest) => void;
-  /** Optional inline error from the api / hook layer (rendered above
-   *  the submit button, NOT next to a field; field-level errors are
-   *  resolved by the parent before re-rendering the form). */
   apiError?: string | null;
 }
 
@@ -50,29 +34,25 @@ export default function CoverLetterForm({
   onSubmit,
   apiError = null,
 }: CoverLetterFormProps) {
-  // Required.
-  const [jd, setJd] = useState("");
-  // Optional details (collapsed by default).
+  const [jd, setJd] = useState('');
   const [optionalOpen, setOptionalOpen] = useState(false);
-  const [companyName, setCompanyName] = useState("");
-  const [roleTitle, setRoleTitle] = useState("");
-  const [hiringManagerName, setHiringManagerName] = useState("");
-  const [signatureName, setSignatureName] = useState("");
+  const [companyName, setCompanyName] = useState('');
+  const [roleTitle, setRoleTitle] = useState('');
+  const [hiringManagerName, setHiringManagerName] = useState('');
+  const [signatureName, setSignatureName] = useState('');
   const [includeContact, setIncludeContact] = useState(false);
-  // Advanced (collapsed by default).
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [minWords, setMinWords] = useState(250);
   const [maxWords, setMaxWords] = useState(400);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState('');
 
-  // Field-level validation.
   const errors = useMemo(() => {
     const e: { jd?: string; note?: string; bounds?: string } = {};
     const trimmed = jd.trim();
     if (trimmed.length === 0) {
-      e.jd = "Job description is required.";
+      e.jd = 'Job description is required.';
     } else if (trimmed.length < MIN_JD_CHARS) {
-      e.jd = `Please paste at least ${MIN_JD_CHARS} characters of the job description.`;
+      e.jd = `Paste at least ${MIN_JD_CHARS} characters of the job description.`;
     }
     if (note.length > MAX_NOTE_CHARS) {
       e.note = `Note must be ${MAX_NOTE_CHARS} characters or fewer.`;
@@ -83,24 +63,15 @@ export default function CoverLetterForm({
     return e;
   }, [jd, note, minWords, maxWords]);
 
-  const hasErrors =
-    !!errors.jd || !!errors.note || !!errors.bounds;
-
+  const hasErrors = !!errors.jd || !!errors.note || !!errors.bounds;
   const formId = useId();
 
   function buildRequest(): CoverLetterGenerateRequest {
-    // Build application_context ONLY when the user typed something.
-    // Empty optionals are NOT sent — backend treats missing as
-    // null, and we'd rather send the smallest valid body.
     const appCtxFields = {
       ...(companyName.trim() && { company_name: companyName.trim() }),
       ...(roleTitle.trim() && { role_title: roleTitle.trim() }),
-      ...(hiringManagerName.trim() && {
-        hiring_manager_name: hiringManagerName.trim(),
-      }),
-      ...(signatureName.trim() && {
-        candidate_signature_name: signatureName.trim(),
-      }),
+      ...(hiringManagerName.trim() && { hiring_manager_name: hiringManagerName.trim() }),
+      ...(signatureName.trim() && { candidate_signature_name: signatureName.trim() }),
       ...(includeContact && { include_contact_details: true }),
     };
     const hasAppCtx = Object.keys(appCtxFields).length > 0;
@@ -110,17 +81,13 @@ export default function CoverLetterForm({
       resume_schema_version: resumeSchemaVersion,
       job_description: jd.trim(),
       ...(hasAppCtx && {
-        application_context: {
-          ...appCtxFields,
-          source: "user" as const,
-        },
+        application_context: { ...appCtxFields, source: 'user' as const },
       }),
       options: {
-        tone: "professional",
+        tone: 'professional',
         min_words: minWords,
         max_words: maxWords,
         ...(note.trim() && { candidate_note: note.trim() }),
-        // SECURITY INVARIANT: ALWAYS false (api client also forces).
         include_debug_metadata: false,
       },
     };
@@ -133,73 +100,84 @@ export default function CoverLetterForm({
   }
 
   return (
-    <form
-      id={formId}
-      onSubmit={handleSubmit}
-      className="bg-white rounded-2xl shadow-sm p-6 space-y-5"
-      noValidate
-    >
-      {/* Resume section — V1 uses the latest; picker is a V1.1 add. */}
-      <fieldset>
-        <legend className="text-sm font-semibold text-gray-700 mb-2">
-          Resume
-        </legend>
-        <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 text-sm text-gray-700">
-          Using your latest parsed resume
-          <span className="text-gray-500"> (schema {resumeSchemaVersion})</span>
-        </div>
-      </fieldset>
+    <form id={formId} onSubmit={handleSubmit} noValidate className="space-y-4">
 
-      {/* JD textarea — required */}
-      <div>
-        <label
-          htmlFor={`${formId}-jd`}
-          className="block text-sm font-semibold text-gray-700 mb-2"
-        >
-          Job description <span className="text-red-500">*</span>
+      {/* ── 1. Resume ─────────────────────────────────────── */}
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
+        <div className="w-9 h-9 bg-white rounded-lg border border-emerald-200 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <FileText className="w-4 h-4 text-emerald-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-slate-800">Resume ready</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Using your latest parsed resume
+            <span className="ml-1 text-emerald-600 font-medium">
+              (schema {resumeSchemaVersion})
+            </span>
+          </p>
+        </div>
+        <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+      </div>
+
+      {/* ── 2. Job Description ────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+        <label htmlFor={`${formId}-jd`} className="block mb-1">
+          <span className="text-sm font-semibold text-slate-800">Job Description</span>
+          <span className="text-red-500 ml-1" aria-hidden="true">*</span>
         </label>
+        <p className="text-xs text-slate-500 mb-3">
+          Paste the full job posting. More detail = better letter.
+        </p>
         <textarea
           id={`${formId}-jd`}
           autoFocus
           value={jd}
           onChange={(e) => setJd(e.target.value)}
-          rows={8}
-          placeholder="Paste the JD here, or paste the job URL."
+          rows={9}
+          placeholder="Paste the job description here…"
           aria-required="true"
           aria-invalid={!!errors.jd}
-          aria-describedby={`${formId}-jd-count ${errors.jd ? `${formId}-jd-error` : ""}`}
+          aria-describedby={`${formId}-jd-count ${errors.jd ? `${formId}-jd-error` : ''}`}
           disabled={isSubmitting}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:border-transparent disabled:opacity-50 resize-y"
+          className={[
+            'w-full px-4 py-3 border rounded-xl text-sm text-slate-800 placeholder-slate-400 bg-slate-50',
+            'focus:outline-none focus:ring-2 focus:ring-[#2557a7]/40 focus:border-[#2557a7] focus:bg-white',
+            'disabled:opacity-50 resize-y transition-colors',
+            errors.jd && jd.length > 0
+              ? 'border-red-300 bg-red-50/30'
+              : 'border-slate-200',
+          ].join(' ')}
         />
-        <div className="flex justify-between mt-1">
-          <p id={`${formId}-jd-count`} className="text-xs text-gray-500">
+        <div className="flex justify-between items-center mt-2">
+          <p id={`${formId}-jd-count`} className="text-xs text-slate-400">
             {jd.length.toLocaleString()} characters
+            {jd.length >= MIN_JD_CHARS && (
+              <span className="ml-1.5 text-emerald-600">✓ Ready</span>
+            )}
           </p>
-          {errors.jd && (
-            <p
-              id={`${formId}-jd-error`}
-              className="text-xs text-red-600"
-              role="alert"
-            >
+          {errors.jd && jd.length > 0 && (
+            <p id={`${formId}-jd-error`} className="text-xs text-red-600" role="alert">
               {errors.jd}
             </p>
           )}
         </div>
       </div>
 
-      {/* Optional details — collapsible */}
-      <CollapsibleSection
+      {/* ── 3. Optional details — collapsible ────────────── */}
+      <CollapsibleCard
+        icon={<UserCircle className="w-4 h-4 text-slate-400" />}
         label="Optional details"
+        hint="Company, role, hiring manager"
         open={optionalOpen}
         onToggle={() => setOptionalOpen((v) => !v)}
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <TextField
             id={`${formId}-company`}
             label="Company"
             value={companyName}
             onChange={setCompanyName}
-            placeholder="TestCo"
+            placeholder="e.g. TCS, Infosys"
             disabled={isSubmitting}
           />
           <TextField
@@ -207,7 +185,7 @@ export default function CoverLetterForm({
             label="Role title"
             value={roleTitle}
             onChange={setRoleTitle}
-            placeholder="Backend Engineer"
+            placeholder="e.g. Backend Engineer"
             disabled={isSubmitting}
           />
           <TextField
@@ -215,7 +193,7 @@ export default function CoverLetterForm({
             label="Hiring manager"
             value={hiringManagerName}
             onChange={setHiringManagerName}
-            placeholder="Jane Doe"
+            placeholder="e.g. Jane Doe"
             disabled={isSubmitting}
           />
           <TextField
@@ -223,60 +201,65 @@ export default function CoverLetterForm({
             label="Sign as"
             value={signatureName}
             onChange={setSignatureName}
-            placeholder="Your name"
+            placeholder="Your full name"
             disabled={isSubmitting}
           />
         </div>
-        <label className="flex items-center gap-2 mt-3 text-sm text-gray-700">
+        <label className="flex items-center gap-2.5 mt-4 text-sm text-slate-700 cursor-pointer">
           <input
             type="checkbox"
             checked={includeContact}
             onChange={(e) => setIncludeContact(e.target.checked)}
             disabled={isSubmitting}
-            className="rounded border-gray-300 text-[#2257a7] focus:ring-[#2257a7] disabled:opacity-50"
+            className="w-4 h-4 rounded border-slate-300 text-[#2557a7] focus:ring-[#2557a7] disabled:opacity-50"
           />
-          Include my contact details at the top
+          Include my contact details at the top of the letter
         </label>
-      </CollapsibleSection>
+      </CollapsibleCard>
 
-      {/* Advanced — collapsible */}
-      <CollapsibleSection
-        label="Advanced (defaults are usually right)"
+      {/* ── 4. Advanced — collapsible ─────────────────────── */}
+      <CollapsibleCard
+        icon={<Settings2 className="w-4 h-4 text-slate-400" />}
+        label="Advanced settings"
+        hint="Length and custom notes (defaults are fine)"
         open={advancedOpen}
         onToggle={() => setAdvancedOpen((v) => !v)}
       >
-        <div className="mt-3 space-y-3">
+        <div className="space-y-4">
           <div>
-            <label
-              htmlFor={`${formId}-min`}
-              className="block text-xs font-medium text-gray-700 mb-1"
-            >
-              Length: {minWords}–{maxWords} words
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                id={`${formId}-min`}
-                type="range"
-                min={MIN_WORDS_FLOOR}
-                max={MAX_WORDS_CEIL}
-                step={10}
-                value={minWords}
-                onChange={(e) => setMinWords(Number(e.target.value))}
-                disabled={isSubmitting}
-                aria-label="Minimum word count"
-                className="w-full disabled:opacity-50"
-              />
-              <input
-                type="range"
-                min={MIN_WORDS_FLOOR}
-                max={MAX_WORDS_CEIL}
-                step={10}
-                value={maxWords}
-                onChange={(e) => setMaxWords(Number(e.target.value))}
-                disabled={isSubmitting}
-                aria-label="Maximum word count"
-                className="w-full disabled:opacity-50"
-              />
+            <p className="text-xs font-medium text-slate-600 mb-2">
+              Letter length: <span className="text-[#2557a7] font-semibold">{minWords}–{maxWords} words</span>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-slate-400 mb-1">Minimum</p>
+                <input
+                  id={`${formId}-min`}
+                  type="range"
+                  min={MIN_WORDS_FLOOR}
+                  max={MAX_WORDS_CEIL}
+                  step={10}
+                  value={minWords}
+                  onChange={(e) => setMinWords(Number(e.target.value))}
+                  disabled={isSubmitting}
+                  aria-label="Minimum word count"
+                  className="w-full accent-[#2557a7] disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 mb-1">Maximum</p>
+                <input
+                  type="range"
+                  min={MIN_WORDS_FLOOR}
+                  max={MAX_WORDS_CEIL}
+                  step={10}
+                  value={maxWords}
+                  onChange={(e) => setMaxWords(Number(e.target.value))}
+                  disabled={isSubmitting}
+                  aria-label="Maximum word count"
+                  className="w-full accent-[#2557a7] disabled:opacity-50"
+                />
+              </div>
             </div>
             {errors.bounds && (
               <p className="text-xs text-red-600 mt-1" role="alert">
@@ -284,12 +267,11 @@ export default function CoverLetterForm({
               </p>
             )}
           </div>
+
           <div>
-            <label
-              htmlFor={`${formId}-note`}
-              className="block text-xs font-medium text-gray-700 mb-1"
-            >
-              Note to writer (optional, {MAX_NOTE_CHARS} chars max)
+            <label htmlFor={`${formId}-note`} className="block text-xs font-medium text-slate-600 mb-1.5">
+              Note to AI writer
+              <span className="ml-1 font-normal text-slate-400">(optional, up to {MAX_NOTE_CHARS} chars)</span>
             </label>
             <textarea
               id={`${formId}-note`}
@@ -297,16 +279,12 @@ export default function CoverLetterForm({
               onChange={(e) => setNote(e.target.value)}
               rows={2}
               maxLength={MAX_NOTE_CHARS}
-              placeholder='e.g., "lean into my fintech background"'
+              placeholder='e.g. "Lean into my fintech background and leadership experience"'
               disabled={isSubmitting}
               aria-invalid={!!errors.note}
-              aria-describedby={`${formId}-note-count`}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:border-transparent disabled:opacity-50 resize-y"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2557a7]/40 focus:border-[#2557a7] focus:bg-white disabled:opacity-50 resize-y transition-colors"
             />
-            <p
-              id={`${formId}-note-count`}
-              className="text-xs text-gray-500 mt-1"
-            >
+            <p className="text-xs text-slate-400 mt-1">
               {note.length}/{MAX_NOTE_CHARS}
             </p>
             {errors.note && (
@@ -316,65 +294,91 @@ export default function CoverLetterForm({
             )}
           </div>
         </div>
-      </CollapsibleSection>
+      </CollapsibleCard>
 
-      {/* API-level error (from the hook layer, NOT field validation) */}
+      {/* ── API error ─────────────────────────────────────── */}
       {apiError && (
         <div
           role="alert"
-          className="border border-red-200 bg-red-50 text-red-700 text-sm rounded-lg p-3"
+          className="border border-red-200 bg-red-50 text-red-700 text-sm rounded-xl p-4"
         >
           {apiError}
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex justify-end gap-2 pt-2">
+      {/* ── Submit ────────────────────────────────────────── */}
+      <div className="pt-2">
         <button
           type="submit"
           disabled={hasErrors || isSubmitting}
-          className="bg-[#2257a7] hover:bg-[#184284] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:ring-offset-2"
+          className="w-full flex items-center justify-center gap-2.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl text-base transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
         >
-          {isSubmitting ? "Generating…" : "Generate letter"}
+          {isSubmitting ? (
+            <>
+              <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              Generating your letter…
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4" />
+              Generate Cover Letter
+            </>
+          )}
         </button>
+        <p className="text-center text-xs text-slate-400 mt-2.5">
+          Takes ~30 seconds · Powered by AI · Free to use
+        </p>
       </div>
     </form>
   );
 }
 
-/* ── small subcomponents ─────────────────────────────────────── */
-
-function CollapsibleSection({
+/* ── CollapsibleCard ─────────────────────────────────────────── */
+function CollapsibleCard({
+  icon,
   label,
+  hint,
   open,
   onToggle,
   children,
 }: {
+  icon: React.ReactNode;
   label: string;
+  hint: string;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-t border-gray-100 pt-4">
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center justify-between text-sm font-semibold text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2257a7] rounded"
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#2557a7]/30"
       >
-        {label}
-        {open ? (
-          <ChevronUp className="w-4 h-4" aria-hidden="true" />
-        ) : (
-          <ChevronDown className="w-4 h-4" aria-hidden="true" />
-        )}
+        <div className="flex items-center gap-2.5">
+          {icon}
+          <span className="text-sm font-semibold text-slate-700">{label}</span>
+          {!open && (
+            <span className="text-xs text-slate-400 hidden sm:inline">{hint}</span>
+          )}
+        </div>
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          aria-hidden="true"
+        />
       </button>
-      {open && children}
+      {open && (
+        <div className="px-5 pb-5 pt-1 border-t border-slate-100">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
 
+/* ── TextField ───────────────────────────────────────────────── */
 function TextField({
   id,
   label,
@@ -392,7 +396,7 @@ function TextField({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-xs font-medium text-gray-700 mb-1">
+      <label htmlFor={id} className="block text-xs font-semibold text-slate-600 mb-1.5">
         {label}
       </label>
       <input
@@ -402,7 +406,7 @@ function TextField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:border-transparent disabled:opacity-50"
+        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2557a7]/40 focus:border-[#2557a7] focus:bg-white disabled:opacity-50 transition-colors"
       />
     </div>
   );

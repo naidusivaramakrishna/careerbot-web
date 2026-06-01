@@ -58,10 +58,12 @@ const clearAllTokens = () => {
 const client: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   withCredentials: true, // ✅ Enable httpOnly cookie sending/receiving
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
 
 /* --------------------------------------------------
    Refresh State & Queues
@@ -162,9 +164,16 @@ client.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const isAdmin = isAdminRequest(originalRequest?.url);
+    const skipAuthRedirect =
+      originalRequest?.headers?.get?.('X-Skip-Auth-Redirect') === 'true' ||
+      originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true';
 
     // 403 = tenant mismatch — do NOT attempt token refresh, just reject
     if (error.response?.status === 403) {
+      return Promise.reject(error);
+    }
+
+    if (error.response?.status === 401 && skipAuthRedirect) {
       return Promise.reject(error);
     }
 
@@ -249,7 +258,11 @@ client.interceptors.response.use(
     }
 
     originalRequest._retry = true;
-    isAdmin ? (isRefreshingAdmin = true) : (isRefreshingUser = true);
+    if (isAdmin) {
+      isRefreshingAdmin = true;
+    } else {
+      isRefreshingUser = true;
+    }
 
     try {
       const endpoint = isAdmin
@@ -289,9 +302,11 @@ client.interceptors.response.use(
       }
       return Promise.reject(refreshError);
     } finally {
-      isAdmin
-        ? (isRefreshingAdmin = false)
-        : (isRefreshingUser = false);
+      if (isAdmin) {
+        isRefreshingAdmin = false;
+      } else {
+        isRefreshingUser = false;
+      }
     }
   }
 );

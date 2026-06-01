@@ -16,9 +16,10 @@ export default function ClientLayout({
 
   // Determine if user is authenticated based on current route
   // Must match the protectedRoutes array in middleware.ts
+  const isPublicBuilderRoute = pathname === '/builder' || pathname?.startsWith('/builder/start');
   const isAuthenticatedRoute = pathname?.startsWith('/dashboard') ||
     pathname?.startsWith('/profile') ||
-    pathname?.startsWith('/builder') ||
+    (pathname?.startsWith('/builder') && !isPublicBuilderRoute) ||
     pathname?.startsWith('/atslogin') ||
     pathname?.startsWith('/enhancer') ||
     pathname?.startsWith('/jobmatch') ||

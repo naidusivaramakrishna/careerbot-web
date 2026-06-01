@@ -49,7 +49,7 @@ export default function CoverLetterDetailPage() {
     onSettled: (_id, wasNewlyDeleted) => {
       if (wasNewlyDeleted) toast.success("Cover letter deleted.");
       setConfirmOpen(false);
-      router.push("/cover-letter");
+      router.push("/cover-letter/history");
     },
     onError: (_id, err) => {
       toast.error(ERROR_MESSAGES[err.reason] ?? ERROR_MESSAGES.unknown);
@@ -72,7 +72,7 @@ export default function CoverLetterDetailPage() {
         {/* Header */}
         <div className="flex items-center gap-2 mb-4">
           <Link
-            href="/cover-letter"
+            href="/cover-letter/history"
             aria-label="Back to cover letters"
             className="p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
           >
@@ -109,7 +109,7 @@ export default function CoverLetterDetailPage() {
                 <div className="flex items-center gap-2">
                   <Link
                     href="/cover-letter/new"
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-[#2257a7] hover:text-[#184284] hover:bg-blue-50 rounded-md transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-[#2557a7] hover:text-[#1e4a94] hover:bg-blue-50 rounded-md transition-colors"
                   >
                     <Plus className="w-4 h-4" aria-hidden="true" />
                     Generate another
@@ -192,8 +192,8 @@ function NotFoundCard() {
         deleted, or the link is wrong.
       </p>
       <Link
-        href="/cover-letter"
-        className="inline-block bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-2.5 px-5 rounded-lg transition-colors"
+        href="/cover-letter/history"
+        className="inline-block bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-2.5 px-5 rounded-lg transition-colors"
       >
         Back to history
       </Link>
@@ -214,7 +214,7 @@ function ErrorCard({ onRetry }: { onRetry: () => void }) {
       <button
         type="button"
         onClick={onRetry}
-        className="inline-block bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-2.5 px-5 rounded-lg transition-colors"
+        className="inline-block bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-2.5 px-5 rounded-lg transition-colors"
       >
         Try again
       </button>

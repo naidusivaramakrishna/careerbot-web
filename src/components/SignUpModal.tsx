@@ -70,9 +70,9 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
 
             // Verification email is sent automatically by backend
             // User can verify email from profile/settings later
-            toast.success("Account created! Redirecting to dashboard...")
+            toast.success("Account created! Redirecting to resume builder...")
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            window.location.href = "/dashboard"
+            window.location.href = "/builder"
         } catch (err) {
             handleApiError(err)
         } finally {
@@ -88,12 +88,12 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
             // Tenant ID is auto-generated and set in context
             // httpClient will add X-Tenant-Id header automatically
             await signIn(loginForm)
-            toast.success("Login successful")
+            toast.success("Login successful! Redirecting to resume builder...")
             setLoginForm({ email: "", password: "" })
             // Reset the refresh timestamp so useTokenRefresh doesn't immediately
             // fire a refresh attempt on dashboard mount due to a stale previous-session timestamp.
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            window.location.href = "/dashboard"
+            window.location.href = "/builder"
             onClose()
         } catch (err) {
             handleApiError(err, true)

@@ -37,7 +37,7 @@ export default function GroundingDetails({ grounding }: GroundingDetailsProps) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-[#2257a7] rounded-lg"
+        className="flex w-full items-center justify-between px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-[#2557a7] rounded-lg"
       >
         <span className="text-sm font-semibold text-gray-700">
           Grounding info

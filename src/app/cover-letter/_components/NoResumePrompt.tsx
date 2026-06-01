@@ -48,7 +48,7 @@ export default function NoResumePrompt({
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
         <div className="flex justify-center mb-6">
           <div className="bg-blue-50 rounded-full p-5">
-            <FileText className="w-10 h-10 text-[#2257a7]" aria-hidden="true" />
+            <FileText className="w-10 h-10 text-[#2557a7]" aria-hidden="true" />
           </div>
         </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
@@ -64,7 +64,7 @@ export default function NoResumePrompt({
         </p>
         <Link
           href="/builder/start?return_to=/cover-letter/new"
-          className="inline-flex items-center justify-center gap-2 w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2257a7] focus:ring-offset-2"
+          className="inline-flex items-center justify-center gap-2 w-full bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
         >
           Create my resume
         </Link>
@@ -72,7 +72,7 @@ export default function NoResumePrompt({
           type="button"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="mt-4 inline-flex items-center justify-center gap-2 text-sm font-medium text-[#2257a7] hover:text-[#184284] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="mt-4 inline-flex items-center justify-center gap-2 text-sm font-medium text-[#2557a7] hover:text-[#1e4a94] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <RefreshCw
             className={["w-3.5 h-3.5", isRefreshing ? "animate-spin" : ""].join(" ")}
