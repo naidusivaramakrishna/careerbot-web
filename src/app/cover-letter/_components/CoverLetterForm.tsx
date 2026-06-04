@@ -10,16 +10,14 @@ import {
   UserCircle,
 } from 'lucide-react';
 import type {
-  CoverLetterGenerateRequest,
-  ResumeSchemaVersion,
+  CoverLetterFormSubmit,
 } from '@/types/coverLetter';
 
 export interface CoverLetterFormProps {
-  resume: Record<string, unknown>;
-  resumeSchemaVersion: ResumeSchemaVersion;
   isSubmitting?: boolean;
-  onSubmit: (request: CoverLetterGenerateRequest) => void;
+  onSubmit: (request: CoverLetterFormSubmit) => void;
   apiError?: string | null;
+  validationErrors?: Array<{ field: string; message: string }>;
 }
 
 const MIN_JD_CHARS = 50;
@@ -28,11 +26,10 @@ const MIN_WORDS_FLOOR = 200;
 const MAX_WORDS_CEIL = 500;
 
 export default function CoverLetterForm({
-  resume,
-  resumeSchemaVersion,
   isSubmitting = false,
   onSubmit,
   apiError = null,
+  validationErrors = [],
 }: CoverLetterFormProps) {
   const [jd, setJd] = useState('');
   const [optionalOpen, setOptionalOpen] = useState(false);
@@ -66,7 +63,7 @@ export default function CoverLetterForm({
   const hasErrors = !!errors.jd || !!errors.note || !!errors.bounds;
   const formId = useId();
 
-  function buildRequest(): CoverLetterGenerateRequest {
+  function buildRequest(): CoverLetterFormSubmit {
     const appCtxFields = {
       ...(companyName.trim() && { company_name: companyName.trim() }),
       ...(roleTitle.trim() && { role_title: roleTitle.trim() }),
@@ -77,8 +74,6 @@ export default function CoverLetterForm({
     const hasAppCtx = Object.keys(appCtxFields).length > 0;
 
     return {
-      resume,
-      resume_schema_version: resumeSchemaVersion,
       job_description: jd.trim(),
       ...(hasAppCtx && {
         application_context: { ...appCtxFields, source: 'user' as const },
@@ -110,10 +105,7 @@ export default function CoverLetterForm({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-800">Resume ready</p>
           <p className="text-xs text-slate-500 mt-0.5">
-            Using your latest parsed resume
-            <span className="ml-1 text-emerald-600 font-medium">
-              (schema {resumeSchemaVersion})
-            </span>
+            Using your latest parsed resume for this letter
           </p>
         </div>
         <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
@@ -302,7 +294,17 @@ export default function CoverLetterForm({
           role="alert"
           className="border border-red-200 bg-red-50 text-red-700 text-sm rounded-xl p-4"
         >
-          {apiError}
+          <p>{apiError}</p>
+          {validationErrors.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 space-y-1">
+              {validationErrors.map((error) => (
+                <li key={`${error.field}-${error.message}`}>
+                  <span className="font-semibold">{error.field}:</span>{" "}
+                  {error.message}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

@@ -23,6 +23,18 @@ const BASE_URL =
 const isAdminRequest = (url?: string): boolean =>
   url?.includes('/admin/') || false;
 
+const getUserLoginHref = (): string => {
+  if (typeof window === 'undefined') return '/?showLogin=true';
+
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const params = new URLSearchParams({ showLogin: 'true' });
+  if (currentPath && currentPath !== '/') {
+    params.set('next', currentPath);
+  }
+
+  return `/?${params.toString()}`;
+};
+
 const bodyContains = (data: unknown, str: string): boolean => {
   if (typeof data === 'string') return data.includes(str);
   if (data && typeof data === 'object') {
@@ -239,7 +251,7 @@ client.interceptors.response.use(
       if (isAdmin) {
         window.location.href = '/admin/login';
       } else {
-        window.location.href = '/?showLogin=true';
+        window.location.href = getUserLoginHref();
       }
       return Promise.reject(error);
     }
@@ -298,7 +310,7 @@ client.interceptors.response.use(
       if (isAdmin) {
         window.location.href = '/admin/login';
       } else {
-        window.location.href = '/?showLogin=true';
+        window.location.href = getUserLoginHref();
       }
       return Promise.reject(refreshError);
     } finally {

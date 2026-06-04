@@ -88,6 +88,7 @@ export interface ResumeResponse {
     endDate: string;
     currentlyWorking: boolean;
     description: string;
+    technologies?: string[];
   }>;
   awards?: Array<{
     id?: string;
@@ -126,7 +127,15 @@ export interface ResumeResponse {
     phone: string;
   }>;
   work_experience?: Array<{
-    role?: string;
+    id?: string;
+    company: string;
+    role: string;
+    location: string;
+    startDate: string;
+    endDate: string;
+    currentlyWorking: boolean;
+    description: string;
+    technologies?: string[];
   }>;
   builder_score?: {
     score?: number;
@@ -292,12 +301,8 @@ export const createResumeFromParsed = async (
 };
 
 // ==================== GET ALL RESUMES (UNIFIED) ====================
-export const getAllResumesUnified = async (
-  options?: { skipAuthRedirect?: boolean }
-): Promise<import('@/types/api.types').AllResumesResponse> => {
-  const response = await httpClient.get<import('@/types/api.types').AllResumesResponse>('/resumes/all', {
-    headers: options?.skipAuthRedirect ? { 'X-Skip-Auth-Redirect': 'true' } : undefined,
-  });
+export const getAllResumesUnified = async (): Promise<import('@/types/api.types').AllResumesResponse> => {
+  const response = await httpClient.get<import('@/types/api.types').AllResumesResponse>('/resumes/all');
   return response.data;
 };
 
@@ -412,7 +417,19 @@ interface BackendCustomSection {
  * Transform frontend customSections (fields-based) to backend format (items-based)
  */
 const transformCustomSectionsForBackend = (customSections: CustomSection[]): BackendCustomSection[] => {
-  return customSections.map((section) => {
+  return customSections
+    .filter(section => {
+      // Skip sections with no fields — they have no content to render
+      if (!section.fields || section.fields.length === 0) return false;
+      // Skip sections where every field is empty
+      return section.fields.some(f => {
+        const v = f.value;
+        if (typeof v === 'string') return v.trim() !== '';
+        if (Array.isArray(v)) return v.length > 0;
+        return !!v;
+      });
+    })
+    .map((section) => {
     // Create an item from the fields
     const item: BackendCustomSectionItem = {
       title: '',
@@ -483,7 +500,7 @@ const transformCustomSectionsForBackend = (customSections: CustomSection[]): Bac
       icon: 'custom', // Default icon
       items: [cleanedItem], // Single item per section for now
     };
-  });
+  }); // end .map
 };
 
 /**
@@ -588,6 +605,11 @@ const transformCustomSectionsFromBackend = (backendSections: BackendCustomSectio
 const transformResumeDataForBackend = (resumeData: Partial<ResumeResponse>): Partial<ResumeResponse> => {
   const transformed = { ...resumeData };
 
+  // Skills are managed exclusively via individual skill endpoints (POST/DELETE).
+  // Sending them through PATCH causes a backend error, so strip them here.
+  delete transformed.skills;
+  delete transformed.categorizedSkills;
+
   // ✅ Send full professionalSummary object (summary + targetRole) to backend
   if (transformed.professionalSummary && typeof transformed.professionalSummary === 'object') {
     transformed.professionalSummary = {
@@ -596,20 +618,13 @@ const transformResumeDataForBackend = (resumeData: Partial<ResumeResponse>): Par
     };
   }
 
-  // ✅ Transform categorizedSkills to keep structure intact
-  if (transformed.categorizedSkills && typeof transformed.categorizedSkills === 'object') {
-    // Ensure all categories exist, defaulting empty arrays if missing
-    const categorizedSkills: CategorizedSkills = {
-      programming_languages: transformed.categorizedSkills.programming_languages || [],
-      frameworks: transformed.categorizedSkills.frameworks || [],
-      databases: transformed.categorizedSkills.databases || [],
-      tools: transformed.categorizedSkills.tools || [],
-      cloud_platforms: transformed.categorizedSkills.cloud_platforms || [],
-      soft_skills: transformed.categorizedSkills.soft_skills || []
-    };
-
-    transformed.categorizedSkills = categorizedSkills;
-    logger.info("✅ Categorized skills prepared for backend:", categorizedSkills);
+  // Ensure personalInfo is sent under both snake_case and camelCase keys so the
+  // backend PDF generator finds it regardless of which convention it uses.
+  const raw = transformed as Record<string, unknown>;
+  if (raw['personal_info']) {
+    raw['personalInfo'] = raw['personal_info'];
+  } else if (transformed.personalInfo) {
+    raw['personal_info'] = transformed.personalInfo;
   }
 
   // Transform customSections from fields-based to items-based structure
@@ -725,6 +740,58 @@ export const deleteResumeSectionItem = async (
   }
 };
 
+// ==================== ADD SKILL TO CATEGORY ====================
+export const addSkillToCategory = async (
+  resumeId: string,
+  category: string,
+  skillName: string
+): Promise<{ id?: string }> => {
+  try {
+    logger.debug("➕ Adding skill to category:", { category, skillName });
+    const response = await httpClient.post<{ id?: string; _id?: string }>(
+      `/resumes/${resumeId}/skills/${category}`,
+      { name: skillName }
+    );
+    const id = response.data?.id ?? response.data?._id;
+    logger.info("✅ Skill added successfully, id:", id);
+    return { id };
+  } catch (error) {
+    logger.error("❌ Error adding skill:", error);
+    throw error;
+  }
+};
+
+// ==================== DELETE SKILL BY ID ====================
+export const deleteSkillById = async (
+  resumeId: string,
+  category: string,
+  skillId: string
+): Promise<void> => {
+  try {
+    logger.debug("🗑️ Deleting skill:", { category, skillId });
+    await httpClient.delete(`/resumes/${resumeId}/skills/${category}/${encodeURIComponent(skillId)}`);
+    logger.info("✅ Skill deleted successfully");
+  } catch (error) {
+    logger.error("❌ Error deleting skill:", error);
+    throw error;
+  }
+};
+
+// ==================== DELETE SKILL CATEGORY ====================
+export const deleteSkillCategory = async (
+  resumeId: string,
+  category: string
+): Promise<void> => {
+  try {
+    logger.debug("🗑️ Deleting skill category:", category);
+    await httpClient.delete(`/resumes/${resumeId}/skills/categories/${category}`);
+    logger.info("✅ Skill category deleted successfully");
+  } catch (error) {
+    logger.error("❌ Error deleting skill category:", error);
+    throw error;
+  }
+};
+
 // ==================== TRIGGER SCORE CALCULATION ====================
 export const triggerScoreCalculation = async (resumeId: string): Promise<void> => {
   
@@ -760,7 +827,9 @@ export const getBuilderScore = async (resumeId: string): Promise<BuilderScoreRes
   }
 };
 
-// ==================== GET RESUME SCORE WITH POLLING ====================
+// ==================== GET RESUME SCORE WITH POLLING (DEPRECATED) ====================
+// @deprecated Use triggerScoreCalculation + getBuilderScore directly instead.
+// Do not use this function - it fabricates fake metrics.
 export const getResumeScore = async (
   resumeId: string,
   onProgress?: (attempt: number, max: number) => void
@@ -791,14 +860,10 @@ export const getResumeScore = async (
           return {
             overall_score: builderScore.score,
             details: {
-              keywords_score: Math.floor(builderScore.score * 0.9),
-              grammar_score: Math.floor(builderScore.score * 0.95),
-              skills_match: Math.floor(builderScore.score * 0.85),
-              improvement_suggestions: builderScore.score < 70
-                ? ["Add more keywords", "Improve formatting", "Add more skills"]
-                : builderScore.score < 90
-                ? ["Fine-tune your summary", "Add certifications"]
-                : ["Your resume looks great!"]
+              keywords_score: 0,
+              grammar_score: 0,
+              skills_match: 0,
+              improvement_suggestions: []
             }
           };
         }

@@ -199,7 +199,7 @@ export function SubscriptionManagement({ onUpgrade, fromPayment }: SubscriptionM
               Subscription cancelled successfully
             </p>
             <p className="text-green-700 text-xs mt-1">
-              • You'll retain access until the end of your billing period
+              • You&apos;ll retain access until the end of your billing period
             </p>
             <p className="text-green-700 text-xs">
               • A confirmation email has been sent to your registered email

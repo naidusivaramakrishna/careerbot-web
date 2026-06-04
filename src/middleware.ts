@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { logger } from '@/lib/logger';
-
+ 
 // Public routes — no auth required
 const publicRoutes = [
     '/',
@@ -12,18 +12,32 @@ const publicRoutes = [
     '/reset-password',
     '/forgot-password',
     '/resend-verification',
-    "/browse-templates"
+    "/browse-templates",
+    // Builder and cover-letter are fully public — auth is enforced at the
+    // action level (download / generate) inside the client components.
+    "/builder",
+    "/cover-letter",
 ];
 
-const publicExactRoutes = ['/builder', '/builder/start', '/cover-letter'];
-
+const publicExactRoutes: string[] = [];
+ 
 const RECRUITER_PREFIX = '/recruiter';
 const ADMIN_PREFIX = '/admin';
 
+function buildUserLoginUrl(request: NextRequest): URL {
+    const loginUrl = new URL('/', request.url);
+    loginUrl.searchParams.set('showLogin', 'true');
+    loginUrl.searchParams.set(
+        'next',
+        `${request.nextUrl.pathname}${request.nextUrl.search}`
+    );
+    return loginUrl;
+}
+ 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     logger.info(`[${request.method}] ${pathname}`);
-
+ 
     // Allow public routes without authentication
     const isPublicRoute =
         publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/')) ||
@@ -43,16 +57,18 @@ export async function middleware(request: NextRequest) {
                   request.cookies.get('admin_access_token')?.value;
     const refreshToken = request.cookies.get('refresh_token')?.value ||
                          request.cookies.get('admin_refresh_token')?.value;
-
+ 
     if (!token && !refreshToken) {
         const loginUrl = pathname.startsWith(ADMIN_PREFIX)
             ? '/admin/login'
             : pathname.startsWith(RECRUITER_PREFIX)
             ? '/recruiter/auth'
-            : '/?showLogin=true';
-        return NextResponse.redirect(new URL(loginUrl, request.url));
+            : buildUserLoginUrl(request);
+        return NextResponse.redirect(
+            typeof loginUrl === 'string' ? new URL(loginUrl, request.url) : loginUrl
+        );
     }
-
+ 
     // JWT role enforcement — decode access_token to check role claim
     if (token && process.env.JWT_SECRET) {
         try {
@@ -61,7 +77,7 @@ export async function middleware(request: NextRequest) {
                 new TextEncoder().encode(process.env.JWT_SECRET)
             );
             const role = payload.role as string | undefined;
-
+ 
             if (pathname.startsWith(RECRUITER_PREFIX) && role !== 'recruiter' && role !== 'admin') {
                 return NextResponse.redirect(new URL('/403', request.url));
             }
@@ -80,16 +96,18 @@ export async function middleware(request: NextRequest) {
                 ? '/admin/login'
                 : pathname.startsWith(RECRUITER_PREFIX)
                 ? '/recruiter/auth'
-                : '/?showLogin=true';
-            return NextResponse.redirect(new URL(loginUrl, request.url));
+                : buildUserLoginUrl(request);
+            return NextResponse.redirect(
+                typeof loginUrl === 'string' ? new URL(loginUrl, request.url) : loginUrl
+            );
         }
     }
-
+ 
     return NextResponse.next();
 }
-
+ 
 export const config = {
     matcher: [
-        '/((?!_next/static|_next/image|favicon.ico|assets|api).*)',
+        '/((?!_next/static|_next/image|favicon.ico|assets|images|api).*)',
     ],
 };

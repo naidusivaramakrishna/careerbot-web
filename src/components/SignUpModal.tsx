@@ -8,16 +8,18 @@ import { signUp, signIn } from "@/api/authApi"
 import { SignUpForm as ISignUpForm, LoginForm, ErrorState, LoadingState, FormType } from "@/types/authTypes"
 import SocialLoginButtons from "./SocialLoginButtons"
 import { mapAuthError } from "@/lib/authMessages"
-import { validatePassword } from "@/lib/passwordPolicy"
+import { sanitizeAuthRedirect } from "@/lib/authRedirect"
 
 interface Props {
     open: boolean
     onClose: () => void
     initialFormType?: FormType
+    redirectTo?: string
 }
 
-const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" }) => {
+const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup", redirectTo }) => {
     const router = useRouter()
+    const authRedirectTo = sanitizeAuthRedirect(redirectTo)
 
     const [formType, setFormType] = useState<FormType>(initialFormType)
     const [showPassword, setShowPassword] = useState(false)
@@ -70,9 +72,9 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
 
             // Verification email is sent automatically by backend
             // User can verify email from profile/settings later
-            toast.success("Account created! Redirecting to resume builder...")
+            toast.success("Account created! Redirecting...")
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            window.location.href = "/builder"
+            window.location.href = authRedirectTo
         } catch (err) {
             handleApiError(err)
         } finally {
@@ -88,12 +90,12 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
             // Tenant ID is auto-generated and set in context
             // httpClient will add X-Tenant-Id header automatically
             await signIn(loginForm)
-            toast.success("Login successful! Redirecting to resume builder...")
+            toast.success("Login successful! Redirecting...")
             setLoginForm({ email: "", password: "" })
             // Reset the refresh timestamp so useTokenRefresh doesn't immediately
             // fire a refresh attempt on dashboard mount due to a stale previous-session timestamp.
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            window.location.href = "/builder"
+            window.location.href = authRedirectTo
             onClose()
         } catch (err) {
             handleApiError(err, true)
@@ -257,7 +259,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup" 
                     </p>
                 </div>
 
-                <SocialLoginButtons variant={formType} />
+                <SocialLoginButtons variant={formType} redirectTo={authRedirectTo} />
 
                 <div className="flex items-center my-5">
                     <div className="grow h-px bg-[#e6d6f4]"></div>

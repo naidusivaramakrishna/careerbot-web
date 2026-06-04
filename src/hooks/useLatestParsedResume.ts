@@ -25,6 +25,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAllResumesUnified } from "@/api/resumeApi";
+import { hasCoverLetterUsableResume } from "@/lib/coverLetterResume";
 import type { ResumeSchemaVersion } from "@/types/coverLetter";
 
 interface ParsedResumeBlob {
@@ -89,8 +90,8 @@ export function useLatestParsedResume(): UseLatestParsedResumeResult {
       // content the cover-letter contract requires (Codex WEB-3.1
       // P2). If a user has only enhanced resumes (no builder), this
       // hook returns null and the page falls back to NoResumePrompt.
-      const pool: ParsedResumeBlob[] = (response.builder_resumes ??
-        []) as ParsedResumeBlob[];
+      const pool: ParsedResumeBlob[] = ((response.builder_resumes ??
+        []) as ParsedResumeBlob[]).filter(hasCoverLetterUsableResume);
       if (pool.length === 0) {
         setResume(null);
         setSchemaVersion(DEFAULT_SCHEMA);

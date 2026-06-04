@@ -262,6 +262,7 @@ export const extractResume = async (file: File): Promise<ResumeExtractResponse> 
             "/parser/parse_resume/",
             formData,
             {
+                timeout: 120000,
                 headers: {
                     "Content-Type": "multipart/form-data",
                 },

@@ -26,6 +26,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAllResumesUnified } from "@/api/resumeApi";
+import { hasCoverLetterUsableResume } from "@/lib/coverLetterResume";
 
 export interface UseHasParsedResumeResult {
   hasResume: boolean | null;
@@ -48,15 +49,11 @@ export function useHasParsedResume(): UseHasParsedResumeResult {
     try {
       const response = await getAllResumesUnified();
       if (mySeq !== requestSeqRef.current) return;
-      // Cover-letter generate needs the FULL parsed resume blob;
-      // only `builder_resumes` carry that shape. `enhanced_resumes`
-      // are summary metadata only and can't be embedded in the
-      // request (Codex WEB-3.1 P2). Keep this hook aligned with
-      // useLatestParsedResume's source-of-truth filter so the gate
-      // and the content are consistent. A user with only enhanced
-      // resumes is routed to /resume/parser (NoResumePrompt) to
-      // produce a builder-shape resume.
-      const has = (response.builder_resumes?.length ?? 0) > 0;
+      // Cover-letter generate is ID-based. It needs a parser resume
+      // document id that the backend can resolve to parsed_data.
+      // Builder-only resumes are not enough unless they carry that
+      // parser id or include parsed_data themselves.
+      const has = (response.builder_resumes ?? []).some(hasCoverLetterUsableResume);
       setHasResume(has);
     } catch (err) {
       if (mySeq !== requestSeqRef.current) return;

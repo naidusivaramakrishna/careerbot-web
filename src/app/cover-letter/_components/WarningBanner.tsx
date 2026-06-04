@@ -39,11 +39,11 @@ export default function WarningBanner({ warnings }: WarningBannerProps) {
             id="warning-banner-heading"
             className="text-sm font-semibold text-amber-900 mb-1"
           >
-            Please review before sending
+            Draft ready, review before sending
           </h3>
           <p className="text-sm text-amber-800 mb-2">
-            This draft has {warnings.length} quality signal
-            {warnings.length === 1 ? "" : "s"} you should check.
+            This cover letter is ready, with {warnings.length} quality
+            signal{warnings.length === 1 ? "" : "s"} to check before you use it.
           </p>
           <ul className="text-sm text-amber-800 space-y-0.5 list-disc list-inside">
             {warnings.map((w, i) => (

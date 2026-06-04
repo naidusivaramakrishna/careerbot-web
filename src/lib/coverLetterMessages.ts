@@ -88,6 +88,7 @@ export type CoverLetterApiErrorReason =
   | "timeout"
   | "unauthorized"
   | "not_found"
+  | "download_unavailable"
   | "unknown";
 
 export const ERROR_MESSAGES: Record<CoverLetterApiErrorReason, string> = {
@@ -109,6 +110,8 @@ export const ERROR_MESSAGES: Record<CoverLetterApiErrorReason, string> = {
     "Your session has expired. Please sign in again.",
   not_found:
     "We couldn't find that cover letter.",
+  download_unavailable:
+    "Cover letter download is not available yet. Please check that the backend download endpoint is running.",
   unknown:
     "Something went wrong. Please try again.",
 };

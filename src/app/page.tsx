@@ -3,23 +3,25 @@
 import { useState, useEffect } from 'react';
 import SignUpModal from '@/components/SignUpModal';
 import { useTenant } from '@/contexts/TenantContext';
-import LandingNavbar from './_components/LandingNavbar';
-import HeroSection from './_components/HeroSection';
-import TrustBadgeRow from './_components/TrustBadgeRow';
-import SocialProofBar from './_components/SocialProofBar';
-import FeaturesSection from './_components/FeaturesSection';
-import TemplateGallery from './_components/TemplateGallery';
-import HowItWorks from './_components/HowItWorks';
-import UserSegments from './_components/UserSegments';
-import Testimonials from './_components/Testimonials';
-import PricingTeaser from './_components/PricingTeaser';
-import FAQSection from './_components/FAQSection';
-import FinalCTASection from './_components/FinalCTASection';
-import LandingFooter from './_components/LandingFooter';
+import { sanitizeAuthRedirect } from '@/lib/authRedirect';
+import LandingNavbar from './(landing)/_components/LandingNavbar';
+import HeroSection from './(landing)/_components/HeroSection';
+import TrustBadgeRow from './(landing)/_components/TrustBadgeRow';
+import SocialProofBar from './(landing)/_components/SocialProofBar';
+import FeaturesSection from './(landing)/_components/FeaturesSection';
+import TemplateGallery from './(landing)/_components/TemplateGallery';
+import HowItWorks from './(landing)/_components/HowItWorks';
+import UserSegments from './(landing)/_components/UserSegments';
+import Testimonials from './(landing)/_components/Testimonials';
+import PricingTeaser from './(landing)/_components/PricingTeaser';
+import FAQSection from './(landing)/_components/FAQSection';
+import FinalCTASection from './(landing)/_components/FinalCTASection';
+import LandingFooter from './(landing)/_components/LandingFooter';
 
 export default function Home() {
   const [showModal, setShowModal] = useState(false);
   const [initialFormType, setInitialFormType] = useState<'signup' | 'signin'>('signup');
+  const [authRedirectTo, setAuthRedirectTo] = useState<string | undefined>();
   const { setActiveTenant } = useTenant();
 
   const openSignup = () => {
@@ -43,6 +45,7 @@ export default function Home() {
       }
 
       if (params.get('showLogin') === 'true') {
+        setAuthRedirectTo(sanitizeAuthRedirect(params.get('next')));
         // Delay slightly to ensure state updates properly
         setTimeout(() => {
           openSignin();
@@ -86,6 +89,7 @@ export default function Home() {
         open={showModal}
         onClose={() => setShowModal(false)}
         initialFormType={initialFormType}
+        redirectTo={authRedirectTo}
       />
     </>
   );

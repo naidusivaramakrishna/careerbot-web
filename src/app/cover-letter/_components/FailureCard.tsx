@@ -26,16 +26,86 @@ export interface FailureCardProps {
   letter: CoverLetterResponse;
 }
 
-const NEXT_ACTIONS = [
-  "Pick a different JD that matches your background more",
-  "Update your resume to include relevant projects/skills",
-  "Use the \"note to writer\" field to lean into niche experience",
-];
+type FailureRecovery = {
+  title: string;
+  actions: string[];
+  cta: string;
+};
+
+const DEFAULT_RECOVERY: FailureRecovery = {
+  title: "What to try next:",
+  actions: [
+    "Paste a shorter, cleaner JD with the core responsibilities",
+    "Keep the letter length at the default or lower range",
+    "Try again in a moment",
+  ],
+  cta: "Try again",
+};
+
+const RECOVERY_BY_REASON: Partial<Record<CoverLetterReason, FailureRecovery>> = {
+  llm_budget_exceeded: {
+    title: "What to try next:",
+    actions: [
+      "Try again in a moment; this is usually temporary",
+      "Shorten the JD to the responsibilities and requirements only",
+      "Use a lower letter length in advanced settings",
+    ],
+    cta: "Try again",
+  },
+  invalid_jd: {
+    title: "What to try next:",
+    actions: [
+      "Paste the full job posting text instead of a summary",
+      "Remove unrelated page text, navigation, ads, or duplicate content",
+      "Try a different JD if this posting is incomplete",
+    ],
+    cta: "Try a different JD",
+  },
+  low_jd_match: {
+    title: "What to try next:",
+    actions: [
+      "Pick a JD that matches your background more closely",
+      "Update your resume to include relevant projects and skills",
+      "Use the note field to highlight relevant niche experience",
+    ],
+    cta: "Try a different JD",
+  },
+  insufficient_grounding: {
+    title: "What to try next:",
+    actions: [
+      "Upload a more detailed resume with projects, impact, and tools",
+      "Add concrete achievements before generating again",
+      "Use the note field for role-specific evidence the resume supports",
+    ],
+    cta: "Update resume or retry",
+  },
+  claim_catalog_empty: {
+    title: "What to try next:",
+    actions: [
+      "Upload a resume with more concrete work, project, or education details",
+      "Add measurable achievements and relevant skills",
+      "Try again after the resume is parsed successfully",
+    ],
+    cta: "Update resume or retry",
+  },
+  parser_confidence_too_low: {
+    title: "What to try next:",
+    actions: [
+      "Upload a text-based PDF or DOCX resume",
+      "Avoid scanned image resumes where possible",
+      "Check that the parsed resume includes your experience and skills",
+    ],
+    cta: "Upload resume again",
+  },
+};
 
 export default function FailureCard({ letter }: FailureCardProps) {
   const [diagOpen, setDiagOpen] = useState(false);
   const reason = letter.reason as CoverLetterReason | null;
   const reasonCopy = reason ? FAILED_REASON_MESSAGES[reason] : null;
+  const recovery = reason
+    ? RECOVERY_BY_REASON[reason] ?? DEFAULT_RECOVERY
+    : DEFAULT_RECOVERY;
   const reasonsList = letter.generation_status?.reasons ?? [];
   const grounding = letter.grounding ?? {};
 
@@ -61,10 +131,10 @@ export default function FailureCard({ letter }: FailureCardProps) {
 
       <div className="mb-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-2">
-          What to try next:
+          {recovery.title}
         </h3>
         <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-          {NEXT_ACTIONS.map((line) => (
+          {recovery.actions.map((line) => (
             <li key={line}>{line}</li>
           ))}
         </ul>
@@ -74,7 +144,7 @@ export default function FailureCard({ letter }: FailureCardProps) {
         href="/cover-letter/new"
         className="block w-full text-center bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
       >
-        Try a different JD
+        {recovery.cta}
       </Link>
 
       {/* Advanced diagnostics — collapsed by default */}

@@ -19,9 +19,11 @@
 import axios from "axios";
 import { httpClient } from "@/lib/http";
 import type {
+  CoverLetterExportFormat,
   CoverLetterGenerateRequest,
   CoverLetterListResponse,
   CoverLetterResponse,
+  CoverLetterTemplateCatalogResponse,
   ListCoverLettersParams,
 } from "@/types/coverLetter";
 import type { CoverLetterApiErrorReason } from "@/lib/coverLetterMessages";
@@ -86,11 +88,16 @@ function mapError(err: unknown): CoverLetterApiError {
               }>;
             };
           };
-          detail?: string;
+          detail?: string | Array<{
+            loc?: Array<string | number>;
+            msg?: string;
+            message?: string;
+          }>;
         }
       | undefined;
     const backendErrorCode = data?.error?.error_code;
-    const message = data?.error?.message ?? data?.detail ?? err.message;
+    const detailMessage = typeof data?.detail === "string" ? data.detail : undefined;
+    const message = data?.error?.message ?? detailMessage ?? err.message;
 
     // Per impl-blueprint §4 canonical 7-status map. 402 is NOT in
     // V1 (free feature; paid-tier deferred).
@@ -110,6 +117,14 @@ function mapError(err: unknown): CoverLetterApiError {
         backendErrorCode,
       });
     }
+    if (status === 409) {
+      return new CoverLetterApiError({
+        reason: "download_unavailable",
+        status,
+        message,
+        backendErrorCode,
+      });
+    }
     if (status === 413) {
       return new CoverLetterApiError({
         reason: "body_too_large",
@@ -119,8 +134,16 @@ function mapError(err: unknown): CoverLetterApiError {
       });
     }
     if (status === 422) {
-      const raw = data?.error?.details?.validation_errors ?? [];
-      const validationErrors = raw
+      const explicit = data?.error?.details?.validation_errors ?? [];
+      const fastApi = Array.isArray(data?.detail)
+        ? data.detail.map((item) => ({
+            field: Array.isArray(item.loc)
+              ? item.loc.filter((part) => part !== "body").join(".")
+              : "request",
+            message: item.msg ?? item.message ?? "Invalid value",
+          }))
+        : [];
+      const validationErrors = [...explicit, ...fastApi]
         .filter((v) => v.field && v.message)
         .map((v) => ({ field: v.field as string, message: v.message as string }));
       return new CoverLetterApiError({
@@ -230,6 +253,7 @@ export async function generateCoverLetter(
       `${BASE}/generate`,
       stripDebugMetadata(body),
       {
+        timeout: 120000,
         headers: {
           "Idempotency-Key": idempotencyKey,
         },
@@ -287,6 +311,53 @@ export async function listCoverLetters(
  * returns false on a 404 (treat as "already gone" — idempotent
  * from the user's POV). Other errors throw.
  */
+export async function listCoverLetterTemplates(): Promise<CoverLetterTemplateCatalogResponse> {
+  try {
+    const { data } = await httpClient.get<CoverLetterTemplateCatalogResponse>(
+      `${BASE}/templates`,
+    );
+    return data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+export interface DownloadCoverLetterParams {
+  format: CoverLetterExportFormat;
+  template_id: string;
+}
+
+export async function downloadCoverLetter(
+  letterId: string,
+  params: DownloadCoverLetterParams,
+): Promise<void> {
+  try {
+    const response = await httpClient.get<Blob>(
+      `${BASE}/${encodeURIComponent(letterId)}/download`,
+      {
+        params,
+        responseType: "blob",
+      },
+    );
+    triggerBlobDownload(
+      response.data,
+      filenameFromDisposition(response.headers?.["content-disposition"])
+        ?? fallbackDownloadFilename(params.format),
+    );
+  } catch (err) {
+    const mapped = mapError(err);
+    if (mapped.reason === "not_found") {
+      throw new CoverLetterApiError({
+        reason: "download_unavailable",
+        status: mapped.status,
+        message: mapped.message,
+        backendErrorCode: mapped.backendErrorCode,
+      });
+    }
+    throw mapped;
+  }
+}
+
 export async function deleteCoverLetter(letterId: string): Promise<boolean> {
   try {
     await httpClient.delete(
@@ -303,4 +374,36 @@ export async function deleteCoverLetter(letterId: string): Promise<boolean> {
 }
 
 // ── re-export the canonical error class for hook consumers ─────
+function filenameFromDisposition(disposition: unknown): string | null {
+  if (typeof disposition !== "string") return null;
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const plainMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return plainMatch?.[1] ?? null;
+}
+
+function fallbackDownloadFilename(format: CoverLetterExportFormat): string {
+  return `cover-letter.${format}`;
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+}
+
 export type { CoverLetterApiErrorReason } from "@/lib/coverLetterMessages";

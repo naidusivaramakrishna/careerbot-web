@@ -3,16 +3,26 @@ import React from "react"
 import Image from "next/image"
 import { getGoogleLoginUrl, getLinkedInLoginUrl } from "@/api/authApi"
 import { mapAuthError } from "@/lib/authMessages"
+import { AUTH_REDIRECT_STORAGE_KEY, sanitizeAuthRedirect } from "@/lib/authRedirect"
 import { toast } from "sonner"
 
 interface Props {
   variant?: "signup" | "signin"
+  redirectTo?: string
 }
 
-const SocialLoginButtons: React.FC<Props> = ({ variant = "signup" }) => {
+const SocialLoginButtons: React.FC<Props> = ({ variant = "signup", redirectTo }) => {
+  const storeRedirectTarget = () => {
+    sessionStorage.setItem(
+      AUTH_REDIRECT_STORAGE_KEY,
+      sanitizeAuthRedirect(redirectTo)
+    )
+  }
+
   // Use BACKEND OAuth for Google (gives you tokens for your API)
   const handleGoogleLogin = async () => {
     try {
+      storeRedirectTarget()
       const loginUrl = await getGoogleLoginUrl()
       window.location.href = loginUrl
     } catch (error) {
@@ -39,6 +49,7 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup" }) => {
   // Use BACKEND OAuth for LinkedIn
   const handleLinkedInLogin = async () => {
     try {
+      storeRedirectTarget()
       const loginUrl = await getLinkedInLoginUrl()
       window.location.href = loginUrl
     } catch (error) {

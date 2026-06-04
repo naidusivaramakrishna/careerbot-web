@@ -3,6 +3,7 @@ import React, { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { isAuthenticated } from "@/api/authApi"
+import { getStoredAuthRedirect } from "@/lib/authRedirect"
 
 const LinkedInSuccessContent = () => {
     const router = useRouter()
@@ -18,9 +19,10 @@ const LinkedInSuccessContent = () => {
                     setStatus('success')
                     toast.success('Successfully signed in with LinkedIn!')
 
-                    // Redirect to dashboard after a brief moment
+                    const redirectTo = getStoredAuthRedirect()
+
                     setTimeout(() => {
-                        router.push('/dashboard')
+                        router.push(redirectTo)
                     }, 1000)
                 } else {
                     setStatus('error')
@@ -76,7 +78,7 @@ const LinkedInSuccessContent = () => {
                         </div>
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome! 🎉</h2>
                         <p className="text-gray-600">Successfully signed in with LinkedIn</p>
-                        <p className="text-sm text-gray-500 mt-2">Redirecting to your dashboard...</p>
+                        <p className="text-sm text-gray-500 mt-2">Redirecting...</p>
                     </>
                 )}
 

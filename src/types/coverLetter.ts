@@ -19,6 +19,8 @@ export type CoverLetterStatus = "ready_to_review" | "needs_review" | "failed";
 
 export type CoverLetterTone = "professional";
 
+export type CoverLetterExportFormat = "pdf" | "docx";
+
 export type AppContextSource = "user" | "jd" | "unknown";
 
 export type JdMatchStatus =
@@ -74,10 +76,14 @@ export interface GenerateOptions {
 }
 
 export interface CoverLetterGenerateRequest {
-  resume: Record<string, unknown>;
-  resume_schema_version: ResumeSchemaVersion;
-  /** Parsed JD object OR raw JD text string (CL-1.2 contract). */
-  job_description: string | Record<string, unknown>;
+  parsed_resume_id: string;
+  jd_id: string;
+  application_context?: ApplicationContext | null;
+  options?: GenerateOptions;
+}
+
+export interface CoverLetterFormSubmit {
+  job_description: string;
   application_context?: ApplicationContext | null;
   options?: GenerateOptions;
 }
@@ -186,6 +192,38 @@ export interface CoverLetterListResponse {
 }
 
 // ── pagination params ──────────────────────────────────────────
+export interface CoverLetterTemplateSection {
+  enabled?: boolean;
+  order?: number;
+  label?: string;
+  description?: string | null;
+  includes?: string[] | null;
+  default_text?: string | null;
+  placeholder?: string | null;
+}
+
+export interface CoverLetterTemplatePlaceholder {
+  label?: string;
+  type?: string;
+  required?: boolean;
+  example?: string | null;
+  auto_fill?: string | null;
+}
+
+export interface CoverLetterTemplate {
+  template_id: string;
+  name: string;
+  description: string;
+  supports: CoverLetterExportFormat[];
+  is_default: boolean;
+  sections?: Record<string, CoverLetterTemplateSection> | null;
+  placeholders?: Record<string, CoverLetterTemplatePlaceholder> | null;
+}
+
+export interface CoverLetterTemplateCatalogResponse {
+  templates: CoverLetterTemplate[];
+}
+
 export interface ListCoverLettersParams {
   /** 1..100; default 20 (server default). */
   limit?: number;

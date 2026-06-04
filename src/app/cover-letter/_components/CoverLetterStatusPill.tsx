@@ -2,15 +2,6 @@
 
 import type { CoverLetterStatus } from "@/types/coverLetter";
 
-/**
- * Status pill — one of three colors mapped to the CL-1.2 status.
- *
- * Renders a small inline-block badge with an accessible label
- * ("Status: Ready to review") so screen readers announce it as
- * a status update rather than just a colored shape.
- *
- * Spec: wireframes §A.2 STATUS PILL COLORING + §11 a11y.
- */
 export interface CoverLetterStatusPillProps {
   status: CoverLetterStatus;
   className?: string;
@@ -21,19 +12,19 @@ const STATUS_STYLE: Record<
   { label: string; bg: string; text: string; dot: string }
 > = {
   ready_to_review: {
-    label: "Ready to review",
+    label: "Draft ready",
     bg: "bg-emerald-50",
     text: "text-emerald-700",
     dot: "bg-emerald-500",
   },
   needs_review: {
-    label: "Needs review",
+    label: "Draft ready - Review",
     bg: "bg-amber-50",
     text: "text-amber-700",
     dot: "bg-amber-500",
   },
   failed: {
-    label: "Failed",
+    label: "No draft",
     bg: "bg-red-50",
     text: "text-red-700",
     dot: "bg-red-500",
@@ -45,6 +36,7 @@ export default function CoverLetterStatusPill({
   className,
 }: CoverLetterStatusPillProps) {
   const s = STATUS_STYLE[status];
+
   return (
     <span
       role="status"

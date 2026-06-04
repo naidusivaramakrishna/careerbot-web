@@ -14,6 +14,7 @@ import UploadResumeModal from '../_components/UploadResumeModal';
 import { useRouter, useSearchParams } from 'next/navigation';
 import logger from "@/lib/logger";
 import { createResumeWithAuth } from '@/api/resumeApi';
+import AuthModal from '@/components/SignUpModal';
 
 export interface Resume {
   id: string;

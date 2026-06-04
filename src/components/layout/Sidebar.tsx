@@ -468,6 +468,9 @@ export default function Sidebar() {
   const getActiveId = () => {
     for (const group of VISIBLE_NAV_GROUPS) {
       for (const item of group.items) {
+        if (item.id === "cover_letter" && pathname.startsWith("/cover-letter/")) {
+          return item.id;
+        }
         if (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path))) {
           return item.id;
         }
