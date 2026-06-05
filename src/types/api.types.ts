@@ -382,6 +382,7 @@ export interface EnhanceResumeResponse {
   enhancer_state?: EnhancerState;
   suggestions?: EnhancedSuggestion[];
   suggested_summary?: string[];
+  ats_display?: AtsDisplay;
   ats_tokens_used?: ATSTokensUsed;
   display_name?: string;
   source?: string;
@@ -395,6 +396,13 @@ export interface EnhanceResumeResponse {
   enhanced_resume?: ResumeData;
   enhancement_report?: EnhancementReport;
   Tokens_Used?: unknown;
+}
+
+// New-format ATS display block returned alongside the enhance result.
+// `score` is the headline 0-100 figure; other presentation fields vary.
+export interface AtsDisplay {
+  score?: number;
+  [key: string]: unknown;
 }
 
 export interface UpdateEnhancedResumeRequest {

@@ -1,6 +1,6 @@
 import { TOKEN_ALIASES } from "./constants";
 import { escapeRegex } from "./helpers";
-import { HighlightSpan } from "../_types";
+import { HighlightSpan } from "../../_types";
 
 export function expandTokens(tokens: string[]): string[] {
   const out: string[] = [];

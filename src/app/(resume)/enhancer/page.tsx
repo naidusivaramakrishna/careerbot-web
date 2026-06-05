@@ -364,7 +364,7 @@ export default function ResumeLandingPage() {
         heading="Ready for a Resume That Gets You Hired?"
         subtext="Join 50,000+ job seekers who used CareerBot to enhance or build their resume and landed more interviews. Start free — no credit card needed."
         buttonText="Get Started Free"
-        buttonHref="/enhancer/start"
+        buttonHref="/builder/start?action=enhance"
         buttonIcon={Sparkles}
         note="Enhance existing · Build from scratch · PDF export · No credit card"
       />

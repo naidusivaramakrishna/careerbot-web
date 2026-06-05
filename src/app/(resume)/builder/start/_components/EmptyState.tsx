@@ -1,6 +1,5 @@
 "use client"
 import { CircleCheckBig, Plus, Upload } from "lucide-react";
-// import { FaLinkedinIn } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
@@ -17,8 +16,6 @@ const EmptyState = ({ selected, onSelect, initialUploadOpen }: {
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  // const [showLinkedInModal, setShowLinkedInModal] = useState(false);
-  // const [linkedInUrl, setLinkedInUrl] = useState("");
 
   useEffect(() => {
     if (initialUploadOpen) {
@@ -95,46 +92,6 @@ const EmptyState = ({ selected, onSelect, initialUploadOpen }: {
       setIsCreating(false);
     }
   };
-
-  // const handleLinkedInClick = (e: React.MouseEvent) => {
-  //   e.preventDefault();
-  //   e.stopPropagation();
-  //   // // console.log("LinkedIn option clicked");
-  //   onSelect("linkedin");
-  //   setShowLinkedInModal(true);
-  // };
-
-  // const handleCloseModal = () => {
-  //   setShowLinkedInModal(false);
-  //   setLinkedInUrl("");
-  // };
-
-  // const handleLinkedInGo = () => {
-  //   if (!linkedInUrl.trim()) {
-  //     toast.error("Please enter a LinkedIn URL");
-  //     return;
-  //   }
-    
-  //   // Validate LinkedIn URL format
-  //   if (!linkedInUrl.includes("linkedin.com")) {
-  //     toast.error("Please enter a valid LinkedIn URL");
-  //     return;
-  //   }
-    
-  //   // // console.log("LinkedIn URL submitted:", linkedInUrl);
-  //   toast.success("Processing LinkedIn URL...");
-    
-  //   // Add your LinkedIn import logic here
-  //   // For example: call an API to import LinkedIn data
-    
-  //   handleCloseModal();
-  // };
-
-  // const handleBackdropClick = (e: React.MouseEvent) => {
-  //   if (e.target === e.currentTarget) {
-  //     handleCloseModal();
-  //   }
-  // };
 
   const handleUploadClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -420,64 +377,6 @@ const EmptyState = ({ selected, onSelect, initialUploadOpen }: {
 
         </div>
       </div>
-
-      {/* LinkedIn URL Modal */}
-      {/* {showLinkedInModal && (
-        <div
-          onClick={handleBackdropClick}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 bg-opacity-60 transition-opacity"
-        >
-          <div className="relative bg-white rounded-xl w-[930px] h-[50vh] shadow-lg  max-w-lg mx-4"> */}
-            {/* Close Button */}
-            {/* <button
-              onClick={handleCloseModal}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 transition"
-            >
-              <X className="w-6 h-6" />
-            </button> */}
-
-            {/* Modal Header */}
-            {/* <div className="bg-white rounded-t-xl p-4 flex items-center border-b border-gray-400 justify-center">
-              <div className="bg-[#2557a7] rounded-lg p-2 mr-3">
-                <FaLinkedinIn className="text-white w-6 h-6" />
-              </div>
-              <h2 className="text-2xl font-semibold text-[#2557a7]">
-                Import from LinkedIn
-              </h2>
-            </div> */}
-
-            {/* Modal Body */}
-            {/* <div className="p-6">
-              <label className="block mb-2 mt-6 text-sm font-medium text-gray-700">
-                LinkedIn Profile URL
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={linkedInUrl}
-                  onChange={(e) => setLinkedInUrl(e.target.value)}
-                  placeholder="https://www.linkedin.com/in/your-profile"
-                  className="flex-1 bg-transparent placeholder:text-gray-400 text-gray-700 text-sm border border-gray-300 rounded-lg px-4 py-3 transition duration-300 ease focus:outline-none focus:border-[#0A66C2] hover:border-gray-400 shadow-sm focus:shadow"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      handleLinkedInGo();
-                    }
-                  }}
-                />
-                <button
-                  onClick={handleLinkedInGo}
-                  className="rounded-lg bg-[#0A66C2] py-3 px-8 text-center text-sm font-medium text-white transition-all hover:bg-[#004182] shadow-md hover:shadow-lg"
-                >
-                  Go
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Paste your LinkedIn profile URL to import your professional information
-              </p>
-            </div>
-          </div>
-        </div>
-      )} */}
     </>
   );
 };

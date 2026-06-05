@@ -9,8 +9,10 @@
  * returns false, otherwise the generate form.
  *
  * Endpoint: GET /api/v1/resumes/all  →  AllResumesResponse
- *   hasResume = builder_resumes.length > 0
- *               || enhanced_resumes.length > 0
+ *   hasResume = builder_resumes.some(hasCoverLetterUsableResume)
+ *   Only builder_resumes are considered: cover-letter generate is
+ *   ID-based and needs a parser resume id resolvable to parsed_data.
+ *   enhanced_resumes are intentionally NOT counted here.
  *
  * The same predicate is used by the existing Sidebar smartNav
  * (src/components/layout/Sidebar.tsx:443-448).

@@ -53,3 +53,6 @@ build-output.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editor / scratch backups
+*.backup

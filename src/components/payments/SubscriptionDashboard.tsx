@@ -9,6 +9,7 @@ import {
   CurrentSubscription,
 } from '@/api/paymentApi';
 import { CreditCard, History, RefreshCw } from 'lucide-react';
+import { COMPANY_CONFIG } from '@/config';
 
 type TabType = 'overview' | 'billing' | 'upgrade';
 

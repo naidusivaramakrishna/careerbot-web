@@ -1,7 +1,7 @@
 import React from 'react';
 import { Eye } from 'lucide-react';
 import { type TemplateResponse } from '@/api/resumeApi';
-import { Badge } from '@/components/common';
+import { Badge } from '@/components/ui/Badge';
 
 interface TemplateCardProps {
   template: TemplateResponse;

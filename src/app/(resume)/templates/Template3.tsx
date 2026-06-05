@@ -151,7 +151,7 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       case "Skills":
         return (data.categorizedSkills && Object.keys(data.categorizedSkills).some(key => {
           const skillArray = data.categorizedSkills![key as keyof typeof data.categorizedSkills];
-          return skillArray && skillArray.length > 0;
+          return Array.isArray(skillArray) && skillArray.length > 0;
         })) || (skills && skills.length > 0) ? (
           <div style={{ marginBottom: "16px" }}>
             <h2 style={headingStyle}>{getSectionTitle("Skills")}</h2>

@@ -1008,7 +1008,7 @@ const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
     try {
       const { enhanceResume } = await import("@/api/enhancerApi");
       const res = await enhanceResume({ resume_id: rid });
-      const breakdown = (res as Record<string, unknown>)?.enhancer_state as Record<string, unknown> | undefined;
+      const breakdown = (res as unknown as Record<string, unknown>)?.enhancer_state as Record<string, unknown> | undefined;
       const atsBreakdown = breakdown?.ats_breakdown as Record<string, unknown> | undefined;
       const score = Number(
         atsBreakdown?.FinalScore ?? atsBreakdown?.Percentage ?? atsBreakdown?.overall_score ??

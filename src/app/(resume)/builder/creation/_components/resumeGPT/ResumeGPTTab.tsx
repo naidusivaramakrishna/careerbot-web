@@ -120,7 +120,7 @@ export default function ResumeGPT() {
 
   // Local fallback logic when Rasa is unavailable
   const handleLocalFallback = (text: string) => {
-    const personalPrompts: Record<keyof typeof resumeData.personalInfo, string> = {
+    const personalPrompts: Partial<Record<keyof typeof resumeData.personalInfo, string>> = {
       fullname: "What's your full name?",
       email: "Great! Now, what's your email?",
       phone: "Nice! What's your phone number?",
@@ -166,7 +166,7 @@ export default function ResumeGPT() {
     const nextStep = stepOrder[currentIndex + 1];
 
     if (nextStep) {
-      setMessages((prev) => [...prev, { sender: "bot", text: personalPrompts[nextStep] }]);
+      setMessages((prev) => [...prev, { sender: "bot", text: personalPrompts[nextStep] ?? "" }]);
       setCurrentStep(nextStep);
     } else {
       setMessages((prev) => [

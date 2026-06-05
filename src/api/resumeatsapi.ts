@@ -10,7 +10,7 @@ const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
    STEP 1 — Upload + Parse Resume
 ------------------------------------------------------ */
 export const parseResume = async (file: File) => {
-  if (!isAuthenticated()) throw new Error("Not authenticated");
+  if (!(await isAuthenticated())) throw new Error("Not authenticated");
 
   const correlationId = getCorrelationId();
   const formData = new FormData();

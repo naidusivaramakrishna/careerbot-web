@@ -14,6 +14,7 @@ export interface Resume {
   modified: string;
   created: string;
   primary: boolean;
+  source?: 'enhanced' | 'builder';
   createdAt?: string;
   updatedAt?: string;
 }

@@ -5,6 +5,10 @@ export const UI_CONFIG = {
   paymentSuccessRedirectDelay: 3000,
 } as const;
 
+export const API_CONFIG = {
+  razorpayScript: "https://checkout.razorpay.com/v1/checkout.js",
+} as const;
+
 export const PAYMENT_MESSAGES = {
   paymentSuccess: "Payment successful. Your subscription is being activated.",
   subscriptionLoadError: "Unable to load your subscription. Please try again.",
