@@ -1,24 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle, XCircle, Eye, EyeClosed } from "lucide-react";
 import { confirmPasswordReset } from "@/api/authApi";
+import { validatePassword } from "@/lib/passwordPolicy";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
 
-type ResetStatus = "loading" | "form" | "success" | "error";
-
 const ResetPasswordContent = () => {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const token = searchParams.get("token");
 
-  const [status, setStatus] = useState<ResetStatus>(token ? "form" : "error");
-  const [errorMessage, setErrorMessage] = useState(token ? "" : "No reset token found. Please check your email link.");
+  const [token, setToken] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [countdown, setCountdown] = useState(5);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetError, setResetError] = useState("");
 
   const [formData, setFormData] = useState({
     password: "",
@@ -26,53 +26,53 @@ const ResetPasswordContent = () => {
   });
 
   const [fieldErrors, setFieldErrors] = useState({ password: "", confirmPassword: "" });
+  const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
+
+  // Extract token from URL and strip from URL for privacy
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get("token");
+
+    if (urlToken) {
+      // Store token in state before stripping from URL
+      setToken(urlToken);
+      // Strip token from URL after reading to prevent leakage via:
+      // - Browser history
+      // - Referer headers
+      // - Server access logs
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      setResetError("No reset token found. Please check your email link.");
+    }
+  }, []);
 
   // Countdown timer for redirect on success
   useEffect(() => {
-    if (status === "success" && countdown > 0) {
+    if (resetSuccess && countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      setRedirectTimer(timer);
       return () => clearTimeout(timer);
     }
 
-    if (countdown === 0 && status === "success") {
+    if (countdown === 0 && resetSuccess) {
       router.push("/?showLogin=true");
     }
-  }, [countdown, status, router]);
+  }, [countdown, resetSuccess, router]);
 
-  const validatePassword = (password: string): { valid: boolean; message: string } => {
-    if (!password) {
-      return { valid: false, message: "Password is required" };
-    }
-
-    if (password.length < 8) {
-      return { valid: false, message: "Password must be at least 8 characters long" };
-    }
-
-    if (!/[A-Z]/.test(password)) {
-      return { valid: false, message: "Password must contain at least one uppercase letter" };
-    }
-
-    if (!/[a-z]/.test(password)) {
-      return { valid: false, message: "Password must contain at least one lowercase letter" };
-    }
-
-    if (!/\d/.test(password)) {
-      return { valid: false, message: "Password must contain at least one digit" };
-    }
-
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-      return { valid: false, message: "Password must contain at least one special character" };
-    }
-
-    return { valid: true, message: "" };
-  };
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (redirectTimer) {
+        clearTimeout(redirectTimer);
+      }
+    };
+  }, [redirectTimer]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!token) {
-      setStatus("error");
-      setErrorMessage("No reset token found.");
+      setResetError("No reset token found.");
       return;
     }
 
@@ -92,49 +92,65 @@ const ResetPasswordContent = () => {
     setFieldErrors({ password: "", confirmPassword: "" });
 
     try {
-      setStatus("loading");
-      logger.info("Confirming password reset with token:", token.substring(0, 10) + "...");
+      setIsResetting(true);
 
       const response = await confirmPasswordReset({
         token,
         new_password: formData.password,
       });
 
-      logger.info("Password reset response:", response);
+      logger.info("Password reset response received");
 
       // Backend returns success if API call completes without error
       // Response contains: { message: "Password reset successfully" } or similar
       if (response && response.message) {
-        setStatus("success");
+        setResetSuccess(true);
         toast.success(response.message || "Password reset successfully!");
       } else {
-        setStatus("error");
-        setErrorMessage("Password reset failed. Please try again.");
+        setResetError("Password reset failed. Please try again.");
         toast.error("Password reset failed. Please try again.");
       }
     } catch (error: unknown) {
       logger.error("Password reset error:", error);
 
       let errorMsg = "Failed to reset password. Please try again.";
+      let isSamePasswordError = false;
+
       if (typeof error === "object" && error !== null) {
-        const apiError = error as { response?: { data?: { error?: { message?: string }; detail?: string } } };
-        errorMsg =
-          apiError.response?.data?.error?.message ||
-          apiError.response?.data?.detail ||
-          "Failed to reset password. Please try again.";
+        const apiError = error as { response?: { data?: { error?: { code?: string; message?: string }; detail?: string } } };
+
+        // Check for error code first (preferred)
+        const errorCode = apiError.response?.data?.error?.code;
+        if (errorCode === "PASSWORD_REUSE" || errorCode?.toLowerCase().includes("password_reuse")) {
+          isSamePasswordError = true;
+          errorMsg = "Your new password must be different from your current password";
+        } else {
+          // Fallback to message patterns
+          const msg =
+            apiError.response?.data?.error?.message ||
+            apiError.response?.data?.detail ||
+            "";
+
+          if (msg.toLowerCase().includes("same") && msg.toLowerCase().includes("password")) {
+            isSamePasswordError = true;
+            errorMsg = "Your new password must be different from your current password";
+          } else {
+            errorMsg = msg || "Failed to reset password. Please try again.";
+          }
+        }
       } else if (error instanceof Error) {
         errorMsg = error.message;
       }
 
       // Show inline field error for "same password" case, full error page for others
-      if (errorMsg.toLowerCase().includes("same as current")) {
-        setStatus("form");
+      if (isSamePasswordError) {
         setFieldErrors({ password: errorMsg, confirmPassword: "" });
       } else {
-        setStatus("error");
-        setErrorMessage(errorMsg);
+        setResetError(errorMsg);
         toast.error(errorMsg);
       }
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -142,7 +158,7 @@ const ResetPasswordContent = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
         {/* Success State */}
-        {status === "success" && (
+        {resetSuccess && (
           <>
             <div className="mb-6 flex justify-center">
               <div className="bg-green-100 rounded-full p-4">
@@ -155,20 +171,22 @@ const ResetPasswordContent = () => {
             </p>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-700 text-center">
-                Redirecting to Sign In in <span className="font-bold text-blue-600">{countdown}s</span>...
+                Redirecting to Sign In in <span className="font-bold text-blue-600" aria-live="polite" aria-atomic="true">{countdown}s</span>...
               </p>
             </div>
-            <button
-              onClick={() => router.push("/?showLogin=true")}
-              className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
-            >
-              Go to Sign In
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => router.push("/?showLogin=true")}
+                className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
+              >
+                Go to Sign In
+              </button>
+            </div>
           </>
         )}
 
         {/* Error State */}
-        {status === "error" && (
+        {resetError && !resetSuccess && (
           <>
             <div className="mb-6 flex justify-center">
               <div className="bg-red-100 rounded-full p-4">
@@ -176,13 +194,16 @@ const ResetPasswordContent = () => {
               </div>
             </div>
             <h1 className="text-2xl font-bold text-red-600 mb-2 text-center">Reset Failed</h1>
-            <p className="text-gray-600 mb-6 text-center">{errorMessage}</p>
+            <p className="text-gray-600 mb-6 text-center">{resetError}</p>
             <div className="space-y-3">
               <button
                 onClick={() => {
                   if (token) {
-                    setStatus("form");
+                    setResetError("");
                     setFormData({ password: "", confirmPassword: "" });
+                    setFieldErrors({ password: "", confirmPassword: "" });
+                  } else {
+                    setResetError("No reset token found. Please request a new password reset link.");
                   }
                 }}
                 className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
@@ -200,7 +221,7 @@ const ResetPasswordContent = () => {
         )}
 
         {/* Form State */}
-        {(status === "form" || status === "loading") && (
+        {(token && !resetSuccess && !resetError) && (
           <>
             <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">Reset Your Password</h1>
             <p className="text-gray-600 text-center mb-6">Enter your new password below.</p>
@@ -215,11 +236,12 @@ const ResetPasswordContent = () => {
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
+                    autoFocus
                     value={formData.password}
                     onChange={(e) => { setFormData({ ...formData, password: e.target.value }); setFieldErrors(p => ({ ...p, password: "" })); }}
                     placeholder="Enter new password"
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${fieldErrors.password ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-[#2257a7]"}`}
-                    disabled={status === "loading"}
+                    disabled={isResetting}
                     required
                   />
                   <button
@@ -246,7 +268,7 @@ const ResetPasswordContent = () => {
                     onChange={(e) => { setFormData({ ...formData, confirmPassword: e.target.value }); setFieldErrors(p => ({ ...p, confirmPassword: "" })); }}
                     placeholder="Confirm password"
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${fieldErrors.confirmPassword ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-blue-500"}`}
-                    disabled={status === "loading"}
+                    disabled={isResetting}
                     required
                   />
                   <button
@@ -260,34 +282,14 @@ const ResetPasswordContent = () => {
                 {fieldErrors.confirmPassword && <p className="text-red-500 text-sm mt-1">{fieldErrors.confirmPassword}</p>}
               </div>
 
-              {/* Password Requirements */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <p className="text-xs font-semibold text-gray-700 mb-2">Password Requirements:</p>
-                <ul className="text-xs text-gray-600 space-y-1">
-                  <li className={formData.password.length >= 8 ? "text-green-600" : ""}>
-                    ✓ At least 8 characters
-                  </li>
-                  <li className={/[A-Z]/.test(formData.password) ? "text-green-600" : ""}>
-                    ✓ One uppercase letter
-                  </li>
-                  <li className={/[a-z]/.test(formData.password) ? "text-green-600" : ""}>
-                    ✓ One lowercase letter
-                  </li>
-                  <li className={/\d/.test(formData.password) ? "text-green-600" : ""}>
-                    ✓ One number
-                  </li>
-                  <li className={/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password) ? "text-green-600" : ""}>
-                    ✓ One special character
-                  </li>
-                </ul>
-              </div>
+              <PasswordRequirements password={formData.password} />
 
               <button
                 type="submit"
-                disabled={status === "loading"}
+                disabled={isResetting}
                 className="w-full bg-[#2257a7] hover:bg-[#184284] disabled:bg-[#2557a7] text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                {status === "loading" ? (
+                {isResetting ? (
                   <span className="flex items-center cursor-pointer justify-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                     Resetting...
@@ -313,11 +315,7 @@ const ResetPasswordContent = () => {
 };
 
 const ResetPasswordPage = () => {
-  return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
-      <ResetPasswordContent />
-    </Suspense>
-  );
+  return <ResetPasswordContent />;
 };
 
 export default ResetPasswordPage;

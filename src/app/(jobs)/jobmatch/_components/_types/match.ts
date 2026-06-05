@@ -6,6 +6,8 @@ export interface AnalysisContentProps {
   matchResults: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   parsedResumeData?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  parsedJDData?: any;
   onBackToUpload?: () => void;
 }
 

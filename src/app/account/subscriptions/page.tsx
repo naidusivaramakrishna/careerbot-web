@@ -1,19 +1,21 @@
 'use client';
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, LayoutDashboard } from 'lucide-react';
 import { SubscriptionManagement } from '@/components/payments/SubscriptionManagement';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 
-export default function SubscriptionsPage() {
+function SubscriptionsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromPayment = searchParams.get('upgraded') === 'true';
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top Navigation Bar */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          {/* Left: Back button + breadcrumb */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.back()}
@@ -35,7 +37,6 @@ export default function SubscriptionsPage() {
             </nav>
           </div>
 
-          {/* Right: Go to Dashboard button */}
           <button
             onClick={() => router.push('/dashboard')}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
@@ -46,16 +47,22 @@ export default function SubscriptionsPage() {
         </div>
       </div>
 
-      {/* Page Content */}
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Subscription & Billing</h1>
           <p className="text-gray-500 mt-1">Manage your plan, track credits, and control billing</p>
         </div>
 
-        <SubscriptionManagement onUpgrade={() => router.push('/payments')} />
+        <SubscriptionManagement onUpgrade={() => router.push('/payments')} fromPayment={fromPayment} />
       </div>
     </div>
+  );
+}
+
+export default function SubscriptionsPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center items-center min-h-screen"><LoadingSpinner /></div>}>
+      <SubscriptionsContent />
+    </Suspense>
   );
 }

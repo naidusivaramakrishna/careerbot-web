@@ -1,6 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import PromptCard from "./PromptCard";
 
 interface NancyGuideModalProps {
@@ -14,7 +16,10 @@ export default function NancyGuideModal({
   onClose,
   onPromptClick,
 }: NancyGuideModalProps) {
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!isOpen || !mounted) return null;
 
   const sections = [
     {
@@ -344,16 +349,16 @@ export default function NancyGuideModal({
     onClose();
   };
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-9998"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
+      <div className="fixed inset-0 z-9999 flex items-center justify-center p-3">
         <div className="bg-white rounded-lg shadow-lg w-[45vw] max-h-[85vh] flex flex-col animate-in fade-in zoom-in-95 duration-300">
           {/* Header - Minimal */}
           <div className="shrink-0 px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
@@ -433,6 +438,7 @@ export default function NancyGuideModal({
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }

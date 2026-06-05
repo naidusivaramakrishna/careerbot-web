@@ -54,6 +54,7 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     { username: data.email, password: data.password },
     {
       baseURL: "",
+      timeout: 45000, // Extended timeout for signin (can be slow on first load)
       headers: {
         "Content-Type": "application/json",
         "X-Tenant-Id": tenantId,
@@ -98,9 +99,11 @@ export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
   const tenantId = "public";
 
   const response = await httpClient.post<SignUpResponse>(
-    "/auth/signup",
+    "/api/backend/auth/signup",
     data,
     {
+      baseURL: "",
+      timeout: 45000, // Extended timeout for signup (can be slow on first load)
       headers: {
         "X-Tenant-Id": tenantId,
         "Content-Type": "application/json",

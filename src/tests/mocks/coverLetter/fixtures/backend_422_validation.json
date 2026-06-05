@@ -1,0 +1,25 @@
+{
+  "success": false,
+  "error": {
+    "message": "Request validation failed",
+    "error_code": "VALIDATION_ERROR",
+    "error_id": "v1-fixture-validation-422",
+    "request_id": "fixture-422",
+    "timestamp": "2026-05-25T11:00:00.000000+00:00",
+    "path": "/api/v1/cover-letter/generate",
+    "details": {
+      "validation_errors": [
+        {
+          "field": "resume_schema_version",
+          "message": "unsupported resume_schema_version 'v1.0'; supported: ['2.0', '2.1', '2.5']",
+          "type": "value_error"
+        },
+        {
+          "field": "options.candidate_note",
+          "message": "candidate_note must be 300 characters or fewer",
+          "type": "string_too_long"
+        }
+      ]
+    }
+  }
+}

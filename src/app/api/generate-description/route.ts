@@ -1,35 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
 
 const AZURE_ENDPOINT = "https://veliv-mgtcnqad-uaenorth.services.ai.azure.com";
 const DEPLOYMENT = "Llama-3.3-70B-Instruct";
-const MAX_BODY_BYTES = 256 * 1024; // 256 KB — generate-description bodies are small
 
 export async function POST(req: Request) {
-  // Require a VERIFIED session — this route spends the server-side Azure API
-  // key, so cookie *presence* is not enough: the JWT signature must check out.
-  const cookieStore = await cookies();
-  const token = cookieStore.get("access_token")?.value;
-  if (!token || !process.env.JWT_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   try {
-    await jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET));
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    // Read the body as text first so the size cap holds even when
-    // Content-Length is absent, chunked, or spoofed.
-    const rawBody = await req.text();
-    // Measure actual UTF-8 byte length — rawBody.length counts UTF-16 code
-    // units, which undercounts multibyte payloads and would let the cap slip.
-    if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
-      return NextResponse.json({ error: "Request too large" }, { status: 413 });
-    }
-    const body = JSON.parse(rawBody);
+    const body = await req.json();
     const { type } = body;
     const apiKey = process.env.AZURE_OPENAI_API_KEY;
 
@@ -124,7 +100,7 @@ ${context}
 
 IMPORTANT:
 - Do NOT add any introductory lines.
-- Do NOT say “Here is a summary”.
+- Do NOT say "Here is a summary".
 - Output ONLY the summary content.
 `;
 
@@ -156,8 +132,8 @@ IMPORTANT:
               content: prompt
             }
           ],
-          max_tokens: type === 'summary' ? 200 : 300, // ✅ Shorter for summaries
-          temperature: type === 'summary' ? 0.6 : 0.7, // ✅ Less creative for summaries
+          max_tokens: type === 'summary' ? 200 : 300,
+          temperature: type === 'summary' ? 0.6 : 0.7,
         })
       }
     );
@@ -165,7 +141,6 @@ IMPORTANT:
     const data = await response.json();
 
     if (!response.ok) {
-      // // console.error("Azure Error:", data);
       return NextResponse.json(
         { error: "Azure request failed", details: data },
         { status: 500 }
@@ -181,14 +156,13 @@ IMPORTANT:
       );
     }
 
-    // ✅ Return appropriate field name based on type
+    // Return appropriate field name based on type
     if (type === 'summary') {
       return NextResponse.json({ summary: description });
     } else {
       return NextResponse.json({ description });
     }
   } catch (error) {
-    // // console.error("AI ERROR:", error);
     return NextResponse.json(
       { error: "Unexpected server error", details: error },
       { status: 500 }

@@ -129,7 +129,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // When parsedData is available, render the HTML template for section navigation
   if (parsedData) {
     return (
-      <div className="relative bg-white">
+      <div className="relative" style={{ backgroundColor: "#F8FAFD" }}>
         {isUpdating && (
           <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-50 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-3">

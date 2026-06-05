@@ -16,7 +16,8 @@ interface BuilderPageProps {
 function BuilderPageInner({ resumeId }: { resumeId: string }) {
   const searchParams = useSearchParams();
   const fromAts = searchParams.get("from_ats") === "true";
-  const initialTab = fromAts ? "Enhance" : undefined;
+  const sourceEnhancer = searchParams.get("source") === "enhancer";
+  const initialTab = fromAts ? "Enhance" : (sourceEnhancer ? "ResumeGPT" : undefined);
   const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   // ✅ Get loading state from context to prevent rendering before data loads

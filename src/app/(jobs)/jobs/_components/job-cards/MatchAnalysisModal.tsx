@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { getMatchExplanation } from "@/api/insightsApi";
 import type { MatchExplanationResponse } from "@/api/insightsApi";
@@ -43,19 +43,25 @@ function PickerView({ jobTitle, company, onSelect, onClose }: {
       {/* Header */}
       <div
         className="relative overflow-hidden px-8 pt-7 pb-6"
-        style={{ background: "linear-gradient(135deg,#0f2d4e 0%,#1a3a5c 100%)" }}
+        style={{ background: "linear-gradient(135deg,#5896d7 0%,#2557a7 50%,#1f4e98 100%)" }}
       >
-        <div className="pointer-events-none absolute -top-6 -right-6 w-40 h-40 rounded-full opacity-10 blur-2xl bg-blue-400" />
+        <div className="pointer-events-none absolute -top-8 -right-8 w-48 h-48 rounded-full opacity-20 blur-3xl bg-blue-500" />
+        <div className="pointer-events-none absolute bottom-0 left-12 w-28 h-28 rounded-full opacity-10 blur-2xl bg-indigo-400" />
         <div className="relative flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-1">Match Analysis</p>
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.85)" }}>AI Match Analysis</p>
+            </div>
             <h2 className="text-[20px] font-extrabold text-white leading-tight">Choose Analysis Type</h2>
-            <p className="text-[13px] text-white/55 mt-1 truncate">{jobTitle} · {company}</p>
+            <p className="text-[12.5px] mt-1 truncate" style={{ color: "rgba(255,255,255,0.8)" }}>{jobTitle} · {company}</p>
           </div>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors mt-0.5 shrink-0"
-            style={{ color: "rgba(255,255,255,0.5)" }}
+            style={{ color: "rgba(255,255,255,0.8)" }}
             aria-label="Close"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,7 +86,7 @@ function PickerView({ jobTitle, company, onSelect, onClose }: {
             </svg>
             FREE
           </span>
-          <p className="text-[16px] font-extrabold text-[#0f2d4e] group-hover:text-[#2557a7] transition-colors mb-2">
+          <p className="text-[16px] font-extrabold text-[#1f4e98] group-hover:text-[#2557a7] transition-colors mb-2">
             Basic Analysis
           </p>
           <p className="text-[12px] text-gray-500 leading-relaxed mb-5">
@@ -142,23 +148,70 @@ function PickerView({ jobTitle, company, onSelect, onClose }: {
   );
 }
 
+/* ── Dimension icons ─────────────────────────────────────────────────────── */
+const DIM_ICONS: Record<string, JSX.Element> = {
+  Skills: (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+    </svg>
+  ),
+  "Job Title": (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  ),
+  Experience: (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  Education: (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+    </svg>
+  ),
+  Location: (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+};
+
+/* ── Dimension color palette — softer, less aggressive ───────────────────── */
+function dimPalette(score: number) {
+  if (score >= 70) return { color: "#059669", bg: "#f0fdf4", border: "#bbf7d0" };
+  if (score >= 40) return { color: "#d97706", bg: "#fefce8", border: "#fde68a" };
+  if (score >= 15) return { color: "#ea580c", bg: "#fff7ed", border: "#fed7aa" };
+  return              { color: "#e11d48", bg: "#fff5f5", border: "#fecdd3" };
+}
+
 /* ── Basic analysis view ─────────────────────────────────────────────────── */
 function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
   jobId: string; jobTitle: string; company: string;
   onBack: () => void; onClose: () => void;
 }) {
-  const [data, setData]       = useState<MatchExplanationResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState("");
+  const [data, setData]         = useState<MatchExplanationResponse | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState("");
+  const [mounted, setMounted]   = useState(false);
+  const [showAllSkills, setShowAllSkills] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
     setError("");
     getMatchExplanation(jobId)
-      .then((res) => { if (!cancelled) { setData(res); setLoading(false); } })
+      .then((res) => {
+        if (!cancelled) {
+          setData(res);
+          setLoading(false);
+          timer = setTimeout(() => { if (!cancelled) setMounted(true); }, 60);
+        }
+      })
       .catch(() => { if (!cancelled) { setError("Could not load match analysis. Please try again."); setLoading(false); } });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [jobId]);
 
   const band    = data?.band ?? "low";
@@ -168,162 +221,388 @@ function BasicView({ jobId, jobTitle, company, onBack, onClose }: {
     {
       label: "Skills", score: data.explanation.skills.score,
       detail: data.explanation.skills.detail,
-      chips: [
-        ...data.explanation.skills.matched.map(s => ({ text: s, matched: true })),
-        ...data.explanation.skills.missing.map(s => ({ text: s, matched: false })),
-      ],
+      matched: data.explanation.skills.matched ?? [] as string[],
+      missing: data.explanation.skills.missing ?? [] as string[],
       meta: null,
     },
     {
       label: "Job Title", score: data.explanation.title.score,
       detail: data.explanation.title.detail,
-      chips: [],
+      matched: [] as string[], missing: [] as string[],
       meta: data.explanation.title.job_title ? `Required: ${data.explanation.title.job_title}` : null,
     },
     {
       label: "Experience", score: data.explanation.experience.score,
       detail: data.explanation.experience.detail,
-      chips: [],
+      matched: [] as string[], missing: [] as string[],
       meta: data.explanation.experience.job_range ? `Required: ${data.explanation.experience.job_range}` : null,
     },
     {
       label: "Education", score: data.explanation.education.score,
       detail: data.explanation.education.detail,
-      chips: [],
+      matched: [] as string[], missing: [] as string[],
       meta: data.explanation.education.job_level ? `Required: ${data.explanation.education.job_level}` : null,
     },
     {
       label: "Location", score: data.explanation.location.score,
       detail: data.explanation.location.detail,
-      chips: [],
+      matched: [] as string[], missing: [] as string[],
       meta: data.explanation.location.job_location ? `Location: ${data.explanation.location.job_location}` : null,
     },
   ] : [];
 
+  const allMatched = data?.explanation.skills.matched ?? [];
+  const allMissing = data?.explanation.skills.missing ?? [];
+  const totalMatched = allMatched.length;
+  const totalMissing = allMissing.length;
+
+  const CHIP_PREVIEW = 8;
+  const totalHidden = allMissing.length > CHIP_PREVIEW && !showAllSkills
+    ? allMissing.length - CHIP_PREVIEW
+    : 0;
+
+  // AI recommendations derived from weakest dims
+  const aiRecs: string[] = data ? [
+    allMissing.length > 0
+      ? `Add ${allMissing.slice(0, 2).join(" and ")} to your resume skills section`
+      : null,
+    data.explanation.title.score < 60
+      ? `Update your job title to better align with "${data.explanation.title.job_title ?? "the required role"}"`
+      : null,
+    data.explanation.experience.score < 60
+      ? "Highlight specific achievements and metrics in your experience section"
+      : null,
+  ].filter(Boolean) as string[] : [];
+
   return (
     <div
-      className="relative w-full max-w-xl rounded-3xl bg-white overflow-hidden"
-      style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.18)" }}
+      className="relative w-full max-w-xl rounded-3xl bg-white overflow-hidden flex flex-col"
+      style={{ boxShadow: "0 32px 80px rgba(0,0,0,0.22)", maxHeight: "92vh" }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Header */}
+      {/* ── Header ── */}
       <div
         className="relative overflow-hidden px-6 pt-5 pb-5 shrink-0"
-        style={{ background: "linear-gradient(135deg,#0f2d4e 0%,#1a3a5c 100%)" }}
+        style={{ background: "linear-gradient(145deg, #4a7cc9 0%, #2557a7 55%, #1d4a94 100%)" }}
       >
-        <div className="pointer-events-none absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-10 blur-2xl bg-blue-400" />
+        <div className="pointer-events-none absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-20 blur-3xl" style={{ background: bandCfg.color }} />
+        <div className="pointer-events-none absolute bottom-0 left-10 w-24 h-24 rounded-full opacity-10 blur-2xl bg-blue-400" />
+
         <div className="relative flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <button onClick={onBack} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0" style={{ color: "rgba(255,255,255,0.6)" }} aria-label="Back">
+            <button onClick={onBack} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0" style={{ color: "rgba(255,255,255,0.85)" }} aria-label="Back">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/45 leading-none mb-0.5">Basic Analysis · Free</p>
+              <p className="text-[9.5px] font-bold uppercase tracking-widest mb-0.5" style={{ color: "rgba(255,255,255,0.80)" }}>AI Match Analysis · Free</p>
               <h2 className="text-[15px] font-extrabold text-white leading-tight truncate">{jobTitle}</h2>
-              <p className="text-[11px] text-white/45 truncate">{company}</p>
+              <p className="text-[11px] truncate" style={{ color: "rgba(255,255,255,0.75)" }}>{company}</p>
             </div>
           </div>
-          {/* Score pill */}
-          <div className="flex items-center gap-3 shrink-0">
-            {data && (
-              <>
-                <div className="flex flex-col items-center">
-                  <span className="text-[26px] font-black text-white leading-none tabular-nums">{Math.round(data.score)}</span>
-                  <span className="text-[9px] text-white/40 font-semibold">/ 100</span>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            {data && (() => {
+              const circR = 23;
+              const circ  = 2 * Math.PI * circR;
+              const off   = circ - (data.score / 100) * circ;
+              return (
+                <div className="flex flex-col items-center gap-1">
+                  <svg width="60" height="60" viewBox="0 0 60 60" style={{ overflow: "visible" }}>
+                    <defs>
+                      <linearGradient id="hdr-ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor={bandCfg.color} stopOpacity="0.6" />
+                        <stop offset="100%" stopColor={bandCfg.color} stopOpacity="1" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="30" cy="30" r={circR} stroke="rgba(255,255,255,0.10)" strokeWidth="3.5" fill="none" />
+                    <circle
+                      cx="30" cy="30" r={circR}
+                      stroke="url(#hdr-ring-grad)"
+                      strokeWidth="3.5" fill="none"
+                      strokeDasharray={circ}
+                      strokeDashoffset={mounted ? off : circ}
+                      strokeLinecap="round"
+                      transform="rotate(-90 30 30)"
+                      style={{
+                        transition: "stroke-dashoffset 0.9s cubic-bezier(0.4,0,0.2,1)",
+                        filter: `drop-shadow(0 0 5px ${bandCfg.color}70)`,
+                      }}
+                    />
+                    <text x="30" y="27" textAnchor="middle" fontSize="13" fontWeight="800" fill="white" dominantBaseline="middle">
+                      {Math.round(data.score)}%
+                    </text>
+                    <text x="30" y="39" textAnchor="middle" fontSize="6.5" fontWeight="700" fill="rgba(255,255,255,0.65)" dominantBaseline="middle" style={{ letterSpacing: "0.5px" }}>
+                      MATCH
+                    </text>
+                  </svg>
+                  <span
+                    className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.90)", border: "1px solid rgba(255,255,255,0.20)" }}
+                  >
+                    {bandCfg.label}
+                  </span>
                 </div>
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold" style={{ background: bandCfg.bg, color: bandCfg.color }}>
-                  {bandCfg.label}
-                </span>
-              </>
-            )}
-            <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors" style={{ color: "rgba(255,255,255,0.5)" }} aria-label="Close">
+              );
+            })()}
+            <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors" style={{ color: "rgba(255,255,255,0.70)" }} aria-label="Close">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
         </div>
+
+        {/* Skills summary strip */}
+        {data && (totalMatched > 0 || totalMissing > 0) && (
+          <div className="relative flex items-center gap-3 mt-4 pt-3.5" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
+            {totalMatched > 0 && (
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "#6ee7b7" }}>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                {totalMatched} matched
+              </span>
+            )}
+            {totalMissing > 0 && (
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "#fca5a5" }}>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                {totalMissing} to add
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Body */}
-      <div className="px-6 py-4">
+      {/* ── Body ── */}
+      <div className="overflow-y-auto flex-1 px-5 py-4" style={{ scrollbarWidth: "none" }}>
         {loading && (
-          <div className="flex flex-col items-center py-10 text-center">
-            <div className="w-9 h-9 rounded-full border-4 border-t-transparent animate-spin mb-3" style={{ borderColor: "#0f2d4e", borderTopColor: "transparent" }} />
-            <p className="text-[13px] font-semibold text-gray-600">Analysing your match…</p>
+          <div className="flex flex-col items-center py-12 text-center">
+            <div className="relative w-12 h-12 mb-4">
+              <div className="absolute inset-0 rounded-full border-[3px] border-gray-100" />
+              <div className="absolute inset-0 rounded-full border-[3px] border-t-[#2557a7] animate-spin" />
+            </div>
+            <p className="text-[13px] font-semibold text-gray-700">Analysing your match…</p>
+            <p className="text-[11px] text-gray-400 mt-1">Comparing your profile to the job</p>
           </div>
         )}
 
         {!loading && error && (
-          <div className="flex flex-col items-center py-8 text-center">
-            <p className="text-[13px] font-semibold text-red-500">{error}</p>
+          <div className="flex flex-col items-center py-10 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-3">
+              <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            </div>
+            <p className="text-[13px] font-semibold text-gray-800">{error}</p>
           </div>
         )}
 
         {!loading && data && (
-          <div className="space-y-0 divide-y divide-gray-100">
-            {dims.map((dim) => {
-              const color = dim.score >= 70 ? "#16a34a" : dim.score >= 40 ? "#d97706" : "#dc2626";
-              const scoreColor = dim.score >= 70 ? "text-emerald-600" : dim.score >= 40 ? "text-amber-500" : "text-red-500";
+          <div className="space-y-2">
+            {dims.map((dim, idx) => {
+              const pal = dimPalette(dim.score);
+              const isSkills = dim.label === "Skills";
+              const visibleMissing = isSkills && !showAllSkills
+                ? dim.missing.slice(0, CHIP_PREVIEW)
+                : dim.missing;
+              const halfIdx = Math.ceil(visibleMissing.length / 2);
+              const criticalGaps = visibleMissing.slice(0, halfIdx);
+              const additionalSkills = visibleMissing.slice(halfIdx);
+
               return (
-                <div key={dim.label} className="py-3">
-                  {/* Row: label | bar | score */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-20 shrink-0">{dim.label}</span>
-                    <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${Math.min(dim.score, 100)}%`, background: color, transition: "width 0.5s ease" }} />
+                <div
+                  key={dim.label}
+                  className="rounded-2xl border p-3.5"
+                  style={{
+                    borderColor: pal.border,
+                    background: pal.bg,
+                    opacity: mounted ? 1 : 0,
+                    transform: mounted ? "translateY(0)" : "translateY(8px)",
+                    transition: `opacity 0.45s ease ${idx * 65}ms, transform 0.45s ease ${idx * 65}ms`,
+                  }}
+                >
+                  {/* Row: icon + label | score */}
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: `${pal.color}18`, color: pal.color }}
+                    >
+                      {DIM_ICONS[dim.label]}
                     </div>
-                    <span className={`text-[13px] font-extrabold tabular-nums w-7 text-right shrink-0 ${scoreColor}`}>{Math.round(dim.score)}</span>
+                    <span className="text-[12px] font-bold text-gray-700 flex-1">{dim.label}</span>
+                    <span className="text-[13.5px] font-black tabular-nums shrink-0" style={{ color: pal.color }}>
+                      {Math.round(dim.score)}
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-medium shrink-0">/100</span>
                   </div>
-                  {/* Detail */}
-                  <p className="text-[11px] text-gray-500 mt-1.5 ml-23 leading-relaxed">{dim.detail}</p>
+
+                  {/* Progress bar — thinner */}
+                  <div className="h-[3px] rounded-full bg-white/70 overflow-hidden mb-2.5" style={{ boxShadow: "inset 0 1px 2px rgba(0,0,0,0.05)" }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: mounted ? `${Math.min(dim.score, 100)}%` : "0%",
+                        background: `linear-gradient(90deg, ${pal.color}99, ${pal.color})`,
+                        transition: `width 0.75s cubic-bezier(0.4,0,0.2,1) ${idx * 80}ms`,
+                        boxShadow: `0 0 4px ${pal.color}50`,
+                      }}
+                    />
+                  </div>
+
+                  {/* Detail text */}
+                  <p className="text-[11.5px] text-gray-600 leading-relaxed">{dim.detail}</p>
+
                   {/* Meta */}
                   {dim.meta && (
-                    <p className="text-[10px] text-gray-400 mt-0.5 ml-23">
-                      {dim.meta}
-                    </p>
+                    <p className="text-[10.5px] font-medium text-gray-400 mt-1">{dim.meta}</p>
                   )}
-                  {/* Skill chips */}
-                  {dim.chips.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2 ml-23">
-                      {dim.chips.map((c) => (
-                        <span
-                          key={c.text}
-                          className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
-                            c.matched
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                              : "bg-rose-50 text-rose-600 border-rose-100"
-                          }`}
+
+                  {/* Skill chips — only for Skills dim */}
+                  {isSkills && (dim.matched.length > 0 || dim.missing.length > 0) && (
+                    <div className="mt-2.5 space-y-2">
+                      {/* Matched skills */}
+                      {dim.matched.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {dim.matched.map((s) => (
+                            <span
+                              key={s}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
+                              style={{ background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}
+                            >
+                              <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Critical gaps */}
+                      {criticalGaps.length > 0 && (
+                        <div>
+                          <p className="text-[9.5px] font-bold uppercase tracking-wider text-amber-600 mb-1">Critical gaps</p>
+                          <div className="flex flex-wrap gap-1">
+                            {criticalGaps.map((s) => (
+                              <span
+                                key={s}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
+                                style={{ background: "#fef9ec", color: "#92400e", border: "1px solid #fde68a" }}
+                              >
+                                <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Additional skills */}
+                      {additionalSkills.length > 0 && (
+                        <div>
+                          <p className="text-[9.5px] font-bold uppercase tracking-wider text-gray-400 mb-1">Additional skills</p>
+                          <div className="flex flex-wrap gap-1">
+                            {additionalSkills.map((s) => (
+                              <span
+                                key={s}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full"
+                                style={{ background: "#f9fafb", color: "#6b7280", border: "1px solid #e5e7eb" }}
+                              >
+                                <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Expand / collapse */}
+                      {totalHidden > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllSkills(true)}
+                          className="text-[10.5px] font-semibold text-[#2557a7] hover:text-[#1f4e98] transition-colors"
                         >
-                          {c.matched ? "✓" : "✗"} {c.text}
-                        </span>
-                      ))}
+                          +{totalHidden} more skills to add →
+                        </button>
+                      )}
+                      {showAllSkills && allMissing.length > CHIP_PREVIEW && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllSkills(false)}
+                          className="text-[10.5px] font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          Show less ↑
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               );
             })}
+
+            {/* AI Recommendations */}
+            {aiRecs.length > 0 && (
+              <div
+                className="rounded-2xl border p-4 mt-1"
+                style={{
+                  background: "linear-gradient(145deg, #f0f5ff, #eaefff)",
+                  borderColor: "#c7d7f8",
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? "translateY(0)" : "translateY(8px)",
+                  transition: `opacity 0.45s ease ${dims.length * 65 + 60}ms, transform 0.45s ease ${dims.length * 65 + 60}ms`,
+                }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: "#2557a7" }}>
+                    <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <span className="text-[11.5px] font-bold text-[#1f4e98]">AI Recommendations</span>
+                </div>
+                <div className="space-y-2">
+                  {aiRecs.map((rec, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <span
+                        className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[8px] font-black"
+                        style={{ background: "#2557a7", color: "white" }}
+                      >
+                        {i + 1}
+                      </span>
+                      <p className="text-[11.5px] leading-relaxed" style={{ color: "#1f4e98cc" }}>{rec}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
+      </div>
 
-        {/* Footer */}
-        <div className="flex items-center gap-3 pt-3 mt-1 border-t border-gray-100">
-          <button
-            onClick={onBack}
-            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[12px] font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
-          >
-            ← Back
-          </button>
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl text-[12px] font-bold text-white transition-all hover:opacity-90"
-            style={{ background: "linear-gradient(135deg,#0f2d4e,#1a4a6c)" }}
-          >
-            Done
-          </button>
-        </div>
+      {/* ── Footer ── */}
+      <div className="shrink-0 flex items-center gap-3 px-5 py-4 border-t border-gray-100 bg-white">
+        <button
+          onClick={onBack}
+          className="flex-1 py-2.5 rounded-full border border-gray-200 text-[12.5px] font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={onClose}
+          className="flex-1 py-2.5 rounded-full text-[12.5px] font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+          style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)" }}
+        >
+          Done
+        </button>
       </div>
     </div>
   );
@@ -573,9 +852,12 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
 
 /* ── Root modal ──────────────────────────────────────────────────────────── */
 export default function MatchAnalysisModal({ jobId, jobTitle, company, onClose }: Props) {
+  const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<View>("pick");
 
-  if (typeof document === "undefined") return null;
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!mounted) return null;
 
   const modal = (
     <div
@@ -602,6 +884,7 @@ export default function MatchAnalysisModal({ jobId, jobTitle, company, onClose }
       )}
       {view === "premium" && (
         <PremiumView
+          jobId={jobId}
           jobTitle={jobTitle}
           company={company}
           onBack={() => setView("pick")}

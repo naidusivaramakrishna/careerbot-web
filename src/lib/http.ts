@@ -23,6 +23,18 @@ const BASE_URL =
 const isAdminRequest = (url?: string): boolean =>
   url?.includes('/admin/') || false;
 
+const getUserLoginHref = (): string => {
+  if (typeof window === 'undefined') return '/?showLogin=true';
+
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const params = new URLSearchParams({ showLogin: 'true' });
+  if (currentPath && currentPath !== '/') {
+    params.set('next', currentPath);
+  }
+
+  return `/?${params.toString()}`;
+};
+
 const bodyContains = (data: unknown, str: string): boolean => {
   if (typeof data === 'string') return data.includes(str);
   if (data && typeof data === 'object') {
@@ -58,10 +70,12 @@ const clearAllTokens = () => {
 const client: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   withCredentials: true, // ✅ Enable httpOnly cookie sending/receiving
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
 
 /* --------------------------------------------------
    Refresh State & Queues
@@ -162,9 +176,16 @@ client.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const isAdmin = isAdminRequest(originalRequest?.url);
+    const skipAuthRedirect =
+      originalRequest?.headers?.get?.('X-Skip-Auth-Redirect') === 'true' ||
+      originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true';
 
     // 403 = tenant mismatch — do NOT attempt token refresh, just reject
     if (error.response?.status === 403) {
+      return Promise.reject(error);
+    }
+
+    if (error.response?.status === 401 && skipAuthRedirect) {
       return Promise.reject(error);
     }
 
@@ -230,7 +251,7 @@ client.interceptors.response.use(
       if (isAdmin) {
         window.location.href = '/admin/login';
       } else {
-        window.location.href = '/?showLogin=true';
+        window.location.href = getUserLoginHref();
       }
       return Promise.reject(error);
     }
@@ -249,7 +270,11 @@ client.interceptors.response.use(
     }
 
     originalRequest._retry = true;
-    isAdmin ? (isRefreshingAdmin = true) : (isRefreshingUser = true);
+    if (isAdmin) {
+      isRefreshingAdmin = true;
+    } else {
+      isRefreshingUser = true;
+    }
 
     try {
       const endpoint = isAdmin
@@ -285,13 +310,15 @@ client.interceptors.response.use(
       if (isAdmin) {
         window.location.href = '/admin/login';
       } else {
-        window.location.href = '/?showLogin=true';
+        window.location.href = getUserLoginHref();
       }
       return Promise.reject(refreshError);
     } finally {
-      isAdmin
-        ? (isRefreshingAdmin = false)
-        : (isRefreshingUser = false);
+      if (isAdmin) {
+        isRefreshingAdmin = false;
+      } else {
+        isRefreshingUser = false;
+      }
     }
   }
 );

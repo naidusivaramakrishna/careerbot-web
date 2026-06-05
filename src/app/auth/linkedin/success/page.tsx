@@ -2,6 +2,8 @@
 import React, { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
+import { isAuthenticated } from "@/api/authApi"
+import { getStoredAuthRedirect } from "@/lib/authRedirect"
 
 const LinkedInSuccessContent = () => {
     const router = useRouter()
@@ -9,18 +11,28 @@ const LinkedInSuccessContent = () => {
     const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
 
     useEffect(() => {
-        const redirectAfterSuccess = async () => {
+        const verifyAndRedirect = async () => {
             try {
-                // ✅ Backend handles httpOnly cookie setting automatically
-                // ❌ No need to manually extract or store tokens from URL
+                const authenticated = await isAuthenticated()
 
-                setStatus('success')
-                toast.success('Successfully signed in with LinkedIn!')
+                if (authenticated) {
+                    setStatus('success')
+                    toast.success('Successfully signed in with LinkedIn!')
 
-                // Redirect to dashboard after a brief moment
-                setTimeout(() => {
-                    router.push('/dashboard')
-                }, 1000)
+                    const redirectTo = getStoredAuthRedirect()
+
+                    setTimeout(() => {
+                        router.push(redirectTo)
+                    }, 1000)
+                } else {
+                    setStatus('error')
+                    toast.error('Session verification failed. Please try again.')
+
+                    // Redirect to home page after error
+                    setTimeout(() => {
+                        router.push('/')
+                    }, 2000)
+                }
 
             } catch (error: unknown) {
                 console.error('Sign in error:', error)
@@ -34,7 +46,7 @@ const LinkedInSuccessContent = () => {
             }
         }
 
-        redirectAfterSuccess()
+        verifyAndRedirect()
     }, [searchParams, router])
 
     return (
@@ -66,7 +78,7 @@ const LinkedInSuccessContent = () => {
                         </div>
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome! 🎉</h2>
                         <p className="text-gray-600">Successfully signed in with LinkedIn</p>
-                        <p className="text-sm text-gray-500 mt-2">Redirecting to your dashboard...</p>
+                        <p className="text-sm text-gray-500 mt-2">Redirecting...</p>
                     </>
                 )}
 

@@ -5,16 +5,18 @@ import { useRouter } from 'next/navigation';
 import { getCurrentSubscription, cancelSubscription, CurrentSubscription } from '@/api/paymentApi';
 import { usePaymentToast } from '@/hooks/usePaymentToast';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { PAYMENT_MESSAGES } from '@/config';
 import {
   CheckCircle2, AlertCircle, Zap, Crown,
-  Calendar, RefreshCw, TrendingUp, ShieldX
+  Calendar, RefreshCw, TrendingUp, ShieldX, Clock
 } from 'lucide-react';
 
 interface SubscriptionManagementProps {
   onUpgrade?: () => void;
+  fromPayment?: boolean;
 }
 
-export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProps) {
+export function SubscriptionManagement({ onUpgrade, fromPayment }: SubscriptionManagementProps) {
   const router = useRouter();
   const toast = usePaymentToast();
   const [subscription, setSubscription] = useState<CurrentSubscription | null>(null);
@@ -23,10 +25,45 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
   const [canceling, setCanceling] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelSuccess, setCancelSuccess] = useState(false);
+  const [activating, setActivating] = useState(false);
 
   useEffect(() => {
-    fetchSubscription();
+    if (fromPayment) {
+      activateWithRetry();
+    } else {
+      fetchSubscription();
+    }
   }, []);
+
+  const activateWithRetry = async () => {
+    setActivating(true);
+    setLoading(true);
+    const MAX_ATTEMPTS = 8;
+    const INTERVAL_MS = 2500;
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      try {
+        const data = await getCurrentSubscription();
+        const isFreePlan = !data || data.plan_name?.toLowerCase().includes('free');
+        if (!isFreePlan || attempt === MAX_ATTEMPTS - 1) {
+          setSubscription(data);
+          setActivating(false);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        if (attempt === MAX_ATTEMPTS - 1) {
+          setError(PAYMENT_MESSAGES.subscriptionLoadError);
+          setActivating(false);
+          setLoading(false);
+          return;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
+    }
+    setActivating(false);
+    setLoading(false);
+  };
 
   const fetchSubscription = async () => {
     try {
@@ -35,7 +72,7 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
       const data = await getCurrentSubscription();
       setSubscription(data);
     } catch (err) {
-      setError('Could not load subscription details.');
+      setError(PAYMENT_MESSAGES.subscriptionLoadError);
       console.error('Error loading subscription:', err);
     } finally {
       setLoading(false);
@@ -49,10 +86,10 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
       await cancelSubscription();
       setShowCancelConfirm(false);
       setCancelSuccess(true);
-      toast.success('Subscription cancelled successfully. Check your email for confirmation.');
+      toast.success(PAYMENT_MESSAGES.cancellationSuccess);
       await fetchSubscription();
     } catch (err) {
-      const errorMsg = 'Failed to cancel subscription. Please try again.';
+      const errorMsg = PAYMENT_MESSAGES.cancellationError;
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -63,11 +100,17 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
   if (loading) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
-        {/* Header skeleton */}
+        {activating && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
+            <div>
+              <p className="text-blue-900 text-sm font-semibold">Activating your subscription…</p>
+              <p className="text-blue-700 text-xs mt-0.5">This usually takes a few seconds after payment</p>
+            </div>
+          </div>
+        )}
         <div className="bg-white rounded-xl border border-gray-200 h-32 animate-pulse" />
-        {/* Content skeleton */}
         <div className="bg-white rounded-xl border border-gray-200 h-48 animate-pulse" />
-        {/* Buttons skeleton */}
         <div className="flex gap-3">
           <div className="flex-1 h-12 bg-gray-200 rounded-xl animate-pulse" />
           <div className="flex-1 h-12 bg-gray-200 rounded-xl animate-pulse" />
@@ -138,7 +181,12 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
     : 0;
 
   const isFreePlan = subscription.plan_name?.toLowerCase().includes('free');
+  const isCancelled = subscription.status === 'cancelled';
   const barColor = creditsPercentage > 50 ? '#2563eb' : creditsPercentage > 20 ? '#d97706' : '#dc2626';
+
+  const accessUntilText = subscription.expires_at
+    ? new Date(subscription.expires_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom duration-500">
@@ -151,7 +199,7 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
               Subscription cancelled successfully
             </p>
             <p className="text-green-700 text-xs mt-1">
-              • You'll retain access until the end of your billing period
+              • You&apos;ll retain access until the end of your billing period
             </p>
             <p className="text-green-700 text-xs">
               • A confirmation email has been sent to your registered email
@@ -159,6 +207,36 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
           </div>
         </div>
       )}
+
+      {/* Cancelled plan — access-until warning */}
+      {isCancelled && !cancelSuccess && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-amber-900 text-sm font-semibold">
+              Your {subscription.plan_name} plan is cancelled
+            </p>
+            {accessUntilText ? (
+              <p className="text-amber-700 text-xs mt-1">
+                You have full access until <strong>{accessUntilText}</strong>. After that, your account moves to the Free plan.
+              </p>
+            ) : (
+              <p className="text-amber-700 text-xs mt-1">
+                You have access until the end of your current billing period, then downgrade to Free.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Refresh button for updated data */}
+      <button
+        onClick={fetchSubscription}
+        className="w-full flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-600 font-semibold py-2 rounded-lg transition-colors border border-blue-200"
+      >
+        <RefreshCw className="w-4 h-4" />
+        Refresh Subscription Data
+      </button>
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
@@ -247,9 +325,11 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
             <div>
               <p className="text-xs text-gray-500 mb-0.5">Started On</p>
               <p className="text-sm font-semibold text-gray-900">
-                {new Date(subscription.started_at).toLocaleDateString('en-IN', {
-                  day: 'numeric', month: 'short', year: 'numeric'
-                })}
+                {subscription.started_at
+                  ? new Date(subscription.started_at).toLocaleDateString('en-IN', {
+                      day: 'numeric', month: 'short', year: 'numeric'
+                    })
+                  : '—'}
               </p>
             </div>
             {subscription.next_billing_date && (
@@ -297,8 +377,8 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
           Upgrade Plan
         </button>
 
-        {/* Danger: Cancel (only for paid active subscriptions) */}
-        {!isFreePlan && !cancelSuccess && (
+        {/* Cancel Plan — disabled until cancellation flow is implemented
+        {!isFreePlan && !isCancelled && !cancelSuccess && (
           <button
             onClick={() => setShowCancelConfirm(true)}
             className="flex items-center justify-center gap-2 bg-white hover:bg-red-50 text-red-600 font-semibold py-3 rounded-xl border border-red-200 transition-colors"
@@ -307,9 +387,10 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
             Cancel Plan
           </button>
         )}
+        */}
       </div>
 
-      {/* Cancel Confirmation Modal */}
+      {/* Cancel Confirmation Modal — disabled until cancellation flow is implemented
       {showCancelConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
@@ -323,8 +404,6 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
                 After that, you'll be moved to the Free plan.
               </p>
             </div>
-
-            {/* Info boxes */}
             <div className="space-y-3 mb-6">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-xs text-blue-900">
@@ -337,7 +416,6 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
                 </p>
               </div>
             </div>
-
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCancelConfirm(false)}
@@ -360,6 +438,7 @@ export function SubscriptionManagement({ onUpgrade }: SubscriptionManagementProp
           </div>
         </div>
       )}
+      */}
     </div>
   );
 }

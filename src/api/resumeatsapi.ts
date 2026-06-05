@@ -103,9 +103,40 @@ export const processResumeComplete = async (file: File) => {
     const resumeId = parsed.resume_id;
     const parsedData = parsed?.parsed_data ?? {};
 
+    // If the parser served this file from cache, check whether we already
+    // have the full enhancement result stored locally — if so, skip the
+    // enhance + getResume calls entirely (no credits charged).
+    if (parsed.cache_hit && resumeId) {
+      const localKey = `atsAnalysis_${resumeId}`;
+
+      // Check resume-specific key first
+      const cached = localStorage.getItem(localKey);
+      if (cached) {
+        try {
+          const cachedPayload = JSON.parse(cached);
+          localStorage.setItem("atsAnalysisData", cached);
+          return { success: true as const, ...cachedPayload };
+        } catch { /* corrupted — fall through */ }
+      }
+
+      // Fallback: check the legacy "atsAnalysisData" key — if it belongs to
+      // this same resume_id, reuse it and migrate it to the new key.
+      const legacy = localStorage.getItem("atsAnalysisData");
+      if (legacy) {
+        try {
+          const legacyPayload = JSON.parse(legacy);
+          if (legacyPayload.resume_id === resumeId) {
+            localStorage.setItem(localKey, legacy); // migrate for future hits
+            return { success: true as const, ...legacyPayload };
+          }
+        } catch { /* fall through to fresh analysis */ }
+      }
+    }
+
     // Step 2: Enhance — now also returns the ATS breakdown
     const enhanceResult = await enhanceResume({ resume_id: resumeId });
     const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown ?? {};
+    const atsDisplay = enhanceResult.ats_display;
 
     // Step 3: Fetch full resume from MongoDB (has all sections after LLM enhancement)
     let resumeData: Record<string, unknown> | null = null;
@@ -113,15 +144,17 @@ export const processResumeComplete = async (file: File) => {
       resumeData = await getResume(resumeId) as Record<string, unknown>;
     } catch { /* non-fatal — fallback to parsed_data */ }
 
-    // Extract final score from ats_breakdown (try all known field names)
+    // Prefer ats_display.score (new format), fall back to ats_breakdown fields (legacy)
+    const atsBreakdownRec = atsBreakdown as Record<string, unknown>;
     const finalScore: number = Number(
-      (atsBreakdown as Record<string, unknown>).FinalScore ??
-      (atsBreakdown as Record<string, unknown>).Percentage ??
-      (atsBreakdown as Record<string, unknown>).overall_score ??
-      (atsBreakdown as Record<string, unknown>).final_score ??
-      (atsBreakdown as Record<string, unknown>).percentage ??
-      (atsBreakdown as Record<string, unknown>).score ??
-      (atsBreakdown as Record<string, unknown>).TotalScore ??
+      atsDisplay?.score ??
+      atsBreakdownRec.FinalScore ??
+      atsBreakdownRec.Percentage ??
+      atsBreakdownRec.overall_score ??
+      atsBreakdownRec.final_score ??
+      atsBreakdownRec.percentage ??
+      atsBreakdownRec.score ??
+      atsBreakdownRec.TotalScore ??
       0
     );
 
@@ -132,11 +165,16 @@ export const processResumeComplete = async (file: File) => {
       resume_data: resumeData,        // full MongoDB doc — most complete source
       enhanced_resume: enhanceResult.enhanced_resume || null,
       ats_score: atsBreakdown,
+      ats_display: atsDisplay || null,
       finalWeightedScore: finalScore,
       missingFields: [],
       scanned_pdf: false,
     };
 
+    // Store under a resume-specific key so future cache hits can skip enhance
+    if (resumeId) {
+      localStorage.setItem(`atsAnalysis_${resumeId}`, JSON.stringify(payload));
+    }
     localStorage.setItem("atsAnalysisData", JSON.stringify(payload));
 
     return { success: true as const, ...payload };

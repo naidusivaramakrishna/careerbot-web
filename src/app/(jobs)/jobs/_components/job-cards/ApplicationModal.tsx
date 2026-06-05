@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef, memo } from "react";
 import { createPortal } from "react-dom";
@@ -218,7 +218,7 @@ export default function ApplicationModal({
   // Guard against SSR — createPortal requires document
   if (typeof document === "undefined") return null;
 
-  const initial = jobCompany.charAt(0).toUpperCase();
+  const initial = (jobCompany || "J").charAt(0).toUpperCase() || "J";
 
   // ── Render ─────────────────────────────────────────────────────────────────
   // createPortal renders the modal directly into document.body, escaping any
@@ -408,7 +408,7 @@ export default function ApplicationModal({
                 style={{
                   background: isLoading
                     ? "#93c5fd"
-                    : "linear-gradient(135deg, #2557a7 0%, #1a4a96 100%)",
+                    : "linear-gradient(135deg, #2557a7 0%, #1f4e98 100%)",
                   boxShadow: isLoading ? "none" : "0 4px 14px rgba(37, 87, 167, 0.35)",
                   transition: "background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease",
                 }}

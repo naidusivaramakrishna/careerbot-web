@@ -88,6 +88,7 @@ export interface ResumeResponse {
     endDate: string;
     currentlyWorking: boolean;
     description: string;
+    technologies?: string[];
   }>;
   awards?: Array<{
     id?: string;
@@ -126,7 +127,15 @@ export interface ResumeResponse {
     phone: string;
   }>;
   work_experience?: Array<{
-    role?: string;
+    id?: string;
+    company: string;
+    role: string;
+    location: string;
+    startDate: string;
+    endDate: string;
+    currentlyWorking: boolean;
+    description: string;
+    technologies?: string[];
   }>;
   builder_score?: {
     score?: number;
@@ -292,8 +301,19 @@ export const createResumeFromParsed = async (
 };
 
 // ==================== GET ALL RESUMES (UNIFIED) ====================
-export const getAllResumesUnified = async (): Promise<import('@/types/api.types').AllResumesResponse> => {
-  const response = await httpClient.get<import('@/types/api.types').AllResumesResponse>('/resumes/all');
+export const getAllResumesUnified = async (
+  options: { skipAuthRedirect?: boolean } = {}
+): Promise<import('@/types/api.types').AllResumesResponse> => {
+  const response = await httpClient.get<import('@/types/api.types').AllResumesResponse>(
+    '/resumes/all',
+    options.skipAuthRedirect
+      ? {
+          headers: {
+            'X-Skip-Auth-Redirect': 'true',
+          },
+        }
+      : undefined
+  );
   return response.data;
 };
 
@@ -818,7 +838,9 @@ export const getBuilderScore = async (resumeId: string): Promise<BuilderScoreRes
   }
 };
 
-// ==================== GET RESUME SCORE WITH POLLING ====================
+// ==================== GET RESUME SCORE WITH POLLING (DEPRECATED) ====================
+// @deprecated Use triggerScoreCalculation + getBuilderScore directly instead.
+// Do not use this function - it fabricates fake metrics.
 export const getResumeScore = async (
   resumeId: string,
   onProgress?: (attempt: number, max: number) => void
@@ -849,14 +871,10 @@ export const getResumeScore = async (
           return {
             overall_score: builderScore.score,
             details: {
-              keywords_score: Math.floor(builderScore.score * 0.9),
-              grammar_score: Math.floor(builderScore.score * 0.95),
-              skills_match: Math.floor(builderScore.score * 0.85),
-              improvement_suggestions: builderScore.score < 70
-                ? ["Add more keywords", "Improve formatting", "Add more skills"]
-                : builderScore.score < 90
-                ? ["Fine-tune your summary", "Add certifications"]
-                : ["Your resume looks great!"]
+              keywords_score: 0,
+              grammar_score: 0,
+              skills_match: 0,
+              improvement_suggestions: []
             }
           };
         }

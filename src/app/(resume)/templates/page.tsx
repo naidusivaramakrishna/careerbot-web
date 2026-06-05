@@ -23,7 +23,8 @@ const DOMAIN_NAMES: Record<string, string> = {
   marine_merchant_navy: 'Marine & Merchant Navy',
   modern_minimal_template: 'Modern Minimal',
   research_scholar: 'Research Scholar',
-  sales_business_development: 'Sales & Business Development'
+  sales_business_development: 'Sales & Business Development',
+  general_professional: 'General Professional'
 };
 
 const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
@@ -41,6 +42,7 @@ const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
   modern_minimal_template: '/assets/templates/modern_minimal.png',
   research_scholar: '/assets/templates/research_scholar.png',
   sales_business_development: '/assets/templates/sales_business.png',
+  general_professional: '/assets/templates/software_engineering.png',
 };
 
 const DEFAULT_TEMPLATE_IMAGE = '/assets/templates/template-1.png';
@@ -106,6 +108,12 @@ const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   computer_applications: 'Computer Applications Specialist',
   iot: 'IOT Engineer',
   ux_ui_design: 'UX/UI Designer',
+  web_development: 'Web Development',
+  full_stack_development: "Full Stack Developer",
+  mobile_development: "Mobile Developer",
+  cloud_engineering: 'Cloud Engineer',
+  devops: 'DevOps Engineer',
+  machine_learning: 'Machine Learning',
 
   // Finance domains
   accounting: 'Accountant',

@@ -23,7 +23,8 @@ const DOMAIN_FAMILY_NAMES: Record<string, string> = {
   'marine_merchant_navy': 'Marine & Merchant Navy',
   'modern_minimal_template': 'Modern Minimal',
   'research_scholar': 'Research Scholar',
-  'sales_business_development': 'Sales & Business Development'
+  'sales_business_development': 'Sales & Business Development',
+  'general_professional': 'General Professional'
 };
 
 export default function CategorySidebar({

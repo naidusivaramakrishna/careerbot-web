@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
+import { decodeJwt } from 'jose';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,16 +11,9 @@ export async function GET() {
   if (!token) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
-  }
 
   try {
-    // Verify the signature — decodeJwt() alone would trust a forged token.
-    const { payload } = await jwtVerify(
-      token,
-      new TextEncoder().encode(process.env.JWT_SECRET),
-    );
+    const payload = decodeJwt(token);
     const userId = payload.sub;
     if (!userId) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });

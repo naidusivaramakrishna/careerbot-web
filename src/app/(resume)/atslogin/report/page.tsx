@@ -2,10 +2,6 @@
 
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { Playfair_Display } from "next/font/google";
-import { enhanceResume } from "@/api/enhancerApi";
-import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
-import { toast } from "sonner";
 import {
   CheckCircle2,
   RefreshCw,
@@ -28,7 +24,6 @@ import {
 } from "lucide-react";
 import ATSResumePreview from "@/app/(resume)/atslogin/_components/ATSResumePreview";
 
-const playfair = Playfair_Display({ subsets: ["latin"], weight: ["400", "700"] });
 
 const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
 const PREVIEW_BASE = `${API_BASE}/api/v1`;
@@ -81,12 +76,45 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
     {}
   ) as Record<string, unknown>;
 
+  // Build section map from ats_display.sections (new API format fallback)
+  const atsDisplayRaw = raw?.ats_display as {
+    score?: number;
+    sections?: Array<{
+      name: string;
+      score_pct: number;
+      weighted_pts: number;
+      max_pts: number;
+      is_not_applicable: boolean;
+      deductions: unknown[];
+    }>;
+    action_items?: Record<string, Array<{ id: string; after_example: string; fix_type?: string; impact?: string }>>;
+  } | undefined;
+
+  const atsDisplaySections: Record<string, BreakdownItem> = {};
+  if (atsDisplayRaw?.sections) {
+    for (const s of atsDisplayRaw.sections) {
+      if (!s.is_not_applicable) {
+        atsDisplaySections[s.name] = {
+          percentage: s.score_pct,
+          max_score: s.max_pts,
+          raw_score: s.weighted_pts,
+          deductions: s.deductions || [],
+        };
+      }
+    }
+  }
+
   const numericKeyword = Number(atsScore?.keyword_score ?? numericBreakdown.keywords ?? 0);
   const numericFormat  = Number(atsScore?.format_score  ?? numericBreakdown.formatting ?? 0);
 
   function getSection(keys: string[], numericPct: number, maxRaw: number): BreakdownItem {
     for (const k of keys) {
       const v = sectionBreakdown[k];
+      if (v && typeof v === "object" && !Array.isArray(v)) return v as BreakdownItem;
+    }
+    // Fallback to ats_display.sections (new API format)
+    for (const k of keys) {
+      const v = atsDisplaySections[k];
       if (v && typeof v === "object" && !Array.isArray(v)) return v as BreakdownItem;
     }
     for (const k of keys) {
@@ -97,6 +125,7 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
     return { raw_score: 0, max_raw_score: maxRaw, deductions: [] };
   }
 
+  const scoreFromAtsDisplay = Number((raw?.ats_display as { score?: number } | undefined)?.score ?? 0);
   const scoreFromStorage = Number(raw?.finalWeightedScore) || 0;
   const scoreFromAts = Number(
     atsScore?.FinalScore ??
@@ -109,29 +138,30 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
     atsScore?.TotalScore ??
     0
   );
-  const score = scoreFromStorage || scoreFromAts;
+  const score = scoreFromAtsDisplay || scoreFromStorage || scoreFromAts;
 
   return {
     TotalScore: score,
     FinalWeightedScore: score,
     MaxScore: 100,
     Breakdown: {
-      Contact:          getSection(["Contact",          "contact"],                        0,             5),
-      Education:        getSection(["Education",        "education"],                      0,             15),
-      Experience:       getSection(["Experience",       "experience", "WorkExperience"],   0,             0),
-      Projects:         getSection(["Projects",         "projects"],                       0,             20),
-      Skills:           getSection(["Skills",           "skills"],                         numericKeyword, 20),
-      Certifications:   getSection(["Certifications",   "certifications"],                 0,             10),
-      Summary:          getSection(["Summary",          "summary"],                        0,             5),
-      Formatting:       getSection(["Formatting",       "formatting", "FormattingEnhanced"], numericFormat, 10),
-      Internships:      getSection(["Internships",      "internships"],                    0,             10),
-      ContentQuality:   getSection(["ContentQuality",   "content_quality", "Readability", "readability"], 0, 15),
-      ATSCompatibility: getSection(["ATSCompatibility", "ats_compatibility"],              0,             5),
-      Keywords:         getSection(["Keywords",         "keywords"],                       numericKeyword, 30),
-      LengthScore:      getSection(["LengthScore",      "length_score"],                   0,             10),
-      StructureScore:   getSection(["StructureScore",   "structure_score"],                0,             20),
-      Leadership:       getSection(["Leadership",       "leadership"],                     0,             4),
-      CareerProgression:getSection(["CareerProgression","career_progression"],             0,             0),
+      Contact:          getSection(["Contact",          "contact"],                                                          0,             5),
+      Headline:         getSection(["Headline",         "headline"],                                                         0,             0),
+      Education:        getSection(["Education",        "education"],                                                        0,             15),
+      Experience:       getSection(["Experience",       "experience", "WorkExperience"],                                     0,             0),
+      Projects:         getSection(["Projects",         "projects"],                                                         0,             20),
+      Skills:           getSection(["Skills",           "skills"],                                                           numericKeyword, 20),
+      Certifications:   getSection(["Certifications",   "certifications"],                                                   0,             10),
+      Summary:          getSection(["Summary",          "summary"],                                                          0,             5),
+      Formatting:       getSection(["Formatting",       "formatting", "FormattingEnhanced", "Format", "format"],             numericFormat, 10),
+      Internships:      getSection(["Internships",      "internships"],                                                      0,             10),
+      ContentQuality:   getSection(["ContentQuality",   "content_quality", "Content Quality", "Readability", "readability", "content"], 0, 15),
+      ATSCompatibility: getSection(["ATSCompatibility", "ats_compatibility", "ATS Compatibility", "ats"],                   0,             5),
+      Keywords:         getSection(["Keywords",         "keywords"],                                                         numericKeyword, 30),
+      LengthScore:      getSection(["LengthScore",      "length_score"],                                                     0,             10),
+      StructureScore:   getSection(["StructureScore",   "structure_score"],                                                  0,             20),
+      Leadership:       getSection(["Leadership",       "leadership"],                                                       0,             4),
+      CareerProgression:getSection(["CareerProgression","career_progression", "Career Progression"],                         0,             0),
       Suggestions:      (atsScore?.suggestions as unknown[]) || (atsScore?.Suggestions as unknown[]) || (numericBreakdown.Suggestions as unknown[]) || [],
     },
     ...(() => {
@@ -216,10 +246,58 @@ function getSuggestion(section: string, description: string): string {
   return "Address this issue to strengthen the overall quality and ATS compatibility of your resume.";
 }
 
+/* Robustly extract a human-readable text string from a deduction/suggestion item.
+   Handles: JSON strings, objects with various field names, suggested_keywords arrays. */
+function extractText(raw: unknown): string {
+  // If it's a JSON string, parse it first
+  let item: unknown = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try { item = JSON.parse(trimmed); } catch { return raw; }
+    } else {
+      return raw; // plain string — use as-is
+    }
+  }
+
+  if (typeof item !== "object" || item === null) return String(item);
+
+  const obj = item as Record<string, unknown>;
+
+  // Ordered preference for text fields across both old and new API formats
+  for (const key of ["after_example", "message", "description", "after", "title", "fix_text"]) {
+    if (typeof obj[key] === "string" && (obj[key] as string).length > 0) {
+      return obj[key] as string;
+    }
+  }
+
+  // Special case: keywords gap — build a readable string from suggested_keywords
+  if (Array.isArray(obj.suggested_keywords) && (obj.suggested_keywords as unknown[]).length > 0) {
+    const kws = (obj.suggested_keywords as unknown[]).slice(0, 5).join(", ");
+    return `Add missing keywords to your resume: ${kws}`;
+  }
+
+  // No usable text field found
+  return "";
+}
+
+// Maps legacy/lowercase suggestion section names → canonical Breakdown keys
+const SUGGESTION_SECTION_MAP: Record<string, string> = {
+  format: "Formatting", formatting: "Formatting",
+  content: "ContentQuality", content_quality: "ContentQuality", "content quality": "ContentQuality",
+  ats: "ATSCompatibility", ats_compatibility: "ATSCompatibility", "ats compatibility": "ATSCompatibility",
+  keywords: "Keywords", skills: "Skills", summary: "Summary",
+  contact: "Contact", education: "Education", experience: "Experience",
+  projects: "Projects", certifications: "Certifications",
+  internships: "Internships", leadership: "Leadership",
+  career_progression: "CareerProgression", "career progression": "CareerProgression",
+};
+
 function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
   const cards: IssueCard[] = [];
   let id = 0;
-  const seen = new Set<string>();
+  const seen    = new Set<string>(); // section:key combos
+  const seenIds = new Set<string>(); // global IDs — prevent cross-section duplicates
 
   Object.entries(breakdown).forEach(([section, data]) => {
     if (section === "Suggestions") return;
@@ -237,13 +315,20 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
     const display   = section.replace(/Enhanced$/, "");
 
     (item.deductions || []).forEach((d: unknown) => {
-      const dStr = typeof d === "string" ? d
-        : typeof d === "object" && d !== null && "message" in d ? String((d as Record<string, unknown>).message)
-        : typeof d === "object" && d !== null ? JSON.stringify(d)
-        : String(d);
-      const key = `${display}:${dStr}`;
-      if (seen.has(key)) return;
+      const dStr = extractText(d);
+      if (!dStr) return;
+
+      // Get stable ID for deduplication
+      let dId = dStr;
+      const parsed = typeof d === "string" ? (() => { try { return JSON.parse(d); } catch { return null; } })() : d;
+      if (parsed && typeof parsed === "object" && typeof (parsed as Record<string, unknown>).id === "string") {
+        dId = (parsed as Record<string, unknown>).id as string;
+      }
+
+      const key = `${display}:${dId}`;
+      if (seen.has(key) || seenIds.has(dId)) return;
       seen.add(key);
+      seenIds.add(dId);
       cards.push({
         id:          `i-${id++}`,
         priority:    pct === 0 || section === "Experience" ? "critical" : pct < 80 ? "urgent" : "optional",
@@ -276,24 +361,28 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
   if (Array.isArray(suggestions)) {
     suggestions.forEach((s: unknown) => {
       const isObj = typeof s === "object" && s !== null;
-      const suggId = isObj && "id" in (s as Record<string, unknown>)
-        ? String((s as Record<string, unknown>).id)
-        : "";
+      const sObj = isObj ? s as Record<string, unknown> : null;
+      const suggId = sObj && typeof sObj.id === "string" ? sObj.id : "";
 
       if (
         suggId.startsWith("suggested_summary_") ||
         /_suggested_contribution_\d+$/.test(suggId)
       ) return;
 
-      const description = isObj && "message" in (s as Record<string, unknown>)
-        ? String((s as Record<string, unknown>).message)
-        : typeof s === "string" ? s : String(s);
-      const sectionName = isObj && "section" in (s as Record<string, unknown>)
-        ? String((s as Record<string, unknown>).section)
-        : "General";
-      const key = `${sectionName}:${description}`;
+      // Skip if this ID was already rendered from a section's deductions
+      if (suggId && seenIds.has(suggId)) return;
+
+      const description = extractText(s);
+      if (!description) return;
+
+      const rawSection = sObj && typeof sObj.section === "string" ? sObj.section : "General";
+      // Normalize legacy/lowercase section names to canonical Breakdown keys
+      const sectionName = SUGGESTION_SECTION_MAP[rawSection.toLowerCase()] ?? SUGGESTION_SECTION_MAP[rawSection] ?? rawSection;
+      const dedupeId = suggId || description;
+      const key = `${sectionName}:${dedupeId}`;
       if (seen.has(key)) return;
       seen.add(key);
+      if (suggId) seenIds.add(suggId);
       cards.push({ id: `i-${id++}`, priority: "optional", section: sectionName, description, suggestion: getSuggestion(sectionName, description) });
     });
   }
@@ -317,7 +406,7 @@ function WhyTooltip({ text }: { text: string }) {
         padding: "2px 6px", cursor: "default", userSelect: "none",
         transition: "all 0.15s",
       }}
-        onMouseEnter={e => { (e.currentTarget as HTMLSpanElement).style.color = "#2557a7"; (e.currentTarget as HTMLSpanElement).style.borderColor = "rgba(37,87,167,0.3)"; }}
+        onMouseEnter={e => { (e.currentTarget as HTMLSpanElement).style.color = "#3465BC"; (e.currentTarget as HTMLSpanElement).style.borderColor = "rgba(52,101,188,0.3)"; }}
         onMouseLeave={e => { (e.currentTarget as HTMLSpanElement).style.color = "#94a3b8"; (e.currentTarget as HTMLSpanElement).style.borderColor = "#e2e8f0"; }}
       >
         WHY?
@@ -353,7 +442,7 @@ function IssueCard({
 
   const isCritical = issue.priority === "critical";
   const isUrgent   = issue.priority === "urgent";
-  const fixBtnColor = isCritical ? "#dc2626" : isUrgent ? "#d97706" : "#0f172a";
+  const fixBtnColor = "#3465BC";
 
   const rawPts    = SECTION_IMPACT[issue.section] ?? 5;
   const impactPts = isCritical ? rawPts : isUrgent ? Math.floor(rawPts * 0.65) : Math.floor(rawPts * 0.35);
@@ -380,19 +469,22 @@ function IssueCard({
       <div className="px-5 pt-5 pb-5">
         {/* Row 1: icon + title + pts */}
         <div className="flex items-center gap-3 mb-3.5">
-          <div className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "#f1f5f9", border: "1px solid #e2e8f0" }}>
-            <Icon style={{ width: 16, height: 16, color: "#475569" }} />
+          <div className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center" style={{
+            background: isCritical ? "#fef2f2" : isUrgent ? "rgba(254,230,85,0.35)" : "rgba(52,101,188,0.07)",
+            border: `1px solid ${isCritical ? "rgba(220,38,38,0.18)" : isUrgent ? "rgba(217,119,6,0.22)" : "rgba(52,101,188,0.15)"}`,
+          }}>
+            <Icon style={{ width: 16, height: 16, color: isCritical ? "#dc2626" : isUrgent ? "#F59E0B" : "#3465BC" }} />
           </div>
           <p className="text-[14px] font-bold text-gray-900 leading-snug flex-1">{title}</p>
           <span className="shrink-0 text-[11.5px] font-black whitespace-nowrap px-2.5 py-1 rounded-full"
-            style={{ background: "rgba(37,87,167,0.08)", color: "#2557a7", border: "1px solid rgba(37,87,167,0.15)" }}>
+            style={{ background: "rgba(52,101,188,0.08)", color: "#3465BC", border: "1px solid rgba(52,101,188,0.15)" }}>
             +{impactPts} pts
           </span>
         </div>
 
         {/* Suggestion box */}
-        <div className="rounded-xl px-4 py-3.5 mb-3.5" style={{ background: "#f8fafc", border: "1px solid #e8ecf0" }}>
-          <p className="text-[13px] leading-relaxed" style={{ color: "#64748b" }}>{issue.suggestion}</p>
+        <div className="rounded-xl px-4 py-3.5 mb-3.5" style={{ background: "#f0f4ff", border: "1px solid rgba(52,101,188,0.12)" }}>
+          <p className="text-[13px] leading-relaxed" style={{ color: "#475569" }}>{issue.suggestion}</p>
         </div>
 
         {/* Fix Now button */}
@@ -550,13 +642,13 @@ function BackToTop() {
         transform: visible ? "translateY(0)" : "translateY(16px)",
         pointerEvents: visible ? "auto" : "none",
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 20px rgba(37,87,167,0.2)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(37,87,167,0.3)"; }}
+      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 20px rgba(52,101,188,0.2)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(52,101,188,0.3)"; }}
       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 16px rgba(0,0,0,0.12)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#e2e8f0"; }}
     >
-      <svg width="16" height="16" fill="none" stroke="#2557a7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <svg width="16" height="16" fill="none" stroke="#3465BC" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
         <path d="M18 15l-6-6-6 6" />
       </svg>
-      <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.05em", color: "#2557a7", lineHeight: 1, textTransform: "uppercase" }}>TOP</span>
+      <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.05em", color: "#3465BC", lineHeight: 1, textTransform: "uppercase" }}>TOP</span>
     </button>
   );
 }
@@ -623,7 +715,7 @@ function ATSLoginReport() {
     };
 
     return [
-      "Contact","Education","Experience","Projects","Skills",
+      "Contact","Headline","Education","Experience","Projects","Skills",
       "Certifications","Summary","Internships","Keywords",
       "Formatting","ContentQuality","ATSCompatibility","Leadership","CareerProgression","LengthScore","StructureScore",
     ]
@@ -709,13 +801,13 @@ function ATSLoginReport() {
   /* ── helpers ── */
   const gradeLabel  = pct >= 85 ? "Excellent" : pct >= 70 ? "Good" : pct >= 50 ? "Average" : "Needs Work";
   const gradeUpper  = gradeLabel.toUpperCase();
-  const scoreColor  = pct >= 70 ? "#16a34a" : pct >= 40 ? "#d97706" : "#dc2626";
-  const scoreLight  = pct >= 70 ? "#f0fdf4" : pct >= 40 ? "#fffbeb" : "#fef2f2";
-  const scoreBorder = pct >= 70 ? "#86efac" : pct >= 40 ? "#fcd34d" : "#fca5a5";
+  const scoreColor  = pct >= 70 ? "#00A63E" : pct >= 40 ? "#F59E0B" : "#dc2626";
+  const scoreLight  = pct >= 70 ? "#ECFDF5" : pct >= 40 ? "#FEF3C7" : "#fef2f2";
+  const scoreBorder = pct >= 70 ? "#6EE7A0" : pct >= 40 ? "#FDE68A" : "#fca5a5";
   const ptsDiff     = Math.max(0, 90 - pct);
 
   const SECTION_ICONS: Record<string, React.ElementType> = {
-    Contact: User, Education: GraduationCap, Experience: Briefcase,
+    Contact: User, Headline: Tag, Education: GraduationCap, Experience: Briefcase,
     Projects: FolderOpen, Skills: Zap, Certifications: Award,
     Summary: AlignLeft, Internships: Building2, Keywords: Tag,
     Formatting: LayoutTemplate, ContentQuality: BookOpen,
@@ -744,29 +836,18 @@ function ATSLoginReport() {
   const TAB_CONFIG = [
     { key: "all",      label: "All",            count: grouped.critical.length + grouped.urgent.length + grouped.optional.length },
     { key: "critical", label: "Fix First",       count: grouped.critical.length, color: "#dc2626" },
-    { key: "urgent",   label: "High Impact",     count: grouped.urgent.length,   color: "#d97706" },
-    { key: "optional", label: "Nice to Improve", count: grouped.optional.length, color: "#2557a7" },
+    { key: "urgent",   label: "High Impact",     count: grouped.urgent.length,   color: "#F59E0B" },
+    { key: "optional", label: "Nice to Improve", count: grouped.optional.length, color: "#3465BC" },
   ] as const;
 
-  /* Section checklist for sidebar — top 7 most impactful */
-  const CHECKLIST_SECTIONS = ["Contact", "Summary", "Skills", "Experience", "Education", "Keywords", "Formatting"];
-  const checklistItems = CHECKLIST_SECTIONS
-    .filter(s => allScoreItems.some(a => a.name === s))
-    .map(s => ({
-      key: s,
-      label: s === "ContentQuality" ? "Content Quality" : s === "ATSCompatibility" ? "ATS Compatibility" : s,
-      count: sectionIssueCounts[s] ?? 0,
-      hasIssue: (sectionIssueCounts[s] ?? 0) > 0,
-    }));
-
-  /* ── Loading ─────────────────────── */
+/* ── Loading ─────────────────────── */
   if (loading) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f0f4fa" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#EFF6FF" }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 4px 16px rgba(0,0,0,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-          <div className="w-8 h-8 border-[3px] border-t-transparent rounded-full animate-spin" style={{ borderColor: "#2557a7", borderTopColor: "transparent" }} />
+          <div className="w-8 h-8 border-[3px] border-t-transparent rounded-full animate-spin" style={{ borderColor: "#3465BC", borderTopColor: "transparent" }} />
         </div>
-        <p className={playfair.className} style={{ fontStyle: "italic", fontSize: 22, fontWeight: 700, color: "#0f172a" }}>Analyzing your resume…</p>
+        <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a" }}>Analyzing your resume…</p>
         <p style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>Building your personalized report</p>
       </div>
     </div>
@@ -774,14 +855,14 @@ function ATSLoginReport() {
 
   /* ── No data ─────────────────────── */
   if (!scoreData) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f0f4fa", padding: "0 24px" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#EFF6FF", padding: "0 24px" }}>
       <div style={{ maxWidth: 440, width: "100%", textAlign: "center", background: "#fff", borderRadius: 20, padding: "48px 40px", border: "1px solid #e2e8f0", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
         <div style={{ width: 64, height: 64, borderRadius: 16, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
           <XCircle style={{ width: 32, height: 32, color: "#dc2626" }} />
         </div>
-        <h2 className={playfair.className} style={{ fontStyle: "italic", fontSize: 24, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>No Report Found</h2>
+        <h2 style={{ fontSize: 24, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>No Report Found</h2>
         <p style={{ fontSize: 14, color: "#6b7280", marginBottom: 28, lineHeight: 1.6 }}>Upload and scan your resume first to see your full ATS analysis.</p>
-        <button onClick={() => router.push("/atslogin")} style={{ width: "100%", padding: "14px 24px", borderRadius: 12, background: "#2557a7", border: "none", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <button onClick={() => router.push("/atslogin")} style={{ width: "100%", padding: "14px 24px", borderRadius: 12, background: "#3465BC", border: "none", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           <RefreshCw style={{ width: 16, height: 16 }} /> Go to ATS Scanner
         </button>
       </div>
@@ -792,45 +873,35 @@ function ATSLoginReport() {
   const CARD = { background: "#fff", borderRadius: 16, border: "1px solid #e5eaf2", boxShadow: "0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)", overflow: "hidden" as const };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f0f4fa" }}>
-      {/* Arc lines background — fixed so it covers viewport at all scroll positions */}
-      <svg
-        aria-hidden="true"
-        style={{ position: "fixed", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 0 }}
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {[280, 440, 600, 760, 920, 1080, 1240, 1400].map((r) => (
-          <circle key={r} cx="-60" cy="110%" r={r} fill="none" stroke="rgba(37,87,167,0.07)" strokeWidth="1.2" />
-        ))}
-      </svg>
+    <div style={{ minHeight: "100vh", background: "#EFF6FF" }}>
       <div style={{ position: "relative", zIndex: 1 }}>
 
       {/* ── PAGE HEADER ── */}
-      <div style={{ padding: "18px 40px 16px", borderBottom: "1px solid #e2e8f2" }}>
-        <div style={{ maxWidth: 1520, margin: "0 auto", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24 }}>
+      <div className="px-4 md:px-10 py-5 md:py-6 border-b border-[#dce8fb]" style={{ background: "#EFF6FF" }}>
+        <div style={{ maxWidth: 1520, margin: "0 auto" }} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <div style={{ width: 4, height: 20, borderRadius: 99, background: "linear-gradient(180deg,#2557a7,#4f8ef7)" }} />
-              <p style={{ fontSize: 10, fontWeight: 800, color: "#2557a7", letterSpacing: "0.2em", textTransform: "uppercase" as const, fontFamily: "monospace", margin: 0 }}>
+              <div style={{ width: 4, height: 18, borderRadius: 99, background: "linear-gradient(180deg,#3465BC,#4f8ef7)" }} />
+              <p style={{ fontSize: 10, fontWeight: 800, color: "#3465BC", letterSpacing: "0.2em", textTransform: "uppercase" as const, fontFamily: "monospace", margin: 0 }}>
                 ATS Resume Report
               </p>
             </div>
-            <h1 className={playfair.className} style={{ fontStyle: "italic", fontSize: 36, fontWeight: 700, color: "#0f172a", margin: 0, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
+            <h1 style={{ fontSize: 30, fontWeight: 700, color: "#0f172a", margin: 0, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
               {pct >= 70 ? "Great score! Let’s make it perfect." : "Let’s fine-tune your resume."}
             </h1>
             <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 8, fontWeight: 400 }}>
               We found <span style={{ fontWeight: 700, color: "#0f172a" }}>{issues.length} issues</span> affecting your ATS compatibility score.
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, paddingBottom: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 4 }}>Your Score</p>
               <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                <span className={playfair.className} style={{ fontStyle: "italic", fontSize: 40, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{pct}</span>
+                <span style={{ fontSize: 40, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{pct}</span>
                 <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 500 }}>/100</span>
               </div>
             </div>
-            <div style={{ width: 1, height: 48, background: "#e2e8f2" }} />
+            <div style={{ width: 1, height: 48, background: "#dce8fb" }} />
             <span style={{ padding: "8px 20px", borderRadius: 99, background: scoreLight, color: scoreColor, border: `1.5px solid ${scoreBorder}`, fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>
               {gradeUpper}
             </span>
@@ -839,7 +910,7 @@ function ATSLoginReport() {
       </div>
 
       {/* ── MAIN GRID ── */}
-      <div style={{ maxWidth: 1520, margin: "0 auto", padding: "32px 40px 64px" }}>
+      <div style={{ maxWidth: 1520, margin: "0 auto" }} className="px-4 md:px-10 py-6 md:py-8 pb-16">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
 
           {/* ── LEFT (4 cols sticky) ── */}
@@ -848,33 +919,72 @@ function ATSLoginReport() {
             {/* Score card */}
             <div style={CARD}>
               <div style={{ padding: "22px 24px 20px" }}>
-                <p className={playfair.className} style={{ fontStyle: "italic", fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 20 }}>Resume Check Score</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 20 }}>Resume Check Score</p>
 
-                {/* Gauge row */}
-                <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 22 }}>
-                  <div style={{ position: "relative", flexShrink: 0 }}>
-                    <svg viewBox="0 0 120 120" width="108" height="108">
-                      <circle cx="60" cy="60" r="48" fill="none" stroke="#e8edf3" strokeWidth="10" />
+                {/* Score circle — centered, SaaS-grade */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 22 }}>
+                  <div style={{ position: "relative", width: 172, height: 172 }}>
+                    {/* Ambient glow */}
+                    <div style={{
+                      position: "absolute", inset: -14, borderRadius: "50%",
+                      background: `radial-gradient(circle, ${scoreColor}1a 0%, transparent 68%)`,
+                      filter: "blur(14px)", pointerEvents: "none",
+                    }} />
+                    <svg viewBox="0 0 200 200" width="172" height="172">
+                      <defs>
+                        <linearGradient id="scoreArcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor={scoreColor} stopOpacity="0.6"/>
+                          <stop offset="100%" stopColor={scoreColor}/>
+                        </linearGradient>
+                      </defs>
+                      {/* Outer decorative dashed orbit */}
+                      <circle cx="100" cy="100" r="95" fill="none"
+                        stroke={`${scoreColor}18`} strokeWidth="1.5" strokeDasharray="3 9"/>
+                      {/* Track ring */}
+                      <circle cx="100" cy="100" r="80" fill="none"
+                        stroke="#edf0f5" strokeWidth="13" strokeLinecap="round"/>
+                      {/* Progress arc */}
                       {pct > 0 && (
-                        <circle cx="60" cy="60" r="48" fill="none" stroke={scoreColor} strokeWidth="10"
-                          strokeDasharray={`${2 * Math.PI * 48 * pct / 100} ${2 * Math.PI * 48}`}
-                          strokeLinecap="round" transform="rotate(-90 60 60)"
-                          style={{ filter: `drop-shadow(0 0 8px ${scoreColor}88)` }} />
+                        <circle cx="100" cy="100" r="80" fill="none"
+                          stroke="url(#scoreArcGrad)" strokeWidth="13" strokeLinecap="round"
+                          strokeDasharray={`${2 * Math.PI * 80 * pct / 100} ${2 * Math.PI * 80}`}
+                          transform="rotate(-90 100 100)"
+                          style={{ filter: `drop-shadow(0 0 10px ${scoreColor}99)`, transition: "stroke-dasharray 0.9s ease" }}
+                        />
+                      )}
+                      {/* End dot accent */}
+                      {pct > 2 && (
+                        <circle
+                          cx={100 + 80 * Math.cos((Math.PI * 2 * pct / 100) - Math.PI / 2)}
+                          cy={100 + 80 * Math.sin((Math.PI * 2 * pct / 100) - Math.PI / 2)}
+                          r="5.5" fill={scoreColor}
+                          style={{ filter: `drop-shadow(0 0 6px ${scoreColor})` }}
+                        />
                       )}
                     </svg>
+                    {/* Center label */}
                     <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                      <span className={playfair.className} style={{ fontStyle: "italic", fontSize: 34, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{pct}</span>
-                      <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, marginTop: 2 }}>/ 100</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", color: "#94a3b8", textTransform: "uppercase" as const, marginBottom: 1 }}>ATS Score</span>
+                      <span style={{ fontSize: 56, fontWeight: 900, color: scoreColor, lineHeight: 1, letterSpacing: "-0.04em" }}>{pct}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#b0bac8", marginTop: 2 }}>/ 100</span>
                     </div>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 24, fontWeight: 900, color: scoreColor, lineHeight: 1, marginBottom: 6 }}>{gradeUpper}</p>
-                    <span style={{ display: "inline-block", fontSize: 10, fontWeight: 700, padding: "4px 12px", borderRadius: 99, background: scoreLight, color: scoreColor, border: `1.5px solid ${scoreBorder}`, textTransform: "uppercase" as const, letterSpacing: "0.07em" }}>
+
+                  {/* Grade + badge centered below */}
+                  <div style={{ textAlign: "center", marginTop: 16 }}>
+                    <p style={{ fontSize: 26, fontWeight: 900, color: scoreColor, lineHeight: 1, marginBottom: 8, letterSpacing: "-0.02em" }}>{gradeUpper}</p>
+                    <span style={{
+                      display: "inline-block", fontSize: 10, fontWeight: 800,
+                      padding: "5px 16px", borderRadius: 99,
+                      background: scoreLight, color: scoreColor,
+                      border: `1.5px solid ${scoreBorder}`,
+                      textTransform: "uppercase" as const, letterSpacing: "0.1em",
+                    }}>
                       Resume Strength
                     </span>
                     {ptsDiff > 0 && (
                       <p style={{ fontSize: 12, color: "#6b7280", marginTop: 10, lineHeight: 1.4 }}>
-                        Fix issues to gain <span style={{ color: "#2557a7", fontWeight: 800 }}>+{ptsDiff} pts</span>
+                        Fix issues to gain <span style={{ color: "#3465BC", fontWeight: 800 }}>+{ptsDiff} pts</span>
                       </p>
                     )}
                   </div>
@@ -888,63 +998,19 @@ function ATSLoginReport() {
                   {isFixing ? "Preparing…" : "Fix My Resume →"}
                 </button>
                 <button onClick={() => router.push("/atslogin")}
-                  style={{ width: "100%", padding: "11px 20px", borderRadius: 12, background: "transparent", color: "#2557a7", fontWeight: 700, fontSize: 13, border: "1.5px solid #dbeafe", cursor: "pointer", marginBottom: 0 }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#eff6ff"; }}
+                  style={{ width: "100%", padding: "11px 20px", borderRadius: 12, background: "transparent", color: "#3465BC", fontWeight: 700, fontSize: 13, border: "1.5px solid #dbeafe", cursor: "pointer", marginBottom: 0 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#EFF6FF"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
                   Upload &amp; Rescan
                 </button>
               </div>
 
-              {/* Divider */}
-              <div style={{ height: 1, background: "#f1f5f9" }} />
-
-              {/* Section checklist */}
-              <div style={{ padding: "18px 24px 22px" }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 12 }}>Sections to Review</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  {checklistItems.map(item => (
-                    <div key={item.key}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 12,
-                        padding: "10px 12px", borderRadius: 10,
-                        background: item.hasIssue ? "#fef8f8" : "#f8faf8",
-                        border: `1px solid ${item.hasIssue ? "#fee2e2" : "#e8f5e9"}`,
-                        cursor: item.hasIssue ? "pointer" : "default",
-                        transition: "all 0.15s",
-                      }}
-                      onClick={item.hasIssue ? () => scrollToSection(item.key) : undefined}
-                      onMouseEnter={e => { if (item.hasIssue) { (e.currentTarget as HTMLDivElement).style.background = "#fef2f2"; (e.currentTarget as HTMLDivElement).style.borderColor = "#fca5a5"; } }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = item.hasIssue ? "#fef8f8" : "#f8faf8"; (e.currentTarget as HTMLDivElement).style.borderColor = item.hasIssue ? "#fee2e2" : "#e8f5e9"; }}
-                    >
-                      {item.hasIssue ? (
-                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 6px rgba(220,38,38,0.3)" }}>
-                          <span style={{ color: "#fff", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>!</span>
-                        </div>
-                      ) : (
-                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#16a34a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 6px rgba(22,163,74,0.25)" }}>
-                          <svg width="11" height="11" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                      )}
-                      <span style={{ fontSize: 13, fontWeight: item.hasIssue ? 700 : 500, color: item.hasIssue ? "#0f172a" : "#4b7a57", flex: 1 }}>{item.label}</span>
-                      {item.hasIssue && (
-                        <span style={{ minWidth: 22, height: 22, borderRadius: 99, padding: "0 6px", background: "#dc2626", color: "#fff", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          {item.count}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 16, padding: "10px 12px", borderRadius: 10, background: "#f8fafc", border: "1px solid #e8ecf0" }}>
-                  <svg width="11" height="11" fill="#94a3b8" viewBox="0 0 24 24"><path d="M12 1l9 4v6c0 5.25-3.75 10.14-9 11.25C6.75 21.14 3 16.25 3 11V5l9-4z" /></svg>
-                  <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>Your data is secure and confidential</p>
-                </div>
-              </div>
             </div>
 
             {/* Score Breakdown card */}
             <div style={CARD}>
               <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f5f9" }}>
-                <p className={playfair.className} style={{ fontStyle: "italic", fontSize: 19, fontWeight: 700, color: "#0f172a" }}>Score Breakdown</p>
+                <p style={{ fontSize: 19, fontWeight: 700, color: "#0f172a" }}>Score Breakdown</p>
                 <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 3 }}>Click a section to jump to its issues</p>
               </div>
               <div className="custom-scrollbar" style={{ padding: "12px 14px", maxHeight: 440, overflowY: "auto" }}>
@@ -953,7 +1019,7 @@ function ATSLoginReport() {
                     const count    = sectionIssueCounts[item.name] ?? 0;
                     const hasIssues = count > 0;
                     const label    = item.name.replace(/([A-Z])/g, " $1").trim();
-                    const barColor = item.score >= 70 ? "#16a34a" : item.score >= 40 ? "#d97706" : "#dc2626";
+                    const barColor = item.score >= 70 ? "#00A63E" : item.score >= 40 ? "#F59E0B" : "#dc2626";
                     const SIcon    = SECTION_ICONS[item.name] ?? Lightbulb;
                     return (
                       <button key={item.name}
@@ -972,12 +1038,12 @@ function ATSLoginReport() {
                               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
                                 {hasIssues
                                   ? <span style={{ width: 16, height: 16, borderRadius: "50%", background: "#dc2626", color: "#fff", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{count}</span>
-                                  : <CheckCircle2 style={{ width: 13, height: 13, color: "#16a34a" }} />
+                                  : <CheckCircle2 style={{ width: 13, height: 13, color: "#00A63E" }} />
                                 }
                                 <span style={{ fontSize: 12, fontWeight: 800, color: barColor }}>{item.score}%</span>
                               </div>
                             </div>
-                            <div style={{ height: 4, borderRadius: 99, background: "#f1f5f9", overflow: "hidden" }}>
+                            <div style={{ height: 6, borderRadius: 99, background: "#edf0f7", overflow: "hidden" }}>
                               <div style={{ height: "100%", width: `${item.score}%`, background: barColor, borderRadius: 99, transition: "width 0.8s ease" }} />
                             </div>
                           </div>
@@ -1001,12 +1067,12 @@ function ATSLoginReport() {
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <div style={{ display: "flex", gap: 6 }}>
                       <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#f87171" }} />
-                      <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fbbf24" }} />
+                      <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#F59E0B" }} />
                       <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#4ade80" }} />
                     </div>
-                    <span className={playfair.className} style={{ fontStyle: "italic", fontSize: 16, fontWeight: 700, color: "#0f172a" }}>Resume Preview</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>Resume Preview</span>
                   </div>
-                  <span style={{ fontSize: 10, fontWeight: 800, padding: "5px 14px", borderRadius: 99, background: "rgba(37,87,167,0.07)", color: "#2557a7", border: "1.5px solid rgba(37,87,167,0.18)", textTransform: "uppercase" as const, letterSpacing: "0.1em" }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: "5px 14px", borderRadius: 99, background: "rgba(52,101,188,0.07)", color: "#3465BC", border: "1.5px solid rgba(52,101,188,0.18)", textTransform: "uppercase" as const, letterSpacing: "0.1em" }}>
                     {scoreData?.Fresher ? "Fresher" : "Experienced"}
                   </span>
                 </div>
@@ -1022,13 +1088,13 @@ function ATSLoginReport() {
             {/* Issues Card */}
             <div style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #e5eaf2", boxShadow: "0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)" }}>
               {/* Header */}
-              <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1a3a5c 55%, #2557a7 100%)", padding: "28px 28px 0", position: "relative", overflow: "hidden" }}>
+              <div style={{ background: "linear-gradient(135deg, #3465BC 0%, #4a7fd4 55%, #5e94e8 100%)", padding: "28px 28px 0", position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: -40, right: -40, width: 220, height: 220, borderRadius: "50%", background: "rgba(88,150,215,0.12)", filter: "blur(40px)", pointerEvents: "none" }} />
-                <div style={{ position: "absolute", bottom: 0, left: -20, width: 160, height: 160, borderRadius: "50%", background: "rgba(37,87,167,0.1)", filter: "blur(30px)", pointerEvents: "none" }} />
+                <div style={{ position: "absolute", bottom: 0, left: -20, width: 160, height: 160, borderRadius: "50%", background: "rgba(52,101,188,0.1)", filter: "blur(30px)", pointerEvents: "none" }} />
                 <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
                   <div>
                     <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.4)", marginBottom: 8, fontFamily: "monospace" }}>Action Items</p>
-                    <h3 className={playfair.className} style={{ fontStyle: "italic", fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1.2, marginBottom: 6 }}>
+                    <h3 style={{ fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1.2, marginBottom: 6 }}>
                       {issues.length === 0 ? "Resume Looks Great!" : `${issues.length} Issue${issues.length !== 1 ? "s" : ""} Found`}
                     </h3>
                     <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)", fontWeight: 400 }}>
@@ -1075,13 +1141,13 @@ function ATSLoginReport() {
               </div>
 
               {/* Body */}
-              <div style={{ padding: 24, background: "#f8fafc" }}>
+              <div style={{ padding: 24, background: "#f4f6fa" }}>
                 {issues.length === 0 ? (
                   <div style={{ padding: "56px 0", textAlign: "center" }}>
-                    <div style={{ width: 72, height: 72, borderRadius: 20, background: "#f0fdf4", border: "1.5px solid #86efac", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-                      <CheckCircle2 style={{ width: 36, height: 36, color: "#16a34a" }} />
+                    <div style={{ width: 72, height: 72, borderRadius: 20, background: "#ECFDF5", border: "1.5px solid #6EE7A0", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                      <CheckCircle2 style={{ width: 36, height: 36, color: "#00A63E" }} />
                     </div>
-                    <p className={playfair.className} style={{ fontStyle: "italic", fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>All Clear!</p>
+                    <p style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>All Clear!</p>
                     <p style={{ fontSize: 13, color: "#9ca3af" }}>No issues detected across all resume sections.</p>
                   </div>
                 ) : (
@@ -1092,19 +1158,19 @@ function ATSLoginReport() {
                         onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={handleFixNow} />
                     )}
                     {(filter === "all" || filter === "urgent") && (
-                      <PriorityGroup title="High Impact" subtitle="Significant score improvements" accent="#d97706" accentBg="#fffbeb"
+                      <PriorityGroup title="High Impact" subtitle="Significant score improvements" accent="#F59E0B" accentBg="#FEF3C7"
                         issues={grouped.urgent} sectionIcons={SECTION_ICONS} tooltip="These issues cost meaningful ATS points. Fixing them moves your score into the competitive range."
                         onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={handleFixNow} />
                     )}
                     {(filter === "all" || filter === "optional") && (
-                      <PriorityGroup title="Nice to Improve" subtitle="Polish that separates good from great" accent="#2557a7" accentBg="#eff6ff"
+                      <PriorityGroup title="Nice to Improve" subtitle="Polish that separates good from great" accent="#3465BC" accentBg="#EFF6FF"
                         issues={grouped.optional} sectionIcons={SECTION_ICONS} tooltip="Low-severity polish items. Address after fixing critical and urgent issues for maximum ROI."
                         onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={handleFixNow} />
                     )}
                     {((filter === "critical" && !grouped.critical.length) || (filter === "urgent" && !grouped.urgent.length) || (filter === "optional" && !grouped.optional.length)) && (
-                      <div style={{ padding: "48px 0", textAlign: "center", borderRadius: 14, background: "#f0fdf4", border: "1px solid #86efac" }}>
-                        <CheckCircle2 style={{ width: 32, height: 32, color: "#16a34a", margin: "0 auto 10px" }} />
-                        <p style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>No issues in this category</p>
+                      <div style={{ padding: "48px 0", textAlign: "center", borderRadius: 14, background: "#ECFDF5", border: "1px solid #6EE7A0" }}>
+                        <CheckCircle2 style={{ width: 32, height: 32, color: "#00A63E", margin: "0 auto 10px" }} />
+                        <p style={{ fontSize: 13, fontWeight: 700, color: "#00A63E" }}>No issues in this category</p>
                       </div>
                     )}
                   </div>
@@ -1133,16 +1199,13 @@ function ATSLoginReport() {
 export default function ATSLoginReportPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{
-        backgroundImage: "linear-gradient(rgba(37,87,167,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(37,87,167,0.04) 1px, transparent 1px), linear-gradient(135deg, #f8faff 0%, #eff6ff 50%, #dbeafe 100%)",
-        backgroundSize: "48px 48px, 48px 48px, 100% 100%",
-      }}>
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
-            style={{ background: "#fff", border: "1.5px solid #0f172a", boxShadow: "4px 4px 0px #0f172a" }}>
-            <div className="w-8 h-8 border-[3px] border-t-transparent rounded-full animate-spin" style={{ borderColor: "#2557a7", borderTopColor: "transparent" }} />
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#EFF6FF" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 4px 16px rgba(0,0,0,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+            <div className="w-8 h-8 border-[3px] border-t-transparent rounded-full animate-spin" style={{ borderColor: "#3465BC", borderTopColor: "transparent" }} />
           </div>
-          <p className="font-bold text-gray-700">Loading report…</p>
+          <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a" }}>Loading report…</p>
+          <p style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>Preparing your ATS analysis</p>
         </div>
       </div>
     }>

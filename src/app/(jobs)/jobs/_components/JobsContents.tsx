@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { searchJobs, getSmartMatchedJobs } from "@/api/jobsApi";
@@ -7,18 +7,14 @@ import type { FilterParams } from "./filters/filterConstants";
 import { toast } from "sonner";
 import { getSavedJobIds, getSavedJobsCount } from "@/utils/jobTracking";
 import { getJobId } from "@/utils/jobIdHelper";
+import { Bookmark, Zap, Search, Briefcase, AlertTriangle, RotateCcw, FileX } from "lucide-react";
 
-import JobsTabs, { TabType, SortType } from "./JobsTabs";
+import JobsTabs, { TabType, SortType, FilterSort } from "./JobsTabs";
 import JobList from "./sidebar/JobList";
 import Pagination from "./Pagination";
-import TopPickCard from "./sidebar/TopPickCard";
-import SalaryInsights from "./sidebar/SalaryInsights";
-import TrendingSkillsCard from "./sidebar/TrendingSkillsCard";
-import CareerTip from "./sidebar/CareerTip";
+import JobsRightSidebar from "./sidebar/JobsRightSidebar";
 import NancyChat from "./chat/NancyChat";
 import JobSkeleton from "./JobSkeleton";
-import JobsHeaderSection from "./JobsHeaderSection";
-import JobsLandingSection from "./JobsLandingSection";
 import JobsFilterSidebar from "./JobsFilterSidebar";
 
 // ── Normalized shape used throughout the component ──
@@ -54,68 +50,60 @@ interface NormalizedJob {
   match_band?: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function normalizeJob(job: any, matchScore = 0, matchData?: MatchedJobItem["match"]): NormalizedJob {
-  const title = job.title || job.job_title || "Job Title";
-  const company =
-    job.company || job.company_name || job.organization || job.about_company || job.employer || "";
-  const location =
-    job.location || job.job_location || job.city || job.place || "Location not specified";
+function str(job: Record<string, unknown>, ...keys: string[]): string {
+  for (const k of keys) {
+    const v = job[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: MatchedJobItem["match"]): NormalizedJob {
+  const title = str(job, "title", "job_title") || "Job Title";
+  const company = str(job, "company", "company_name", "organization", "about_company", "employer");
+  const location = str(job, "location", "job_location", "city", "place") || "Location not specified";
+
+  const jobType = str(job, "job_type", "type", "employment_type", "work_type", "contract_type").toLowerCase();
+  const typeNorm = !jobType ? ""
+    : jobType.includes("intern") ? "Internship"
+    : jobType.includes("contract") || jobType.includes("freelance") ? "Contract"
+    : jobType.includes("part") ? "Part-time"
+    : "Full-time";
+
+  const skills = job["skills"];
+  const skillsStr = typeof skills === "string" ? skills
+    : Array.isArray(skills) ? (skills as string[]).join(", ")
+    : "";
+
+  const recruiterId = str(job, "recruiter_id");
 
   return {
-    id: getJobId(job.id, title, company, location),
+    id: getJobId(String(job["id"] ?? ""), title, company, location),
     title,
     company,
     location,
-    logo: job.organization_logo || job.company_logo || "",
-    type: (() => {
-      const raw = (
-        job.job_type ||
-        job.type ||
-        job.employment_type ||
-        job.work_type ||
-        job.contract_type ||
-        ""
-      )
-        .toLowerCase()
-        .trim();
-      if (!raw) return "";
-      if (raw.includes("intern")) return "Internship";
-      if (raw.includes("contract") || raw.includes("freelance")) return "Contract";
-      if (raw.includes("part")) return "Part-time";
-      return "Full-time";
-    })(),
-    mode: job.work_mode || job.mode || "",
-    salary:
-      typeof job.salary === "string" && job.salary.trim() ? job.salary.trim() : "",
+    logo: str(job, "organization_logo", "company_logo"),
+    type: typeNorm,
+    mode: str(job, "work_mode", "mode"),
+    salary: str(job, "salary"),
     time: "Recently",
-    url: job.recruiter_id ? "" : job.url || job.apply_url || "",
-    application_url: job.recruiter_id ? "" : job.application_url || "",
-    recruiter_id: job.recruiter_id || "",
+    url: recruiterId ? "" : str(job, "url", "apply_url"),
+    application_url: recruiterId ? "" : str(job, "application_url"),
+    recruiter_id: recruiterId,
     matchScore,
     matchText: matchData ? `${Math.round(matchScore)}% match` : "Match",
     roleTrending: false,
     highHiring: false,
-    description: job.description || job.job_description || "",
-    created_at: job.created_at || null,
-    posted_date: job.posted_date || job.created_at || null,
-    company_website: job.company_website || "",
-    skills:
-      typeof job.skills === "string"
-        ? job.skills
-        : Array.isArray(job.skills)
-        ? job.skills.join(", ")
-        : "",
-    experience: job.experience_level || job.experience || "",
-    experience_level: job.experience_level || "",
-    education:
-      job.education ||
-      job.qualification ||
-      job.education_required ||
-      job.min_education ||
-      "",
-    source: job.source || "",
-    is_applied: !!job.is_applied,
+    description: str(job, "description", "job_description"),
+    created_at: (job["created_at"] as string | null) ?? null,
+    posted_date: (job["posted_date"] as string | null) ?? (job["created_at"] as string | null) ?? null,
+    company_website: str(job, "company_website"),
+    skills: skillsStr,
+    experience: str(job, "experience_level", "experience"),
+    experience_level: str(job, "experience_level"),
+    education: str(job, "education", "qualification", "education_required", "min_education"),
+    source: str(job, "source"),
+    is_applied: !!job["is_applied"],
     matched_skills: matchData?.matched_skills,
     missing_skills: matchData?.missing_skills,
     match_band: matchData?.band,
@@ -125,14 +113,16 @@ function normalizeJob(job: any, matchScore = 0, matchData?: MatchedJobItem["matc
 const JOBS_PER_PAGE = 10;
 
 export default function JobsContents() {
-  // ── State ──
+  // ── Fetch / pagination ──
   const [jobs, setJobs] = useState<NormalizedJob[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<NormalizedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalJobs, setTotalJobs] = useState<number | undefined>(undefined);
 
+  // ── Search & filter ──
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
@@ -142,22 +132,37 @@ export default function JobsContents() {
   const [cityFilter, setCityFilter] = useState("");
   const [experienceFilter, setExperienceFilter] = useState("");
   const [sortBy, setSortBy] = useState<SortType>("relevance");
-  const [totalJobs, setTotalJobs] = useState<number | undefined>(undefined);
+  const [filterSort, setFilterSort] = useState<FilterSort>("most-recent");
 
-  const [showLanding, setShowLanding] = useState(true);
-  const [openChat, setOpenChat] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<NormalizedJob | null>(null);
-
+  // ── Tab counters ──
   const [newJobsCount, setNewJobsCount] = useState(0);
   const [savedJobsCount, setSavedJobsCount] = useState(0);
   const [newJobIds, setNewJobIds] = useState<string[]>([]);
 
-  // SmartMatch state
+  // ── Nancy chat ──
+  const [openChat, setOpenChat] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<NormalizedJob | null>(null);
+
+  // ── Smart match ──
   const [matchedJobs, setMatchedJobs] = useState<NormalizedJob[]>([]);
   const [matchedLoading, setMatchedLoading] = useState(false);
   const [matchedFetched, setMatchedFetched] = useState(false);
   const [matchedNoResume, setMatchedNoResume] = useState(false);
   const [matchBandFilter, setMatchBandFilter] = useState<"all" | "strong" | "good" | "partial" | "low">("all");
+
+  // ── Sort helper ──
+  const sortJobs = useCallback((list: NormalizedJob[], sort: FilterSort): NormalizedJob[] => {
+    const copy = [...list];
+    if (sort === "recommended" || sort === "top-matched") {
+      return copy.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+    }
+    // most-recent
+    return copy.sort((a, b) => {
+      const da = new Date(a.created_at || a.posted_date || 0).getTime();
+      const db = new Date(b.created_at || b.posted_date || 0).getTime();
+      return db - da;
+    });
+  }, []);
 
   // ── Filter change handler ──
   const handleFilterChange = useCallback((filters: FilterParams) => {
@@ -214,7 +219,7 @@ export default function JobsContents() {
         }
 
         const jobsData = Array.isArray(response.data) ? response.data : [];
-        const normalized = jobsData.map((job) => normalizeJob(job));
+        const normalized = jobsData.map((job) => normalizeJob(job as unknown as Record<string, unknown>));
 
         // Identify new jobs (posted in last 24h)
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -292,8 +297,7 @@ export default function JobsContents() {
       setMatchedFetched(true);
       setMatchedNoResume(false);
     } catch (err: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const status = (err as any)?.response?.status;
+      const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 404) {
         setMatchedNoResume(true);
       } else {
@@ -327,13 +331,133 @@ export default function JobsContents() {
 
   // ── Client-side filter / tab logic ──
   useEffect(() => {
-    // Matched tab: apply band filter only
+    // Matched tab: apply band filter + other filters
     if (activeTab === "matched") {
-      setFilteredJobs(
-        matchBandFilter === "all"
-          ? matchedJobs
-          : matchedJobs.filter((j) => j.match_band === matchBandFilter)
-      );
+      let filtered = [...matchedJobs];
+
+      // Apply match band filter
+      if (matchBandFilter !== "all") {
+        filtered = filtered.filter((j) => j.match_band === matchBandFilter);
+      }
+
+      // Apply other filters (same logic as All Jobs tab)
+      if (selectedFilters.length > 0) {
+        const WORK_MODEL_OPTIONS = ["onsite", "hybrid", "remote"];
+        const TYPE_FILTERS = ["full-time", "contract", "part-time", "internship"];
+
+        const selectedWorkModels = selectedFilters.filter((f) =>
+          WORK_MODEL_OPTIONS.includes(f.toLowerCase())
+        );
+        const selectedTypeFilters = selectedFilters.filter((f) =>
+          TYPE_FILTERS.includes(f.toLowerCase())
+        );
+        const yearsFilter = selectedFilters.find((f) => f.startsWith("years:"));
+        const yearsValue = yearsFilter ? yearsFilter.replace("years:", "") : null;
+        const salaryFilter = selectedFilters.find((f) => f.startsWith("salary:"));
+        const salaryLabel = salaryFilter ? salaryFilter.replace("salary:", "") : "Any salary";
+        const locationFilters = selectedFilters
+          .filter((f) => f.startsWith("location:"))
+          .map((f) => f.replace("location:", "").toLowerCase());
+        const educationFilters = selectedFilters
+          .filter((f) => f.startsWith("education:"))
+          .map((f) => f.replace("education:", "").toLowerCase());
+
+        filtered = filtered.filter((job) => {
+          const jobMode = (job.mode || "").toLowerCase();
+          const effectiveMode = jobMode || "onsite";
+          const matchesWorkModel =
+            selectedWorkModels.length === 0 ||
+            selectedWorkModels.some((f) => {
+              const fl = f.toLowerCase();
+              if (fl === "onsite")
+                return (
+                  effectiveMode.includes("on-site") ||
+                  effectiveMode.includes("onsite") ||
+                  effectiveMode.includes("office") ||
+                  effectiveMode === "onsite"
+                );
+              if (fl === "hybrid") return jobMode.includes("hybrid");
+              if (fl === "remote") return jobMode.includes("remote");
+              return false;
+            });
+
+          const matchesType =
+            selectedTypeFilters.length === 0 ||
+            selectedTypeFilters.some((f) => job.type.toLowerCase() === f.toLowerCase());
+
+          const matchesYears = (() => {
+            if (!yearsValue) return true;
+            const expStr = job.experience || "";
+            const nums = String(expStr).match(/\d+/g);
+            if (yearsValue === "Fresher") {
+              if (!nums) return true;
+              return parseInt(nums[0], 10) === 0;
+            }
+            const selectedYear =
+              yearsValue === "11+ yrs" ? 11 : parseInt(yearsValue, 10);
+            if (isNaN(selectedYear)) return true;
+            if (!nums) return selectedYear === 0;
+            const minExp = parseInt(nums[0], 10);
+            if (selectedYear === 11) return minExp >= 11;
+            return minExp === selectedYear;
+          })();
+
+          const matchesSalary = (() => {
+            if (salaryLabel === "Any salary") return true;
+            const salaryStr = job.salary || "";
+            if (!salaryStr) return true;
+            const cleaned = salaryStr.replace(/[₹,]/g, "").toLowerCase();
+            const rangeMatch = cleaned.match(
+              /(\d+\.?\d*)\s*[lk]?\s*-\s*(\d+\.?\d*)\s*[lk]/
+            );
+            let salaryNum = 0;
+            if (rangeMatch) {
+              const maxVal = parseFloat(rangeMatch[2]);
+              const unit = cleaned.match(/[lk]/);
+              if (unit?.[0] === "l") salaryNum = maxVal * 100000;
+              else if (unit?.[0] === "k") salaryNum = maxVal * 1000;
+              else salaryNum = maxVal;
+            } else {
+              const lakhMatch = cleaned.match(/(\d+\.?\d*)\s*l/);
+              const kMatch = cleaned.match(/(\d+\.?\d*)\s*k/);
+              const numMatch = cleaned.match(/(\d+)/);
+              if (lakhMatch) salaryNum = parseFloat(lakhMatch[1]) * 100000;
+              else if (kMatch) salaryNum = parseFloat(kMatch[1]) * 1000;
+              else if (numMatch) salaryNum = parseFloat(numMatch[1]);
+            }
+            if (salaryNum === 0) return false;
+            const lpaMatch = salaryLabel.match(/(\d+)\s*LPA\+/i);
+            const minVal = lpaMatch
+              ? parseInt(lpaMatch[1]) * 100000
+              : parseInt(salaryLabel.replace(/[₹L+]/g, "")) * 100000;
+            return salaryNum >= minVal;
+          })();
+
+          const matchesLocation = (() => {
+            if (locationFilters.length === 0) return true;
+            const jobCity = (job.location || "").split(",")[0].trim().toLowerCase();
+            return locationFilters.some((loc) => jobCity === loc);
+          })();
+
+          const matchesEducation = (() => {
+            if (educationFilters.length === 0) return true;
+            const jobEdu = (job.education || "").toLowerCase();
+            if (!jobEdu) return false;
+            return educationFilters.some((edu) => jobEdu.includes(edu));
+          })();
+
+          return (
+            matchesWorkModel &&
+            matchesType &&
+            matchesYears &&
+            matchesSalary &&
+            matchesLocation &&
+            matchesEducation
+          );
+        });
+      }
+
+      setFilteredJobs(sortJobs(filtered, filterSort));
       return;
     }
 
@@ -343,7 +467,7 @@ export default function JobsContents() {
       const savedIds = getSavedJobIds();
       filtered = filtered.filter((j) => savedIds.includes(j.id));
     } else if (activeTab === "new") {
-      setFilteredJobs(filtered.filter((j) => newJobIds.includes(j.id)));
+      setFilteredJobs(sortJobs(filtered.filter((j) => newJobIds.includes(j.id)), filterSort));
       return;
     }
 
@@ -481,7 +605,7 @@ export default function JobsContents() {
       });
     }
 
-    setFilteredJobs(filtered);
+    setFilteredJobs(sortJobs(filtered, filterSort));
   }, [
     jobs,
     matchedJobs,
@@ -492,6 +616,8 @@ export default function JobsContents() {
     activeTab,
     newJobIds,
     selectedLocation,
+    filterSort,
+    sortJobs,
   ]);
 
   // ── Filter toggle ──
@@ -499,11 +625,15 @@ export default function JobsContents() {
     setSelectedFilters((prev) => {
       if (filter.startsWith("salary:")) {
         const withoutSalary = prev.filter((f) => !f.startsWith("salary:"));
-        return filter === "salary:Any salary" ? withoutSalary : [...withoutSalary, filter];
+        // Remove if already active or is the "Any" sentinel
+        if (filter === "salary:Any salary" || prev.includes(filter)) return withoutSalary;
+        return [...withoutSalary, filter];
       }
       if (filter.startsWith("years:")) {
         const withoutYears = prev.filter((f) => !f.startsWith("years:"));
-        return filter === "years:Any requirements" ? withoutYears : [...withoutYears, filter];
+        // Remove if already active or is the "Any" sentinel
+        if (filter === "years:Any requirements" || prev.includes(filter)) return withoutYears;
+        return [...withoutYears, filter];
       }
       if (filter.startsWith("location:") || filter.startsWith("education:")) {
         return prev.includes(filter)
@@ -523,111 +653,23 @@ export default function JobsContents() {
     });
   };
 
-  // ── Landing handlers ──
-  const handleLandingSearch = (query: string, location: string, experience: string) => {
-    if (query.trim()) setSearchQuery(query.trim());
-    if (location && location !== "All Locations") setSelectedLocation(location);
-    if (experience && experience !== "Select experience") {
-      const expMap: Record<string, string> = {
-        "0-1 years": "0-1 years",
-        "1-3 years": "1-3 years",
-        "3-5 years": "3-5 years",
-        "5-8 years": "5-8 years",
-        "8+ years": "8-11+ years",
-      };
-      const mapped = expMap[experience];
-      if (mapped) {
-        setSelectedFilters((prev) => {
-          const withoutYears = prev.filter((f) => !f.startsWith("years:"));
-          return [...withoutYears, `years:${mapped}`];
-        });
-      }
-    }
-    setShowLanding(false);
-  };
-
-  const handleCategoryClick = (
-    query: string,
-    filter?: { type?: string; workModel?: string }
-  ) => {
-    if (query.trim()) {
-      const isRoleClick = !filter?.workModel && !filter?.type;
-      if (isRoleClick) {
-        setRoleFilter(query.trim());
-        setSearchQuery("");
-      } else {
-        setSearchQuery(query.trim());
-        setRoleFilter("");
-      }
-    }
-    if (filter?.workModel) {
-      setSelectedFilters((prev) =>
-        prev.includes(filter.workModel!) ? prev : [...prev, filter.workModel!]
-      );
-    }
-    if (filter?.type) {
-      setSelectedFilters((prev) =>
-        prev.includes(filter.type!) ? prev : [...prev, filter.type!]
-      );
-    }
-    setShowLanding(false);
-  };
-
   // ── Derived values ──
   const isMatchedTab = activeTab === "matched";
   const displayLoading = isMatchedTab ? matchedLoading : loading;
   const matchedCount = matchedJobs.length;
 
   return (
-    <div className="flex min-h-screen bg-[#f4f6fb]">
+    <div className="flex min-h-[calc(100vh-56px)] bg-[#f0f2f5]">
       {/* CENTER PANEL */}
-      <main className="flex-1 min-w-0 overflow-y-auto">
-        {/* LANDING VIEW */}
-        {showLanding && (
-          <JobsLandingSection
-            onSearch={handleLandingSearch}
-            onCategoryClick={handleCategoryClick}
-          />
-        )}
-
+      <main id="jobs-main-scroll" className="flex-1 min-w-0">
         {/* RESULTS VIEW */}
-        {!showLanding && (
-          <div>
+        <div>
             {/* TOP BAR */}
-            <div className="px-6 py-3 border-b border-gray-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-center justify-between gap-4">
+            <div className="px-6 py-5 bg-white border-b border-gray-100 flex items-center justify-between gap-4" style={{ boxShadow: "0 1px 0 rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.02)" }}>
               <div className="flex items-center gap-3 min-w-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowLanding(true);
-                    setSearchQuery("");
-                    setRoleFilter("");
-                    setSelectedLocation("All Locations");
-                    setSelectedFilters([]);
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all shrink-0 group"
-                >
-                  <svg
-                    className="w-3.5 h-3.5 text-[#2557a7] group-hover:text-[#1a4a96]"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                    />
-                  </svg>
-                  <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900">
-                    Home
-                  </span>
-                </button>
-                <div className="w-px h-4 bg-gray-200 shrink-0" />
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-[15px] font-bold text-gray-900 truncate leading-tight">
+                  <div className="flex items-center gap-2.5">
+                    <h1 className="text-[17px] font-bold text-gray-900 truncate leading-tight tracking-tight">
                       {isMatchedTab
                         ? "Smart Match Jobs"
                         : searchQuery
@@ -636,13 +678,14 @@ export default function JobsContents() {
                         ? `${roleFilter} Jobs`
                         : "All Jobs"}
                     </h1>
-                    <span className="shrink-0 px-1.5 py-px bg-emerald-500 text-white text-[8px] font-bold rounded uppercase tracking-widest">
-                      LIVE
+                    <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#eef3ff] text-[#2557a7] text-[9px] font-bold rounded-full border border-[#2557a7]/20 tracking-wide uppercase">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#2557a7] animate-pulse shrink-0" />
+                      Live
                     </span>
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-px">
+                  <p className="text-[12.5px] text-gray-400 mt-1 font-medium">
                     {filteredJobs.length > 0
-                      ? `${filteredJobs.length} opportunities found`
+                      ? `${filteredJobs.length.toLocaleString()} opportunities`
                       : displayLoading
                       ? "Loading…"
                       : "No results"}
@@ -651,109 +694,34 @@ export default function JobsContents() {
                 </div>
               </div>
 
-              {/* Active filter chips */}
-              {!isMatchedTab &&
-                (searchQuery ||
-                  roleFilter ||
-                  selectedLocation !== "All Locations" ||
-                  selectedFilters.length > 0) && (
-                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    {roleFilter && (
-                      <span className="flex items-center gap-1 px-2.5 py-1 bg-[#2557a7] text-white rounded-full text-[11px] font-semibold">
-                        {roleFilter}
-                        <button
-                          onClick={() => setRoleFilter("")}
-                          className="ml-0.5 opacity-70 hover:opacity-100 leading-none text-xs"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    )}
-                    {searchQuery && (
-                      <span className="flex items-center gap-1 px-2.5 py-1 bg-[#2557a7] text-white rounded-full text-[11px] font-semibold">
-                        {searchQuery}
-                        <button
-                          onClick={() => setSearchQuery("")}
-                          className="ml-0.5 opacity-70 hover:opacity-100 leading-none text-xs"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    )}
-                    {selectedLocation !== "All Locations" && (
-                      <span className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-[11px] font-medium border border-gray-200">
-                        {selectedLocation}
-                        <button
-                          onClick={() => setSelectedLocation("All Locations")}
-                          className="ml-0.5 opacity-60 hover:opacity-100 leading-none text-xs"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    )}
-                    {selectedFilters.map((filter) => (
-                      <span
-                        key={filter}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-full text-[11px] font-medium border border-gray-200"
-                      >
-                        {filter.replace(/^(years:|salary:|location:|education:|date:|source:)/, "")}
-                        <button
-                          onClick={() => handleFilterToggle(filter)}
-                          className="ml-0.5 opacity-60 hover:opacity-100 leading-none text-xs"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    <button
-                      onClick={() => {
-                        setSearchQuery("");
-                        setRoleFilter("");
-                        setSelectedLocation("All Locations");
-                        setSelectedFilters([]);
-                      }}
-                      className="text-[11px] text-red-500 hover:text-red-700 font-semibold whitespace-nowrap px-1"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                )}
+              {/* Search input — right side */}
+              <div className="relative shrink-0">
+                <svg
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by title or company"
+                  className="w-72 pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-[#f8f9fb] text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#2557a7]/50 focus:ring-2 focus:ring-[#2557a7]/10 focus:bg-white transition-all"
+                />
+              </div>
             </div>
 
-            <div className="px-25 py-4">
-              {!isMatchedTab && (
-                <JobsHeaderSection
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  cityValue={cityFilter}
-                  onCityChange={(city) => {
-                    setCityFilter(city);
-                    if (city) setSelectedLocation(city);
-                    else setSelectedLocation("All Locations");
-                  }}
-                  experienceValue={experienceFilter}
-                  onExperienceChange={(exp) => {
-                    setExperienceFilter(exp);
-                    if (exp) {
-                      setSelectedFilters((prev) => {
-                        const without = prev.filter((f) => !f.startsWith("years:"));
-                        return exp ? [...without, `years:${exp}`] : without;
-                      });
-                    }
-                  }}
-                />
-              )}
-
-              {!isMatchedTab && (
+            <div className="px-6">
+              {/* STICKY FILTER + TABS BAR */}
+              <div className="sticky top-0 z-30 -mx-6 px-6 pb-0 bg-[#f0f2f5]" style={{ boxShadow: "0 1px 0 rgba(0,0,0,0.06)" }}>
                 <JobsFilterSidebar
                   selectedFilters={selectedFilters}
                   onFilterToggle={handleFilterToggle}
                   onFilterChange={handleFilterChange}
-                  jobs={jobs}
+                  jobs={isMatchedTab ? matchedJobs : jobs}
                 />
-              )}
 
-              <div className="mt-2 flex items-center justify-between gap-4">
                 <JobsTabs
                   activeTab={activeTab}
                   onTabChange={(tab) => { setActiveTab(tab); }}
@@ -763,72 +731,13 @@ export default function JobsContents() {
                   allCount={filteredJobs.length}
                   sortBy={sortBy}
                   onSortChange={setSortBy}
+                  filterSort={filterSort}
+                  onFilterSortChange={setFilterSort}
                 />
-                {isMatchedTab && matchedFetched && !matchedLoading && (
-                  <button
-                    type="button"
-                    onClick={() => fetchSmartMatchedJobs(true)}
-                    className="shrink-0 flex items-center gap-1.5 text-[11px] font-semibold text-[#2557a7] hover:text-[#1a4a96] transition-colors pb-3"
-                    title="Recalculate matches based on your current profile"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Refresh matches
-                  </button>
-                )}
               </div>
 
-              {/* SmartMatch band filter dropdown */}
-              {isMatchedTab && !matchedLoading && matchedJobs.length > 0 && (() => {
-                const BANDS: { key: "all" | "strong" | "good" | "partial" | "low"; label: string }[] = [
-                  { key: "all",     label: "All Matches"     },
-                  { key: "strong",  label: "Best Fit"        },
-                  { key: "good",    label: "Recommended"     },
-                  { key: "partial", label: "Worth Exploring" },
-                  { key: "low",     label: "Low Relevance"   },
-                ];
-                const counts: Record<string, number> = { all: matchedJobs.length };
-                matchedJobs.forEach((j) => {
-                  if (j.match_band) counts[j.match_band] = (counts[j.match_band] ?? 0) + 1;
-                });
-                const visible = BANDS.filter((b) => b.key === "all" || (counts[b.key] ?? 0) > 0);
-                const active = BANDS.find((b) => b.key === matchBandFilter)!;
-                return (
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-[12px] text-gray-400 font-medium shrink-0">Filter by match:</span>
-                    <div className="relative">
-                      <select
-                        value={matchBandFilter}
-                        onChange={(e) => setMatchBandFilter(e.target.value as typeof matchBandFilter)}
-                        className="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-[12.5px] font-semibold border border-gray-200 bg-white text-gray-700 cursor-pointer focus:outline-none focus:border-[#2557a7] transition-colors"
-                        style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}
-                      >
-                        {visible.map((b) => (
-                          <option key={b.key} value={b.key}>
-                            {b.label} ({counts[b.key] ?? 0})
-                          </option>
-                        ))}
-                      </select>
-                      <svg
-                        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
-                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    {matchBandFilter !== "all" && (
-                      <span className="text-[11px] text-gray-400">
-                        Showing <span className="font-semibold text-gray-700">{active.label}</span> — {counts[matchBandFilter] ?? 0} job{(counts[matchBandFilter] ?? 0) !== 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
-
               {/* JOB LIST */}
-              <div className="mt-2">
+              <div className="mt-4 pb-10">
                 {displayLoading ? (
                   <div className="space-y-4">
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -836,19 +745,36 @@ export default function JobsContents() {
                     ))}
                   </div>
                 ) : error && !isMatchedTab ? (
-                  <div className="bg-red-50 border border-red-100 rounded-2xl p-5">
-                    <p className="text-red-800 font-semibold text-sm">Failed to Load Jobs</p>
-                    <p className="text-red-500 text-xs mt-1">{error}</p>
+                  <div className="flex flex-col items-center justify-center py-14 px-8 text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mb-4 shadow-sm">
+                      <AlertTriangle size={24} className="text-red-400" />
+                    </div>
+                    <h3 className="text-[15px] font-bold text-gray-800">Failed to Load Jobs</h3>
+                    <p className="text-gray-500 text-[12.5px] mt-1.5 max-w-xs leading-relaxed">{error}</p>
+                    <button
+                      type="button"
+                      onClick={() => fetchJobs(currentPage)}
+                      className="mt-5 inline-flex items-center gap-2 px-5 py-2 bg-[#2557a7] text-white text-[13px] font-semibold rounded-full hover:bg-[#1f4e98] transition-colors"
+                    >
+                      <RotateCcw size={13} />
+                      Try Again
+                    </button>
                   </div>
                 ) : filteredJobs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-                    <img
-                      src="/images/no_results.png"
-                      alt="No results found"
-                      className="object-contain mb-4"
-                      style={{ width: 500, mixBlendMode: "multiply" }}
-                    />
-                    <h3 className="text-lg font-bold text-gray-800">
+                  <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
+                    {/* Tab-specific icon */}
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm ${
+                      activeTab === "saved"   ? "bg-amber-50 border border-amber-100" :
+                      activeTab === "matched" ? "bg-blue-50 border border-blue-100" :
+                      activeTab === "new"     ? "bg-emerald-50 border border-emerald-100" :
+                                               "bg-gray-100 border border-gray-200"
+                    }`}>
+                      {activeTab === "saved"   ? <Bookmark size={26} className="text-amber-400" /> :
+                       activeTab === "matched" ? <Zap size={26} className="text-[#2557a7]" /> :
+                       activeTab === "new"     ? <Briefcase size={26} className="text-emerald-500" /> :
+                                                <Search size={26} className="text-gray-400" />}
+                    </div>
+                    <h3 className="text-[16px] font-bold text-gray-800">
                       {activeTab === "saved"
                         ? "No saved jobs yet"
                         : activeTab === "new"
@@ -857,9 +783,9 @@ export default function JobsContents() {
                         ? matchedNoResume
                           ? "Resume required for Smart Match"
                           : "No matched jobs found"
-                        : "Sorry, no results found :("}
+                        : "No results found"}
                     </h3>
-                    <p className="text-gray-400 text-sm mt-2 max-w-md leading-relaxed">
+                    <p className="text-gray-500 text-[13px] mt-2 max-w-sm leading-relaxed">
                       {activeTab === "saved"
                         ? "Save jobs you like and find them all here."
                         : activeTab === "new"
@@ -868,12 +794,12 @@ export default function JobsContents() {
                         ? matchedNoResume
                           ? "Smart Match analyses your resume to score every job for you. Go to Profile → Resume tab to upload your resume."
                           : "Smart Match ran but no strong matches found yet. Try clicking Retry or update your profile with more skills."
-                        : "Try changing your search criteria or filters."}
+                        : "Try adjusting your search or filters to find more jobs."}
                     </p>
                     {isMatchedTab && matchedNoResume && (
                       <a
                         href="/profile"
-                        className="mt-5 inline-flex items-center gap-2 px-6 py-2.5 bg-[#2557a7] text-white text-sm font-semibold rounded-full hover:bg-[#1e4a96] transition-colors"
+                        className="mt-5 inline-flex items-center gap-2 px-6 py-2.5 bg-[#2557a7] text-white text-sm font-semibold rounded-full hover:bg-[#1f4e98] transition-colors"
                       >
                         Upload Resume in Profile →
                       </a>
@@ -882,8 +808,9 @@ export default function JobsContents() {
                       <button
                         type="button"
                         onClick={() => fetchSmartMatchedJobs(true)}
-                        className="mt-5 inline-flex items-center gap-2 px-6 py-2.5 bg-[#2557a7] text-white text-sm font-semibold rounded-full hover:bg-[#1e4a96] transition-colors"
+                        className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] text-white text-sm font-semibold rounded-full hover:bg-[#1f4e98] transition-colors"
                       >
+                        <RotateCcw size={13} />
                         Retry Smart Match
                       </button>
                     )}
@@ -896,8 +823,9 @@ export default function JobsContents() {
                             setRoleFilter("");
                             setSelectedFilters([]);
                           }}
-                          className="mt-5 px-6 py-2.5 bg-[#0f172a] text-white text-sm font-semibold rounded-full hover:bg-[#1e293b] transition-colors"
+                          className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#0f172a] text-white text-sm font-semibold rounded-full hover:bg-[#1e293b] transition-colors"
                         >
+                          <FileX size={13} />
                           Clear Filters &amp; Try Again
                         </button>
                       )}
@@ -906,7 +834,7 @@ export default function JobsContents() {
                   <JobList
                     jobs={filteredJobs}
                     onBotClick={(job) => {
-                      setSelectedJob(job);
+                      setSelectedJob(job as unknown as NormalizedJob);
                       setOpenChat(true);
                     }}
                   />
@@ -937,33 +865,49 @@ export default function JobsContents() {
               </div>
             </div>
           </div>
-        )}
       </main>
 
-      {/* RIGHT SIDEBAR */}
-      {!showLanding && (
-        <aside className="w-130 shrink-0 pr-5 py-5 space-y-3 sticky top-0 h-fit">
-          {!openChat && (
-            <>
-              <TopPickCard jobs={jobs} />
-              <TrendingSkillsCard />
-              <SalaryInsights jobs={jobs} />
-              <CareerTip />
-            </>
-          )}
-          {openChat && (
-            <div className="sticky top-5 bg-transparent z-50 rounded-xl shadow-lg">
-              <NancyChat
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                job={selectedJob as any}
-                onClose={() => {
-                  setOpenChat(false);
-                  setSelectedJob(null);
-                }}
-              />
-            </div>
-          )}
-        </aside>
+      {/* RIGHT SIDEBAR — always visible */}
+      <aside className="w-104 shrink-0 sticky self-start bg-white border-l border-gray-200/60 flex flex-col overflow-hidden" style={{ top: "var(--header-h, 56px)", height: "calc(100vh - var(--header-h, 56px))", boxShadow: "-4px 0 20px rgba(0,0,0,0.05)" }}>
+        <JobsRightSidebar
+          jobs={jobs}
+          onChatOpen={() => { setSelectedJob(null); setOpenChat(true); }}
+        />
+      </aside>
+
+      {/* NANCY CHAT — floating popup slides over the sidebar from the right */}
+      {openChat && (
+        <>
+          {/* Click-outside to close */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => { setOpenChat(false); setSelectedJob(null); }}
+          />
+          {/* Chat panel — same position/width as sidebar, slides in from right */}
+          <div
+            className="fixed bottom-4 right-4 z-50 flex flex-col bg-white rounded-2xl overflow-hidden border border-gray-200"
+            style={{
+              width: 400,
+              height: 560,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.1)",
+              animation: "slideInRight 0.22s cubic-bezier(0.16,1,0.3,1)",
+            }}
+          >
+            <NancyChat
+              job={selectedJob as unknown as Parameters<typeof NancyChat>[0]["job"]}
+              onClose={() => {
+                setOpenChat(false);
+                setSelectedJob(null);
+              }}
+            />
+          </div>
+          <style>{`
+            @keyframes slideInRight {
+              from { transform: translateX(100%); opacity: 0; }
+              to   { transform: translateX(0);    opacity: 1; }
+            }
+          `}</style>
+        </>
       )}
     </div>
   );

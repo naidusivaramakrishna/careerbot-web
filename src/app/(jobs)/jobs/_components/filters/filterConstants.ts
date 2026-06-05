@@ -31,7 +31,7 @@ export const JOB_SOURCES = [
   "Company Website",
 ];
 
-export const WORK_MODELS = ["Onsite", "Hybrid", "Remote anywhere in the India"];
+export const WORK_MODELS = ["Onsite", "Hybrid", "Remote"];
 
 export const JOB_TYPES = ["Full-time", "Contract", "Part-time", "Internship"];
 
