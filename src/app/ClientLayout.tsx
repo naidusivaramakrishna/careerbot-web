@@ -42,7 +42,12 @@ export default function ClientLayout({
       if (isAdminRoute) {
         router.push('/admin/login');
       } else {
-        router.push('/?showLogin=true');
+        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        const params = new URLSearchParams({ showLogin: 'true' });
+        if (currentPath && currentPath !== '/') {
+          params.set('next', currentPath);
+        }
+        router.push(`/?${params.toString()}`);
       }
     };
 

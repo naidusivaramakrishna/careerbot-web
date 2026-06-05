@@ -228,12 +228,21 @@ export async function parseJDFile(file: File) {
   }
 }
 
-export async function parseJDText(text: string) {
+export async function parseJDText(
+  text: string,
+  options: { skipAuthRedirect?: boolean } = {},
+) {
   try {
     const res = await safePost<unknown>(`/jd/parse`, {
       jd_texts: [text],
       skip_duplicate_check: false,
-    });
+    }, options.skipAuthRedirect
+      ? {
+          headers: {
+            "X-Skip-Auth-Redirect": "true",
+          },
+        }
+      : undefined);
     return {
       raw: res,
       jd_id: extractJdId(res),

@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, FileText } from "lucide-react";
 import { toast } from "sonner";
-import type { CoverLetterResponse } from "@/types/coverLetter";
+import type { CoverLetterResponse, CoverLetterTemplate } from "@/types/coverLetter";
 import { useCoverLetterTemplates } from "@/hooks/useCoverLetterTemplates";
 import { useDownloadCoverLetter } from "@/hooks/useDownloadCoverLetter";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
@@ -22,7 +22,6 @@ import WarningBanner from "./WarningBanner";
 import JDMatchMatrix from "./JDMatchMatrix";
 import GroundingDetails from "./GroundingDetails";
 import CopyButton from "./CopyButton";
-import type { CoverLetterTemplate } from "@/types/coverLetter";
 
 export interface CoverLetterViewProps {
   letter: CoverLetterResponse;
@@ -47,6 +46,16 @@ function formatGeneratedFull(iso: string): string {
   }
 }
 
+function redirectToLoginForExport() {
+  if (typeof window === "undefined") return;
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const params = new URLSearchParams({ showLogin: "true" });
+  if (currentPath && currentPath !== "/") {
+    params.set("next", currentPath);
+  }
+  window.location.href = `/?${params.toString()}`;
+}
+
 function TemplatePreviewCard({
   template,
   selected,
@@ -58,12 +67,42 @@ function TemplatePreviewCard({
   disabled: boolean;
   onSelect: () => void;
 }) {
-  const accentByTemplate: Record<string, string> = {
-    classic: "bg-slate-900",
-    modern: "bg-teal-600",
-    compact: "bg-blue-700",
+  const metaByTemplate: Record<string, {
+    accent: string;
+    badge: string;
+    previewBg: string;
+    titleAlign: string;
+    titleWidth: string;
+  }> = {
+    classic: {
+      accent: "bg-slate-900",
+      badge: "Executive",
+      previewBg: "bg-stone-50",
+      titleAlign: "",
+      titleWidth: "w-11",
+    },
+    modern: {
+      accent: "bg-teal-600",
+      badge: "Signature",
+      previewBg: "bg-cyan-50",
+      titleAlign: "mx-auto",
+      titleWidth: "w-9",
+    },
+    compact: {
+      accent: "bg-blue-700",
+      badge: "One-page",
+      previewBg: "bg-blue-50",
+      titleAlign: "",
+      titleWidth: "w-12",
+    },
   };
-  const accent = accentByTemplate[template.template_id] ?? "bg-[#2557a7]";
+  const meta = metaByTemplate[template.template_id] ?? {
+    accent: "bg-[#2557a7]",
+    badge: "Template",
+    previewBg: "bg-slate-50",
+    titleAlign: "",
+    titleWidth: "w-10",
+  };
   const isCompact = template.template_id === "compact";
   const isModern = template.template_id === "modern";
 
@@ -88,27 +127,31 @@ function TemplatePreviewCard({
           aria-hidden="true"
         />
       )}
-      <div className="mb-3 flex h-28 items-center justify-center rounded-lg bg-slate-50">
-        <div className="h-24 w-16 rounded border border-slate-200 bg-white p-2 shadow-sm">
+      <div className={["mb-3 flex h-32 items-center justify-center rounded-lg", meta.previewBg].join(" ")}>
+        <div className="h-28 w-20 rounded border border-slate-200 bg-white p-2.5 shadow-sm">
           <div
             className={[
               "mb-2 h-1.5 rounded-full",
-              isModern ? "mx-auto w-8" : "w-10",
-              accent,
+              meta.titleAlign,
+              meta.titleWidth,
+              meta.accent,
             ].join(" ")}
           />
+          {isModern && (
+            <div className={["mb-2 h-0.5 rounded-full", meta.accent].join(" ")} />
+          )}
           <div className={["space-y-1", isCompact ? "space-y-0.5" : ""].join(" ")}>
-            <div className="h-1 w-12 rounded bg-slate-300" />
+            <div className="h-1 w-14 rounded bg-slate-300" />
+            <div className="h-1 w-12 rounded bg-slate-200" />
             <div className="h-1 w-10 rounded bg-slate-200" />
-            <div className="h-1 w-11 rounded bg-slate-200" />
           </div>
           <div className={["mt-2 space-y-1", isCompact ? "mt-1 space-y-0.5" : ""].join(" ")}>
-            {Array.from({ length: isCompact ? 7 : 5 }).map((_, index) => (
+            {Array.from({ length: isCompact ? 9 : 6 }).map((_, index) => (
               <div
                 key={index}
                 className={[
                   "h-1 rounded bg-slate-200",
-                  index % 3 === 0 ? "w-12" : index % 3 === 1 ? "w-10" : "w-14",
+                  index % 3 === 0 ? "w-14" : index % 3 === 1 ? "w-12" : "w-16",
                 ].join(" ")}
               />
             ))}
@@ -116,8 +159,13 @@ function TemplatePreviewCard({
         </div>
       </div>
       <div className="pr-4">
-        <p className="text-sm font-semibold text-slate-900">{template.name}</p>
-        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-slate-900">{template.name}</p>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+            {meta.badge}
+          </span>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-slate-500">
           {template.description}
         </p>
       </div>
@@ -141,6 +189,11 @@ export default function CoverLetterView({
   const downloader = useDownloadCoverLetter({
     onSuccess: () => toast.success("Cover letter downloaded."),
     onError: (_letterId, _params, err) => {
+      if (err.reason === "unauthorized") {
+        toast.info("Sign in to export your cover letter.");
+        redirectToLoginForExport();
+        return;
+      }
       toast.error(ERROR_MESSAGES[err.reason] ?? ERROR_MESSAGES.unknown);
     },
   });
@@ -203,10 +256,10 @@ export default function CoverLetterView({
       {/* Letter body */}
       <section
         aria-label="Cover letter body"
-        className="rounded-2xl border border-gray-200 bg-white p-6"
+        className="rounded-2xl border border-slate-200 bg-white px-7 py-7 shadow-sm"
       >
         {cl ? (
-          <div className="prose prose-sm max-w-none">
+          <div className="prose prose-base max-w-none leading-7 text-slate-950">
             <p className="whitespace-pre-line">{cl.greeting}</p>
             <p className="whitespace-pre-line">{cl.opening}</p>
             {cl.body.map((paragraph, i) => (
@@ -227,21 +280,21 @@ export default function CoverLetterView({
       {/* Matrix + grounding */}
       <JDMatchMatrix
         entries={letter.jd_match_matrix}
-        defaultOpen={letter.status === "ready_to_review"}
+        defaultOpen={false}
       />
       <GroundingDetails grounding={letter.grounding} />
 
       {/* Bottom actions */}
       {letter.plain_text && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="space-y-4">
             {canDownload && (
               <div>
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-bold text-slate-900">Choose a template</h2>
-                    <p className="text-xs text-slate-500">
-                      Pick a style, then download as PDF or DOCX.
+                    <h2 className="text-lg font-bold text-slate-900">Export cover letter</h2>
+                    <p className="text-sm text-slate-500">
+                      Choose a professional layout and download a ready-to-send file.
                     </p>
                   </div>
                   {templatesLoading && (

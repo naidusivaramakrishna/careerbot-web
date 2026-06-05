@@ -12,13 +12,13 @@ const STATUS_STYLE: Record<
   { label: string; bg: string; text: string; dot: string }
 > = {
   ready_to_review: {
-    label: "Draft ready",
+    label: "Ready to review",
     bg: "bg-emerald-50",
     text: "text-emerald-700",
     dot: "bg-emerald-500",
   },
   needs_review: {
-    label: "Draft ready - Review",
+    label: "Needs review",
     bg: "bg-amber-50",
     text: "text-amber-700",
     dot: "bg-amber-500",

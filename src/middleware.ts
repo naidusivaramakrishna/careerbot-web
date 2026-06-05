@@ -13,13 +13,11 @@ const publicRoutes = [
     '/forgot-password',
     '/resend-verification',
     "/browse-templates",
-    // Builder and cover-letter are fully public — auth is enforced at the
-    // action level (download / generate) inside the client components.
+    // Builder and cover-letter creation flow remain public. Cover-letter
+    // export/download handles auth at the action level.
     "/builder",
     "/cover-letter",
 ];
-
-const publicExactRoutes: string[] = [];
  
 const RECRUITER_PREFIX = '/recruiter';
 const ADMIN_PREFIX = '/admin';
@@ -40,8 +38,7 @@ export async function middleware(request: NextRequest) {
  
     // Allow public routes without authentication
     const isPublicRoute =
-        publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/')) ||
-        publicExactRoutes.includes(pathname);
+        publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'));
     if (isPublicRoute) {
         return NextResponse.next();
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useCoverLetterList } from '@/hooks/useCoverLetterList';
 import { useDeleteCoverLetter } from '@/hooks/useDeleteCoverLetter';
@@ -31,10 +31,11 @@ export default function CoverLetterHistoryPage() {
     },
   });
 
-  if (error) {
+  useEffect(() => {
+    if (!error) return;
     const message = ERROR_MESSAGES[error.reason] ?? ERROR_MESSAGES.unknown;
     toast.error(message, { id: `cl-list-error:${error.reason}` });
-  }
+  }, [error]);
 
   const pendingItem =
     pendingDeleteId != null

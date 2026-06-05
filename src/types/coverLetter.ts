@@ -21,6 +21,8 @@ export type CoverLetterTone = "professional";
 
 export type CoverLetterExportFormat = "pdf" | "docx";
 
+export type CoverLetterTemplateId = "classic" | "modern" | "compact";
+
 export type AppContextSource = "user" | "jd" | "unknown";
 
 export type JdMatchStatus =
@@ -211,7 +213,7 @@ export interface CoverLetterTemplatePlaceholder {
 }
 
 export interface CoverLetterTemplate {
-  template_id: string;
+  template_id: CoverLetterTemplateId;
   name: string;
   description: string;
   supports: CoverLetterExportFormat[];

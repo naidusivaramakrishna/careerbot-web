@@ -111,7 +111,7 @@ export const ERROR_MESSAGES: Record<CoverLetterApiErrorReason, string> = {
   not_found:
     "We couldn't find that cover letter.",
   download_unavailable:
-    "Cover letter download is not available yet. Please check that the backend download endpoint is running.",
+    "Failed cover letters can't be downloaded.",
   unknown:
     "Something went wrong. Please try again.",
 };

@@ -47,7 +47,7 @@ export function useHasParsedResume(): UseHasParsedResumeResult {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await getAllResumesUnified();
+      const response = await getAllResumesUnified({ skipAuthRedirect: true });
       if (mySeq !== requestSeqRef.current) return;
       // Cover-letter generate is ID-based. It needs a parser resume
       // document id that the backend can resolve to parsed_data.

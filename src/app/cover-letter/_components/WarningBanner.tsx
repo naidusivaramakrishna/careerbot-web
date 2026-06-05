@@ -27,7 +27,7 @@ export default function WarningBanner({ warnings }: WarningBannerProps) {
     <div
       role="alert"
       aria-labelledby="warning-banner-heading"
-      className="rounded-lg border border-amber-200 bg-amber-50 p-4"
+      className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm"
     >
       <div className="flex items-start gap-3">
         <AlertTriangle
@@ -37,15 +37,15 @@ export default function WarningBanner({ warnings }: WarningBannerProps) {
         <div className="flex-1 min-w-0">
           <h3
             id="warning-banner-heading"
-            className="text-sm font-semibold text-amber-900 mb-1"
+            className="text-base font-bold text-amber-950 mb-1"
           >
-            Draft ready, review before sending
+            Review recommended before sending
           </h3>
-          <p className="text-sm text-amber-800 mb-2">
-            This cover letter is ready, with {warnings.length} quality
-            signal{warnings.length === 1 ? "" : "s"} to check before you use it.
+          <p className="text-sm leading-6 text-amber-800 mb-2">
+            The draft is usable, but {warnings.length} quality
+            signal{warnings.length === 1 ? "" : "s"} should be checked first.
           </p>
-          <ul className="text-sm text-amber-800 space-y-0.5 list-disc list-inside">
+          <ul className="text-sm leading-6 text-amber-900 space-y-0.5 list-disc pl-5">
             {warnings.map((w, i) => (
               <li key={`${w.code}-${i}`}>{warningMessage(w.code)}</li>
             ))}

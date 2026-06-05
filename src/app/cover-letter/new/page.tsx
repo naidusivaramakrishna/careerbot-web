@@ -109,7 +109,9 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
     setApiError(null);
     setIsPreparing(true);
     try {
-      const parsedJd = await parseJDText(request.job_description);
+      const parsedJd = await parseJDText(request.job_description, {
+        skipAuthRedirect: true,
+      });
       if (!parsedJd.jd_id) {
         throw new Error('Could not parse this job description. Please paste the full job posting and try again.');
       }
@@ -229,20 +231,21 @@ function useCoverLetterResumeUpload(
     setIsUploading(true);
     setUploadError(null);
     try {
-      const parsed = await extractResume(file);
-      if (parsed.parsed_data?.image_warning || parsed.parsed_data?.image_message) {
-        throw new Error(
-          parsed.parsed_data.image_message ||
-          'This resume could not be parsed. Please upload a text-based PDF or DOCX.'
-        );
-      }
-
+      const parsed = await extractResume(file, { skipAuthRedirect: true });
       const mappedResume = {
         parsed_data: parsed.parsed_data,
         parsed_resume_id: parsed.resume_id,
         resume_id: parsed.resume_id,
         source_file_name: parsed.file_name,
       } satisfies ParsedResumeBlob;
+      const imageWarning =
+        parsed.parsed_data?.image_warning || parsed.parsed_data?.image_message
+          ? parsed.parsed_data.image_message ||
+            'Resume parsed with image warnings. Text inside images may not be fully extracted.'
+          : null;
+      if (imageWarning) {
+        toast.warning(imageWarning);
+      }
       toast.success('Resume parsed. Continue with your cover letter.');
       await onUploaded(mappedResume);
     } catch (err) {

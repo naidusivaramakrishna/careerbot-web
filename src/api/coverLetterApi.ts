@@ -24,6 +24,7 @@ import type {
   CoverLetterListResponse,
   CoverLetterResponse,
   CoverLetterTemplateCatalogResponse,
+  CoverLetterTemplateId,
   ListCoverLettersParams,
 } from "@/types/coverLetter";
 import type { CoverLetterApiErrorReason } from "@/lib/coverLetterMessages";
@@ -256,6 +257,7 @@ export async function generateCoverLetter(
         timeout: 120000,
         headers: {
           "Idempotency-Key": idempotencyKey,
+          "X-Skip-Auth-Redirect": "true",
         },
       },
     );
@@ -277,6 +279,11 @@ export async function getCoverLetter(
   try {
     const { data } = await httpClient.get<CoverLetterResponse>(
       `${BASE}/${encodeURIComponent(letterId)}`,
+      {
+        headers: {
+          "X-Skip-Auth-Redirect": "true",
+        },
+      },
     );
     return data;
   } catch (err) {
@@ -297,6 +304,9 @@ export async function listCoverLetters(
       params: {
         ...(params.limit !== undefined && { limit: params.limit }),
         ...(params.cursor && { cursor: params.cursor }),
+      },
+      headers: {
+        "X-Skip-Auth-Redirect": "true",
       },
     });
     return data;
@@ -324,7 +334,7 @@ export async function listCoverLetterTemplates(): Promise<CoverLetterTemplateCat
 
 export interface DownloadCoverLetterParams {
   format: CoverLetterExportFormat;
-  template_id: string;
+  template_id: CoverLetterTemplateId;
 }
 
 export async function downloadCoverLetter(
@@ -337,6 +347,9 @@ export async function downloadCoverLetter(
       {
         params,
         responseType: "blob",
+        headers: {
+          "X-Skip-Auth-Redirect": "true",
+        },
       },
     );
     triggerBlobDownload(
@@ -345,16 +358,7 @@ export async function downloadCoverLetter(
         ?? fallbackDownloadFilename(params.format),
     );
   } catch (err) {
-    const mapped = mapError(err);
-    if (mapped.reason === "not_found") {
-      throw new CoverLetterApiError({
-        reason: "download_unavailable",
-        status: mapped.status,
-        message: mapped.message,
-        backendErrorCode: mapped.backendErrorCode,
-      });
-    }
-    throw mapped;
+    throw mapError(err);
   }
 }
 
@@ -362,6 +366,11 @@ export async function deleteCoverLetter(letterId: string): Promise<boolean> {
   try {
     await httpClient.delete(
       `${BASE}/${encodeURIComponent(letterId)}`,
+      {
+        headers: {
+          "X-Skip-Auth-Redirect": "true",
+        },
+      },
     );
     return true;
   } catch (err) {

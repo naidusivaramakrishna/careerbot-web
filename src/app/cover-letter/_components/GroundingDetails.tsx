@@ -1,25 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
 import type { Grounding } from "@/types/coverLetter";
 
-/**
- * Grounding-info collapsible (Screen C bottom section).
- *
- * Collapsed by default. Shows claim-catalog stats from the
- * backend's grounding object.
- *
- * Spec: wireframes §5.
- */
 export interface GroundingDetailsProps {
   grounding: Grounding;
 }
 
 const COVERAGE_LABEL: Record<NonNullable<Grounding["coverage_status"]>, string> = {
-  sufficient: "Sufficient",
-  thin: "Thin",
+  sufficient: "Strong evidence",
+  thin: "Limited evidence",
   low_confidence: "Low confidence",
+};
+
+const COVERAGE_STYLE: Record<NonNullable<Grounding["coverage_status"]>, string> = {
+  sufficient: "bg-emerald-50 text-emerald-700",
+  thin: "bg-amber-50 text-amber-700",
+  low_confidence: "bg-red-50 text-red-700",
 };
 
 export default function GroundingDetails({ grounding }: GroundingDetailsProps) {
@@ -30,47 +28,55 @@ export default function GroundingDetails({ grounding }: GroundingDetailsProps) {
   const lowConf = grounding.low_confidence_claims_used ?? 0;
   const coverage = grounding.coverage_status;
   const parserWarnings = grounding.parser_warnings_used ?? [];
+  const coverageLabel = coverage ? COVERAGE_LABEL[coverage] : "Evidence checked";
+  const coverageStyle = coverage ? COVERAGE_STYLE[coverage] : "bg-slate-50 text-slate-600";
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white">
+    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-[#2557a7] rounded-lg"
+        className="flex w-full items-start justify-between gap-4 rounded-2xl px-5 py-4 text-left focus:outline-none focus:ring-2 focus:ring-[#2557a7]"
       >
-        <span className="text-sm font-semibold text-gray-700">
-          Grounding info
-          {size > 0 && (
-            <span className="text-gray-400 font-normal">
-              {" "}
-              (claim catalog: {size}
-              {highConf > 0 && `, ${highConf} high-confidence`})
+        <span className="flex min-w-0 flex-1 gap-3">
+          <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#2557a7]">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-base font-bold text-slate-900">Evidence check</span>
+              <span className={["rounded-full px-2 py-0.5 text-xs font-medium", coverageStyle].join(" ")}>
+                {coverageLabel}
+              </span>
             </span>
-          )}
+            <span className="mt-1 block text-sm text-slate-500">
+              {highConf} high-confidence claim{highConf === 1 ? "" : "s"} found from a catalog of {size}.
+            </span>
+          </span>
         </span>
         {open ? (
-          <ChevronUp className="w-4 h-4 text-gray-400" aria-hidden="true" />
+          <ChevronUp className="mt-1 h-4 w-4 text-slate-400" aria-hidden="true" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-gray-400" aria-hidden="true" />
+          <ChevronDown className="mt-1 h-4 w-4 text-slate-400" aria-hidden="true" />
         )}
       </button>
+
       {open && (
-        <div className="px-4 pb-4 text-xs text-gray-700 space-y-1.5">
-          <DataRow label="Claim catalog size" value={String(size)} />
-          <DataRow label="High-confidence claims" value={String(highConf)} />
-          <DataRow label="Low-confidence claims used" value={String(lowConf)} />
-          {coverage && (
-            <DataRow label="Coverage" value={COVERAGE_LABEL[coverage]} />
-          )}
+        <div className="border-t border-slate-100 px-5 pb-4 pt-4 text-sm text-slate-700">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <DataTile label="Claim catalog" value={String(size)} />
+            <DataTile label="High-confidence" value={String(highConf)} />
+            <DataTile label="Low-confidence used" value={String(lowConf)} />
+          </div>
           {parserWarnings.length > 0 && (
-            <div className="pt-2 mt-2 border-t border-gray-100">
-              <p className="font-semibold mb-1">Parser warnings used:</p>
-              <ul className="font-mono space-y-0.5">
-                {parserWarnings.map((w, i) => (
-                  <li key={`${w}-${i}`} className="text-gray-600">
-                    {w}
-                  </li>
+            <div className="mt-4 rounded-xl bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase text-slate-500">
+                Parser notes
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                {parserWarnings.map((warning, index) => (
+                  <li key={`${warning}-${index}`}>{warning}</li>
                 ))}
               </ul>
             </div>
@@ -81,11 +87,11 @@ export default function GroundingDetails({ grounding }: GroundingDetailsProps) {
   );
 }
 
-function DataRow({ label, value }: { label: string; value: string }) {
+function DataTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-gray-900 font-mono">{value}</span>
+    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-bold text-slate-900">{value}</p>
     </div>
   );
 }

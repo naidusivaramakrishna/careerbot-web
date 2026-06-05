@@ -81,7 +81,7 @@ export function useLatestParsedResume(): UseLatestParsedResumeResult {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await getAllResumesUnified();
+      const response = await getAllResumesUnified({ skipAuthRedirect: true });
       if (mySeq !== requestSeqRef.current) return;
 
       // Only `builder_resumes` are FULL parsed-resume JSON blobs.

@@ -253,7 +253,10 @@ export interface ResumeExtractResponse {
  * @param file - The resume file (PDF or DOCX)
  * @returns Parsed resume data
  */
-export const extractResume = async (file: File): Promise<ResumeExtractResponse> => {
+export const extractResume = async (
+    file: File,
+    options: { skipAuthRedirect?: boolean } = {}
+): Promise<ResumeExtractResponse> => {
     try {
         const formData = new FormData();
         formData.append("file", file);
@@ -265,6 +268,9 @@ export const extractResume = async (file: File): Promise<ResumeExtractResponse> 
                 timeout: 120000,
                 headers: {
                     "Content-Type": "multipart/form-data",
+                    ...(options.skipAuthRedirect && {
+                        "X-Skip-Auth-Redirect": "true",
+                    }),
                 },
             }
         );
