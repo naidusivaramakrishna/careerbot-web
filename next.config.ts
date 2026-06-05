@@ -2,11 +2,18 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: false, // ✅ Make sure this is here
- 
+
+  // Dev-server rewrites proxy default is 30s; mock-test/generate routinely
+  // takes 30-60s (Azure OpenAI generation + verify chain) so requests get
+  // killed mid-flight with ECONNRESET. Raise to 4 minutes.
+  experimental: {
+    proxyTimeout: 240000,
+  },
+
   eslint: {
     ignoreDuringBuilds: true,
   },
- 
+
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -52,10 +59,13 @@ const nextConfig: NextConfig = {
   },
   
   async rewrites() {
+    // BACKEND_URL lets local devs override the proxy target when WSL's
+    // automatic localhost-forwarding for podman ports breaks (set in .env.local).
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },

@@ -47,7 +47,7 @@ const cards = [
     stats: [
       { value: '40', label: 'Questions' },
       { value: '4',  label: 'Sections'  },
-      { value: '30m',label: 'Duration'  },
+      { value: '80m',label: 'Duration'  },
     ],
     features: [
       { icon: Brain,         label: 'Aptitude'         },

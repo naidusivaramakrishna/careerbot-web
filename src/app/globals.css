@@ -768,3 +768,24 @@ section.docx {
   list-style-type: decimal;
 }
 
+/* Global keyboard-focus indicator for the mock-test surface — uses
+   :focus-visible so mouse users don't see the ring on click. */
+[data-mock-test] button:focus-visible,
+[data-mock-test] a:focus-visible,
+[data-mock-test] input:focus-visible,
+[data-mock-test] select:focus-visible,
+[data-mock-test] textarea:focus-visible,
+[data-mock-test] [role="tab"]:focus-visible,
+[data-mock-test] [role="button"]:focus-visible {
+  outline: 2px solid #1e3a8a;
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+/* Labels wrapping sr-only radio inputs — light the wrapper when the
+   hidden input is focused. */
+[data-mock-test] label:has(> input:focus-visible) {
+  outline: 2px solid #1e3a8a;
+  outline-offset: 2px;
+  border-radius: 0.75rem;
+}
+

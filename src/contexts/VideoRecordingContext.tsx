@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useRef, useState, useCallback } from 'react';
+import React, { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react';
 
 interface VideoRecordingContextType {
   isRecording: boolean;
@@ -30,6 +30,22 @@ export const VideoRecordingProvider: React.FC<VideoRecordingProviderProps> = ({ 
   const recordedChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const recordedVideoRef = useRef<Blob | null>(null);
+
+  // Release camera/mic when the provider unmounts (e.g. the user leaves the
+  // assessment mid-recording without triggering stopRecording). Without this,
+  // the tracks stay live and the browser's "recording" indicator persists onto
+  // other pages — making it look like the mock test is recording.
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+    };
+  }, []);
 
   const startRecording = useCallback(async () => {
     try {

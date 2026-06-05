@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { AlertTriangle, Play, Clock, BookOpen, Calculator, Brain, Code, Lightbulb,
-         Lock, CheckCircle, ChevronRight, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Play, Lock, CheckCircle, ChevronRight, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getMockTestCompanyById, generateMockTest, getProgressAnalytics, ProgressAnalytics } from '@/api/mockTestApi';
+import LoadingScreen from '../../_components/LoadingScreen';
+import HighlightBox from '../../_components/HighlightBox';
 import { resolveCompanyId, resolveCompanyInfo } from '@/lib/mockTestConstants';
 
 interface CompanyTemplate {
@@ -24,19 +25,29 @@ interface CompanyTemplate {
 
 interface MockSection {
   name: string;
-  icon: React.ElementType;
   questions: number;
   duration: number;
   description: string;
   difficulty: 'EASY' | 'MED' | 'HARD';
 }
 
+// IMPORTANT: question_count and duration here must match what the test runner
+// at /mock-test/[id] actually delivers per section — see currentSection in
+// app/(interview)/mock-test/[id]/page.tsx (10 questions each, 20/25/25/20 min).
+// Drift between these and the runner causes the "Total: 55Q / 105min" header
+// to disagree with the "40Q / 90min" stats strip and the test timer.
 const MOCK_SECTIONS: MockSection[] = [
-  { name: 'Arithmetic', icon: Calculator, questions: 10, duration: 20, description: 'Percentages, P&L, Time-Work, SI/CI',            difficulty: 'MED'  },
-  { name: 'Aptitude',   icon: BookOpen,   questions: 15, duration: 25, description: 'Data interpretation, permutations, probability', difficulty: 'MED'  },
-  { name: 'Reasoning',  icon: Brain,      questions: 15, duration: 25, description: 'Logical sequences, blood relations, coding',     difficulty: 'HARD' },
-  { name: 'Technical',  icon: Code,       questions: 15, duration: 35, description: 'Python · Java · DSA · SQL · OOP',                difficulty: 'HARD' },
+  { name: 'Arithmetic', questions: 10, duration: 20, description: 'Percentages, P&L, Time-Work, SI/CI',            difficulty: 'MED'  },
+  { name: 'Aptitude',   questions: 10, duration: 20, description: 'Data interpretation, permutations, probability', difficulty: 'MED'  },
+  { name: 'Reasoning',  questions: 10, duration: 20, description: 'Logical sequences, blood relations, coding',     difficulty: 'HARD' },
+  { name: 'Technical',  questions: 10, duration: 20, description: 'Python · Java · DSA · SQL · OOP',                difficulty: 'HARD' },
 ];
+
+// Practice-test totals — the ONE source of truth for what the user actually
+// takes. Everything user-facing (stats strip, section-table total, footer,
+// pre-flight tip) must read these so no two surfaces can disagree.
+const PRACTICE_TOTAL_Q   = MOCK_SECTIONS.reduce((sum, s) => sum + s.questions, 0); // 40
+const PRACTICE_TOTAL_MIN = MOCK_SECTIONS.reduce((sum, s) => sum + s.duration,  0); // 90
 
 const companyTemplates: Record<string, CompanyTemplate> = {
   '1': {
@@ -79,7 +90,7 @@ function transformCompanyData(data: any): any {
     lastVerified: data.last_verified || 'March 2026',
     confidence: 'high',
     rules: data.rules || ['Section-locked navigation', `${data.config?.negative_marking ? 'Negative marking applies' : 'No negative marking'}`],
-    tips: data.tips || [`${data.total_questions || 50} questions in ${data.total_duration_minutes || 60} minutes`, 'Practice thoroughly before the test'],
+    tips: data.tips || [`${PRACTICE_TOTAL_Q} questions in ${PRACTICE_TOTAL_MIN} minutes`, 'Practice thoroughly before the test'],
   };
 }
 
@@ -89,18 +100,9 @@ const DIFF_COLOR: Record<string, { bg: string; color: string }> = {
   HARD: { bg: '#fee2e2', color: '#991b1b' },
 };
 
-function getSectionIcon(name: string): React.ElementType {
-  const n = name.toLowerCase();
-  if (n.includes('arithmetic') || n.includes('math') || n.includes('quant')) return Calculator;
-  if (n.includes('aptitude') || n.includes('verbal'))   return BookOpen;
-  if (n.includes('reasoning') || n.includes('logical')) return Brain;
-  if (n.includes('technical') || n.includes('coding'))  return Code;
-  return Lightbulb;
-}
-
 function getGrade(score: number): { label: string; bg: string; color: string } {
   if (score >= 80) return { label: 'GRADE A', bg: '#d1fae5', color: '#065f46' };
-  if (score >= 70) return { label: 'GRADE B', bg: '#dbeafe', color: '#2557a7' };
+  if (score >= 70) return { label: 'GRADE B', bg: '#dbeafe', color: '#1e3a8a' };
   if (score >= 60) return { label: 'GRADE C', bg: '#fef3c7', color: '#92400e' };
   if (score >= 50) return { label: 'GRADE D', bg: '#fee2e2', color: '#991b1b' };
   return { label: 'GRADE F', bg: '#fee2e2', color: '#7f1d1d' };
@@ -132,451 +134,277 @@ export default function CompanyDetailPage() {
   const template   = company || companyTemplates[companyId];
   const { logoPath, name: companyName, initials, color: companyColor } = resolveCompanyInfo(companyId);
 
+  // Single source of truth — see PRACTICE_TOTAL_Q / PRACTICE_TOTAL_MIN.
   const totalSections = MOCK_SECTIONS.length;
-  const totalQ        = 40;
-  const totalMin      = 90;
+  const totalQ        = PRACTICE_TOTAL_Q;
+  const totalMin      = PRACTICE_TOTAL_MIN;
   const passMarkStr   = template?.passing?.replace(/[^0-9%]/g, '') ?? '60%';
 
-  // Derived history values from analytics
-  const lastScore   = analytics?.latest_score ?? analytics?.best_score ?? null;
-  const avgAcc      = analytics?.average_accuracy ?? analytics?.average_score ?? null;
-  const totalTests  = analytics?.total_tests ?? 0;
+  // Derived history values from analytics — only lastScore is read by the
+  // JSX (Your best stat). The other analytics fields and getGrade() are
+  // kept in case the brief is restored to its previous heavier layout.
+  const lastScore = analytics?.latest_score ?? analytics?.best_score ?? null;
 
-  const grade = lastScore != null ? getGrade(lastScore) : null;
-
-  // ── Loading ──────────────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F4F2EC' }}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin"
-            style={{ borderColor: '#009980', borderTopColor: 'transparent', borderWidth: 3 }} />
-          <p className="text-sm font-semibold" style={{ color: '#2d2d2d' }}>Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingScreen label="Loading brief" />;
 
   if (!template) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F4F2EC' }}>
-        <div className="text-center">
-          <p className="text-sm mb-3" style={{ color: '#2d2d2d' }}>Company not found.</p>
-          <button onClick={() => router.push('/mock-test')} className="text-sm font-black" style={{ color: '#009980' }}>
-            Back to Mock Tests
-          </button>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6" style={{ background: '#F8F9FB' }}>
+        <p className="text-sm" style={{ color: '#475569' }}>Company not found.</p>
+        <button
+          onClick={() => router.push('/mock-test')}
+          className="text-sm font-medium hover:underline"
+          style={{ color: '#1e3a8a' }}
+        >
+          ← Back to Mock Tests
+        </button>
       </div>
     );
   }
 
+  const handleBeginExam = async () => {
+    setStartError(null);
+    setStarting(true);
+    try {
+      const backendCompanyId = resolveCompanyId(companyId);
+      const subs = ['percentages', 'time_and_work', 'profit_and_loss', 'ratios', 'number_systems'];
+      const sub  = subs[Math.floor(Math.random() * subs.length)];
+      const session = await generateMockTest(backendCompanyId, ['arithmetic'], [sub], undefined, 30000);
+      router.push(`/mock-test/${companyId}?sessionId=${session.session_id}`);
+    } catch (err: any) {
+      const data = err?.response?.data;
+      const backendError = data?.error;
+      const is402 = err?.response?.status === 402 || backendError?.error_code === 'HTTP_402' || backendError?.details?.error === 'INSUFFICIENT_CREDITS';
+      if (is402) { setStartError('Not enough credits.'); return; }
+      if (backendError?.error_code === 'AI_SERVICE_UNAVAILABLE') {
+        setStartError('AI service temporarily unavailable.');
+      } else {
+        setStartError(backendError?.message || 'Failed to start. Please try again.');
+      }
+    } finally {
+      setStarting(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen pb-24" style={{ background: '#F4F2EC' }}>
+    <div className="min-h-screen" style={{ background: '#F8F9FB' }}>
+      <div className="max-w-5xl mx-auto px-6 md:px-10 pt-10 pb-16">
 
-      {/* ── Breadcrumb ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-6 pt-5 pb-0">
-        <div className="flex items-center gap-1.5 text-xs font-bold tracking-widest" style={{ color: '#2d2d2d', opacity: 0.5 }}>
-          <button onClick={() => router.push('/mock-test')} className="hover:opacity-80 transition">MOCK TESTS</button>
-          <ChevronRight size={10} />
-          <span style={{ color: '#2557a7', opacity: 1 }}>{companyName.toUpperCase()}</span>
-          <ChevronRight size={10} />
-          <span>BRIEF</span>
+        {/* Breadcrumb — same shape as section intro */}
+        <div className="mb-6 text-sm flex items-center gap-2">
+          <button onClick={() => router.push('/mock-test')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
+          <span style={{ color: '#CBD5E1' }}>›</span>
+          <span className="font-semibold" style={{ color: '#0F172A' }}>{companyName} — Brief</span>
         </div>
-        <span className="text-xs font-semibold" style={{ color: '#2d2d2d', opacity: 0.45 }}>
-          last reviewed {template.lastVerified}
-        </span>
-      </div>
 
-      {/* ── Header ────────────────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="px-6 pt-4 pb-3"
-      >
-        <div className="flex items-start justify-between gap-6">
-          {/* Left: logo + title + desc */}
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden border"
-              style={{ borderColor: '#e5e7eb', background: '#fff' }}>
-              {logoPath ? (
-                <img src={logoPath} alt={template.name} className="w-full h-full object-contain p-1.5"
-                  onError={e => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    const p = e.currentTarget.parentElement as HTMLElement;
-                    p.style.background = companyColor;
-                    const s = document.createElement('span');
-                    s.style.cssText = 'color:white;font-weight:900;font-size:16px';
-                    s.textContent = initials;
-                    p.replaceChildren(s);
-                  }}
-                />
-              ) : (
-                <span className="font-black text-lg text-white">{initials}</span>
-              )}
-            </div>
-            <div>
-              <p className="text-xs font-bold tracking-widest mb-1" style={{ color: '#2d2d2d', opacity: 0.45 }}>
-                COMPANY MOCK · TIER 1 IT SERVICES
-              </p>
-              <h1 className="text-2xl font-black mb-1" style={{ color: '#000', letterSpacing: '-0.5px' }}>
-                {template.name} Recruitment Test
-              </h1>
-              <p className="text-sm max-w-lg leading-relaxed mb-4" style={{ color: '#2d2d2d', opacity: 0.7 }}>
-                Modeled on the live {template.name} hiring pattern. {totalSections} locked sections,{' '}
-                {template.negativeMarking ? `negative marking ${template.negativeValue}` : 'no negative marking'},{' '}
-                section-locked navigation. Pass mark{' '}
-                <span className="font-black" style={{ color: '#2557a7' }}>{passMarkStr}</span>.
-              </p>
-
-              {/* Inline stats strip */}
-              <div className="flex items-center gap-0 rounded-xl overflow-hidden border w-fit" style={{ borderColor: '#e5e7eb' }}>
-                {[
-                  { label: 'TOTAL QUESTIONS', value: String(totalQ),        suffix: '',    accent: false },
-                  { label: 'TOTAL TIME',       value: String(totalMin),      suffix: 'min', accent: false },
-                  { label: 'SECTIONS',         value: String(totalSections), suffix: '',    accent: false },
-                  { label: 'PASS MARK',        value: passMarkStr,           suffix: '',    accent: true  },
-                ].map((stat, i, arr) => (
-                  <div
-                    key={stat.label}
-                    className="px-5 py-3 text-center bg-white"
-                    style={{ borderRight: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none' }}
-                  >
-                    <div className="flex items-baseline justify-center gap-0.5 font-black" style={{ color: stat.accent ? '#2557a7' : '#000', fontSize: 22 }}>
-                      {stat.value}
-                      {stat.suffix && <span className="text-xs font-semibold ml-0.5" style={{ color: '#2d2d2d', opacity: 0.5 }}>{stat.suffix}</span>}
-                    </div>
-                    <div className="text-xs font-semibold mt-0.5" style={{ color: '#2d2d2d', opacity: 0.5 }}>{stat.label}</div>
-                  </div>
-                ))}
+        {/* Main brief card — section-intro DNA */}
+        <div
+          className="bg-white rounded-2xl border p-8 md:p-10"
+          style={{
+            borderColor: '#E5E7EB',
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -12px rgba(15,23,42,0.06)',
+          }}
+        >
+          {/* Header: logo + title + meta */}
+          <div className="flex items-start justify-between gap-4 mb-7 flex-wrap">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 overflow-hidden border"
+                style={{ borderColor: '#E5E7EB', background: '#fff' }}>
+                {logoPath ? (
+                  <img src={logoPath} alt={template.name} className="w-full h-full object-contain p-1.5"
+                    onError={e => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      const p = e.currentTarget.parentElement as HTMLElement;
+                      p.style.background = companyColor;
+                      const s = document.createElement('span');
+                      s.style.cssText = 'color:white;font-weight:700;font-size:16px';
+                      s.textContent = initials;
+                      p.replaceChildren(s);
+                    }}
+                  />
+                ) : (
+                  <span className="font-bold text-lg text-white">{initials}</span>
+                )}
               </div>
-            </div>
-          </div>
-
-          {/* Right: badges in one row */}
-          <div className="flex items-center gap-2 flex-shrink-0 pt-1">
-            <span className="flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-full"
-              style={{ background: '#1e3a5f', color: '#93c5fd' }}>
-              <Lock size={10} /> SECTION-LOCKED
-            </span>
-            <span className="flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-full"
-              style={{ background: template.negativeMarking ? '#7f1d1d' : '#064e3b', color: template.negativeMarking ? '#fca5a5' : '#6ee7b7' }}>
-              <CheckCircle size={10} /> {template.negativeMarking ? `NEG MARK ${template.negativeValue}` : 'NO NEG MARK'}
-            </span>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* ── Main two-column body ───────────────────────────────────────────────── */}
-      <div className="flex gap-5 px-6">
-
-        {/* Left column */}
-        <div className="flex-1 min-w-0 space-y-4">
-
-          {/* Section table */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white rounded-2xl border overflow-hidden"
-            style={{ borderColor: '#e5e7eb' }}
-          >
-            {/* Table title row */}
-            <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: '#f3f4f6' }}>
-              <p className="text-sm font-black" style={{ color: '#000' }}>Section-by-section breakdown</p>
-              <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: '#2d2d2d', opacity: 0.45 }}>
-                <Lock size={10} /> SEQUENTIAL · LOCKED
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight mb-1.5" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
+                  {template.name} Recruitment Test
+                </h2>
+                <p className="text-sm max-w-xl leading-relaxed" style={{ color: '#64748B' }}>
+                  Modeled on the live {template.name} hiring pattern. {totalSections} locked sections, section-locked navigation,{' '}
+                  {template.negativeMarking ? `negative marking ${template.negativeValue}` : 'no negative marking'}.
+                </p>
               </div>
             </div>
 
-            {/* Column headers */}
-            <div className="grid grid-cols-12 px-5 py-2.5" style={{ background: '#f9fafb' }}>
-              {[['SEQ',1,'center'],['SECTION',4,'left'],['QS',1,'center'],['MIN',1,'center'],['DIFF',2,'center'],['YOUR AVG',2,'right']] .map(([h, span, align]) => (
-                <span key={h as string}
-                  className={`text-xs font-black tracking-widest col-span-${span}`}
-                  style={{ color: '#2d2d2d', opacity: 0.4, textAlign: align as any }}>
-                  {h}
-                </span>
-              ))}
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase"
+                style={{ background: '#dbeafe', color: '#1e3a8a', border: '1px solid #bfdbfe' }}>
+                <Lock size={11} /> Section-locked
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase"
+                style={{
+                  background: template.negativeMarking ? '#fee2e2' : '#dcfce7',
+                  color:      template.negativeMarking ? '#991b1b' : '#15803d',
+                  border:     `1px solid ${template.negativeMarking ? '#fecaca' : '#bbf7d0'}`,
+                }}>
+                <CheckCircle size={11} /> {template.negativeMarking ? `Neg mark ${template.negativeValue}` : 'No neg mark'}
+              </span>
             </div>
+          </div>
 
+          {/* Numbered section list — mirrors section intro instructions */}
+          <p className="text-base font-bold mb-3" style={{ color: '#0F172A' }}>Sections:</p>
+          <ol className="space-y-4 mb-7">
             {MOCK_SECTIONS.map((sec, i) => {
-              const Icon  = getSectionIcon(sec.name);
-              const dc    = DIFF_COLOR[sec.difficulty];
+              const dc = DIFF_COLOR[sec.difficulty];
               const isFirst = i === 0;
               return (
-                <div key={sec.name}
-                  className="grid grid-cols-12 items-center px-5 py-4 border-b last:border-0"
-                  style={{ borderColor: '#f9fafb' }}
-                >
-                  <span className="col-span-1 text-center text-xs font-black" style={{ color: '#2d2d2d', opacity: 0.35 }}>
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <div className="col-span-4 flex items-start gap-2.5">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: '#f3f4f6' }}>
-                      <Icon size={13} style={{ color: '#2557a7' }} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-xs font-black" style={{ color: '#000' }}>{sec.name}</p>
+                <li key={sec.name} className="flex gap-3 text-[15px] leading-relaxed">
+                  <span className="font-semibold tabular-nums shrink-0 w-5" style={{ color: '#475569' }}>{i + 1}.</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <span className="font-bold" style={{ color: '#000' }}>{sec.name}:</span>{' '}
+                        <span style={{ color: '#2d2d2d' }}>{sec.description}</span>
                         {isFirst && (
-                          <span className="text-xs font-black px-1.5 py-0.5 rounded"
-                            style={{ background: '#2557a7', color: '#fff' }}>
-                            STARTS HERE
+                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase"
+                            style={{ background: '#1e3a8a', color: '#fff' }}>
+                            Starts here
                           </span>
                         )}
                       </div>
-                      <p className="text-xs" style={{ color: '#2d2d2d', opacity: 0.55 }}>{sec.description}</p>
+                      <div className="flex items-center gap-3 shrink-0 text-xs" style={{ color: '#64748B' }}>
+                        <span><span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{sec.questions}</span> Q</span>
+                        <span><span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{sec.duration}</span> min</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase"
+                          style={{ background: dc.bg, color: dc.color }}>
+                          {sec.difficulty}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <span className="col-span-1 text-center text-sm font-black" style={{ color: '#000' }}>{sec.questions}</span>
-                  <span className="col-span-1 text-center text-sm font-black" style={{ color: '#000' }}>{sec.duration}</span>
-                  <div className="col-span-2 flex justify-center">
-                    <span className="text-xs font-black px-2 py-0.5 rounded-full" style={{ background: dc.bg, color: dc.color }}>
-                      {sec.difficulty}
-                    </span>
-                  </div>
-                  <span className="col-span-2 text-right text-sm font-black" style={{ color: '#2d2d2d', opacity: 0.35 }}>
-                    —
-                  </span>
-                </div>
+                </li>
               );
             })}
+          </ol>
 
-            {/* Footer totals */}
-            <div className="grid grid-cols-12 items-center px-5 py-3 border-t" style={{ background: '#eef3ff', borderColor: '#c7d7f4' }}>
-              <span className="col-span-1" />
-              <span className="col-span-4 text-xs font-black" style={{ color: '#2557a7' }}>TOTAL</span>
-              <span className="col-span-1 text-center text-xs font-black" style={{ color: '#2557a7' }}>{totalQ}</span>
-              <span className="col-span-1 text-center text-xs font-black" style={{ color: '#2557a7' }}>{totalMin}</span>
-              <span className="col-span-2" />
-              <span className="col-span-2 text-right text-xs font-black" style={{ color: '#2557a7' }}>—</span>
+          <HighlightBox>
+            <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
+              Pass mark <span className="font-bold" style={{ color: '#1e3a8a' }}>{passMarkStr}</span> · Window{' '}
+              <span className="font-bold" style={{ color: '#0F172A' }}>{totalMin} min</span> · No pause
+            </p>
+            <div className="flex items-center gap-4 shrink-0">
+              <div className="text-right">
+                <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Total</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: '#1e3a8a' }}>
+                  {totalQ}<span className="text-base font-bold" style={{ color: '#60a5fa' }}>/{totalMin}m</span>
+                </p>
+              </div>
+              {lastScore != null && (
+                <div className="text-right">
+                  <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Your best</p>
+                  <p className="text-2xl font-bold tabular-nums" style={{ color: '#15803d' }}>{lastScore}<span className="text-base" style={{ color: '#94A3B8' }}>/100</span></p>
+                </div>
+              )}
             </div>
-          </motion.div>
+          </HighlightBox>
+        </div>
 
-          {/* Exam Rules accordion */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
+        {/* Rules + Tips as accordion cards below the main card */}
+        <div className="mt-5 space-y-3">
+          <div
             className="bg-white rounded-2xl border overflow-hidden"
-            style={{ borderColor: '#e5e7eb' }}
+            style={{ borderColor: '#E5E7EB', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
           >
             <button
               onClick={() => setRulesOpen(v => !v)}
-              className="w-full flex items-center justify-between px-5 py-4 text-left"
+              className="w-full flex items-center justify-between px-6 py-4 text-left"
             >
-              <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-black text-white"
-                  style={{ background: '#2557a7' }}>i</div>
-                <span className="text-sm font-black" style={{ color: '#000' }}>Exam rules</span>
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold text-white"
+                  style={{ background: '#1e3a8a' }}>i</span>
+                <span className="text-sm font-bold" style={{ color: '#0F172A' }}>Exam rules</span>
               </div>
-              <ChevronDown size={15} style={{ color: '#2d2d2d', opacity: 0.4, transform: rulesOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              <ChevronDown size={16} style={{ color: '#94A3B8', transform: rulesOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
             </button>
             <AnimatePresence>
               {rulesOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <ul className="px-5 pb-5 space-y-3 border-t" style={{ borderColor: '#f3f4f6' }}>
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                  <ol className="px-6 pb-5 space-y-3 border-t" style={{ borderColor: '#f3f4f6' }}>
                     {template.rules.map((rule: string, i: number) => (
-                      <li key={i} className="flex items-start gap-3 pt-3 first:pt-3">
-                        <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-black mt-0.5"
-                          style={{ background: '#eef3ff', color: '#2557a7' }}>{i + 1}</span>
-                        <span className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>{rule}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-
-          {/* Pre-flight tips accordion */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white rounded-2xl border overflow-hidden"
-            style={{ borderColor: '#e5e7eb' }}
-          >
-            <button
-              onClick={() => setTipsOpen(v => !v)}
-              className="w-full flex items-center justify-between px-5 py-4 text-left"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-black"
-                  style={{ background: '#ecfdf5', color: '#009980' }}>+</div>
-                <span className="text-sm font-black" style={{ color: '#000' }}>Pre-flight tips</span>
-              </div>
-              <ChevronDown size={15} style={{ color: '#2d2d2d', opacity: 0.4, transform: tipsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-            </button>
-            <AnimatePresence>
-              {tipsOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <ol className="px-5 pb-5 space-y-3 border-t" style={{ borderColor: '#f3f4f6' }}>
-                    {template.tips.map((tip: string, i: number) => (
-                      <li key={i} className="flex items-start gap-3 pt-3">
-                        <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-black mt-0.5 text-white"
-                          style={{ background: '#009980' }}>{i + 1}</span>
-                        <span className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>{tip}</span>
+                      <li key={i} className="flex gap-3 pt-3 text-sm leading-relaxed">
+                        <span className="font-semibold tabular-nums shrink-0 w-5" style={{ color: '#475569' }}>{i + 1}.</span>
+                        <span style={{ color: '#2d2d2d' }}>{rule}</span>
                       </li>
                     ))}
                   </ol>
                 </motion.div>
               )}
             </AnimatePresence>
-          </motion.div>
+          </div>
 
-        </div>
-
-        {/* Right column */}
-        <div className="w-64 flex-shrink-0 space-y-4">
-
-          {/* History panel */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+          <div
             className="bg-white rounded-2xl border overflow-hidden"
-            style={{ borderColor: '#e5e7eb' }}
+            style={{ borderColor: '#E5E7EB', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
           >
-            <div className="px-4 py-3 border-b" style={{ borderColor: '#f3f4f6' }}>
-              <p className="text-xs font-black tracking-widest" style={{ color: '#2d2d2d', opacity: 0.45 }}>
-                YOUR HISTORY WITH {companyName.toUpperCase()}
-              </p>
-            </div>
-
-            {lastScore != null ? (
-              <div className="p-4 space-y-4">
-                {/* Last score */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold" style={{ color: '#2d2d2d', opacity: 0.5 }}>LAST · {totalTests} ATTEMPT{totalTests !== 1 ? 'S' : ''}</span>
-                    {grade && (
-                      <span className="text-xs font-black px-2 py-0.5 rounded"
-                        style={{ background: grade.bg, color: grade.color }}>{grade.label}</span>
-                    )}
-                  </div>
-                  <p className="font-black leading-none" style={{ color: '#000', fontSize: 36 }}>
-                    {lastScore}<span className="text-base font-semibold" style={{ color: '#2d2d2d', opacity: 0.4 }}>/100</span>
-                  </p>
-                  {avgAcc != null && (
-                    <p className="text-xs mt-1" style={{ color: '#2d2d2d', opacity: 0.55 }}>
-                      {totalMin} min · {Math.round(avgAcc)}% accuracy
-                    </p>
-                  )}
-                </div>
-
+            <button
+              onClick={() => setTipsOpen(v => !v)}
+              className="w-full flex items-center justify-between px-6 py-4 text-left"
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold"
+                  style={{ background: '#dbeafe', color: '#1e3a8a' }}>+</span>
+                <span className="text-sm font-bold" style={{ color: '#0F172A' }}>Pre-flight tips</span>
               </div>
-            ) : (
-              <div className="p-4">
-                <div className="text-center py-5">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2" style={{ background: '#f3f4f6' }}>
-                    <Clock size={18} style={{ color: '#2d2d2d', opacity: 0.3 }} />
-                  </div>
-                  <p className="text-xs font-semibold" style={{ color: '#2d2d2d', opacity: 0.6 }}>No history yet</p>
-                  <p className="text-xs mt-1" style={{ color: '#2d2d2d', opacity: 0.35 }}>Complete a test to see stats</p>
-                </div>
-              </div>
-            )}
-          </motion.div>
-
-          {/* Disclaimer */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="rounded-xl p-3 border flex items-start gap-2.5"
-            style={{ background: '#fffbeb', borderColor: '#fde68a' }}
-          >
-            <AlertTriangle size={13} style={{ color: '#d97706', flexShrink: 0, marginTop: 1 }} />
-            <p className="text-xs leading-relaxed" style={{ color: '#92400e' }}>
-              Pattern {template.confidence === 'high' ? 'verified' : 'approximate'} as of {template.lastVerified}. Verify with official sources before your actual exam.
-            </p>
-          </motion.div>
-
-        </div>
-      </div>
-
-      {/* ── Bottom bar ────────────────────────────────────────────────────────── */}
-      <div
-        className="fixed bottom-0 left-52 right-0 z-30 border-t px-6 py-3 flex items-center justify-between gap-4"
-        style={{ background: '#ffffff', borderColor: '#e5e7eb' }}
-      >
-        {/* Left info strips */}
-        <div className="flex items-center gap-6">
-          <div>
-            <p className="text-xs font-bold tracking-widest" style={{ color: '#2d2d2d', opacity: 0.45 }}>PASS MARK</p>
-            <p className="text-sm font-black" style={{ color: '#2557a7' }}>{passMarkStr}</p>
+              <ChevronDown size={16} style={{ color: '#94A3B8', transform: tipsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+            </button>
+            <AnimatePresence>
+              {tipsOpen && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                  <ol className="px-6 pb-5 space-y-3 border-t" style={{ borderColor: '#f3f4f6' }}>
+                    {template.tips.map((tip: string, i: number) => (
+                      <li key={i} className="flex gap-3 pt-3 text-sm leading-relaxed">
+                        <span className="font-semibold tabular-nums shrink-0 w-5" style={{ color: '#475569' }}>{i + 1}.</span>
+                        <span style={{ color: '#2d2d2d' }}>{tip}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          <div className="w-px h-8" style={{ background: '#e5e7eb' }} />
-          <div>
-            <p className="text-xs font-bold tracking-widest" style={{ color: '#2d2d2d', opacity: 0.45 }}>WINDOW</p>
-            <p className="text-sm font-black" style={{ color: '#000' }}>
-              {totalMin} MIN · <span style={{ color: '#2d2d2d', opacity: 0.55, fontWeight: 600 }}>NO PAUSE</span>
-            </p>
-          </div>
-          {lastScore != null && (
-            <>
-              <div className="w-px h-8" style={{ background: '#e5e7eb' }} />
-              <div>
-                <p className="text-xs font-bold tracking-widest" style={{ color: '#2d2d2d', opacity: 0.45 }}>YOUR BEST</p>
-                <p className="text-sm font-black" style={{ color: '#000' }}>{lastScore}/100</p>
-              </div>
-            </>
-          )}
         </div>
 
-        {/* Right buttons */}
-        <div className="flex items-center gap-3">
-          {startError && (
-            <p className="text-xs font-semibold flex items-center gap-1" style={{ color: '#ef4444' }}>
-              <AlertTriangle size={12} /> {startError}
-            </p>
-          )}
+        {/* Bottom action row — section-intro DNA */}
+        <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
           <button
-            disabled={starting}
-            onClick={async () => {
-              setStartError(null);
-              setStarting(true);
-              try {
-                const backendCompanyId = resolveCompanyId(companyId);
-                const subs = ['percentages', 'time_and_work', 'profit_and_loss', 'ratios', 'number_systems'];
-                const sub  = subs[Math.floor(Math.random() * subs.length)];
-                const session = await generateMockTest(backendCompanyId, ['arithmetic'], [sub], undefined, 30000);
-                router.push(`/mock-test/${companyId}?sessionId=${session.session_id}`);
-              } catch (err: any) {
-                const data = err?.response?.data;
-                const is402 = err?.response?.status === 402 || data?.error_code === 'HTTP_402' || data?.details?.error === 'INSUFFICIENT_CREDITS';
-                if (is402) { setStartError('Not enough credits.'); return; }
-                if (data?.error_code === 'AI_SERVICE_UNAVAILABLE') {
-                  setStartError('AI service temporarily unavailable.');
-                } else {
-                  setStartError(data?.message || 'Failed to start. Please try again.');
-                }
-              } finally {
-                setStarting(false);
-              }
-            }}
-            className="flex items-center gap-2 font-black px-7 py-2.5 rounded-xl text-white text-sm tracking-wide transition disabled:opacity-60"
-            style={{ background: '#2557a7' }}
+            onClick={() => router.push('/mock-test')}
+            className="text-sm font-medium hover:underline"
+            style={{ color: '#475569' }}
           >
-            {starting ? (
-              <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> STARTING...</>
-            ) : (
-              <><Play size={14} className="fill-white" /> BEGIN EXAM <ChevronRight size={14} /></>
-            )}
+            ← Back to Tests
           </button>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {startError && (
+              <p className="text-xs font-semibold flex items-center gap-1" style={{ color: '#ef4444' }}>
+                <AlertTriangle size={12} /> {startError}
+              </p>
+            )}
+            <button
+              disabled={starting}
+              onClick={handleBeginExam}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(30,58,138,0.5)] disabled:opacity-60 disabled:hover:translate-y-0"
+              style={{ background: '#1e3a8a', boxShadow: '0 4px 14px -4px rgba(30,58,138,0.35)' }}
+            >
+              {starting ? (
+                <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Starting…</>
+              ) : (
+                <><Play size={14} className="fill-white" /> Begin Exam <ChevronRight size={14} /></>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

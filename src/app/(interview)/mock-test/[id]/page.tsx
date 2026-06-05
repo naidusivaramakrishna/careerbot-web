@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Flag, EyeOff, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, EyeOff, AlertTriangle, CheckCircle, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { resolveCompanyId, resolveCompanyInfo, CATEGORY_SUBCATEGORIES } from '@/lib/mockTestConstants';
+import { addSeenQuestionIds } from '@/utils/seenQuestionIds';
 import {
   generateMockTest,
   getSectionQuestions,
@@ -28,6 +29,10 @@ interface Question {
   options: string[];
   selected: string | null;
   markedForReview: boolean;
+  // True once submitAnswer has succeeded for this question. Locked questions
+  // cannot be cleared or re-selected — preserves assessment integrity once the
+  // user has seen the correct answer in the feedback.
+  locked: boolean;
 }
 
 type Phase = 'loading' | 'section_intro' | 'section_testing' | 'results_summary' | 'submitting';
@@ -47,17 +52,6 @@ const negMarkingSections: Record<string, string[]> = {
 
 
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getSectionTags(sectionName: string): string[] {
-  const n = (sectionName || '').toLowerCase();
-  if (n.includes('arithmetic')) return ['Percentages', 'Time & Work', 'Profit & Loss', 'Ratios', 'Number Systems'];
-  if (n.includes('aptitude'))   return ['Data Interpretation', 'Averages', 'Permutations', 'Probability'];
-  if (n.includes('reasoning'))  return ['Logical Sequences', 'Blood Relations', 'Directions', 'Coding-Decoding'];
-  if (n.includes('technical'))  return ['CS Fundamentals', 'Algorithms', 'OOP', 'DSA'];
-  return [sectionName];
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function MockTestPage() {
@@ -75,6 +69,18 @@ export default function MockTestPage() {
   // Custom test config from query params
   const customCategories = isCustomTest
     ? (searchParams.get('categories') ?? 'arithmetic').split(',').filter(Boolean)
+    : null;
+  // Optional: focus the custom test on a single subcategory/topic (e.g. when
+  // launched from Weak Areas → "Practice this topic"). Falls back to a random
+  // subcategory of the section's category when absent or invalid.
+  const customSubcategory = isCustomTest ? searchParams.get('subcategory') : null;
+  // Total question count picked in the Custom Builder. Defaults to 30 when
+  // missing/invalid. Divided across the selected sections below.
+  const customTotalCount = isCustomTest
+    ? (() => {
+        const n = parseInt(searchParams.get('count') ?? '', 10);
+        return Number.isFinite(n) && n > 0 ? n : 30;
+      })()
     : null;
 
   // Section progression: Arithmetic(0) → Aptitude(1) → Reasoning(2) → Technical(3)
@@ -97,7 +103,6 @@ export default function MockTestPage() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
   const [currentBackendSectionId, setCurrentBackendSectionId] = useState<string | null>(null);
-  const [sessionSections, setSessionSections] = useState<MockTestSection[]>([]);
   const [currentSectionProgressionIndex, setCurrentSectionProgressionIndex] = useState(0); // Track which section in progression (0-3)
 
 
@@ -137,8 +142,27 @@ export default function MockTestPage() {
   const [reportReason, setReportReason] = useState('');
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
+  // Mid-test exit modal
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [exitSubmitting, setExitSubmitting] = useState(false);
+
   // Completed section results (for transition screen)
   const [sectionResults, setSectionResults] = useState<SectionResult[]>([]);
+
+  // Per-section question count. For company tests every section is a flat 10
+  // questions. For custom tests we split the user-picked total evenly across
+  // the selected sections — e.g. count=30, categories=arithmetic,aptitude →
+  // 15 per section. Any remainder lands in the first sections (16, 14).
+  const perSectionCount = isCustomTest && customTotalCount && SECTION_PROGRESSION.length > 0
+    ? Math.max(1, Math.floor(customTotalCount / SECTION_PROGRESSION.length))
+    : 10;
+  const perSectionRemainder = isCustomTest && customTotalCount && SECTION_PROGRESSION.length > 0
+    ? customTotalCount - perSectionCount * SECTION_PROGRESSION.length
+    : 0;
+  // 2 minutes per question is the same ratio used in company tests (20 min / 10 q).
+  const perSectionMinutes = Math.max(5, Math.round(perSectionCount * 2));
+  const questionCountFor = (sectionIdx: number): number =>
+    perSectionCount + (sectionIdx < perSectionRemainder ? 1 : 0);
 
   // Use SECTION_PROGRESSION as the source of truth for section names
   const currentSectionProgression = SECTION_PROGRESSION[currentSectionProgressionIndex];
@@ -147,18 +171,18 @@ export default function MockTestPage() {
     section_name: currentSectionProgression ?
       currentSectionProgression.name.charAt(0).toUpperCase() + currentSectionProgression.name.slice(1)
       : 'Unknown',
-    duration_minutes: currentSectionProgression?.name === 'arithmetic' || currentSectionProgression?.name === 'technical' ? 20 : 25,
-    question_count: 10,
+    duration_minutes: perSectionMinutes,
+    question_count: questionCountFor(currentSectionProgressionIndex),
   };
   const isLastSection = currentSectionProgressionIndex === SECTION_PROGRESSION.length - 1;
   const testName = isCustomTest ? 'Custom Test' : resolveCompanyInfo(testId).name;
 
   // ── Sections derived from SECTION_PROGRESSION ─────────────────────────────
-  const EDUCATIONAL_SECTIONS: MockTestSection[] = SECTION_PROGRESSION.map(s => ({
+  const EDUCATIONAL_SECTIONS: MockTestSection[] = SECTION_PROGRESSION.map((s, idx) => ({
     section_id: s.name,
     section_name: s.name.charAt(0).toUpperCase() + s.name.slice(1),
-    duration_minutes: s.name === 'arithmetic' || s.name === 'technical' ? 20 : 25,
-    question_count: 10,
+    duration_minutes: perSectionMinutes,
+    question_count: questionCountFor(idx),
   }));
 
   type RawQ = { question_id?: number | string; question_text?: string; text?: string; options?: string[]; choices?: string[] };
@@ -182,7 +206,6 @@ export default function MockTestPage() {
           }
         }
 
-        setSessionSections(EDUCATIONAL_SECTIONS);
         setPhase('section_intro');
       } catch (err: unknown) {
         setInitError((err as { message?: string })?.message || 'Failed to load mock test. Please try again.');
@@ -198,6 +221,12 @@ export default function MockTestPage() {
   const handleStartSection = async () => {
     if (!currentSection) return;
 
+    // Enter fullscreen — must run synchronously from the user-gesture click,
+    // before any awaits, or the browser strips the gesture context.
+    if (typeof document !== 'undefined' && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => { /* denied or unsupported */ });
+    }
+
     setLoadingSection(true);
     try {
       let backendSectionId: string;
@@ -208,11 +237,15 @@ export default function MockTestPage() {
       const activeCategory = isCustomTest && customCategories
         ? customCategories[currentSectionProgressionIndex % customCategories.length]
         : sectionInfo.name;
-      const randomSubcategory = sectionInfo.subcategories[Math.floor(Math.random() * sectionInfo.subcategories.length)];
+      // Prefer the focused subcategory (from Weak Areas) when it's valid for
+      // this section's category; otherwise pick a random one.
+      const chosenSubcategory = (customSubcategory && sectionInfo.subcategories.includes(customSubcategory))
+        ? customSubcategory
+        : sectionInfo.subcategories[Math.floor(Math.random() * sectionInfo.subcategories.length)];
 
       let newSession: MockTestSession;
       try {
-        newSession = await generateMockTest(testId, [activeCategory], [randomSubcategory], parentSessionIdRef.current, 180000);
+        newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes);
       } catch (genErr: unknown) {
         const _genErr = genErr as { response?: { data?: { error_code?: string; details?: { session_id?: string } } } };
         if (_genErr?.response?.data?.error_code === 'ACTIVE_SESSION_EXISTS') {
@@ -220,7 +253,7 @@ export default function MockTestPage() {
           if (existingId) {
             try { await submitTest(existingId); } catch { /* ignore close errors */ }
           }
-          newSession = await generateMockTest(testId, [activeCategory], [randomSubcategory], parentSessionIdRef.current, 180000);
+          newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes);
         } else {
           throw genErr;
         }
@@ -257,7 +290,13 @@ export default function MockTestPage() {
         options: q.options ?? q.choices ?? [],
         selected: null,
         markedForReview: false,
+        locked: false,
       }));
+
+      // Record the question IDs the user is about to see so the next
+      // /mock-test/generate call for this company excludes them and the
+      // user doesn't get the same questions on a retake.
+      addSeenQuestionIds(testId, qs.map(q => q.question_id ?? null));
 
       if (questions.length < currentSection.question_count) {
         toast.info(`This section has ${questions.length} questions. Attempt all to proceed.`);
@@ -313,23 +352,76 @@ export default function MockTestPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [phase]);
 
-  // ── Tab switch detection ───────────────────────────────────────────────────
+  // ── Lockdown: tab-switch / window-blur detection ───────────────────────────
+  // The browser cannot truly block OS-level Alt-Tab or new-tab shortcuts;
+  // we detect focus loss during testing and force the user to acknowledge it
+  // via the blocking modal below.
   useEffect(() => {
-    const handle = () => {
-      if (document.hidden && phase === 'section_testing') {
-        setTabSwitchCount(p => p + 1);
-        setShowTabWarning(true);
+    if (phase !== 'section_testing') return;
+    const flag = () => {
+      setTabSwitchCount(p => p + 1);
+      setShowTabWarning(true);
+    };
+    const onVisibility = () => { if (document.hidden) flag(); };
+    const onBlur = () => flag();
+    const onFullscreenChange = () => { if (!document.fullscreenElement) flag(); };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    };
+  }, [phase]);
+
+  // ── Exit fullscreen when the test ends or the page unmounts ────────────────
+  useEffect(() => {
+    if (phase === 'results_summary' && typeof document !== 'undefined' && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
       }
     };
-    document.addEventListener('visibilitychange', handle);
-    return () => document.removeEventListener('visibilitychange', handle);
-  }, [phase]);
+  }, []);
 
   // ── Disable right-click ────────────────────────────────────────────────────
   useEffect(() => {
     const prevent = (e: MouseEvent) => { if (phase === 'section_testing') e.preventDefault(); };
     document.addEventListener('contextmenu', prevent);
     return () => document.removeEventListener('contextmenu', prevent);
+  }, [phase]);
+
+  // ── Escape closes whichever modal is open ──────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showReportModal) { setShowReportModal(false); return; }
+      if (showExitConfirm) { setShowExitConfirm(false); return; }
+      if (showTabWarning)  { setShowTabWarning(false);  return; }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showReportModal, showExitConfirm, showTabWarning]);
+
+  // ── Block copy / paste / cut while testing ────────────────────────────────
+  useEffect(() => {
+    if (phase !== 'section_testing') return;
+    const block = (e: ClipboardEvent) => e.preventDefault();
+    document.addEventListener('copy',  block);
+    document.addEventListener('paste', block);
+    document.addEventListener('cut',   block);
+    return () => {
+      document.removeEventListener('copy',  block);
+      document.removeEventListener('paste', block);
+      document.removeEventListener('cut',   block);
+    };
   }, [phase]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
@@ -340,6 +432,23 @@ export default function MockTestPage() {
         return;
       }
       if (phase !== 'section_testing') return;
+
+      // Block clipboard / browser-action shortcuts during the test:
+      //   Ctrl/Cmd + C / V / X / A / P / S / U   (copy, paste, cut, select-all, print, save, view-source)
+      //   F12 and Ctrl+Shift+I/J/C               (DevTools)
+      // OS-level shortcuts (Alt+Tab, Ctrl+T, Ctrl+W, Windows key) cannot be
+      // blocked from a web page — browsers reserve them. Tab-switch / focus-loss
+      // detection above catches those cases instead.
+      const k = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'a', 'p', 's', 'u'].includes(k)) {
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(k))) {
+        e.preventDefault();
+        return;
+      }
+
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'ArrowRight' || e.key === 'n' || e.key === 'N') handleNext();
       if (e.key === 'ArrowLeft'  || e.key === 'p' || e.key === 'P') handlePrevious();
@@ -372,8 +481,15 @@ export default function MockTestPage() {
   // ── Answer handlers ────────────────────────────────────────────────────────
   const handleSelectAnswer = async (option: string) => {
     const q = questions[currentQ];
+    // Defense in depth: ignore selections on a question that already got a
+    // verdict from the backend. The radio/label is also disabled in the UI.
+    if (q?.locked) return;
+    // Lock immediately on selection. The answer is final and stays locked when
+    // navigating Prev/Next. Locking up-front (instead of after the async submit)
+    // makes it immune to backend/network failures — a failed submitAnswer below
+    // can no longer leave the question editable.
     setQuestions(prev => prev.map((item, i) =>
-      i === currentQ ? { ...item, selected: option } : item
+      i === currentQ ? { ...item, selected: option, locked: true } : item
     ));
 
     if (!sessionId) {
@@ -413,6 +529,9 @@ export default function MockTestPage() {
   };
 
   const handleClearAnswer = () => {
+    // Locked questions cannot be cleared — once the backend has returned a
+    // verdict (and revealed the correct answer), the selection is final.
+    if (questions[currentQ]?.locked) return;
     setQuestions(prev => prev.map((item, i) =>
       i === currentQ ? { ...item, selected: null } : item
     ));
@@ -435,6 +554,21 @@ export default function MockTestPage() {
     if (currentQ > 0) {
       setCurrentQ(p => p - 1);
       setAnswerFeedback(null);
+    }
+  };
+
+  // ── Mid-test exit: best-effort close the active session, then go to dashboard.
+  const handleExitTest = async () => {
+    setExitSubmitting(true);
+    try {
+      if (sessionId) {
+        await submitTest(sessionId).catch(() => { /* ignore — we're abandoning */ });
+      }
+    } finally {
+      // Reset phase so the page-unload guard (beforeunload) and fullscreen
+      // cleanup don't fight the navigation.
+      setPhase('loading');
+      router.push('/dashboard');
     }
   };
 
@@ -553,7 +687,7 @@ export default function MockTestPage() {
               </button>
               <button
                 onClick={() => { setInitError(null); window.location.reload(); }}
-                className="px-5 py-2.5 bg-[#2557a7] text-white font-semibold rounded-lg hover:bg-[#1a3d73] transition text-sm"
+                className="px-5 py-2.5 bg-[#1e3a8a] text-white font-semibold rounded-lg hover:bg-[#172554] transition text-sm"
               >
                 Try Again
               </button>
@@ -564,7 +698,7 @@ export default function MockTestPage() {
     }
     return (
       <div className="w-full bg-white min-h-screen flex flex-col items-center justify-center gap-4">
-        <div className="w-12 h-12 border-4 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+        <div className="w-12 h-12 border-4 border-[#1e3a8a] border-t-transparent rounded-full animate-spin" />
         <p className="text-slate-600 font-semibold text-lg">Preparing your test...</p>
         <p className="text-slate-400 text-sm">Generating questions from the bank</p>
       </div>
@@ -582,200 +716,139 @@ export default function MockTestPage() {
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 
     return (
-      <div className="w-full min-h-screen flex flex-col" style={{ background: '#F4F2EC' }}>
+      <div className="min-h-screen" style={{ background: '#F8F9FB' }}>
+        <div className="max-w-5xl mx-auto px-6 md:px-10 pt-10 pb-16">
 
-        {/* Dark top bar */}
-        <div className="flex items-center justify-between px-6 py-3 shrink-0" style={{ background: '#111827' }}>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>{testName.toUpperCase()}</span>
-            <span style={{ color: 'rgba(255,255,255,0.2)' }}>·</span>
-            <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>MOCK_TEST</span>
-            <span style={{ color: 'rgba(255,255,255,0.2)' }}>·</span>
-            <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>SESSION {sessionId?.slice(-8).toUpperCase() ?? '—'}</span>
+          {/* Breadcrumb — same shape as section intro */}
+          <div className="mb-6 text-sm flex items-center gap-2">
+            <span style={{ color: '#64748B' }}>Mock Tests</span>
+            <span style={{ color: '#CBD5E1' }}>›</span>
+            <span style={{ color: '#64748B' }}>{testName}</span>
+            <span style={{ color: '#CBD5E1' }}>›</span>
+            <span className="font-semibold" style={{ color: '#0F172A' }}>Review &amp; Submit</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-black tracking-widest px-2.5 py-1 rounded" style={{ background: '#374151', color: '#34d399' }}>
-              COMPLETE
-            </span>
-            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{dayStr} · {timeStr} LOCAL</span>
-          </div>
-        </div>
 
-        {/* Progress strip — all sections done */}
-        <div className="flex items-center px-6 py-2 border-b shrink-0" style={{ background: '#1f2937', borderColor: '#374151' }}>
-          <span className="text-xs font-black tracking-widest mr-5" style={{ color: 'rgba(255,255,255,0.25)' }}>TEST PROGRESSION</span>
-          <div className="flex items-center flex-1 gap-1">
-            {SECTION_PROGRESSION.map((sec, i, arr) => (
-              <div key={sec.name} className="flex items-center gap-1">
-                <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-black rounded"
-                  style={{ background: 'transparent', color: 'rgba(255,255,255,0.45)' }}
+          {/* Main card */}
+          <div
+            className="bg-white rounded-2xl border p-8 md:p-10"
+            style={{
+              borderColor: '#E5E7EB',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -12px rgba(15,23,42,0.06)',
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 mb-7 flex-wrap">
+              <div>
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase mb-3"
+                  style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}
                 >
-                  <span style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 900 }}>{String(i + 1).padStart(2, '0')}</span>
-                  <span>{sec.name.toUpperCase()}</span>
-                  <CheckCircle size={10} style={{ color: '#34d399' }} />
-                </div>
-                {i < arr.length - 1 && <span className="text-xs" style={{ color: 'rgba(255,255,255,0.12)' }}>·</span>}
+                  <CheckCircle size={11} /> Test Complete
+                </span>
+                <h2 className="text-2xl font-bold tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
+                  Review your attempt
+                </h2>
+                <p className="text-sm mt-1.5" style={{ color: '#64748B' }}>
+                  All {SECTION_PROGRESSION.length} sections attempted. Submit to receive your full score report.
+                </p>
               </div>
-            ))}
-          </div>
-          <span className="text-xs font-black ml-4" style={{ color: '#34d399' }}>
-            {String(SECTION_PROGRESSION.length).padStart(2, '0')}/{String(SECTION_PROGRESSION.length).padStart(2, '0')}
-          </span>
-        </div>
+              <div className="text-right shrink-0">
+                <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Submitted</p>
+                <p className="text-xs font-semibold mt-0.5" style={{ color: '#475569' }}>{dayStr} · {timeStr}</p>
+              </div>
+            </div>
 
-        {/* Section notice */}
-        <div className="px-6 py-2 shrink-0 border-b" style={{ background: '#F4F2EC', borderColor: '#e5e0d5' }}>
-          <span className="text-xs font-black tracking-widest" style={{ color: '#2d2d2d', opacity: 0.45 }}>
-            ALL {SECTION_PROGRESSION.length} SECTIONS COMPLETE — REVIEW YOUR ATTEMPT BEFORE SUBMITTING
-          </span>
-        </div>
-
-        {/* Main content: two-column */}
-        <div className="flex flex-1 overflow-hidden">
-
-          {/* Left: section breakdown table */}
-          <div className="flex-1 px-10 py-8 flex flex-col overflow-y-auto">
-            <h1 className="font-black mb-1" style={{ color: '#2557a7', fontSize: 32, letterSpacing: '-1px', lineHeight: 1 }}>
-              Test Complete.
-            </h1>
-            <p className="text-sm mb-6" style={{ color: '#2d2d2d', opacity: 0.5 }}>
-              All sections attempted. Submit to receive your full score report.
-            </p>
-
-            {/* Section rows */}
-            <div className="flex flex-col gap-2">
-              {sectionResults.map((result, idx) => {
+            {/* Numbered section list — same shape as section intro instructions */}
+            <ol className="space-y-4 mb-7">
+              {sectionResults.map((result, i) => {
                 const pct  = result.total > 0 ? Math.round((result.answered / result.total) * 100) : 0;
                 const done = result.answered === result.total;
                 return (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-4 px-5 py-4 rounded-xl border"
-                    style={{ background: '#ffffff', borderColor: '#e5e7eb' }}
-                  >
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black shrink-0 text-white"
-                      style={{ background: '#2557a7' }}
-                    >
-                      {String(idx + 1).padStart(2, '0')}
-                    </div>
+                  <li key={i} className="flex gap-3 text-[15px] leading-relaxed">
+                    <span className="font-semibold tabular-nums shrink-0 w-5" style={{ color: '#475569' }}>{i + 1}.</span>
                     <div className="flex-1 min-w-0">
-                      <p className="font-black text-sm" style={{ color: '#2d2d2d' }}>{result.name.toUpperCase()}</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'rgba(0,0,0,0.4)' }}>
-                        {result.answered} of {result.total} answered
-                      </p>
-                    </div>
-                    {/* Mini progress bar */}
-                    <div className="w-24 shrink-0">
-                      <div className="w-full rounded-full overflow-hidden" style={{ height: 4, background: '#f3f4f6' }}>
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${pct}%`, background: done ? '#22c55e' : '#2557a7' }}
-                        />
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <span className="font-bold" style={{ color: '#000' }}>{result.name}:</span>{' '}
+                          <span style={{ color: '#2d2d2d' }}>{result.answered} of {result.total} answered</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="w-32" aria-hidden>
+                            <div className="w-full rounded-full overflow-hidden" style={{ height: 5, background: '#f1f5f9' }}>
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{ width: `${pct}%`, background: done ? '#22c55e' : '#1e3a8a' }}
+                              />
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold tabular-nums w-10 text-right" style={{ color: done ? '#15803d' : '#1e3a8a' }}>{pct}%</span>
+                          {done
+                            ? <CheckCircle size={16} style={{ color: '#22c55e' }} />
+                            : <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider" style={{ background: '#fef3c7', color: '#92400e' }}>Partial</span>
+                          }
+                        </div>
                       </div>
-                      <p className="text-xs font-black mt-1 text-right" style={{ color: done ? '#22c55e' : '#2557a7' }}>
-                        {pct}%
-                      </p>
                     </div>
-                    <div className="shrink-0">
-                      {done
-                        ? <CheckCircle size={18} style={{ color: '#22c55e' }} />
-                        : <span className="text-xs font-black px-2 py-1 rounded" style={{ background: '#fef3c7', color: '#92400e' }}>PARTIAL</span>
-                      }
-                    </div>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
 
-            <div className="flex-1" />
-
-            {/* Warning */}
+            {/* Summary highlight box — mirrors the section intro "1 Score = 1 Point" box */}
             <div
-              className="flex items-start gap-2.5 px-4 py-3 rounded-xl border mt-6"
-              style={{ background: '#fffbeb', borderColor: '#fde68a' }}
+              className="rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap"
+              style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}
             >
-              <AlertTriangle size={13} style={{ color: '#d97706', flexShrink: 0, marginTop: 1 }} />
-              <p className="text-xs leading-relaxed" style={{ color: '#78350f' }}>
-                Once submitted, your answers cannot be changed. Results will be available immediately after submission.
+              <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
+                Once submitted, your answers cannot be changed.<br />
+                Results will be available immediately after submission.
               </p>
+              <div className="flex items-center gap-4 shrink-0">
+                <div className="text-right">
+                  <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Answered</p>
+                  <p className="text-2xl font-bold tabular-nums" style={{ color: '#1E3A8A' }}>{totalAnswered}<span className="text-base font-bold" style={{ color: '#60A5FA' }}>/{totalQuestions}</span></p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Completion</p>
+                  <p className="text-2xl font-bold tabular-nums" style={{ color: percentage === 100 ? '#15803d' : '#b45309' }}>{percentage}%</p>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Right: white summary card */}
-          <div className="w-80 shrink-0 border-l flex flex-col" style={{ background: '#ffffff', borderColor: '#e5e7eb' }}>
-
-            {/* Stat rows */}
-            {[
-              {
-                label: 'SECTIONS',
-                sub: 'all sections attempted',
-                value: <span className="text-xl font-black" style={{ color: '#000' }}>{sectionResults.length} / {SECTION_PROGRESSION.length}</span>,
-              },
-              {
-                label: 'ANSWERED',
-                sub: `${totalQuestions - totalAnswered} questions skipped`,
-                value: <span className="text-xl font-black" style={{ color: '#2557a7' }}>{totalAnswered}/{totalQuestions}</span>,
-              },
-              {
-                label: 'COMPLETION',
-                sub: percentage >= 100 ? 'All questions attempted' : 'Partial attempt recorded',
-                value: <span className="text-xl font-black" style={{ color: percentage === 100 ? '#22c55e' : '#f59e0b' }}>{percentage}%</span>,
-              },
-            ].map(row => (
-              <div
-                key={row.label}
-                className="flex items-center justify-between px-6 py-4"
-                style={{ borderBottom: '1px solid #f3f4f6' }}
-              >
-                <div>
-                  <p className="text-xs font-black tracking-wide mb-0.5" style={{ color: '#2d2d2d', opacity: 0.4 }}>{row.label}</p>
-                  <p className="text-xs" style={{ color: '#2d2d2d', opacity: 0.35 }}>{row.sub}</p>
+          {/* Completed pills — same shape as section intro */}
+          {sectionResults.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-5">
+              {sectionResults.map((r, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
+                  style={{ background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}
+                >
+                  <CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}
                 </div>
-                {row.value}
-              </div>
-            ))}
-
-            <div className="flex-1" />
-
-            {/* Submit button */}
-            <div className="px-5 pt-4 pb-2">
-              <button
-                onClick={finalSubmit}
-                className="w-full font-black py-3.5 rounded-xl text-white text-sm tracking-widest flex items-center justify-center gap-2 transition hover:opacity-90"
-                style={{ background: '#2557a7' }}
-              >
-                <CheckCircle size={15} />
-                SUBMIT FULL TEST
-              </button>
+              ))}
             </div>
+          )}
 
-            {/* Back button */}
-            <div className="px-5 pb-4">
-              <button
-                onClick={() => router.push('/mock-test')}
-                className="w-full py-2.5 rounded-xl border text-xs font-black tracking-widest transition hover:bg-slate-50"
-                style={{ borderColor: '#e5e7eb', color: '#2d2d2d', background: 'transparent' }}
-              >
-                BACK TO TESTS
-              </button>
-            </div>
+          {/* Bottom action row — same shape as section intro */}
+          <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
+            <button
+              onClick={() => router.push('/mock-test')}
+              className="text-sm font-medium hover:underline"
+              style={{ color: '#475569' }}
+            >
+              ← Back to Tests
+            </button>
 
-            {/* Completed section pills */}
-            <div className="px-5 pb-5 border-t pt-4" style={{ borderColor: '#f3f4f6' }}>
-              <p className="text-xs font-black tracking-widest mb-2" style={{ color: 'rgba(0,0,0,0.25)' }}>SECTIONS COMPLETED</p>
-              <div className="flex flex-wrap gap-1.5">
-                {sectionResults.map((r, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black"
-                    style={{ background: '#eef3ff', color: '#2557a7' }}
-                  >
-                    <CheckCircle size={9} /> {r.name}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <button
+              onClick={finalSubmit}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(30,58,138,0.5)]"
+              style={{ background: '#1e3a8a', boxShadow: '0 4px 14px -4px rgba(30,58,138,0.35)' }}
+            >
+              <CheckCircle size={16} />
+              Submit Full Test
+            </button>
           </div>
         </div>
       </div>
@@ -785,10 +858,10 @@ export default function MockTestPage() {
   // ── Submitting ─────────────────────────────────────────────────────────────
   if (phase === 'submitting') {
     return (
-      <div className="w-full min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: '#F4F2EC' }}>
-        <div className="w-12 h-12 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#2557a7', borderTopColor: 'transparent' }} />
-        <p className="font-black text-lg tracking-wide" style={{ color: '#2557a7' }}>SCORING YOUR TEST</p>
-        <p className="text-sm" style={{ color: 'rgba(0,0,0,0.4)' }}>Please wait while we calculate your results</p>
+      <div className="w-full min-h-screen flex flex-col items-center justify-center gap-5" style={{ background: '#ffffff' }}>
+        <div className="w-12 h-12 border-4 rounded-full animate-spin" style={{ borderColor: '#dbeafe', borderTopColor: '#1e3a8a' }} />
+        <p className="font-bold text-xs tracking-widest uppercase" style={{ color: '#1e3a8a' }}>Scoring your test</p>
+        <p className="text-sm" style={{ color: '#9ca3af' }}>Please wait while we calculate your results</p>
       </div>
     );
   }
@@ -797,289 +870,130 @@ export default function MockTestPage() {
 
   // ── Section Intro ──────────────────────────────────────────────────────────
   if (phase === 'section_intro') {
-    const now     = new Date();
-    const dayStr  = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const sName   = currentSection?.section_name ?? 'Section';
-    const qCount  = currentSection?.question_count ?? 10;
-    const minPerQ = currentSection?.duration_minutes && qCount
-      ? Math.round(currentSection.duration_minutes / qCount)
-      : 2;
+    const sName     = currentSection?.section_name ?? 'Section';
+    const qCount    = currentSection?.question_count ?? 10;
+    const dur       = currentSection?.duration_minutes ?? 20;
     const passCount = Math.ceil(qCount * 0.6);
-
-    // Mini bar chart mock data (last 5 scores)
+    const passPct   = Math.round((passCount / qCount) * 100);
 
     return (
-      <div className="w-full min-h-screen flex flex-col" style={{ background: '#F4F2EC' }}>
+      <div className="min-h-screen" style={{ background: '#F8F9FB' }}>
+        <div className="max-w-5xl mx-auto px-6 md:px-10 pt-10 pb-16">
 
-        {/* Dark top bar */}
-        <div className="flex items-center justify-between px-6 py-3 shrink-0" style={{ background: '#111827' }}>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>{testName.toUpperCase()}</span>
-            <span style={{ color: 'rgba(255,255,255,0.2)' }}>·</span>
-            <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>MOCK_TEST</span>
-            <span style={{ color: 'rgba(255,255,255,0.2)' }}>·</span>
-            <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>SESSION {sessionId?.slice(-8).toUpperCase() ?? '—'}</span>
+          {/* Breadcrumb */}
+          <div className="mb-6 text-sm flex items-center gap-2">
+            <span style={{ color: '#64748B' }}>Mock Tests</span>
+            <span style={{ color: '#CBD5E1' }}>›</span>
+            <span className="font-semibold" style={{ color: '#0F172A' }}>{testName} — {sName}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span
-              className="text-xs font-black tracking-widest px-2.5 py-1 rounded"
-              style={{ background: '#374151', color: '#fbbf24' }}
-            >
-              STANDBY
-            </span>
-            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{dayStr} · {timeStr} LOCAL</span>
-          </div>
-        </div>
 
-        {/* Progress strip */}
-        <div
-          className="flex items-center px-6 py-2 border-b shrink-0"
-          style={{ background: '#1f2937', borderColor: '#374151' }}
-        >
-          <span className="text-xs font-black tracking-widest mr-5" style={{ color: 'rgba(255,255,255,0.25)' }}>TEST PROGRESSION</span>
-          <div className="flex items-center flex-1 gap-1">
-            {(sessionSections.length > 0 ? sessionSections.map((s) => ({ name: s.section_name, id: s.section_id })) : SECTION_PROGRESSION.map((s, idx) => ({ name: s.name.charAt(0).toUpperCase() + s.name.slice(1), id: String(idx) }))).map((sec, i, arr) => {
-              const done   = i < currentSectionProgressionIndex;
-              const active = i === currentSectionProgressionIndex;
-              return (
-                <div key={sec.id} className="flex items-center gap-1">
-                  <div
-                    className="flex items-center gap-1.5 px-2 py-1 text-xs font-black rounded"
-                    style={{
-                      background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
-                      color: active ? '#ffffff' : done ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.2)',
-                    }}
-                  >
-                    <span style={{ color: active ? '#2557a7' : done ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.15)', fontWeight: 900 }}>
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span>{sec.name.toUpperCase()}</span>
-                  </div>
-                  {i < arr.length - 1 && (
-                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.12)' }}>·</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <span className="text-xs font-black ml-4" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            {String(currentSectionProgressionIndex + 1).padStart(2, '0')}/{String(Math.max(sessionSections.length, SECTION_PROGRESSION.length)).padStart(2, '0')}
-          </span>
-        </div>
+          {/* Instructions card */}
+          <div
+            className="bg-white rounded-2xl border p-8 md:p-10"
+            style={{
+              borderColor: '#E5E7EB',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -12px rgba(15,23,42,0.06)',
+            }}
+          >
+            <h2 className="text-xl font-bold mb-7" style={{ color: '#0F172A' }}>Instructions:</h2>
 
-        {/* Section notice strip */}
-        <div className="px-6 py-2 shrink-0 border-b" style={{ background: '#F4F2EC', borderColor: '#e5e0d5' }}>
-          <span className="text-xs font-black tracking-widest" style={{ color: '#2d2d2d', opacity: 0.45 }}>
-            ↓ SECTION {currentSectionProgressionIndex + 1} OF {sessionSections.length} — STARTING IN STANDBY
-          </span>
-        </div>
-
-        {/* Main content: three-column flex row */}
-        <div className="flex flex-1 gap-0 overflow-hidden">
-
-            {/* Left: section title + description + tags */}
-            <div className="flex-1 px-10 py-8 flex flex-col">
-              <h1 className="font-black mb-3" style={{ color: '#2557a7', fontSize: 40, letterSpacing: '-2px', lineHeight: 1 }}>
-                {sName}.
-              </h1>
-              <p className="text-sm mb-6 max-w-md leading-relaxed" style={{ color: '#2d2d2d', opacity: 0.6 }}>
-                {sName === 'Arithmetic' && 'Number systems, percentages, profit & loss, time & work, ratios. Calculator-free. Show your work on paper.'}
-                {sName === 'Aptitude'   && 'Data interpretation, averages, permutations, probability. Time-bound. Show your reasoning.'}
-                {sName === 'Reasoning'  && 'Logical sequences, blood relations, directions, coding-decoding. Analytical problem solving.'}
-                {sName === 'Technical'  && 'Computer science fundamentals, programming concepts, algorithms, data structures.'}
-                {!['Arithmetic','Aptitude','Reasoning','Technical'].includes(sName) && `${sName} questions for ${testName}.`}
-              </p>
-
-              {/* Topic tags */}
-              <div className="flex flex-wrap gap-2 mb-6">
-                {getSectionTags(sName).map(tag => (
-                  <span
-                    key={tag}
-                    className="text-xs font-medium px-3 py-1 rounded-full border"
-                    style={{ background: 'transparent', borderColor: '#d1d5db', color: '#2d2d2d' }}
-                  >
-                    {tag.toLowerCase()}
-                  </span>
-                ))}
-              </div>
-
-              {/* Previously completed pills */}
-              {sectionResults.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {sectionResults.map((r, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black"
-                      style={{ background: '#eef3ff', color: '#2557a7' }}
-                    >
-                      <CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Pre-flight warning */}
-              <div
-                className="flex items-start gap-2.5 px-4 py-3 rounded-xl border mt-4"
-                style={{ background: '#fffbeb', borderColor: '#fde68a' }}
-              >
-                <AlertTriangle size={13} style={{ color: '#d97706', flexShrink: 0, marginTop: 1 }} />
-                <p className="text-xs leading-relaxed" style={{ color: '#78350f' }}>
-                  Once you press <span className="font-black">SPACE</span>, the timer starts immediately and cannot be paused. Tab switches will be logged. Right-click is disabled until the section ends.
-                </p>
-              </div>
-
-              {hasNegMarking && (
-                <div
-                  className="flex items-start gap-2.5 px-4 py-3 rounded-xl border mt-2"
-                  style={{ background: '#fef2f2', borderColor: '#fecaca' }}
-                >
-                  <AlertTriangle size={13} style={{ color: '#dc2626', flexShrink: 0, marginTop: 1 }} />
-                  <p className="text-xs leading-relaxed font-black" style={{ color: '#991b1b' }}>
-                    NEGATIVE MARKING ACTIVE — wrong answers deduct 1/3 mark. Skip if unsure.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex-1" />
-            </div>
-
-            {/* Right: white stats card */}
-            <div className="w-96 shrink-0 border-l flex flex-col" style={{ background: '#ffffff', borderColor: '#e5e7eb' }}>
-
-              {/* Stat rows */}
+            <ol className="space-y-5 mb-7">
               {[
+                { label: 'Number of Questions', value: String(qCount) },
+                { label: 'Type of Questions',   value: 'Multiple Choice (MCQ) · 4 options each' },
+                { label: 'Duration',            value: `${dur} mins` },
                 {
-                  label: 'QUESTIONS',
-                  sub: 'MCQ · 4 options each',
-                  value: <span className="text-xl font-black" style={{ color: '#000' }}>{qCount}</span>,
+                  label: 'Marking Scheme',
+                  value: hasNegMarking
+                    ? '1 mark for each correct answer · 1/3 mark deducted for each wrong answer'
+                    : '1 mark for each correct answer · No negative marking',
                 },
-                {
-                  label: 'TIME',
-                  sub: `${minPerQ} minutes per question avg`,
-                  value: <span className="text-xl font-black" style={{ color: '#009980' }}>{String(currentSection?.duration_minutes ?? 0).padStart(2, '0')}:00</span>,
-                },
-                {
-                  label: 'PASS MARK',
-                  sub: `${passCount} of ${qCount} correct to pass`,
-                  value: <span className="text-xl font-black" style={{ color: '#2557a7' }}>60%</span>,
-                },
-                {
-                  label: 'DIFFICULTY',
-                  sub: '3 easy · 5 medium · 2 hard',
-                  value: (
-                    <span className="text-xs font-black px-2.5 py-0.5 rounded-lg" style={{ background: '#fef3c7', color: '#92400e' }}>
-                      MED
-                    </span>
-                  ),
-                },
-              ].map((row) => (
-                <div
-                  key={row.label}
-                  className="flex items-center justify-between px-6 py-4"
-                  style={{ borderBottom: '1px solid #f3f4f6' }}
-                >
-                  <div>
-                    <p className="text-xs font-black tracking-wide mb-0.5" style={{ color: '#2d2d2d', opacity: 0.4 }}>{row.label}</p>
-                    <p className="text-xs" style={{ color: '#2d2d2d', opacity: 0.35 }}>{row.sub}</p>
+                { label: 'Attempts',     value: 'Each section can be attempted once in this session' },
+                { label: 'Cutoff Marks', value: `You need to score a minimum of ${passCount} marks (${passPct}%) to pass` },
+              ].map((item, i) => (
+                <li key={i} className="flex gap-3 text-[15px] leading-relaxed">
+                  <span className="font-semibold tabular-nums shrink-0 w-5" style={{ color: '#475569' }}>{i + 1}.</span>
+                  <div style={{ color: '#2d2d2d' }}>
+                    <span className="font-bold" style={{ color: '#000' }}>{item.label}:</span> {item.value}
                   </div>
-                  {row.value}
+                </li>
+              ))}
+            </ol>
+
+            {/* Highlight box — points/score */}
+            <div
+              className="rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap"
+              style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}
+            >
+              <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
+                Points will be awarded based on your<br />score in MCQ questions
+              </p>
+              <div className="flex items-center gap-2 font-bold shrink-0" style={{ color: '#0F172A' }}>
+                <span>1 Score</span>
+                <span>=</span>
+                <span className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: '#1E3A8A' }}>
+                  <Star size={14} fill="#fff" stroke="#fff" />
+                </span>
+                <span>1 Point</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Previously completed pills */}
+          {sectionResults.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-5">
+              {sectionResults.map((r, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
+                  style={{ background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}
+                >
+                  <CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}
                 </div>
               ))}
-
-              {/* Begin button */}
-              <div className="px-5 pt-4 pb-2">
-                <button
-                  onClick={handleStartSection}
-                  disabled={loadingSection}
-                  className="w-full font-black py-3.5 rounded-xl text-white text-sm tracking-widest flex items-center px-5 transition disabled:opacity-60"
-                  style={{ background: '#2557a7' }}
-                >
-                  {loadingSection ? (
-                    <span className="flex items-center gap-3 mx-auto">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      GENERATING...
-                    </span>
-                  ) : (
-                    <>
-                      <span>▶&nbsp; BEGIN {sName.toUpperCase()}</span>
-                      <span
-                        className="text-xs font-black px-2 py-0.5 rounded ml-auto"
-                        style={{ background: 'rgba(255,255,255,0.18)', letterSpacing: '0.08em' }}
-                      >
-                        SPACE
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Abort button */}
-              <div className="px-5 pb-4">
-                <button
-                  onClick={() => router.push('/mock-test')}
-                  className="w-full py-2.5 rounded-xl border text-xs font-black tracking-widest transition"
-                  style={{ borderColor: '#e5e7eb', color: '#2d2d2d', background: 'transparent' }}
-                >
-                  ABORT TEST — RETURN TO BRIEF
-                </button>
-              </div>
-
-              {sectionResults.length > 0 && (
-                <div className="px-5 pb-4">
-                  <button
-                    onClick={() => setPhase('results_summary')}
-                    className="w-full py-2 rounded-lg border text-xs font-black transition"
-                    style={{ borderColor: '#e5e7eb', color: '#2d2d2d', background: 'transparent' }}
-                  >
-                    SKIP & VIEW RESULTS
-                  </button>
-                </div>
-              )}
             </div>
+          )}
 
-          {/* Right narrow question navigator */}
-        <div
-          className="w-16 shrink-0 flex flex-col border-l overflow-hidden"
-          style={{ background: '#1f2937', borderColor: '#374151' }}
-        >
-          {/* Session label */}
-          <div className="px-2 py-2 border-b" style={{ borderColor: '#374151' }}>
-            <p className="text-center font-black leading-tight" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 8, letterSpacing: '0.05em' }}>
-              SECTION {String(currentSectionProgressionIndex + 1).padStart(2, '0')}
-            </p>
-            <p className="text-center font-black truncate leading-tight mt-0.5" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 8 }}>
-              {sName.slice(0, 5).toUpperCase()}
-            </p>
-          </div>
-          <div className="px-2 pt-2 pb-1 border-b" style={{ borderColor: '#374151' }}>
-            <p className="text-center font-black" style={{ color: 'rgba(255,255,255,0.25)', fontSize: 8, letterSpacing: '0.05em' }}>QUESTION</p>
-          </div>
-          {/* Question squares (placeholders) */}
-          <div className="flex-1 flex flex-col items-center py-2 gap-1.5 overflow-y-auto">
-            {Array.from({ length: qCount }).map((_, i) => (
-              <div
-                key={i}
-                className="w-8 h-8 rounded text-xs font-black flex items-center justify-center shrink-0"
-                style={{ background: '#374151', color: 'rgba(255,255,255,0.35)' }}
+          {/* Bottom action row */}
+          <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
+            <button
+              onClick={() => router.push('/mock-test')}
+              className="text-sm font-medium hover:underline"
+              style={{ color: '#475569' }}
+            >
+              ← Back
+            </button>
+
+            <div className="flex items-center gap-3">
+              {sectionResults.length > 0 && (
+                <button
+                  onClick={() => setPhase('results_summary')}
+                  className="text-sm font-medium px-4 py-2.5 rounded-xl border bg-white"
+                  style={{ borderColor: '#E5E7EB', color: '#2d2d2d' }}
+                >
+                  Skip &amp; View Results
+                </button>
+              )}
+              <button
+                onClick={handleStartSection}
+                disabled={loadingSection}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(30,58,138,0.5)] disabled:opacity-60 disabled:hover:translate-y-0"
+                style={{ background: '#1e3a8a', boxShadow: '0 4px 14px -4px rgba(30,58,138,0.35)' }}
               >
-                {i + 1}
-              </div>
-            ))}
+                {loadingSection ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Starting…
+                  </>
+                ) : (
+                  <>
+                    Start {sName}
+                    <ChevronRight size={16} />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-          {/* Legend */}
-          <div className="px-2 py-2 border-t" style={{ borderColor: '#374151' }}>
-            {[
-              { dot: '#374151', label: 'PRE' },
-            ].map(({ dot, label }) => (
-              <div key={label} className="flex items-center gap-1 mb-1">
-                <div className="w-2 h-2 rounded-sm shrink-0" style={{ background: dot }} />
-                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 8, fontWeight: 700 }}>{qCount} {label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
         </div>
       </div>
     );
@@ -1090,84 +1004,183 @@ export default function MockTestPage() {
   const isTimerCritical = timeRemaining > 0 && timeRemaining <= 60;
 
   return (
-    <div className="w-full min-h-screen flex flex-col" style={{ background: '#F4F2EC' }}>
-      {/* Tab switch warning */}
+    <div className="w-full min-h-screen flex flex-col" style={{ background: '#F8F9FB' }}>
+      {/* Lockdown violation modal — blocks the UI until the user returns to fullscreen */}
       <AnimatePresence>
-        {showTabWarning && (
+        {showTabWarning && phase === 'section_testing' && (
           <motion.div
-            initial={{ opacity: 0, y: -60 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -60 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-100 bg-red-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-6"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)' }}
           >
-            <EyeOff size={16} />
-            <span className="font-semibold text-sm">Tab switch detected ({tabSwitchCount}). This is recorded.</span>
-            <button onClick={() => setShowTabWarning(false)} className="ml-2 text-red-200 hover:text-white font-bold text-lg leading-none">×</button>
+            <div className="bg-white rounded-2xl p-8 max-w-md w-full text-center shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="focus-lost-title">
+              <div className="mx-auto mb-4 w-14 h-14 rounded-full flex items-center justify-center" style={{ background: '#fee2e2' }}>
+                <AlertTriangle size={28} style={{ color: '#dc2626' }} />
+              </div>
+              <h2 id="focus-lost-title" className="text-xl font-bold mb-2" style={{ color: '#000' }}>Focus lost</h2>
+              <p className="text-sm mb-1" style={{ color: '#2d2d2d' }}>
+                Switching tabs, leaving fullscreen, or switching applications during the exam is not allowed.
+              </p>
+              <p className="text-xs font-bold mb-6" style={{ color: '#dc2626' }}>
+                Violation #{tabSwitchCount} — this has been recorded.
+              </p>
+              <button
+                onClick={() => {
+                  setShowTabWarning(false);
+                  if (typeof document !== 'undefined' && !document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                  }
+                }}
+                className="w-full py-3 rounded-xl text-white font-bold text-sm tracking-wide hover:opacity-90 transition"
+                style={{ background: '#1e3a8a' }}
+              >
+                Resume in Fullscreen
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Dark top bar */}
-      <div className="flex items-center gap-3 px-4 py-3 shrink-0" style={{ background: '#111827' }}>
-        {/* Section progress in top bar */}
-        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
-          <span className="text-xs font-semibold shrink-0 mr-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{testName}</span>
-          <span style={{ color: 'rgba(255,255,255,0.2)' }} className="shrink-0">·</span>
-          {sessionSections.map((sec, i) => {
-            const done   = i < currentSectionProgressionIndex;
-            const active = i === currentSectionProgressionIndex;
-            return (
-              <div key={sec.section_id} className="flex items-center shrink-0">
-                <span
-                  className="text-xs font-black px-1"
-                  style={{ color: active ? '#ffffff' : done ? '#34d399' : 'rgba(255,255,255,0.2)' }}
-                >
-                  {active
-                    ? `${sec.section_name.toUpperCase()} ${currentQ + 1}/${questions.length}`
-                    : sec.section_name.split(' ')[0].slice(0, 4).toUpperCase()}
-                </span>
-                {i < sessionSections.length - 1 && (
-                  <span className="text-xs shrink-0" style={{ color: 'rgba(255,255,255,0.15)' }}>→</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Timer */}
-        <div
-          className={`flex items-center gap-2 px-3 py-1.5 rounded shrink-0 ${isTimerCritical ? 'animate-pulse' : ''}`}
-          style={{ background: isTimerCritical ? '#991b1b' : isTimerWarning ? '#78350f' : 'transparent' }}
-        >
-          <span className="text-xs font-semibold" style={{ color: isTimerWarning ? '#fbbf24' : 'rgba(255,255,255,0.4)' }}>
-            TIME LEFT
-          </span>
-          <span
-            className="font-mono font-black text-sm"
-            style={{ color: isTimerCritical ? '#fca5a5' : isTimerWarning ? '#fde68a' : 'rgba(255,255,255,0.85)' }}
+      {/* Exit confirmation modal */}
+      <AnimatePresence>
+        {showExitConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-6"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
           >
-            {formatTime(timeRemaining)}
-          </span>
+            <div className="bg-white rounded-2xl p-7 max-w-md w-full shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="exit-confirm-title">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: '#fef3c7' }}>
+                  <AlertTriangle size={20} style={{ color: '#d97706' }} />
+                </div>
+                <div className="flex-1">
+                  <h2 id="exit-confirm-title" className="text-lg font-bold mb-1" style={{ color: '#000' }}>Exit the test?</h2>
+                  <p className="text-sm" style={{ color: '#2d2d2d' }}>
+                    Your progress in this section will be lost and the session will be closed.
+                    You can start a new test from the dashboard anytime.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-5">
+                <button
+                  onClick={() => setShowExitConfirm(false)}
+                  disabled={exitSubmitting}
+                  className="flex-1 py-2.5 rounded-lg border text-sm font-bold hover:bg-slate-50 transition disabled:opacity-60"
+                  style={{ borderColor: '#d1d5db', color: '#2d2d2d' }}
+                >
+                  STAY IN TEST
+                </button>
+                <button
+                  onClick={handleExitTest}
+                  disabled={exitSubmitting}
+                  className="flex-1 py-2.5 rounded-lg text-white text-sm font-bold transition disabled:opacity-60 hover:opacity-90"
+                  style={{ background: '#dc2626' }}
+                >
+                  {exitSubmitting ? 'EXITING...' : 'EXIT & GO TO DASHBOARD'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* NXT Wave-style practice header */}
+      <div className="bg-white shrink-0">
+        <div className="flex flex-col md:flex-row md:items-stretch md:justify-between gap-3 md:gap-6 px-4 md:px-8 pt-3 md:pt-4 pb-3">
+          {/* Left: back + PRACTICE label + section instructions tab */}
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <button
+              onClick={() => setShowExitConfirm(true)}
+              disabled={sectionSubmitting || exitSubmitting}
+              className="flex items-center gap-2 text-sm font-bold hover:text-blue-900 transition disabled:opacity-40 w-fit"
+              style={{ color: '#1f2937' }}
+              title="Exit test and return to dashboard"
+            >
+              <ChevronLeft size={16} strokeWidth={2.5} />
+              <span className="tracking-wide">PRACTICE {currentSectionProgressionIndex + 1}</span>
+            </button>
+            <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase" style={{ color: '#1e3a8a' }}>
+              <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ background: '#dbeafe', color: '#1e3a8a' }}>i</span>
+              <span className="truncate">{currentSection?.section_name} Instructions</span>
+            </div>
+          </div>
+
+          {/* Center: SCORE badge */}
+          <div className="flex md:flex-col items-center md:justify-center shrink-0 gap-2 md:gap-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: '#6b7280' }}>Score:</span>
+              <span className="text-2xl md:text-3xl font-bold leading-none tabular-nums" style={{ color: '#1e3a8a' }}>{answered}</span>
+            </div>
+          </div>
+
+          {/* Right: counter + timer + END PRACTICE + SUBMIT SECTION */}
+          <div className="flex flex-col md:items-end gap-1.5 shrink-0">
+            <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold tabular-nums ${isTimerCritical ? 'animate-pulse' : ''}`}
+                style={{
+                  background: isTimerCritical ? '#fee2e2' : isTimerWarning ? '#fef3c7' : '#eff6ff',
+                  color: isTimerCritical ? '#991b1b' : isTimerWarning ? '#92400e' : '#1e3a8a',
+                  border: `1px solid ${isTimerCritical ? '#fecaca' : isTimerWarning ? '#fde68a' : '#bfdbfe'}`,
+                }}
+              >
+                <span className="font-mono">{formatTime(timeRemaining)}</span>
+              </div>
+              <span className="text-[11px] font-bold tracking-wider uppercase" style={{ color: '#6b7280' }}>
+                Answered Correctly: <span style={{ color: '#1f2937' }}>{answered}/{questions.length}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowExitConfirm(true)}
+                className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase hover:text-blue-950 transition"
+                style={{ color: '#1e3a8a' }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <circle cx="12" cy="12" r="9" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l6 6m0-6l-6 6" />
+                </svg>
+                End Practice
+              </button>
+              <button
+                onClick={handleSectionSubmit}
+                disabled={sectionSubmitting}
+                className="text-[11px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-md text-white transition disabled:opacity-60 hover:opacity-90"
+                style={{ background: isLastSection ? '#059669' : '#1e3a8a' }}
+                title="Keyboard shortcut: press S"
+                aria-keyshortcuts="s"
+              >
+                {sectionSubmitting ? '...' : isLastSection ? 'Submit Test' : 'Submit Section'}
+                <kbd className="hidden md:inline-block ml-1.5 px-1 py-0 rounded text-[9px] font-bold align-middle" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>S</kbd>
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Submit button */}
-        <button
-          onClick={handleSectionSubmit}
-          disabled={sectionSubmitting}
-          className="shrink-0 font-black text-xs tracking-widest px-4 py-2 rounded transition disabled:opacity-60 text-white"
-          style={{ background: isLastSection ? '#059669' : '#2557a7' }}
-        >
-          {sectionSubmitting ? 'SUBMITTING...' : isLastSection ? 'SUBMIT TEST' : 'SUBMIT SECTION'}
-        </button>
+        {/* Thin purple progress bar */}
+        <div className="h-1" style={{ background: '#f1f5f9' }}>
+          <motion.div
+            className="h-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${((currentQ + 1) / Math.max(questions.length, 1)) * 100}%` }}
+            transition={{ duration: 0.3 }}
+            style={{ background: '#1e3a8a' }}
+          />
+        </div>
       </div>
 
       {/* Three-column body */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Left: dark question palette */}
+        {/* Left: question palette (light, purple accents) — hidden on mobile */}
         <div
-          className="w-14 shrink-0 flex flex-col items-center py-4 gap-1.5 overflow-y-auto"
-          style={{ background: '#1f2937' }}
+          className="hidden md:flex w-14 shrink-0 flex-col items-center py-4 gap-2 overflow-y-auto border-r"
+          style={{ background: '#ffffff', borderColor: '#f3f4f6' }}
         >
           {questions.map((q, i) => {
             const isAns     = q.selected !== null;
@@ -1177,13 +1190,12 @@ export default function MockTestPage() {
               <button
                 key={i}
                 onClick={() => { setCurrentQ(i); setAnswerFeedback(null); }}
-                className="w-8 h-8 rounded text-xs font-black flex items-center justify-center transition shrink-0"
+                className="w-9 h-9 rounded-lg text-xs font-bold flex items-center justify-center transition shrink-0"
                 style={{
-                  background:    isCurrent ? '#2557a7' : isFlagged ? '#f59e0b' : isAns ? '#22c55e' : '#374151',
-                  color:         'white',
-                  outline:       isCurrent ? '2px solid #93b4e0' : 'none',
-                  outlineOffset: '1px',
-                  opacity:       (!isCurrent && !isAns && !isFlagged) ? 0.6 : 1,
+                  background:  isCurrent ? '#1e3a8a' : isFlagged ? '#fef3c7' : isAns ? '#dbeafe' : '#f9fafb',
+                  color:       isCurrent ? '#ffffff' : isFlagged ? '#92400e' : isAns ? '#1e3a8a' : '#9ca3af',
+                  border:      isCurrent ? '2px solid #1e3a8a' : isFlagged ? '1px solid #fde68a' : isAns ? '1px solid #bfdbfe' : '1px solid #f3f4f6',
+                  boxShadow:   isCurrent ? '0 0 0 3px #dbeafe' : 'none',
                 }}
               >
                 {i + 1}
@@ -1192,186 +1204,199 @@ export default function MockTestPage() {
           })}
         </div>
 
-        {/* Center: question area */}
+        {/* Center: question area — NXT Wave style (centered, minimal) */}
         <motion.div
           key={currentQ}
           initial={{ opacity: 0, x: 10 }}
           animate={{ opacity: 1, x: 0 }}
-          className="flex-1 overflow-y-auto p-6"
-          style={{ background: '#F4F2EC' }}
+          className="flex-1 overflow-y-auto"
+          style={{ background: '#ffffff' }}
         >
-          {/* Question header */}
-          <div className="flex items-center gap-3 mb-5 pb-3 border-b" style={{ borderColor: '#d1d5db' }}>
-            <span className="text-xs font-black tracking-widest" style={{ color: '#2d2d2d' }}>
-              QUESTION {String(currentQ + 1).padStart(2, '0')}/{String(questions.length).padStart(2, '0')}
-            </span>
-            <span className="text-xs font-black px-2 py-0.5 rounded text-white" style={{ background: '#374151' }}>
-              {currentSection?.section_name.toUpperCase()}
-            </span>
-            {hasNegMarking && (
-              <span className="text-xs font-black px-2 py-0.5 rounded text-white" style={{ background: '#ef4444' }}>
-                NEG MARK
-              </span>
-            )}
-            {currentQuestion?.markedForReview && (
-              <span className="text-xs font-black px-2 py-0.5 rounded" style={{ background: '#fef3c7', color: '#92400e' }}>
-                ⭐ MARK FOR REVIEW
-              </span>
-            )}
-            {tabSwitchCount > 0 && (
-              <span className="ml-auto flex items-center gap-1 text-xs font-semibold" style={{ color: '#ef4444' }}>
-                <EyeOff size={10} /> {tabSwitchCount} switch
-              </span>
-            )}
-          </div>
+          <div className="max-w-3xl mx-auto px-8 pt-8 pb-6 flex flex-col min-h-full">
+            {/* Tiny meta row */}
+            <div className="flex items-center gap-2 mb-6 text-[11px] font-bold tracking-widest" style={{ color: '#9ca3af' }}>
+              <span>QUESTION {String(currentQ + 1).padStart(2, '0')}/{String(questions.length).padStart(2, '0')}</span>
+              {hasNegMarking && (
+                <span className="px-2 py-0.5 rounded uppercase" style={{ background: '#fee2e2', color: '#991b1b' }}>
+                  Neg Mark
+                </span>
+              )}
+              {currentQuestion?.markedForReview && (
+                <span className="px-2 py-0.5 rounded uppercase" style={{ background: '#fef3c7', color: '#92400e' }}>
+                  ⭐ Marked
+                </span>
+              )}
+              {tabSwitchCount > 0 && (
+                <span className="ml-auto flex items-center gap-1" style={{ color: '#ef4444' }}>
+                  <EyeOff size={10} /> {tabSwitchCount} switch
+                </span>
+              )}
+            </div>
 
-          {/* Question text */}
-          <div className="bg-white rounded-xl p-5 mb-5 border" style={{ borderColor: '#e5e7eb', userSelect: 'none' }}>
-            <p className="text-base font-semibold leading-relaxed" style={{ color: '#000' }}>
-              {currentQuestion?.text}
-            </p>
-          </div>
+            {/* Question text */}
+            <div className="pb-5 mb-5 border-b" style={{ borderColor: '#e5e7eb', userSelect: 'none' }}>
+              <p className="text-base font-semibold leading-relaxed" style={{ color: '#111827' }}>
+                {currentQuestion?.text}
+              </p>
+            </div>
 
-          {/* Options */}
-          <div className="space-y-2.5 mb-6">
-            {currentQuestion?.options.map((option, idx) => {
-              const letter        = String.fromCharCode(65 + idx);
-              const isSelected    = currentQuestion.selected === option;
-              const correctLetter = answerFeedback?.correct_answer?.trim().charAt(0).toUpperCase();
-              const correctIndex  = correctLetter ? correctLetter.charCodeAt(0) - 65 : -1;
-              const isCorrect     = answerFeedback !== null && correctIndex === idx;
-              const isWrong       = answerFeedback !== null && isSelected && !answerFeedback.is_correct;
+            {/* Options (radio circle + text) */}
+            <div className="space-y-3 mb-10">
+              {currentQuestion?.options.map((option, idx) => {
+                const isSelected    = currentQuestion.selected === option;
+                const correctLetter = answerFeedback?.correct_answer?.trim().charAt(0).toUpperCase();
+                const correctIndex  = correctLetter ? correctLetter.charCodeAt(0) - 65 : -1;
+                const isCorrect     = answerFeedback !== null && correctIndex === idx;
+                const isWrong       = answerFeedback !== null && isSelected && !answerFeedback.is_correct;
 
-              let borderColor = '#e5e7eb';
-              let bgColor     = '#ffffff';
-              if (answerFeedback) {
-                if (isCorrect)    { borderColor = '#22c55e'; bgColor = '#f0fdf4'; }
-                else if (isWrong) { borderColor = '#ef4444'; bgColor = '#fef2f2'; }
-              } else if (isSelected) {
-                borderColor = '#2557a7'; bgColor = '#eef3ff';
-              }
+                let textColor = '#1f2937';
+                let dotBorder = '#d1d5db';
+                let dotFill   = 'transparent';
+                if (answerFeedback) {
+                  if (isCorrect)    { textColor = '#15803d'; dotBorder = '#22c55e'; dotFill = '#22c55e'; }
+                  else if (isWrong) { textColor = '#991b1b'; dotBorder = '#ef4444'; dotFill = '#ef4444'; }
+                  else if (isSelected) { dotBorder = '#1e3a8a'; dotFill = '#1e3a8a'; }
+                } else if (isSelected) {
+                  dotBorder = '#1e3a8a'; dotFill = '#1e3a8a';
+                }
 
-              return (
-                <label
-                  key={idx}
-                  className={`flex items-center gap-4 p-4 rounded-xl border-2 transition ${answerSubmitting ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
-                  style={{ borderColor, background: bgColor }}
-                >
-                  <span
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0"
-                    style={{
-                      background: answerFeedback && isCorrect ? '#22c55e' : answerFeedback && isWrong ? '#ef4444' : isSelected ? '#2557a7' : '#f3f4f6',
-                      color: (isSelected || (answerFeedback && (isCorrect || isWrong))) ? 'white' : '#2d2d2d',
-                    }}
+                const isLocked = !!currentQuestion?.locked;
+                const letter = String.fromCharCode(65 + idx);
+                return (
+                  <label
+                    key={idx}
+                    aria-label={`Option ${letter}: ${option}`}
+                    className={`flex items-center gap-3.5 py-2.5 transition ${answerSubmitting || isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}${answerSubmitting ? ' opacity-70' : ''}`}
                   >
-                    {letter}
-                  </span>
-                  <input
-                    type="radio"
-                    name="answer"
-                    value={option}
-                    checked={isSelected}
-                    onChange={() => handleSelectAnswer(option)}
-                    disabled={answerSubmitting || answerFeedback !== null}
-                    className="sr-only"
-                  />
-                  <span className="flex-1 text-sm font-medium" style={{ color: '#2d2d2d' }}>{option}</span>
-                  {answerFeedback && isCorrect && <CheckCircle size={15} style={{ color: '#22c55e', flexShrink: 0 }} />}
-                  {answerFeedback && isWrong   && <span className="font-bold shrink-0" style={{ color: '#ef4444' }}>✗</span>}
-                  {answerSubmitting && isSelected && (
-                    <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin shrink-0" style={{ borderColor: '#2557a7' }} />
-                  )}
-                </label>
-              );
-            })}
-          </div>
+                    <span
+                      className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition"
+                      style={{ borderColor: dotBorder, background: 'transparent' }}
+                      aria-hidden="true"
+                    >
+                      {(isSelected || isCorrect) && (
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: dotFill }} />
+                      )}
+                    </span>
+                    <input
+                      type="radio"
+                      name="answer"
+                      value={option}
+                      checked={isSelected}
+                      onChange={() => handleSelectAnswer(option)}
+                      disabled={answerSubmitting || isLocked}
+                      aria-label={`Option ${letter}: ${option}`}
+                      className="sr-only"
+                    />
+                    <span className="flex-1 text-sm font-medium" style={{ color: textColor }}>{option}</span>
+                    {answerFeedback && isCorrect && <CheckCircle size={15} style={{ color: '#22c55e', flexShrink: 0 }} />}
+                    {answerFeedback && isWrong   && <span className="font-bold shrink-0" style={{ color: '#ef4444' }}>✗</span>}
+                    {answerSubmitting && isSelected && (
+                      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin shrink-0" style={{ borderColor: '#1e3a8a' }} />
+                    )}
+                  </label>
+                );
+              })}
+            </div>
 
-          {/* Action row */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            {/* Centered SHOW ANSWER + SUBMIT row */}
+            <div className="flex items-center justify-center gap-4 mb-6">
               <button
                 onClick={handleMarkForReview}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-black transition"
+                className="px-7 py-2.5 rounded-md text-xs font-bold tracking-widest uppercase transition hover:bg-blue-50"
                 style={{
-                  borderColor: currentQuestion?.markedForReview ? '#f59e0b' : '#e5e7eb',
-                  background:  currentQuestion?.markedForReview ? '#fef3c7' : 'transparent',
-                  color:       currentQuestion?.markedForReview ? '#92400e' : '#2d2d2d',
+                  border: '2px solid #1e3a8a',
+                  color: '#1e3a8a',
+                  background: currentQuestion?.markedForReview ? '#dbeafe' : 'transparent',
                 }}
               >
-                <Flag size={12} /> MARK FOR REVIEW
-              </button>
-              {currentQuestion?.selected && (
-                <button
-                  onClick={handleClearAnswer}
-                  className="px-3 py-2 rounded-lg border text-xs font-black transition"
-                  style={{ borderColor: '#d1d5db', color: '#2d2d2d' }}
-                >
-                  CLEAR
-                </button>
-              )}
-              <button
-                onClick={() => setShowReportModal(true)}
-                className="px-3 py-2 rounded-lg border text-xs font-black transition"
-                style={{ borderColor: '#fca5a5', color: '#ef4444' }}
-              >
-                ⚠ REPORT
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handlePrevious}
-                disabled={currentQ === 0}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black transition disabled:opacity-40"
-                style={{ border: '2px solid #d1d5db', color: '#2d2d2d' }}
-              >
-                <ChevronLeft size={13} /> PREVIOUS
+                {currentQuestion?.markedForReview ? '★ Marked' : 'Show Answer'}
               </button>
               <button
                 onClick={handleNext}
-                disabled={currentQ === questions.length - 1}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black transition disabled:opacity-40 text-white"
-                style={{ background: '#2557a7' }}
+                disabled={!currentQuestion?.selected || currentQ === questions.length - 1}
+                className="px-7 py-2.5 rounded-md text-xs font-bold tracking-widest uppercase text-white transition disabled:opacity-40 hover:opacity-90"
+                style={{ background: '#1e3a8a' }}
               >
-                NEXT <ChevronRight size={13} />
+                Submit
               </button>
+            </div>
+
+            {/* Bottom action row: secondary (clear/report) on left, prev/next on right, SKIP on far right */}
+            <div className="flex items-center justify-between gap-3 mt-auto pt-6 border-t" style={{ borderColor: '#f3f4f6' }}>
+              <div className="flex items-center gap-2">
+                {currentQuestion?.selected && !currentQuestion?.locked && (
+                  <button
+                    onClick={handleClearAnswer}
+                    className="px-3 py-1.5 rounded-md border text-[11px] font-bold tracking-wider uppercase transition"
+                    style={{ borderColor: '#e5e7eb', color: '#6b7280' }}
+                  >
+                    Clear
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowReportModal(true)}
+                  className="px-3 py-1.5 rounded-md border text-[11px] font-bold tracking-wider uppercase transition"
+                  style={{ borderColor: '#fed7aa', color: '#ea580c' }}
+                >
+                  ⚠ Report
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrevious}
+                  disabled={currentQ === 0}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-bold tracking-wider uppercase transition disabled:opacity-40"
+                  style={{ border: '1px solid #e5e7eb', color: '#6b7280' }}
+                >
+                  <ChevronLeft size={12} /> Prev
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={currentQ === questions.length - 1}
+                  className="flex items-center gap-1 px-4 py-1.5 rounded-md text-[11px] font-bold tracking-wider uppercase text-white transition disabled:opacity-40"
+                  style={{ background: '#1e3a8a' }}
+                >
+                  Skip <ChevronRight size={12} />
+                </button>
+              </div>
             </div>
           </div>
         </motion.div>
 
-        {/* Right: feedback panel */}
+        {/* Right: feedback panel — light, purple accents — hidden until lg */}
         <div
-          className="w-72 shrink-0 flex flex-col overflow-y-auto border-l"
-          style={{ background: '#ffffff', borderColor: '#e5e7eb' }}
+          className="hidden lg:flex w-72 shrink-0 flex-col overflow-y-auto border-l"
+          style={{ background: '#fafafa', borderColor: '#f3f4f6' }}
         >
           <AnimatePresence mode="wait">
             {answerFeedback ? (
               <motion.div key="feedback" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex-1 flex flex-col">
                 <div
                   className="flex items-center gap-2 px-4 py-3"
-                  style={{ background: answerFeedback.is_correct ? '#22c55e' : '#ef4444' }}
+                  style={{ background: answerFeedback.is_correct ? '#dcfce7' : '#fee2e2', borderBottom: `1px solid ${answerFeedback.is_correct ? '#bbf7d0' : '#fecaca'}` }}
                 >
                   {answerFeedback.is_correct
-                    ? <CheckCircle size={15} className="text-white" />
-                    : <span className="text-white font-black text-base leading-none">✗</span>
+                    ? <CheckCircle size={15} style={{ color: '#15803d' }} />
+                    : <span className="font-bold text-base leading-none" style={{ color: '#991b1b' }}>✗</span>
                   }
-                  <span className="text-white font-black text-xs tracking-widest">
+                  <span className="font-bold text-xs tracking-widest" style={{ color: answerFeedback.is_correct ? '#15803d' : '#991b1b' }}>
                     {answerFeedback.is_correct ? 'CORRECT' : 'INCORRECT'}
                   </span>
                   {!answerFeedback.is_correct && answerFeedback.correct_answer && (
-                    <span className="ml-auto text-white text-xs opacity-80">{answerFeedback.correct_answer}</span>
+                    <span className="ml-auto text-xs font-semibold" style={{ color: '#7f1d1d' }}>{answerFeedback.correct_answer}</span>
                   )}
                 </div>
 
                 <div className="p-4 space-y-4 flex-1">
                   {answerFeedback.solution_steps && answerFeedback.solution_steps.length > 0 && (
                     <div>
-                      <p className="text-xs font-black tracking-widest mb-2" style={{ color: '#2d2d2d', opacity: 0.45 }}>SOLUTION PATH</p>
+                      <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#9ca3af' }}>SOLUTION PATH</p>
                       <ol className="space-y-2">
                         {answerFeedback.solution_steps.map((step, i) => (
-                          <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#2d2d2d' }}>
+                          <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#1f2937' }}>
                             <span
-                              className="w-4 h-4 rounded flex items-center justify-center text-xs font-black shrink-0 mt-0.5"
-                              style={{ background: '#f3f4f6', color: '#2d2d2d' }}
+                              className="w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
+                              style={{ background: '#dbeafe', color: '#1e3a8a' }}
                             >{i + 1}</span>
                             {step}
                           </li>
@@ -1381,75 +1406,80 @@ export default function MockTestPage() {
                   )}
                   {answerFeedback.explanation && (
                     <div>
-                      <p className="text-xs font-black tracking-widest mb-1" style={{ color: '#2d2d2d', opacity: 0.45 }}>EXPLANATION</p>
-                      <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: '#2d2d2d' }}>
+                      <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#9ca3af' }}>EXPLANATION</p>
+                      <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: '#1f2937' }}>
                         {answerFeedback.explanation}
                       </p>
                     </div>
                   )}
                   {answerFeedback.feedback && (
-                    <div className="p-3 rounded-xl" style={{ background: '#f8faff' }}>
-                      <p className="text-xs font-black tracking-widest mb-1" style={{ color: '#2d2d2d', opacity: 0.45 }}>AI PATTERN</p>
-                      <p className="text-xs leading-relaxed" style={{ color: '#2d2d2d' }}>{answerFeedback.feedback}</p>
+                    <div className="p-3 rounded-xl" style={{ background: '#eff6ff', border: '1px solid #dbeafe' }}>
+                      <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#1e3a8a' }}>AI PATTERN</p>
+                      <p className="text-xs leading-relaxed" style={{ color: '#1f2937' }}>{answerFeedback.feedback}</p>
                     </div>
                   )}
                 </div>
               </motion.div>
             ) : (
               <motion.div key="placeholder" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4">
-                <p className="text-xs font-black tracking-widest mb-1" style={{ color: '#2d2d2d', opacity: 0.45 }}>ANSWER</p>
-                <p className="text-xs" style={{ color: '#2d2d2d', opacity: 0.4 }}>Select an option to see feedback</p>
+                <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#9ca3af' }}>ANSWER</p>
+                <p className="text-xs" style={{ color: '#9ca3af' }}>Select an option to see feedback</p>
               </motion.div>
             )}
           </AnimatePresence>
 
           {/* Section stats */}
           <div className="p-4 border-t shrink-0" style={{ borderColor: '#f3f4f6' }}>
-            <p className="text-xs font-black tracking-widest mb-3" style={{ color: '#2d2d2d', opacity: 0.45 }}>THIS SECTION</p>
+            <p className="text-[10px] font-bold tracking-widest mb-3" style={{ color: '#9ca3af' }}>THIS SECTION</p>
             <div className="grid grid-cols-3 gap-2">
-              <div className="text-center p-2 rounded-xl" style={{ background: '#f0fdf4' }}>
-                <div className="text-lg font-black" style={{ color: '#22c55e' }}>{answered}</div>
-                <div className="text-xs font-semibold" style={{ color: '#86efac' }}>DONE</div>
+              <div className="text-center p-2.5 rounded-xl" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <div className="text-lg font-bold" style={{ color: '#15803d' }}>{answered}</div>
+                <div className="text-[10px] font-bold tracking-wider uppercase" style={{ color: '#22c55e' }}>Done</div>
               </div>
-              <div className="text-center p-2 rounded-xl" style={{ background: '#f9fafb' }}>
-                <div className="text-lg font-black" style={{ color: '#2d2d2d' }}>{notAnswered}</div>
-                <div className="text-xs font-semibold" style={{ color: '#2d2d2d', opacity: 0.4 }}>LEFT</div>
+              <div className="text-center p-2.5 rounded-xl" style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+                <div className="text-lg font-bold" style={{ color: '#1e3a8a' }}>{notAnswered}</div>
+                <div className="text-[10px] font-bold tracking-wider uppercase" style={{ color: '#60a5fa' }}>Left</div>
               </div>
-              <div className="text-center p-2 rounded-xl" style={{ background: '#fffbeb' }}>
-                <div className="text-lg font-black" style={{ color: '#f59e0b' }}>{flagged}</div>
-                <div className="text-xs font-semibold" style={{ color: '#fcd34d' }}>FLAG</div>
+              <div className="text-center p-2.5 rounded-xl" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+                <div className="text-lg font-bold" style={{ color: '#b45309' }}>{flagged}</div>
+                <div className="text-[10px] font-bold tracking-wider uppercase" style={{ color: '#f59e0b' }}>Flag</div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Bottom status bar */}
+      {/* Bottom: SKIP-with-timer hint + status */}
       <div
-        className="flex items-center gap-3 px-4 py-2 border-t shrink-0 text-xs"
-        style={{ background: '#1f2937', borderColor: '#374151' }}
+        className="flex items-center justify-between gap-3 px-6 py-2.5 border-t shrink-0 text-[11px]"
+        style={{ background: '#ffffff', borderColor: '#f3f4f6' }}
       >
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
-          <span style={{ color: 'rgba(255,255,255,0.5)' }}>NETWORK</span>
-          <span style={{ color: '#22c55e' }}>OK</span>
+        <div className="flex items-center gap-3" style={{ color: '#9ca3af' }}>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} aria-hidden="true" />
+            <CheckCircle size={10} style={{ color: '#22c55e' }} aria-hidden="true" />
+            <span className="font-semibold tracking-wider uppercase">Network OK</span>
+          </span>
+          <span style={{ color: '#d1d5db' }}>·</span>
+          <span className="font-semibold tracking-wider uppercase">Autosave</span>
+          <span style={{ color: '#d1d5db' }}>·</span>
+          <span className="font-semibold tracking-wider uppercase">
+            {String(currentQ + 1).padStart(2, '0')}/{String(questions.length).padStart(2, '0')}
+          </span>
+          <span style={{ color: '#d1d5db' }}>·</span>
+          <span className="font-semibold tracking-wider uppercase" style={{ color: '#15803d' }}>{answered} Answered</span>
+          <span style={{ color: '#d1d5db' }}>·</span>
+          <span className="font-semibold tracking-wider uppercase">{notAnswered} Remaining</span>
+          {flagged > 0 && (
+            <>
+              <span style={{ color: '#d1d5db' }}>·</span>
+              <span className="font-semibold tracking-wider uppercase" style={{ color: '#b45309' }}>{flagged} Marked</span>
+            </>
+          )}
         </div>
-        <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
-        <span style={{ color: 'rgba(255,255,255,0.5)' }}>AUTOSAVE</span>
-        <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
-        <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-          {String(currentQ + 1).padStart(2, '0')}/{String(questions.length).padStart(2, '0')}
-        </span>
-        <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
-        <span style={{ color: '#22c55e' }}>{answered} ANSWERED</span>
-        <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
-        <span style={{ color: 'rgba(255,255,255,0.5)' }}>{notAnswered} REMAINING</span>
-        {flagged > 0 && (
-          <>
-            <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
-            <span style={{ color: '#f59e0b' }}>{flagged} MARK FOR REVIEW</span>
-          </>
-        )}
+        <div className="text-[10px] font-medium" style={{ color: '#60a5fa' }}>
+          You can skip this question anytime — your selection is auto-saved.
+        </div>
       </div>
 
       {/* Report issue modal */}
@@ -1459,8 +1489,11 @@ export default function MockTestPage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="report-issue-title"
           >
-            <h2 className="text-base font-black mb-1" style={{ color: '#000' }}>Report an Issue</h2>
+            <h2 id="report-issue-title" className="text-base font-bold mb-1" style={{ color: '#000' }}>Report an Issue</h2>
             <p className="text-xs mb-4" style={{ color: '#2d2d2d', opacity: 0.6 }}>Question {currentQ + 1} — describe the problem</p>
             <textarea
               value={reportReason}
@@ -1481,7 +1514,7 @@ export default function MockTestPage() {
               <button
                 onClick={handleReportIssue}
                 disabled={!reportReason.trim() || reportSubmitting}
-                className="flex-1 py-2 rounded-lg text-sm font-black text-white transition disabled:opacity-50"
+                className="flex-1 py-2 rounded-lg text-sm font-bold text-white transition disabled:opacity-50"
                 style={{ background: '#ef4444' }}
               >
                 {reportSubmitting ? 'Submitting...' : 'Submit Report'}

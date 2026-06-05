@@ -16,6 +16,11 @@ const sections = [
   { name: 'Describe Situation',  count: 1, description: 'Open-ended situational response',        type: 'VOICE' },
 ];
 
+// Only assessments that actually contain a recording (VOICE) section need the
+// microphone/camera. Without this gate the start flow prompted for media on
+// every assessment, even MCQ-only ones.
+const needsRecording = sections.some((s) => s.type === 'VOICE');
+
 export default function SectionsPage() {
   const router = useRouter();
   const [isRequesting, setIsRequesting] = useState(false);
@@ -49,13 +54,16 @@ export default function SectionsPage() {
       const testId = localStorage.getItem('test_id');
       if (!testId) throw new Error('Test ID not found. Please start from the beginning.');
 
-      await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      // Only request mic/camera when the assessment has a recording section.
+      if (needsRecording) {
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
 
-      if (videoRef.current && videoRef.current.srcObject) {
-        (videoRef.current.srcObject as MediaStream)?.getTracks().forEach((t) => t.stop());
+        if (videoRef.current && videoRef.current.srcObject) {
+          (videoRef.current.srcObject as MediaStream)?.getTracks().forEach((t) => t.stop());
+        }
+
+        await startCameraPreview();
       }
-
-      await startCameraPreview();
 
       const response = await startSession({ test_id: testId });
       logger.info('Session started successfully:', response);
@@ -90,17 +98,19 @@ export default function SectionsPage() {
       localStorage.setItem('test_start_date', startDate);
       window.dispatchEvent(new CustomEvent('assessment-timer-start', { detail: startDate }));
 
-      try {
-        await startRecording();
-        logger.info('✅ Video recording started');
-        // Stop the preview stream — the recording context owns its own stream from here on.
-        // Without this, the preview stream keeps the camera LED on even after stopRecording() is called.
-        if (videoRef.current && videoRef.current.srcObject) {
-          (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-          videoRef.current.srcObject = null;
+      if (needsRecording) {
+        try {
+          await startRecording();
+          logger.info('✅ Video recording started');
+          // Stop the preview stream — the recording context owns its own stream from here on.
+          // Without this, the preview stream keeps the camera LED on even after stopRecording() is called.
+          if (videoRef.current && videoRef.current.srcObject) {
+            (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+            videoRef.current.srcObject = null;
+          }
+        } catch (recordingError) {
+          logger.error('Failed to start video recording:', recordingError);
         }
-      } catch (recordingError) {
-        logger.error('Failed to start video recording:', recordingError);
       }
 
       try {
@@ -209,8 +219,8 @@ export default function SectionsPage() {
             </div>
             <div className="grid grid-cols-2">
               {[
-                { label: 'Microphone', note: 'Required for all voice sections',       required: true  },
-                { label: 'Camera',     note: 'Required for video proctoring',         required: true  },
+                { label: 'Microphone', note: 'Required for all voice sections',       required: needsRecording },
+                { label: 'Camera',     note: 'Required for video proctoring',         required: needsRecording },
                 { label: 'Quiet Room', note: 'Minimise background noise',             required: false },
                 { label: 'Headphones', note: 'Recommended for listening tasks',       required: false },
               ].map((req, i) => (

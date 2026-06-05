@@ -10,7 +10,11 @@ const montserrat = Montserrat({
   weight: ['400', '500', '700', '900'],
 });
 
-const NO_SIDEBAR_ROUTES = ['results'];
+// Whitelist of "browse / configure" routes that get the sidebar.
+// Everything else — the test runner ('/mock-test/<companyId>',
+// '/mock-test/custom-test') and the results page — hides the sidebar so the
+// user owns the full canvas while testing.
+const ROUTES_WITH_SIDEBAR = ['', 'company', 'custom', 'history', 'leaderboard', 'weak-areas'];
 
 export default function MockTestLayout({
   children,
@@ -19,10 +23,10 @@ export default function MockTestLayout({
 }) {
   const pathname = usePathname();
   const segment = pathname.replace('/mock-test', '').replace(/^\//, '').split('/')[0];
-  const showSidebar = !NO_SIDEBAR_ROUTES.includes(segment);
+  const showSidebar = ROUTES_WITH_SIDEBAR.includes(segment);
 
   return (
-    <div className={`${montserrat.variable} antialiased font-montserrat min-h-screen`} style={{ background: '#F4F2EC' }}>
+    <div data-mock-test className={`${montserrat.variable} antialiased font-montserrat min-h-screen`} style={{ background: '#F4F2EC' }}>
       {showSidebar && <MockTestSidebar />}
       <main className={showSidebar ? 'pl-52' : ''}>
         {children}

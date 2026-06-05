@@ -2,9 +2,11 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, ChevronDown, Eye, RotateCcw, MoreVertical, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, Eye, RotateCcw, MoreVertical, TrendingUp, TrendingDown, Minus, History as HistoryIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getMockTestHistory, getProgressAnalytics, HistoryRecord, ProgressAnalytics } from '@/api/mockTestApi';
+import LoadingScreen from '../_components/LoadingScreen';
+import HighlightBox from '../_components/HighlightBox';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 
 interface TestHistory {
@@ -52,10 +54,10 @@ const mapRecord = (r: HistoryRecord, i: number): TestHistory => {
 
 const gradeConfig = (grade: TestHistory['grade']) => {
   switch (grade) {
-    case 'Excellent':        return { bg: '#7c3aed', text: '#fff',    label: 'A' };
-    case 'Good':             return { bg: '#16a34a', text: '#fff',    label: 'B' };
-    case 'Average':          return { bg: '#d97706', text: '#fff',    label: 'C' };
-    default:                 return { bg: '#dc2626', text: '#fff',    label: 'D' };
+    case 'Excellent':        return { bg: '#dcfce7', text: '#15803d', label: 'A', dot: '#22c55e' };
+    case 'Good':             return { bg: '#dbeafe', text: '#1e3a8a', label: 'B', dot: '#3b82f6' };
+    case 'Average':          return { bg: '#fef3c7', text: '#92400e', label: 'C', dot: '#f59e0b' };
+    default:                 return { bg: '#fee2e2', text: '#991b1b', label: 'D', dot: '#ef4444' };
   }
 };
 
@@ -81,7 +83,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
       <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-sm">
         <p className="font-bold text-slate-900 mb-1">{payload[0].payload.testName}</p>
         <p className="text-slate-500">{label}</p>
-        <p className="font-bold mt-1" style={{ color: '#2557a7' }}>{payload[0].value}% score</p>
+        <p className="font-bold mt-1" style={{ color: '#1e3a8a' }}>{payload[0].value}% score</p>
         <p className="text-slate-500 text-xs">{payload[0].payload.grade}</p>
       </div>
     );
@@ -98,7 +100,7 @@ export default function MockTestHistoryPage() {
   const [historyData, setHistoryData] = useState<TestHistory[]>([]);
   const [progress, setProgress] = useState<ProgressAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const menuRef = useRef<HTMLTableCellElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -179,109 +181,122 @@ export default function MockTestHistoryPage() {
 
   const trendIcon = () => {
     if (!progress) return null;
-    if (progress.improvement_trend === 'improving') return <TrendingUp size={14} className="text-green-400" />;
-    if (progress.improvement_trend === 'declining') return <TrendingDown size={14} className="text-red-400" />;
-    return <Minus size={14} className="text-slate-400" />;
+    if (progress.improvement_trend === 'improving') return <TrendingUp size={12} style={{ color: '#15803d' }} />;
+    if (progress.improvement_trend === 'declining') return <TrendingDown size={12} style={{ color: '#dc2626' }} />;
+    return <Minus size={12} style={{ color: '#64748B' }} />;
+  };
+
+  const trendLabel = () => {
+    if (!progress) return '—';
+    if (progress.improvement_trend === 'improving') return 'Improving';
+    if (progress.improvement_trend === 'declining') return 'Declining';
+    return 'Stable';
   };
 
   const trendColor = () => {
-    if (!progress) return 'text-slate-300';
-    if (progress.improvement_trend === 'improving') return 'text-green-400';
-    if (progress.improvement_trend === 'declining') return 'text-red-400';
-    return 'text-slate-400';
+    if (!progress) return '#94A3B8';
+    if (progress.improvement_trend === 'improving') return '#15803d';
+    if (progress.improvement_trend === 'declining') return '#dc2626';
+    return '#475569';
   };
 
+  if (loading && historyData.length === 0) return <LoadingScreen label="Loading history" />;
+
   return (
-    <div className="w-full min-h-screen" style={{ background: '#F4F2EC' }}>
+    <div className="min-h-screen" style={{ background: '#F8F9FB' }}>
+      <div className="max-w-5xl mx-auto px-6 md:px-10 pt-10 pb-16">
 
-      {/* Dark top bar */}
-      <div style={{ background: '#111827' }} className="px-8 py-0">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 pt-4 pb-1">
-          <button
-            onClick={() => router.push('/mock-test')}
-            className="text-xs font-black tracking-widest uppercase text-slate-400 hover:text-white transition"
-          >
-            MOCK TESTS
-          </button>
-          <span className="text-slate-600 text-xs">/</span>
-          <span className="text-xs font-black tracking-widest uppercase text-white">HISTORY</span>
+        {/* Breadcrumb — same shape as section intro */}
+        <div className="mb-6 text-sm flex items-center gap-2">
+          <button onClick={() => router.push('/mock-test')} style={{ color: '#64748B' }} className="hover:underline">Mock Tests</button>
+          <span style={{ color: '#CBD5E1' }}>›</span>
+          <span className="font-semibold" style={{ color: '#0F172A' }}>History</span>
         </div>
 
-        {/* Title row */}
-        <div className="flex items-end justify-between py-5">
-          <div>
-            <h1 className="text-2xl font-black text-white tracking-tight">Test History</h1>
-            <p className="text-slate-400 text-sm mt-1">Track your performance over time and monitor your growth</p>
+        {/* Main card — section-intro DNA */}
+        <div
+          className="bg-white rounded-2xl border p-8 md:p-10"
+          style={{
+            borderColor: '#E5E7EB',
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -12px rgba(15,23,42,0.06)',
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-start gap-4 mb-7">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border"
+              style={{ borderColor: '#E5E7EB', background: '#F8FAFC' }}>
+              <HistoryIcon size={22} style={{ color: '#1e3a8a' }} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight mb-1.5" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
+                Test History
+              </h2>
+              <p className="text-sm max-w-xl leading-relaxed" style={{ color: '#64748B' }}>
+                Track your performance over time and monitor your growth across every attempt.
+              </p>
+            </div>
           </div>
-          {progress && (
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-black tracking-widest uppercase text-slate-400">Overall Grade</span>
-              <span
-                className="text-sm font-black px-4 py-1.5 rounded-full"
-                style={{ background: '#2557a7', color: '#fff' }}
-              >
-                {progress.overall_grade ?? 'B'}
-              </span>
+
+          <HighlightBox>
+            <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
+              {progress?.total_tests
+                ? <>You&apos;ve completed{' '}
+                    <span className="font-bold" style={{ color: '#1e3a8a' }}>{progress.total_tests}</span>{' '}
+                    {progress.total_tests === 1 ? 'test' : 'tests'} so far · Overall grade{' '}
+                    <span className="font-bold" style={{ color: '#0F172A' }}>{progress.overall_grade ?? '—'}</span>
+                  </>
+                : 'Take your first test to start tracking your growth.'}
+            </p>
+            <div className="flex items-center gap-4 shrink-0">
+              <div className="text-right">
+                <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Tests</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: '#0F172A' }}>{progress?.total_tests ?? 0}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Avg</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: '#1e3a8a' }}>
+                  {progress?.average_score != null ? Math.round(progress.average_score) : '—'}
+                  <span className="text-base font-bold" style={{ color: '#60a5fa' }}>%</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Best</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: '#0F172A' }}>
+                  {progress?.best_score != null ? Math.round(progress.best_score) : '—'}
+                  <span className="text-base font-bold" style={{ color: '#94A3B8' }}>%</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Trend</p>
+                <p className="text-sm font-bold flex items-center gap-1 justify-end" style={{ color: trendColor() }}>
+                  {trendIcon()} {trendLabel()}
+                </p>
+              </div>
             </div>
-          )}
+          </HighlightBox>
         </div>
 
-        {/* Stats strip */}
-        <div className="flex items-center gap-8 py-3 border-t border-white/10">
-          {progress ? (
-            <>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black tracking-widest uppercase text-slate-500">TESTS TAKEN</span>
-                <span className="text-sm font-black text-white">{progress.total_tests}</span>
-              </div>
-              <div className="w-px h-4 bg-white/10" />
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black tracking-widest uppercase text-slate-500">AVG SCORE</span>
-                <span className="text-sm font-black text-white">{progress.average_score}%</span>
-              </div>
-              <div className="w-px h-4 bg-white/10" />
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black tracking-widest uppercase text-slate-500">BEST</span>
-                <span className="text-sm font-black text-white">{progress.best_score}%</span>
-              </div>
-              <div className="w-px h-4 bg-white/10" />
-              <div className={`flex items-center gap-1.5 text-sm font-black ${trendColor()}`}>
-                {trendIcon()}
-                {progress.improvement_trend === 'improving' ? 'Improving' : progress.improvement_trend === 'declining' ? 'Declining' : 'Stable'}
-              </div>
-            </>
-          ) : (
-            <div className="h-4 w-64 bg-white/10 rounded animate-pulse" />
-          )}
-        </div>
-      </div>
-
-      {/* Page content */}
-      <div className="px-8 py-6">
-
-        {/* Score Progress Chart */}
+        {/* Score Progress Chart — secondary card */}
         {showChart && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl p-6 mb-5 shadow-sm"
+          <div
+            className="mt-5 bg-white rounded-2xl border overflow-hidden p-6 md:p-8"
+            style={{ borderColor: '#E5E7EB', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
           >
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-baseline justify-between mb-5 flex-wrap gap-2">
               <div>
-                <h2 className="text-base font-black text-slate-900 tracking-tight">Score Progress</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Accuracy trend across {chartData.length} tests</p>
+                <h3 className="text-base font-bold" style={{ color: '#0F172A' }}>Score progress</h3>
+                <p className="text-xs mt-0.5" style={{ color: '#64748B' }}>Accuracy trend across {chartData.length} tests</p>
               </div>
-              <div className="flex items-center gap-5 text-xs text-slate-400">
+              <div className="flex items-center gap-4 text-[11px] font-semibold" style={{ color: '#94A3B8' }}>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-5 h-0.5 rounded inline-block" style={{ background: '#2557a7' }} /> Score
+                  <span className="w-4 h-0.5 rounded inline-block" style={{ background: '#1e3a8a' }} /> Score
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-5 border-t border-dashed border-slate-400 inline-block" /> Avg ({averageScore}%)
+                  <span className="w-4 border-t border-dashed inline-block" style={{ borderColor: '#94A3B8' }} /> Avg ({averageScore}%)
                 </span>
               </div>
             </div>
-            <div className="h-52">
+            <div className="h-40 md:h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 4, right: 20, left: 0, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -307,174 +322,170 @@ export default function MockTestHistoryPage() {
                   <Line
                     type="monotone"
                     dataKey="score"
-                    stroke="#2557a7"
+                    stroke="#1e3a8a"
                     strokeWidth={2.5}
-                    dot={{ fill: '#2557a7', r: 4, strokeWidth: 2, stroke: '#fff' }}
-                    activeDot={{ r: 6, fill: '#1a3d73' }}
+                    dot={{ fill: '#1e3a8a', r: 4, strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, fill: '#172554' }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-          </motion.div>
+          </div>
         )}
 
-        {/* Search & Filter */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: showChart ? 0.1 : 0 }}
-          className="bg-white rounded-2xl p-5 mb-4 shadow-sm"
+        {/* All tests list — secondary card */}
+        <div
+          className="mt-5 bg-white rounded-2xl border overflow-hidden p-6 md:p-8"
+          style={{ borderColor: '#E5E7EB', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
         >
-          <div className="flex gap-4 mb-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-3 text-slate-400" size={16} />
-              <input
-                type="text"
-                placeholder="Search by test name or company..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full pl-11 pr-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 text-sm"
-                style={{ '--tw-ring-color': '#2557a7' } as React.CSSProperties}
-              />
+          <div className="flex items-baseline justify-between mb-5 flex-wrap gap-2">
+            <div>
+              <h3 className="text-base font-bold" style={{ color: '#0F172A' }}>All attempts</h3>
+              <p className="text-xs mt-0.5" style={{ color: '#64748B' }}>
+                Showing <span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{filtered.length}</span> of{' '}
+                <span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{historyData.length}</span>
+              </p>
             </div>
             <button
               onClick={() => setSortLatest(p => !p)}
-              className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition hover:bg-slate-50"
+              style={{ border: '1px solid #E5E7EB', color: '#475569' }}
             >
-              <ChevronDown size={14} className={`transition-transform ${sortLatest ? '' : 'rotate-180'}`} />
-              {sortLatest ? 'Latest First' : 'Oldest First'}
+              <ChevronDown size={12} className={`transition-transform ${sortLatest ? '' : 'rotate-180'}`} />
+              {sortLatest ? 'Latest first' : 'Oldest first'}
             </button>
           </div>
 
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black tracking-widest uppercase text-slate-400 mr-1">Filter</span>
-              {filterOptions.map(opt => {
-                const isActive = filter === opt;
-                const optColor =
-                  opt === 'Excellent' ? '#7c3aed'
-                  : opt === 'Good' ? '#16a34a'
-                  : opt === 'Average' ? '#d97706'
-                  : opt === 'Needs Improvement' ? '#dc2626'
-                  : '#2557a7';
-                return (
-                  <button
-                    key={opt}
-                    onClick={() => setFilter(opt)}
-                    className="px-3 py-1 rounded-full text-xs font-black border transition"
-                    style={isActive
-                      ? { background: optColor, color: '#fff', borderColor: optColor }
-                      : { background: 'transparent', color: optColor, borderColor: optColor + '55' }
-                    }
-                  >
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
-            <span className="text-xs text-slate-500">
-              Showing <span className="font-black text-slate-900">{filtered.length}</span> of <span className="font-black text-slate-900">{historyData.length}</span>
-            </span>
+          {/* Search */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3.5 top-3 pointer-events-none" size={15} style={{ color: '#94A3B8' }} />
+            <input
+              type="text"
+              placeholder="Search by test name or company…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2"
+              style={{ border: '1px solid #E5E7EB', color: '#0F172A', ['--tw-ring-color' as string]: '#1e3a8a' } as React.CSSProperties}
+            />
           </div>
-        </motion.div>
 
-        {/* Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: showChart ? 0.2 : 0.1 }}
-          className="bg-white rounded-2xl shadow-sm overflow-hidden"
-        >
-          <table className="w-full">
-            <thead>
-              <tr style={{ background: '#111827' }}>
-                <th className="px-6 py-4 text-left text-xs font-black tracking-widest uppercase text-slate-400">Test Name</th>
-                <th className="px-6 py-4 text-left text-xs font-black tracking-widest uppercase text-slate-400">Accuracy</th>
-                <th className="px-6 py-4 text-left text-xs font-black tracking-widest uppercase text-slate-400">Questions</th>
-                <th className="px-6 py-4 text-left text-xs font-black tracking-widest uppercase text-slate-400">Grade</th>
-                <th className="px-6 py-4 text-left text-xs font-black tracking-widest uppercase text-slate-400">Date &amp; Time</th>
-                <th className="px-6 py-4 text-left text-xs font-black tracking-widest uppercase text-slate-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
-                    <div className="flex justify-center mb-3">
-                      <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: '#2557a7', borderTopColor: 'transparent' }} />
-                    </div>
-                    <p className="text-slate-500 text-sm">Loading test history...</p>
-                  </td>
-                </tr>
-              ) : filtered.map((test, i) => {
+          {/* Filter chips */}
+          <div className="flex items-center gap-2 flex-wrap mb-5">
+            <span className="text-[10px] font-bold tracking-widest uppercase mr-1" style={{ color: '#94A3B8' }}>Filter</span>
+            {filterOptions.map(opt => {
+              const isActive = filter === opt;
+              return (
+                <button
+                  key={opt}
+                  onClick={() => setFilter(opt)}
+                  className="px-3 py-1 rounded-full text-xs font-semibold transition"
+                  style={isActive
+                    ? { background: '#1e3a8a', color: '#fff', border: '1px solid #1e3a8a' }
+                    : { background: 'transparent', color: '#475569', border: '1px solid #E5E7EB' }
+                  }
+                >
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Numbered <ol> — mirrors section intro instructions list */}
+          {filtered.length === 0 ? (
+            <div className="rounded-xl px-5 py-8 text-center" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+              <p className="text-sm" style={{ color: '#475569' }}>
+                {historyData.length === 0
+                  ? 'No test history yet — take a test to see your progress.'
+                  : 'No tests match your search or filter.'}
+              </p>
+            </div>
+          ) : (
+            <ol className="space-y-2.5">
+              {filtered.map((test, i) => {
                 const cfg = gradeConfig(test.grade);
+                const accColor = test.accuracy >= 70 ? '#15803d' : test.accuracy >= 50 ? '#b45309' : '#dc2626';
+                const menuKey = test.id + i;
                 return (
-                  <tr key={`${test.id}-${i}`} className="border-t border-slate-100 hover:bg-slate-50 transition">
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">{test.testName}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${test.accuracy}%`, background: test.accuracy >= 70 ? '#16a34a' : test.accuracy >= 50 ? '#d97706' : '#dc2626' }}
-                          />
-                        </div>
-                        <span className="text-sm font-semibold text-slate-700">{test.accuracy}%</span>
+                  <motion.li
+                    key={menuKey}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                    className="flex gap-3 text-[15px] leading-relaxed rounded-xl px-3 py-3 transition hover:bg-slate-50"
+                    style={{ border: '1px solid #F1F5F9' }}
+                  >
+                    <span className="font-semibold tabular-nums shrink-0 w-5 pt-0.5" style={{ color: '#475569' }}>{i + 1}.</span>
+                    <div className="flex-1 min-w-0 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <p className="font-bold truncate" style={{ color: '#000' }}>{test.testName}</p>
+                        <p className="text-xs mt-0.5" style={{ color: '#94A3B8' }}>
+                          {test.date} · {test.time} · {test.total} questions
+                        </p>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{test.total} Qs</td>
-                    <td className="px-6 py-4">
-                      <span
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black"
-                        style={{ background: cfg.bg, color: cfg.text }}
-                      >
-                        {cfg.label} · {test.grade}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      <div className="font-medium">{test.date}</div>
-                      <div className="text-slate-400 text-xs">{test.time}</div>
-                    </td>
-                    <td className="px-6 py-4 relative" ref={openMenu === test.id + i ? menuRef : null}>
-                      <button
-                        onClick={() => setOpenMenu(openMenu === test.id + i ? null : test.id + i)}
-                        className="p-2 rounded-full hover:bg-slate-100 transition"
-                      >
-                        <MoreVertical size={16} className="text-slate-500" />
-                      </button>
-                      {openMenu === test.id + i && (
-                        <div className="absolute right-6 top-12 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-2 w-48">
+                      <div className="flex items-center gap-3 shrink-0 text-xs">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold"
+                          style={{ background: cfg.bg, color: cfg.text }}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.dot }} />
+                          {cfg.label} · {test.grade}
+                        </span>
+                        <span className="font-bold tabular-nums" style={{ color: accColor }}>{test.accuracy}%</span>
+
+                        <div className="relative" ref={openMenu === menuKey ? menuRef : null}>
                           <button
-                            onClick={() => { router.push(`/mock-test/results/${test.id}${test.sessionId ? `?parentSession=${test.sessionId}` : ''}`); setOpenMenu(null); }}
-                            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                            onClick={() => setOpenMenu(openMenu === menuKey ? null : menuKey)}
+                            className="p-1.5 rounded-full hover:bg-slate-100 transition"
                           >
-                            <Eye size={15} className="text-slate-500" />
-                            View Result
+                            <MoreVertical size={15} style={{ color: '#94A3B8' }} />
                           </button>
-                          <button
-                            onClick={() => { router.push(`/mock-test/${test.id}`); setOpenMenu(null); }}
-                            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
-                          >
-                            <RotateCcw size={15} className="text-slate-500" />
-                            Retake Test
-                          </button>
+                          {openMenu === menuKey && (
+                            <div className="absolute right-0 top-9 bg-white border rounded-xl shadow-lg z-50 py-1.5 w-44"
+                              style={{ borderColor: '#E5E7EB' }}>
+                              <button
+                                onClick={() => { router.push(`/mock-test/results/${test.id}${test.sessionId ? `?parentSession=${test.sessionId}` : ''}`); setOpenMenu(null); }}
+                                className="flex items-center gap-2.5 w-full px-3.5 py-2 text-sm text-left hover:bg-slate-50"
+                                style={{ color: '#475569' }}
+                              >
+                                <Eye size={14} style={{ color: '#94A3B8' }} />
+                                View result
+                              </button>
+                              <button
+                                onClick={() => { router.push(`/mock-test/${test.id}`); setOpenMenu(null); }}
+                                className="flex items-center gap-2.5 w-full px-3.5 py-2 text-sm text-left hover:bg-slate-50"
+                                style={{ color: '#475569' }}
+                              >
+                                <RotateCcw size={14} style={{ color: '#94A3B8' }} />
+                                Retake test
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </td>
-                  </tr>
+                      </div>
+                    </div>
+                  </motion.li>
                 );
               })}
+            </ol>
+          )}
+        </div>
 
-              {!loading && filtered.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-14 text-center text-slate-400 text-sm">
-                    No tests found matching your search.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </motion.div>
+        {/* Bottom action row — section-intro DNA */}
+        <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
+          <button
+            onClick={() => router.push('/mock-test')}
+            className="text-sm font-medium hover:underline"
+            style={{ color: '#475569' }}
+          >
+            ← Back to Tests
+          </button>
+
+          <button
+            onClick={() => router.push('/mock-test/custom')}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(30,58,138,0.5)]"
+            style={{ background: '#1e3a8a', boxShadow: '0 4px 14px -4px rgba(30,58,138,0.35)' }}
+          >
+            Take a Test <ChevronRight size={14} />
+          </button>
+        </div>
       </div>
     </div>
   );

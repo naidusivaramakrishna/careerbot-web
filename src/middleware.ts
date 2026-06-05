@@ -35,6 +35,11 @@ export async function middleware(request: NextRequest) {
     const refreshToken = request.cookies.get('refresh_token')?.value ||
                          request.cookies.get('admin_refresh_token')?.value;
 
+    // TEMP DIAG — prints exactly what middleware sees for each guarded request.
+    // Remove once the sign-in redirect issue is identified.
+    const cookieNames = request.cookies.getAll().map((c) => c.name);
+    console.log(`[mw-diag] ${pathname} cookies=[${cookieNames.join(',')}] access=${token ? 'YES' : 'NO'} refresh=${refreshToken ? 'YES' : 'NO'} hasSecret=${!!process.env.JWT_SECRET}`);
+
     const isProtectedArea =
         pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
 
@@ -73,19 +78,36 @@ export async function middleware(request: NextRequest) {
                 new TextEncoder().encode(process.env.JWT_SECRET)
             );
             if (!roleAllows(payload.role as string | undefined)) {
+                console.log(`[mw-diag] ${pathname} ROLE_REJECT role=${payload.role}`);
                 return NextResponse.redirect(new URL('/403', request.url));
             }
+            console.log(`[mw-diag] ${pathname} JWT_OK role=${payload.role}`);
             return NextResponse.next();
-        } catch {
+        } catch (e) {
+            console.log(`[mw-diag] ${pathname} JWT_VERIFY_FAIL ${(e as Error)?.message}`);
             // Access token present but invalid/expired — fall through to refresh.
         }
     }
 
-    // 2) No verified token. Non-protected pages: a refresh cookie is enough —
-    //    let the request through; the client HTTP interceptor refreshes on the
-    //    first 401.
+    // 2) No verified token. Non-role-protected pages: presence of EITHER an
+    //    access_token or refresh_token cookie is enough to consider the user
+    //    "logged in" at the gate. The backend re-validates every API call the
+    //    page makes, and the HTTP interceptor handles refresh on the first 401.
+    //
+    //    Why both, not just refresh? The frontend JWT_SECRET only verifies
+    //    locally — if it doesn't match the backend's signing secret, a real
+    //    access_token won't verify here even though the backend would accept
+    //    it. Falling back to just refresh_token bounces real users to login
+    //    when their backend hasn't issued a refresh cookie. Admin and recruiter
+    //    routes (handled in step 3) still require a verifiable JWT for role
+    //    enforcement.
     if (!isProtectedArea) {
-        return refreshToken ? NextResponse.next() : loginRedirect();
+        if (token || refreshToken) {
+            console.log(`[mw-diag] ${pathname} PASS_HAS_CREDENTIAL access=${!!token} refresh=${!!refreshToken}`);
+            return NextResponse.next();
+        }
+        console.log(`[mw-diag] ${pathname} REDIRECT_NO_CREDENTIAL`);
+        return loginRedirect();
     }
 
     // 3) Protected area with no verified token — whether the access token is

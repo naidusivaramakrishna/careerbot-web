@@ -1,4 +1,6 @@
 import { httpClient } from '@/lib/http';
+import { CATEGORY_SUBCATEGORIES } from '@/lib/mockTestConstants';
+import { getSeenQuestionIds } from '@/utils/seenQuestionIds';
 
 export interface MockTestCompany {
   id?: string;
@@ -84,31 +86,56 @@ export const getMockTestCompanyById = async (companyId: string): Promise<any> =>
   }
 };
 
+// The backend has been observed to reject — or silently cap — count > 10
+// on /mock-test/generate. Cap here so the request always sends a value
+// known to succeed; the runner can chain multiple generate calls if it
+// needs more than this per section.
+const MAX_QUESTIONS_PER_GENERATE = 10;
+
+// Backend rejects exclude_question_ids with > 50 items
+// ("VALIDATION_ERROR: exclude_question_ids cannot exceed 50 items").
+// Belt-and-braces cap: keeps stale localStorage contents from older
+// versions (which stored up to 800 IDs) from breaking the request.
+const MAX_EXCLUDE_IDS = 50;
+const limitExcludeIds = (ids: string[]): string[] =>
+  ids.length <= MAX_EXCLUDE_IDS ? ids : ids.slice(-MAX_EXCLUDE_IDS);
+
 export const generateMockTest = async (
   companyId: string,
   categories: string[] = ['arithmetic'],
   subcategories: string[] = [],
   parentSessionId?: string,
-  timeoutMs: number = 60000
+  timeoutMs: number = 60000,
+  count: number = 10,
+  timeLimit: number = 20,
 ): Promise<MockTestSession> => {
   const resolvedSubcategories = subcategories.length > 0 ? subcategories : categories;
+  // Send the IDs the user has already seen for this company so the backend
+  // doesn't re-serve them on a fresh attempt. Scope by companyId so taking
+  // TCS doesn't suppress the Infosys pool. See utils/seenQuestionIds.
+  // Capped at MAX_EXCLUDE_IDS to satisfy backend validation.
+  const excludeIds = limitExcludeIds(getSeenQuestionIds(companyId));
+  const cappedCount = Math.min(Math.max(1, count), MAX_QUESTIONS_PER_GENERATE);
+  if (cappedCount !== count) {
+    console.warn(`[generateMockTest] count ${count} exceeds backend limit; sending ${cappedCount}`);
+  }
   const payload: Record<string, any> = {
-    count: 10,
-    time_limit: 20,
+    count: cappedCount,
+    time_limit: timeLimit,
     type: 'mcq',
     company_context: companyId,
     category: categories,
     subcategory: resolvedSubcategories,
     difficulty: 'medium',
     cross_verify: false,
-    exclude_question_ids: [],
+    exclude_question_ids: excludeIds,
   };
 
   if (parentSessionId) {
     payload.parent_session_id = parentSessionId;
   }
 
-  console.log('[generateMockTest] sending payload:', JSON.stringify(payload, null, 2));
+  console.log('[generateMockTest] sending payload:', JSON.stringify({ ...payload, exclude_question_ids: `<${excludeIds.length} ids>` }, null, 2));
 
   try {
     const response = await httpClient.post<any>('/mock-test/generate', payload, { timeout: timeoutMs });
@@ -117,14 +144,86 @@ export const generateMockTest = async (
     return session;
   } catch (err: any) {
     const d = err?.response?.data;
+    // Log every diagnostic we can extract — previous version only logged
+    // fields under err.response, so a network-level failure (no response)
+    // produced an empty `{}` and we couldn't tell what broke.
     console.error('[generateMockTest] FAILED', {
+      name: err?.name,
+      message: err?.message,
+      code: err?.code,
       status: err?.response?.status,
-      error_code: d?.error_code,
-      message: d?.message,
-      error_id: d?.error_id,
-      request_id: d?.request_id,
-      timestamp: d?.timestamp,
-      path: d?.path,
+      statusText: err?.response?.statusText,
+      response_data: d,
+      error_code: d?.error?.error_code,
+      error_message: d?.error?.message,
+      error_id: d?.error?.error_id,
+      request_id: d?.error?.request_id,
+      timestamp: d?.error?.timestamp,
+      path: d?.error?.path,
+      url: err?.config?.url,
+      method: err?.config?.method,
+      timeout_ms: err?.config?.timeout,
+      payload,
+    });
+    throw err;
+  }
+};
+
+/**
+ * Generate a custom mock-test session for the Custom Builder.
+ * The builder calls this as a reachability probe (validates the AI service,
+ * then submits the probe session) before navigating to the custom-test runner,
+ * which generates each section via generateMockTest under the same parent.
+ * Unlike generateMockTest, the caller-selected difficulty is forwarded.
+ */
+export const generateCustomTest = async (
+  categories: string[],
+  difficulty: string = 'medium',
+  parentSessionId?: string,
+  timeoutMs: number = 60000
+): Promise<MockTestSession> => {
+  const resolvedCategories = categories.length > 0 ? categories : ['arithmetic'];
+  // Backend rejects category names as subcategory values — it expects the
+  // specific slugs listed in CATEGORY_SUBCATEGORIES. Pick one valid sub per category.
+  const resolvedSubcategories = resolvedCategories.map(cat => {
+    const subs = CATEGORY_SUBCATEGORIES[cat];
+    return subs && subs.length > 0
+      ? subs[Math.floor(Math.random() * subs.length)]
+      : cat;
+  });
+  // Same dedup story as generateMockTest, scoped to the synthetic 'custom-test'
+  // bucket so custom-builder attempts don't suppress company tests.
+  const excludeIds = limitExcludeIds(getSeenQuestionIds('custom-test'));
+  const payload: Record<string, any> = {
+    count: 10,
+    time_limit: 20,
+    type: 'mcq',
+    company_context: 'tcs',
+    category: resolvedCategories,
+    subcategory: resolvedSubcategories,
+    difficulty,
+    cross_verify: false,
+    exclude_question_ids: excludeIds,
+  };
+
+  if (parentSessionId) {
+    payload.parent_session_id = parentSessionId;
+  }
+
+  console.log('[generateCustomTest] sending payload:', JSON.stringify({ ...payload, exclude_question_ids: `<${excludeIds.length} ids>` }, null, 2));
+
+  try {
+    const response = await httpClient.post<any>('/mock-test/generate', payload, { timeout: timeoutMs });
+    console.log('[generateCustomTest] response:', JSON.stringify(response.data, null, 2));
+    const session = response.data?.data ?? response.data;
+    return session;
+  } catch (err: any) {
+    const d = err?.response?.data;
+    console.error('[generateCustomTest] FAILED', {
+      status: err?.response?.status,
+      error_code: d?.error?.error_code,
+      message: d?.error?.message,
+      error_id: d?.error?.error_id,
       payload,
     });
     throw err;
@@ -293,6 +392,7 @@ export interface TestResult {
     is_correct: boolean;
     explanation: string;
     solution_steps: string[] | null;
+    common_mistakes: string[] | null;
     difficulty?: string;
     time_taken_seconds?: number;
   }[];
@@ -372,6 +472,7 @@ const mapRawResult = (rawData: any): TestResult => {
         is_correct: q.is_correct ?? false,
         explanation: q.explanation ?? '',
         solution_steps: Array.isArray(q.solution_steps) ? q.solution_steps : null,
+        common_mistakes: Array.isArray(q.common_mistakes) ? q.common_mistakes : null,
         difficulty: q.difficulty,
         time_taken_seconds: q.time_taken_seconds,
       }))
@@ -734,13 +835,48 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
       return item.is_weak === true || (item.is_weak !== false && acc < 70);
     };
 
+    // Score-tiered suggestion. Used when the backend doesn't return a
+    // per-topic suggestion, or when it returns the same boilerplate for
+    // every row. Each band has distinct phrasing so the user gets actionable
+    // advice that varies with how weak the topic actually is.
+    const suggestionFor = (topic: string, accuracy: number, attempts: number): string => {
+      const t = topic || 'this topic';
+      const attemptsTail = attempts > 0
+        ? ` (based on ${attempts} attempt${attempts === 1 ? '' : 's'})`
+        : '';
+      if (accuracy < 30) {
+        return `Critical gap in ${t} — restart from the fundamentals before attempting more questions${attemptsTail}.`;
+      }
+      if (accuracy < 45) {
+        return `Major weakness in ${t} — block out 30–45 min daily on core concepts and worked examples${attemptsTail}.`;
+      }
+      if (accuracy < 55) {
+        return `${t} needs focused practice — aim for 10 fresh problems a day and review every mistake${attemptsTail}.`;
+      }
+      if (accuracy < 65) {
+        return `${t} is below the cutoff — drill the patterns you keep missing and time yourself${attemptsTail}.`;
+      }
+      if (accuracy < 75) {
+        return `Close to passing on ${t} — tighten accuracy on the trickier sub-types and try mixed sets${attemptsTail}.`;
+      }
+      if (accuracy < 85) {
+        return `${t} is solid — polish the harder questions and work on speed${attemptsTail}.`;
+      }
+      return `Strong on ${t} — keep momentum with a weekly refresher set${attemptsTail}.`;
+    };
+
     const toWeakArea = (item: any): WeakArea => {
       const topic: string = item.topic ?? item.category ?? item.subcategory ?? item.section ?? item.name ?? 'Unknown';
       const accuracy = extractAccuracy(item);
       const attempts: number = item.attempts ?? item.total_attempts ?? item.count ?? 0;
-      const suggestion: string =
-        item.suggestion ?? item.recommendation ??
-        `Work on ${topic} — ${accuracy}% accuracy across ${attempts} attempt${attempts !== 1 ? 's' : ''}.`;
+
+      // Always compute the suggestion locally from the score band. The
+      // backend's suggestion field has been observed to return the same
+      // boilerplate text ("Need urgent improvement", "Work on …", etc.) for
+      // every row regardless of accuracy, which defeats the purpose. Local
+      // tiering guarantees each row reads differently.
+      const suggestion = suggestionFor(topic, accuracy, attempts);
+
       return { topic, accuracy, suggestion };
     };
 

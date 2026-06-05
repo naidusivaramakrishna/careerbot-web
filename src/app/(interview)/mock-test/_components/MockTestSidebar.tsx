@@ -70,8 +70,6 @@ export default function MockTestSidebar() {
       <div className="px-5 py-4 border-b border-slate-100"
         style={{ background: 'linear-gradient(135deg,#eef3ff 0%,#fff 100%)' }}>
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black"
-            style={{ background: '#2557a7' }}>C</div>
           <span className="text-sm font-black" style={{ color: '#000' }}>Mock Tests</span>
         </div>
       </div>
@@ -95,14 +93,14 @@ export default function MockTestSidebar() {
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all text-xs"
                   style={{
                     background:  active ? '#eef3ff' : 'transparent',
-                    color:       item.soon ? '#2d2d2d' : active ? '#2557a7' : '#2d2d2d',
+                    color:       item.soon ? '#2d2d2d' : active ? '#1e3a8a' : '#2d2d2d',
                     fontWeight:  active ? 700 : 500,
                     opacity:     item.soon ? 0.45 : 1,
                     cursor:      item.soon ? 'default' : 'pointer',
                   }}
                 >
                   <Icon size={14} style={{
-                    color:   active ? '#2557a7' : '#2d2d2d',
+                    color:   active ? '#1e3a8a' : '#2d2d2d',
                     opacity: active ? 1 : 0.5,
                   }} />
                   <span className="flex-1">{item.label}</span>
@@ -136,7 +134,7 @@ export default function MockTestSidebar() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs" style={{ color: '#2d2d2d', opacity: 0.55 }}>Avg accuracy</span>
-              <span className="text-xs font-black" style={{ color: '#2557a7' }}>
+              <span className="text-xs font-black" style={{ color: '#1e3a8a' }}>
                 {analytics?.average_accuracy != null
                   ? `${Math.round(analytics.average_accuracy)}%`
                   : analytics?.average_score != null
