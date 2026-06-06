@@ -6,10 +6,9 @@ import { useResume } from "../../_context/ResumeContext";
 import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, TemplateResponse } from "@/api/resumeApi";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
-import { TEMPLATE_DEFAULT_STYLES } from "../../_utils/templateStyles";
+import { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } from "../../_utils/templateStyles";
 import { getProfile } from "@/api/userApi";
 import { useRouter } from "next/navigation";
-import { getSectionOrder } from "@/app/(resume)/templates/_utils/sectionOrder";
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder";
 
 const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
@@ -379,12 +378,19 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
           localStorage.removeItem(selectedTemplateKey);
           localStorage.removeItem(careerLevelKey);
+          localStorage.removeItem('selected_catalogue');
           setCareerLevelData(null);
 
           // Sync resumeStyle with the backend's template config so preview matches download
           const templateDefaults = TEMPLATE_DEFAULT_STYLES[previewTemplate.template_id];
           if (templateDefaults) {
             setResumeStyle(prev => ({ ...prev, ...templateDefaults }));
+          }
+
+          // Apply catalogue if selected
+          const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+          if (selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue]) {
+            setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
           }
         } else {
           // For career level templates, clear selectedTemplate to avoid highlighting other templates

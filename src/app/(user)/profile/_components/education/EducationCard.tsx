@@ -10,7 +10,7 @@ interface Props {
 }
 
 function formatDateRange(start?: string | Date, end?: string | Date): string {
-  if (!start) return "";
+  if (!start && !end) return "";
 
   const parseDate = (value?: string | Date) => {
     if (!value) return null;
@@ -31,23 +31,27 @@ function formatDateRange(start?: string | Date, end?: string | Date): string {
   const parsedStart = parseDate(start);
   const parsedEnd = parseDate(end);
 
-  const formattedStart =
-    parsedStart instanceof Date ? format(parsedStart, "MMM yyyy") : start;
+  // Only end date (e.g. passed_out year from resume parser)
+  if (!start && end) {
+    if (parsedEnd instanceof Date) return format(parsedEnd, "yyyy");
+    return String(end);
+  }
 
-  // FIXED LOGIC
+  const formattedStart =
+    parsedStart instanceof Date ? format(parsedStart, "MMM yyyy") : String(start);
+
   let formattedEnd;
   if (!end) {
-    formattedEnd = ""; // no end date
+    formattedEnd = "";
   } else if (parsedEnd === "Present") {
     formattedEnd = "Present";
   } else if (parsedEnd instanceof Date) {
     formattedEnd = format(parsedEnd, "MMM yyyy");
   } else {
-    // If parse fails, fallback to original text — NOT Present
     formattedEnd = String(end);
   }
 
-  return `${formattedStart} – ${formattedEnd}`;
+  return formattedEnd ? `${formattedStart} – ${formattedEnd}` : formattedStart;
 }
 
 
@@ -66,12 +70,17 @@ export default function EducationCard({ edu, index, onEdit, onDelete }: Props) {
           </p>
         )}
         <div className="flex gap-4 items-center text-neutral-500 my-4">
-          {formatDateRange(edu.start_date, edu.end_date) && (
+          {!edu.start_date && edu.end_date ? (
+            <div className="flex gap-1 items-center text-neutral-500">
+              <Calendar className="w-5 h-5" />
+              <span className="text-sm">Passed out: {formatDateRange(edu.start_date, edu.end_date)}</span>
+            </div>
+          ) : formatDateRange(edu.start_date, edu.end_date) ? (
             <div className="flex gap-1 items-center text-neutral-500">
               <Calendar className="w-5 h-5" />
               <span className="text-sm">{formatDateRange(edu.start_date, edu.end_date)}</span>
             </div>
-          )}
+          ) : null}
           {edu.cgpa && (
             <span className="rounded-full px-3 py-1 bg-[#f2f4f5] text-sm font-semibold text-black/70">
               GPA: {edu.cgpa}

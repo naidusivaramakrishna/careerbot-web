@@ -92,7 +92,7 @@ const ResendVerificationPage = () => {
 
         {/* Form */}
         {status !== "success" ? (
-          <form onSubmit={handleResendEmail} className="space-y-4">
+          <form onSubmit={handleResendEmail} className="space-y-4" noValidate>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
@@ -105,7 +105,6 @@ const ResendVerificationPage = () => {
                 placeholder="your@email.com"
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${emailError ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-[#2257a7]"}`}
                 disabled={status === "loading"}
-                required
               />
               {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
             </div>

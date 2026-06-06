@@ -541,7 +541,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
 
 
     return (
-        <div className='flex-1 w-1/5'>
+        <div className='flex-1 min-w-0'>
             <div className="flex flex-col justify-center">
                 <div className="bg-white p-4 rounded-xl my-4 shadow-sm">
                     <h3 className='my-4 font-semibold text-lg'>Quick Actions</h3>

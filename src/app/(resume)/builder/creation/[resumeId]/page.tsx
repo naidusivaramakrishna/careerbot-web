@@ -31,6 +31,8 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   // ✅ Clear saved sidebar state on mount to ensure it always starts closed
   useEffect(() => {
     localStorage.removeItem("template_sidebar_open");
+    // Clear pendingTemplateFamily so a normal next-login doesn't trigger an auto-redirect
+    localStorage.removeItem("pendingTemplateFamily");
   }, []);
 
   // Save sidebar state to localStorage whenever it changes (during session)

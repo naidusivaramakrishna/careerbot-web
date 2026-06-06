@@ -35,7 +35,8 @@ export function normalizeDegree(parsed: string | null): string | "" {
         "secondary": "Secondary School (10th)",
         "10th": "Secondary School (10th)",
         "ssc": "Secondary School (10th)",
-
+        "high school diploma": "Secondary School (10th)",
+        "high school": "Secondary School (10th)",
         "diploma": "Diploma / Polytechnic",
     };
 

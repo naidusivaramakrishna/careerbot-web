@@ -163,10 +163,13 @@ export interface ProjectAutoFillRequest {
  * Get user profile
  */
 
-export const getProfile = async (): Promise<UserProfile> => {
+export const getProfile = async (options?: { skipAuthRedirect?: boolean }): Promise<UserProfile> => {
     try {
         // ✅ httpOnly cookies sent automatically by httpClient with withCredentials
-        const response = await httpClient.get<ApiResponse<UserProfile>>('/profile/');
+        const response = await httpClient.get<ApiResponse<UserProfile>>(
+            '/profile/',
+            options?.skipAuthRedirect ? { headers: { 'X-Skip-Auth-Redirect': 'true' } } : undefined
+        );
 
         let profileData: UserProfile;
 

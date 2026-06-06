@@ -235,6 +235,8 @@ export interface ResumeStyle {
   lineSpacing: string;
   headingColor: string;
   bodyColor: string;
+  sectionHeaderBg?: string;
+  accentColor?: string;
 }
 
 export type EnhancedAtsScore = ATSScore | null;
@@ -699,16 +701,51 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         }
 
         // ✅ Set default template (with fallback to clean_simple)
-        const { TEMPLATE_DEFAULT_STYLES } = await import("../_utils/templateStyles");
+        const { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } = await import("../_utils/templateStyles");
         try {
-          const defaultTemplateId = String(defaultTemplateData?.template_id || defaultTemplateData?.id || "clean_simple");
-          await setSelectedTemplate(defaultTemplateId);
-          const defaults = TEMPLATE_DEFAULT_STYLES[defaultTemplateId];
+          // Use domain template ID
+          const templateId = String(defaultTemplateData?.template_id || defaultTemplateData?.id || "clean_simple");
+          await setSelectedTemplate(templateId);
+
+          // Apply template defaults for styling
+          const defaults = TEMPLATE_DEFAULT_STYLES[templateId];
           if (defaults) setResumeStyle(prev => ({ ...prev, ...defaults }));
+
+          // Apply catalogue color/font overrides on top
+          const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+          if (selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue]) {
+            setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
+          }
+          // Apply user-picked custom colour (from browse-templates colour picker).
+          // Eclipse uses it as the section-header background; all other catalogues use it as headingColor.
+          if (typeof window !== 'undefined' && selectedCatalogue) {
+            if (selectedCatalogue === 'eclipse') {
+              const sectionBg = localStorage.getItem('selected_section_bg');
+              if (sectionBg) setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg }));
+            } else {
+              const accent = localStorage.getItem(`selected_color_${selectedCatalogue}`);
+              if (accent) setResumeStyle(prev => ({ ...prev, headingColor: accent }));
+            }
+          }
         } catch {
           await setSelectedTemplate("clean_simple");
           const defaults = TEMPLATE_DEFAULT_STYLES["clean_simple"];
           if (defaults) setResumeStyle(prev => ({ ...prev, ...defaults }));
+
+          // Apply catalogue if selected
+          const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+          if (selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue]) {
+            setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
+          }
+          if (typeof window !== 'undefined' && selectedCatalogue) {
+            if (selectedCatalogue === 'eclipse') {
+              const sectionBg = localStorage.getItem('selected_section_bg');
+              if (sectionBg) setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg }));
+            } else {
+              const accent = localStorage.getItem(`selected_color_${selectedCatalogue}`);
+              if (accent) setResumeStyle(prev => ({ ...prev, headingColor: accent }));
+            }
+          }
         }
 
         // Continue with resume data processing...

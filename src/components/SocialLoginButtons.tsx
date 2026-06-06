@@ -80,8 +80,7 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup", redirectTo })
       <div className="w-full flex items-center">
         <button
           onClick={handleGoogleLogin}
-          className="flex gap-2 items-center justify-center bg-[#f8f0fd] cursor-pointer rounded-lg px-4 py-2.5 w-full border border-purple-200 placeholder-[#635B6B] outline-none focus:ring-2 focus:ring-purple-400 transition-all"
-          style={{ boxShadow: '0 2px 4px 0 rgba(168, 85, 247, 0.35)' }}
+          className="flex gap-2 items-center justify-center hover:bg-gray-200 cursor-pointer rounded-lg px-4 py-2.5 w-full border border-gray-300 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
         >
           <Image src="/assets/icons/google-icon.svg" alt="google-icon" width={20} height={20} className="w-4 h-4" />
           <span className="text-sm">
@@ -95,8 +94,7 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup", redirectTo })
       <div className="w-full flex items-center">
         <button
           onClick={handleLinkedInLogin}
-          className="flex gap-2 items-center justify-center bg-[#f8f0fd]  cursor-pointer rounded-lg px-4 py-2.5 w-full border border-purple-200 placeholder-[#635B6B] outline-none focus:ring-2 focus:ring-purple-400 transition-all"
-          style={{ boxShadow: '0 2px 4px 0 rgba(168, 85, 247, 0.35)' }}
+          className="flex gap-2 items-center justify-center  hover:bg-gray-200 cursor-pointer rounded-lg px-4 py-2.5 w-full border border-gray-300 outline-none focus:ring-2 focus:ring-blue-200 transition-all"
         >
           <Image src="/assets/icons/linkedin-icon.svg" alt="linkedin-icon" width={20} height={20} className="w-4 h-4" />
           <span className="text-sm ">{variant === "signup" ? "Sign up" : "Sign in"} with LinkedIn</span>

@@ -4,6 +4,7 @@ import {
   LayoutGrid,
   BarChart2,
   Shuffle,
+  Palette,
   SidebarOpen,
 } from "lucide-react";
 
@@ -16,6 +17,7 @@ interface TabsProps {
 
 const tabs = [
   { label: "Templates", icon: LayoutGrid },
+  { label: "Style", icon: Palette },
   { label: "Score", icon: BarChart2 },
   { label: "Job Match", icon: Shuffle },
 ];
