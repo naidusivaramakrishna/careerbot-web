@@ -6,6 +6,34 @@ const AZURE_ENDPOINT = "https://veliv-mgtcnqad-uaenorth.services.ai.azure.com";
 const DEPLOYMENT = "Llama-3.3-70B-Instruct";
 const MAX_BODY_BYTES = 256 * 1024; // 256 KB — generate-description bodies are small
 
+// Read the request body incrementally, returning null the moment the
+// accumulated byte count exceeds `limit` (the reader is cancelled so the
+// rest of the stream is never buffered). Returns the decoded UTF-8 string
+// when the body fits.
+async function readBodyCapped(req: Request, limit: number): Promise<string | null> {
+  const reader = req.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.length;
+    if (received > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new TextDecoder().decode(merged);
+}
+
 export async function POST(req: Request) {
   // Require a VERIFIED session — this route spends the server-side Azure API
   // key, so cookie presence is not enough: the JWT signature must check out.
@@ -21,11 +49,18 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Read the body as text first so the size cap holds even when
-    // Content-Length is absent, chunked, or spoofed. Measure UTF-8 bytes —
-    // string .length counts UTF-16 units and would undercount multibyte input.
-    const rawBody = await req.text();
-    if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
+    // Fast-reject an honestly-declared oversized body before reading anything.
+    const declaredLength = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Request too large" }, { status: 413 });
+    }
+
+    // Stream the body and abort as soon as the running UTF-8 byte count
+    // exceeds the cap, so a chunked/Content-Length-less payload can never
+    // buffer unbounded memory before the check (counting bytes, not UTF-16
+    // string length, which would undercount multibyte input).
+    const rawBody = await readBodyCapped(req, MAX_BODY_BYTES);
+    if (rawBody === null) {
       return NextResponse.json({ error: "Request too large" }, { status: 413 });
     }
     const body = JSON.parse(rawBody);

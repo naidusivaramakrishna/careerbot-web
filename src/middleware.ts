@@ -22,11 +22,6 @@ const publicRoutes = [
 const RECRUITER_PREFIX = '/recruiter';
 const ADMIN_PREFIX = '/admin';
 
-// Mirror the client's API base (src/lib/http.ts) so the server-side refresh
-// below targets the same backend, whether it's the relative rewrite or an
-// absolute URL.
-const API_BASE = process.env.NEXT_PUBLIC_BASE_URL || '/api/v1';
-
 function buildUserLoginUrl(request: NextRequest): URL {
     const loginUrl = new URL('/', request.url);
     loginUrl.searchParams.set('showLogin', 'true');
@@ -124,9 +119,15 @@ export async function middleware(request: NextRequest) {
     //    role-gated page.
     if (refreshToken && process.env.JWT_SECRET) {
         try {
+            // Keep the refresh on a SAME-ORIGIN relative path. It forwards the
+            // raw httpOnly Cookie header, so the target must never be a
+            // client-exposed/absolute base (e.g. NEXT_PUBLIC_BASE_URL) — that
+            // would exfiltrate tokens to whatever host that var points at.
+            // Next's rewrite (`/api/:path*` -> server-only BACKEND_URL in
+            // next.config.ts) proxies this to the trusted backend.
             const refreshPath = pathname.startsWith(ADMIN_PREFIX)
-                ? `${API_BASE}/admin/auth/refresh`
-                : `${API_BASE}/auth/refresh`;
+                ? '/api/v1/admin/auth/refresh'
+                : '/api/v1/auth/refresh';
             const refreshRes = await fetch(new URL(refreshPath, request.url), {
                 method: 'POST',
                 headers: { cookie: request.headers.get('cookie') ?? '' },
