@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
+import { logger } from "@/lib/logger";
 
 const AZURE_ENDPOINT = "https://veliv-mgtcnqad-uaenorth.services.ai.azure.com";
 const DEPLOYMENT = "Llama-3.3-70B-Instruct";
@@ -199,8 +200,11 @@ IMPORTANT:
     const data = await response.json();
 
     if (!response.ok) {
+      // Log the upstream error server-side; never echo it to the client —
+      // it can carry Azure account/deployment details.
+      logger.error("generate-description: Azure request failed", data);
       return NextResponse.json(
-        { error: "Azure request failed", details: data },
+        { error: "Azure request failed" },
         { status: 500 }
       );
     }
@@ -221,8 +225,11 @@ IMPORTANT:
       return NextResponse.json({ description });
     }
   } catch (error) {
+    // Log the raw error server-side; the client gets a generic message so we
+    // never leak stack traces / internal paths.
+    logger.error("generate-description: unexpected server error", error);
     return NextResponse.json(
-      { error: "Unexpected server error", details: error },
+      { error: "Unexpected server error" },
       { status: 500 }
     );
   }
