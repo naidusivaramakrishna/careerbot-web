@@ -1,26 +1,28 @@
 // background/service-worker.js
 
-chrome.action.onClicked.addListener(() => {
-  openPopup();
+// Open side panel on icon click (direct user gesture — always works).
+chrome.action.onClicked.addListener((tab) => {
+  chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
 });
+
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Validate that the message comes from our own extension only.
-  // This prevents any externally_connectable web page from triggering handlers.
-  if (sender.id !== chrome.runtime.id) {
-    return false;
-  }
+  if (sender.id !== chrome.runtime.id) return false;
 
   if (message.type === 'JD_DETECTED') {
     handleJDDetected(message.data, sender.tab);
     sendResponse({ ok: true });
   }
 
-  // User clicked "Tailor Resume" in the banner — save JD and open popup immediately
+  // "Tailor Resume" clicked in banner — open panel immediately (user gesture
+  // context is still active), then store the JD asynchronously.
   if (message.type === 'JD_TAILOR_NOW') {
-    handleJDDetected(message.data, sender.tab).then(() => {
-      openPopup();
-    });
+    if (sender.tab?.id) {
+      chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {});
+    }
+    handleJDDetected(message.data, sender.tab);
     sendResponse({ ok: true });
   }
 
@@ -43,32 +45,6 @@ async function handleJDDetected(data, tab) {
   chrome.action.setBadgeBackgroundColor({ color: '#8b5cf6', tabId: tab?.id });
 }
 
-async function openPopup() {
-  const popupUrl = chrome.runtime.getURL('popup/popup.html');
-
-  // If already open, just focus it
-  const existing = await chrome.windows.getAll({ windowTypes: ['popup'] });
-  const careerbotWin = existing.find(w => w.type === 'popup');
-  if (careerbotWin) {
-    await chrome.windows.update(careerbotWin.id, { focused: true });
-    return;
-  }
-
-  const win = await chrome.windows.getCurrent().catch(() => null);
-  const W = 800;
-  const H = 840;
-  const left = (win?.left || 0) + (win?.width || screen.availWidth) - W;
-  const top  = win?.top || 0;
-
-  chrome.windows.create({
-    url:    popupUrl,
-    type:   'popup',
-    width:  W,
-    height: H,
-    left:   Math.max(0, left),
-    top:    Math.max(0, top),
-  });
-}
 
 // Clear detected JD only when the exact tab that detected it navigates away
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {

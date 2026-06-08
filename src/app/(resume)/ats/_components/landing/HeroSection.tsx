@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
 import { motion } from "framer-motion";
 import { Star, Sparkles, ShieldCheck, Zap } from "lucide-react";
 
@@ -14,25 +13,27 @@ const HeroATS: React.FC<HeroATSProps> = ({ onScanClick }) => {
   useEffect(() => { setMounted(true); }, []);
 
   return (
-    <section className="relative overflow-hidden py-16 lg:py-20 xl:py-24">
-
-      {/* Background */}
-      <div className="absolute inset-0 bg-linear-to-br from-[#2557a7] via-[#2557a7] to-[#194386]" />
-
-      {/* Background glow orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-white/5 rounded-full blur-3xl" />
-        <div className="absolute -bottom-48 -left-24 w-[500px] h-[500px] bg-[#2557a7]/40 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-[#2557a7]/20 rounded-full blur-3xl" />
-      </div>
+    <section className="relative overflow-hidden py-16 lg:py-20 xl:py-24" style={{ background: "linear-gradient(135deg, #f8fbff 0%, #eef6ff 48%, #eaf7f5 100%)" }}>
 
       {/* Dot grid pattern */}
       <div
-        className="absolute inset-0 opacity-[0.06] pointer-events-none"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)",
-          backgroundSize: "32px 32px",
+          backgroundImage: "radial-gradient(circle,rgba(148,163,184,0.18) 1px,transparent 1px)",
+          backgroundSize: "24px 24px",
         }}
+      />
+
+      {/* Center blue glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse at center,rgba(37,87,167,0.04) 0%,rgba(37,87,167,0.02) 40%,transparent 70%)" }}
+      />
+
+      {/* Bottom-right teal glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse at bottom right,rgba(16,185,129,0.05) 0%,transparent 60%)" }}
       />
 
       <div className="relative w-full px-8 lg:px-16">
@@ -48,8 +49,8 @@ const HeroATS: React.FC<HeroATSProps> = ({ onScanClick }) => {
           >
             {/* Badge */}
             <div className="flex items-center gap-2.5 bg-white text-[#2557a7] font-semibold text-xs px-4 py-2 rounded-full w-fit shadow-lg">
-              <div className="w-5 h-5 rounded-full bg-[#FFC85E] flex items-center justify-center shrink-0">
-                <Sparkles className="w-3 h-3 text-[#2557a7]" />
+              <div className="w-5 h-5 rounded-full bg-[#2557a7] flex items-center justify-center shrink-0">
+                <Sparkles className="w-3 h-3 text-white" />
               </div>
               AI RESUME ANALYSIS
             </div>
@@ -57,7 +58,7 @@ const HeroATS: React.FC<HeroATSProps> = ({ onScanClick }) => {
             {/* Heading — locked to 2 lines */}
             <div>
               <h1
-                className="font-extrabold leading-[1.15] text-white tracking-tight"
+                className="font-extrabold leading-[1.15] text-[#0f172a] tracking-tight"
                 style={{ fontSize: "3rem" }}
               >
                 Transform Your Resume{" "}
@@ -67,7 +68,7 @@ const HeroATS: React.FC<HeroATSProps> = ({ onScanClick }) => {
             </div>
 
             {/* Description */}
-            <p className="text-base lg:text-lg text-white/75 leading-relaxed max-w-[520px]">
+            <p className="text-base lg:text-lg text-slate-500 leading-relaxed max-w-130">
               Boost your chances of landing the job with our AI-powered ATS Resume Checker.
               Get a personalized score and actionable suggestions in seconds.
             </p>
@@ -76,12 +77,12 @@ const HeroATS: React.FC<HeroATSProps> = ({ onScanClick }) => {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <button
                 onClick={onScanClick}
-                className="bg-[#FFC85E] hover:bg-[#f5b83d] text-[#1a1a1a] font-bold px-9 py-4 rounded-full shadow-[0_4px_24px_rgba(255,200,94,0.35)] hover:shadow-[0_8px_32px_rgba(255,200,94,0.5)] hover:scale-105 active:scale-100 transition-all duration-300 text-base whitespace-nowrap"
+                className="bg-[#2557a7] hover:bg-[#1a3a8f] text-white font-bold px-9 py-4 rounded-full shadow-[0_4px_24px_rgba(37,87,167,0.35)] hover:shadow-[0_8px_32px_rgba(37,87,167,0.5)] hover:scale-105 active:scale-100 transition-all duration-300 text-base whitespace-nowrap"
               >
                 Check Your Resume
               </button>
-              <span className="flex items-center gap-1.5 text-white/60 text-sm">
-                <ShieldCheck className="w-4 h-4 text-white/50" />
+              <span className="flex items-center gap-1.5 text-slate-400 text-sm">
+                <ShieldCheck className="w-4 h-4 text-slate-300" />
                 Free · No signup needed
               </span>
             </div>
@@ -97,10 +98,10 @@ const HeroATS: React.FC<HeroATSProps> = ({ onScanClick }) => {
                   ))}
                   <Star className="w-4 h-4 text-[#00b67a] fill-[#00b67a] opacity-60" />
                 </div>
-                <span className="text-white/80 text-sm font-medium">
-                  <span className="text-white font-semibold">4.8</span> on
+                <span className="text-slate-500 text-sm font-medium">
+                  <span className="text-[#0f172a] font-semibold">4.8</span> on
                 </span>
-                <span className="flex items-center gap-1 text-white font-semibold text-sm">
+                <span className="flex items-center gap-1 text-[#0f172a] font-semibold text-sm">
                   <svg className="w-4 h-4 text-[#00b67a]" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 0L14.59 8.41H24L16.18 13.59L18.77 22L12 17L5.23 22L7.82 13.59L0 8.41H9.41L12 0Z" />
                   </svg>
@@ -108,46 +109,40 @@ const HeroATS: React.FC<HeroATSProps> = ({ onScanClick }) => {
                 </span>
               </div>
 
-              <div className="w-px h-5 bg-white/20" />
+              <div className="w-px h-5 bg-slate-200" />
 
               {/* Scan speed badge */}
-              <div className="flex items-center gap-1.5 text-white/70 text-sm">
+              <div className="flex items-center gap-1.5 text-slate-500 text-sm">
                 <Zap className="w-4 h-4 text-[#FFC85E]" />
-                <span>Results in <span className="text-white font-semibold">~10 sec</span></span>
+                <span>Results in <span className="text-[#2557a7] font-semibold">~10 sec</span></span>
               </div>
 
-              <div className="w-px h-5 bg-white/20" />
+              <div className="w-px h-5 bg-slate-200" />
 
               {/* Users count */}
-              <span className="text-white/70 text-sm">
-                <span className="text-white font-semibold">50,000+</span> resumes scanned
+              <span className="text-slate-500 text-sm">
+                <span className="text-[#0f172a] font-semibold">50,000+</span> resumes scanned
               </span>
             </div>
           </motion.div>
 
           {/* ── RIGHT COLUMN ── */}
-          <motion.div
-            className="relative flex justify-center lg:justify-end lg:-translate-x-8"
-            initial={{ opacity: 0, x: 48 }}
-            animate={mounted ? { opacity: 1, x: 0 } : {}}
-            transition={{ duration: 0.85, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-          >
+          <div className="relative flex justify-center lg:justify-end">
             {/* Glow halo behind image */}
-            <div className="absolute inset-0 -m-6 bg-white/10 rounded-[40px] blur-2xl scale-90" />
-            <div className="absolute inset-0 -m-2 bg-[#FFC85E]/8 rounded-[32px] blur-xl" />
+            <div className="absolute inset-0 -m-6 bg-[#2557a7]/5 rounded-[40px] blur-2xl scale-90" />
 
             {/* Static image */}
             <div className="relative z-10 w-full">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src="/images/atsheroimage.png"
                 alt="ATS Resume Checker — AI Scan Preview"
-                width={920}
-                height={720}
-                className="w-full h-auto object-contain drop-shadow-[0_32px_64px_rgba(0,0,0,0.35)] scale-90 origin-center"
-                priority
+                width={800}
+                height={600}
+                className="w-full h-auto object-contain drop-shadow-xl rounded-2xl"
               />
             </div>
-          </motion.div>
+          </div>
 
         </div>
       </div>

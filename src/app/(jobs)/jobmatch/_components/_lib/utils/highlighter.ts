@@ -18,7 +18,8 @@ export function highlightJD(
   matchedSkills: string[],
   missingSkills: string[],
   matchedSoftSkills: string[] = [],
-  missingSoftSkills: string[] = []
+  missingSoftSkills: string[] = [],
+  matchedCapabilities: string[] = []
 ): HighlightSpan[] {
   if (!jd) return [{ text: "", match: false }];
 
@@ -26,7 +27,8 @@ export function highlightJD(
   const expMissingTech = expandTokens(missingSkills).sort((a, b) => b.length - a.length);
   const expMatchedSoft = expandTokens(matchedSoftSkills).sort((a, b) => b.length - a.length);
   const expMissingSoft = expandTokens(missingSoftSkills).sort((a, b) => b.length - a.length);
-  const allExpanded = [...expMatchedTech, ...expMissingTech, ...expMatchedSoft, ...expMissingSoft];
+  const expMatchedCap  = expandTokens(matchedCapabilities).sort((a, b) => b.length - a.length);
+  const allExpanded = [...expMatchedTech, ...expMissingTech, ...expMatchedSoft, ...expMissingSoft, ...expMatchedCap];
 
   if (allExpanded.length === 0) return [{ text: jd, match: false }];
 
@@ -55,6 +57,7 @@ export function highlightJD(
     if (expMatchedTech.some(s => s.toLowerCase() === lower)) matchType = 'matched-tech';
     else if (expMatchedSoft.some(s => s.toLowerCase() === lower)) matchType = 'matched-soft';
     else if (expMissingSoft.some(s => s.toLowerCase() === lower)) matchType = 'missing-soft';
+    else if (expMatchedCap.some(s => s.toLowerCase() === lower)) matchType = 'matched-cap';
 
     result.push({ text: matchedText, match: true, matchType });
     lastIndex = end;

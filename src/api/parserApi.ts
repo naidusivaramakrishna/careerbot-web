@@ -318,7 +318,7 @@ export async function matcherAddSkill(match_id: string, skills: string | string[
   const skill = Array.isArray(skills) ? skills[0] : skills;
   if (!skill || !skill.trim()) throw new Error("No skill provided");
 
-  const payload = { skill: skill.trim() };
+  const payload = { skill_to_add: skill.trim() };
   logger.api.request('POST', `/matcher/live-update/${match_id}/add-skill`, payload);
 
   try {
@@ -341,9 +341,9 @@ export async function matcherAddSkill(match_id: string, skills: string | string[
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data;
 
-      if (raw?.error === "skill_exists" || raw?.error?.message?.includes("skill_exists")) {
+      if (raw?.error === "duplicate_skill" || raw?.detail?.error === "duplicate_skill") {
         logger.warn("Skill already exists in resume", { match_id, skill });
-        return { skipped: true, data: null, reason: "skill_exists" };
+        return { skipped: true, data: null, reason: "duplicate_skill" };
       }
     }
     logger.api.error('POST', `/matcher/live-update/${match_id}/add-skill`, err);
@@ -360,7 +360,7 @@ export async function matcherRemoveSkill(match_id: string, skills: string | stri
   const skill = Array.isArray(skills) ? skills[0] : skills;
   if (!skill || !skill.trim()) throw new Error("No skill provided");
 
-  const payload = { skill: skill.trim() };
+  const payload = { skill_to_remove: skill.trim() };
   logger.api.request('POST', `/matcher/live-update/${match_id}/remove-skill`, payload);
 
   try {
@@ -382,9 +382,9 @@ export async function matcherRemoveSkill(match_id: string, skills: string | stri
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data;
 
-      if (raw?.error === "skill_not_in_resume" || raw?.error?.message?.includes("skill_not_in_resume")) {
-        logger.warn("Skill not found in resume", { match_id, skill });
-        return { skipped: true, data: null, reason: "skill_not_in_resume" };
+      if (raw?.error === "cannot_remove_original_skill" || raw?.detail?.error === "cannot_remove_original_skill") {
+        logger.warn("Cannot remove original skill from resume", { match_id, skill });
+        return { skipped: true, data: null, reason: "cannot_remove_original_skill" };
       }
     }
     logger.api.error('POST', `/matcher/live-update/${match_id}/remove-skill`, err);

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "CareerBot - Resume Tailor",
+  "name": "CareerBot - ATS Resume Checker & Job Matcher",
   "version": "1.1.0",
   "description": "Auto-detect job descriptions from LinkedIn, Naukri, Indeed, Glassdoor, Shine, TimesJobs, Internshala, Foundit, ZipRecruiter, Wellfound, Greenhouse, Lever and tailor your resume in 1 click.",
   "icons": {
@@ -14,6 +14,9 @@
       "48": "icons/icon48.png"
     },
     "default_title": "CareerBot"
+  },
+  "side_panel": {
+    "default_path": "popup/popup.html"
   },
   "background": {
     "service_worker": "background/service-worker.js"
@@ -131,7 +134,8 @@
   "permissions": [
     "storage",
     "tabs",
-    "activeTab"
+    "activeTab",
+    "sidePanel"
   ],
   "host_permissions": [
     "http://localhost:8000/*",

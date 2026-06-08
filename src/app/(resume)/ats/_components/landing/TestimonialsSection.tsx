@@ -48,7 +48,7 @@ function TestimonialsSection() {
   }, []);
 
   return (
-    <section className="bg-white py-16 md:py-24">
+    <section className="py-16 md:py-24" style={{ background: "#ffffff" }}>
       <div className="max-w-6xl mx-auto px-6 lg:px-8">
 
         {/* Header */}

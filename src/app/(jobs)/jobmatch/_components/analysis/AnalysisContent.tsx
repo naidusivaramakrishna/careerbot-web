@@ -13,6 +13,10 @@ import {
 import { FaCheckCircle } from "react-icons/fa";
 import { RiSparkling2Fill } from "react-icons/ri";
 import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
+import JDHighlighter from "../highlighter/JDHighlighter";
+import { matcherAddSkill } from "@/api/parserApi";
+import ScoreBreakdown from "./ScoreBreakdown";
+import MatchPenalties from "./MatchPenalties";
 
 // All possible predefined sections
 const ALL_SECTIONS = [
@@ -112,6 +116,7 @@ export default function AnalysisContent({
   jdText,
   matchResults,
   parsedResumeData,
+  onBackToUpload,
 }: AnalysisContentProps) {
   const [pdfBlobUrl]  = React.useState<string>("");
   const [isLoading]   = React.useState(false);
@@ -122,6 +127,9 @@ export default function AnalysisContent({
 
   const [isEditMode, setIsEditMode] = React.useState(false);
   const [openSection, setOpenSection] = React.useState<string | null>(null);
+
+  // Track which skills were added (for green highlight in resume template)
+  const [addedSkillFields, setAddedSkillFields] = React.useState<string[]>([]);
 
   // Active section IDs (from parsed data + user-added)
   const [activeSectionIds, setActiveSectionIds] = React.useState<string[]>(
@@ -155,24 +163,74 @@ export default function AnalysisContent({
     };
   });
 
+  const matchId: string | undefined =
+    matchResults?.data?.id ?? matchResults?.data?._id ?? matchResults?.data?.match_id;
+
+  // Directly add a skill to the resume (no pending step)
+  const directAddSkill = React.useCallback(async (skill: string) => {
+    const s = skill.trim();
+    if (!s) return;
+    setAddedSkillFields((prev) => prev.includes(s) ? prev : [...prev, s]);
+    setResumeSections((prev: Record<string, unknown>) => {
+      const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+      if (existing.includes(s)) return prev;
+      return { ...prev, skills: [...existing, s] };
+    });
+    if (matchId) {
+      try { await matcherAddSkill(matchId, s); } catch { /* local state already updated */ }
+    }
+  }, [matchId]);
+
   const score = Math.min(100, Math.max(0, parseInt(String(matchResults?.data?.ats_score || "0"))));
 
-  const parseJD = () => {
-    if (!jdText) return null;
-    const lines = jdText.split("\n").filter((l) => l.trim());
-    const sections: { title: string; content: string[] }[] = [];
-    let cur: { title: string; content: string[] } | null = null;
-    for (const line of lines) {
-      const t = line.trim();
-      if (/^(role|location|experience|key\s+resp|required|nice|about)/i.test(t)) {
-        if (cur) sections.push(cur);
-        cur = { title: t, content: [] };
-      } else if (cur && t) cur.content.push(t);
-    }
-    if (cur) sections.push(cur);
-    return sections;
-  };
-  const jdSections = parseJD();
+  // Merge newly-added skills back into parsedData so the template renders them
+  const mergedParsedData = React.useMemo(() => {
+    if (!addedSkillFields.length) return parsedResumeData;
+    const base = parsedResumeData?.parsed_data ?? parsedResumeData ?? {};
+    const existing: string[] = Array.isArray(base.skills)
+      ? base.skills
+      : Array.isArray(base.technical_skills)
+      ? base.technical_skills
+      : [];
+    const merged = Array.from(new Set([...existing, ...addedSkillFields]));
+    return { ...parsedResumeData, parsed_data: { ...base, skills: merged } };
+  }, [parsedResumeData, addedSkillFields]);
+
+  const matchResult = matchResults?.data?.match_result ?? {};
+  const techSkills   = matchResult?.Technical_Skills ?? {};
+  const softSkills   = matchResult?.Soft_Skills ?? {};
+
+  const matchedTechSkills: string[] = [
+    ...(techSkills.matched_critical_skills ?? []).map((s: { skill: string }) => s.skill),
+    ...(techSkills.matched_important_skills ?? []).map((s: { skill: string }) => s.skill),
+    ...(techSkills.matched_nice_to_have    ?? []).map((s: { skill: string }) => s.skill),
+  ];
+  const missingTechSkills: string[] = [
+    ...(techSkills.missing_critical_skills  ?? []).map((s: { skill: string }) => s.skill),
+    ...(techSkills.missing_important_skills ?? []).map((s: { skill: string }) => s.skill),
+    ...(techSkills.missing_nice_to_have     ?? []).map((s: { skill: string }) => s.skill),
+  ];
+  const matchedSoftSkills: string[] = softSkills.matched_skills ?? [];
+  const missingSoftSkills: string[] = softSkills.missing_skills ?? [];
+  const capSkills   = matchResult?.Capabilities_Check ?? {};
+  const certSkills  = matchResult?.Certifications_Check ?? {};
+  const jobTitle    = matchResult?.Job_Title_Check ?? {};
+  const starCheck   = matchResult?.STAR_Pattern_Check ?? {};
+
+  const matchedCapabilities: string[] = [
+    // Capabilities
+    ...(capSkills.matched_capabilities ?? []).map((c: { capability: string }) => c.capability),
+    // Certifications
+    ...(certSkills.matched_certifications ?? []).map((c: { certification?: string; name?: string }) => c.certification ?? c.name ?? "").filter(Boolean),
+    // Job title
+    ...(jobTitle.matched_title ? [jobTitle.matched_title] : []),
+    ...(jobTitle.jd_title ? [jobTitle.jd_title] : []),
+    // STAR matched bullets (first few words as phrase)
+    ...(starCheck.strong_bullets ?? []).map((b: { text?: string; bullet?: string }) => b.text ?? b.bullet ?? "").filter(Boolean),
+  ];
+
+  const totalMatchedCount = matchedTechSkills.length + matchedSoftSkills.length;
+  const totalMissingCount = missingTechSkills.length + missingSoftSkills.length;
 
   // Sections shown in the active list
   const activePredefined = ALL_SECTIONS.filter((s) => activeSectionIds.includes(s.id));
@@ -340,10 +398,20 @@ export default function AnalysisContent({
         )}
 
         {/* CENTER — Resume Preview (always visible) */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent bg-gray-50 border-r border-gray-200 px-18 py-5">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden h-full flex flex-col">
+        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent bg-gray-50 border-r border-gray-200 px-18 py-5 space-y-4">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gray-50 shrink-0">
-              <h3 className="text-[12px] font-bold text-gray-600 uppercase">Resume Preview</h3>
+              <div className="flex items-center gap-3">
+                {onBackToUpload && (
+                  <button
+                    onClick={onBackToUpload}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded border border-gray-200"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back
+                  </button>
+                )}
+                <h3 className="text-[12px] font-bold text-gray-600 uppercase">Resume Preview</h3>
+              </div>
               <div className="flex items-center gap-2">
                 <button className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded border border-gray-200">
                   <Download className="w-4 h-4" /> Download
@@ -357,7 +425,7 @@ export default function AnalysisContent({
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-4" style={{ zoom: 1.1, scrollbarWidth: "thin", scrollbarColor: "#f3f4f6 transparent" }}>
+            <div className="overflow-auto p-4" style={{ zoom: 1.1, scrollbarWidth: "thin", scrollbarColor: "#f3f4f6 transparent" }}>
               {pdfError ? (
                 <PDFPreviewError error={pdfError} />
               ) : (
@@ -368,34 +436,47 @@ export default function AnalysisContent({
                   isUpdating={isUpdating}
                   isDocx={isDocx}
                   docxBlob={docxBlob}
-                  parsedData={parsedResumeData}
+                  parsedData={mergedParsedData}
                   resumeId=""
+                  addedFields={{ skills: addedSkillFields }}
                 />
               )}
             </div>
+
           </div>
+
+          {/* Score Breakdown — below resume preview */}
+          <ScoreBreakdown matchResult={matchResult} />
+
+          {/* Match Penalties — improvement suggestions */}
+          <MatchPenalties
+            matchResult={matchResult}
+            onAddSkill={directAddSkill}
+          />
         </div>
 
         {/* RIGHT — ATS Score + Job Description */}
-        <div className="w-136 shrink-0 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent bg-white border-l border-gray-200 p-4 space-y-4">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-[12px] font-bold text-gray-600 mb-3 uppercase">ATS Match Score</h3>
-            <div className="flex flex-col items-center mb-4">
-              <MultiColorCircularScore value={score} />
-              <p className="text-[11px] text-gray-600 mt-2">Overall Score</p>
+        <div className="w-125 shrink-0 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent bg-white border-l border-gray-200 p-4 space-y-4">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <h3 className="text-[11px] font-bold text-gray-600 mb-2 uppercase tracking-wide">ATS Match Score</h3>
+            <div className="flex flex-col items-center mb-3">
+              <div className="w-28 h-28">
+                <MultiColorCircularScore value={score} />
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1.5">Overall Score</p>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1">
               <div className="text-center">
-                <p className="text-[20px] font-bold text-red-600">12</p>
-                <p className="text-[12px] text-gray-600">Missing Skills</p>
+                <p className="text-[16px] font-bold text-red-600">{totalMissingCount}</p>
+                <p className="text-[10px] text-gray-500">Missing Skills</p>
               </div>
               <div className="text-center">
-                <p className="text-[20px] font-bold text-green-600">24</p>
-                <p className="text-[12px] text-gray-600">Matched Skills</p>
+                <p className="text-[16px] font-bold text-green-600">{totalMatchedCount}</p>
+                <p className="text-[10px] text-gray-500">Matched Skills</p>
               </div>
               <div className="text-center">
-                <p className="text-[20px] font-bold text-blue-600">18</p>
-                <p className="text-[12px] text-gray-600">Resume Sections</p>
+                <p className="text-[16px] font-bold text-blue-600">{activeSectionIds.length}</p>
+                <p className="text-[10px] text-gray-500">Sections</p>
               </div>
             </div>
           </div>
@@ -410,18 +491,19 @@ export default function AnalysisContent({
                 <FileText className="w-3 h-3" /> Copy
               </button>
             </div>
-            <div className="p-3 max-h-[32rem] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent text-sm text-gray-700 space-y-2">
-              {jdSections && jdSections.length > 0 ? (
-                jdSections.map((section, i) => (
-                  <div key={i}>
-                    <p className="font-semibold text-gray-900 mb-1">{section.title}</p>
-                    {section.content.map((item, j) => (
-                      <p key={j} className="text-gray-600 ml-2">• {item}</p>
-                    ))}
-                  </div>
-                ))
+            <div className="p-3 max-h-[32rem] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent">
+              {jdText ? (
+                <JDHighlighter
+                  text={jdText}
+                  matchedSkills={matchedTechSkills}
+                  missingSkills={missingTechSkills}
+                  matchedSoftSkills={matchedSoftSkills}
+                  missingSoftSkills={missingSoftSkills}
+                  matchedCapabilities={matchedCapabilities}
+                  onMissingSkillClick={directAddSkill}
+                />
               ) : (
-                <p className="text-gray-400">No job description available</p>
+                <p className="text-gray-400 text-sm">No job description available</p>
               )}
             </div>
           </div>

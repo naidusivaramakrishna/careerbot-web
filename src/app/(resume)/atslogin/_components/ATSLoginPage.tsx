@@ -72,11 +72,9 @@ const LIVE_MESSAGES = [
 ] as const;
 
 const WORKFLOW = [
-  { id: "upload",   label: "Upload",   icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg> },
-  { id: "parse",    label: "Parse",    icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg> },
-  { id: "analyze",  label: "Analyze",  icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> },
-  { id: "optimize", label: "Optimize", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> },
-  { id: "report",   label: "Report",   icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg> },
+  { id: "upload",  label: "Upload",  icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg> },
+  { id: "analyze", label: "Analyze", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> },
+  { id: "report",  label: "Report",  icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg> },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -642,7 +640,7 @@ export default function ATSLoginPage() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden flex flex-col justify-center pb-20" style={{ backgroundColor: "#FAFBFF" }}>
+    <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden flex flex-col justify-center pt-12 pb-20" style={{ backgroundColor: "#FAFBFF" }}>
 
       {/* ── Background layers ── */}
       {/* Dot grid */}

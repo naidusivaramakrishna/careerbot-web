@@ -9,7 +9,7 @@ import HeroSection from "./landing/HeroSection";
 import ResumeUploadModal from "./upload/ResumeUploadModal";
 import ResumeUpload from "./upload/ResumeUpload";
 import TestimonialsSection from "./landing/TestimonialsSection";
-import HowATSScoreWorksPage from "./landing/HowATSScoreWorksPage";
+import ATSScannerChecks from "./landing/ATSScannerChecks";
 import BeforeAfterSection from "./landing/BeforeAfterSection";
 
 export default function HomePage() {
@@ -37,9 +37,9 @@ export default function HomePage() {
   return (
     <>
       <HeroSection onScanClick={openModal} />
-      <HowATSScoreWorksPage />
-      <BeforeAfterSection onScanClick={openModal} />
       <FeaturesSection />
+      <ATSScannerChecks />
+      <BeforeAfterSection onScanClick={openModal} />
       <TestimonialsSection />
       <CTABand onScanClick={openModal} />
       <FAQPage />
@@ -55,11 +55,11 @@ export default function HomePage() {
           aria-label="Scroll to top"
           style={{
             position: "fixed",
-            bottom: 32,
-            right: 32,
-            width: 44,
-            height: 52,
-            borderRadius: 14,
+            bottom: 24,
+            right: 12,
+            width: 34,
+            height: 40,
+            borderRadius: 10,
             background: "#ffffff",
             color: "#2557a7",
             border: "2px solid #2557a7",
@@ -84,8 +84,8 @@ export default function HomePage() {
             e.currentTarget.style.boxShadow = "0 4px 16px rgba(37,87,167,0.18)";
           }}
         >
-          <ChevronUp style={{ width: 18, height: 18 }} strokeWidth={2.5} />
-          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", lineHeight: 1 }}>TOP</span>
+          <ChevronUp style={{ width: 13, height: 13 }} strokeWidth={2.5} />
+          <span style={{ fontSize: 7.5, fontWeight: 800, letterSpacing: "0.08em", lineHeight: 1 }}>TOP</span>
         </button>
       )}
     </>
