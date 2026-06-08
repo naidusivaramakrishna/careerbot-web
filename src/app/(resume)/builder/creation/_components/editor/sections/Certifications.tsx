@@ -305,7 +305,8 @@ const Certifications: React.FC = () => {
                           placeholder="Certification Name"
                           onChange={(e) => handleChange(editIndex, "name", e.target.value)}
                           onBlur={() => validateRequired("certification", globalIndex, { name: certification.name })}
-                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]`}
+                          maxLength={150}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`certification-${globalIndex}-name`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}
                         />
                         {errors[`certification-${globalIndex}-name`] && (
                           <span className="text-xs text-red-500">
@@ -323,6 +324,7 @@ const Certifications: React.FC = () => {
                           value={certification.issuer}
                           placeholder="Organization Name"
                           onChange={(e) => handleChange(editIndex, "issuer", e.target.value)}
+                          maxLength={100}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]`}
                         />
                       </div>
@@ -366,6 +368,7 @@ const Certifications: React.FC = () => {
                           value={certification.credentialId || ""}
                           placeholder="Certificate or License Number"
                           onChange={(e) => handleChange(editIndex, "credentialId", e.target.value)}
+                          maxLength={100}
                           className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]"
                         />
                       </div>

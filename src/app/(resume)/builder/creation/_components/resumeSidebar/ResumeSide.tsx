@@ -58,6 +58,7 @@ interface ResumeSideProps {
   onToggleTemplateSidebar?: (isOpen: boolean) => void;
   resumeId?: string;
   initialTab?: string;
+  defaultOpen?: boolean;
 }
 
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
@@ -72,6 +73,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   isTemplateSidebarOpen = true,
   onToggleTemplateSidebar,
   initialTab,
+  defaultOpen = true,
 }) => {
   // ✅ Get context first
   const {
@@ -101,16 +103,13 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       return initialSections;
     }
 
-    // Check if sectionOrder contains extra sections (not in initialSections)
-    const initialSectionNames = new Set(initialSections.map(s => s.name));
-    const hasExtraSections = sectionOrder.some(name => !initialSectionNames.has(name));
+    const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+    const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
+    const hasSavedOrder = typeof window !== 'undefined' && !!localStorage.getItem(sectionOrderKey);
 
-    console.warn("🔧 ResumeSide init - sectionOrder:", sectionOrder);
-    console.warn("🔧 ResumeSide init - initialSectionNames:", Array.from(initialSectionNames));
-    console.warn("🔧 ResumeSide init - hasExtraSections:", hasExtraSections);
-
-    if (hasExtraSections) {
-      // Use all known sections (initialSections + defaultExtraSections)
+    if (hasSavedOrder) {
+      // localStorage sectionOrder = exact main list (core + any extras the user added).
+      // Use the full known-sections map so restored extra sections resolve correctly.
       const allKnownSections = [...initialSections, ...defaultExtraSections];
       const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
       return sectionOrder
@@ -119,7 +118,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
         .filter(Boolean);
     }
 
-    // No extra sections: sectionOrder comes from getSectionOrder() which lists ALL sections.
+    // No saved order: sectionOrder comes from getSectionOrder() which lists ALL sections.
     // Only pick initialSections from it — extras stay in "Add New Sections".
     const sectionMap = new Map(initialSections.map(s => [s.name, s]));
     const reordered = sectionOrder
@@ -158,56 +157,9 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<number | null>(null);
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [activeTab, setActiveTab] = useState(initialTab ?? "Editor");
-
-  // ✅ Update sections when sectionOrder changes
-  useEffect(() => {
-    if (!sectionOrder || sectionOrder.length === 0) {
-      setSections(initialSections);
-      return;
-    }
-
-    // Check if sectionOrder contains extra sections (not in initialSections)
-    const initialSectionNames = new Set(initialSections.map(s => s.name));
-    const hasExtraSections = sectionOrder.some(name => !initialSectionNames.has(name));
-
-    console.warn("🔧 ResumeSide useEffect - sectionOrder changed:", sectionOrder);
-    console.warn("🔧 ResumeSide useEffect - hasExtraSections:", hasExtraSections);
-    console.warn("🔧 ResumeSide useEffect - initialSectionNames:", Array.from(initialSectionNames));
-
-    if (hasExtraSections) {
-      const allKnownSections = [...initialSections, ...defaultExtraSections];
-      const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
-      const newSections = sectionOrder
-        .filter(name => sectionMap.has(name))
-        .map(name => sectionMap.get(name)!)
-        .filter(Boolean);
-      setSections(newSections);
-    } else {
-      const sectionMap = new Map(initialSections.map(s => [s.name, s]));
-      const reordered = sectionOrder
-        .filter(name => sectionMap.has(name))
-        .map(name => sectionMap.get(name)!)
-        .filter(Boolean);
-      const orderedNames = new Set(reordered.map(s => s.name));
-      const remaining = initialSections.filter(s => !orderedNames.has(s.name));
-      setSections([...reordered, ...remaining]);
-    }
-
-    // Also update extraSections when sectionOrder changes
-    if (hasExtraSections) {
-      const mainNames = new Set(sectionOrder);
-      const allKnown = [
-        ...defaultExtraSections,
-        ...initialSections.filter(s => !defaultExtraSections.some(d => d.name === s.name)),
-      ];
-      setExtraSections(allKnown.filter(s => !mainNames.has(s.name)));
-    } else {
-      setExtraSections(defaultExtraSections);
-    }
-  }, [sectionOrder]);
-
+  
   const clearErrors = (fields?: string[]) => {
   if (!fields || fields.length === 0) {
     // Clear all errors

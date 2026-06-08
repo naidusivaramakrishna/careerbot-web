@@ -201,18 +201,21 @@ const Skills: React.FC = () => {
                               setResumeData({ ...resumeData, categorizedSkills: { ...categorizedSkills, skill_id_map: updatedMap } });
                             }
                             toast.success("Skill added successfully.");
-                          } catch {
-                            toast.error("Failed to add skill. Please try again.");
+                          } catch (err) {
+                            const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
+                            toast.error(errorMsg);
                             throw new Error("api_failed");
                           }
                         } : undefined}
                         onRemoveSkill={resumeData.resume_id ? async (skill) => {
                           try {
+                            const apiCategory = CATEGORY_KEY_MAP[cat.key] ?? cat.key;
                             const skillId = categorizedSkills.skill_id_map?.[`${cat.key}:${skill}`] ?? skill;
-                            await deleteSkillById(resumeData.resume_id!, cat.key, skillId);
+                            await deleteSkillById(resumeData.resume_id!, apiCategory, skillId);
                             toast.success("Skill removed successfully.");
-                          } catch {
-                            toast.error("Failed to remove skill. Please try again.");
+                          } catch (err) {
+                            const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";
+                            toast.error(errorMsg);
                             throw new Error("api_failed");
                           }
                         } : undefined}
@@ -249,6 +252,7 @@ const Skills: React.FC = () => {
                       }}
                       ref={(el) => { nameInputRefs.current[custom.id] = el; }}
                       placeholder="Category name (e.g. Architecture Patterns)"
+                      maxLength={80}
                       className="text-sm font-semibold text-[#3b3b3b] bg-transparent border-none outline-none w-full placeholder:text-gray-400 mb-1"
                     />
                     <TechnologyChipsInput
@@ -262,8 +266,9 @@ const Skills: React.FC = () => {
                         try {
                           await addSkillToCategory(resumeData.resume_id!, custom.name, skill);
                           toast.success("Skill added successfully.");
-                        } catch {
-                          toast.error("Failed to add skill. Please try again.");
+                        } catch (err) {
+                          const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
+                          toast.error(errorMsg);
                           throw new Error("api_failed");
                         }
                       } : undefined}
@@ -271,8 +276,9 @@ const Skills: React.FC = () => {
                         try {
                           await deleteSkillById(resumeData.resume_id!, custom.name, skill);
                           toast.success("Skill removed successfully.");
-                        } catch {
-                          toast.error("Failed to remove skill. Please try again.");
+                        } catch (err) {
+                          const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";
+                          toast.error(errorMsg);
                           throw new Error("api_failed");
                         }
                       } : undefined}

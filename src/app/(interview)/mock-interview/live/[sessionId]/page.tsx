@@ -13,6 +13,7 @@ import {
   Mic,
   MicOff,
   Video,
+  VideoOff,
   Clock,
   PhoneOff,
   Wifi,
@@ -25,6 +26,8 @@ import {
   ChevronRight,
   MessageSquare,
   RefreshCw,
+  Maximize2,
+  Minimize2,
   X,
 } from "lucide-react";
 
@@ -342,6 +345,82 @@ export default function LiveInterviewSessionPage() {
   // Keep ref in sync with state so toggles mid-playback take effect
   useEffect(() => { isAudioMutedRef.current = isAudioMuted; }, [isAudioMuted]);
 
+  // ─── Camera self-view + fullscreen ─────────────────────────────────────────
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraOn, setCameraOn] = useState(true);
+  const [cameraError, setCameraError] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Turn the webcam on automatically when the live interview opens
+  useEffect(() => {
+    let cancelled = false;
+    let localStream: MediaStream | null = null;
+    navigator.mediaDevices
+      .getUserMedia({ video: true, audio: false })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        localStream = stream;
+        setCameraStream(stream);
+        setCameraError(false);
+      })
+      .catch(() => {
+        if (!cancelled) setCameraError(true);
+      });
+    return () => {
+      cancelled = true;
+      localStream?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  // Attach the stream to the <video> element once both are available
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
+
+  const toggleCamera = useCallback(() => {
+    setCameraOn((on) => {
+      const next = !on;
+      cameraStream?.getVideoTracks().forEach((t) => { t.enabled = next; });
+      return next;
+    });
+  }, [cameraStream]);
+
+  // Track fullscreen state so the toggle button shows the right icon
+  useEffect(() => {
+    const sync = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", sync);
+    sync();
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }, []);
+
+  // Release camera + exit fullscreen when the interview finishes
+  useEffect(() => {
+    if (phase !== "completed") return;
+    cameraStream?.getTracks().forEach((t) => t.stop());
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }, [phase, cameraStream]);
+
+  // Leave fullscreen if the user navigates away mid-interview
+  useEffect(() => {
+    return () => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+
   const [showEndModal, setShowEndModal] = useState(false);
   const [showReconnectModal, setShowReconnectModal] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -607,6 +686,30 @@ export default function LiveInterviewSessionPage() {
           </div>
         )}
 
+        {/* Camera self-view */}
+        <div className="fixed bottom-4 right-4 z-30 w-44 h-32 rounded-xl overflow-hidden border-2 border-white bg-gray-900 shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`h-full w-full scale-x-[-1] object-cover transition-opacity ${
+              cameraOn && !cameraError ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          {(!cameraOn || cameraError) && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-400">
+              <VideoOff size={20} />
+              <span className="text-[10px] font-medium">
+                {cameraError ? "Camera unavailable" : "Camera off"}
+              </span>
+            </div>
+          )}
+          <span className="absolute bottom-1 left-2 text-[10px] font-medium text-white/90 drop-shadow">
+            You
+          </span>
+        </div>
+
         {/* Status bar */}
         <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
@@ -626,6 +729,13 @@ export default function LiveInterviewSessionPage() {
               <Clock size={11} />
               {sessionType} Interview
             </span>
+            <button
+              onClick={toggleFullscreen}
+              className="flex items-center justify-center w-8 h-8 bg-gray-100 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors"
+              aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+            >
+              {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            </button>
             <button
               onClick={() => setShowEndModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-500 border border-gray-200 rounded-lg text-xs font-semibold hover:bg-gray-200 transition-colors"
@@ -772,6 +882,19 @@ export default function LiveInterviewSessionPage() {
                 aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
               >
                 {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
+              </button>
+
+              <button
+                onClick={toggleCamera}
+                disabled={cameraError}
+                className={`w-12 h-12 rounded-full flex items-center justify-center border transition-all disabled:cursor-not-allowed ${
+                  !cameraOn || cameraError
+                    ? "bg-gray-100 border-gray-200 text-gray-400"
+                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50 shadow-sm"
+                }`}
+                aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}
+              >
+                {cameraOn && !cameraError ? <Video size={18} /> : <VideoOff size={18} />}
               </button>
 
               {phase === "listening" && (

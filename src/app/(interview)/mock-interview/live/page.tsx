@@ -281,6 +281,15 @@ export default function LiveSetupPage() {
   }, []);
 
   const handleStart = async () => {
+    // Enter fullscreen now — within this click gesture — so it carries into the
+    // interview page (programmatic fullscreen needs a user gesture).
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {
+      /* fullscreen unsupported or denied — continue without it */
+    }
     setPhase("connecting");
     try {
       const typeMap: Record<string, "hr" | "technical" | "mixed"> = {

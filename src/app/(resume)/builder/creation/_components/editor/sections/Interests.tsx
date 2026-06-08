@@ -1,7 +1,5 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
-import SafeHTML from "@/components/common/SafeHTML";
-import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -47,7 +45,7 @@ interface ToolbarButtonProps {
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isActive = false }) => (
   <button
     type="button"
-    onClick={onClick}
+    onMouseDown={(e) => { e.preventDefault(); onClick(); }}
     className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition ${
       isActive ? "text-[#2557a7] border border-[#2557a7] bg-blue-50" : "text-gray-400 hover:text-blue-600"
     }`}
@@ -246,22 +244,34 @@ const Interests: React.FC = () => {
     setEditingOriginalEntry(null);
   };
 
+  const cleanHtmlContent = (html: string): string => {
+    if (!html) return "";
+    const textOnly = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (!textOnly) return "";
+    return html
+      .replace(/(\s*<br\s*\/?>\s*)+$/gi, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
+  };
+
   const exec = (idx: number, command: string, value?: string) => {
     const editor = editorRefs.current[idx];
     if (!editor) return;
-    
+
     editor.focus();
     document.execCommand(command, false, value);
-    
+
     setTimeout(() => {
-      handleChange(idx, "description", editor.innerHTML || "");
+      const content = cleanHtmlContent(editor.innerHTML);
+      handleChange(idx, "description", content);
     }, 0);
   };
 
   const onEditorInput = (idx: number) => {
     const el = editorRefs.current[idx];
     if (!el) return;
-    handleChange(idx, "description", el.innerHTML || "");
+    const content = cleanHtmlContent(el.innerHTML);
+    handleChange(idx, "description", content);
   };
 
   const toggleSpellCheck = (editIndex: number) => {
@@ -322,7 +332,7 @@ Master blockchain technologies and distributed systems architecture, contributin
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = sanitizeHtml(suggestion);
+      el.innerHTML = suggestion;
       handleChange(editIndex, "description", suggestion);
 
       setTimeout(() => {
@@ -353,8 +363,10 @@ Master blockchain technologies and distributed systems architecture, contributin
   useEffect(() => {
     editingEntries.forEach((interest, idx) => {
       const el = editorRefs.current[idx];
-      if (el && interest.description && el.innerHTML !== interest.description) {
-        el.innerHTML = sanitizeHtml(interest.description);
+      if (el && interest.description) {
+        if (document.activeElement !== el && el.innerHTML !== interest.description) {
+          el.innerHTML = interest.description;
+        }
       }
     });
   }, [editingEntries]);
@@ -392,9 +404,9 @@ Master blockchain technologies and distributed systems architecture, contributin
                   )}
                   
                   {interest.description && (
-                    <SafeHTML
-                      className="text-sm text-[#404040] mt-1 line-clamp-2"
-                      content={interest.description}
+                    <div 
+                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
+                      dangerouslySetInnerHTML={{ __html: interest.description }} 
                     />
                   )}
                 </div>
@@ -472,7 +484,8 @@ Master blockchain technologies and distributed systems architecture, contributin
                         placeholder="e.g., Artificial Intelligence, Sustainable Architecture"
                         onChange={(e) => handleChange(editIndex, "name", e.target.value)}
                         onBlur={() => validateRequired("interest", globalIndex, { name: interest.name })}
-                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                        maxLength={80}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`interest-${globalIndex}-name`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
                       {errors[`interest-${globalIndex}-name`] && (
                         <span className="text-xs text-red-500">
@@ -532,8 +545,9 @@ Master blockchain technologies and distributed systems architecture, contributin
                           ref={(el) => { editorRefs.current[editIndex] = el; }}
                           contentEditable
                           suppressContentEditableWarning
+                          lang="en"
                           onInput={() => onEditorInput(editIndex)}
-                          className="w-full px-3 py-2 text-sm text-black min-h-[120px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7]"
+                          className="w-full px-3 py-2 text-sm text-black min-h-[120px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                           spellCheck={spellCheckEnabled}
                         />
                       </div>

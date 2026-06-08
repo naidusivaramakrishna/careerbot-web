@@ -12,7 +12,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Sparkles, TrendingUp } from 'lucide-react';
+import { Zap, Sparkles, TrendingUp } from 'lucide-react';
 
 export interface CreditBadgeProps {
   creditsRemaining: number;
@@ -68,15 +68,18 @@ export const CreditBadge: React.FC<CreditBadgeProps> = ({
   if (variant === 'header') {
     return (
       <Link
-        href="/pricing"
-        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border ${colors.bg} ${colors.border} hover:shadow-md transition-all ${className}`}
+        href="/settings/subscription"
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${colors.bg} ${colors.border} hover:shadow-sm transition-all ${className}`}
         title={`${creditsRemaining} of ${creditsTotal} credits remaining`}
       >
-        <Sparkles className={`w-4 h-4 ${colors.icon}`} />
-        <span className={`text-sm font-semibold ${colors.text}`}>
-          {creditsRemaining}
+        <span className="w-5 h-5 rounded-full bg-[#2557a7] flex items-center justify-center shrink-0">
+          <Zap className="w-2.5 h-2.5 text-white fill-white" />
         </span>
-        <span className="text-xs text-gray-500">credits</span>
+        <span className={`text-xs font-semibold ${colors.text}`}>
+          {creditsRemaining}
+          <span className="font-normal text-gray-400 mx-0.5">/</span>
+          {creditsTotal}
+        </span>
       </Link>
     );
   }
