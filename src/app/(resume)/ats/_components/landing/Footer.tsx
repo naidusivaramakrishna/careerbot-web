@@ -130,9 +130,6 @@ const Footer = () => {
           <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
             © {new Date().getFullYear()} CareerBot. All rights reserved.
           </p>
-          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
-            Built with ❤️ to help job seekers land better opportunities.
-          </p>
         </div>
       </div>
 

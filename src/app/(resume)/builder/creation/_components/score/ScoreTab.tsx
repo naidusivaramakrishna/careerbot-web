@@ -1,250 +1,212 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
-import { getResumeScore, ResumeScoreResponse } from "@/api/resumeApi";
-import ProgressBar from "./ProgressBar";
+import { triggerScoreCalculation, getBuilderScore } from "@/api/resumeApi";
+import PreviewScoreCard from "./PreviewScoreCard";
+import FullAtsScoreCard from "./FullAtsScoreCard";
 import MultiColorCircularScore from "./MultiColorCircularScore";
 import { toast } from "sonner";
 import { useScore } from "../../_context/ScoreContext";
 import { useResume } from "../../_context/ResumeContext";
+import { useResumeScorePreview } from "../../_hooks/useResumeScorePreview";
 
-// ── Enhanced ATS score tab (data from /resume/enhance/{id} response) ─────────
+function EnhancedScorePanel() {
+  const { enhancedAtsScore } = useResume();
 
-function EnhancedScoreTab({ atsScore }: { atsScore: Record<string, unknown> }) {
-  const { setOverallScore } = useScore();
+  if (!enhancedAtsScore) {
+    return (
+      <div className="flex items-center justify-center py-16 text-sm text-gray-400">
+        Score data not available.
+      </div>
+    );
+  }
 
-  const finalScore = Number(atsScore.final_score ?? atsScore.Percentage ?? 0);
+  const score = Math.round(enhancedAtsScore.final_score ?? enhancedAtsScore.Percentage ?? 0);
+  const profile = enhancedAtsScore.profile;
+  const breakdown = enhancedAtsScore.section_breakdown ?? {};
+  const penalties = enhancedAtsScore.intelligence_penalties ?? [];
 
-  const sectionBreakdown = (atsScore.section_breakdown ?? {}) as Record<string, {
-    raw_score: number;
-    max_raw_score: number;
-    percentage: number;
-    weighted_contribution: number;
-    deductions: { id: string; penalty: number; message?: string; after_example?: string; before_example?: string }[];
-  }>;
+  const scoreColor = score >= 70 ? "#16a34a" : score >= 40 ? "#2557a7" : "#dc2626";
 
-  const intelligencePenalties = (atsScore.IntelligencePenalties ?? []) as {
-    id: string; penalty: number; message?: string; after_example?: string;
-  }[];
-
-  useEffect(() => {
-    setOverallScore(finalScore);
-  }, [finalScore, setOverallScore]);
-
-  const sections = Object.entries(sectionBreakdown);
+  const sections = Object.entries(breakdown).filter(([, sec]) => sec.weight > 0);
 
   return (
-    <div className="p-4 bg-white rounded-2xl shadow-md space-y-4">
-      <h2 className="text-lg font-semibold text-gray-800">ATS Score</h2>
-
-      {/* Overall score */}
-      <div className="flex flex-col items-center">
-        <MultiColorCircularScore value={finalScore} />
-        <p className="mt-2 text-sm text-gray-600">Overall Score</p>
-        {(atsScore.Profile as string) && (
-          <span className="mt-1 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-            {atsScore.Profile as string}
+    <div className="space-y-4 p-4">
+      {/* Score circle */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 flex flex-col items-center">
+        <MultiColorCircularScore value={score} />
+        <p className="mt-2 text-sm font-semibold" style={{ color: scoreColor }}>
+          ATS Score
+        </p>
+        {profile && (
+          <span className="mt-1 text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-[#2557a7] font-medium">
+            {profile}
           </span>
         )}
       </div>
 
       {/* Section breakdown */}
       {sections.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700">Section Breakdown</h3>
-          {sections.map(([name, sec]) => (
-            <div key={name}>
-              <div className="flex justify-between text-xs text-gray-600 mb-0.5">
-                <span className="font-medium">{name}</span>
-                <span>{sec.percentage.toFixed(0)}%</span>
-              </div>
-              <ProgressBar value={sec.percentage} label="" />
-              {sec.deductions.length > 0 && (
-                <ul className="mt-1 space-y-0.5">
-                  {sec.deductions.map((d) => {
-                    const text = d.after_example || d.message;
-                    if (!text) return null;
-                    return (
-                      <li key={d.id} className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-0.5">
-                        {text}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          ))}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+          <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">
+            Section Breakdown
+          </h3>
+          <div className="space-y-3">
+            {sections.map(([name, sec]) => {
+              const pct = Math.round(sec.percentage);
+              const barColor = pct >= 70 ? "#16a34a" : pct >= 40 ? "#2557a7" : "#dc2626";
+              return (
+                <div key={name}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-medium text-gray-700">{name}</span>
+                    <span className="text-xs font-bold" style={{ color: barColor }}>{pct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, background: barColor }}
+                    />
+                  </div>
+                  {sec.deductions?.slice(0, 1).map((d, i) => (
+                    <p key={i} className="text-[10px] text-amber-700 mt-0.5 leading-tight">
+                      {d.after_example || d.message}
+                    </p>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Intelligence penalties */}
-      {intelligencePenalties.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">Additional Notes</h3>
-          <ul className="space-y-1">
-            {intelligencePenalties.map((p) => {
-              const text = p.after_example || p.message;
-              if (!text) return null;
-              return (
-                <li key={p.id} className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">
-                  {text}
-                </li>
-              );
-            })}
-          </ul>
+      {penalties.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+          <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">
+            Improvement Tips
+          </h3>
+          <div className="space-y-2">
+            {penalties.map((p, i) => (
+              <div key={i} className="text-xs rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-amber-800">
+                {p.after_example || p.message}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ── Builder ATS score tab (calls GET /resumes/{id}/score API) ────────────────
+export default function ATSScorePanel() {
+  const { resumeData, resumeSource } = useResume();
+  const {
+    canonicalScore,
+    canonicalStatus,
+    scoreStale,
+    lastCalculatedAt,
+    setCanonicalScore,
+    setCanonicalStatus,
+    markScoreStale,
+  } = useScore();
 
-function BuilderScoreTab() {
-  const [scoreData, setScoreData] = useState<ResumeScoreResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pollProgress, setPollProgress] = useState<{ attempt: number; max: number } | null>(null);
-  const { setOverallScore, overallScore, resetScore } = useScore();
-  const previousResumeIdRef = useRef<string | null>(null);
   const isMountedRef = useRef(true);
 
+  // Cast: ResumeData is structurally compatible for preview score computation
+  const previewScore = useResumeScorePreview(resumeData as unknown as import("@/api/resumeApi").ResumeResponse);
+
+  const isEnhanced = resumeSource === "enhanced";
+
+  // Mark score stale when resume data changes — builder resumes only
   useEffect(() => {
-    isMountedRef.current = true;
+    if (!isEnhanced && canonicalScore !== null && canonicalStatus === "ready") {
+      markScoreStale();
+    }
+  }, [resumeData, canonicalScore, canonicalStatus, markScoreStale, isEnhanced]);
 
-    const fetchScore = async () => {
-      const resumeId = localStorage.getItem("current_resume_id");
-
-      if (!resumeId || resumeId === "null" || resumeId === "undefined") {
-        setError("No resume found. Please create a resume first.");
-        setIsLoading(false);
-        return;
-      }
-
-      if (previousResumeIdRef.current !== null && previousResumeIdRef.current !== resumeId) {
-        resetScore();
-        setScoreData(null);
-      }
-      previousResumeIdRef.current = resumeId;
-
-      try {
-        setIsLoading(true);
-        setError(null);
-        setPollProgress(null);
-        const data = await getResumeScore(resumeId, (attempt, max) => {
-          if (isMountedRef.current) setPollProgress({ attempt, max });
-        });
-        if (isMountedRef.current) {
-          setScoreData(data);
-          setOverallScore(data.overall_score);
-        }
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to fetch score";
-        if (isMountedRef.current) {
-          setError(errorMessage);
-          if (overallScore === 0) toast.error(errorMessage);
-        }
-      } finally {
-        if (isMountedRef.current) setIsLoading(false);
-      }
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
     };
+  }, []);
 
-    fetchScore();
-    return () => { isMountedRef.current = false; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (isLoading && overallScore > 0) {
-    return (
-      <div className="p-6 bg-white border rounded-2xl shadow-md">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">ATS Score</h2>
-        <div className="flex flex-col items-center justify-center">
-          <MultiColorCircularScore value={overallScore} />
-          <p className="mt-2 text-sm text-gray-600">Overall Score (Cached)</p>
-        </div>
-        <div className="mt-4 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-          <p className="ml-2 text-xs text-gray-500">Refreshing...</p>
-        </div>
-      </div>
-    );
+  // For enhanced resumes, render the dedicated enhanced score panel
+  if (isEnhanced) {
+    return <EnhancedScorePanel />;
   }
 
-  if (isLoading) {
-    const pct = pollProgress ? Math.round((pollProgress.attempt / pollProgress.max) * 100) : 0;
-    return (
-      <div className="p-6 bg-white border rounded-2xl shadow-md">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">ATS Score</h2>
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-          <p className="mt-4 text-sm text-gray-600">Calculating score...</p>
-          {pollProgress ? (
-            <div className="mt-3 w-48">
-              <div className="flex justify-between text-xs text-gray-500 mb-1">
-                <span>Attempt {pollProgress.attempt}/{pollProgress.max}</span>
-                <span>{pct}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div
-                  className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="mt-2 text-xs text-gray-500">This may take up to 20 seconds</p>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const handleCalculateScore = async () => {
+    const resumeId = localStorage.getItem("current_resume_id");
 
-  if (error && !scoreData && overallScore === 0) {
-    return (
-      <div className="p-6 bg-white border rounded-2xl shadow-md">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">ATS Score</h2>
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="text-red-500 text-4xl mb-2">⚠️</div>
-          <p className="text-sm text-gray-600 text-center">{error || "Unable to load score"}</p>
-        </div>
-      </div>
-    );
-  }
+    if (!resumeId || resumeId === "null" || resumeId === "undefined") {
+      toast.error("No resume found. Please create a resume first.");
+      return;
+    }
 
-  const suggestions = scoreData?.details?.improvement_suggestions ?? [];
+    try {
+      isMountedRef.current = true;
+      setIsCalculating(true);
+      setError(null);
+      setCanonicalStatus("calculating");
+
+      await triggerScoreCalculation(resumeId);
+
+      const maxAttempts = 10;
+      const pollInterval = 2000;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+
+        if (!isMountedRef.current) return;
+
+        try {
+          const builderScore = await getBuilderScore(resumeId);
+
+          if (builderScore.score > 0) {
+            if (isMountedRef.current) {
+              setCanonicalScore(builderScore.score, new Date().toLocaleString());
+              toast.success("Score calculated successfully!");
+            }
+            return;
+          }
+        } catch {
+          // Continue polling
+        }
+      }
+
+      if (isMountedRef.current) {
+        setError("Score calculation timeout. Please try again.");
+        setCanonicalStatus("error");
+        toast.error("Score calculation timeout.");
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to calculate score";
+
+      if (isMountedRef.current) {
+        setError(errorMessage);
+        setCanonicalStatus("error");
+        toast.error(errorMessage);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsCalculating(false);
+      }
+    }
+  };
 
   return (
-    <div className="p-6 bg-white rounded-2xl shadow-md">
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">ATS Score</h2>
-      <div className="flex flex-col items-center justify-center">
-        <MultiColorCircularScore value={scoreData?.overall_score ?? overallScore} />
-        <p className="mt-2 text-sm text-gray-600">Overall Score</p>
-      </div>
-      <div className="mt-6 space-y-3 w-full">
-        <ProgressBar value={scoreData?.details?.keywords_score ?? 0} label="Keywords" />
-        <ProgressBar value={scoreData?.details?.grammar_score ?? 0} label="Grammar" />
-        <ProgressBar value={scoreData?.details?.skills_match ?? 0} label="Skills Match" />
-      </div>
-      <div className="mt-6 w-full">
-        <h3 className="text-sm font-semibold text-gray-700">Suggestions:</h3>
-        {suggestions.length > 0 ? (
-          <ul className="list-disc ml-5 text-sm text-gray-600 mt-2">
-            {suggestions.map((s, i) => <li key={i}>{s}</li>)}
-          </ul>
-        ) : (
-          <p className="text-gray-500 text-sm mt-2">No suggestions available.</p>
-        )}
-      </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <PreviewScoreCard previewScore={previewScore} />
+      <FullAtsScoreCard
+        score={canonicalScore}
+        status={canonicalStatus}
+        isStale={scoreStale}
+        lastCalculatedAt={lastCalculatedAt}
+        onCalculate={handleCalculateScore}
+        isLoading={isCalculating}
+        error={error}
+      />
     </div>
   );
-}
-
-// ── Main export: routes based on resume source ───────────────────────────────
-
-export default function ATSScorePanel() {
-  const { resumeSource, enhancedAtsScore } = useResume();
-
-  if (resumeSource === "enhanced" && enhancedAtsScore) {
-    return <EnhancedScoreTab atsScore={enhancedAtsScore as Record<string, unknown>} />;
-  }
-
-  return <BuilderScoreTab />;
 }

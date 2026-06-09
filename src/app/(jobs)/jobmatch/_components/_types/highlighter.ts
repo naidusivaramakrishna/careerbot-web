@@ -7,7 +7,7 @@ export interface TokenAliases {
 export interface HighlightSpan {
   text: string;
   match: boolean;
-  matchType?: 'matched-tech' | 'missing-tech' | 'matched-soft' | 'missing-soft';
+  matchType?: 'matched-tech' | 'missing-tech' | 'matched-soft' | 'missing-soft' | 'matched-cap';
 }
 
 export interface JDHighlighterProps {
@@ -16,4 +16,6 @@ export interface JDHighlighterProps {
   missingSkills: string[];
   matchedSoftSkills?: string[];
   missingSoftSkills?: string[];
+  matchedCapabilities?: string[];
+  onMissingSkillClick?: (skill: string) => void;
 }

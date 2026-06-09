@@ -1,17 +1,30 @@
 "use client";
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import type { CanonicalScoreStatus } from "../_components/score/FullAtsScoreCard";
 
 interface ScoreContextType {
-  overallScore: number;
+  canonicalScore: number | null;
+  canonicalStatus: CanonicalScoreStatus;
+  scoreStale: boolean;
+  lastCalculatedAt: string | null;
+  setCanonicalScore: (score: number, calculatedAt?: string) => void;
+  markScoreStale: () => void;
+  resetCanonicalScore: () => void;
+  setCanonicalStatus: (status: CanonicalScoreStatus) => void;
+  overallScore: number; // Legacy - kept for backward compatibility
   setOverallScore: (score: number) => void;
-  refreshScore: () => void;
-  resetScore: () => void;
 }
 
 const ScoreContext = createContext<ScoreContextType | undefined>(undefined);
 
 export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // ✅ Get current resume ID from localStorage
+  const [canonicalScore, setCanonicalScoreState] = useState<number | null>(null);
+  const [canonicalStatus, setCanonicalStatusState] = useState<CanonicalScoreStatus>("not_calculated");
+  const [scoreStale, setScoreStaleState] = useState<boolean>(false);
+  const [lastCalculatedAt, setLastCalculatedAtState] = useState<string | null>(null);
+  const [overallScore, setOverallScoreState] = useState<number>(0);
+  const [currentResumeId, setCurrentResumeId] = useState<string | null>(null);
+
   const getCurrentResumeId = useCallback(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem("current_resume_id") || null;
@@ -19,16 +32,11 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return null;
   }, []);
 
-  // ✅ Get score key based on resume ID
   const getScoreKey = useCallback((resumeId: string | null) => {
     return resumeId ? `resume_score_${resumeId}` : "resume_overall_score";
   }, []);
 
-  // ✅ Initialize score - Start at 0
-  const [overallScore, setOverallScoreState] = useState<number>(0);
-  const [currentResumeId, setCurrentResumeId] = useState<string | null>(null);
-
-  // ✅ Initialize score after component mounts
+  // Initialize on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -38,143 +46,107 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (resumeId) {
       const scoreKey = getScoreKey(resumeId);
       const stored = localStorage.getItem(scoreKey);
-      
+
       if (stored) {
         const parsed = parseFloat(stored);
         const score = isNaN(parsed) ? 0 : parsed;
-        // // console.log(`📊 Loaded cached score for resume ${resumeId}:`, score);
         setOverallScoreState(score);
-      } else {
-        // // console.log(`🆕 No cached score for resume ${resumeId} - starting at 0`);
-        setOverallScoreState(0);
+        setCanonicalScoreState(score);
+        setCanonicalStatusState("ready");
       }
-    } else {
-      // // console.log("ℹ️ No resume ID - starting with score 0");
-      setOverallScoreState(0);
     }
   }, [getCurrentResumeId, getScoreKey]);
 
-  // ✅ Stable function with empty dependencies
+  const setCanonicalScore = useCallback((score: number, calculatedAt?: string) => {
+    setCanonicalScoreState(score);
+    setCanonicalStatusState("ready");
+    setScoreStaleState(false);
+    setLastCalculatedAtState(calculatedAt || new Date().toLocaleString());
+
+    if (typeof window !== 'undefined') {
+      const resumeId = localStorage.getItem("current_resume_id");
+      if (resumeId) {
+        const scoreKey = getScoreKey(resumeId);
+        localStorage.setItem(scoreKey, score.toString());
+      }
+    }
+  }, [getScoreKey]);
+
+  const setCanonicalStatus = useCallback((status: CanonicalScoreStatus) => {
+    setCanonicalStatusState(status);
+  }, []);
+
+  const markScoreStale = useCallback(() => {
+    setScoreStaleState(true);
+  }, []);
+
+  const resetCanonicalScore = useCallback(() => {
+    setCanonicalScoreState(null);
+    setCanonicalStatusState("not_calculated");
+    setScoreStaleState(false);
+    setLastCalculatedAtState(null);
+
+    if (typeof window !== 'undefined') {
+      const resumeId = localStorage.getItem("current_resume_id");
+      if (resumeId) {
+        const scoreKey = getScoreKey(resumeId);
+        localStorage.removeItem(scoreKey);
+      }
+    }
+  }, [getScoreKey]);
+
+  // Legacy setOverallScore for backward compatibility
   const setOverallScore = useCallback((score: number) => {
     setOverallScoreState(score);
-    
-    if (typeof window !== 'undefined') {
-      const resumeId = localStorage.getItem("current_resume_id");
-      if (resumeId) {
-        const scoreKey = resumeId ? `resume_score_${resumeId}` : "resume_overall_score";
-        localStorage.setItem(scoreKey, score.toString());
-        // // console.log(`💾 Score saved for resume ${resumeId}:`, score);
-      }
-    }
   }, []);
 
-  // ✅ Reset score (for new resume) - stable function
-  const resetScore = useCallback(() => {
-    setOverallScoreState(0);
-    
-    if (typeof window !== 'undefined') {
-      const resumeId = localStorage.getItem("current_resume_id");
-      if (resumeId) {
-        const scoreKey = resumeId ? `resume_score_${resumeId}` : "resume_overall_score";
-        localStorage.removeItem(scoreKey);
-        // // console.log(`🗑️ Removed cached score for resume ${resumeId}`);
-      }
-    }
-    
-    // // console.log("🔄 Score reset to 0");
-  }, []);
-
-  // ✅ Use storage event listener instead of polling interval
+  // Handle resume ID changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleStorageChange = (e: StorageEvent) => {
-      // Only respond to current_resume_id changes
       if (e.key === 'current_resume_id') {
         const newResumeId = e.newValue;
-        
-        // // console.log(`🔄 Resume ID changed to ${newResumeId} (detected via storage event)`);
         setCurrentResumeId(newResumeId);
-        
+
         if (newResumeId) {
           const scoreKey = getScoreKey(newResumeId);
           const stored = localStorage.getItem(scoreKey);
-          
+
           if (stored) {
             const parsed = parseFloat(stored);
             const newScore = isNaN(parsed) ? 0 : parsed;
-            // // console.log(`📊 Loaded cached score for resume ${newResumeId}:`, newScore);
             setOverallScoreState(newScore);
+            setCanonicalScoreState(newScore);
+            setCanonicalStatusState("ready");
           } else {
-            // // console.log(`🆕 New resume ${newResumeId} - resetting score to 0`);
-            setOverallScoreState(0);
+            resetCanonicalScore();
           }
         } else {
-          // // console.log("ℹ️ No resume ID - resetting score to 0");
-          setOverallScoreState(0);
+          resetCanonicalScore();
         }
       }
     };
 
-    // ✅ Listen to storage events (cross-tab changes)
     window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [getScoreKey]);
-
-  // ✅ Manual check on visibility change (when user comes back to tab)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        const newResumeId = getCurrentResumeId();
-        
-        if (newResumeId !== currentResumeId) {
-          // // console.log(`🔄 Resume ID changed from ${currentResumeId} to ${newResumeId} (visibility change)`);
-          setCurrentResumeId(newResumeId);
-          
-          if (newResumeId) {
-            const scoreKey = getScoreKey(newResumeId);
-            const stored = localStorage.getItem(scoreKey);
-            
-            if (stored) {
-              const parsed = parseFloat(stored);
-              const newScore = isNaN(parsed) ? 0 : parsed;
-              // // console.log(`📊 Loaded cached score for resume ${newResumeId}:`, newScore);
-              setOverallScoreState(newScore);
-            } else {
-              // // console.log(`🆕 New resume ${newResumeId} - resetting score to 0`);
-              setOverallScoreState(0);
-            }
-          } else {
-            // // console.log("ℹ️ No resume ID - resetting score to 0");
-            setOverallScoreState(0);
-          }
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [currentResumeId, getCurrentResumeId, getScoreKey]);
-
-  const refreshScore = useCallback(() => {
-    // no-op: consumers re-fetch on their own trigger
-  }, []);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [getScoreKey, resetCanonicalScore]);
 
   return (
-    <ScoreContext.Provider value={{ 
-      overallScore, 
-      setOverallScore, 
-      refreshScore,
-      resetScore 
-    }}>
+    <ScoreContext.Provider
+      value={{
+        canonicalScore,
+        canonicalStatus,
+        scoreStale,
+        lastCalculatedAt,
+        setCanonicalScore,
+        markScoreStale,
+        resetCanonicalScore,
+        setCanonicalStatus,
+        overallScore,
+        setOverallScore,
+      }}
+    >
       {children}
     </ScoreContext.Provider>
   );

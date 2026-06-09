@@ -86,6 +86,26 @@ export const mockDashboardSummary: DashboardSummary = {
       result_summary: '15 improvements applied',
     },
   ],
+  trending_roles: [
+    {
+      title: 'Software Engineer',
+      growth: '+18%',
+      tag: 'High demand',
+      tag_color: '#1f4e98',
+      tag_bg: 'rgba(31,78,152,0.1)',
+      dot: '#2557a7',
+      job_count: 1240,
+    },
+    {
+      title: 'Data Analyst',
+      growth: '+12%',
+      tag: 'Growing',
+      tag_color: '#15803d',
+      tag_bg: 'rgba(21,128,61,0.1)',
+      dot: '#22c55e',
+      job_count: 860,
+    },
+  ],
 };
 
 // Mock for different user states

@@ -11,7 +11,7 @@ import DownloadModal from '../_components/DownloadModal';
 import ResumeTableRow from '../_components/ResumeTableRow';
 import AddResumeModal from '../_components/AddResumeModal';
 import UploadResumeModal from '../_components/UploadResumeModal';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import logger from "@/lib/logger";
 import { createResumeWithAuth } from '@/api/resumeApi';
 import AuthModal from '@/components/SignUpModal';
@@ -32,7 +32,6 @@ export interface Resume {
 
 const ResumeListContent = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -44,8 +43,6 @@ const ResumeListContent = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
-  // ✅ Track refresh parameter to force data refetch
-  const refreshParam = searchParams?.get('refresh');
 
   const getInitials = (name: string) => {
     return name
@@ -150,11 +147,6 @@ const ResumeListContent = () => {
       // Merge: builder resumes first, then enhanced resumes
       const merged = [...resumesWithScores, ...transformedEnhanced];
       setResumes(merged);
-
-      // ✅ Clean URL by removing refresh parameter after successful fetch
-      if (refreshParam) {
-        router.replace('/builder/start/list', { scroll: false });
-      }
     } catch (err) {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       if (error.response?.status === 401 || error.message?.includes("sign in")) {
@@ -169,12 +161,11 @@ const ResumeListContent = () => {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, refreshParam]); // transformResumeData is a function defined inline and doesn't need to be a dependency
+  }, [router]);
 
   useEffect(() => {
-    logger.info('Fetching resumes... (refresh param:', refreshParam, ')');
     fetchResumes();
-  }, [fetchResumes, refreshParam]); // ✅ Refetch when refresh parameter changes
+  }, [fetchResumes]);
 
   const handleDeleteResume = async (resumeId: string) => {
     try {

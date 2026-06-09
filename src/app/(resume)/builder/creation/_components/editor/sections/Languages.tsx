@@ -274,7 +274,7 @@ const Languages: React.FC = () => {
                         placeholder="e.g., English, Spanish, Mandarin Chinese"
                         onChange={(e) => handleChange(editIndex, "language", e.target.value)}
                         onBlur={() => validateRequired("language", globalIndex, { language: language.language })}
-                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`language-${globalIndex}-language`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
                       {errors[`language-${globalIndex}-language`] && (
                         <span className="text-xs text-red-500">
@@ -292,7 +292,7 @@ const Languages: React.FC = () => {
                         value={language.proficiency}
                         onChange={(e) => handleChange(editIndex, "proficiency", e.target.value)}
                         onBlur={() => validateRequired("language", globalIndex, { proficiency: language.proficiency })}
-                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`language-${globalIndex}-proficiency`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                       >
                         <option value="">Select proficiency level</option>
                         {proficiencyLevels.map((level) => (

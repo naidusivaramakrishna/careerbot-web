@@ -1,5 +1,24 @@
 import React, { useMemo } from 'react';
 import { Skeleton } from '@/components/ui/Skeleton';
+import {
+  LayoutGrid,
+  HardHat,
+  Code2,
+  Stethoscope,
+  TrendingUp,
+  GraduationCap,
+  ShieldCheck,
+  CircuitBoard,
+  Landmark,
+  Scale,
+  Truck,
+  Anchor,
+  Layers,
+  FlaskConical,
+  Handshake,
+  Briefcase,
+  type LucideIcon,
+} from 'lucide-react';
 
 interface CategorySidebarProps {
   categories: string[];
@@ -19,12 +38,31 @@ const DOMAIN_FAMILY_NAMES: Record<string, string> = {
   'electronics_and_vlsi': 'Electronics & VLSI',
   'government_standard': 'Government Standard',
   'legal': 'Legal',
-  'logistics_warehouse_operations': 'Logistics & Warehouse Operations',
-  'marine_merchant_navy': 'Marine & Merchant Navy',
+  'logistics_warehouse_operations': 'Logistics & Warehouse',
+  'marine_merchant_navy': 'Marine & Navy',
   'modern_minimal_template': 'Modern Minimal',
   'research_scholar': 'Research Scholar',
-  'sales_business_development': 'Sales & Business Development',
-  'general_professional': 'General Professional'
+  'sales_business_development': 'Sales & Business',
+  'general_professional': 'General Professional',
+};
+
+const DOMAIN_FAMILY_ICONS: Record<string, LucideIcon> = {
+  'All': LayoutGrid,
+  'core_engineering': HardHat,
+  'software_engineering': Code2,
+  'healthcare': Stethoscope,
+  'finance': TrendingUp,
+  'education': GraduationCap,
+  'cybersecurity': ShieldCheck,
+  'electronics_and_vlsi': CircuitBoard,
+  'government_standard': Landmark,
+  'legal': Scale,
+  'logistics_warehouse_operations': Truck,
+  'marine_merchant_navy': Anchor,
+  'modern_minimal_template': Layers,
+  'research_scholar': FlaskConical,
+  'sales_business_development': Handshake,
+  'general_professional': Briefcase,
 };
 
 export default function CategorySidebar({
@@ -33,20 +71,16 @@ export default function CategorySidebar({
   onSelectCategory,
   loading,
 }: CategorySidebarProps) {
-  // Get all available domain families from DOMAIN_FAMILY_NAMES
   const domainFamilies = useMemo(() => {
-    // Get all domain families except 'All' and sort them
     const families = Object.keys(DOMAIN_FAMILY_NAMES)
       .filter(key => key !== 'All')
       .sort();
-
-    // Return with 'All' at the beginning
     return ['All', ...families];
   }, []);
 
   if (loading) {
     return (
-      <div className="w-48 shrink-0 space-y-2">
+      <div className="w-64 shrink-0 space-y-2">
         {[...Array(8)].map((_, i) => (
           <Skeleton key={i} className="h-10 w-full rounded-lg" />
         ))}
@@ -55,7 +89,7 @@ export default function CategorySidebar({
   }
 
   return (
-    <div className="w-48 shrink-0 sticky top-20">
+    <div className="w-64 shrink-0">
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
         <div className="p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -64,22 +98,24 @@ export default function CategorySidebar({
               Industries
             </p>
           </div>
-          <div className="space-y-1 max-h-[calc(100vh-180px)] overflow-y-auto">
+          <div className="space-y-1">
             {domainFamilies.map((family) => {
               const isActive = selectedCategory === family;
+              const Icon = DOMAIN_FAMILY_ICONS[family] ?? Briefcase;
               return (
                 <button
                   key={family}
                   onClick={() => onSelectCategory(family === 'All' ? 'All' : family)}
-                  className={`relative w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${isActive
+                  className={`relative w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${isActive
                     ? 'bg-[#e8eff9] text-[#2257a7] ring-1 ring-[#c9dcf2] shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    }`}
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
                 >
                   {isActive && (
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-[#2257a7]" />
                   )}
-                  {DOMAIN_FAMILY_NAMES[family] || family}
+                  <Icon size={18} className="shrink-0" />
+                  <span className="truncate">{DOMAIN_FAMILY_NAMES[family] || family}</span>
                 </button>
               );
             })}

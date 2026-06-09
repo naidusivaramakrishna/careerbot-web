@@ -7,7 +7,7 @@ import type { ATSScore, EnhancedSuggestion } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
-import { getSectionOrderByDomainAndCareer } from "../../../templates/_utils/domainSectionOrder";
+import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
 import logger from "@/lib/logger";
 
 // Extract country code from a combined phone string like "+911234567890"
@@ -32,10 +32,9 @@ export interface CustomCategory {
 export interface CategorizedSkills {
   programming_languages: string[];
   frameworks: string[];
-  databases: string[];
-  tools: string[];
-  cloud_platforms: string[];
   soft_skills: string[];
+  project_management: string[];
+  marketing_sales: string[];
   custom_categories?: CustomCategory[];
   hidden_predefined_categories?: string[];
   // Maps "CategoryKey:SkillName" → backend skill ID for delete calls
@@ -48,10 +47,9 @@ type BackendSkills = Record<string, BackendSkillItem[]>;
 const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
   programming_languages: [],
   frameworks: [],
-  databases: [],
-  tools: [],
-  cloud_platforms: [],
   soft_skills: [],
+  project_management: [],
+  marketing_sales: [],
 };
 
 export function mapBackendSkillsToCategorized(backendSkills: unknown): CategorizedSkills {
@@ -69,18 +67,16 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
 
   buildIdMap('programming_languages', s.programmingLanguages);
   buildIdMap('frameworks', s.frameworks);
-  buildIdMap('databases', s.databases);
-  buildIdMap('tools', s.tools);
-  buildIdMap('cloud_platforms', s.cloudPlatforms);
   buildIdMap('soft_skills', s.softSkills);
+  buildIdMap('project_management', s.projectManagement);
+  buildIdMap('marketing_sales', s.marketingSales);
 
   return {
     programming_languages: extractNames(s.programmingLanguages),
     frameworks: extractNames(s.frameworks),
-    databases: extractNames(s.databases),
-    tools: extractNames(s.tools),
-    cloud_platforms: extractNames(s.cloudPlatforms),
     soft_skills: extractNames(s.softSkills),
+    project_management: extractNames(s.projectManagement),
+    marketing_sales: extractNames(s.marketingSales),
     skill_id_map: idMap,
   };
 }
@@ -139,6 +135,7 @@ export interface ResumeData {
     currentlyWorking: boolean;
     description: string;
     location: string;
+    technologies: string[];
   }[];
   projects: {
     id?: string;
@@ -188,6 +185,7 @@ export interface ResumeData {
     currentlyWorking: boolean;
     description: string;
     location: string;
+    technologies: string[];
   }[];
   awards: {
     id?: string;
@@ -235,6 +233,8 @@ export interface ResumeStyle {
   lineSpacing: string;
   headingColor: string;
   bodyColor: string;
+  sectionHeaderBg?: string;
+  accentColor?: string;
 }
 
 export type EnhancedAtsScore = ATSScore | null;
@@ -341,10 +341,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       categorizedSkills: {
         programming_languages: [],
         frameworks: [],
-        databases: [],
-        tools: [],
-        cloud_platforms: [],
-        soft_skills: []
+        soft_skills: [],
+        project_management: [],
+        marketing_sales: [],
       },
       certifications: [],
       achievements: [],
@@ -401,9 +400,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   // ✅ Get career level from localStorage to set initial section order
   const getCareerLevelFromStorage = (): string | undefined => {
     try {
-      if (typeof window === 'undefined') return undefined;
-
-      const userEmail = localStorage.getItem('userEmail');
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
       const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
       const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
 
@@ -450,29 +447,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     return undefined;
   };
 
-  // ✅ Get domain family from localStorage for two-dimensional section ordering
-  const getDomainFamilyFromStorage = (): string | undefined => {
-    try {
-      if (typeof window === 'undefined') return undefined;
-
-      const userEmail = localStorage.getItem('userEmail');
-      const domainFamilyKey = userEmail ? `domainFamily_${userEmail}` : 'domainFamily';
-      const domainFamily = localStorage.getItem(domainFamilyKey);
-
-      console.warn("🔍 getDomainFamilyFromStorage - email:", userEmail, "key:", domainFamilyKey, "domain:", domainFamily);
-      if (!domainFamily) {
-        console.warn("🔍 No domain family found in localStorage!");
-      }
-      return domainFamily || undefined;
-    } catch (err) {
-      console.warn("🔍 Error in getDomainFamilyFromStorage:", err);
-    }
-    return undefined;
-  };
-
   const [sectionOrder, setSectionOrder] = useState<string[]>(() => {
     try {
-      // Try to load sectionOrder directly from localStorage first (set by TemplatesTab/DomainTemplatesModal)
+      // Try to load sectionOrder directly from localStorage first (set by DomainTemplatesModal)
       const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
       const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
       const stored = typeof window !== 'undefined' ? localStorage.getItem(sectionOrderKey) : null;
@@ -486,15 +463,14 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       console.warn("🎯 Error loading sectionOrder from localStorage:", err);
     }
 
-    // Fallback: compute from career level and domain family
+    // Fallback: compute from career level
     const careerLevel = getCareerLevelFromStorage();
-    const domainFamily = getDomainFamilyFromStorage();
-    const order = getSectionOrderByDomainAndCareer(domainFamily, careerLevel);
-    console.warn("🎯 Initial sectionOrder from domain:", domainFamily, "career level:", careerLevel, "Order:", order);
+    const order = getSectionOrder(careerLevel);
+    console.warn("🎯 Initial sectionOrder from career level:", careerLevel, "Order:", order);
     return order;
   });
 
-  // ✅ Update section order when career level or domain changes or template is switched
+  // ✅ Update section order when career level changes or template is switched
   useEffect(() => {
     // If user has a saved order in localStorage (e.g. after deleting a section), respect it
     try {
@@ -507,10 +483,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         return;
       }
     } catch { /* ignore */ }
-    // No saved order — compute from career level and domain (first visit or after clearing storage)
+    // No saved order — compute from career level (first visit or after clearing storage)
     const careerLevel = getCareerLevelFromStorage();
-    const domainFamily = getDomainFamilyFromStorage();
-    const newOrder = getSectionOrderByDomainAndCareer(domainFamily, careerLevel);
+    const newOrder = getSectionOrder(careerLevel);
     setSectionOrder(newOrder);
   }, [resumeIdProp, selectedTemplate]); // Re-check when resumeId or selectedTemplate changes
 
@@ -540,11 +515,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         console.warn("📋 Error loading sectionOrder from localStorage:", err);
       }
 
-      // Fallback: compute from career level and domain
+      // Fallback: compute from career level
       const careerLevel = getCareerLevelFromStorage();
-      const domainFamily = getDomainFamilyFromStorage();
-      const newOrder = getSectionOrderByDomainAndCareer(domainFamily, careerLevel);
-      console.warn("📋 Storage check - domain:", domainFamily, "careerLevel:", careerLevel, "newOrder:", newOrder);
+      const newOrder = getSectionOrder(careerLevel);
+      console.warn("📋 Storage check - careerLevel:", careerLevel, "newOrder:", newOrder);
       setSectionOrder(newOrder);
     };
 
@@ -699,16 +673,51 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         }
 
         // ✅ Set default template (with fallback to clean_simple)
-        const { TEMPLATE_DEFAULT_STYLES } = await import("../_utils/templateStyles");
+        const { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } = await import("../_utils/templateStyles");
         try {
-          const defaultTemplateId = String(defaultTemplateData?.template_id || defaultTemplateData?.id || "clean_simple");
-          await setSelectedTemplate(defaultTemplateId);
-          const defaults = TEMPLATE_DEFAULT_STYLES[defaultTemplateId];
+          // Use domain template ID
+          const templateId = String(defaultTemplateData?.template_id || defaultTemplateData?.id || "clean_simple");
+          await setSelectedTemplate(templateId);
+
+          // Apply template defaults for styling
+          const defaults = TEMPLATE_DEFAULT_STYLES[templateId];
           if (defaults) setResumeStyle(prev => ({ ...prev, ...defaults }));
+
+          // Apply catalogue color/font overrides on top
+          const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+          if (selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue]) {
+            setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
+          }
+          // Apply user-picked custom colour (from browse-templates colour picker).
+          // Eclipse uses it as the section-header background; all other catalogues use it as headingColor.
+          if (typeof window !== 'undefined' && selectedCatalogue) {
+            if (selectedCatalogue === 'eclipse') {
+              const sectionBg = localStorage.getItem('selected_section_bg');
+              if (sectionBg) setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg }));
+            } else {
+              const accent = localStorage.getItem(`selected_color_${selectedCatalogue}`);
+              if (accent) setResumeStyle(prev => ({ ...prev, headingColor: accent }));
+            }
+          }
         } catch {
           await setSelectedTemplate("clean_simple");
           const defaults = TEMPLATE_DEFAULT_STYLES["clean_simple"];
           if (defaults) setResumeStyle(prev => ({ ...prev, ...defaults }));
+
+          // Apply catalogue if selected
+          const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+          if (selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue]) {
+            setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
+          }
+          if (typeof window !== 'undefined' && selectedCatalogue) {
+            if (selectedCatalogue === 'eclipse') {
+              const sectionBg = localStorage.getItem('selected_section_bg');
+              if (sectionBg) setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg }));
+            } else {
+              const accent = localStorage.getItem(`selected_color_${selectedCatalogue}`);
+              if (accent) setResumeStyle(prev => ({ ...prev, headingColor: accent }));
+            }
+          }
         }
 
         // Continue with resume data processing...
@@ -741,10 +750,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
-            : {
-                summary: (data.professionalSummary?.summary || data.professionalSummary?.["summary"] || ""),
-                targetRole: (data.professionalSummary?.targetRole || data.professionalSummary?.["target_role"] || "")
-              },
+            : (data.professionalSummary || { summary: "", targetRole: "" }),
           education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
           workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
           projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
@@ -760,10 +766,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             const skills = [
               ...categorizedSkills.programming_languages,
               ...categorizedSkills.frameworks,
-              ...categorizedSkills.databases,
-              ...categorizedSkills.tools,
-              ...categorizedSkills.cloud_platforms,
               ...categorizedSkills.soft_skills,
+              ...(categorizedSkills.project_management || []),
+              ...(categorizedSkills.marketing_sales || []),
               ...(categorizedSkills.custom_categories || []).flatMap(c => c.skills),
             ];
             return { skills, categorizedSkills };

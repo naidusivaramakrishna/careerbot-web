@@ -23,6 +23,9 @@ import {
   TrendingUp,
 } from "lucide-react";
 import ATSResumePreview from "@/app/(resume)/atslogin/_components/ATSResumePreview";
+import { toast } from "sonner";
+import { enhanceResume } from "@/api/enhancerApi";
+import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 
 
 const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';

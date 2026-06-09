@@ -30,16 +30,16 @@ const ResumeTableRow = ({
   useEffect(() => { setMounted(true); }, []);
 
   // Dynamic time formatting that updates every minute
-  const [createdTime, setCreatedTime] = useState(formatDateResume(resume.created));
-  const [modifiedTime, setModifiedTime] = useState(formatDateResume(resume.modified));
+  const [createdTime, setCreatedTime] = useState(formatDateResume(resume.createdAt));
+  const [modifiedTime, setModifiedTime] = useState(formatDateResume(resume.updatedAt));
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCreatedTime(formatDateResume(resume.created));
-      setModifiedTime(formatDateResume(resume.modified));
+      setCreatedTime(formatDateResume(resume.createdAt));
+      setModifiedTime(formatDateResume(resume.updatedAt));
     }, 60000);
     return () => clearInterval(interval);
-  }, [resume.created, resume.modified]);
+  }, [resume.createdAt, resume.updatedAt]);
 
   const handleToggle = () => {
     if (!isOpen && buttonRef.current) {

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useResume } from "../_context/ResumeContext";
 import { useScore } from "../_context/ScoreContext";
+import { useResumeScorePreview } from "../_hooks/useResumeScorePreview";
 import TemplateOne from "./templates/TemplateOne";
 import TemplateTwo from "./templates/TemplateTwo";
 import TemplateThree from "./templates/TemplateThree";
@@ -23,10 +24,13 @@ import Template1 from "../../../templates/Template1";
 import Template2 from "../../../templates/Template2";
 import Template3 from "../../../templates/Template3";
 import Template4 from "../../../templates/Template4";
+import { toPng } from "html-to-image";
+import jsPDF from "jspdf";
 import { downloadResume } from "../../../../../api/resumeApi";
 import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
 import { getProfile } from "@/api/userApi";
 import logger from "@/lib/logger";
+import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
 interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
   onTabClick: (tab: string) => void;
@@ -50,19 +54,26 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   isEnhancedResume = false,
 }) => {
   const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, sectionOrder } = useResume();
-  const { overallScore, setOverallScore } = useScore();
+  const { canonicalScore, setCanonicalScore } = useScore();
+  const previewScore = useResumeScorePreview(resumeData);
+
+  // For enhanced resumes, seed the canonical score from the enhancer's ATS score
+  // so the toolbar and any other score consumers show the correct value.
+  useEffect(() => {
+    if (isEnhancedResume && enhancedAtsScore?.final_score) {
+      setCanonicalScore(Math.round(enhancedAtsScore.final_score));
+    }
+  }, [isEnhancedResume, enhancedAtsScore, setCanonicalScore]);
+
+  const displayScore = isEnhancedResume && enhancedAtsScore?.final_score
+    ? Math.round(enhancedAtsScore.final_score)
+    : (canonicalScore ?? previewScore.score);
+  const scoreLabel = "Score";
 
   useEffect(() => {
     console.warn("📋 PreviewPanel - sectionOrder:", sectionOrder, "selectedTemplate:", selectedTemplate);
   }, [sectionOrder, selectedTemplate]);
 
-  // Set score in ScoreContext from enhanced resume ATS data on load
-  useEffect(() => {
-    if (resumeSource === "enhanced" && enhancedAtsScore) {
-      const score = Number(enhancedAtsScore.final_score ?? enhancedAtsScore.Percentage ?? 0);
-      setOverallScore(score);
-    }
-  }, [resumeSource, enhancedAtsScore, setOverallScore]);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -144,6 +155,99 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     }
   };
 
+  const handleDownloadPDF = async () => {
+    const el = contentRef.current;
+    if (!el) return;
+    setShowExportOptions(false);
+
+    const prevTransform = el.style.transform;
+    el.style.transform = "none";
+
+    try {
+      const dataUrl = await toPng(el, {
+        pixelRatio: 3,
+        backgroundColor: "#ffffff",
+        skipFonts: true,
+      });
+
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise<void>(resolve => { img.onload = () => resolve(); });
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgW = pageW;
+      const imgH = (img.naturalHeight * imgW) / img.naturalWidth;
+
+      let posY = 0;
+      let remaining = imgH;
+
+      pdf.addImage(dataUrl, "PNG", 0, posY, imgW, imgH);
+      remaining -= pageH;
+
+      while (remaining > 0) {
+        posY -= pageH;
+        pdf.addPage();
+        pdf.addImage(dataUrl, "PNG", 0, posY, imgW, imgH);
+        remaining -= pageH;
+      }
+
+      const fullname = resumeData.personalInfo?.fullname || "";
+      const sanitizedName = fullname.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
+      const filename = sanitizedName ? `${sanitizedName}.pdf` : "resume.pdf";
+
+      pdf.save(filename);
+    } finally {
+      el.style.transform = prevTransform;
+    }
+  };
+  
+  const handleDownloadDOCX = async () => {
+    const el = contentRef.current;
+    if (!el) return;
+    setShowExportOptions(false);
+    setIsDownloading(true);
+    setDownloadError(null);
+
+    const prevTransform = el.style.transform;
+    el.style.transform = "none";
+
+    try {
+      // Send resume HTML to server-side API route (runs html-to-docx in Node.js)
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>${el.outerHTML}</body></html>`;
+
+      const response = await fetch("/api/generate-docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Server error" }));
+        throw new Error(err.error || "Server error");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const fullname = resumeData.personalInfo?.fullname || "";
+      const sanitizedName = fullname.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
+      link.setAttribute("download", sanitizedName ? `${sanitizedName}.docx` : "resume.docx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to generate DOCX";
+      setDownloadError(`DOCX generation failed. ${msg}`);
+    } finally {
+      el.style.transform = prevTransform;
+      setIsDownloading(false);
+    }
+  };
+
   const handleResumeScoreClick = () => {
     if (onOpenSidebar) {
       onOpenSidebar("Score");
@@ -183,6 +287,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
     const careerLevel = getCareerLevel();
 
+    // Compute layoutVariant from selected catalogue
+    const selectedCatalogue = localStorage.getItem('selected_catalogue');
+    const catalogueTemplateId = selectedCatalogue ? STYLE_CATALOGUES[selectedCatalogue]?.template_id : undefined;
+    const layoutVariant: HeaderLayout = (catalogueTemplateId && CATALOGUE_LAYOUT_MAP[catalogueTemplateId]) || "centered";
+
     // Function to get the correct template component based on domain_family
     const getTemplateByDomain = (domainFamily?: string) => {
       switch (domainFamily) {
@@ -196,16 +305,16 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         case 'research_scholar':
         case 'software_engineering':
         case 'marine_merchant_navy':
-          return <Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} />;
+          return <Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
         case 'legal':
-          return <Template4 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} />;
+          return <Template4 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
         case 'government_standard':
-          return <Template3 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} />;
+          return <Template3 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
         // All other domains use Template1 (core_engineering, finance, etc.)
         case 'core_engineering':
         case 'finance':
         default:
-          return <Template1 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} />;
+          return <Template1 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
       }
     };
 
@@ -301,26 +410,22 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       {/* Toolbar - When Sidebar is Open */}
       {isTemplateSidebarOpen && (
         <div
-          className="flex items-center justify-center border border-gray-300 rounded px-2 py-1.5 mb-0 gap-2 bg-white shadow-sm space-x-2 relative z-30 transition-all duration-300 ease-in-out"
+          className="flex items-center justify-between border border-gray-300 rounded px-6 py-1.5 mb-0 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out"
           style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
         >
-          <div className={`flex flex-col items-center justify-center ml-6 bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold relative`}>
-            <span className="text-[#2d2d2d]">{`Score ${overallScore}%`}</span>
+          <div className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold">
+            <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
           </div>
-
-          <div className="flex-1"></div>
 
           <div className="text-base font-semibold text-[#2d2d2d]">
             <span>PREVIEW</span>
           </div>
 
-          <div className="flex-1"></div>
-
-          <div className="ml-1 relative">
+          <div className="relative">
             <button
               onClick={() => setShowExportOptions((prev) => !prev)}
               disabled={isDownloading}
-              className={`flex items-center gap-1 mr-6 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
+              className={`flex items-center gap-1 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
                 }`}
             >
               <ArrowDownToLine size={16} />
@@ -329,13 +434,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             {showExportOptions && !isDownloading && (
               <div className="absolute right-0 mt-2 w-28 bg-white border rounded-md shadow-lg z-50">
                 <button
-                  onClick={() => handleExport("PDF")}
+                  onClick={()=>handleExport("PDF")}
                   className="w-full px-3 py-2 text-left text-[#2557a7] text-sm hover:bg-gray-100"
                 >
                   PDF
                 </button>
                 <button
-                  onClick={() => handleExport("DOCX")}
+                  onClick={()=>handleExport("DOCX")}
                   className="w-full px-3 py-2 text-left text-sm text-[#2557a7] hover:bg-gray-100"
                 >
                   DOCX
@@ -357,7 +462,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               onClick={handleResumeScoreClick}
               className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-[#d4e6f7] transition cursor-pointer"
             >
-              <span className="text-[#2d2d2d]">{`Score ${overallScore}%`}</span>
+              <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -420,13 +525,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               {showExportOptions && !isDownloading && (
                 <div className="absolute right-0 mt-2 w-28 bg-white border rounded-md shadow-lg z-50">
                   <button
-                    onClick={() => handleExport("PDF")}
+                    onClick={()=>handleExport("PDF")}
                     className="w-full px-3 py-2 text-left text-[#2557a7] text-sm hover:bg-gray-100"
                   >
                     PDF
                   </button>
                   <button
-                    onClick={() => handleExport("DOCX")}
+                    onClick={()=>handleExport("DOCX")}
                     className="w-full px-3 py-2 text-left text-sm text-[#2557a7] hover:bg-gray-100"
                   >
                     DOCX

@@ -9,479 +9,391 @@
 <body>
 <div id="app">
 
-  <!-- ══ MAIN CONTENT ══ -->
-  <div id="main-content">
+<div class="app-main">
 
-    <!-- HEADER (always visible) -->
-    <div class="header">
-      <div class="header-logo-wrap">
-        <img src="../icons/icon48.png" alt="" class="logo" onerror="cbIconFallback(this.parentElement,18)" />
+  <!-- ══ HEADER (always visible) ══ -->
+  <header class="header">
+    <div class="header-left">
+      <div class="header-logo">
+        <img src="../icons/icon48.png" alt="" class="logo-img" onerror="cbIconFallback(this.parentElement,18)" />
       </div>
-      <span class="title">CareerBot AI</span>
+      <span class="header-brand">CareerBot <span class="ai-badge">AI</span></span>
     </div>
+    <div class="header-right">
+    </div>
+  </header>
 
-    <!-- ══════════════════════════════════
-         STATE: LOGIN
-    ══════════════════════════════════ -->
-    <div id="state-login" class="state hidden">
+  <!-- ══ STATES ══ -->
 
-      <!-- Hero gradient section -->
+  <!-- LOGIN -->
+  <div id="state-login" class="state hidden">
+    <div class="login-body">
+
+      <!-- Hero band -->
       <div class="login-hero">
-        <div class="login-orb login-orb-1"></div>
-        <div class="login-orb login-orb-2"></div>
-        <div class="login-orb login-orb-3"></div>
-
-        <!-- Trust badge -->
-        <div class="login-trust-badge">
-          <span class="login-trust-badge-dot"></span>
-          AI-Powered Career Assistant
+        <div class="login-hero-icon">
+          <img src="../icons/icon48.png" alt="" style="width:28px;height:28px;object-fit:contain;border-radius:6px" onerror="cbIconFallback(this.parentElement,28)" />
         </div>
+        <h1 class="login-headline">Analyze any job.<br><span>Improve your resume.</span></h1>
+        <p class="login-desc">Instant ATS score, missing keywords &amp; job match — right in your browser.</p>
+      </div>
 
-        <div class="login-logo-circle">
-          <img src="../icons/icon128.png" alt="CareerBot" class="login-logo-img"
-               onerror="cbIconFallback(this.parentElement,46)" />
+      <!-- Feature pills -->
+      <div class="login-pills">
+        <span class="login-pill login-pill-blue">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          ATS Score
+        </span>
+        <span class="login-pill login-pill-green">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Keywords
+        </span>
+        <span class="login-pill login-pill-amber">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Job Match %
+        </span>
+      </div>
+
+      <!-- CTA buttons -->
+      <div class="login-actions">
+        <button id="btn-login" class="btn-login-primary">Sign In to CareerBot</button>
+        <button id="btn-signup" class="btn-login-outline">Create Free Account</button>
+      </div>
+
+      <!-- Feature list -->
+      <div class="login-feature-list">
+        <div class="lfl-item">
+          <div class="lfl-icon lfl-icon-blue">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <span class="lfl-text"><strong>ATS Score</strong> — See how well your resume matches</span>
         </div>
-        <h1 class="login-hero-title">Land Your Dream Job<br><span>Faster with AI</span></h1>
-        <p class="login-hero-sub">Optimize resumes, match jobs, and ace interviews — all powered by AI</p>
-
-        <!-- Stats row -->
-        <div class="login-stats-row">
-          <div class="login-stat">
-            <span class="login-stat-value">50K+</span>
-            <span class="login-stat-label">Users</span>
+        <div class="lfl-item">
+          <div class="lfl-icon lfl-icon-green">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
-          <div class="login-stat">
-            <span class="login-stat-value">92%</span>
-            <span class="login-stat-label">ATS Boost</span>
+          <span class="lfl-text"><strong>Missing Keywords</strong> — Know exactly what to add</span>
+        </div>
+        <div class="lfl-item">
+          <div class="lfl-icon lfl-icon-amber">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
-          <div class="login-stat">
-            <span class="login-stat-value">3x</span>
-            <span class="login-stat-label">More Interviews</span>
-          </div>
+          <span class="lfl-text"><strong>Job Match %</strong> — Instant compatibility score</span>
         </div>
       </div>
 
-      <!-- Feature cards + CTAs -->
-      <div class="login-body">
-
-        <p class="login-section-label">What you get</p>
-
-        <div class="login-features-grid">
-          <!-- Card 1: ATS Score -->
-          <div class="lfc">
-            <div class="lfc-icon" style="background:linear-gradient(135deg,#eff6ff,#dbeafe)">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
-            </div>
-            <p class="lfc-name">ATS Score</p>
-            <p class="lfc-desc">See how your resume ranks instantly</p>
-          </div>
-          <!-- Card 2: Job Match -->
-          <div class="lfc">
-            <div class="lfc-icon" style="background:linear-gradient(135deg,#ecfdf5,#d1fae5)">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-            </div>
-            <p class="lfc-name">Job Match</p>
-            <p class="lfc-desc">Skill gap analysis per role</p>
-          </div>
-          <!-- Card 3: AI Resume -->
-          <div class="lfc">
-            <div class="lfc-icon" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe)">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 20h9"/>
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-              </svg>
-            </div>
-            <p class="lfc-name">AI Resume</p>
-            <p class="lfc-desc">Tailored CVs in seconds</p>
-          </div>
-        </div>
-
-        <div class="login-cta-group">
-          <button id="btn-login" class="btn btn-primary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-              <polyline points="10 17 15 12 10 7"/>
-              <line x1="15" y1="12" x2="3" y2="12"/>
-            </svg>
-            Sign In to CareerBot
-          </button>
-          <button id="btn-signup" class="btn btn-outline">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="8.5" cy="7" r="4"/>
-              <line x1="20" y1="8" x2="20" y2="14"/>
-              <line x1="23" y1="11" x2="17" y2="11"/>
-            </svg>
-            Create Free Account
-          </button>
-        </div>
-
-        <p class="login-disclaimer">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          </svg>
-          Free forever
-          <span class="login-disclaimer-dot"></span>
-          No credit card required
-          <span class="login-disclaimer-dot"></span>
-          Cancel anytime
-        </p>
-      </div>
     </div>
+  </div>
 
-    <!-- ══════════════════════════════════
-         STATE: LOADING
-    ══════════════════════════════════ -->
-    <div id="state-loading" class="state hidden">
-      <div class="loading-wrap">
-        <div class="spinner-ring"></div>
-        <p class="loading-text">Connecting to CareerBot&hellip;</p>
-      </div>
+  <!-- LOADING -->
+  <div id="state-loading" class="state hidden">
+    <div class="center-state">
+      <div class="spinner-ring"></div>
+      <p class="state-sub">Connecting to CareerBot…</p>
     </div>
+  </div>
 
-    <!-- ══════════════════════════════════
-         STATE: IDLE (logged in, no JD)
-    ══════════════════════════════════ -->
-    <div id="state-idle" class="state hidden">
-      <div class="state-scroll">
+  <!-- IDLE (no JD detected) -->
+  <div id="state-idle" class="state hidden">
+    <div class="idle-body">
 
-        <!-- Upload card -->
-        <div class="section-card">
-          <div class="sc-header">
-            <div class="sc-icon sc-icon-blue">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            </div>
-            <span class="sc-title">Your Resume</span>
-          </div>
-          <label for="resume-file-input" class="drop-zone">
-            <div class="drop-zone-inner">
-              <div class="drop-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-              </div>
-              <p class="drop-primary">Drop your resume here</p>
-              <p class="drop-hint">PDF or DOCX &middot; Max 10 MB</p>
-              <span class="drop-browse-btn">Browse Files</span>
-            </div>
-            <input type="file" id="resume-file-input" accept=".pdf,.docx" />
+      <p class="idle-helper">Upload your resume and analyze any job instantly</p>
+
+      <!-- Primary CTA -->
+      <button id="btn-manual-tailor" class="btn-analyze-big" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Analyze Job
+      </button>
+
+      <!-- Resume card -->
+      <div class="resume-upload-card" id="resume-row-idle">
+        <div class="ruc-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <div class="ruc-info">
+          <span class="ruc-name" id="idle-resume-name">No resume uploaded</span>
+          <label for="resume-file-input" class="ruc-replace">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Resume
           </label>
-          <!-- File chip shown after selection -->
-          <div class="file-chip" id="file-chip-idle">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            <span class="file-name" id="file-name-display">No file chosen</span>
-          </div>
         </div>
+        <input type="file" id="resume-file-input" accept=".pdf,.docx" />
+      </div>
 
-        <!-- JD card -->
-        <div class="section-card">
-          <div class="sc-header">
-            <div class="sc-icon sc-icon-indigo">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-              </svg>
-            </div>
-            <span class="sc-title">Job Description</span>
-          </div>
-          <textarea id="manual-jd-input" class="jd-textarea"
-            placeholder="Auto-detected from the page, or paste job description here&hellip;"></textarea>
-        </div>
-
-      </div><!-- /.state-scroll -->
-
-      <!-- Sticky bottom CTA -->
-      <div class="sticky-cta">
-        <button id="btn-manual-tailor" class="cta-btn">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-          </svg>
-          Generate CV
+      <!-- JD section toggle -->
+      <div class="jd-toggle-row">
+        <span class="jdt-label">Paste job description</span>
+        <button class="jdt-toggle" id="jd-toggle-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" id="jd-toggle-icon"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
       </div>
+      <div id="jd-expand-area" class="jd-expand hidden">
+        <textarea id="manual-jd-input" class="jd-compact" placeholder="Paste job description here…" rows="6"></textarea>
+      </div>
 
-      <!-- hidden compat elements (required by popup.js) -->
+      <!-- Capabilities row -->
+      <div class="idle-caps">
+        <span class="idle-cap">✓ ATS Score</span>
+        <span class="idle-cap">✓ Job Match</span>
+        <span class="idle-cap">✓ Missing Keywords</span>
+      </div>
+
+      <!-- hidden compat elements -->
       <select id="manual-resume-select" style="display:none"></select>
       <span id="user-name" style="display:none"></span>
       <span id="credits-badge" style="display:none"></span>
       <span id="credits-remaining" style="display:none"></span>
     </div>
+  </div>
 
-    <!-- ══════════════════════════════════
-         STATE: JD DETECTED
-    ══════════════════════════════════ -->
-    <div id="state-jd-detected" class="state hidden">
-      <div class="state-scroll">
+  <!-- JD DETECTED -->
+  <div id="state-jd-detected" class="state hidden">
+    <div class="state-body">
 
-        <!-- Job detected banner -->
-        <div class="job-detect-card" id="jd-detected-banner">
-          <div class="jdc-logo-wrap" id="jd-logo-wrap">
-            <img id="jd-company-logo" src="" alt=""
-                 style="display:none;width:44px;height:44px;border-radius:8px;object-fit:contain;background:#f8fafc" />
-            <div id="jd-company-initials"
-                 style="display:none;width:44px;height:44px;border-radius:8px;background:#2563eb;color:#fff;font-size:15px;font-weight:800;align-items:center;justify-content:center;letter-spacing:0.5px;flex-shrink:0"></div>
-            <svg id="jd-fallback-icon" width="22" height="22" fill="none" stroke="#94a3b8" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="flex-shrink:0">
-              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-            </svg>
-          </div>
-          <div class="jdc-info">
-            <span class="jdc-badge">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              Job Detected
-            </span>
-            <p class="jdc-company" id="jd-company">Loading&hellip;</p>
-            <p class="jdc-title" id="jd-job-title"></p>
-          </div>
+      <!-- Job card -->
+      <div class="job-card" id="jd-detected-banner">
+        <div class="jc-logo" id="jd-logo-wrap">
+          <img id="jd-company-logo" src="" alt="" style="display:none;width:100%;height:100%;object-fit:contain;border-radius:6px" />
+          <div id="jd-company-initials" style="display:none;width:100%;height:100%;border-radius:6px;background:#2557a7;color:#fff;font-size:13px;font-weight:800;align-items:center;justify-content:center;letter-spacing:0.3px;"></div>
+          <svg id="jd-fallback-icon" width="18" height="18" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
         </div>
-
-        <!-- Upload card -->
-        <div class="section-card">
-          <div class="sc-header">
-            <div class="sc-icon sc-icon-blue">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            </div>
-            <span class="sc-title">Your Resume</span>
-          </div>
-          <label for="resume-file-input-jd" class="drop-zone">
-            <div class="drop-zone-inner">
-              <div class="drop-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-              </div>
-              <p class="drop-primary">Drop your resume here</p>
-              <p class="drop-hint">PDF or DOCX &middot; Max 10 MB</p>
-              <span class="drop-browse-btn">Browse Files</span>
-            </div>
-            <input type="file" id="resume-file-input-jd" accept=".pdf,.docx" />
-          </label>
-          <div class="file-chip">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            <span class="file-name" id="file-name-display-jd">No file chosen</span>
-          </div>
+        <div class="jc-info">
+          <span class="jc-detected-badge">
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Job Detected
+          </span>
+          <p class="jc-title" id="jd-job-title">Loading…</p>
+          <p class="jc-company" id="jd-company"></p>
         </div>
-
-        <!-- JD card -->
-        <div class="section-card">
-          <div class="sc-header">
-            <div class="sc-icon sc-icon-indigo">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-              </svg>
-            </div>
-            <span class="sc-title">Job Description</span>
-          </div>
-          <textarea id="jd-textarea-main" class="jd-textarea"
-            placeholder="Auto-detected from the page&hellip;"></textarea>
-        </div>
-
-      </div><!-- /.state-scroll -->
-
-      <!-- Sticky CTA row -->
-      <div class="sticky-cta sticky-cta-row">
-        <button id="btn-tailor" class="cta-btn" style="flex:1">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-          </svg>
-          Generate CV
+        <button class="jc-dismiss" id="btn-dismiss" title="Dismiss">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
-        <button id="btn-dismiss" class="dismiss-btn">Dismiss</button>
       </div>
+
+      <!-- Resume row -->
+      <div class="compact-row">
+        <div class="cr-icon cr-icon-blue">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="cr-content">
+          <span class="cr-label">Resume</span>
+          <span class="cr-value" id="file-name-display-jd">No file selected</span>
+        </div>
+        <label for="resume-file-input-jd" class="cr-action">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload
+        </label>
+        <input type="file" id="resume-file-input-jd" accept=".pdf,.docx" />
+      </div>
+
+      <!-- JD preview (collapsed by default) -->
+      <div class="jd-preview-row" id="jd-preview-toggle">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+        <span class="jdp-label">Job description auto-detected</span>
+        <span class="jdp-edit" id="jd-preview-edit">Edit ↓</span>
+      </div>
+      <div id="jd-expand-area-detected" class="jd-expand hidden">
+        <textarea id="jd-textarea-main" class="jd-compact" placeholder="Job description…" rows="6"></textarea>
+      </div>
+
     </div>
+    <div class="state-footer">
+      <button id="btn-tailor" class="btn-primary-full">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Analyze Match →
+      </button>
+      <button id="btn-cover-letter" class="btn-outline-full">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Generate Cover Letter
+      </button>
+    </div>
+  </div>
 
-    <!-- ══════════════════════════════════
-         STATE: RESULTS
-    ══════════════════════════════════ -->
-    <div id="state-results" class="state hidden">
-      <div class="state-scroll">
-
-        <!-- Job banner -->
-        <div class="result-job-banner">
-          <svg width="14" height="14" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-          </svg>
-          <div class="rjb-text">
-            <p id="result-job-title" class="rjb-title"></p>
-            <p id="result-company" class="rjb-company"></p>
-          </div>
-        </div>
-
-        <!-- Score circle -->
-        <div class="score-section">
-          <div class="score-circle-wrap">
-            <svg width="160" height="160" style="transform:rotate(-90deg);display:block">
-              <circle cx="80" cy="80" r="68" fill="none" stroke="#e2e8f0" stroke-width="10"/>
-              <circle id="score-arc" cx="80" cy="80" r="68" fill="none" stroke="#2563eb" stroke-width="10"
-                stroke-linecap="round"
-                stroke-dasharray="427 427"
-                stroke-dashoffset="427"
-                style="transition:stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)"/>
-            </svg>
-            <div class="score-inner-text">
-              <span id="score-pct" class="score-pct">0%</span>
-              <span class="score-sub-label">ATS Match</span>
-            </div>
-          </div>
-          <p id="score-label" class="score-label-text">&mdash;</p>
-          <p id="score-tip" class="score-tip-text"></p>
-        </div>
-
-        <!-- Skill cards -->
-        <div id="missing-skills-section" style="display:none">
-          <div class="skill-cards-row">
-            <div class="skill-card">
-              <div class="skill-card-head">
-                <span class="skill-card-title">Technical Skills</span>
-                <span class="skill-card-badge tech" id="tech-added-badge">0 matched</span>
-              </div>
-              <div id="tech-skills-content"></div>
-            </div>
-            <div class="skill-card">
-              <div class="skill-card-head">
-                <span class="skill-card-title soft">Soft Skills</span>
-                <span class="skill-card-badge soft" id="soft-added-badge">0 matched</span>
-              </div>
-              <div id="soft-skills-content"></div>
-            </div>
-          </div>
-        </div>
-
-      </div><!-- /.state-scroll -->
-
-      <!-- Sticky CTA row -->
-      <div class="sticky-cta sticky-cta-row">
-        <button id="btn-improve-resume" class="cta-btn" style="flex:1">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"/>
-            <polyline points="1 20 1 14 7 14"/>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-          </svg>
-          Improve Resume
+  <!-- COVER LETTER -->
+  <div id="state-cover-letter" class="state hidden">
+    <div class="state-body">
+      <div class="cl-header">
+        <button class="cl-back" id="btn-cl-back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
         </button>
-        <button id="btn-result-try-again" class="dismiss-btn">Try Again</button>
+        <div class="cl-title-wrap">
+          <p class="cl-title">Cover Letter</p>
+          <p class="cl-subtitle" id="cl-job-label">—</p>
+        </div>
+        <button class="cl-copy-btn" id="btn-cl-copy" title="Copy to clipboard">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+
+      <!-- Generating skeleton -->
+      <div id="cl-generating" class="cl-generating hidden">
+        <div class="cl-gen-ring"></div>
+        <p class="cl-gen-text">Generating your cover letter…</p>
+      </div>
+
+      <!-- Result -->
+      <textarea id="cl-output" class="cl-output hidden" readonly placeholder="Your cover letter will appear here…"></textarea>
+
+      <!-- Error -->
+      <div id="cl-error" class="cl-error hidden">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="cl-error-msg">Something went wrong. Please try again.</span>
       </div>
     </div>
+    <div class="state-footer">
+      <button id="btn-cl-open-web" class="btn-primary-full">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Open in CareerBot
+      </button>
+      <button id="btn-cl-regenerate" class="btn-ghost-full">Regenerate</button>
+    </div>
+  </div>
 
-    <!-- ══════════════════════════════════
-         STATE: PROCESSING
-    ══════════════════════════════════ -->
-    <div id="state-processing" class="state hidden">
-      <div class="processing-wrap">
-        <div class="proc-spinner">
-          <div class="proc-spinner-track"></div>
-          <div class="proc-spinner-arc"></div>
-          <div class="proc-spinner-logo">
-            <img src="../icons/icon48.png" alt="" style="width:28px;height:28px;object-fit:contain;border-radius:6px"
-                 onerror="cbIconFallback(this.parentElement,28)" />
+  <!-- PROCESSING -->
+  <div id="state-processing" class="state hidden">
+    <div class="center-state">
+      <div class="proc-ring-wrap">
+        <div class="proc-ring-track"></div>
+        <div class="proc-ring-arc"></div>
+        <div class="proc-ring-logo">
+          <img src="../icons/icon48.png" alt="" style="width:24px;height:24px;object-fit:contain;border-radius:5px" onerror="cbIconFallback(this.parentElement,24)" />
+        </div>
+      </div>
+      <p id="processing-step" class="proc-step">Analyzing…</p>
+      <div class="proc-bar-track"><div id="progress-fill" class="proc-bar-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="state-results" class="state hidden">
+    <div class="state-body results-body">
+
+      <!-- Score hero -->
+      <div class="score-hero">
+        <div class="score-ring-wrap">
+          <svg width="110" height="110" style="transform:rotate(-90deg);display:block">
+            <circle cx="55" cy="55" r="46" fill="none" stroke="#e2e8f0" stroke-width="7"/>
+            <circle id="score-arc" cx="55" cy="55" r="46" fill="none" stroke="#2557a7" stroke-width="7"
+              stroke-linecap="round"
+              stroke-dasharray="289 289"
+              stroke-dashoffset="289"
+              style="transition:stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)"/>
+          </svg>
+          <div class="score-inner">
+            <span id="score-pct" class="score-num">0%</span>
+            <span class="score-sub">ATS Match</span>
           </div>
         </div>
-        <p id="processing-step" class="proc-step-text">Processing&hellip;</p>
-        <div class="proc-progress-track">
-          <div id="progress-fill" class="proc-progress-fill"></div>
+        <div class="score-meta">
+          <div class="score-job-row">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            <span id="result-job-title" class="sj-title">Job Position</span>
+          </div>
+          <p id="result-company" class="sj-company"></p>
+          <p id="score-label" class="score-label">—</p>
+          <div class="score-trend" id="score-trend">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+            <span>+12 after optimization</span>
+          </div>
         </div>
       </div>
+
+      <!-- Skills section -->
+      <div id="missing-skills-section" class="skills-section" style="display:none">
+
+        <div class="skills-group" id="matched-group" style="display:none">
+          <div class="sg-header">
+            <span class="sg-dot sg-dot-green"></span>
+            <span class="sg-title">Matched Skills</span>
+            <span class="sg-count" id="matched-count"></span>
+          </div>
+          <div class="sg-chips" id="matched-chips"></div>
+        </div>
+
+        <div class="skills-group" id="missing-group" style="display:none">
+          <div class="sg-header">
+            <span class="sg-dot sg-dot-red"></span>
+            <span class="sg-title">Missing Skills</span>
+            <span class="sg-count" id="missing-count"></span>
+          </div>
+          <div class="sg-chips" id="missing-chips"></div>
+        </div>
+
+        <div class="skills-group" id="soft-group" style="display:none">
+          <div class="sg-header">
+            <span class="sg-dot sg-dot-purple"></span>
+            <span class="sg-title">Soft Skills</span>
+          </div>
+          <div class="sg-chips" id="soft-chips"></div>
+        </div>
+
+      </div>
+
+      <!-- ATS improvements -->
+      <div class="ats-improvements" id="ats-improvements" style="display:none">
+        <p class="ai-title">ATS Improvements</p>
+        <div id="ats-items"></div>
+      </div>
+
     </div>
-
-    <!-- FOOTER -->
-    <div class="footer">
-      <a id="card-dashboard-footer" href="#" class="footer-link">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="7" height="7"/>
-          <rect x="14" y="3" width="7" height="7"/>
-          <rect x="14" y="14" width="7" height="7"/>
-          <rect x="3" y="14" width="7" height="7"/>
-        </svg>
-        Dashboard
-      </a>
+    <div class="state-footer results-footer">
+      <button id="btn-improve-resume" class="btn-primary-full">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Improve Resume →
+      </button>
+      <button id="btn-result-try-again" class="btn-ghost-full">Try Again</button>
     </div>
+  </div>
 
-  </div><!-- /#main-content -->
+</div><!-- /.app-main -->
+  <button class="rail-open-btn hidden" id="btn-open-rail" title="Open sidebar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+  </button>
 
-  <!-- ══ RIGHT SIDEBAR ══ -->
-  <div id="right-sidebar">
-
-    <div class="rsb-top">
-      <button class="rsb-btn active" id="sb-analyze" title="Analyze Job">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-        </svg>
+  <!-- RIGHT SIDEBAR RAIL -->
+  <nav class="side-rail">
+    <div class="sr-top">
+      <button class="sr-btn sr-toggle" id="btn-toggle-rail" title="Toggle sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+      </button>
+      <button class="sr-btn active" id="sb-analyze" title="Analyze">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <span>Analyze</span>
       </button>
+      <button class="sr-btn" id="sb-dashboard" title="Dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Tracker</span>
+      </button>
     </div>
-
-    <div class="rsb-bottom">
-      <!-- Profile with hover card -->
-      <div class="rsb-profile-wrap">
-        <button class="rsb-btn" id="sb-profile" title="User Profile">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
-          <span>Profile</span>
+    <div class="sr-bottom">
+      <div class="sr-profile-wrap">
+        <button class="sr-btn" id="sb-profile-rail" title="Profile">
+          <div class="sr-avatar" id="sr-avatar-initials">S</div>
         </button>
-        <div class="rsb-profile-card" id="profile-popover">
-          <div class="rpc-avatar" id="rpc-avatar-wrap">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          </div>
-          <p class="rpc-name" id="rpc-name">Profile</p>
-          <p class="rpc-sub" id="rpc-sub">Sign in to access your profile</p>
-          <button class="rpc-btn" id="rpc-action-btn">Sign In</button>
+        <div class="sr-profile-popover" id="sr-profile-popover">
+          <p class="srp-name" id="srp-name">My Account</p>
+          <p class="srp-email" id="srp-email"></p>
+          <div class="srp-divider"></div>
+          <button class="srp-btn" id="srp-dashboard">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </button>
+          <button class="srp-btn srp-btn-danger" id="srp-signout">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Sign Out
+          </button>
         </div>
       </div>
-
-      <button class="rsb-btn" id="sb-feedback" title="Send Feedback">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
+      <button class="sr-btn" id="sb-feedback" title="Feedback">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span>Feedback</span>
       </button>
-
-      <button class="rsb-btn" id="sb-settings" title="Settings">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
-        <span>Settings</span>
-      </button>
     </div>
+  </nav>
 
-  </div><!-- /#right-sidebar -->
-
-</div><!-- /#app -->
+</div>
 <script src="../config.js"></script>
 <script src="popup.js"></script>
 </body>

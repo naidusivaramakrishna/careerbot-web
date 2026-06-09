@@ -15,9 +15,10 @@ interface Props {
     onClose: () => void
     initialFormType?: FormType
     redirectTo?: string
+    onSuccess?: () => void
 }
 
-const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup", redirectTo }) => {
+const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup", redirectTo, onSuccess }) => {
     const router = useRouter()
     const authRedirectTo = sanitizeAuthRedirect(redirectTo)
 
@@ -74,7 +75,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             // User can verify email from profile/settings later
             toast.success("Account created! Redirecting...")
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            window.location.href = authRedirectTo
+            if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = authRedirectTo }
         } catch (err) {
             handleApiError(err)
         } finally {
@@ -84,7 +85,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
     // ================== LOGIN ==================
     const handleLogin = async () => {
-        setErrors((prev) => ({ ...prev, login: "" }))
+        setErrors({ email: "", username: "", password: "", login: "" })
         setLoading((prev) => ({ ...prev, login: true }))
         try {
             // Tenant ID is auto-generated and set in context
@@ -95,8 +96,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             // Reset the refresh timestamp so useTokenRefresh doesn't immediately
             // fire a refresh attempt on dashboard mount due to a stale previous-session timestamp.
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            window.location.href = authRedirectTo
-            onClose()
+            if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = authRedirectTo; onClose(); }
         } catch (err) {
             handleApiError(err, true)
         } finally {
@@ -111,36 +111,39 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             console.error(`[auth:${isLogin ? 'signin' : 'signup'}] status=${res?.status}`, res?.data)
             const newErrors: ErrorState = { email: "", username: "", password: "", login: "" }
 
-            // Handle new backend validation error format - show first error to prevent overflow
+            // Backend uses OAuth2 form-data convention on /signin, so the email field
+            // is reported as "username". Re-map to "email" for the login UI.
+            const normaliseField = (field: string): string =>
+                isLogin && field === 'username' ? 'email' : field
+
+            const cleanMessage = (raw: string): string => {
+                let msg = raw
+                if (msg.includes('Value error,')) msg = msg.replace('Value error,', '').trim()
+                if (msg.includes(':')) msg = msg.split(':').slice(1).join(':').trim()
+                return msg
+            }
+
+            // Handle new backend validation error format (envelope with validation_errors)
             if (res?.data?.error?.details?.validation_errors) {
-                const validationErrors = res.data.error.details.validation_errors
-                if (validationErrors.length > 0) {
-                    const firstError = validationErrors[0]
-                    const field = firstError.field
-                    if (field in newErrors) {
-                        let message = firstError.message
-                        // Remove "Value error," prefix
-                        if (message.includes('Value error,')) {
-                            message = message.replace('Value error,', '').trim()
-                        }
-                        // Extract just the error message after colon if present
-                        if (message.includes(':')) {
-                            message = message.split(':').slice(1).join(':').trim()
-                        }
-                        newErrors[field as keyof ErrorState] = message
+                const validationErrors: Array<{ field: string; message: string }> =
+                    res.data.error.details.validation_errors
+                validationErrors.forEach((v) => {
+                    const field = normaliseField(v.field)
+                    if (field in newErrors && !newErrors[field as keyof ErrorState]) {
+                        newErrors[field as keyof ErrorState] = cleanMessage(v.message)
                     }
-                }
+                })
                 setErrors(newErrors)
             }
-            // Handle old validation error format (422 with detail array) - show only first error
-            else if (!isLogin && res?.status === 422 && Array.isArray(res.data.detail)) {
-                if (res.data.detail.length > 0) {
-                    const firstError = res.data.detail[0]
-                    const field = firstError.loc[firstError.loc.length - 1]
-                    if (field in newErrors) {
-                        newErrors[field as keyof ErrorState] = firstError.msg
+            // Handle FastAPI 422 validation format (detail array) — applies to login & signup
+            else if (res?.status === 422 && Array.isArray(res.data.detail)) {
+                res.data.detail.forEach((d: { loc: string[]; msg: string }) => {
+                    const rawField = d.loc[d.loc.length - 1]
+                    const field = normaliseField(rawField)
+                    if (field in newErrors && !newErrors[field as keyof ErrorState]) {
+                        newErrors[field as keyof ErrorState] = cleanMessage(d.msg)
                     }
-                }
+                })
                 setErrors(newErrors)
             }
             // Handle direct error message from backend
@@ -160,7 +163,9 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
         }
     }
 
-    const renderLoginForm = () => (
+    const renderLoginForm = () => {
+        const activeLoginError = errors.email ? 'email' : errors.password ? 'password' : errors.login ? 'login' : null
+        return (
         <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="flex flex-col gap-4">
             <input
                 type="email"
@@ -169,10 +174,9 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 placeholder="Email Address"
                 value={loginForm.email}
                 onChange={handleChange}
-                className="w-full bg-violet-50 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-purple-200 transition-all"
-                required
+                className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
             />
-            {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
+            {activeLoginError === 'email' && <p className="text-red-500 text-xs -mt-2">{errors.email}</p>}
 
             <div className="relative">
                 <input
@@ -181,8 +185,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     placeholder="Password"
                     value={loginForm.password}
                     onChange={handleChange}
-                    className="w-full bg-violet-50 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 focus:ring-purple-200 transition-all"
-                    required
+                    className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
                 />
                 <button
                     type="button"
@@ -193,8 +196,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 </button>
             </div>
 
-            {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
-            {errors.login && formType === "signin" && <p className="text-red-500 text-sm">{errors.login}</p>}
+            {activeLoginError === 'password' && <p className="text-red-500 text-xs -mt-2">{errors.password}</p>}
+            {activeLoginError === 'login' && <p className="text-red-500 text-xs -mt-2">{errors.login}</p>}
 
             <p
                 className="text-xs font-semibold cursor-pointer flex justify-end my-2 text-blue-500 hover:text-blue-700 transition-colors"
@@ -221,7 +224,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 )}
             </button>
         </form>
-    )
+    )}
+
 
     const renderAuthForm = () => {
         // Show verified email message when redirected from email verification
@@ -262,63 +266,67 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 <SocialLoginButtons variant={formType} redirectTo={authRedirectTo} />
 
                 <div className="flex items-center my-5">
-                    <div className="grow h-px bg-[#e6d6f4]"></div>
-                    <p className="text-[#836B94] text-center px-4 text-xs font-semibold">
+                    <div className="grow h-px bg-gray-300"></div>
+                    <p className="text-gray-500 text-center px-4 text-xs font-semibold">
                         Or Continue with Email
                     </p>
-                    <div className="grow h-px bg-[#e6d6f4]"></div>
+                    <div className="grow h-px bg-gray-300"></div>
                 </div>
 
-                <div className="flex flex-col gap-4">
-                    {formType === "signup" && (
-                        <>
+                {(() => {
+                    const activeError = (formType === 'signup' && errors.username) ? 'username'
+                        : errors.email ? 'email'
+                        : errors.password ? 'password'
+                        : errors.login ? 'login' : null
+                    return (
+                        <div className="flex flex-col gap-4">
+                            {formType === "signup" && (
+                                <>
+                                    <input
+                                        type="text"
+                                        name="username"
+                                        autoFocus
+                                        placeholder="Username"
+                                        value={signUpForm.username}
+                                        onChange={handleChange}
+                                        className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.username ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                                    />
+                                    {activeError === 'username' && <p className="text-red-500 text-xs -mt-2">{errors.username}</p>}
+                                </>
+                            )}
+
                             <input
-                                type="text"
-                                name="username"
-                                autoFocus
-                                placeholder="Username"
-                                value={signUpForm.username}
+                                type="email"
+                                name="email"
+                                placeholder="Email Address"
+                                value={formType === "signup" ? signUpForm.email : loginForm.email}
                                 onChange={handleChange}
-                                className="w-full bg-[#f8f0fd] rounded-xl px-4 py-3 border border-purple-200 text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 focus:ring-purple-400 transition-all"
-                                style={{ boxShadow: '0 2px 4px 0 rgba(168, 85, 247, 0.35)' }}
+                                className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.email || (formType === "signin" && errors.login)) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
                             />
-                            {errors.username && <p className="text-red-500 text-sm">{errors.username}</p>}
-                        </>
-                    )}
+                            {activeError === 'email' && <p className="text-red-500 text-xs -mt-2">{errors.email}</p>}
 
-                    <input
-                        type="email"
-                        name="email"
-                        placeholder="Email Address"
-                        value={formType === "signup" ? signUpForm.email : loginForm.email}
-                        onChange={handleChange}
-                        className="w-full bg-[#f8f0fd] rounded-xl px-4 py-3 border border-purple-200 text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 focus:ring-purple-400 transition-all"
-                        style={{ boxShadow: '0 2px 4px 0 rgba(168, 85, 247, 0.35)' }}
-                    />
-                    {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
-
-                    <div className="relative">
-                        <input
-                            type={showPassword ? "text" : "password"}
-                            name="password"
-                            placeholder="Password"
-                            value={formType === "signup" ? signUpForm.password : loginForm.password}
-                            onChange={handleChange}
-                            className="w-full bg-[#f8f0fd] rounded-xl px-4 py-3 border border-purple-200 text-sm text-gray-800 placeholder-[#635B6B] outline-none  focus:ring-2 focus:ring-purple-400 transition-all"
-                            style={{ boxShadow: '0 2px 4px 0 rgba(168, 85, 247, 0.35)' }}
-                        />
-                        <button
-                            type="button"
-                            onClick={() => setShowPassword((p) => !p)}
-                            className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                            {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
-                        </button>
-                    </div>
-
-                    {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
-                    {errors.login && <p className="text-red-500 text-sm">{errors.login}</p>}
-                </div>
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    name="password"
+                                    placeholder="Password"
+                                    value={formType === "signup" ? signUpForm.password : loginForm.password}
+                                    onChange={handleChange}
+                                    className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.password || (formType === "signin" && errors.login)) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword((p) => !p)}
+                                    className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                    {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
+                                </button>
+                            </div>
+                            {activeError === 'password' && <p className="text-red-500 text-xs -mt-2">{errors.password}</p>}
+                            {activeError === 'login' && <p className="text-red-500 text-xs -mt-2">{errors.login}</p>}
+                        </div>
+                    )
+                })()}
 
                 {formType === "signin" && (
                     <p
@@ -393,10 +401,10 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div className="relative w-full max-w-120 h-145 p-8 rounded-[28px] shadow-2xl  bg-linear-to-br from-[#fff4fc] to-[#efe0ff]">
+            <div className="relative w-full max-w-124 h-145 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
                 <button
                     onClick={onClose}
-                    className="absolute top-5 right-5 p-1.5 cursor-pointer hover:bg-gray-200 rounded-full transition-colors"
+                    className="absolute top-5 right-5 p-1.5 cursor-pointer hover:bg-gray-100 rounded-full transition-colors"
                 >
                     <X className="h-4 w-4 text-gray-500" />
                 </button>

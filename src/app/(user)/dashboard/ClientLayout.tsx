@@ -16,7 +16,7 @@ export default function ClientLayout({
       <Header />
       <div
         className="pt-14 min-h-screen transition-[margin] duration-300"
-        style={{ backgroundColor: '#e8eff9', marginLeft: "var(--sidebar-width, 56px)" }}
+        style={{ backgroundColor: '#f4f5f7', marginLeft: "var(--sidebar-width, 56px)" }}
       >
         {children}
         <Footer />

@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useState, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { getAllResumesUnified } from '@/api/resumeApi';
 import EmptyState from './_components/EmptyState';
@@ -14,13 +14,37 @@ export interface Resume {
   modified: string;
   created: string;
   primary: boolean;
+  source?: 'enhanced' | 'builder';
   createdAt?: string;
   updatedAt?: string;
 }
 
+const PageShell = ({ children }: { children: React.ReactNode }) => (
+  <div className="min-h-screen bg-gray-50">
+    <div className="px-6 pt-6 pb-2">
+      <div className="flex items-center gap-3">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)" }}
+        >
+          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 leading-tight">Resume Management</h1>
+          <p className="text-xs text-gray-500">Manage, analyze and optimize your resumes with AI</p>
+        </div>
+      </div>
+    </div>
+    <div className="mx-6 mt-4 border-t border-gray-200" />
+    {children}
+  </div>
+);
+
 const ResumePage = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -30,7 +54,7 @@ const ResumePage = () => {
 
       // ✅ No manual token check needed - httpClient sends cookies automatically
       // ✅ If not authenticated, API will return 401 (handled in catch block)
-      const { builder_resumes, enhanced_resumes } = await getAllResumesUnified({ skipAuthRedirect: true });
+      const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
 
       if (builder_resumes.length > 0 || enhanced_resumes.length > 0) {
         router.push('/builder/start/list');
@@ -51,42 +75,8 @@ const ResumePage = () => {
   }, [router]);
 
   useEffect(() => {
-    const action = searchParams?.get('action');
-    if (action === 'enhance') {
-      setSelected('upload');
-      setLoading(false);
-      return;
-    }
     checkForResumes();
-  }, [checkForResumes, searchParams]);
-
-  const PageShell = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen bg-gray-50">
-      {/* Page header */}
-      <div className="px-6 pt-6 pb-2">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)" }}
-          >
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 leading-tight">Resume Management</h1>
-            <p className="text-xs text-gray-500">Manage, analyze and optimize your resumes with AI</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div className="mx-6 mt-4 border-t border-gray-200" />
-
-      {children}
-    </div>
-  );
+  }, [checkForResumes]);
 
   if (loading) {
     return (
@@ -112,11 +102,7 @@ const ResumePage = () => {
       <div className="px-6 pt-6 pb-2 text-center">
         <p className="text-sm text-gray-400">Choose how you&apos;d like to get started</p>
       </div>
-      <EmptyState
-        selected={selected}
-        onSelect={setSelected}
-        initialUploadOpen={searchParams?.get('action') === 'enhance'}
-      />
+      <EmptyState selected={selected} onSelect={setSelected} />
     </PageShell>
   );
 };

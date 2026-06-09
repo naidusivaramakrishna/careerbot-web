@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { logger } from '@/lib/logger';
- 
+
 // Public routes — no auth required
 const publicRoutes = [
     '/',
@@ -18,7 +18,7 @@ const publicRoutes = [
     "/builder",
     "/cover-letter",
 ];
- 
+
 const RECRUITER_PREFIX = '/recruiter';
 const ADMIN_PREFIX = '/admin';
 
@@ -31,11 +31,31 @@ function buildUserLoginUrl(request: NextRequest): URL {
     );
     return loginUrl;
 }
- 
+
+function redirectToLogin(request: NextRequest): NextResponse {
+    const { pathname } = request.nextUrl;
+    const target = pathname.startsWith(ADMIN_PREFIX)
+        ? new URL('/admin/login', request.url)
+        : pathname.startsWith(RECRUITER_PREFIX)
+        ? new URL('/recruiter/auth', request.url)
+        : buildUserLoginUrl(request);
+    return NextResponse.redirect(target);
+}
+
+function roleAllows(pathname: string, role: string | undefined): boolean {
+    if (pathname.startsWith(ADMIN_PREFIX)) {
+        return role === 'admin';
+    }
+    if (pathname.startsWith(RECRUITER_PREFIX)) {
+        return role === 'recruiter' || role === 'admin';
+    }
+    return true;
+}
+
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     logger.info(`[${request.method}] ${pathname}`);
- 
+
     // Allow public routes without authentication
     const isPublicRoute =
         publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'));
@@ -55,6 +75,13 @@ export async function middleware(request: NextRequest) {
     const refreshToken = request.cookies.get('refresh_token')?.value ||
                          request.cookies.get('admin_refresh_token')?.value;
 
+    if (!token && !refreshToken) {
+        return redirectToLogin(request);
+    }
+
+    // Role-gated areas (admin / recruiter) REQUIRE a working verifier. If
+    // JWT_SECRET is absent the server is misconfigured — deny rather than fail
+    // open and let an unverifiable token through.
     const isProtectedArea =
         pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
 
@@ -67,16 +94,8 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(
             typeof loginUrl === 'string' ? new URL(loginUrl, request.url) : loginUrl
         );
-    };
-
-    // Role claim must match the area being entered. Returns true for any
-    // non-role-gated route, so the check is a no-op outside admin/recruiter.
-    const roleAllows = (role: string | undefined): boolean => {
-        if (pathname.startsWith(ADMIN_PREFIX))     return role === 'admin';
-        if (pathname.startsWith(RECRUITER_PREFIX)) return role === 'recruiter' || role === 'admin';
-        return true;
-    };
-
+    }
+ 
     // JWT role enforcement — decode access_token to check role claim
     if (token && process.env.JWT_SECRET) {
         try {
@@ -84,7 +103,7 @@ export async function middleware(request: NextRequest) {
                 token,
                 new TextEncoder().encode(process.env.JWT_SECRET)
             );
-            if (!roleAllows(payload.role as string | undefined)) {
+            if (!roleAllows(pathname, payload.role as string | undefined)) {
                 return NextResponse.redirect(new URL('/403', request.url));
             }
             return NextResponse.next();
@@ -93,25 +112,27 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // 2) No verified token. Non-role-protected pages: presence of EITHER an
-    //    access_token or refresh_token cookie is enough to let the request
-    //    through. The page's own API calls will revalidate against the backend
-    //    on every request, and the HTTP interceptor handles refresh on the
-    //    first 401. Falling back to refresh_token alone bounced real users to
-    //    login when their backend hadn't issued a refresh cookie OR when the
-    //    frontend JWT_SECRET didn't match the backend's signing key.
+    // 2) No verified token. Non-protected pages: a refresh cookie is enough —
+    //    let the request through; the client HTTP interceptor refreshes on the
+    //    first 401.
     if (!isProtectedArea) {
-        return (token || refreshToken) ? NextResponse.next() : loginRedirect();
+        return refreshToken ? NextResponse.next() : loginRedirect();
     }
 
-    // 3) Protected area with no verified token — whether the access token is
-    //    missing OR invalid. Attempt a server-side refresh, re-verify the NEW
-    //    token's role, then bounce through a redirect so the page renders with a
-    //    valid cookie. Every failure path falls through to the login redirect
+    // 3) Role-gated area with no verified token (access token missing OR
+    //    invalid). Attempt a server-side refresh, re-verify the NEW token's
+    //    role, then bounce through a redirect so the page renders with a valid
+    //    cookie. Every failure path falls through to the login redirect
     //    (fail-safe) — a forged/expired refresh cookie can never reach a
     //    role-gated page.
     if (refreshToken && process.env.JWT_SECRET) {
         try {
+            // Keep the refresh on a SAME-ORIGIN relative path. It forwards the
+            // raw httpOnly Cookie header, so the target must never be a
+            // client-exposed/absolute base (e.g. NEXT_PUBLIC_BASE_URL) — that
+            // would exfiltrate tokens to whatever host that var points at.
+            // Next's rewrite (`/api/:path*` -> server-only BACKEND_URL in
+            // next.config.ts) proxies this to the trusted backend.
             const refreshPath = pathname.startsWith(ADMIN_PREFIX)
                 ? '/api/v1/admin/auth/refresh'
                 : '/api/v1/auth/refresh';
@@ -129,7 +150,7 @@ export async function middleware(request: NextRequest) {
                         newAccess,
                         new TextEncoder().encode(process.env.JWT_SECRET)
                     );
-                    if (!roleAllows(payload.role as string | undefined)) {
+                    if (!roleAllows(pathname, payload.role as string | undefined)) {
                         return NextResponse.redirect(new URL('/403', request.url));
                     }
                     // Re-issue the navigation with the refreshed cookies; the
@@ -140,27 +161,13 @@ export async function middleware(request: NextRequest) {
                 }
             }
         } catch {
-            // Token invalid or expired.
-            // If a refresh token exists, let the request through — the HTTP interceptor
-            // on the client will detect the 401 and call /auth/refresh automatically.
-            // Only redirect immediately when there is truly no way to recover the session.
-            if (refreshToken) {
-                return NextResponse.next();
-            }
-            const loginUrl = pathname.startsWith(ADMIN_PREFIX)
-                ? '/admin/login'
-                : pathname.startsWith(RECRUITER_PREFIX)
-                ? '/recruiter/auth'
-                : buildUserLoginUrl(request);
-            return NextResponse.redirect(
-                typeof loginUrl === 'string' ? new URL(loginUrl, request.url) : loginUrl
-            );
+            // refresh failed — fall through to the login redirect
         }
     }
- 
-    return NextResponse.next();
+
+    return redirectToLogin(request);
 }
- 
+
 export const config = {
     matcher: [
         '/((?!_next/static|_next/image|favicon.ico|assets|images|api).*)',

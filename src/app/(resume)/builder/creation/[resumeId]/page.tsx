@@ -16,22 +16,16 @@ interface BuilderPageProps {
 function BuilderPageInner({ resumeId }: { resumeId: string }) {
   const searchParams = useSearchParams();
   const fromAts = searchParams.get("from_ats") === "true";
-  const sourceEnhancer = searchParams.get("source") === "enhancer";
-  const initialTab = fromAts ? "Enhance" : (sourceEnhancer ? "ResumeGPT" : undefined);
+  const initialTab = fromAts ? "Editor" : undefined;
   const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   // ✅ Get loading state from context to prevent rendering before data loads
   const { isLoadingResume } = useResume();
 
-  // ✅ Always start with sidebar closed when page loads
-  const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(false);
+  // When source=enhanced, open the template sidebar and collapse the editor sidebar by default
+  const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(isEnhancedResume);
 
-  const [activeTab, setActiveTab] = useState("Templates");
-
-  // ✅ Clear saved sidebar state on mount to ensure it always starts closed
-  useEffect(() => {
-    localStorage.removeItem("template_sidebar_open");
-  }, []);
+  const [activeTab, setActiveTab] = useState(isEnhancedResume ? "Score" : "Templates");
 
   // Save sidebar state to localStorage whenever it changes (during session)
   useEffect(() => {
@@ -73,6 +67,7 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
           onToggleTemplateSidebar={handleToggleTemplateSidebar}
           resumeId={resumeId}
           initialTab={initialTab}
+          defaultOpen={!isEnhancedResume}
         />
 
         <main className="flex-1 bg-gray-50 ">

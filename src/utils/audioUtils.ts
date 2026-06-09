@@ -5,15 +5,9 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import logger from '@/lib/logger';
-import meSpeak from 'mespeak';
-
 // Singleton FFmpeg instance
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoading: Promise<FFmpeg> | null = null;
-
-// meSpeak initialization state
-let meSpeakInitialized = false;
-let meSpeakInitializing: Promise<void> | null = null;
 
 /**
  * Get or initialize FFmpeg instance (singleton pattern)
@@ -46,60 +40,6 @@ const getFFmpeg = async (): Promise<FFmpeg> => {
   return ffmpegLoading;
 };
 
-/**
- * Initialize meSpeak TTS engine (singleton pattern)
- * Loads configuration and voice files from public directory
- */
-const initializeMeSpeak = async (): Promise<void> => {
-  if (meSpeakInitialized) {
-    return;
-  }
-
-  if (meSpeakInitializing) {
-    return meSpeakInitializing;
-  }
-
-  meSpeakInitializing = (async () => {
-    try {
-      logger.info('🎤 Initializing meSpeak TTS engine...');
-
-      // Load config and voice from public directory
-      // Files were copied during build from node_modules/mespeak
-      meSpeak.loadConfig('/mespeak/mespeak_config.json');
-      meSpeak.loadVoice('/mespeak/voices/en/en.json');
-
-      // Poll until meSpeak is ready (files load asynchronously)
-      const maxWaitTime = 10000; // 10 seconds max
-      const pollInterval = 300;  // Check every 300ms
-      let waited = 0;
-
-      while (waited < maxWaitTime) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-        waited += pollInterval;
-
-        // Test if meSpeak is ready by generating a short test audio
-        try {
-          const testData = meSpeak.speak('test', { rawdata: 'buffer' });
-          if (testData && testData instanceof Uint8Array && testData.length > 0) {
-            meSpeakInitialized = true;
-            logger.info(`✅ meSpeak initialized successfully (${waited}ms)`);
-            return;
-          }
-        } catch {
-          // Not ready yet, continue waiting
-        }
-      }
-
-      throw new Error(`meSpeak initialization timeout after ${maxWaitTime}ms`);
-    } catch (error) {
-      logger.error('❌ Failed to initialize meSpeak:', error);
-      meSpeakInitializing = null;
-      throw error;
-    }
-  })();
-
-  return meSpeakInitializing;
-};
 
 /**
  * Convert WebM video blob to MP4 format
@@ -545,108 +485,6 @@ export const getAllTextAnswers = (): { [questionId: string]: string } => {
   }
 };
 
-/**
- * Convert text to audio blob using Web Audio API
- * Creates a valid silent audio file since Web Speech API can't be captured
- * The text is still spoken for user feedback, but we generate a proper audio file separately
- */
-export const textToSpeechAndRecord = async (
-  text: string,
-  options?: {
-    rate?: number;
-    pitch?: number;
-    volume?: number;
-    lang?: string;
-  }
-): Promise<Blob> => {
-  try {
-    // Optionally speak the text for user feedback (muted if volume is 0)
-    if (options?.volume !== 0 && window.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = options?.rate ?? 0.85;
-      utterance.pitch = options?.pitch ?? 1.0;
-      utterance.volume = options?.volume ?? 0;
-      utterance.lang = options?.lang ?? 'en-GB';
-
-      const voices = await getAvailableVoices();
-      const foreignVoice = voices.find(voice =>
-        voice.lang.includes('en-GB') ||
-        voice.lang.includes('en-AU') ||
-        voice.lang.includes('en-IN') ||
-        voice.name.toLowerCase().includes('british')
-      );
-      if (foreignVoice) {
-        utterance.voice = foreignVoice;
-      }
-
-      window.speechSynthesis.speak(utterance);
-    }
-
-    // ✅ Generate speech-like audio using advanced formant synthesis
-    // This creates audio with multiple frequencies that simulate human speech
-    // The AI transcription service can process this better than a simple tone
-    logger.info(`🎤 Generating speech-like audio for: "${text.substring(0, 50)}..."`);
-    const audioBlob = await generateSpeechAudio(text);
-    logger.info(`✅ Speech-like audio generated: ${(audioBlob.size / 1024).toFixed(1)} KB`);
-
-    return audioBlob;
-
-  } catch (error) {
-    logger.error('❌ Error in textToSpeechAndRecord:', error);
-    // Fallback: create a minimal silent audio file
-    return createMinimalAudioBlob();
-  }
-};
-
-/**
- * Generate speech-like audio from text using advanced synthesis
- * Creates audio with multiple frequencies to simulate speech formants
- * This produces audio that AI transcription services can process
- */
-export async function generateSpeechAudio(
-  text: string
-): Promise<Blob> {
-  try {
-    logger.info(`🎤 Generating real speech audio using meSpeak: "${text.substring(0, 50)}..."`);
-
-    // Initialize meSpeak if not already done
-    await initializeMeSpeak();
-
-    // Generate speech audio as raw WAV buffer
-    const audioData = meSpeak.speak(text, {
-      amplitude: 100,        // Volume (0-200, default 100)
-      pitch: 50,             // Voice pitch (0-99, default 50)
-      speed: 175,            // Speaking speed (words per minute, default 175)
-      variant: 'f1',         // Female voice variant (f1-f4 for female, m1-m7 for male)
-      wordgap: 0,            // Additional gap between words in 10ms units
-      rawdata: 'buffer'      // Return Uint8Array buffer instead of playing audio
-    });
-
-    // Check if audio generation succeeded
-    if (!audioData || !(audioData instanceof Uint8Array)) {
-      throw new Error('meSpeak failed to generate audio data');
-    }
-
-    // Convert Uint8Array to Blob with proper MIME type
-    // Create a new ArrayBuffer to ensure type compatibility (meSpeak returns ArrayBufferLike)
-    const buffer = new ArrayBuffer(audioData.length);
-    const view = new Uint8Array(buffer);
-    view.set(audioData);
-    const wavBlob = new Blob([buffer], { type: 'audio/wav' });
-
-    logger.info(`✅ Real speech audio generated: ${(wavBlob.size / 1024).toFixed(1)} KB`);
-    logger.info(`   Text: "${text}"`);
-
-    return wavBlob;
-
-  } catch (error) {
-    logger.error('❌ Error generating speech with meSpeak:', error);
-    logger.warn('⚠️ Falling back to minimal audio blob');
-
-    // Fallback: create a minimal audio file
-    return createMinimalAudioBlob();
-  }
-}
 
 /**
  * Create a minimal silent audio blob as fallback

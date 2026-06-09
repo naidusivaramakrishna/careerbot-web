@@ -246,7 +246,9 @@ export interface MatchResult {
 export interface ATSSectionDeduction {
   id: string;
   penalty: number;
-  message: string;
+  message?: string;
+  after_example?: string;
+  before_example?: string;
 }
 
 export interface ATSSectionScore {
@@ -262,7 +264,9 @@ export interface ATSSectionScore {
 export interface ATSIntelligencePenalty {
   id: string;
   penalty: number;
-  message: string;
+  message?: string;
+  after_example?: string;
+  before_example?: string;
   missing_languages?: string[];
 }
 
@@ -382,6 +386,7 @@ export interface EnhanceResumeResponse {
   enhancer_state?: EnhancerState;
   suggestions?: EnhancedSuggestion[];
   suggested_summary?: string[];
+  ats_display?: AtsDisplay;
   ats_tokens_used?: ATSTokensUsed;
   display_name?: string;
   source?: string;
@@ -395,6 +400,13 @@ export interface EnhanceResumeResponse {
   enhanced_resume?: ResumeData;
   enhancement_report?: EnhancementReport;
   Tokens_Used?: unknown;
+}
+
+// New-format ATS display block returned alongside the enhance result.
+// `score` is the headline 0-100 figure; other presentation fields vary.
+export interface AtsDisplay {
+  score?: number;
+  [key: string]: unknown;
 }
 
 export interface UpdateEnhancedResumeRequest {

@@ -61,7 +61,7 @@ const TemplatesSidebar: React.FC<TemplatesSidebarProps> = ({
           {activeTab === "Templates" && (
             <TemplatesTab onTemplateSelect={handleTemplateSelect} resumeId={resumeId} />
           )}
-          {activeTab === "Score" && <ScoreTab />}
+{activeTab === "Score" && <ScoreTab />}
           {activeTab === "Job Match" && <JobMatchTab />}
         </div>
       )}

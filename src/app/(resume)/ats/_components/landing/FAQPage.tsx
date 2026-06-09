@@ -51,7 +51,7 @@ function FAQPage() {
   const toggle = (i: number) => setOpenIndex(openIndex === i ? null : i);
 
   return (
-    <section className="py-16 md:py-24 px-6 lg:px-8" style={{ background: "linear-gradient(160deg, #f0fdf4 0%, #ffffff 60%, #f0fdf4 100%)" }}>
+    <section className="py-16 md:py-24 px-6 lg:px-8" style={{ background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 40%, #ffffff 100%)" }}>
       <div className="max-w-3xl mx-auto">
 
         {/* Header */}

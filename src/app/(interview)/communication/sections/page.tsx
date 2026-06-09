@@ -54,15 +54,55 @@ export default function SectionsPage() {
       const testId = localStorage.getItem('test_id');
       if (!testId) throw new Error('Test ID not found. Please start from the beginning.');
 
-      // Only request mic/camera when the assessment has a recording section.
-      if (needsRecording) {
-        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-
-        if (videoRef.current && videoRef.current.srcObject) {
-          (videoRef.current.srcObject as MediaStream)?.getTracks().forEach((t) => t.stop());
+      // Silently read current permission state — no prompt, no dialog.
+      // If denied, fail early before touching fullscreen.
+      // If already granted, fullscreen can go first (still in user gesture).
+      // If prompt (not yet asked), ask camera/mic first then fullscreen.
+      let alreadyGranted = false;
+      try {
+        const [cam, mic] = await Promise.all([
+          navigator.permissions.query({ name: 'camera' as PermissionName }),
+          navigator.permissions.query({ name: 'microphone' as PermissionName }),
+        ]);
+        if (cam.state === 'denied' || mic.state === 'denied') {
+          throw Object.assign(new Error('Permissions denied'), { name: 'NotAllowedError' });
         }
+        alreadyGranted = cam.state === 'granted' && mic.state === 'granted';
+      } catch (permErr) {
+        const e = permErr as { name?: string };
+        if (e.name === 'NotAllowedError') throw permErr;
+        // permissions API unsupported — fall through, getUserMedia will handle it
+      }
 
-        await startCameraPreview();
+      // Fullscreen first only when we already have access (user gesture still active)
+      if (alreadyGranted) {
+        try {
+          if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+            await document.documentElement.requestFullscreen();
+            logger.info('✅ Entered fullscreen mode');
+          }
+        } catch (fsErr) {
+          logger.warn('Could not enter fullscreen:', fsErr);
+        }
+      }
+
+      // Request camera/mic — shows browser prompt if not yet granted
+      await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+
+      // Permissions just granted via prompt — try fullscreen now (Chrome keeps gesture active)
+      if (!alreadyGranted) {
+        try {
+          if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+            await document.documentElement.requestFullscreen();
+            logger.info('✅ Entered fullscreen mode');
+          }
+        } catch (fsErr) {
+          logger.warn('Could not enter fullscreen:', fsErr);
+        }
+      }
+
+      if (videoRef.current && videoRef.current.srcObject) {
+        (videoRef.current.srcObject as MediaStream)?.getTracks().forEach((t) => t.stop());
       }
 
       const response = await startSession({ test_id: testId });
@@ -113,15 +153,6 @@ export default function SectionsPage() {
         }
       }
 
-      try {
-        if (document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen();
-          logger.info('✅ Entered fullscreen mode');
-        }
-      } catch (fullscreenError) {
-        logger.warn('Could not enter fullscreen:', fullscreenError);
-      }
-
       logger.info('🚀 Navigating to see-and-repeat page...');
       router.push('/communication/see-and-repeat');
     } catch (err) {
@@ -166,8 +197,8 @@ export default function SectionsPage() {
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
               { value: '7',   label: 'Sections'  },
-              { value: '45',  label: 'Questions' },
-              { value: '~30', label: 'Minutes'   },
+              { value: '44',  label: 'Questions' },
+              { value: '20', label: 'Minutes'   },
             ].map((s) => (
               <div key={s.label} className="bg-white border border-gray-200 rounded-xl py-5 text-center shadow-sm">
                 <p className="text-[26px] font-bold text-[#2557a7] leading-none">{s.value}</p>
@@ -249,7 +280,7 @@ export default function SectionsPage() {
             </p>
             <ul className="space-y-1.5 text-xs text-amber-800">
               {[
-                'You have 30 minutes to complete all 7 sections.',
+                'You have 20 minutes to complete all 7 sections.',
                 'Sections are sequential — you cannot skip ahead.',
                 'Progress is auto-saved between questions.',
                 'Do not close or refresh the browser during the assessment.',

@@ -305,7 +305,8 @@ const Volunteering: React.FC = () => {
                           placeholder="Organization Name"
                           onChange={(e) => handleChange(editIndex, "organization", e.target.value)}
                           onBlur={() => validateRequired("volunteering", globalIndex, { organization: volunteering.organization })}
-                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                          maxLength={150}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`volunteering-${globalIndex}-organization`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                         />
                         {errors[`volunteering-${globalIndex}-organization`] && (
                           <span className="text-xs text-red-500">
@@ -323,6 +324,7 @@ const Volunteering: React.FC = () => {
                           value={volunteering.role}
                           placeholder="Volunteer Role"
                           onChange={(e) => handleChange(editIndex, "role", e.target.value)}
+                          maxLength={100}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
                         />
                       </div>
@@ -336,6 +338,7 @@ const Volunteering: React.FC = () => {
                           value={volunteering.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
+                          maxDate={volunteering.endDate}
                         />
                       </div>
 
@@ -345,6 +348,7 @@ const Volunteering: React.FC = () => {
                           value={volunteering.endDate}
                           onChange={(val) => handleChange(editIndex, "endDate", val)}
                           placeholder="MM/YY"
+                          minDate={volunteering.startDate}
                         />
                       </div>
                     </div>

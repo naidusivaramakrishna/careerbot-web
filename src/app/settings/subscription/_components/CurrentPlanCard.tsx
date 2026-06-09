@@ -24,14 +24,15 @@ export const CurrentPlanCard: React.FC<CurrentPlanCardProps> = ({ subscription }
     ? Math.round((subscription.credits_remaining / subscription.credits_total) * 100)
     : 0;
 
-  const isPro = subscription.plan_id === 'PRO';
-  const isMax = subscription.plan_id === 'MAX';
-  const isFree = subscription.plan_id === 'FREE';
+  const planId = subscription.plan_id?.toUpperCase();
+  const isPro = planId === 'PRO';
+  const isMax = planId === 'MAX';
+  const isFree = !isPro && !isMax;
 
   const barColor = pct >= 50 ? '#2557a7' : pct >= 20 ? '#d97706' : '#dc2626';
 
   const nextPlans = SUBSCRIPTION_PLANS.filter((p) =>
-    isUpgrade(subscription.plan_id as PlanId, p.plan_id)
+    isUpgrade((planId as PlanId) ?? 'FREE', p.plan_id)
   );
 
   const expiryDate = subscription.expires_at
@@ -52,31 +53,31 @@ export const CurrentPlanCard: React.FC<CurrentPlanCardProps> = ({ subscription }
             ? 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)'
             : isPro
             ? 'linear-gradient(135deg, #2557a7 0%, #1f4e98 100%)'
-            : '#f8fafc',
+            : 'linear-gradient(135deg, #5896d7 0%, #2557a7 100%)',
         }}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: isFree ? '#e2e8f0' : 'rgba(255,255,255,0.2)' }}
+              style={{ background: 'rgba(255,255,255,0.2)' }}
             >
               {isMax || isPro ? (
                 <Crown className="w-5 h-5 text-yellow-300" />
               ) : (
-                <Zap className="w-5 h-5 text-gray-500" />
+                <Zap className="w-5 h-5 text-white" />
               )}
             </div>
             <div>
               <p
                 className="text-[11px] font-bold uppercase tracking-widest mb-0.5"
-                style={{ color: isFree ? '#64748b' : 'rgba(255,255,255,0.7)' }}
+                style={{ color: 'rgba(255,255,255,0.7)' }}
               >
                 Current Plan
               </p>
               <h3
                 className="text-xl font-bold"
-                style={{ color: isFree ? '#1e293b' : 'white' }}
+                style={{ color: 'white' }}
               >
                 {subscription.plan_name}
               </h3>
@@ -96,7 +97,7 @@ export const CurrentPlanCard: React.FC<CurrentPlanCardProps> = ({ subscription }
         {expiryDate && (
           <div
             className="mt-3 flex items-center gap-1.5 text-xs"
-            style={{ color: isFree ? '#64748b' : 'rgba(255,255,255,0.65)' }}
+            style={{ color: 'rgba(255,255,255,0.65)' }}
           >
             <Calendar className="w-3.5 h-3.5" />
             Renews {expiryDate}

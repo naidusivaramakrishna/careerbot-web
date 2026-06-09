@@ -299,11 +299,14 @@ export default function JobsContents() {
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 404) {
+        // No resume on file is a terminal state — cache it so we don't refetch.
         setMatchedNoResume(true);
+        setMatchedFetched(true);
       } else {
+        // Transient failure — leave matchedFetched false so the next tab
+        // activation retries instead of caching the error.
         toast.error("Could not load Smart Match jobs. Please try again later.");
       }
-      setMatchedFetched(true);
     } finally {
       setMatchedLoading(false);
     }

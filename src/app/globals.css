@@ -1,13 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&display=swap');
 @import "tailwindcss";
 
 :root {
-  --font-montserrat: 'Montserrat', sans-serif;
+  /* --font-montserrat kept as alias so interview/cover-letter pages that reference it still resolve */
+  --font-montserrat: var(--font-sans, 'Inter', system-ui, sans-serif);
 }
 
 /* Base Typography */
 body {
-  font-family: var(--font-montserrat);
+  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
   font-weight: 400;
   font-size: 14px;
   line-height: 21px;

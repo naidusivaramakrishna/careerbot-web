@@ -18,6 +18,7 @@ interface UseNotificationStreamOptions {
 
 export function useNotificationStream(options: UseNotificationStreamOptions = {}) {
   const { autoConnect = true, onNotification } = options;
+
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
@@ -61,28 +62,24 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
     }
   }, [onNotification]);
 
-  // Connect to notification stream
+  // ── Connect ───────────────────────────────────────────────────────────────
   const connect = useCallback(async () => {
     if (eventSourceRef.current) return;
 
     try {
-      // Resolve user_id via server-side route (reads httpOnly cookie)
       if (!userIdRef.current) {
         const res = await fetch('/api/auth/stream-token');
-        if (!res.ok) {
-          // Not authenticated — do not connect or schedule retries
-          return;
-        }
+        if (!res.ok) return; // Not authenticated — skip silently
         const data = await res.json() as { user_id: string };
         userIdRef.current = data.user_id;
       }
       connectWithUserId(userIdRef.current);
     } catch (err) {
-      console.error('Failed to resolve stream token:', err);
+      console.error('[NotificationStream] Failed to resolve stream token:', err);
     }
   }, [connectWithUserId]);
 
-  // Disconnect from notification stream
+  // ── Disconnect (public) ───────────────────────────────────────────────────
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -96,65 +93,65 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
     setIsConnected(false);
   }, []);
 
-  // Fetch existing notifications on mount
+  // ── Fetch existing notifications on mount ─────────────────────────────────
   useEffect(() => {
     getNotifications(1, 4)
       .then(({ items, unread_count }) => {
         setNotifications(items);
         setUnreadCount(unread_count);
       })
-      .catch(() => {/* non-fatal */});
+      .catch(() => { /* non-fatal — UI shows empty state */ });
   }, []);
 
-  // Auto-connect on mount
+  // ── Auto-connect ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (autoConnect) {
-      connect();
-    }
+    if (autoConnect) void connect();
     return () => {
-      disconnect();
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
     };
-  }, [autoConnect, connect, disconnect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect]);
 
-  // Mark notification as read
+  // ── Notification actions ──────────────────────────────────────────────────
   const markAsRead = useCallback(async (notificationId: string) => {
     try {
       await markNotificationAsRead(notificationId);
       setNotifications((prev) =>
-        prev.map((notif) =>
-          notif.id === notificationId ? { ...notif, read: true } : notif
-        )
+        prev.map((n) => n.id === notificationId ? { ...n, read: true } : n)
       );
       setUnreadCount((prev) => Math.max(prev - 1, 0));
-    } catch (err) {
-      console.error('Failed to mark notification as read:', err);
+    } catch {
+      // non-fatal
     }
   }, []);
 
-  // Mark all as read
   const markAllAsRead = useCallback(async () => {
     try {
       await markAllNotificationsAsRead();
-      setNotifications((prev) => prev.map((notif) => ({ ...notif, read: true })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
-    } catch (err) {
-      console.error('Failed to mark all notifications as read:', err);
+    } catch {
+      // non-fatal
     }
   }, []);
 
-  // Delete notification
   const remove = useCallback(async (notificationId: string) => {
     try {
       await deleteNotification(notificationId);
       setNotifications((prev) => {
-        const notif = prev.find((n) => n.id === notificationId);
-        if (notif && !notif.read) {
-          setUnreadCount((prev) => Math.max(prev - 1, 0));
-        }
+        const target = prev.find((n) => n.id === notificationId);
+        if (target && !target.read) setUnreadCount((c) => Math.max(c - 1, 0));
         return prev.filter((n) => n.id !== notificationId);
       });
-    } catch (err) {
-      console.error('Failed to delete notification:', err);
+    } catch {
+      // non-fatal
     }
   }, []);
 

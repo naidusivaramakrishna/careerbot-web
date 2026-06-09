@@ -53,7 +53,7 @@ export default function MultiColorCircularScore({
   const redVal = animatedValue > orangeMax ? animatedValue - orangeMax : 0;
 
   return (
-    <div className="relative w-40 h-40">
+    <div className="relative w-full h-full">
       {/* Green layer */}
       <CircularProgressbarWithChildren
         value={greenVal}
@@ -83,7 +83,7 @@ export default function MultiColorCircularScore({
           >
             {/* Center text */}
             <div className="flex flex-col items-center justify-center text-center">
-              <span className="text-3xl font-bold text-gray-800">
+              <span className="text-xl font-bold text-gray-800">
                 {animatedValue}
               </span>
               {/* Optional label */}

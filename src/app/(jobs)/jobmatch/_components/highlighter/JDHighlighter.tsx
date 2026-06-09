@@ -9,6 +9,7 @@ const HIGHLIGHT_COLORS: Record<string, string> = {
   'missing-tech':  '#FEE2E2',
   'matched-soft':  '#DBEAFE',
   'missing-soft':  '#FEF9C3',
+  'matched-cap':   '#EDE9FE',
 };
 
 const JDHighlighter: React.FC<JDHighlighterProps> = ({
@@ -17,11 +18,16 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
   missingSkills,
   matchedSoftSkills = [],
   missingSoftSkills = [],
+  matchedCapabilities = [],
+  onMissingSkillClick,
 }) => {
   const spans = useMemo(
-    () => highlightJD(text, matchedSkills, missingSkills, matchedSoftSkills, missingSoftSkills),
-    [text, matchedSkills, missingSkills, matchedSoftSkills, missingSoftSkills]
+    () => highlightJD(text, matchedSkills, missingSkills, matchedSoftSkills, missingSoftSkills, matchedCapabilities),
+    [text, matchedSkills, missingSkills, matchedSoftSkills, missingSoftSkills, matchedCapabilities]
   );
+
+  const isMissing = (matchType?: string) =>
+    matchType === 'missing-tech' || matchType === 'missing-soft';
 
   return (
     <p className="w-full text-[13px] leading-normal text-gray-900 whitespace-pre-wrap wrap-break-word">
@@ -34,7 +40,14 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
               color: "inherit",
               padding: "1px 3px",
               borderRadius: "3px",
+              cursor: isMissing(s.matchType) && onMissingSkillClick ? "pointer" : "default",
             }}
+            title={isMissing(s.matchType) ? "Click to add to resume" : undefined}
+            onClick={
+              isMissing(s.matchType) && onMissingSkillClick
+                ? () => onMissingSkillClick(s.text)
+                : undefined
+            }
           >
             {s.text}
           </mark>

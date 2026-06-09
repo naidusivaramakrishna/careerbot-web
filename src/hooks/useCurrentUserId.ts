@@ -11,7 +11,9 @@
  *
  * Cache: the id is captured in a module-scoped ref so the second
  * render of any hook consumer is synchronous (no extra round-trip).
- * Invalidated on 401 — caller re-mounts after sign-in.
+ * The cache is only ever populated on success; a failed fetch leaves
+ * it null so the next mount retries. Sign-out reloads the page, which
+ * resets module scope — there is no in-place invalidation.
  *
  * Spec: impl-blueprint §9 WEB-3.2 (idempotency key plumbing).
  */

@@ -6,10 +6,10 @@ import { useResume } from "../../_context/ResumeContext";
 import { getTemplatesByCategory, applyTemplateToResume, getTemplateCategories, TemplateResponse } from "@/api/resumeApi";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
-import { TEMPLATE_DEFAULT_STYLES } from "../../_utils/templateStyles";
+import { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } from "../../_utils/templateStyles";
+import CatalogueTab from "./CatalogueTab";
 import { getProfile } from "@/api/userApi";
 import { useRouter } from "next/navigation";
-import { getSectionOrder } from "@/app/(resume)/templates/_utils/sectionOrder";
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder";
 
 const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
@@ -135,7 +135,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   const [userEmail, setUserEmail] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const { selectedTemplate, setSelectedTemplate, resumeStyle, setResumeStyle, sectionOrder, setSectionOrder } = useResume();
+  const { selectedTemplate, setSelectedTemplate, setResumeStyle, setSectionOrder } = useResume();
 
   // Get user email for scoped localStorage keys
   useEffect(() => {
@@ -379,12 +379,19 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
           localStorage.removeItem(selectedTemplateKey);
           localStorage.removeItem(careerLevelKey);
+          localStorage.removeItem('selected_catalogue');
           setCareerLevelData(null);
 
           // Sync resumeStyle with the backend's template config so preview matches download
           const templateDefaults = TEMPLATE_DEFAULT_STYLES[previewTemplate.template_id];
           if (templateDefaults) {
             setResumeStyle(prev => ({ ...prev, ...templateDefaults }));
+          }
+
+          // Apply catalogue if selected
+          const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+          if (selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue]) {
+            setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
           }
         } else {
           // For career level templates, clear selectedTemplate to avoid highlighting other templates
@@ -653,280 +660,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 text-gray-700">
-          {/* Font Family */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-800 mb-1.5">Font Family</label>
-            <select
-              value={resumeStyle.fontFamily}
-              onChange={(e) => setResumeStyle({ ...resumeStyle, fontFamily: e.target.value })}
-              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-[#72b880] focus:outline-none transition-all duration-200 hover:border-gray-300"
-            >
-              <option value="times-new-roman">Times New Roman</option>
-              <option value="arial">Arial</option>
-              <option value="monospace">Monospace</option>
-              <option value="calibri">Calibri</option>
-            </select>
-          </div>
-
-          {/* Typography Scale */}
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <h4 className="text-xs font-semibold text-gray-800 mb-3 flex items-center gap-2">
-              Typography Scale
-            </h4>
-            <div className="grid grid-cols-1 gap-3">
-              {/* Name Font Size */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Name Font Size</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="20"
-                    max="48"
-                    value={parseInt(resumeStyle.nameFontSize) || 28}
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, nameFontSize: `${e.target.value}px` })}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                  />
-                  <input
-                    type="text"
-                    value={resumeStyle.nameFontSize}
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, nameFontSize: e.target.value })}
-                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-[#72b880] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Heading Font Size */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Heading Font Size</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="12"
-                    max="24"
-                    value={parseInt(resumeStyle.headingFontSize) || 18}
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, headingFontSize: `${e.target.value}px` })}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                  />
-                  <input
-                    type="text"
-                    value={resumeStyle.headingFontSize}
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, headingFontSize: e.target.value })}
-                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-[#72b880] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Body Font Size */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Body Font Size</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="10"
-                    max="16"
-                    value={parseInt(resumeStyle.bodyFontSize) || 12}
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, bodyFontSize: `${e.target.value}px` })}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                  />
-                  <input
-                    type="text"
-                    value={resumeStyle.bodyFontSize}
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, bodyFontSize: e.target.value })}
-                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:border-[#72b880] focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Text Formatting */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-800 mb-2">Text Formatting</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setResumeStyle({ ...resumeStyle, bold: !resumeStyle.bold })}
-                className={`flex items-center justify-center w-10 h-10 border-2 rounded-lg text-sm font-bold transition-all duration-200 ${resumeStyle.bold
-                  ? "bg-blue-100 border-blue-300 text-[#2557a7]"
-                  : "bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                  }`}
-              >
-                B
-              </button>
-              <button
-                onClick={() => setResumeStyle({ ...resumeStyle, italic: !resumeStyle.italic })}
-                className={`flex items-center justify-center w-10 h-10 border-2 rounded-lg text-sm italic transition-all duration-200 ${resumeStyle.italic
-                  ? "bg-blue-100 border-blue-300 text-[#2557a7]"
-                  : "bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                  }`}
-              >
-                I
-              </button>
-            </div>
-          </div>
-
-          {/* Line Spacing */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-800 mb-1.5">Line Spacing</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="1"
-                max="2.5"
-                step="0.1"
-                value={parseFloat(resumeStyle.lineSpacing) || 1.5}
-                onChange={(e) => setResumeStyle({ ...resumeStyle, lineSpacing: e.target.value })}
-                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-              />
-              <input
-                type="text"
-                value={resumeStyle.lineSpacing}
-                onChange={(e) => setResumeStyle({ ...resumeStyle, lineSpacing: e.target.value })}
-                className="w-16 border-2 border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:border-[#72b880] focus:outline-none transition-all duration-200"
-              />
-            </div>
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>Tight</span>
-              <span>Normal</span>
-              <span>Loose</span>
-            </div>
-          </div>
-
-          {/* Color Palette */}
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <h4 className="text-xs font-semibold text-gray-800 mb-3 flex items-center gap-2">
-              Color Palette
-            </h4>
-            <div className="grid grid-cols-1 gap-3">
-              {/* Heading Color */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">Heading Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={resumeStyle.headingColor}
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, headingColor: e.target.value })}
-                    className="w-12 h-10 border-2 border-gray-200 rounded-lg cursor-pointer focus:border-[#72b880] transition-all duration-200"
-                  />
-                  <input
-                    type="text"
-                    value={resumeStyle.headingColor}
-                    placeholder="#000000"
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, headingColor: e.target.value })}
-                    className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:border-[#72b880] focus:outline-none transition-all duration-200"
-                  />
-                </div>
-                <div className="flex gap-1 mt-2">
-                  {['#1f2937', '#374151', '#0f172a', '#1e40af', '#dc2626', '#059669'].map((color) => (
-                    <button
-                      key={color}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setResumeStyle({ ...resumeStyle, headingColor: color })}
-                      className="w-6 h-6 rounded border-2 border-gray-200 hover:border-gray-400 transition-all duration-200"
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Body Color */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">Body Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={resumeStyle.bodyColor}
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, bodyColor: e.target.value })}
-                    className="w-12 h-10 border-2 border-gray-200 rounded-lg cursor-pointer focus:border-[#72b880] transition-all duration-200"
-                  />
-                  <input
-                    type="text"
-                    value={resumeStyle.bodyColor}
-                    placeholder="#000000"
-                    onChange={(e) => setResumeStyle({ ...resumeStyle, bodyColor: e.target.value })}
-                    className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:border-[#72b880] focus:outline-none transition-all duration-200"
-                  />
-                </div>
-                <div className="flex gap-1 mt-2">
-                  {['#374151', '#4b5563', '#6b7280', '#1f2937', '#0f172a', '#111827'].map((color) => (
-                    <button
-                      key={color}
-                      onClick={() => setResumeStyle({ ...resumeStyle, bodyColor: color })}
-                      className="w-6 h-6 rounded border-2 border-gray-200 hover:border-gray-400 transition-all duration-200"
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Presets */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-800 mb-2">Quick Style Presets</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setResumeStyle({
-                  ...resumeStyle,
-                  fontFamily: 'Inter, sans-serif',
-                  nameFontSize: '32px',
-                  headingFontSize: '18px',
-                  bodyFontSize: '14px',
-                  lineSpacing: '1.5',
-                  headingColor: '#1f2937',
-                  bodyColor: '#374151'
-                })}
-                className="p-2 bg-white border-2 border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
-              >
-                Modern
-              </button>
-              <button
-                onClick={() => setResumeStyle({
-                  ...resumeStyle,
-                  fontFamily: 'Playfair Display, serif',
-                  nameFontSize: '36px',
-                  headingFontSize: '20px',
-                  bodyFontSize: '14px',
-                  lineSpacing: '1.6',
-                  headingColor: '#0f172a',
-                  bodyColor: '#1f2937'
-                })}
-                className="p-2 bg-white border-2 border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
-              >
-                Classic
-              </button>
-              <button
-                onClick={() => setResumeStyle({
-                  ...resumeStyle,
-                  fontFamily: 'Roboto, sans-serif',
-                  nameFontSize: '28px',
-                  headingFontSize: '16px',
-                  bodyFontSize: '13px',
-                  lineSpacing: '1.4',
-                  headingColor: '#1e40af',
-                  bodyColor: '#374151'
-                })}
-                className="p-2 bg-white border-2 border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
-              >
-                Corporate
-              </button>
-              <button
-                onClick={() => setResumeStyle({
-                  ...resumeStyle,
-                  fontFamily: 'Open Sans, sans-serif',
-                  nameFontSize: '30px',
-                  headingFontSize: '17px',
-                  bodyFontSize: '14px',
-                  lineSpacing: '1.5',
-                  headingColor: '#059669',
-                  bodyColor: '#4b5563'
-                })}
-                className="p-2 bg-white border-2 border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-all duration-200"
-              >
-                Creative
-              </button>
-            </div>
-          </div>
-        </div>
+        <CatalogueTab />
       )}
 
       {previewTemplate && (

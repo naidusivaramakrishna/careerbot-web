@@ -18,6 +18,23 @@ import { processResumeComplete } from "@/api/resumeatsapi";
 
 const PRIMARY_COLOR = "#0275dd";
 
+// Keys this flow writes to localStorage. Cleared targetedly instead of
+// localStorage.clear() so we don't wipe unrelated app state (auth hints,
+// other features' caches) that happens to share the same origin.
+const ATS_UPLOAD_KEYS = [
+  "uploadedResumeFile",
+  "uploadedFileName",
+  "uploadedFileSize",
+  "uploadedFileType",
+  "isImageBased",
+  "currentScore",
+  "atsAnalysisData",
+] as const;
+
+function clearAtsUploadStorage() {
+  ATS_UPLOAD_KEYS.forEach((k) => localStorage.removeItem(k));
+}
+
 const ResumeUpload: React.FC = () => {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -175,7 +192,7 @@ const ResumeUpload: React.FC = () => {
       setStep(0);
       setUploadedFile(null);
       setIsProcessing(false);
-      localStorage.clear();
+      clearAtsUploadStorage();
     }
   };
 
@@ -187,18 +204,13 @@ const ResumeUpload: React.FC = () => {
     setCurrentScore(0);
     setIsProcessing(false);
     setIsImageBased(false);
-    localStorage.clear();
+    clearAtsUploadStorage();
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const viewReport = () => {
     if (step === 3) {
-      if (isImageBased) {
-        // For image-based resumes, redirect to resume enhancer with parsed data
-        router.push(`/enhancer/builder`);
-      } else {
-        router.push(`/atslogin/report`);
-      }
+      router.push(`/atslogin/report`);
     }
   };
 

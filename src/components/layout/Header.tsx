@@ -181,13 +181,13 @@ export default function Header() {
               className="relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
               aria-label="Notifications"
             >
-              <Bell size={18} />
+              <Bell size={20} />
               {unreadCount > 0 && (
                 <span
-                  className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full text-[9px] font-black text-white px-0.5"
+                  className="absolute top-1 right-1 min-w-3.5 h-3.5 flex items-center justify-center rounded-full text-[8px] font-bold text-white px-0.5 leading-none"
                   style={{ background: "#2557a7" }}
                 >
-                  {unreadCount}
+                  {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
             </button>
@@ -334,13 +334,13 @@ export default function Header() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => { setShowMenu((v) => !v); setShowNotifs(false); }}
-              className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-blue-300 transition-all focus:outline-none"
+              className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center ring-2 ring-gray-300 ring-offset-2 ring-offset-white hover:ring-blue-400 transition-all focus:outline-none"
               style={{ background: "#2557a7" }}
               aria-label="User menu"
               aria-expanded={showMenu}
             >
               {profilePicUrl ? (
-                <Image src={profilePicUrl} alt="Profile" width={32} height={32} className="object-cover w-full h-full" />
+                <Image src={profilePicUrl} alt="Profile" width={32} height={32} className="object-cover w-full h-full" unoptimized />
               ) : (
                 <span className="text-white text-xs font-bold">{displayInitial}</span>
               )}

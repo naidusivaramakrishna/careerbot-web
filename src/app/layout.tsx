@@ -1,9 +1,24 @@
 // src/app/layout.tsx
 import React from "react";
 import type { Metadata } from "next";
-import "@/app/globals.css";
-import "@/app/(jobs)/jobmatch/_components/_styles/docx-preview.css";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import "./globals.css";
+// import "@/app/(jobs)/jobmatch/_components/_styles/docx-preview.css";
 import ClientLayout from "./ClientLayout";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Careerbot",
@@ -14,16 +29,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
         <meta charSet="utf-8" />
         <meta name="theme-color" content="#ffffff" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;900&display=swap" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
       </head>
-      <body className="min-h-screen bg-white antialiased">
+      <body className="min-h-screen bg-white antialiased" style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

@@ -80,14 +80,13 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   const llmCat = (...cats: string[]): string[] =>
     cats.flatMap((c) => llmByCategory[c] || []);
 
-  // Categories that map to one of the 6 standard buckets
+  // Categories that map to one of the standard predefined buckets
   const STANDARD_LLM_CATEGORIES = new Set([
     "programming_language", "frontend",
     "framework", "backend",
-    "database",
-    "tools", "tool",
-    "cloud", "cloud_platform", "cloud_platforms",
     "soft_skill", "soft_skills",
+    "project_management", "project management",
+    "marketing", "sales", "marketing_sales",
   ]);
 
   // Skills in unmapped categories → auto-create named CustomCategory entries
@@ -208,6 +207,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
           ...bulletTexts(exp.contributions),
         ].join("\n") ||
         str(exp.description),
+      technologies: strArr(exp.technologies) || [],
     };
   });
 
@@ -297,70 +297,19 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
           ...bulletTexts(intern.contributions),
         ].join("\n") ||
         str(intern.description),
+      technologies: strArr(intern.technologies) || [],
     };
   });
 
   /* ── Skills ── */
-  // enhanced_data stores skills as p.skills = { programming_languages: [...], frameworks: [...] }
-  // parser stores skills under p.technical_skills
-  // enhanced_resume (camelCase) stores under p.categorizedSkills
-  const skillsObj: AnyRecord =
-    (typeof p.skills === "object" && !Array.isArray(p.skills) && p.skills !== null)
-      ? (p.skills as AnyRecord)
-      : {};
-
+  // All call sites receive enhanced/parser output — skills arrive as custom_categories.
+  // Predefined buckets are left empty; everything lands in custom_categories for display.
   const categorizedSkills: CategorizedSkills = {
-    // programming_language + frontend (HTML/CSS/JS) both map here
-    programming_languages:
-      strArr(tech.programming_languages || tech.languages).length > 0
-        ? strArr(tech.programming_languages || tech.languages)
-        : strArr(catSkills.programming_languages).length > 0
-        ? strArr(catSkills.programming_languages)
-        : strArr(skillsObj.programming_languages).length > 0
-        ? strArr(skillsObj.programming_languages)
-        : llmCat("programming_language", "frontend"),
-    // framework + backend (Node.js/Express) both map here
-    frameworks:
-      strArr(tech.frameworks || tech.libraries).length > 0
-        ? strArr(tech.frameworks || tech.libraries)
-        : strArr(catSkills.frameworks).length > 0
-        ? strArr(catSkills.frameworks)
-        : strArr(skillsObj.frameworks).length > 0
-        ? strArr(skillsObj.frameworks)
-        : llmCat("framework", "backend"),
-    databases:
-      strArr(tech.databases).length > 0
-        ? strArr(tech.databases)
-        : strArr(catSkills.databases).length > 0
-        ? strArr(catSkills.databases)
-        : strArr(skillsObj.databases).length > 0
-        ? strArr(skillsObj.databases)
-        : llmCat("database"),
-    tools:
-      strArr(tech.tools).length > 0
-        ? strArr(tech.tools)
-        : strArr(catSkills.tools).length > 0
-        ? strArr(catSkills.tools)
-        : strArr(skillsObj.tools).length > 0
-        ? strArr(skillsObj.tools)
-        : llmCat("tools", "tool"),
-    cloud_platforms:
-      strArr(tech.cloud_platforms || tech.cloud).length > 0
-        ? strArr(tech.cloud_platforms || tech.cloud)
-        : strArr(catSkills.cloud_platforms).length > 0
-        ? strArr(catSkills.cloud_platforms)
-        : strArr(skillsObj.cloud_platforms).length > 0
-        ? strArr(skillsObj.cloud_platforms)
-        : llmCat("cloud", "cloud_platform", "cloud_platforms"),
-    soft_skills:
-      strArr(p.soft_skills || tech.soft_skills).length > 0
-        ? strArr(p.soft_skills || tech.soft_skills)
-        : strArr(catSkills.soft_skills).length > 0
-        ? strArr(catSkills.soft_skills)
-        : strArr(skillsObj.soft_skills).length > 0
-        ? strArr(skillsObj.soft_skills)
-        : llmCat("soft_skill", "soft_skills"),
-    // Prefer existing custom_categories (camelCase source), then auto-generate from unmapped llm categories
+    programming_languages: [],
+    frameworks: [],
+    soft_skills: [],
+    project_management: [],
+    marketing_sales: [],
     custom_categories:
       Array.isArray(catSkills.custom_categories) && catSkills.custom_categories.length > 0
         ? (catSkills.custom_categories as CustomCategory[])
@@ -369,14 +318,8 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
         : undefined,
   };
 
-  // Flat skills array: prefer flat p.skills array, else build from categorized
+  // Flat skills array: all skills come from custom_categories
   const flatFromCategorized = [
-    ...categorizedSkills.programming_languages,
-    ...categorizedSkills.frameworks,
-    ...categorizedSkills.databases,
-    ...categorizedSkills.tools,
-    ...categorizedSkills.cloud_platforms,
-    ...categorizedSkills.soft_skills,
     ...(categorizedSkills.custom_categories || []).flatMap((c) => c.skills),
   ];
   const skills: string[] =

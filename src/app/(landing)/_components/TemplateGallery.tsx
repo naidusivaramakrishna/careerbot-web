@@ -430,7 +430,7 @@ export default function TemplateGallery({ onOpenSignup }: TemplateGalleryProps) 
           transition={{ duration: 0.4, ease: 'easeOut', delay: 0.2 }}
         >
           <button
-            onClick={handleUseTemplate}
+            onClick={() => router.push('/browse-templates')}
             className="inline-flex items-center gap-2 rounded-xl px-8 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:shadow-xl active:scale-95"
             style={{ background: 'linear-gradient(135deg, #2557a7 0%, #0f766e 100%)' }}
             type="button"

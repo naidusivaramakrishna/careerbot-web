@@ -18,14 +18,29 @@ function cbIconFallback(parent, size) { // safe: static SVG, no user data
 const BASE_URL   = CAREERBOT_CONFIG.BASE_URL;
 const PORTAL_URL = CAREERBOT_CONFIG.PORTAL_URL;
 
+// ─── Sidebar rail toggle ───────────────────────────────────────────────────────
+const sideRail   = document.querySelector('.side-rail');
+const openBtn    = document.getElementById('btn-open-rail');
+
+document.getElementById('btn-toggle-rail').addEventListener('click', () => {
+  sideRail.classList.add('rail-hidden');
+  openBtn.classList.remove('hidden');
+});
+
+openBtn.addEventListener('click', () => {
+  sideRail.classList.remove('rail-hidden');
+  openBtn.classList.add('hidden');
+});
+
 // ─── State refs ───────────────────────────────────────────────────────────────
 const states = {
-  login:      document.getElementById('state-login'),
-  loading:    document.getElementById('state-loading'),
-  jdDetected: document.getElementById('state-jd-detected'),
-  idle:       document.getElementById('state-idle'),
-  processing: document.getElementById('state-processing'),
-  results:    document.getElementById('state-results'),
+  login:       document.getElementById('state-login'),
+  loading:     document.getElementById('state-loading'),
+  jdDetected:  document.getElementById('state-jd-detected'),
+  idle:        document.getElementById('state-idle'),
+  processing:  document.getElementById('state-processing'),
+  results:     document.getElementById('state-results'),
+  coverLetter: document.getElementById('state-cover-letter'),
 };
 
 function showState(name) {
@@ -211,7 +226,7 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   if (labelEl) { labelEl.textContent = labelText; labelEl.style.color = labelColor; }
   if (tipEl)   tipEl.textContent = tipText;
 
-  // ── Skill Cards ────────────────────────────────────────────────────────────
+  // ── Skills Section ─────────────────────────────────────────────────────────
   const tech = structuredSkills.tech || {};
   const soft = structuredSkills.soft || {};
 
@@ -223,66 +238,64 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   const section = document.getElementById('missing-skills-section');
   if (!section) return;
 
-  const hasAnyTech = allTechMissing.length || allTechMatched.length;
-  const hasAnySoft = allSoftMissing.length || allSoftMatched.length;
+  const makeChip = (text, variant) => {
+    const chip = document.createElement('span');
+    chip.className = `skill-chip ${variant}`;
+    chip.textContent = text;
+    return chip;
+  };
 
-  if (!hasAnyTech && !hasAnySoft) {
-    section.style.display = 'none';
-    return;
+  const fillGroup = (groupId, chipsId, countId, chips) => {
+    const group = document.getElementById(groupId);
+    const chipsEl = document.getElementById(chipsId);
+    const countEl = document.getElementById(countId);
+    if (!group || !chipsEl || !chips.length) { if (group) group.style.display = 'none'; return; }
+    group.style.display = 'block';
+    chipsEl.replaceChildren(...chips);
+    if (countEl) countEl.textContent = chips.length;
+  };
+
+  // Matched skills
+  fillGroup('matched-group', 'matched-chips', 'matched-count',
+    allTechMatched.slice(0, 8).map(s => makeChip(s, 'matched')));
+
+  // Missing skills
+  fillGroup('missing-group', 'missing-chips', 'missing-count',
+    allTechMissing.slice(0, 8).map(s => makeChip(s, 'missing')));
+
+  // Soft skills
+  const softChips = [
+    ...allSoftMatched.slice(0, 4).map(s => makeChip(s, 'soft-matched')),
+    ...allSoftMissing.slice(0, 4).map(s => makeChip(s, 'soft-missing')),
+  ];
+  fillGroup('soft-group', 'soft-chips', null, softChips);
+
+  const hasAny = allTechMissing.length || allTechMatched.length || allSoftMissing.length || allSoftMatched.length;
+  section.style.display = hasAny ? 'flex' : 'none';
+
+  // ── ATS Improvements ───────────────────────────────────────────────────────
+  const improvements = [];
+  if (allTechMissing.length > 0) improvements.push(`Add ${allTechMissing.slice(0,3).join(', ')} to Skills`);
+  if (score < 70) improvements.push('Improve Professional Summary');
+  if (allTechMissing.length > 3) improvements.push('Add missing ATS keywords');
+
+  const atsSection = document.getElementById('ats-improvements');
+  const atsItems   = document.getElementById('ats-items');
+  if (atsSection && atsItems && improvements.length) {
+    atsSection.style.display = 'block';
+    atsItems.replaceChildren(...improvements.map(text => {
+      const row = document.createElement('div');
+      row.className = 'ats-item';
+      const check = document.createElement('span');
+      check.className = 'ats-check';
+      check.innerHTML = '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      row.appendChild(check);
+      const label = document.createElement('span');
+      label.textContent = text;
+      row.appendChild(label);
+      return row;
+    }));
   }
-  section.style.display = 'block';
-
-  // Build a skill tag (variant: 'matched' | 'missing')
-  const makeTag = (skill, variant) => {
-    const tag = document.createElement('span');
-    tag.className = `skill-tag ${variant}`;
-    tag.textContent = (variant === 'matched' ? '✓ ' : '✗ ') + skill;
-    return tag;
-  };
-
-  // Build a skill group showing matched then missing tags inline
-  const makeAllSkillsGroup = (matchedSkills, missingSkills) => {
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'margin-top:4px';
-    matchedSkills.forEach(s => wrap.appendChild(makeTag(s, 'matched')));
-    missingSkills.forEach(s => wrap.appendChild(makeTag(s, 'missing')));
-    return wrap;
-  };
-
-  // Build legend
-  const makeLegend = () => {
-    const legend = document.createElement('div');
-    legend.className = 'skills-legend';
-    const legendHTML = '<span class="skills-legend-dot matched">Matched</span><span class="skills-legend-dot missing">Missing</span>';
-    legend.innerHTML = legendHTML; // safe: static hardcoded strings, no user data
-    return legend;
-  };
-
-  // Update badge: "X matched · Y missing"
-  const updateBadge = (id, matched, missing) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = `${matched} matched · ${missing} missing`;
-    el.className = matched > 0 ? 'skill-card-badge matched-count' : 'skill-card-badge tech';
-  };
-
-  // ── Technical Skills Card ──
-  const techContent = document.getElementById('tech-skills-content');
-  if (techContent) {
-    techContent.replaceChildren();
-    techContent.appendChild(makeLegend());
-    techContent.appendChild(makeAllSkillsGroup(allTechMatched, allTechMissing));
-  }
-  updateBadge('tech-added-badge', allTechMatched.length, allTechMissing.length);
-
-  // ── Soft Skills Card ──
-  const softContent = document.getElementById('soft-skills-content');
-  if (softContent) {
-    softContent.replaceChildren();
-    softContent.appendChild(makeLegend());
-    softContent.appendChild(makeAllSkillsGroup(allSoftMatched, allSoftMissing));
-  }
-  updateBadge('soft-added-badge', allSoftMatched.length, allSoftMissing.length);
 }
 
 // ─── Wire up results state buttons (idempotent) ───────────────────────────────
@@ -321,8 +334,54 @@ function bindFileInput(inputId, displayId, fileVar) {
       if (fileVar === 'idle') selectedFile = file;
       else selectedFileJD = file;
       display.textContent = file.name;
+      // Enable analyze button when file selected in idle state
+      if (fileVar === 'idle') {
+        const btn = document.getElementById('btn-manual-tailor');
+        if (btn) btn.disabled = false;
+      }
     }
   });
+}
+
+// ─── JD toggle (idle state) ────────────────────────────────────────────────────
+function setupJDToggles() {
+  // Idle state toggle
+  const toggleBtn  = document.getElementById('jd-toggle-btn');
+  const expandArea = document.getElementById('jd-expand-area');
+  const toggleIcon = document.getElementById('jd-toggle-icon');
+  const jdInput    = document.getElementById('manual-jd-input');
+  let expanded = false;
+  if (toggleBtn && expandArea) {
+    const row = document.querySelector('.jd-toggle-row');
+    const clickHandler = () => {
+      expanded = !expanded;
+      expandArea.classList.toggle('hidden', !expanded);
+      if (toggleIcon) toggleIcon.style.transform = expanded ? 'rotate(180deg)' : '';
+    };
+    toggleBtn.addEventListener('click', clickHandler);
+    if (row) row.addEventListener('click', (e) => { if (e.target !== toggleBtn) clickHandler(); });
+  }
+  // Enable analyze when JD typed
+  if (jdInput) {
+    jdInput.addEventListener('input', () => {
+      const btn = document.getElementById('btn-manual-tailor');
+      if (btn) btn.disabled = !jdInput.value.trim();
+    });
+  }
+
+  // JD detected state expand
+  const previewToggle    = document.getElementById('jd-preview-toggle');
+  const expandDetected   = document.getElementById('jd-expand-area-detected');
+  const previewEditBtn   = document.getElementById('jd-preview-edit');
+  let detectedExpanded = false;
+  if (previewToggle && expandDetected) {
+    const detectedClickHandler = () => {
+      detectedExpanded = !detectedExpanded;
+      expandDetected.classList.toggle('hidden', !detectedExpanded);
+      if (previewEditBtn) previewEditBtn.textContent = detectedExpanded ? 'Collapse ↑' : 'Edit ↓';
+    };
+    previewToggle.addEventListener('click', detectedClickHandler);
+  }
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -465,6 +524,7 @@ function applyJDContent(detectedJD) {
   if (companyEl) companyEl.textContent = detectedJD.meta?.company || '';
 
   setCompanyLogo(detectedJD.meta);
+  updateDetectPill(true, detectedJD.meta?.company, detectedJD.meta?.title);
 }
 
 // ─── Idle state — set up once ─────────────────────────────────────────────────
@@ -473,7 +533,8 @@ function setupIdleState() {
   if (_idleSetup) return;
   _idleSetup = true;
 
-  bindFileInput('resume-file-input', 'file-name-display', 'idle');
+  bindFileInput('resume-file-input', 'idle-resume-name', 'idle');
+  setupJDToggles();
 
   document.getElementById('btn-manual-tailor').addEventListener('click', async () => {
     const jdText = document.getElementById('manual-jd-input')?.value?.trim();
@@ -481,6 +542,10 @@ function setupIdleState() {
     await analyzeScore(jdText, null, selectedFile, null);
   });
 
+  document.getElementById('njn-try-link')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: 'https://www.linkedin.com/jobs/' });
+  });
 }
 
 // ─── JD Detected state — set up once ──────────────────────────────────────────
@@ -592,21 +657,39 @@ async function doTailor(jdText, jobMeta, resumeId) {
   }
 }
 
-// ─── Right sidebar navigation ─────────────────────────────────────────────────
-function setSidebarActive(id) {
-  document.querySelectorAll('.rsb-btn').forEach(btn => btn.classList.remove('active'));
+// ─── Page detection pill ───────────────────────────────────────────────────────
+function updateDetectPill(detected, source, title) {
+  const pill  = document.getElementById('page-detect-pill');
+  const label = pill?.querySelector('.detect-label');
+  if (!pill || !label) return;
+  if (detected && (source || title)) {
+    pill.className = 'detect-pill detect-active';
+    label.textContent = [source, title].filter(Boolean).join(' · ').slice(0, 28) || 'Job Detected';
+  } else {
+    pill.className = 'detect-pill detect-scanning';
+    label.textContent = 'Scanning…';
+  }
+}
+
+// ─── Bottom nav ────────────────────────────────────────────────────────────────
+function setNavActive(id) {
+  document.querySelectorAll('.bn-btn').forEach(btn => btn.classList.remove('active'));
   const btn = document.getElementById(id);
   if (btn) btn.classList.add('active');
 }
 
 document.getElementById('sb-analyze')?.addEventListener('click', async () => {
-  setSidebarActive('sb-analyze');
+  setNavActive('sb-analyze');
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
   showState(detectedJD ? 'jdDetected' : 'idle');
 });
 
+document.getElementById('sb-dashboard')?.addEventListener('click', () => {
+  setNavActive('sb-dashboard');
+  chrome.tabs.create({ url: `${PORTAL_URL}/dashboard` });
+});
+
 document.getElementById('sb-profile')?.addEventListener('click', () => {
-  setSidebarActive('sb-profile');
   chrome.tabs.create({ url: `${PORTAL_URL}/dashboard/profile` });
 });
 
@@ -623,6 +706,14 @@ function updateProfileCard(user) {
     const email       = user.email || '';
     if (nameEl)   nameEl.textContent   = displayName;
     if (subEl)    subEl.textContent    = email;
+
+    // Populate sidebar profile popover
+    const srpName  = document.getElementById('srp-name');
+    const srpEmail = document.getElementById('srp-email');
+    const srAvatar = document.getElementById('sr-avatar-initials');
+    if (srpName)  srpName.textContent  = displayName;
+    if (srpEmail) srpEmail.textContent = email;
+    if (srAvatar) srAvatar.textContent = (displayName[0] || 'U').toUpperCase();
     if (btnEl) {
       btnEl.textContent = 'Sign Out';
       btnEl.className   = 'rpc-btn danger';
@@ -652,13 +743,35 @@ function updateProfileCard(user) {
   }
 }
 
+// ─── Profile popover ──────────────────────────────────────────────────────────
+const profilePopover = document.getElementById('sr-profile-popover');
+document.getElementById('sb-profile-rail')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  profilePopover?.classList.toggle('open');
+});
+document.addEventListener('click', () => profilePopover?.classList.remove('open'));
+
+document.getElementById('srp-dashboard')?.addEventListener('click', () => {
+  profilePopover?.classList.remove('open');
+  chrome.tabs.create({ url: `${PORTAL_URL}/dashboard` });
+});
+
+document.getElementById('srp-signout')?.addEventListener('click', async () => {
+  profilePopover?.classList.remove('open');
+  try {
+    await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+  } catch { /* silent */ }
+  await chrome.storage.local.remove('detectedJD');
+  chrome.action.setBadgeText({ text: '' });
+  showState('login');
+});
+
 document.getElementById('sb-feedback')?.addEventListener('click', () => {
-  setSidebarActive('sb-feedback');
+  setNavActive('sb-feedback');
   chrome.tabs.create({ url: `${PORTAL_URL}/feedback` });
 });
 
 document.getElementById('sb-settings')?.addEventListener('click', () => {
-  setSidebarActive('sb-settings');
   chrome.tabs.create({ url: `${PORTAL_URL}/dashboard/profile` });
 });
 
@@ -676,6 +789,97 @@ document.getElementById('footer-logout')?.addEventListener('click', async () => 
 });
 document.getElementById('footer-settings')?.addEventListener('click', () => {
   chrome.tabs.create({ url: `${PORTAL_URL}/dashboard/profile` });
+});
+
+// ─── Cover Letter ─────────────────────────────────────────────────────────────
+let clLetterId = null;
+
+async function generateCoverLetter() {
+  const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+  const jdText  = detectedJD?.jd  || document.getElementById('jd-textarea-main')?.value?.trim() || '';
+  const jobMeta = detectedJD?.meta || {};
+
+  if (!jdText) {
+    alert('No job description found. Please paste a job description first.');
+    return;
+  }
+
+  showState('coverLetter');
+
+  // Set header label
+  const label = [jobMeta.title, jobMeta.company].filter(Boolean).join(' · ');
+  const labelEl = document.getElementById('cl-job-label');
+  if (labelEl) labelEl.textContent = label || 'Cover Letter';
+
+  // Show generating spinner
+  const genEl    = document.getElementById('cl-generating');
+  const outputEl = document.getElementById('cl-output');
+  const errorEl  = document.getElementById('cl-error');
+  genEl.classList.remove('hidden');
+  outputEl.classList.add('hidden');
+  errorEl.classList.add('hidden');
+
+  try {
+    const resumeId = await resolveResumeId(null, cachedResumeId || null);
+    const idempotencyKey = `ext-cl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const res = await apiFetch('/cover-letter/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        job_description: jdText,
+        job_title:       jobMeta.title   || null,
+        company_name:    jobMeta.company || null,
+        resume_id:       resumeId        || null,
+        options:         { include_debug_metadata: false },
+      }),
+    });
+
+    clLetterId = res?.letter_id || res?.id || null;
+    const content = res?.content || res?.cover_letter || res?.letter || '';
+
+    genEl.classList.add('hidden');
+    outputEl.value = content;
+    outputEl.classList.remove('hidden');
+
+  } catch (err) {
+    genEl.classList.add('hidden');
+    const errMsgEl = document.getElementById('cl-error-msg');
+    if (errMsgEl) errMsgEl.textContent = err?.message || 'Failed to generate. Please try again.';
+    errorEl.classList.remove('hidden');
+  }
+}
+
+document.getElementById('btn-cover-letter')?.addEventListener('click', generateCoverLetter);
+document.getElementById('btn-cl-regenerate')?.addEventListener('click', generateCoverLetter);
+
+document.getElementById('btn-cl-back')?.addEventListener('click', async () => {
+  const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+  showState(detectedJD ? 'jdDetected' : 'idle');
+});
+
+document.getElementById('btn-cl-copy')?.addEventListener('click', () => {
+  const outputEl = document.getElementById('cl-output');
+  const copyBtn  = document.getElementById('btn-cl-copy');
+  if (!outputEl?.value) return;
+  navigator.clipboard.writeText(outputEl.value).then(() => {
+    copyBtn.classList.add('copied');
+    copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!`;
+    setTimeout(() => {
+      copyBtn.classList.remove('copied');
+      copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy`;
+    }, 2000);
+  });
+});
+
+document.getElementById('btn-cl-open-web')?.addEventListener('click', () => {
+  const url = clLetterId
+    ? `${PORTAL_URL}/cover-letter/${clLetterId}`
+    : `${PORTAL_URL}/cover-letter`;
+  chrome.tabs.create({ url });
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────

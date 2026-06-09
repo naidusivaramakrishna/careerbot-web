@@ -12,7 +12,7 @@ const ProfileContent = () => {
         <div className="ml-4">
             <h1 className="text-2xl font-bold mt-4">Profile</h1>
             <div className="min-h-screen  bg-gray-200 px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
-                <div className="flex gap-4">
+                <div className="flex gap-4 w-full">
                     <MainSection />
                     <RightSection
                         completeness={dashboardData?.profile?.completeness ?? 0}

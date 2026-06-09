@@ -1,11 +1,70 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
+import { logger } from "@/lib/logger";
 
 const AZURE_ENDPOINT = "https://veliv-mgtcnqad-uaenorth.services.ai.azure.com";
 const DEPLOYMENT = "Llama-3.3-70B-Instruct";
+const MAX_BODY_BYTES = 256 * 1024; // 256 KB — generate-description bodies are small
+
+// Read the request body incrementally, returning null the moment the
+// accumulated byte count exceeds `limit` (the reader is cancelled so the
+// rest of the stream is never buffered). Returns the decoded UTF-8 string
+// when the body fits.
+async function readBodyCapped(req: Request, limit: number): Promise<string | null> {
+  const reader = req.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.length;
+    if (received > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new TextDecoder().decode(merged);
+}
 
 export async function POST(req: Request) {
+  // Require a VERIFIED session — this route spends the server-side Azure API
+  // key, so cookie presence is not enough: the JWT signature must check out.
+  const cookieStore = await cookies();
+  const token = cookieStore.get("access_token")?.value;
+  if (!token || !process.env.JWT_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
-    const body = await req.json();
+    await jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET));
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    // Fast-reject an honestly-declared oversized body before reading anything.
+    const declaredLength = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Request too large" }, { status: 413 });
+    }
+
+    // Stream the body and abort as soon as the running UTF-8 byte count
+    // exceeds the cap, so a chunked/Content-Length-less payload can never
+    // buffer unbounded memory before the check (counting bytes, not UTF-16
+    // string length, which would undercount multibyte input).
+    const rawBody = await readBodyCapped(req, MAX_BODY_BYTES);
+    if (rawBody === null) {
+      return NextResponse.json({ error: "Request too large" }, { status: 413 });
+    }
+    const body = JSON.parse(rawBody);
     const { type } = body;
     const apiKey = process.env.AZURE_OPENAI_API_KEY;
 
@@ -141,8 +200,11 @@ IMPORTANT:
     const data = await response.json();
 
     if (!response.ok) {
+      // Log the upstream error server-side; never echo it to the client —
+      // it can carry Azure account/deployment details.
+      logger.error("generate-description: Azure request failed", data);
       return NextResponse.json(
-        { error: "Azure request failed", details: data },
+        { error: "Azure request failed" },
         { status: 500 }
       );
     }
@@ -163,8 +225,11 @@ IMPORTANT:
       return NextResponse.json({ description });
     }
   } catch (error) {
+    // Log the raw error server-side; the client gets a generic message so we
+    // never leak stack traces / internal paths.
+    logger.error("generate-description: unexpected server error", error);
     return NextResponse.json(
-      { error: "Unexpected server error", details: error },
+      { error: "Unexpected server error" },
       { status: 500 }
     );
   }

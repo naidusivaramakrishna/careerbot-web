@@ -68,8 +68,10 @@ const nextConfig: NextConfig = {
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     return [
       {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
+        // Forward /api/* to backend EXCEPT routes handled locally by Next.js.
+        // Negative lookahead skips: ats-score, auth, backend, generate-description, generate-docx, rasa.
+        source: '/api/:path((?!ats-score|auth|backend|generate-description|generate-docx|rasa).+)',
+        destination: `${backendUrl}/api/:path`,
       },
     ];
   },
@@ -99,6 +101,7 @@ const nextConfig: NextConfig = {
         ...(Array.isArray(config.externals) ? config.externals : []),
         'mespeak',
         'jsdom',
+        'html-to-docx',
       ];
     }
 

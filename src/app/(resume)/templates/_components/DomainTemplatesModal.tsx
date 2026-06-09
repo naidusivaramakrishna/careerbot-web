@@ -195,6 +195,7 @@ export default function DomainTemplatesModal({
         const newResume = await createResumeWithAuth();
         resumeId = newResume.id || (newResume as unknown as Record<string, unknown>)._id as string;
       }
+      // Catalogue is already saved in localStorage by the /templates page selection
 
       // Redirect immediately to the resume creation page
       if (resumeId) {
@@ -252,7 +253,7 @@ export default function DomainTemplatesModal({
             {/* Header */}
             <div className="mb-6 relative">
               <div className="flex items-center gap-2 mb-2">
-                  <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
+                <span className="inline-block w-1 h-6 rounded-full bg-[#2257a7]" />
                 <h2 className="text-2xl font-bold tracking-tight text-slate-900">
                   {domainName}
                 </h2>
@@ -275,10 +276,9 @@ export default function DomainTemplatesModal({
                       className={`relative rounded-lg overflow-hidden ring-1 transition-all cursor-pointer group bg-linear-to-br from-slate-50 to-slate-100/60 p-2 ${
                         isSelected
                           ? 'ring-2 ring-[#2257a7] shadow-md'
-                        : 'ring-slate-200 hover:ring-[#5896d7] hover:shadow-sm'
+                          : 'ring-slate-200 hover:ring-[#5896d7] hover:shadow-sm'
                       }`}
                     >
-                      {/* Card Preview Image - Full template preview */}
                       <Image
                         src={familyImage}
                         alt={careerLevel}
@@ -287,16 +287,12 @@ export default function DomainTemplatesModal({
                         className="w-full h-auto object-contain group-hover:scale-105 transition-transform"
                         onError={() => setFamilyImage(FALLBACK_IMAGE)}
                       />
-
-                      {/* Tick Mark - Only when Selected */}
                       {isSelected && (
                         <div className="absolute top-2 right-2 bg-linear-to-br from-teal-500 to-sky-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg ring-2 ring-white">
                           <span className="text-sm font-bold">✓</span>
                         </div>
                       )}
                     </button>
-
-                    {/* Career Level Below Card */}
                     <p className={`text-sm font-semibold mt-2 text-center transition-colors ${
                       isSelected ? 'text-[#2257a7]' : 'text-slate-700'
                     }`}>

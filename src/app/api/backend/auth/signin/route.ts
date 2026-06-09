@@ -31,7 +31,10 @@ function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
   for (const attr of attrs) {
     const name = attr.split('=')[0].trim().toLowerCase();
     if (name === 'domain') continue;          // strip — browser will scope to host
-    if (name === 'secure' && !isSecureRequest) continue; // strip on HTTP dev
+    // Only ever drop Secure in non-production. In prod, keep Secure even if the
+    // proxy didn't advertise https — a downgraded auth cookie is worse than a
+    // dropped one.
+    if (name === 'secure' && !isSecureRequest && process.env.NODE_ENV !== 'production') continue;
     if (name === 'path') hasPath = true;
     if (name === 'samesite') hasSameSite = true;
     kept.push(attr);
@@ -68,7 +71,11 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-    const res = NextResponse.json(data);
+    // Tokens live in the httpOnly cookies forwarded below; never expose them
+    // in the JS-readable body (authApi.ts:30 — "never accessible to JavaScript").
+    const { access_token, refresh_token, ...safeBody } = data ?? {};
+    void access_token; void refresh_token;
+    const res = NextResponse.json(safeBody);
 
     const isSecureRequest =
       request.nextUrl.protocol === 'https:' ||
@@ -82,10 +89,10 @@ export async function POST(request: NextRequest) {
 
     return res;
 
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { error: 'Authentication service unavailable' },
+      { status: 502 }
     );
   }
 }
