@@ -67,8 +67,16 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(
             typeof loginUrl === 'string' ? new URL(loginUrl, request.url) : loginUrl
         );
-    }
- 
+    };
+
+    // Role claim must match the area being entered. Returns true for any
+    // non-role-gated route, so the check is a no-op outside admin/recruiter.
+    const roleAllows = (role: string | undefined): boolean => {
+        if (pathname.startsWith(ADMIN_PREFIX))     return role === 'admin';
+        if (pathname.startsWith(RECRUITER_PREFIX)) return role === 'recruiter' || role === 'admin';
+        return true;
+    };
+
     // JWT role enforcement — decode access_token to check role claim
     if (token && process.env.JWT_SECRET) {
         try {
@@ -85,11 +93,15 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // 2) No verified token. Non-protected pages: a refresh cookie is enough —
-    //    let the request through; the client HTTP interceptor refreshes on the
-    //    first 401.
+    // 2) No verified token. Non-role-protected pages: presence of EITHER an
+    //    access_token or refresh_token cookie is enough to let the request
+    //    through. The page's own API calls will revalidate against the backend
+    //    on every request, and the HTTP interceptor handles refresh on the
+    //    first 401. Falling back to refresh_token alone bounced real users to
+    //    login when their backend hadn't issued a refresh cookie OR when the
+    //    frontend JWT_SECRET didn't match the backend's signing key.
     if (!isProtectedArea) {
-        return refreshToken ? NextResponse.next() : loginRedirect();
+        return (token || refreshToken) ? NextResponse.next() : loginRedirect();
     }
 
     // 3) Protected area with no verified token — whether the access token is

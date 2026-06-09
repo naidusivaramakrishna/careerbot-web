@@ -790,3 +790,107 @@ section.docx {
   border-radius: 0.75rem;
 }
 
+/* ==========================================================================
+   Mock-Test Typography System
+
+   Scoped defaults so every page on the surface inherits the same scale.
+   Inline `text-…` Tailwind utilities still take precedence — these only
+   apply where no per-element class overrides them.
+
+   Source family is Montserrat (loaded via next/font in the layout).
+   Heading sizes are deliberately conservative — the section-intro DNA
+   uses one large headline per page; the rest of the hierarchy is small
+   and tight so the highlight box and tables read clearly.
+   ========================================================================== */
+[data-mock-test] {
+  font-family: var(--font-montserrat), ui-sans-serif, -apple-system,
+               BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #0F172A;
+}
+
+[data-mock-test] h1 {
+  font-size: 1.5rem;            /* 24px */
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #0F172A;
+}
+[data-mock-test] h2 {
+  font-size: 1.25rem;           /* 20px */
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: #0F172A;
+}
+[data-mock-test] h3 {
+  font-size: 1rem;              /* 16px */
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: #0F172A;
+}
+[data-mock-test] h4 {
+  font-size: 0.875rem;          /* 14px */
+  font-weight: 700;
+  line-height: 1.35;
+  color: #0F172A;
+}
+
+[data-mock-test] p {
+  font-size: 0.875rem;          /* 14px */
+  line-height: 1.55;
+  color: #2d2d2d;
+}
+
+[data-mock-test] table,
+[data-mock-test] td,
+[data-mock-test] th {
+  font-feature-settings: 'tnum';
+}
+
+[data-mock-test] kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  vertical-align: middle;
+}
+
+/* Small uppercase meta label — applied per-element with the
+   .mt-meta class when needed. Most pages already use Tailwind
+   utilities for this; the class is here for any new call sites. */
+[data-mock-test] .mt-meta {
+  font-size: 0.6875rem;         /* 11px */
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #94A3B8;
+}
+
+/* Numeric displays — apply .mt-num to enforce tabular nums + the
+   navy accent that scores/percentages use across the surface. */
+[data-mock-test] .mt-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+/* Respect users who set reduce-motion: kill the focus-ring transition
+   and any non-essential animation under data-mock-test. */
+@media (prefers-reduced-motion: reduce) {
+  [data-mock-test] *,
+  [data-mock-test] *::before,
+  [data-mock-test] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
