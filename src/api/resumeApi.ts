@@ -6,10 +6,9 @@ import type { CustomSection, CustomField } from '@/app/(resume)/builder/creation
 export interface CategorizedSkills {
   programming_languages: string[];
   frameworks: string[];
-  databases: string[];
-  tools: string[];
-  cloud_platforms: string[];
   soft_skills: string[];
+  project_management: string[];
+  marketing_sales: string[];
 }
 
 export interface ResumeResponse {

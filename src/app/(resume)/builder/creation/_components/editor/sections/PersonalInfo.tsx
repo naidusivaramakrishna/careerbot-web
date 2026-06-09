@@ -12,6 +12,7 @@ interface Field {
   required: boolean;
   type?: string;
   maxLength?: number;
+  readOnly?: boolean;
 }
 
 interface PersonalInfoProps {
@@ -23,6 +24,8 @@ interface PersonalInfoProps {
 
 const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange, onBlur }) => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false);
   const [isGovernmentTemplate, setIsGovernmentTemplate] = useState(false);
   const [isHealthcareTemplate, setIsHealthcareTemplate] = useState(false);
@@ -77,7 +80,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
 
   const fields: Field[] = [
     { field: "Full Name", key: "fullname", required: true, maxLength: 100 },
-    { field: "Email", key: "email", required: true, type: "email", maxLength: 254 },
+    { field: "Email", key: "email", required: true, type: "email", maxLength: 254, readOnly: !isEnhancedResume },
     { field: "Location", key: "location", required: true, maxLength: 100 },
     { field: "LinkedIn URL", key: "linkedinUrl", required: false, type: "url" },
     { field: "GitHub URL", key: "githubUrl", required: false, type: "url" },
@@ -182,10 +185,11 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         type={f.type ?? "text"}
         value={formData[f.key] || ""}
         placeholder={`Enter ${f.field}`}
-        onChange={(e) => handleChange(f.key, e.target.value)}
-        onBlur={() => handleBlur(f)}
-        maxLength={f.maxLength}
-        className={`w-full px-2 py-3.5 rounded-md text-sm text-[#7b7b7a] bg-[#faf9f8] border-2 focus:outline-none transition-all duration-200 hover:bg-[#f3f2f1] ${errors[f.key] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}
+        onChange={(e) => !f.readOnly && handleChange(f.key, e.target.value)}
+        onBlur={() => !f.readOnly && handleBlur(f)}
+        maxLength={f.readOnly ? undefined : f.maxLength}
+        readOnly={f.readOnly}
+        className={`w-full px-2 py-3.5 rounded-md text-sm border-2 focus:outline-none transition-all duration-200 ${f.readOnly ? "bg-gray-100 text-gray-400 cursor-not-allowed border-transparent select-none" : `text-[#7b7b7a] bg-[#faf9f8] hover:bg-[#f3f2f1] ${errors[f.key] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}`}
       />
       {errors[f.key] && (
         <span className="text-xs text-red-500">
