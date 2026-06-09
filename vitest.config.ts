@@ -4,6 +4,12 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  css: {
+    // Vitest v1 bundles Vite v5 which doesn't understand TailwindCSS v4's
+    // string-format PostCSS plugin. Disable PostCSS processing for tests —
+    // jsdom ignores styles anyway so this has no effect on test correctness.
+    postcss: { plugins: [] },
+  },
   test: {
     globals: true,
     environment: 'jsdom',
