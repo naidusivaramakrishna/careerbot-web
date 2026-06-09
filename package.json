@@ -7,7 +7,27 @@
     "dev": "next dev --turbopack --port 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "test:watch": "vitest --watch",
+    "test:dashboard": "vitest src/tests/unit/features/dashboard",
+    "test:resume": "vitest src/tests/unit/features/resume-builder-enhancer",
+    "test:communication": "vitest src/tests/unit/features/communication",
+    "test:mock-interview": "vitest src/tests/unit/features/mock-interview",
+    "test:settings": "vitest src/tests/unit/features/settings",
+    "test:credits": "vitest src/tests/unit/features/credits",
+    "test:all-features": "vitest src/tests/unit/features",
+    "test:integration": "vitest src/tests/integration/features",
+    "test:integration:watch": "vitest src/tests/integration/features --watch",
+    "test:integration:dashboard": "vitest src/tests/integration/features/dashboard",
+    "test:integration:resume": "vitest src/tests/integration/features/resume-builder-enhancer",
+    "test:integration:communication": "vitest src/tests/integration/features/communication",
+    "test:integration:mock-interview": "vitest src/tests/integration/features/mock-interview",
+    "test:integration:settings": "vitest src/tests/integration/features/settings",
+    "test:integration:credits": "vitest src/tests/integration/features/credits",
+    "test:pre-commit": "npm run test:integration && npm test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -53,15 +73,22 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.1.2",
     "@types/lodash.debounce": "^4.0.9",
     "@types/node": "20.19.21",
     "@types/react": "19.2.2",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/ui": "^1.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
+    "jsdom": "^23.0.1",
     "kill-port": "^2.0.1",
+    "msw": "^2.0.0",
     "tailwindcss": "^4",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^1.1.0"
   }
 }

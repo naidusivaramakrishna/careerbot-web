@@ -47,7 +47,7 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  return <FirstTimeDashboard />;
+  return <FirstTimeDashboard data={dashboardData} />;
 };
 
 export default DashboardPage;

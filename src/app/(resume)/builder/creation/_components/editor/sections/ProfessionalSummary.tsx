@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState } from "react";
-import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -31,7 +30,7 @@ interface ToolbarButtonProps {
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isActive = false }) => (
   <button
     type="button"
-    onClick={onClick}
+    onMouseDown={(e) => { e.preventDefault(); onClick(); }}
     className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition ${
       isActive ? "text-[#2557a7] border border-[#2557a7] bg-blue-50" : "text-gray-400 hover:text-blue-600"
     }`}
@@ -53,15 +52,12 @@ const ProfessionalSummary: React.FC = () => {
   } = useAISuggestions();
 
 
-  const {
-    errors,
-    validateRequired,
-    clearError,
-  } = useValidation();
+  const { clearError } = useValidation();
 
 
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
+  const [aiRoleHint, setAIRoleHint] = useState("");
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -89,18 +85,30 @@ const ProfessionalSummary: React.FC = () => {
       },
     });
     clearError("summary", 0, "targetRole");
+    if (value.trim()) setAIRoleHint("");
   };
 
+
+  const cleanHtmlContent = (html: string): string => {
+    if (!html) return "";
+    const textOnly = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (!textOnly) return "";
+    return html
+      .replace(/(\s*<br\s*\/?>\s*)+$/gi, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
+  };
 
   const exec = (command: string, value?: string) => {
     const editor = editorRef.current;
     if (!editor) return;
-    
+
     editor.focus();
     document.execCommand(command, false, value);
-    
+
     setTimeout(() => {
-      handleChange(editor.innerHTML || "");
+      const content = cleanHtmlContent(editor.innerHTML);
+      handleChange(content);
     }, 0);
   };
 
@@ -108,14 +116,17 @@ const ProfessionalSummary: React.FC = () => {
   const onEditorInput = () => {
     const el = editorRef.current;
     if (!el) return;
-    handleChange(el.innerHTML || "");
+    const content = cleanHtmlContent(el.innerHTML);
+    handleChange(content);
   };
 
 
   const handleAIWriterClick = () => {
-    if (!validateRequired("summary", 0, {
-      targetRole: resumeData.professionalSummary.targetRole,
-    })) return;
+    if (!resumeData.professionalSummary.targetRole?.trim()) {
+      setAIRoleHint("Please enter a target role to generate an AI description.");
+      return;
+    }
+    setAIRoleHint("");
 
 
     const summaryBox = summaryRef.current;
@@ -164,7 +175,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
-      el.innerHTML = sanitizeHtml(suggestion);
+      el.innerHTML = suggestion;
       handleChange(suggestion);
       
       setTimeout(() => {
@@ -205,8 +216,10 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
 
   useEffect(() => {
     const el = editorRef.current;
-    if (el && resumeData.professionalSummary.summary && el.innerHTML !== resumeData.professionalSummary.summary) {
-      el.innerHTML = sanitizeHtml(resumeData.professionalSummary.summary);
+    if (el && resumeData.professionalSummary.summary) {
+      if (document.activeElement !== el && el.innerHTML !== resumeData.professionalSummary.summary) {
+        el.innerHTML = resumeData.professionalSummary.summary;
+      }
     }
   }, [resumeData.professionalSummary.summary]);
 
@@ -224,13 +237,12 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
             {/* Target Role Input with Autocomplete */}
             <AutocompleteInput
               label="Target Role"
-              required
               value={resumeData.professionalSummary.targetRole}
               onChange={(val) => handleTargetRoleChange(val)}
-              onBlur={() => validateRequired("summary", 0, { targetRole: resumeData.professionalSummary.targetRole })}
               placeholder="e.g., Frontend Developer, Data Analyst"
               suggestions={roles}
-              error={errors[`summary-0-targetRole`]}
+              maxLength={100}
+              hint={aiRoleHint}
             />
 
 
@@ -274,7 +286,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
                   contentEditable
                   suppressContentEditableWarning
                   onInput={onEditorInput}
-                  className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7]"
+                  className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                   spellCheck={spellCheckEnabled}
                 />
               </div>

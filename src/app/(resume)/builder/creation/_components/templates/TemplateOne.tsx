@@ -95,10 +95,6 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
     fontWeight: "bold",
   };
 
-  const descriptionStyle: React.CSSProperties = {
-    ...baseTextStyle,
-  };
-
   const renderSection = (section: string) => {
     switch (section) {
       case "Personal Info":
@@ -491,7 +487,12 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <span className="mr-2" style={baseTextStyle}>•</span>
                   <div style={baseTextStyle}>
                     <span className="font-medium" style={titleStyle}>{award.title}</span>
-                    <span style={baseTextStyle}> - {award.issuedBy} ({award.year})</span>
+                    {(award.issuedBy || award.year) && (
+                      <span style={baseTextStyle}>
+                        {award.issuedBy && ` — ${award.issuedBy}`}
+                        {award.year && ` (${award.year})`}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -554,7 +555,8 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     {pub.authors}
                   </p>
                   <p className="text-sm" style={baseTextStyle}>
-                    <span className="italic">{pub.publicationName}</span> • {formatDate(pub.date)}
+                    <span className="italic">{pub.publicationName}</span>
+                    {pub.date && <> • {formatDate(pub.date)}</>}
                   </p>
                 </div>
               ))}
@@ -573,7 +575,8 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div key={idx} className="flex items-start" style={baseTextStyle}>
                     <span className="mr-2">•</span>
                     <span>
-                      <span className="font-medium">{lang.language}</span> - {lang.proficiency}
+                      <span className="font-medium">{lang.language}</span>
+                      {lang.proficiency && <span style={baseTextStyle}> — {lang.proficiency}</span>}
                     </span>
                   </div>
                 ))}

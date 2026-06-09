@@ -9,15 +9,8 @@ const Header: React.FC = () => {
   const isEnhanced = searchParams.get("source") === "enhanced";
 
   const handleBackClick = () => {
-    // Clear localStorage resume data to force fresh fetch
     localStorage.removeItem('resumeData');
-
-    // ✅ Add timestamp to force page refresh
-    const timestamp = Date.now();
-    router.push(`/builder/start/list?refresh=${timestamp}`);
-
-    // ✅ Force router to refresh
-    router.refresh();
+    router.push('/builder/start/list');
   };
 
   return (

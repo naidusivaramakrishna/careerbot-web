@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useResume } from "../../../_context/ResumeContext";
 import { countryCodes } from "../../../_utils/sectionsConfig";
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -10,6 +11,8 @@ interface Field {
   key: "fullname" | "email" | "phone" | "countryCode" | "location" | "linkedinUrl" | "githubUrl" | "portfolioUrl" | "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications";
   required: boolean;
   type?: string;
+  maxLength?: number;
+  readOnly?: boolean;
 }
 
 interface PersonalInfoProps {
@@ -21,18 +24,18 @@ interface PersonalInfoProps {
 
 const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange, onBlur }) => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false);
   const [isGovernmentTemplate, setIsGovernmentTemplate] = useState(false);
   const [isHealthcareTemplate, setIsHealthcareTemplate] = useState(false);
-  const [isLegalTemplate, setIsLegalTemplate] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Get domain from localStorage to check if it's government_standard, healthcare, or legal
+  // Get domain from localStorage to check if it's government_standard or healthcare
   useEffect(() => {
     try {
       let isGov = false;
       let isHealthcare = false;
-      let isLegal = false;
 
       // First, try localStorage
       const userEmail = resumeData.personalInfo?.email || '';
@@ -45,15 +48,20 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         }>;
         isGov = careerLevels.some(t => t.domain_family === 'government_standard');
         isHealthcare = careerLevels.some(t => t.domain_family === 'healthcare');
-        isLegal = careerLevels.some(t => t.domain_family === 'legal');
+      }
+
+      // If not found in localStorage, check if government/healthcare fields exist in formData
+      if (!isGov && !isHealthcare) {
+        const hasGovFields = formData['dateOfBirth'] || formData['nationality'] || formData['category'] || formData['languages'];
+        const hasHealthcareFields = formData['titlePrefix'] || formData['qualifications'];
+        isGov = !!hasGovFields;
+        isHealthcare = !!hasHealthcareFields;
       }
 
       setIsGovernmentTemplate(isGov);
       setIsHealthcareTemplate(isHealthcare);
-      setIsLegalTemplate(isLegal);
       logger.info('Government template detected:', isGov);
       logger.info('Healthcare template detected:', isHealthcare);
-      logger.info('Legal template detected:', isLegal);
     } catch (err) {
       logger.warn('Error checking template domain:', err);
     }
@@ -71,9 +79,9 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   }, []);
 
   const fields: Field[] = [
-    { field: "Full Name", key: "fullname", required: true },
-    { field: "Email", key: "email", required: true, type: "email" },
-    { field: "Location", key: "location", required: true },
+    { field: "Full Name", key: "fullname", required: true, maxLength: 100 },
+    { field: "Email", key: "email", required: true, type: "email", maxLength: 254, readOnly: !isEnhancedResume },
+    { field: "Location", key: "location", required: true, maxLength: 100 },
     { field: "LinkedIn URL", key: "linkedinUrl", required: false, type: "url" },
     { field: "GitHub URL", key: "githubUrl", required: false, type: "url" },
     { field: "Portfolio URL", key: "portfolioUrl", required: false, type: "url" },
@@ -123,7 +131,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
     return yyyymmdd;
   };
 
-  const renderGovField = (fieldName: "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications", label: string, placeholder?: string, type: string = "text") => {
+  const renderGovField = (fieldName: "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications", label: string, placeholder?: string, type: string = "text", maxLength?: number) => {
     if (fieldName === "dateOfBirth") {
       return (
         <div className="flex flex-col gap-1 w-full">
@@ -134,7 +142,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
             value={convertToDatePickerFormat(getFieldValue(fieldName))}
             onChange={(e) => handleChange(fieldName, convertFromDatePickerFormat(e.target.value))}
             onBlur={() => onBlur(fieldName, getFieldValue(fieldName))}
-            className="w-full px-2 py-3.5 rounded-md text-sm text-[#7b7b7a] bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7] transition-all duration-200 hover:bg-[#f3f2f1]"
+            className={`w-full px-2 py-3.5 rounded-md text-sm text-[#7b7b7a] bg-[#faf9f8] border-2 focus:outline-none transition-all duration-200 hover:bg-[#f3f2f1] ${errors[fieldName] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}
           />
           {errors[fieldName] && (
             <span className="text-xs text-red-500">
@@ -155,7 +163,8 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
           placeholder={placeholder}
           onChange={(e) => handleChange(fieldName, e.target.value)}
           onBlur={() => onBlur(fieldName, getFieldValue(fieldName))}
-          className="w-full px-2 py-3.5 rounded-md text-sm text-[#7b7b7a] bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7] transition-all duration-200 hover:bg-[#f3f2f1]"
+          maxLength={maxLength}
+          className={`w-full px-2 py-3.5 rounded-md text-sm text-[#7b7b7a] bg-[#faf9f8] border-2 focus:outline-none transition-all duration-200 hover:bg-[#f3f2f1] ${errors[fieldName] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}
         />
         {errors[fieldName] && (
           <span className="text-xs text-red-500">
@@ -176,9 +185,11 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         type={f.type ?? "text"}
         value={formData[f.key] || ""}
         placeholder={`Enter ${f.field}`}
-        onChange={(e) => handleChange(f.key, e.target.value)}
-        onBlur={() => handleBlur(f)}
-        className="w-full px-2 py-3.5 rounded-md text-sm text-[#7b7b7a] bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7] transition-all duration-200 hover:bg-[#f3f2f1]"
+        onChange={(e) => !f.readOnly && handleChange(f.key, e.target.value)}
+        onBlur={() => !f.readOnly && handleBlur(f)}
+        maxLength={f.readOnly ? undefined : f.maxLength}
+        readOnly={f.readOnly}
+        className={`w-full px-2 py-3.5 rounded-md text-sm border-2 focus:outline-none transition-all duration-200 ${f.readOnly ? "bg-gray-100 text-gray-400 cursor-not-allowed border-transparent select-none" : `text-[#7b7b7a] bg-[#faf9f8] hover:bg-[#f3f2f1] ${errors[f.key] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-[#5896d7]"}`}`}
       />
       {errors[f.key] && (
         <span className="text-xs text-red-500">
@@ -237,6 +248,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
           placeholder="Enter phone number"
           onChange={(e) => handleChange("phone", e.target.value)}
           onBlur={() => onBlur("phone", formData["phone"] || "")}
+          maxLength={15}
           className="flex-1 px-1 py-3.5 text-sm bg-transparent text-black outline-none"
           // className="w-35 px-1 py-3.5 rounded-md text-sm text-[#7b7b7a] bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7] transition-all duration-200 hover:bg-[#f3f2f1]"
         />
@@ -288,13 +300,13 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
             {/* Row 5: Date of Birth + Nationality */}
             <div className="flex gap-10">
               {renderGovField("dateOfBirth", "Date of Birth", "", "date")}
-              {renderGovField("nationality", "Nationality", "e.g., Indian")}
+              {renderGovField("nationality", "Nationality", "e.g., Indian", "text", 60)}
             </div>
 
             {/* Row 6: Category + Languages */}
             <div className="flex gap-10">
-              {renderGovField("category", "Category", "e.g., General, SC, ST, OBC")}
-              {renderGovField("languages", "Languages Known", "e.g., English, Hindi, Tamil")}
+              {renderGovField("category", "Category", "e.g., General, SC, ST, OBC", "text", 80)}
+              {renderGovField("languages", "Languages Known", "e.g., English, Hindi, Tamil", "text", 150)}
             </div>
           </>
         )}
@@ -310,24 +322,8 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
 
             {/* Row 5: Title Prefix + Qualifications */}
             <div className="flex gap-10">
-              {renderGovField("titlePrefix", "Title/Prefix", "e.g., DR., PROF., MR.")}
-              {renderGovField("qualifications", "Qualifications", "e.g., MBBS, MD, DM, MS")}
-            </div>
-          </>
-        )}
-
-        {/* Legal Template Fields */}
-        {isLegalTemplate && (
-          <>
-            {/* Divider */}
-            <div className="my-2 border-t border-gray-300 w-full"></div>
-
-            {/* Legal-Specific Section Label */}
-            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Legal - Professional Details</p>
-
-            {/* Row 5: Qualifications */}
-            <div className="flex gap-10">
-              {renderGovField("qualifications", "Qualifications", "e.g., LLB, LLM, Bar License")}
+              {renderGovField("titlePrefix", "Title/Prefix", "e.g., DR., PROF., MR.", "text", 20)}
+              {renderGovField("qualifications", "Qualifications", "e.g., MBBS, MD, DM, MS", "text", 100)}
             </div>
           </>
         )}

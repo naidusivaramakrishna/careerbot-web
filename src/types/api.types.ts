@@ -246,7 +246,9 @@ export interface MatchResult {
 export interface ATSSectionDeduction {
   id: string;
   penalty: number;
-  message: string;
+  message?: string;
+  after_example?: string;
+  before_example?: string;
 }
 
 export interface ATSSectionScore {
@@ -262,7 +264,9 @@ export interface ATSSectionScore {
 export interface ATSIntelligencePenalty {
   id: string;
   penalty: number;
-  message: string;
+  message?: string;
+  after_example?: string;
+  before_example?: string;
   missing_languages?: string[];
 }
 

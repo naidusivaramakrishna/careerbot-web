@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { generateNotes, getNotes, updateNotes } from "@/api/mockInterviewApi";
-import { getAllResumes } from "@/api/resumeApi";
-import { escapeHtml } from "@/lib/sanitizeHtml";
+import { getAllResumesUnified } from "@/api/resumeApi";
+import type { ResumeResponse } from "@/api/resumeApi";
+import type { EnhancedResumeSummary } from "@/types/api.types";
 import { useMockInterview } from "../_context/MockInterviewContext";
 import {
   FileText,
@@ -140,6 +141,25 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
     hr_answers: hrAnswers,
     additional_notes: additionalNotes,
     unfilled_count: apiNotes.unfilled_count ?? 0,
+  };
+}
+
+// ─── Resume option (for generation picker) ───────────────────────────────────
+
+interface ResumeOption {
+  id: string;
+  name: string;
+  role: string;
+}
+
+function toResumeOption(r: ResumeResponse): ResumeOption {
+  return {
+    id: r.id,
+    name: r.personalInfo?.fullname || `Resume …${r.id.slice(-8)}`,
+    role:
+      typeof r.professionalSummary === "object"
+        ? (r.professionalSummary?.targetRole ?? "")
+        : "",
   };
 }
 
@@ -345,38 +365,44 @@ export default function NotesPage() {
   const [notesGenerated, setNotesGenerated] = useState(false);
   const [notesLoading, setNotesLoading] = useState(true);
   const [targetRole, setTargetRole] = useState("");
-  // resume_id: prefer last-used resume stored by builder/enhancer flows
   const [resumeId, setResumeId] = useState<string>("");
+  const [availableResumes, setAvailableResumes] = useState<ResumeOption[]>([]);
 
-  // ── Load existing notes + resolve resume_id ──
-  // Wait until auth context finishes loading before doing anything,
-  // so we never call APIs before userId is available.
+  // ── Load all resumes (builder + enhanced) + existing notes ──
+  // Uses the same unified endpoint as the resume list page so all 4 resumes
+  // (or however many) appear in the picker, not just builder ones.
   useEffect(() => {
-    if (progressLoading) return; // userId not yet resolved — wait
+    if (progressLoading) return;
 
-    const storedResumeId = localStorage.getItem("current_resume_id") ?? "";
+    const storedId = localStorage.getItem("current_resume_id") ?? "";
 
-    if (storedResumeId) {
-      setResumeId(storedResumeId);
-      loadNotes(storedResumeId);
-      return;
-    }
+    getAllResumesUnified()
+      .then(({ builder_resumes, enhanced_resumes }) => {
+        const builderOptions = (builder_resumes as unknown as ResumeResponse[]).map(toResumeOption);
+        const enhancedOptions = (enhanced_resumes as EnhancedResumeSummary[]).map((r) => ({
+          id: r.id,
+          name: r.display_name || `Uploaded Resume …${r.id.slice(-8)}`,
+          role: "",
+        }));
+        const allOptions: ResumeOption[] = [...builderOptions, ...enhancedOptions];
 
-    // Nothing in storage — fetch latest resume from API
-    getAllResumes()
-      .then((resumes) => {
-        if (resumes && resumes.length > 0) {
-          const latestId = resumes[0].id;
-          setResumeId(latestId);
-          localStorage.setItem("current_resume_id", latestId);
-          loadNotes(latestId);
-        } else {
-          // No resumes at all — show pre-gen screen with the "no resume" warning
+        if (allOptions.length === 0) {
+          setAvailableResumes([]);
           setNotesLoading(false);
+          return;
         }
+
+        setAvailableResumes(allOptions);
+
+        // Prefer the stored id if it still exists across both lists; else first
+        const bestId = allOptions.some((r) => r.id === storedId)
+          ? storedId
+          : allOptions[0].id;
+        setResumeId(bestId);
+        localStorage.setItem("current_resume_id", bestId);
+        loadNotes(bestId);
       })
       .catch(() => {
-        // API error (auth not ready, network) — show pre-gen screen, not a redirect
         setNotesLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -390,11 +416,17 @@ export default function NotesPage() {
 
     getNotes(userId)
       .then((record) => {
-        if (record?.notes) {
+        const hasNotes =
+          record?.notes != null &&
+          typeof record.notes === "object" &&
+          Object.keys(record.notes).length > 0;
+
+        if (hasNotes) {
           setNotes(mapApiToNotesData(record.notes as Record<string, unknown>));
           setNotesGenerated(true);
           setContextNotesGenerated(true);
         }
+        // notes: {} → fall through, notesGenerated stays false → show generate screen
       })
       .catch(() => {
         // 404 = no notes yet → show generation screen
@@ -512,26 +544,68 @@ export default function NotesPage() {
 
         {/* Single card: resume + role + what you get */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-          {/* Resume status */}
-          <div className="flex items-center gap-2.5 pb-3 mb-3 border-b border-gray-100">
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${resumeId ? "bg-[#2557a7]/8" : "bg-gray-100"}`}>
-              <FileText size={13} className={resumeId ? "text-[#2557a7]" : "text-gray-400"} />
-            </div>
-            <div className="flex-1 min-w-0">
-              {resumeId ? (
-                <>
-                  <p className="text-sm font-medium text-gray-800">Resume detected</p>
-                  <p className="text-[11px] text-gray-400 truncate font-mono">{resumeId}</p>
-                </>
-              ) : (
-                <>
+          {/* Resume selection */}
+          <div className="pb-3 mb-3 border-b border-gray-100">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              {availableResumes.length > 1 ? "Select Resume" : "Resume"}
+            </p>
+
+            {availableResumes.length === 0 ? (
+              /* No resumes */
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                  <FileText size={13} className="text-gray-400" />
+                </div>
+                <div>
                   <p className="text-sm font-medium text-gray-700">No resume found</p>
                   <a href="/builder/start" className="text-[11px] text-[#2557a7] hover:underline">
                     Create or upload a resume first →
                   </a>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            ) : availableResumes.length === 1 ? (
+              /* Single resume — auto-selected */
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#2557a7]/10 flex items-center justify-center shrink-0">
+                  <FileText size={13} className="text-[#2557a7]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800">{availableResumes[0].name}</p>
+                  {availableResumes[0].role && (
+                    <p className="text-[11px] text-gray-400 truncate">{availableResumes[0].role}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Multiple resumes — radio picker */
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-0.5">
+                {availableResumes.map((r) => (
+                  <label
+                    key={r.id}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${
+                      resumeId === r.id
+                        ? "border-[#2557a7]/40 bg-[#2557a7]/5"
+                        : "border-gray-200 bg-white hover:border-[#2557a7]/20 hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="resume_select"
+                      value={r.id}
+                      checked={resumeId === r.id}
+                      onChange={() => setResumeId(r.id)}
+                      className="accent-[#2557a7] shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{r.name}</p>
+                      {r.role && (
+                        <p className="text-[11px] text-gray-400 truncate">{r.role}</p>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Experience level */}

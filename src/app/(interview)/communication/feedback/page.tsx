@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { submitFinalReport } from '@/api/communicationApi';
 import { getProfile } from '@/api/userApi';
@@ -10,6 +10,8 @@ import logger from '@/lib/logger';
 
 export default function FeedbackPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isTimeout = searchParams.get('reason') === 'timeout';
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
@@ -34,7 +36,7 @@ export default function FeedbackPage() {
     try {
       logger.info('Feedback submitted:', { rating, feedbackText });
       await submitFinalReportAPI();
-      router.push('/communication/report');
+      router.push(isTimeout ? '/dashboard' : '/communication/report');
     } catch (error) {
       logger.error('Error submitting feedback:', error);
       alert('Failed to submit feedback. Please try again.');
@@ -46,7 +48,7 @@ export default function FeedbackPage() {
     setIsSubmitting(true);
     try {
       await submitFinalReportAPI();
-      router.push('/communication/report');
+      router.push(isTimeout ? '/dashboard' : '/communication/report');
     } catch (error) {
       logger.error('Error submitting final report:', error);
       alert('Failed to generate report. Please try again.');
@@ -203,7 +205,9 @@ export default function FeedbackPage() {
           </div>
 
           <p className="text-center text-xs text-gray-400 mt-4">
-            Submitting or skipping will take you to your assessment report.
+            {isTimeout
+              ? 'Submitting or skipping will take you to your dashboard.'
+              : 'Submitting or skipping will take you to your assessment report.'}
           </p>
 
         </div>

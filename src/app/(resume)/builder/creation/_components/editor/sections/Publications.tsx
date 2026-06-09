@@ -297,7 +297,8 @@ const Publications: React.FC = () => {
                         placeholder="Title of your publication"
                         onChange={(e) => handleChange(editIndex, "title", e.target.value)}
                         onBlur={() => validateRequired("publication", globalIndex, { title: publication.title })}
-                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                        maxLength={200}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`publication-${globalIndex}-title`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
                       {errors[`publication-${globalIndex}-title`] && (
                         <span className="text-xs text-red-500">
@@ -316,6 +317,7 @@ const Publications: React.FC = () => {
                         value={publication.authors}
                         placeholder="Your name and co-authors"
                         onChange={(e) => handleChange(editIndex, "authors", e.target.value)}
+                        maxLength={200}
                         className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
                       />
                     </div>
@@ -331,7 +333,8 @@ const Publications: React.FC = () => {
                         placeholder="Journal, Magazine, or Website name"
                         onChange={(e) => handleChange(editIndex, "publicationName", e.target.value)}
                         onBlur={() => validateRequired("publication", globalIndex, { publicationName: publication.publicationName })}
-                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                        maxLength={150}
+                        className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`publication-${globalIndex}-publicationName`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                       />
                       {errors[`publication-${globalIndex}-publicationName`] && (
                         <span className="text-xs text-red-500">

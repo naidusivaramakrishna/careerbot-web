@@ -1,6 +1,4 @@
 import React, { useRef, useEffect, useState } from "react";
-import SafeHTML from "@/components/common/SafeHTML";
-import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -8,10 +6,12 @@ import AISuggestions from "../AISuggestions";
 import { toast } from "sonner";
 import MonthYearPicker from "../MonthYearPicker";
 import AutocompleteInput from "../AutocompleteInput";
+import TechnologyChipsInput from "../TechnologyChipsInput";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { companies } from "../../../../../../../types/companies";
 import { locations } from "../../../../../../../types/locations";
 import { roles } from "../../../../../../../types/roles";
+import { technologies } from "../../../../../../../types/technologies";
 import {
   FaSpellCheck,
   FaListUl,
@@ -36,7 +36,8 @@ interface InternshipEntry {
   currentlyWorking: boolean;
   description: string;
   location: string;
-  id?: string; // ✅ NEW: Add item ID for backend tracking
+  technologies: string[];
+  id?: string;
 }
 
 const emptyInternship = (): InternshipEntry => ({
@@ -47,6 +48,7 @@ const emptyInternship = (): InternshipEntry => ({
   currentlyWorking: false,
   description: "",
   location: "",
+  technologies: [],
 });
 
 // Reusable Toolbar Button Component
@@ -60,7 +62,7 @@ interface ToolbarButtonProps {
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isActive = false }) => (
   <button
     type="button"
-    onClick={onClick}
+    onMouseDown={(e) => { e.preventDefault(); onClick(); }}
     className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 transition ${
       isActive ? "text-[#2557a7] border border-[#2557a7] bg-blue-50" : "text-gray-400 hover:text-blue-600"
     }`}
@@ -269,22 +271,34 @@ const Internships: React.FC = () => {
     setEditingOriginalEntry(null);
   };
 
+  const cleanHtmlContent = (html: string): string => {
+    if (!html) return "";
+    const textOnly = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+    if (!textOnly) return "";
+    return html
+      .replace(/(\s*<br\s*\/?>\s*)+$/gi, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
+  };
+
   const exec = (idx: number, command: string, value?: string) => {
     const editor = editorRefs.current[idx];
     if (!editor) return;
-    
+
     editor.focus();
     document.execCommand(command, false, value);
-    
+
     setTimeout(() => {
-      handleChange(idx, "description", editor.innerHTML || "");
+      const content = cleanHtmlContent(editor.innerHTML);
+      handleChange(idx, "description", content);
     }, 0);
   };
 
   const onEditorInput = (idx: number) => {
     const el = editorRefs.current[idx];
     if (!el) return;
-    handleChange(idx, "description", el.innerHTML || "");
+    const content = cleanHtmlContent(el.innerHTML);
+    handleChange(idx, "description", content);
   };
 
   function startToLabel(val: string): string {
@@ -347,7 +361,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = sanitizeHtml(suggestion);
+      el.innerHTML = suggestion;
       handleChange(editIndex, "description", suggestion);
       
       setTimeout(() => {
@@ -386,8 +400,10 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
   useEffect(() => {
     editingEntries.forEach((internship, idx) => {
       const el = editorRefs.current[idx];
-      if (el && internship.description && el.innerHTML !== internship.description) {
-        el.innerHTML = sanitizeHtml(internship.description);
+      if (el && internship.description) {
+        if (document.activeElement !== el && el.innerHTML !== internship.description) {
+          el.innerHTML = internship.description;
+        }
       }
     });
   }, [editingEntries]);
@@ -421,10 +437,23 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                     </div>
                   )}
                   
+                  {internship.technologies && internship.technologies.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {internship.technologies.map((tech, techIndex) => (
+                        <span
+                          key={techIndex}
+                          className="inline-flex items-center bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full text-xs font-medium"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {internship.description && (
-                    <SafeHTML
+                    <div
                       className="text-sm text-[#404040] mt-1 line-clamp-2"
-                      content={internship.description}
+                      dangerouslySetInnerHTML={{ __html: internship.description }}
                     />
                   )}
                 </div>
@@ -502,6 +531,8 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                         placeholder="Company"
                         suggestions={companies}
                         error={errors[`internship-${globalIndex}-company`]}
+                        className={errors[`internship-${globalIndex}-company`] ? "border-red-500" : ""}
+                        maxLength={100}
                       />
 
                       <AutocompleteInput
@@ -513,6 +544,8 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                         placeholder="Role"
                         suggestions={roles}
                         error={errors[`internship-${globalIndex}-role`]}
+                        className={errors[`internship-${globalIndex}-role`] ? "border-red-500" : ""}
+                        maxLength={100}
                       />
                     </div>
 
@@ -524,6 +557,8 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                           value={internship.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
+                          error={errors[`internship-${globalIndex}-startDate`]}
+                          maxDate={internship.endDate}
                         />
                       </div>
 
@@ -534,6 +569,8 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                             value={internship.endDate}
                             onChange={(val) => handleChange(editIndex, "endDate", val)}
                             placeholder="MM/YY"
+                            error={errors[`internship-${globalIndex}-endDate`]}
+                            minDate={internship.startDate}
                           />
                         </div>
                       )}
@@ -544,6 +581,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                         onChange={(val) => handleChange(editIndex, "location", val)}
                         placeholder="City, State"
                         suggestions={locations}
+                        maxLength={100}
                       />
                     </div>
 
@@ -557,6 +595,17 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                       />
                       <label className="text-xs font-semibold text-gray-700">Currently Working Here</label>
                     </div>
+
+                    {/* Technologies */}
+                    <TechnologyChipsInput
+                      label="Technologies Used"
+                      selectedTechnologies={internship.technologies ?? []}
+                      onTechnologiesChange={(techs) =>
+                        handleChange(editIndex, "technologies", techs)
+                      }
+                      suggestions={technologies}
+                      placeholder="Type to add technologies..."
+                    />
 
                     {/* Description */}
                     <div ref={(el) => { descriptionRefs.current[editIndex] = el; }} className="flex flex-col gap-1 relative">
@@ -595,8 +644,9 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                           ref={(el) => { editorRefs.current[editIndex] = el; }}
                           contentEditable
                           suppressContentEditableWarning
+                          lang="en"
                           onInput={() => onEditorInput(editIndex)}
-                          className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7]"
+                          className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                           spellCheck={spellCheckEnabled}
                         />
                       </div>

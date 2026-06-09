@@ -289,7 +289,8 @@ const References: React.FC = () => {
                           placeholder="Full Name"
                           onChange={(e) => handleChange(editIndex, "name", e.target.value)}
                           onBlur={() => validateRequired("reference", globalIndex, { name: reference.name })}
-                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
+                          maxLength={100}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`reference-${globalIndex}-name`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                         />
                         {errors[`reference-${globalIndex}-name`] && (
                           <span className="text-xs text-red-500">
@@ -307,6 +308,7 @@ const References: React.FC = () => {
                           value={reference.relation}
                           placeholder="Manager, Colleague, Professor, etc."
                           onChange={(e) => handleChange(editIndex, "relation", e.target.value)}
+                          maxLength={80}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
                         />
                       </div>
@@ -321,6 +323,7 @@ const References: React.FC = () => {
                           value={reference.contact}
                           placeholder="Email or Phone Number"
                           onChange={(e) => handleChange(editIndex, "contact", e.target.value)}
+                          maxLength={254}
                           className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500"
                         />
                       </div>

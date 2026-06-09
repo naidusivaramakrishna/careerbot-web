@@ -289,7 +289,8 @@ const Awards: React.FC = () => {
                           placeholder="Award Title"
                           onChange={(e) => handleChange(editIndex, "title", e.target.value)}
                           onBlur={() => validateRequired("award", globalIndex, { title: award.title })}
-                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]`}
+                          maxLength={150}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-2 focus:outline-none ${errors[`award-${globalIndex}-title`] ? "border-red-500 focus:border-red-500" : "border-transparent focus:border-blue-500"}`}
                         />
                         {errors[`award-${globalIndex}-title`] && (
                           <span className="text-xs text-red-500">
@@ -307,6 +308,7 @@ const Awards: React.FC = () => {
                           value={award.issuedBy}
                           placeholder="Organization Name"
                           onChange={(e) => handleChange(editIndex, "issuedBy", e.target.value)}
+                          maxLength={100}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]`}
                         />
                       </div>
@@ -321,6 +323,7 @@ const Awards: React.FC = () => {
                           value={award.year}
                           placeholder="YYYY"
                           onChange={(e) => handleChange(editIndex, "year", e.target.value)}
+                          maxLength={4}
                           className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]"
                         />
                       </div>

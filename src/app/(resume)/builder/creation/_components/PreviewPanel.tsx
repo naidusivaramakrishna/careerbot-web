@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useResume } from "../_context/ResumeContext";
 import { useScore } from "../_context/ScoreContext";
+import { useResumeScorePreview } from "../_hooks/useResumeScorePreview";
 import TemplateOne from "./templates/TemplateOne";
 import TemplateTwo from "./templates/TemplateTwo";
 import TemplateThree from "./templates/TemplateThree";
@@ -53,19 +54,26 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   isEnhancedResume = false,
 }) => {
   const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, sectionOrder } = useResume();
-  const { overallScore, setOverallScore } = useScore();
+  const { canonicalScore, setCanonicalScore } = useScore();
+  const previewScore = useResumeScorePreview(resumeData);
+
+  // For enhanced resumes, seed the canonical score from the enhancer's ATS score
+  // so the toolbar and any other score consumers show the correct value.
+  useEffect(() => {
+    if (isEnhancedResume && enhancedAtsScore?.final_score) {
+      setCanonicalScore(Math.round(enhancedAtsScore.final_score));
+    }
+  }, [isEnhancedResume, enhancedAtsScore, setCanonicalScore]);
+
+  const displayScore = isEnhancedResume && enhancedAtsScore?.final_score
+    ? Math.round(enhancedAtsScore.final_score)
+    : (canonicalScore ?? previewScore.score);
+  const scoreLabel = "Score";
 
   useEffect(() => {
     console.warn("📋 PreviewPanel - sectionOrder:", sectionOrder, "selectedTemplate:", selectedTemplate);
   }, [sectionOrder, selectedTemplate]);
 
-  // Set score in ScoreContext from enhanced resume ATS data on load
-  useEffect(() => {
-    if (resumeSource === "enhanced" && enhancedAtsScore) {
-      const score = Number(enhancedAtsScore.final_score ?? enhancedAtsScore.Percentage ?? 0);
-      setOverallScore(score);
-    }
-  }, [resumeSource, enhancedAtsScore, setOverallScore]);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -402,26 +410,22 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       {/* Toolbar - When Sidebar is Open */}
       {isTemplateSidebarOpen && (
         <div
-          className="flex items-center justify-center border border-gray-300 rounded px-2 py-1.5 mb-0 gap-2 bg-white shadow-sm space-x-2 relative z-30 transition-all duration-300 ease-in-out"
+          className="flex items-center justify-between border border-gray-300 rounded px-6 py-1.5 mb-0 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out"
           style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
         >
-          <div className={`flex flex-col items-center justify-center ml-6 bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold relative`}>
-            <span className="text-[#2d2d2d]">{`Score ${overallScore}%`}</span>
+          <div className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold">
+            <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
           </div>
-
-          <div className="flex-1"></div>
 
           <div className="text-base font-semibold text-[#2d2d2d]">
             <span>PREVIEW</span>
           </div>
 
-          <div className="flex-1"></div>
-
-          <div className="ml-1 relative">
+          <div className="relative">
             <button
               onClick={() => setShowExportOptions((prev) => !prev)}
               disabled={isDownloading}
-              className={`flex items-center gap-1 mr-6 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
+              className={`flex items-center gap-1 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
                 }`}
             >
               <ArrowDownToLine size={16} />
@@ -458,7 +462,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               onClick={handleResumeScoreClick}
               className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-[#d4e6f7] transition cursor-pointer"
             >
-              <span className="text-[#2d2d2d]">{`Score ${overallScore}%`}</span>
+              <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
             </button>
 
             <div className="flex items-center gap-2">

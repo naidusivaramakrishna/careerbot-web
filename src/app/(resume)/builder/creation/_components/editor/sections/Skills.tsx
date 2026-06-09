@@ -1,5 +1,6 @@
 "use client";
 import React, { useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { useResume, type CustomCategory } from "../../../_context/ResumeContext";
 import SectionTipsPanel from "../SectionTipsPanel";
@@ -11,10 +12,9 @@ import { toast } from "sonner";
 const CATEGORY_KEY_MAP: Record<string, string> = {
   programming_languages: "programmingLanguages",
   frameworks: "frameworks",
-  databases: "databases",
-  tools: "tools",
-  cloud_platforms: "cloudPlatforms",
   soft_skills: "softSkills",
+  project_management: "projectManagement",
+  marketing_sales: "marketingSales",
 };
 
 function uid(): string {
@@ -35,22 +35,16 @@ const SKILL_CATEGORIES = [
     suggestions: ["React", "Angular", "Vue.js", "Next.js", "Django", "FastAPI", "Flask", "Node.js", "Express.js", "Spring Boot", "ASP.NET", "Laravel"],
   },
   {
-    key: "databases",
-    label: "Databases",
-    placeholder: "e.g., PostgreSQL, MongoDB...",
-    suggestions: ["PostgreSQL", "MongoDB", "MySQL", "Redis", "DynamoDB", "Firebase", "Cassandra", "Oracle", "SQL Server", "SQLite"],
+    key: "project_management",
+    label: "Project Management",
+    placeholder: "e.g., Agile, Scrum, PMP...",
+    suggestions: ["Agile", "Scrum", "Kanban", "Waterfall", "PRINCE2", "PMP", "Six Sigma", "Lean", "Risk Management", "Budgeting", "Stakeholder Management", "Change Management"],
   },
   {
-    key: "tools",
-    label: "Tools & Technologies",
-    placeholder: "e.g., Docker, Git, Jenkins...",
-    suggestions: ["Docker", "Kubernetes", "Git", "Jenkins", "JIRA", "GitHub", "GitLab", "CircleCI", "Terraform", "Ansible", "Webpack", "Babel"],
-  },
-  {
-    key: "cloud_platforms",
-    label: "Cloud Platforms",
-    placeholder: "e.g., AWS, Azure, Google Cloud...",
-    suggestions: ["AWS", "Azure", "Google Cloud", "Heroku", "DigitalOcean", "Netlify", "Vercel", "IBM Cloud"],
+    key: "marketing_sales",
+    label: "Marketing & Sales",
+    placeholder: "e.g., SEO, CRM, Digital Marketing...",
+    suggestions: ["Digital Marketing", "SEO", "Social Media Marketing", "Content Marketing", "Email Marketing", "Market Research", "CRM", "Brand Management", "Sales Strategy", "Google Analytics", "Lead Generation", "Copywriting"],
   },
   {
     key: "soft_skills",
@@ -63,6 +57,8 @@ const SKILL_CATEGORIES = [
 const Skills: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
   const { errors } = useValidation();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   const containerRef = useRef<HTMLDivElement>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
@@ -81,10 +77,9 @@ const Skills: React.FC = () => {
   const categorizedSkills = resumeData.categorizedSkills || {
     programming_languages: [],
     frameworks: [],
-    databases: [],
-    tools: [],
-    cloud_platforms: [],
     soft_skills: [],
+    project_management: [],
+    marketing_sales: [],
   };
 
   const customCategories: CustomCategory[] = categorizedSkills.custom_categories || [];
@@ -94,10 +89,9 @@ const Skills: React.FC = () => {
     const allSkills = [
       ...updated.programming_languages,
       ...updated.frameworks,
-      ...updated.databases,
-      ...updated.tools,
-      ...updated.cloud_platforms,
       ...updated.soft_skills,
+      ...(updated.project_management || []),
+      ...(updated.marketing_sales || []),
       ...(updated.custom_categories || []).flatMap((c) => c.skills),
     ];
     setResumeData({ ...resumeData, categorizedSkills: updated, skills: allSkills });
@@ -177,8 +171,8 @@ const Skills: React.FC = () => {
           className="flex-1 h-[500px] overflow-y-auto mt-6 scrollbar-hide pr-2"
         >
           <div className="flex flex-col gap-6">
-            {/* Standard categories */}
-            {SKILL_CATEGORIES.filter((cat) => !hiddenPredefined.includes(cat.key)).map((cat) => {
+            {/* Standard categories — hidden for enhanced resumes */}
+            {!isEnhancedResume && SKILL_CATEGORIES.filter((cat) => !hiddenPredefined.includes(cat.key)).map((cat) => {
               const currentSkills =
                 (categorizedSkills as unknown as Record<string, string[]>)[cat.key] || [];
               return (
@@ -201,18 +195,21 @@ const Skills: React.FC = () => {
                               setResumeData({ ...resumeData, categorizedSkills: { ...categorizedSkills, skill_id_map: updatedMap } });
                             }
                             toast.success("Skill added successfully.");
-                          } catch {
-                            toast.error("Failed to add skill. Please try again.");
+                          } catch (err) {
+                            const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
+                            toast.error(errorMsg);
                             throw new Error("api_failed");
                           }
                         } : undefined}
                         onRemoveSkill={resumeData.resume_id ? async (skill) => {
                           try {
+                            const apiCategory = CATEGORY_KEY_MAP[cat.key] ?? cat.key;
                             const skillId = categorizedSkills.skill_id_map?.[`${cat.key}:${skill}`] ?? skill;
-                            await deleteSkillById(resumeData.resume_id!, cat.key, skillId);
+                            await deleteSkillById(resumeData.resume_id!, apiCategory, skillId);
                             toast.success("Skill removed successfully.");
-                          } catch {
-                            toast.error("Failed to remove skill. Please try again.");
+                          } catch (err) {
+                            const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";
+                            toast.error(errorMsg);
                             throw new Error("api_failed");
                           }
                         } : undefined}
@@ -249,6 +246,7 @@ const Skills: React.FC = () => {
                       }}
                       ref={(el) => { nameInputRefs.current[custom.id] = el; }}
                       placeholder="Category name (e.g. Architecture Patterns)"
+                      maxLength={80}
                       className="text-sm font-semibold text-[#3b3b3b] bg-transparent border-none outline-none w-full placeholder:text-gray-400 mb-1"
                     />
                     <TechnologyChipsInput
@@ -262,8 +260,9 @@ const Skills: React.FC = () => {
                         try {
                           await addSkillToCategory(resumeData.resume_id!, custom.name, skill);
                           toast.success("Skill added successfully.");
-                        } catch {
-                          toast.error("Failed to add skill. Please try again.");
+                        } catch (err) {
+                          const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
+                          toast.error(errorMsg);
                           throw new Error("api_failed");
                         }
                       } : undefined}
@@ -271,8 +270,9 @@ const Skills: React.FC = () => {
                         try {
                           await deleteSkillById(resumeData.resume_id!, custom.name, skill);
                           toast.success("Skill removed successfully.");
-                        } catch {
-                          toast.error("Failed to remove skill. Please try again.");
+                        } catch (err) {
+                          const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";
+                          toast.error(errorMsg);
                           throw new Error("api_failed");
                         }
                       } : undefined}
