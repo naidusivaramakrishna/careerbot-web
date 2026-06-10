@@ -18,6 +18,7 @@
     "test:mock-interview": "vitest src/tests/unit/features/mock-interview",
     "test:settings": "vitest src/tests/unit/features/settings",
     "test:credits": "vitest src/tests/unit/features/credits",
+    "test:templates": "vitest src/tests/unit/features/templates-catalogues",
     "test:all-features": "vitest src/tests/unit/features",
     "test:integration": "vitest src/tests/integration/features",
     "test:integration:watch": "vitest src/tests/integration/features --watch",

@@ -84,11 +84,19 @@ export async function middleware(request: NextRequest) {
     // open and let an unverifiable token through.
     const isProtectedArea =
         pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
-    if (isProtectedArea && !process.env.JWT_SECRET) {
-        return NextResponse.redirect(new URL('/403', request.url));
-    }
 
-    // 1) Verify the access token if we have one.
+    const loginRedirect = () => {
+        const loginUrl = pathname.startsWith(ADMIN_PREFIX)
+            ? '/admin/login'
+            : pathname.startsWith(RECRUITER_PREFIX)
+            ? '/recruiter/auth'
+            : buildUserLoginUrl(request);
+        return NextResponse.redirect(
+            typeof loginUrl === 'string' ? new URL(loginUrl, request.url) : loginUrl
+        );
+    }
+ 
+    // JWT role enforcement — decode access_token to check role claim
     if (token && process.env.JWT_SECRET) {
         try {
             const { payload } = await jwtVerify(
@@ -104,11 +112,11 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // 2) No verified token. Non-role-gated pages: a refresh cookie is enough —
+    // 2) No verified token. Non-protected pages: a refresh cookie is enough —
     //    let the request through; the client HTTP interceptor refreshes on the
     //    first 401.
     if (!isProtectedArea) {
-        return refreshToken ? NextResponse.next() : redirectToLogin(request);
+        return refreshToken ? NextResponse.next() : loginRedirect();
     }
 
     // 3) Role-gated area with no verified token (access token missing OR
