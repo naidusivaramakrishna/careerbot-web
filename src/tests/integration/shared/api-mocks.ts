@@ -145,6 +145,168 @@ export const mockResponses = {
     },
   },
 
+  ats: {
+    parsed: {
+      resume_id: 'ats-resume-123',
+      cache_hit: false,
+      parsed_data: {
+        name: 'John Doe',
+        email: 'john@example.com',
+        skills: ['JavaScript', 'React', 'Node.js'],
+        experience: [{ role: 'Software Engineer', company: 'TechCorp', years: 2 }],
+        education: [{ degree: 'B.Tech', institution: 'MIT' }],
+      },
+    },
+    enhanced: {
+      resume_id: 'ats-resume-123',
+      enhanced_resume: { name: 'John Doe', skills: ['JavaScript', 'React', 'Node.js'] },
+      enhancer_state: {
+        ats_breakdown: {
+          FinalScore: 82,
+          SectionBreakdown: {
+            ContactInfo: { score: 90, max: 100 },
+            Skills: { score: 85, max: 100 },
+            Experience: { score: 80, max: 100 },
+            Education: { score: 75, max: 100 },
+            Keywords: { score: 78, max: 100 },
+          },
+        },
+      },
+      ats_display: {
+        score: 82,
+        grade: 'Good',
+        sections: [],
+      },
+    },
+    resumeList: [
+      {
+        id: 'ats-resume-123',
+        personalInfo: { name: 'John Doe' },
+        work_experience: [{ role: 'Software Engineer' }],
+        builder_score: { score: 82 },
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    resumeDetail: {
+      id: 'ats-resume-123',
+      personalInfo: { name: 'John Doe' },
+      work_experience: [{ role: 'Software Engineer' }],
+      builder_score: { score: 82 },
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    },
+  },
+
+  jobs: {
+    jobList: {
+      success: true,
+      data: [
+        {
+          id: 'job-001',
+          title: 'Senior Frontend Developer',
+          company: 'TechCorp',
+          location: 'Bangalore, India',
+          job_type: 'Full-time',
+          work_mode: 'Hybrid',
+          salary: '₹20-30 LPA',
+          skills: 'React, TypeScript, Node.js',
+          experience_level: '3-5 years',
+          source: 'linkedin',
+          is_applied: false,
+          posted_date: new Date().toISOString(),
+        },
+        {
+          id: 'job-002',
+          title: 'Backend Engineer',
+          company: 'StartupXYZ',
+          location: 'Mumbai, India',
+          job_type: 'Contract',
+          work_mode: 'Remote',
+          skills: 'Python, Django, PostgreSQL',
+          experience_level: '2-4 years',
+          source: 'naukri',
+          is_applied: false,
+          posted_date: new Date().toISOString(),
+        },
+      ],
+      pagination: { total: 2, skip: 0, limit: 20, page: 1, total_pages: 1, has_next: false, has_prev: false },
+    },
+    jobDetail: {
+      success: true,
+      data: {
+        id: 'job-001',
+        title: 'Senior Frontend Developer',
+        company: 'TechCorp',
+        location: 'Bangalore, India',
+        job_type: 'Full-time',
+        work_mode: 'Hybrid',
+        description: 'We are looking for a Senior Frontend Developer...',
+        skills_required: ['React', 'TypeScript', 'Node.js'],
+        salary: '₹20-30 LPA',
+        experience_level: '3-5 years',
+        source: 'linkedin',
+        is_applied: false,
+      },
+    },
+    smartMatch: {
+      jobs: [
+        {
+          job: {
+            id: 'job-001',
+            title: 'Senior Frontend Developer',
+            company: 'TechCorp',
+            location: 'Bangalore, India',
+          },
+          match: {
+            job_id: 'job-001',
+            score: 92,
+            band: 'strong',
+            breakdown: { skills: 95, title: 90, experience: 88, education: 85, location: 100 },
+            matched_skills: ['React', 'TypeScript'],
+            missing_skills: ['GraphQL'],
+            scorer_version: 2,
+            computed_at: new Date().toISOString(),
+          },
+        },
+      ],
+      total: 1,
+      skip: 0,
+      limit: 50,
+      cache_hit: false,
+      computed_in_ms: 120,
+      scorer_version: 2,
+      profile_version: 1,
+    },
+    application: {
+      id: 'app-001',
+      job_id: 'job-001',
+      job_title: 'Senior Frontend Developer',
+      company: 'TechCorp',
+      candidate_id: 'user-123',
+      status: 'new' as const,
+      applied_at: new Date().toISOString(),
+    },
+    analytics: {
+      success: true,
+      data: {
+        total_jobs: 150,
+        jobs_by_type: { 'Full-time': 100, 'Contract': 30, 'Part-time': 20 },
+        jobs_by_location: { 'Bangalore': 60, 'Mumbai': 50, 'Remote': 40 },
+        top_skills: ['React', 'Python', 'Node.js', 'TypeScript'],
+        total_applications: 25,
+        success_rate: 0.4,
+      },
+    },
+    chatResponse: {
+      response: 'This job requires 3-5 years of experience with React.',
+      intent: 'job_details',
+      intent_type: 'free' as const,
+      session_id: 'chat-session-001',
+      suggested_action: null,
+    },
+  },
+
   mockInterview: {
     notesGenerated: {
       notes_id: 'notes-789',

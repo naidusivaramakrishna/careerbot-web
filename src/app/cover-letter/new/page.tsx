@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { parseJDText } from '@/api/parserApi';
 import { extractResume } from '@/api/resumeParsingApi';
@@ -52,6 +52,8 @@ export default function CoverLetterNewPage() {
 
 function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialJd = searchParams.get('jd') ?? '';
   const latest = useLatestParsedResume();
   const { userId } = useCurrentUserId();
   const lastAttemptKeyRef = useRef<string | null>(null);
@@ -82,6 +84,23 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
       setApiError(message);
     },
   });
+
+  const autoTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      !autoTriggeredRef.current &&
+      initialJd.trim().length >= 50 &&
+      parsedResumeId &&
+      !latest.isLoading &&
+      !isPreparing &&
+      !generation.isLoading
+    ) {
+      autoTriggeredRef.current = true;
+      void handleSubmit({ job_description: initialJd.trim(), options: { tone: 'professional', min_words: 250, max_words: 400, include_debug_metadata: false } });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedResumeId, latest.isLoading]);
 
   if (latest.isLoading && !resume) return <PageLoader />;
 
@@ -138,6 +157,18 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
     }
   }
 
+  // When coming from extension (auto-triggered), show a full-screen loader instead of the form
+  if (initialJd.trim().length >= 50 && (isPreparing || generation.isLoading)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ backgroundColor: "#eef2fb" }}>
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-[#2557a7]" />
+        <p className="text-sm font-medium text-slate-600">
+          {isPreparing ? 'Preparing job description…' : 'Generating your cover letter…'}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#eef2fb" }}>
       {/* Top bar */}
@@ -165,6 +196,7 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
       <div className="max-w-2xl mx-auto px-4 py-8">
         <CoverLetterForm
           isSubmitting={isPreparing || generation.isLoading}
+          initialJd={initialJd}
           apiError={apiError}
           validationErrors={
             apiError === 'Please fix the highlighted fields and try again.' &&

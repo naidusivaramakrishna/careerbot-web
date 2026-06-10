@@ -29,56 +29,52 @@
   <div id="state-login" class="state hidden">
     <div class="login-body">
 
-      <!-- Hero band -->
+      <!-- Hero -->
       <div class="login-hero">
         <div class="login-hero-icon">
-          <img src="../icons/icon48.png" alt="" style="width:28px;height:28px;object-fit:contain;border-radius:6px" onerror="cbIconFallback(this.parentElement,28)" />
+          <img src="../icons/icon48.png" alt="" style="width:32px;height:32px;object-fit:contain;border-radius:8px" onerror="cbIconFallback(this.parentElement,32)" />
         </div>
-        <h1 class="login-headline">Analyze any job.<br><span>Improve your resume.</span></h1>
-        <p class="login-desc">Instant ATS score, missing keywords &amp; job match — right in your browser.</p>
+        <h1 class="login-headline">Land your <span>dream job</span><br>faster with AI.</h1>
+        <p class="login-desc">Analyze any job posting instantly — ATS score, missing keywords, job match &amp; AI cover letter.</p>
       </div>
 
-      <!-- Feature pills -->
-      <div class="login-pills">
-        <span class="login-pill login-pill-blue">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          ATS Score
-        </span>
-        <span class="login-pill login-pill-green">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Keywords
-        </span>
-        <span class="login-pill login-pill-amber">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          Job Match %
-        </span>
-      </div>
-
-      <!-- CTA buttons -->
+      <!-- CTA buttons side by side -->
       <div class="login-actions">
-        <button id="btn-login" class="btn-login-primary">Sign In to CareerBot</button>
-        <button id="btn-signup" class="btn-login-outline">Create Free Account</button>
+        <button id="btn-login" class="btn-login-primary">Sign In</button>
+        <button id="btn-signup" class="btn-login-outline">Create Account</button>
       </div>
 
-      <!-- Feature list -->
-      <div class="login-feature-list">
-        <div class="lfl-item">
-          <div class="lfl-icon lfl-icon-blue">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <p class="login-footer-note">Free to get started · No credit card needed</p>
+
+      <!-- Feature grid -->
+      <div class="login-feature-grid">
+        <div class="lfg-card">
+          <div class="lfg-icon lfg-icon-blue">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           </div>
-          <span class="lfl-text"><strong>ATS Score</strong> — See how well your resume matches</span>
+          <span class="lfg-label">ATS Score</span>
+          <span class="lfg-sub">Resume fit check</span>
         </div>
-        <div class="lfl-item">
-          <div class="lfl-icon lfl-icon-green">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div class="lfg-card">
+          <div class="lfg-icon lfg-icon-green">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </div>
-          <span class="lfl-text"><strong>Missing Keywords</strong> — Know exactly what to add</span>
+          <span class="lfg-label">Keywords</span>
+          <span class="lfg-sub">What's missing</span>
         </div>
-        <div class="lfl-item">
-          <div class="lfl-icon lfl-icon-amber">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div class="lfg-card">
+          <div class="lfg-icon lfg-icon-amber">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           </div>
-          <span class="lfl-text"><strong>Job Match %</strong> — Instant compatibility score</span>
+          <span class="lfg-label">Job Match</span>
+          <span class="lfg-sub">Compatibility %</span>
+        </div>
+        <div class="lfg-card">
+          <div class="lfg-icon lfg-icon-purple">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+          </div>
+          <span class="lfg-label">Cover Letter</span>
+          <span class="lfg-sub">AI-written fast</span>
         </div>
       </div>
 

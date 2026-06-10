@@ -392,6 +392,44 @@ export async function matcherRemoveSkill(match_id: string, skills: string | stri
   }
 }
 
+/* ========== ENHANCE APPLY / REMOVE ========== */
+
+export async function matcherEnhanceApply(match_id: string, suggestion_id: string, fix_type = "auto", value?: string) {
+  const resp = await httpClient.post<Record<string, unknown>>(
+    `/matcher/enhance/apply/${match_id}`,
+    { suggestion_id, fix_type, value: value ?? null, include_resume: true }
+  );
+  return resp.data;
+}
+
+export async function matcherEnhanceRemove(match_id: string, suggestion_id: string) {
+  const resp = await httpClient.post<Record<string, unknown>>(
+    `/matcher/enhance/remove/${match_id}`,
+    { suggestion_id }
+  );
+  return resp.data;
+}
+
+/* ========== RESUME DOWNLOAD ========== */
+
+export async function downloadResumePdf(resume_id: string, filename?: string): Promise<void> {
+  const response = await httpClient.get(`/parser/download/${resume_id}`, {
+    params: { format: "pdf", use_original: false, preserve_template: false },
+    responseType: "blob",
+  });
+  const contentDisposition = (response.headers as Record<string, string>)["content-disposition"] ?? "";
+  const serverFilename = contentDisposition.match(/filename="?([^"]+)"?/)?.[1];
+  const blob = new Blob([response.data as BlobPart], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = serverFilename ?? filename ?? `resume_${resume_id}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 /* ========== EXPORT ========== */
 export const parserApi = {
   parseResume,

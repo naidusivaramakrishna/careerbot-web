@@ -111,6 +111,100 @@ export const handlers = [
     return HttpResponse.json(mockResponses.mockInterview.interviewComplete);
   }),
 
+  // ==================== Jobs API ====================
+  http.get(`${API_BASE}/v1/jobs/all`, () => {
+    return HttpResponse.json(mockResponses.jobs.jobList);
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/list`, () => {
+    return HttpResponse.json({
+      success: true,
+      data: mockResponses.jobs.jobList.data.map(({ id, title, company, location, job_type }) => ({
+        id, title, company, location, job_type,
+      })),
+    });
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/matched`, () => {
+    return HttpResponse.json(mockResponses.jobs.smartMatch);
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/analytics/stats`, () => {
+    return HttpResponse.json(mockResponses.jobs.analytics);
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/health`, () => {
+    return HttpResponse.json({ success: true, data: { status: 'ok' } });
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/:jobId`, () => {
+    return HttpResponse.json(mockResponses.jobs.jobDetail);
+  }),
+
+  http.post(`${API_BASE}/v1/jobs/`, () => {
+    return HttpResponse.json({ success: true, data: mockResponses.jobs.jobDetail.data });
+  }),
+
+  http.put(`${API_BASE}/v1/jobs/:jobId`, () => {
+    return HttpResponse.json({ success: true, data: mockResponses.jobs.jobDetail.data });
+  }),
+
+  http.delete(`${API_BASE}/v1/jobs/:jobId`, () => {
+    return HttpResponse.json({ success: true, data: { id: 'job-001' } });
+  }),
+
+  http.post(`${API_BASE}/v1/jobs/:jobId/apply`, () => {
+    return HttpResponse.json(mockResponses.jobs.application);
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/:jobId/applications`, () => {
+    return HttpResponse.json({
+      job_id: 'job-001',
+      total: 1,
+      applications: [mockResponses.jobs.application],
+    });
+  }),
+
+  http.post(`${API_BASE}/v1/jobs/:jobId/chat`, () => {
+    return HttpResponse.json(mockResponses.jobs.chatResponse);
+  }),
+
+  http.delete(`${API_BASE}/v1/jobs/cache/clear`, () => {
+    return HttpResponse.json({ success: true, data: { message: 'Cache cleared' } });
+  }),
+
+  // ==================== ATS API ====================
+  http.post(`${API_BASE}/v1/parser/parse_resume/`, () => {
+    return HttpResponse.json(mockResponses.ats.parsed);
+  }),
+
+  http.post(`${API_BASE}/v1/resume/enhance`, () => {
+    return HttpResponse.json(mockResponses.ats.enhanced);
+  }),
+
+  http.get(`${API_BASE}/v1/resumes/`, () => {
+    return HttpResponse.json(mockResponses.ats.resumeList);
+  }),
+
+  http.get(`${API_BASE}/v1/resumes/:resumeId`, () => {
+    return HttpResponse.json(mockResponses.ats.resumeDetail);
+  }),
+
+  http.delete(`${API_BASE}/v1/resumes/:resumeId`, () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.delete(`${API_BASE}/v1/parser/clear-cache/:resumeId`, () => {
+    return new HttpResponse(null, { status: 200 });
+  }),
+
+  http.get(`${API_BASE}/v1/parser/download/:resumeId`, () => {
+    return new HttpResponse(new Blob(['pdf-content'], { type: 'application/pdf' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/pdf' },
+    });
+  }),
+
   // ==================== User API ====================
   http.get(`${API_BASE}/user/profile`, () => {
     return HttpResponse.json({

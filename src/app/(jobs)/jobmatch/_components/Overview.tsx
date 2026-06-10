@@ -575,7 +575,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
                 background: "#F6F8FA",
                 borderRadius: 20,
                 boxShadow: "0 8px 16px rgba(0,0,0,0.10), 0 32px 80px rgba(15,23,42,0.28)",
-                width: "100%", maxWidth: 620,
+                width: "100%", maxWidth: 680,
                 overflow: "hidden",
               }}
               onClick={e => e.stopPropagation()}
@@ -586,7 +586,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
                 padding: "14px 20px",
                 background: "#fff",
                 boxShadow: "0 2px 6px rgba(0,0,0,0.07)",
-                display: "flex", alignItems: "center", gap: 30,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 28,
                 position: "relative", zIndex: 1,
               }}>
                 {MODAL_TABS.map((tab, idx) => {
@@ -863,8 +863,8 @@ We are looking for a Software Engineer with 3+ years of experience in React, Nod
                             <path d="M4 10l4 4 8-8"/>
                           </svg>
                         </div>
-                        <h3 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>Ready to Analyze</h3>
-                        <p style={{ fontSize: 13, color: "#64748B", margin: 0, lineHeight: 1.6 }}>
+                        <h3 style={{ fontSize: 26, fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Ready to Analyze</h3>
+                        <p style={{ fontSize: 15, color: "#64748B", margin: 0, lineHeight: 1.6 }}>
                           We&apos;ve received your resume and job description.<br />
                           Click the button below to get your AI match score.
                         </p>
@@ -874,36 +874,36 @@ We are looking for a Software Engineer with 3+ years of experience in React, Nod
                       <div style={{
                         background: "#fff",
                         border: "1px solid #E8EDF5",
-                        borderRadius: 16,
+                        borderRadius: 18,
                         overflow: "hidden",
                         marginBottom: 20,
                         boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
                       }}>
                         {/* Row: Resume */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 24px" }}>
                           <div style={{
-                            width: 40, height: 40, borderRadius: 10,
+                            width: 48, height: 48, borderRadius: 12,
                             background: "#F1F5F9",
                             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                           }}>
-                            <Upload style={{ width: 16, height: 16, color: "#2557a7" }} />
+                            <Upload style={{ width: 20, height: 20, color: "#2557a7" }} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 10, color: "#94A3B8", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Resume</p>
-                            <p style={{ fontSize: 13.5, fontWeight: 700, color: "#0f172a", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Resume</p>
+                            <p style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {uploadedFile ? uploadedFile.name : sessionResumeName || "Resume ready"}
                             </p>
-                            <p style={{ fontSize: 11.5, color: "#64748B", margin: 0 }}>Uploaded successfully</p>
+                            <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>Uploaded successfully</p>
                           </div>
                           <div style={{
-                            display: "inline-flex", alignItems: "center", gap: 5,
+                            display: "inline-flex", alignItems: "center", gap: 6,
                             background: "#f0fdf4", border: "1px solid #bbf7d0",
-                            padding: "5px 12px", borderRadius: 99, flexShrink: 0,
+                            padding: "6px 14px", borderRadius: 99, flexShrink: 0,
                           }}>
-                            <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M4 10l4 4 8-8"/>
                             </svg>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "#16a34a" }}>Ready</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#16a34a" }}>Ready</span>
                           </div>
                         </div>
 
@@ -911,30 +911,30 @@ We are looking for a Software Engineer with 3+ years of experience in React, Nod
                         <div style={{ height: 1, background: "#F1F5F9" }} />
 
                         {/* Row: Job Description */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 24px" }}>
                           <div style={{
-                            width: 40, height: 40, borderRadius: 10,
+                            width: 48, height: 48, borderRadius: 12,
                             background: "#F1F5F9",
                             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                           }}>
-                            <Link2 style={{ width: 16, height: 16, color: "#2557a7" }} />
+                            <Link2 style={{ width: 20, height: 20, color: "#2557a7" }} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 10, color: "#94A3B8", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Job Description</p>
-                            <p style={{ fontSize: 13.5, fontWeight: 700, color: "#0f172a", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Job Description</p>
+                            <p style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {jdLabel}
                             </p>
-                            <p style={{ fontSize: 11.5, color: "#64748B", margin: 0 }}>{jdSubLabel}</p>
+                            <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>{jdSubLabel}</p>
                           </div>
                           <div style={{
-                            display: "inline-flex", alignItems: "center", gap: 5,
+                            display: "inline-flex", alignItems: "center", gap: 6,
                             background: "#f0fdf4", border: "1px solid #bbf7d0",
-                            padding: "5px 12px", borderRadius: 99, flexShrink: 0,
+                            padding: "6px 14px", borderRadius: 99, flexShrink: 0,
                           }}>
-                            <svg width="9" height="9" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M4 10l4 4 8-8"/>
                             </svg>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "#16a34a" }}>Ready</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#16a34a" }}>Ready</span>
                           </div>
                         </div>
                       </div>

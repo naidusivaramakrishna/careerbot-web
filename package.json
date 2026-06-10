@@ -19,6 +19,8 @@
     "test:settings": "vitest src/tests/unit/features/settings",
     "test:credits": "vitest src/tests/unit/features/credits",
     "test:templates": "vitest src/tests/unit/features/templates-catalogues",
+    "test:ats": "vitest src/tests/unit/features/ats",
+    "test:jobs": "vitest src/tests/unit/features/jobs",
     "test:all-features": "vitest src/tests/unit/features",
     "test:integration": "vitest src/tests/integration/features",
     "test:integration:watch": "vitest src/tests/integration/features --watch",
@@ -28,6 +30,8 @@
     "test:integration:mock-interview": "vitest src/tests/integration/features/mock-interview",
     "test:integration:settings": "vitest src/tests/integration/features/settings",
     "test:integration:credits": "vitest src/tests/integration/features/credits",
+    "test:integration:ats": "vitest src/tests/integration/features/ats",
+    "test:integration:jobs": "vitest src/tests/integration/features/jobs",
     "test:pre-commit": "npm run test:integration && npm test"
   },
   "dependencies": {
