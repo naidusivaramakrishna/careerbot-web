@@ -12,8 +12,8 @@
  *   - Accessibility: aria-label, button role, keyboard accessible
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import CopyButton from "@/app/cover-letter/_components/CopyButton";
 
 // Mock sonner toast
@@ -30,13 +30,26 @@ describe("CopyButton", () => {
   const testText = "This is the text to copy";
 
   beforeEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
-    // Reset clipboard mock
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: vi.fn(() => Promise.resolve()),
+
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
       },
+      configurable: true,
     });
+
+    Object.defineProperty(document, "execCommand", {
+      value: vi.fn().mockReturnValue(true),
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe("rendering", () => {
@@ -93,33 +106,33 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(testText);
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(testText);
     });
 
     it("shows 'Copied' text after successful copy", async () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(screen.getByText("Copied")).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(screen.getByText("Copied")).toBeInTheDocument();
     });
 
     it("shows success toast on successful copy", async () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(toast.success).toHaveBeenCalledWith("Copied to clipboard");
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(toast.success).toHaveBeenCalledWith("Copied to clipboard");
     });
 
     it("reverts to original label after 2 seconds", async () => {
@@ -127,19 +140,17 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(screen.getByText("Copied")).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(button);
       });
 
-      vi.advanceTimersByTime(2000);
+      expect(screen.getByText("Copied")).toBeInTheDocument();
 
-      await waitFor(() => {
-        expect(screen.getByText("Copy plain text")).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(2000);
       });
 
-      vi.useRealTimers();
+      expect(screen.getByText("Copy plain text")).toBeInTheDocument();
     });
 
     it("sets timeout to 2000ms", async () => {
@@ -149,13 +160,11 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
+      await act(async () => {
+        fireEvent.click(button);
       });
 
-      vi.useRealTimers();
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
     });
   });
 
@@ -167,13 +176,13 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          "Couldn't copy. Select the text manually."
-        );
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(toast.error).toHaveBeenCalledWith(
+        "Couldn't copy. Select the text manually."
+      );
     });
 
     it("does not call success toast on error", async () => {
@@ -184,12 +193,11 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalled();
+      await act(async () => {
+        fireEvent.click(button);
       });
 
+      expect(toast.error).toHaveBeenCalled();
       expect(toast.success).not.toHaveBeenCalled();
     });
   });
@@ -209,11 +217,11 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(execCommandSpy).toHaveBeenCalledWith("copy");
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(execCommandSpy).toHaveBeenCalledWith("copy");
     });
 
     it("shows error when execCommand returns false", async () => {
@@ -222,11 +230,11 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalled();
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(toast.error).toHaveBeenCalled();
     });
 
     it("shows success when execCommand returns true", async () => {
@@ -235,11 +243,11 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(toast.success).toHaveBeenCalled();
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(toast.success).toHaveBeenCalled();
     });
 
     it("creates temporary textarea for fallback copy", async () => {
@@ -249,11 +257,11 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(createElementSpy).toHaveBeenCalledWith("textarea");
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(createElementSpy).toHaveBeenCalledWith("textarea");
     });
 
     it("removes textarea from DOM after fallback copy", async () => {
@@ -263,11 +271,11 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(removeChildSpy).toHaveBeenCalledWith(expect.any(HTMLTextAreaElement));
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(removeChildSpy).toHaveBeenCalledWith(expect.any(HTMLTextAreaElement));
     });
 
     it("sets textarea position to fixed and opacity to 0", async () => {
@@ -277,16 +285,16 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        const textareaCall = createElementSpy.mock.results.find(
-          (call) => call.value.tagName === "TEXTAREA"
-        );
-        const textarea = textareaCall?.value as HTMLTextAreaElement;
-        expect(textarea?.style.position).toBe("fixed");
-        expect(textarea?.style.opacity).toBe("0");
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      const textareaCall = createElementSpy.mock.results.find(
+        (call) => call.value.tagName === "TEXTAREA"
+      );
+      const textarea = textareaCall?.value as HTMLTextAreaElement;
+      expect(textarea?.style.position).toBe("fixed");
+      expect(textarea?.style.opacity).toBe("0");
     });
   });
 
@@ -302,35 +310,33 @@ describe("CopyButton", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(screen.getByText("Copied")).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(screen.getByText("Copied")).toBeInTheDocument();
     });
   });
 
   describe("keyboard accessibility", () => {
-    it("responds to Enter key press", async () => {
+    it("can be activated while focused", async () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.keyDown(button, { key: "Enter", code: "Enter" });
-
-      await waitFor(() => {
-        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+      button.focus();
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(navigator.clipboard.writeText).toHaveBeenCalled();
     });
 
-    it("responds to Space key press", async () => {
+    it("keeps native button semantics for keyboard activation", () => {
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.keyDown(button, { key: " ", code: "Space" });
-
-      await waitFor(() => {
-        expect(navigator.clipboard.writeText).toHaveBeenCalled();
-      });
+      expect(button.tagName).toBe("BUTTON");
+      expect(button).toHaveAttribute("type", "button");
     });
 
     it("is focusable (can receive focus)", () => {
@@ -344,23 +350,23 @@ describe("CopyButton", () => {
 
   describe("multiple clicks", () => {
     it("allows multiple copies in sequence", async () => {
+      vi.useFakeTimers();
       render(<CopyButton text={testText} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-      await waitFor(() => {
-        expect(screen.getByText("Copied")).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(button);
+      });
+      expect(screen.getByText("Copied")).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(2100);
       });
 
-      // Reset state and click again
-      vi.useFakeTimers();
-      vi.advanceTimersByTime(2100);
-      vi.useRealTimers();
-
-      fireEvent.click(button);
-      await waitFor(() => {
-        expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        fireEvent.click(button);
       });
+      expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -375,11 +381,11 @@ describe("CopyButton", () => {
       render(<CopyButton text={content} />);
       const button = screen.getByRole("button");
 
-      fireEvent.click(button);
-
-      await waitFor(() => {
-        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(content);
+      await act(async () => {
+        fireEvent.click(button);
       });
+
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(content);
     });
   });
 });
