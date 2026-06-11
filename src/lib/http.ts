@@ -70,7 +70,7 @@ const clearAllTokens = () => {
 const client: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   withCredentials: true, // ✅ Enable httpOnly cookie sending/receiving
-  timeout: 30000,
+  timeout: 120000,
   headers: {
     'Content-Type': 'application/json',
   },

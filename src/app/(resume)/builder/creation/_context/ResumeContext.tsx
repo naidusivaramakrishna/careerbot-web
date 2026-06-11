@@ -32,10 +32,9 @@ export interface CustomCategory {
 export interface CategorizedSkills {
   programming_languages: string[];
   frameworks: string[];
-  databases: string[];
-  tools: string[];
-  cloud_platforms: string[];
   soft_skills: string[];
+  project_management: string[];
+  marketing_sales: string[];
   custom_categories?: CustomCategory[];
   hidden_predefined_categories?: string[];
   // Maps "CategoryKey:SkillName" → backend skill ID for delete calls
@@ -48,10 +47,9 @@ type BackendSkills = Record<string, BackendSkillItem[]>;
 const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
   programming_languages: [],
   frameworks: [],
-  databases: [],
-  tools: [],
-  cloud_platforms: [],
   soft_skills: [],
+  project_management: [],
+  marketing_sales: [],
 };
 
 export function mapBackendSkillsToCategorized(backendSkills: unknown): CategorizedSkills {
@@ -69,18 +67,16 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
 
   buildIdMap('programming_languages', s.programmingLanguages);
   buildIdMap('frameworks', s.frameworks);
-  buildIdMap('databases', s.databases);
-  buildIdMap('tools', s.tools);
-  buildIdMap('cloud_platforms', s.cloudPlatforms);
   buildIdMap('soft_skills', s.softSkills);
+  buildIdMap('project_management', s.projectManagement);
+  buildIdMap('marketing_sales', s.marketingSales);
 
   return {
     programming_languages: extractNames(s.programmingLanguages),
     frameworks: extractNames(s.frameworks),
-    databases: extractNames(s.databases),
-    tools: extractNames(s.tools),
-    cloud_platforms: extractNames(s.cloudPlatforms),
     soft_skills: extractNames(s.softSkills),
+    project_management: extractNames(s.projectManagement),
+    marketing_sales: extractNames(s.marketingSales),
     skill_id_map: idMap,
   };
 }
@@ -345,10 +341,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       categorizedSkills: {
         programming_languages: [],
         frameworks: [],
-        databases: [],
-        tools: [],
-        cloud_platforms: [],
-        soft_skills: []
+        soft_skills: [],
+        project_management: [],
+        marketing_sales: [],
       },
       certifications: [],
       achievements: [],
@@ -771,10 +766,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             const skills = [
               ...categorizedSkills.programming_languages,
               ...categorizedSkills.frameworks,
-              ...categorizedSkills.databases,
-              ...categorizedSkills.tools,
-              ...categorizedSkills.cloud_platforms,
               ...categorizedSkills.soft_skills,
+              ...(categorizedSkills.project_management || []),
+              ...(categorizedSkills.marketing_sales || []),
               ...(categorizedSkills.custom_categories || []).flatMap(c => c.skills),
             ];
             return { skills, categorizedSkills };

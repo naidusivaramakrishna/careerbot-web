@@ -662,13 +662,13 @@ export default function JobsContents() {
   const matchedCount = matchedJobs.length;
 
   return (
-    <div className="flex min-h-[calc(100vh-56px)] bg-[#f0f2f5]">
+    <div className="flex min-h-[calc(100vh-56px)] bg-[#f0f2f5] p-4 gap-4 items-start">
       {/* CENTER PANEL */}
-      <main id="jobs-main-scroll" className="flex-1 min-w-0">
+      <main id="jobs-main-scroll" className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {/* RESULTS VIEW */}
         <div>
             {/* TOP BAR */}
-            <div className="px-6 py-5 bg-white border-b border-gray-100 flex items-center justify-between gap-4" style={{ boxShadow: "0 1px 0 rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.02)" }}>
+            <div className="px-6 py-5 bg-white border-b border-gray-100 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5">
@@ -717,7 +717,7 @@ export default function JobsContents() {
 
             <div className="px-6">
               {/* STICKY FILTER + TABS BAR */}
-              <div className="sticky top-0 z-30 -mx-6 px-6 pb-0 bg-[#f0f2f5]" style={{ boxShadow: "0 1px 0 rgba(0,0,0,0.06)" }}>
+              <div className="sticky top-0 z-30 -mx-6 px-6 pb-0 bg-white" style={{ boxShadow: "0 1px 0 rgba(0,0,0,0.06)" }}>
                 <JobsFilterSidebar
                   selectedFilters={selectedFilters}
                   onFilterToggle={handleFilterToggle}
@@ -871,7 +871,7 @@ export default function JobsContents() {
       </main>
 
       {/* RIGHT SIDEBAR — always visible */}
-      <aside className="w-104 shrink-0 sticky self-start bg-white border-l border-gray-200/60 flex flex-col overflow-hidden" style={{ top: "var(--header-h, 56px)", height: "calc(100vh - var(--header-h, 56px))", boxShadow: "-4px 0 20px rgba(0,0,0,0.05)" }}>
+      <aside className="w-110 shrink-0 sticky self-start flex flex-col overflow-hidden rounded-2xl border border-gray-100 shadow-sm bg-white" style={{ top: "calc(var(--header-h, 56px) + 16px)", height: "calc(100vh - var(--header-h, 56px) - 32px)" }}>
         <JobsRightSidebar
           jobs={jobs}
           onChatOpen={() => { setSelectedJob(null); setOpenChat(true); }}
