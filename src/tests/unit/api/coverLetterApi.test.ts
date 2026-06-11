@@ -29,6 +29,20 @@
  *       — throws mapped error on other errors
  */
 
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ── Mock httpClient (must come before importing coverLetterApi) ────────────
+// vi.mock() is hoisted, so we define the mock object inline
+
+vi.mock("@/lib/http", () => ({
+  httpClient: {
+    post: vi.fn(),
+    get: vi.fn(),
+    delete: vi.fn(),
+  },
+}));
+
+// Import after mocking
 import {
   generateCoverLetter,
   getCoverLetter,
@@ -36,18 +50,7 @@ import {
   deleteCoverLetter,
   CoverLetterApiError,
 } from "@/api/coverLetterApi";
-
-// ── Mock httpClient ────────────────────────────────────────────────────────
-
-const mockHttpClient = {
-  post: jest.fn(),
-  get: jest.fn(),
-  delete: jest.fn(),
-};
-
-jest.mock("@/lib/http", () => ({
-  httpClient: mockHttpClient,
-}));
+import { httpClient as mockHttpClient } from "@/lib/http";
 
 // ── Axios error factory ────────────────────────────────────────────────────
 // axios.isAxiosError checks `err.isAxiosError === true`. We do not need
@@ -150,7 +153,7 @@ describe("error mapping (via generateCoverLetter)", () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   async function expectReason(
@@ -320,7 +323,7 @@ describe("generateCoverLetter()", () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it("throws a validation CoverLetterApiError when idempotency key is empty string", async () => {
@@ -374,7 +377,7 @@ describe("generateCoverLetter()", () => {
 
 describe("getCoverLetter()", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it("returns the response data on success", async () => {
@@ -411,7 +414,7 @@ describe("getCoverLetter()", () => {
 
 describe("listCoverLetters()", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it("omits limit and cursor when called with no arguments", async () => {
@@ -467,7 +470,7 @@ describe("listCoverLetters()", () => {
 
 describe("deleteCoverLetter()", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it("returns true on a successful 204 response", async () => {
