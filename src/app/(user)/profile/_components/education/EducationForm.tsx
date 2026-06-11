@@ -61,6 +61,8 @@ export default function EducationForm({
           <input
             type="text"
             name="institution"
+            id="edu-institution"
+            data-testid="edu-institution-input"
             value={educationForm.institution || ""}
             onChange={handleChange}
             className={`border p-2.5 text-sm rounded-lg bg-gray-100 transition-colors ${getFieldError("institution")
@@ -69,7 +71,7 @@ export default function EducationForm({
               }`}
           />
           {getFieldError("institution") && (
-            <p className="text-red-600 text-xs mt-1">{getFieldError("institution")}</p>
+            <p className="text-red-600 text-xs mt-1" role="alert">{getFieldError("institution")}</p>
           )}
         </div>
 
@@ -103,6 +105,8 @@ export default function EducationForm({
           <input
             type="number"
             name="cgpa"
+            id="edu-cgpa"
+            data-testid="edu-cgpa-input"
             step="0.1"
             min="0"
             max="10"
@@ -115,7 +119,7 @@ export default function EducationForm({
               }`}
           />
           {getFieldError("cgpa") && (
-            <p className="text-red-600 text-xs mt-1">{getFieldError("cgpa")}</p>
+            <p className="text-red-600 text-xs mt-1" role="alert">{getFieldError("cgpa")}</p>
           )}
         </div>
 
@@ -128,6 +132,8 @@ export default function EducationForm({
             <input
               type="date"
               name={field}
+              id={`edu-${field}`}
+              data-testid={`edu-${field}-input`}
               value={String((educationForm as Record<string, unknown>)[field] || "")}
               onChange={handleChange}
               className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError(field)
@@ -136,7 +142,7 @@ export default function EducationForm({
                 }`}
             />
             {getFieldError(field) && (
-              <p className="text-red-600 text-xs mt-1">{getFieldError(field)}</p>
+              <p className="text-red-600 text-xs mt-1" role="alert">{getFieldError(field)}</p>
             )}
           </div>
         ))}
@@ -146,6 +152,7 @@ export default function EducationForm({
           <button
             type="button"
             onClick={onSave}
+            data-testid="edu-save-btn"
             disabled={loading}
             className="bg-[#2257a7] text-white px-4 py-1.5 cursor-pointer rounded"
           >

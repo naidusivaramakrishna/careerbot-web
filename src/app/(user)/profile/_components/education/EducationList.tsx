@@ -20,6 +20,7 @@ export default function EducationList({ educationList, onEdit, onDelete, onAdd }
         <button
           type="button"
           onClick={onAdd}
+          data-testid="add-education-btn"
           className="bg-[#2257a7] text-white text-sm cursor-pointer flex gap-2 items-center px-4 py-2 rounded-lg"
         >
           <FaUserGraduate className="w-4 h-4" />

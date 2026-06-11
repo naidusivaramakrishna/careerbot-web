@@ -111,6 +111,7 @@ export default function CatalogueTab() {
           return (
             <div key={key} className="group flex flex-col">
               <div
+                data-testid={`catalogue-card-${key}`}
                 className="relative rounded-xl overflow-hidden cursor-pointer transition-all duration-200"
                 style={{
                   boxShadow: isSelected

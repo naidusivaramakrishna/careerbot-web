@@ -89,6 +89,8 @@ export default function ExperienceForm({
                     <input
                         type="text"
                         name="job_title"
+                        id="exp-job-title"
+                        data-testid="exp-job-title-input"
                         value={experienceForm.job_title || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("job_title")
@@ -97,7 +99,7 @@ export default function ExperienceForm({
                             }`}
                     />
                     {getFieldError("job_title") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("job_title")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("job_title")}</p>
                     )}
                 </div>
                 <div className="flex flex-col gap-3">
@@ -105,6 +107,8 @@ export default function ExperienceForm({
                     <input
                         type="text"
                         name="company"
+                        id="exp-company"
+                        data-testid="exp-company-input"
                         value={experienceForm.company || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("company")
@@ -113,13 +117,15 @@ export default function ExperienceForm({
                             }`}
                     />
                     {getFieldError("company") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("company")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("company")}</p>
                     )}
                 </div>
                 <div className="flex flex-col gap-3">
                     <label className="text-sm font-semibold">Job Type</label>
                     <select
                         name="job_type"
+                        id="exp-job-type"
+                        data-testid="exp-job-type-select"
                         value={experienceForm.job_type || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("job_type")
@@ -135,7 +141,7 @@ export default function ExperienceForm({
                         ))}
                     </select>
                     {getFieldError("job_type") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("job_type")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("job_type")}</p>
                     )}
                 </div>
                 <div className="flex flex-col gap-3">
@@ -143,6 +149,8 @@ export default function ExperienceForm({
                     <input
                         type="text"
                         name="location"
+                        id="exp-location"
+                        data-testid="exp-location-input"
                         value={experienceForm.location || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("location")
@@ -151,7 +159,7 @@ export default function ExperienceForm({
                             }`}
                     />
                     {getFieldError("location") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("location")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("location")}</p>
                     )}
                 </div>
                 <div className="flex flex-col gap-3">
@@ -159,6 +167,8 @@ export default function ExperienceForm({
                     <input
                         type="date"
                         name="start_date"
+                        id="exp-start-date"
+                        data-testid="exp-start-date-input"
                         value={experienceForm.start_date || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("start_date")
@@ -167,7 +177,7 @@ export default function ExperienceForm({
                             }`}
                     />
                     {getFieldError("start_date") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("start_date")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("start_date")}</p>
                     )}
                 </div>
                 <div className="flex flex-col gap-3">
@@ -175,6 +185,8 @@ export default function ExperienceForm({
                     <input
                         type="date"
                         name="end_date"
+                        id="exp-end-date"
+                        data-testid="exp-end-date-input"
                         value={experienceForm.end_date || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg  bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("end_date")
@@ -183,7 +195,7 @@ export default function ExperienceForm({
                             }`}
                     />
                     {getFieldError("end_date") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("end_date")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("end_date")}</p>
                     )}
                 </div>
             </div>
@@ -218,13 +230,14 @@ export default function ExperienceForm({
                     <p className="text-sm text-[#1F00EC] mt-1">Generating description...</p>
                 )}
                 {getFieldError("description") && (
-                    <p className="text-red-600 text-xs mt-1">{getFieldError("description")}</p>
+                    <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("description")}</p>
                 )}
 
                 {/* Buttons */}
                 <div className="col-span-2 flex gap-2 justify-self-end mt-2">
                     <button
                         type="button"
+                        data-testid="exp-save-btn"
                         onClick={onSave}
                         disabled={loading}
                         className="bg-[#2257a7] text-white px-4 py-1.5 cursor-pointer rounded hover:bg-[#0d4acc] disabled:opacity-50"

@@ -13,6 +13,8 @@ export default function ProjectsEmptyState({ onAdd }: { onAdd: () => void }) {
             </p>
 
             <button
+                type="button"
+                data-testid="add-project-btn"
                 onClick={onAdd}
                 className="mt-2 border-2 border-[#2257a7] text-[#2257a7] px-6 py-2 rounded-lg font-semibold cursor-pointer flex items-center gap-2"
             >

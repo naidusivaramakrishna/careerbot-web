@@ -46,6 +46,8 @@ export default function CertificationForm({
                     <input
                         type="text"
                         name="certification_name"
+                        id="cert-name"
+                        data-testid="cert-name-input"
                         value={certificationForm.certification_name || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("certification_name")
@@ -54,7 +56,7 @@ export default function CertificationForm({
                             }`}
                     />
                     {getFieldError("certification_name") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("certification_name")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("certification_name")}</p>
                     )}
                 </div>
                 <div className="flex flex-col gap-3">
@@ -62,6 +64,8 @@ export default function CertificationForm({
                     <input
                         type="text"
                         name="issuer"
+                        id="cert-issuer"
+                        data-testid="cert-issuer-input"
                         value={certificationForm.issuer || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("issuer")
@@ -70,7 +74,7 @@ export default function CertificationForm({
                             }`}
                     />
                     {getFieldError("issuer") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("issuer")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("issuer")}</p>
                     )}
                 </div>
                 <div className="flex flex-col gap-3">
@@ -78,6 +82,8 @@ export default function CertificationForm({
                     <input
                         type="date"
                         name="start_date"
+                        id="cert-start-date"
+                        data-testid="cert-start-date-input"
                         value={certificationForm.start_date || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("start_date")
@@ -86,7 +92,7 @@ export default function CertificationForm({
                             }`}
                     />
                     {getFieldError("start_date") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("start_date")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("start_date")}</p>
                     )}
                 </div>
                 <div className="flex flex-col gap-3">
@@ -94,6 +100,8 @@ export default function CertificationForm({
                     <input
                         type="date"
                         name="end_date"
+                        id="cert-end-date"
+                        data-testid="cert-end-date-input"
                         value={certificationForm.end_date || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("end_date")
@@ -102,13 +110,14 @@ export default function CertificationForm({
                             }`}
                     />
                     {getFieldError("end_date") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("end_date")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("end_date")}</p>
                     )}
                 </div>
             </div>
             <div className="col-span-2 flex gap-2 justify-end mt-3">
                 <button
                     type="button"
+                    data-testid="cert-save-btn"
                     onClick={onSave}
                     disabled={loading}
                     className="bg-[#2257a7] text-white px-4 py-1.5 cursor-pointer rounded disabled:opacity-50"

@@ -16,6 +16,10 @@ import { mockResponses, mockErrors } from './api-mocks';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
+// httpClient falls back to baseURL='/api/v1' in tests (NEXT_PUBLIC_BASE_URL unset).
+// In jsdom, '/api/v1' resolves to 'http://localhost/api/v1/...'.
+const API_V1 = 'http://localhost/api/v1';
+
 export const handlers = [
   // ==================== Dashboard API ====================
   http.get(`${API_BASE}/dashboard/summary`, () => {
@@ -221,6 +225,56 @@ export const handlers = [
       name: 'John Doe Updated',
     });
   }),
+
+  // ==================== httpClient endpoints (templates/catalogues feature) ====================
+  // httpClient uses baseURL='/api/v1' in tests → resolves to 'http://localhost/api/v1/...'
+
+  http.get(`${API_V1}/profile/`, () =>
+    HttpResponse.json({
+      id: 'user-123',
+      email: 'test@example.com',
+      username: 'testuser',
+      full_name: 'Test User',
+      phone_number: '+1234567890',
+      location: 'Test City',
+      linkedin_url: 'https://linkedin.com/in/testuser',
+    })
+  ),
+
+  http.get(`${API_V1}/resumes`, () =>
+    HttpResponse.json([
+      {
+        id: 'resume-1',
+        _id: 'resume-1',
+        personalInfo: { fullname: 'Test User', email: 'test@example.com' },
+        updatedAt: '2024-01-01T00:00:00Z',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+    ])
+  ),
+
+  http.post(`${API_V1}/resumes/`, () =>
+    HttpResponse.json({
+      id: 'new-resume-123',
+      _id: 'new-resume-123',
+      personalInfo: {
+        fullname: 'Test User',
+        email: 'test@example.com',
+        phone: '+1234567890',
+        location: 'Test City',
+        linkedinUrl: 'https://linkedin.com/in/testuser',
+        portfolioUrl: '',
+      },
+      updatedAt: '2024-01-01T00:00:00Z',
+      createdAt: '2024-01-01T00:00:00Z',
+    })
+  ),
+
+  // Auth refresh: return 401 immediately so the interceptor fails fast
+  // rather than attempting a real network call in tests
+  http.post(`${API_V1}/auth/refresh`, () =>
+    HttpResponse.json({ detail: 'Token expired' }, { status: 401 })
+  ),
 ];
 
 /**

@@ -134,8 +134,11 @@ export default function EmploymentInfoSection({
                     onChange={(val) => updateForm({ work_mode: val as typeof form["work_mode"] })}
                 />
                 <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium">Gender</label>
+                    <label htmlFor="gender" className="text-sm font-medium">Gender</label>
                     <select
+                        id="gender"
+                        name="gender"
+                        data-testid="gender-select"
                         value={form.gender ?? "male"}
                         onChange={(e) => updateForm({ gender: e.target.value as typeof form["gender"] })}
                         className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
@@ -147,9 +150,11 @@ export default function EmploymentInfoSection({
                     </select>
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium">Job-type</label>
+                    <label htmlFor="job-type" className="text-sm font-medium">Job-type</label>
                     <select
+                        id="job-type"
                         name="job_type"
+                        data-testid="job-type-select"
                         value={form.preferred_job_type || ""}
                         onChange={(e) => updateForm({ preferred_job_type: e.target.value as typeof form["preferred_job_type"] })}
                         className="border border-neutral-200  p-2.5 text-sm rounded-lg bg-white outline-neutral-500"
@@ -163,8 +168,11 @@ export default function EmploymentInfoSection({
                     </select>
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium">Employment Status</label>
+                    <label htmlFor="employment-status" className="text-sm font-medium">Employment Status</label>
                     <select
+                        id="employment-status"
+                        name="employment_status"
+                        data-testid="employment-status-select"
                         value={form.employment_status ?? "student"}
                         onChange={(e) =>
                             updateForm({ employment_status: e.target.value as typeof form["employment_status"] })
@@ -178,8 +186,11 @@ export default function EmploymentInfoSection({
                     </select>
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium">Notice Period</label>
+                    <label htmlFor="notice-period" className="text-sm font-medium">Notice Period</label>
                     <select
+                        id="notice-period"
+                        name="notice_period_days"
+                        data-testid="notice-period-select"
                         value={form.notice_period_days ?? "Immediate"}
                         onChange={(e) =>
                             updateForm({ notice_period_days: e.target.value as typeof form["notice_period_days"] })
@@ -220,8 +231,10 @@ export default function EmploymentInfoSection({
             {hasChanges && (
                 <div className="flex justify-end mt-6">
                     <button
+                        type="button"
                         onClick={handleSave}
                         disabled={loading}
+                        data-testid="employment-save-btn"
                         className="bg-[#155DFC] text-white px-6 py-2 text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? "Saving..." : "Save Changes"}

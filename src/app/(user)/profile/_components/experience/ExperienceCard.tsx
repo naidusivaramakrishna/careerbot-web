@@ -17,6 +17,7 @@ export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) 
     return (
         <div
             key={exp.id || index}
+            data-testid={`experience-card-${index}`}
             className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
         >
             <div>
@@ -56,6 +57,7 @@ export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) 
             <div className="flex gap-2 mt-2">
                 <button
                     type="button"
+                    data-testid={`experience-edit-btn-${index}`}
                     onClick={() => onEdit(exp, index)}
                     className="text-sm cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
                 >
@@ -65,6 +67,7 @@ export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) 
 
                 <button
                     type="button"
+                    data-testid={`experience-delete-btn-${index}`}
                     onClick={() => onDelete(exp.id, index)}
                     className="border border-red-300 text-sm  cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
                 >

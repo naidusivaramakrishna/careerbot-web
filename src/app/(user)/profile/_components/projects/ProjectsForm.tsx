@@ -81,6 +81,8 @@ export default function ProjectsForm({
                     <input
                         type="text"
                         name="project_name"
+                        id="proj-name"
+                        data-testid="proj-name-input"
                         value={projectsForm.project_name || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("project_name")
@@ -89,7 +91,7 @@ export default function ProjectsForm({
                             }`}
                     />
                     {getFieldError("project_name") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("project_name")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("project_name")}</p>
                     )}
                 </div>
 
@@ -99,6 +101,8 @@ export default function ProjectsForm({
                     <input
                         type="text"
                         name="role"
+                        id="proj-role"
+                        data-testid="proj-role-input"
                         value={projectsForm.role || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("role")
@@ -107,7 +111,7 @@ export default function ProjectsForm({
                             }`}
                     />
                     {getFieldError("role") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("role")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("role")}</p>
                     )}
                 </div>
 
@@ -117,6 +121,8 @@ export default function ProjectsForm({
                     <input
                         type="text"
                         name="technologies"
+                        id="proj-technologies"
+                        data-testid="proj-technologies-input"
                         value={projectsForm.technologies || ""}
                         onChange={handleChange}
                         placeholder="e.g. React, Node.js, MongoDB"
@@ -126,7 +132,7 @@ export default function ProjectsForm({
                             }`}
                     />
                     {getFieldError("technologies") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("technologies")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("technologies")}</p>
                     )}
                 </div>
 
@@ -139,6 +145,8 @@ export default function ProjectsForm({
                         <input
                             type="date"
                             name={field}
+                            id={`proj-${field}`}
+                            data-testid={`proj-${field}-input`}
                             value={String((projectsForm as Record<string, unknown>)[field] || "")}
                             onChange={handleChange}
                             className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError(field)
@@ -147,7 +155,7 @@ export default function ProjectsForm({
                                 }`}
                         />
                         {getFieldError(field) && (
-                            <p className="text-red-600 text-xs mt-1">{getFieldError(field)}</p>
+                            <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError(field)}</p>
                         )}
                     </div>
                 ))}
@@ -158,6 +166,8 @@ export default function ProjectsForm({
                     <input
                         type="text"
                         name="project_link"
+                        id="proj-link"
+                        data-testid="proj-link-input"
                         value={projectsForm.project_link || ""}
                         onChange={handleChange}
                         className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("project_link")
@@ -166,7 +176,7 @@ export default function ProjectsForm({
                             }`}
                     />
                     {getFieldError("project_link") && (
-                        <p className="text-red-600 text-xs mt-1">{getFieldError("project_link")}</p>
+                        <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("project_link")}</p>
                     )}
                 </div>
             </div>
@@ -200,12 +210,13 @@ export default function ProjectsForm({
                     <p className="text-sm text-[#1F00EC] mt-1">Generating description...</p>
                 )}
                 {getFieldError("description") && (
-                    <p className="text-red-600 text-xs mt-1">{getFieldError("description")}</p>
+                    <p role="alert" className="text-red-600 text-xs mt-1">{getFieldError("description")}</p>
                 )}
                 {/* Buttons */}
                 <div className="col-span-2 flex gap-2 justify-self-end mt-2">
                     <button
                         type="button"
+                        data-testid="proj-save-btn"
                         onClick={onSave}
                         disabled={loading}
                         className="bg-[#2257a7] text-white px-4 py-1.5 cursor-pointer rounded"

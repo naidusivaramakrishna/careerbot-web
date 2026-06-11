@@ -11,7 +11,9 @@ export default function EmploymentInfoEmptyState({ onAdd }: { onAdd: () => void 
                 Include details like gender,disability,relocate,workmode,job_type etc
             </p>
             <button
+                type="button"
                 onClick={onAdd}
+                data-testid="add-employment-info-btn"
                 className="mt-2 border-2 border-[#2257a7] text-[#2257a7] px-6 py-2 rounded-lg font-semibold cursor-pointer flex items-center gap-2"
             >
                 <Plus className="w-4 h-4" />

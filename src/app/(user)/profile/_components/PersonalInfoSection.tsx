@@ -204,7 +204,9 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
         placeholder: string,
         type: string = 'text',
         ref?: React.Ref<HTMLInputElement>,
-        disabled: boolean = false
+        disabled: boolean = false,
+        htmlId?: string,
+        testId?: string
     ) => (
         <div className='flex flex-col gap-3'>
             <label className="text-sm font-medium">{label}</label>
@@ -212,6 +214,8 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                 ref={ref}
                 type={type}
                 name={name}
+                id={htmlId || name}
+                data-testid={testId || `${name}-input`}
                 value={value}
                 onChange={handleChange}
                 disabled={disabled}
@@ -222,7 +226,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                 placeholder={placeholder}
             />
             {fieldErrors[name] && (
-                <p className="text-red-600 text-xs mt-1 flex items-center gap-1">
+                <p role="alert" className="text-red-600 text-xs mt-1 flex items-center gap-1">
                     {fieldErrors[name]}
                 </p>
             )}
@@ -232,15 +236,15 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
         <div>
             {/* Form fields */}
             <div className="grid grid-cols-3 gap-4 my-4">
-                {renderInputField('Full Name', 'fullName', tempProfile.personalInformation?.fullName || '', 'John Doe')}
-                {renderInputField('Headline', 'headline', tempProfile.personalInformation?.headline || '', 'Software Engineer')}
-                {renderInputField('Location', 'location', tempProfile.personalInformation?.location || '', 'New York, USA')}
+                {renderInputField('Full Name', 'fullName', tempProfile.personalInformation?.fullName || '', 'John Doe', 'text', undefined, false, 'fullname', 'fullname-input')}
+                {renderInputField('Headline', 'headline', tempProfile.personalInformation?.headline || '', 'Software Engineer', 'text', undefined, false, 'headline', 'headline-input')}
+                {renderInputField('Location', 'location', tempProfile.personalInformation?.location || '', 'New York, USA', 'text', undefined, false, 'location', 'location-input')}
             </div>
             <div className="grid grid-cols-2 gap-4">
-                {renderInputField('Email', 'email', tempProfile.personalInformation?.email || '', 'john@example.com', 'email', undefined, true)}
-                {renderInputField('Phone', 'phone', tempProfile.personalInformation?.phone || '', '+91 9876543210')}
-                {renderInputField('LinkedIn', 'linkedin', tempProfile.personalInformation?.linkedin || '', 'https://linkedin.com/in/johndoe', 'text', linkedinRef)}
-                {renderInputField('GitHub', 'github', tempProfile.personalInformation?.github || '', 'https://github.com/johndoe', 'text', githubRef)}
+                {renderInputField('Email', 'email', tempProfile.personalInformation?.email || '', 'john@example.com', 'email', undefined, true, 'email', 'email-input')}
+                {renderInputField('Phone', 'phone', tempProfile.personalInformation?.phone || '', '+91 9876543210', 'text', undefined, false, 'phone', 'phone-input')}
+                {renderInputField('LinkedIn', 'linkedin', tempProfile.personalInformation?.linkedin || '', 'https://linkedin.com/in/johndoe', 'text', linkedinRef, false, 'linkedin', 'linkedin-input')}
+                {renderInputField('GitHub', 'github', tempProfile.personalInformation?.github || '', 'https://github.com/johndoe', 'text', githubRef, false, 'github', 'github-input')}
             </div>
             <div className='flex flex-col gap-3 mt-4'>
                 <label className="text-sm font-medium">Professional Summary</label>
@@ -255,6 +259,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                             }`}
                         name="summary"
                         id="summary"
+                        data-testid="summary-textarea"
                         placeholder="Short bio, career goals, highlights..."
                     ></textarea>
                     <Sparkles
@@ -265,7 +270,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                         onClick={isGenerating ? undefined : handleGenerateSummary}
                     />
                     {fieldErrors['summary'] && (
-                        <p className="text-red-600 text-xs mt-1 flex items-center gap-1">
+                        <p role="alert" className="text-red-600 text-xs mt-1 flex items-center gap-1">
                             <span>✕</span> {fieldErrors['summary']}
                         </p>
                     )}
@@ -277,8 +282,10 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                     <div className='text-sm'>Let AI help you write this summary....</div>
                 </div>
                 <button
+                    type="button"
                     onClick={handleSave}
                     disabled={saving}
+                    data-testid="save-changes-btn"
                     className="bg-[#2257a7] text-white flex gap-2 cursor-pointer items-center justify-self-end my-4 px-4 py-2 text-sm rounded-lg hover:bg-[#0d4acc] transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {saving ? (

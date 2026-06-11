@@ -16,10 +16,14 @@ export default function Tabs({ tabs, active, onChange }: TabsProps) {
     return (
         <div>
             {/* Tab Buttons */}
-            <div className="flex overflow-x-auto whitespace-nowrap bg-white  shadow-[0_0_6px_rgba(0,0,0,0.30)] border border-neutral-200  rounded-lg gap-2 mb-4 scrollbar-thin scrollbar-thumb-gray-300">
+            <div role="tablist" className="flex overflow-x-auto whitespace-nowrap bg-white  shadow-[0_0_6px_rgba(0,0,0,0.30)] border border-neutral-200  rounded-lg gap-2 mb-4 scrollbar-thin scrollbar-thumb-gray-300">
                 {tabs.map((tab) => (
                     <button
                         key={tab.label}
+                        type="button"
+                        role="tab"
+                        aria-selected={active === tab.label}
+                        data-testid={`tab-${tab.label.toLowerCase().replace(/\s+/g, '-')}`}
                         className={`flex items-center gap-2 px-3 py-4 cursor-pointer text-sm font-medium  transition ${active === tab.label
                             ? "bg-[#a5c6eb] text-black font-semibold border-b-[2.6px] border-[#2257a7]"
                                 : "text-gray-600 hover:text-black"

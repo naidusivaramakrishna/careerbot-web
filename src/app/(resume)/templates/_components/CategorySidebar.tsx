@@ -105,6 +105,7 @@ export default function CategorySidebar({
               return (
                 <button
                   key={family}
+                  data-testid={`category-btn-${family}`}
                   onClick={() => onSelectCategory(family === 'All' ? 'All' : family)}
                   className={`relative w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${isActive
                     ? 'bg-[#e8eff9] text-[#2257a7] ring-1 ring-[#c9dcf2] shadow-xs'

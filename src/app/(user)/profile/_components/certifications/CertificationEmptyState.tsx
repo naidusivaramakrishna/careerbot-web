@@ -11,6 +11,8 @@ export default function CertificationEmptyState({ onAdd }: { onAdd: () => void }
                 Showcase your professional certifications and licenses to strengthen your profile
             </p>
             <button
+                type="button"
+                data-testid="add-certification-btn"
                 onClick={onAdd}
                 className="mt-2 border-2 border-[#2257a7] text-[#2257a7] px-6 py-2 rounded-lg font-semibold cursor-pointer flex items-center gap-2"
             >

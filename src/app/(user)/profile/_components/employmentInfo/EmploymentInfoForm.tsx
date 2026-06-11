@@ -32,6 +32,9 @@ export default function EmploymentInfoForm({
                 <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold">Authorized to Work?</label>
                     <select
+                        name="authorized_to_work"
+                        id="authorized-to-work"
+                        data-testid="employment-authorized-select"
                         value={
                             employmentInfoForm.authorized_to_work === true
                                 ? "true"
@@ -53,6 +56,9 @@ export default function EmploymentInfoForm({
                 <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold">Disability</label>
                     <select
+                        name="disability_status"
+                        id="disability-status"
+                        data-testid="employment-disability-select"
                         value={employmentInfoForm.disability_status ?? ""}
                         onChange={(e) =>
                             updateForm({ disability_status: e.target.value })
@@ -68,6 +74,9 @@ export default function EmploymentInfoForm({
                 <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold">Willing to Relocate?</label>
                     <select
+                        name="willing_to_relocate"
+                        id="willing-to-relocate"
+                        data-testid="employment-relocate-select"
                         value={
                             employmentInfoForm.willing_to_relocate === true
                                 ? "true"
@@ -89,6 +98,8 @@ export default function EmploymentInfoForm({
                     <label className="text-sm font-semibold">Work Mode</label>
                     <select
                         name="work_mode"
+                        id="work-mode"
+                        data-testid="employment-work-mode-select"
                         value={employmentInfoForm.work_mode || ""}
                         onChange={(e) => updateForm({ work_mode: e.target.value as typeof employmentInfoForm["work_mode"] })}
                         className="border border-neutral-200  p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500"
@@ -101,6 +112,9 @@ export default function EmploymentInfoForm({
                 <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold">Gender</label>
                     <select
+                        name="gender"
+                        id="gender"
+                        data-testid="employment-gender-select"
                         value={employmentInfoForm.gender ?? "male"}
                         onChange={(e) => updateForm({ gender: e.target.value as typeof employmentInfoForm["gender"] })}
                         className="border border-neutral-200 p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500"
@@ -115,6 +129,8 @@ export default function EmploymentInfoForm({
                     <label className="text-sm font-semibold">Job-type</label>
                     <select
                         name="job_type"
+                        id="job-type"
+                        data-testid="employment-job-type-select"
                         value={employmentInfoForm.preferred_job_type || ""}
                         onChange={(e) => updateForm({ preferred_job_type: e.target.value as typeof employmentInfoForm["preferred_job_type"] })}
                         className="border border-neutral-200  p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500"
@@ -130,6 +146,9 @@ export default function EmploymentInfoForm({
                 <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold">Employment Status</label>
                     <select
+                        name="employment_status"
+                        id="employment-status"
+                        data-testid="employment-status-select"
                         value={employmentInfoForm.employment_status ?? "student"}
                         onChange={(e) =>
                             updateForm({ employment_status: e.target.value as typeof employmentInfoForm["employment_status"] })
@@ -145,6 +164,9 @@ export default function EmploymentInfoForm({
                 <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold">Notice Period</label>
                     <select
+                        name="notice_period_days"
+                        id="notice-period"
+                        data-testid="employment-notice-period-select"
                         value={employmentInfoForm.notice_period_days ?? "Immediate"}
                         onChange={(e) =>
                             updateForm({ notice_period_days: e.target.value as typeof employmentInfoForm["notice_period_days"] })
@@ -192,6 +214,8 @@ export default function EmploymentInfoForm({
 
             <div className="flex justify-end gap-3 pt-4">
                 <button
+                    type="button"
+                    data-testid="employment-info-save-btn"
                     onClick={onSave}
                     disabled={loading}
                     className="bg-[#2257a7] text-white px-4 py-1.5 cursor-pointer rounded"

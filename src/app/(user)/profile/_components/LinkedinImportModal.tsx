@@ -20,12 +20,15 @@ const LinkedinImportModal: React.FC<LinkedinImportModalProps> = ({ open, onClose
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div data-testid="linkedin-import-modal" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-lg w-[380px] shadow-xl">
                 <h2 className="text-lg font-semibold mb-3">Import LinkedIn Profile</h2>
 
                 <input
                     type="text"
+                    data-testid="linkedin-url-input"
+                    id="linkedin-url"
+                    name="linkedin_url"
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-md mb-4 bg-gray-100 outline-none text-sm"
                     placeholder="Paste LinkedIn profile URL"
                     value={url}
@@ -34,6 +37,8 @@ const LinkedinImportModal: React.FC<LinkedinImportModalProps> = ({ open, onClose
 
                 <div className="flex justify-end gap-2">
                     <button
+                        type="button"
+                        data-testid="linkedin-modal-cancel-btn"
                         onClick={onClose}
                         className="px-4 py-1.5 bg-gray-200 rounded-md hover:bg-gray-300 cursor-pointer"
                     >
@@ -41,6 +46,8 @@ const LinkedinImportModal: React.FC<LinkedinImportModalProps> = ({ open, onClose
                     </button>
 
                     <button
+                        type="button"
+                        data-testid="linkedin-modal-import-btn"
                         onClick={handleSubmit}
                         className="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
                     >

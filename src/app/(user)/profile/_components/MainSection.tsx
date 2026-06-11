@@ -221,6 +221,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
             {isHoveringImage && selectedImage && (
               <div
                 onClick={handleDeleteImage}
+                data-testid="delete-profile-pic-btn"
+                aria-label="Delete profile picture"
+                role="button"
                 className="bg-red-500 flex items-center justify-center absolute top-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
               >
                 <X className="w-4 h-4 text-white" />
@@ -230,6 +233,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
             {/* Camera icon */}
             <div
               onClick={() => fileInputRef.current?.click()}
+              data-testid="upload-profile-pic-btn"
+              aria-label="Upload profile picture"
+              role="button"
               className="bg-[#2257a7] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
             >
               <Camera className="w-4 h-4 text-white" />
@@ -240,6 +246,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
               accept="image/*"
               className="hidden"
               ref={fileInputRef}
+              id="profile-picture"
+              name="profile_picture"
+              data-testid="profile-pic-input"
               onChange={handleImageChange}
             />
           </div>
@@ -289,6 +298,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                 {isHoveringImage && selectedImage && (
                   <div
                     onClick={handleDeleteImage}
+                    data-testid="delete-profile-pic-btn"
+                    aria-label="Delete profile picture"
+                    role="button"
                     className="bg-gray-500 flex items-center justify-center absolute top-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
                   >
                     <X className="w-4 h-4 text-white" />
@@ -297,6 +309,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
 
                 <div
                   onClick={() => fileInputRef.current?.click()}
+                  data-testid="upload-profile-pic-btn"
+                  aria-label="Upload profile picture"
+                  role="button"
                   className="bg-[#2257a7] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
                 >
                   <Camera className="w-4 h-4 text-white" />
@@ -307,6 +322,9 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                   accept="image/*"
                   className="hidden"
                   ref={fileInputRef}
+                  id="profile-picture"
+                  name="profile_picture"
+                  data-testid="profile-pic-input"
                   onChange={handleImageChange}
                 />
               </div>
@@ -350,6 +368,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                   : `${profileData.personalInformation.linkedin}`}
                 target="_blank"
                 rel="noopener noreferrer"
+                data-testid="linkedin-link"
                 className='flex text-sm gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition text-[#0A66C2]'
               >
                 <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20} />
@@ -357,12 +376,14 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
               </a>
             ) : (
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab("Personal Information");
                   setTimeout(() => {
                     personalInfoRef.current?.focusLinkedin();
                   }, 100);
                 }}
+                data-testid="add-linkedin-btn"
                 className='flex gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition'
               >
                 {/* <Linkedin className='w-5 h-5' /> */}
@@ -379,6 +400,7 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
                   : `${profileData.personalInformation.github}`}
                 target="_blank"
                 rel="noopener noreferrer"
+                data-testid="github-link"
                 className='flex gap-2 text-sm items-center border  shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition text-black'
               >
                 <Github className='w-5 h-5' />
@@ -386,12 +408,14 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
               </a>
             ) : (
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab("Personal Information");
                   setTimeout(() => {
                     personalInfoRef.current?.focusGithub();
                   }, 100);
                 }}
+                data-testid="add-github-btn"
                 className='flex gap-2 text-sm items-center border shadow-sm bg-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-50 transition'
               >
                 <Github className='w-4 h-4' />

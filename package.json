@@ -32,6 +32,9 @@
     "test:integration:credits": "vitest src/tests/integration/features/credits",
     "test:integration:ats": "vitest src/tests/integration/features/ats",
     "test:integration:jobs": "vitest src/tests/integration/features/jobs",
+    "test:integration:templates": "vitest src/tests/integration/features/templates-catalogues",
+    "test:profile": "vitest src/tests/unit/features/profile",
+    "test:integration:profile": "vitest src/tests/integration/features/profile",
     "test:pre-commit": "npm run test:integration && npm test"
   },
   "dependencies": {
@@ -85,7 +88,7 @@
     "@types/react": "19.2.2",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
-    "@vitejs/plugin-react": "^4.2.1",
+    "@vitejs/plugin-react": "4.3.4",
     "@vitest/ui": "^1.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",

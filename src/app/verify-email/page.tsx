@@ -145,6 +145,8 @@ const VerifyEmailContent = () => {
             </div>
             <div className="space-y-3">
               <button
+                type="button"
+                data-testid="goto-signin-btn"
                 onClick={() => window.location.href = "/?showLogin=true&verified=true"}
                 className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
               >
@@ -163,7 +165,7 @@ const VerifyEmailContent = () => {
               </div>
             </div>
             <h1 className="text-2xl font-bold text-red-600 mb-2">Verification Failed</h1>
-            <p className="text-gray-600 mb-4">{errorMessage}</p>
+            <p role="alert" className="text-gray-600 mb-4">{errorMessage}</p>
 
             {/* Troubleshooting tips */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
@@ -177,6 +179,8 @@ const VerifyEmailContent = () => {
 
             <div className="space-y-3">
               <button
+                type="button"
+                data-testid="try-again-btn"
                 onClick={() => {
                   setCountdown(5);
                   setStatus("idle");
@@ -189,6 +193,8 @@ const VerifyEmailContent = () => {
                 Try Again
               </button>
               <button
+                type="button"
+                data-testid="back-to-signin-btn"
                 onClick={() => router.push("/?showLogin=true")}
                 className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
               >
@@ -222,6 +228,8 @@ const VerifyEmailContent = () => {
                 <strong>Didn&apos;t receive the email?</strong>
               </p>
               <button
+                type="button"
+                data-testid="request-new-verification-btn"
                 onClick={() => router.push("/?showLogin=true")}
                 className="text-sm text-[#2257a7] hover:text-[#184284] font-semibold underline"
               >
@@ -230,6 +238,8 @@ const VerifyEmailContent = () => {
             </div>
 
             <button
+              type="button"
+              data-testid="back-to-signin-btn"
               onClick={() => router.push("/?showLogin=true")}
               className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
             >

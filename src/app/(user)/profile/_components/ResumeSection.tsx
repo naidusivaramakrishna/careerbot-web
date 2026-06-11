@@ -172,6 +172,8 @@ const ResumeSection = ({ tempProfile, setTempProfile }: ResumeSectionProps) => {
                         {/* Action Buttons - Side by Side */}
                         <div className="flex gap-3">
                             <button
+                                type="button"
+                                data-testid="delete-resume-btn"
                                 onClick={handleResumeDelete}
                                 disabled={isDeleting}
                                 className="flex-1 inline-flex items-center justify-center gap-2 bg-red-50 text-red-600 px-5 py-2.5 rounded-lg hover:bg-red-100 transition-all duration-200 text-sm font-medium border border-red-200 hover:border-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -183,12 +185,17 @@ const ResumeSection = ({ tempProfile, setTempProfile }: ResumeSectionProps) => {
                             <label className="flex-1">
                                 <input
                                     type="file"
+                                    data-testid="resume-replace-input"
+                                    id="resume-replace"
+                                    name="resume"
                                     accept=".pdf,.doc,.docx"
                                     onChange={handleResumeUpload}
                                     disabled={isLoading}
                                     className="hidden"
                                 />
                                 <button
+                                    type="button"
+                                    data-testid="replace-resume-btn"
                                     onClick={() => setIsReplacing(true)}
                                     disabled={isLoading}
                                     className="w-full inline-flex items-center justify-center gap-2 bg-[#2257a7] text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
@@ -213,12 +220,17 @@ const ResumeSection = ({ tempProfile, setTempProfile }: ResumeSectionProps) => {
                         <label className="inline-block">
                             <input
                                 type="file"
+                                data-testid="resume-file-input"
+                                id="resume-upload"
+                                name="resume"
                                 accept=".pdf,.doc,.docx"
                                 onChange={handleResumeUpload}
                                 disabled={isLoading}
                                 className="hidden"
                             />
                             <button
+                                type="button"
+                                data-testid="choose-resume-btn"
                                 onClick={(e) => e.currentTarget.previousElementSibling?.dispatchEvent(new MouseEvent('click', { bubbles: true }))}
                                 disabled={isLoading}
                                     className="bg-[#2257a7] text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
@@ -261,7 +273,7 @@ const ResumeSection = ({ tempProfile, setTempProfile }: ResumeSectionProps) => {
 
             {/* Delete Confirmation Modal */}
             {showDeleteModal && (
-                <div className="fixed inset-0 backdrop-blur-md flex items-center justify-center z-50 p-4">
+                <div data-testid="delete-resume-modal" className="fixed inset-0 backdrop-blur-md flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 animate-in fade-in zoom-in duration-200">
                         <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mx-auto mb-4">
                             <Trash2 className="w-6 h-6 text-red-600" />
@@ -277,6 +289,8 @@ const ResumeSection = ({ tempProfile, setTempProfile }: ResumeSectionProps) => {
 
                         <div className="flex gap-3">
                             <button
+                                type="button"
+                                data-testid="modal-cancel-btn"
                                 onClick={() => setShowDeleteModal(false)}
                                 disabled={isDeleting}
                                 className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -284,6 +298,8 @@ const ResumeSection = ({ tempProfile, setTempProfile }: ResumeSectionProps) => {
                                 Cancel
                             </button>
                             <button
+                                type="button"
+                                data-testid="modal-confirm-delete-btn"
                                 onClick={confirmDelete}
                                 disabled={isDeleting}
                                 className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"

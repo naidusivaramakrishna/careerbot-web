@@ -479,6 +479,7 @@ export default function TemplatesPage() {
               return (
                 <div key={key} className="group flex flex-col">
                   <div
+                    data-testid={`catalogue-card-${key}`}
                     className="relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300"
                     style={{
                       boxShadow: isSelected
@@ -579,6 +580,7 @@ export default function TemplatesPage() {
             <div className="relative flex items-center bg-white rounded-xl shadow-sm ring-1 ring-slate-200 group-focus-within:ring-[#2257a7]/50 group-focus-within:shadow-md transition-all duration-200">
               <Search className="absolute left-3.5 w-4 h-4 text-slate-400 group-focus-within:text-[#2257a7] transition-colors" />
               <input
+                data-testid="template-search-input"
                 type="text"
                 placeholder="Search by role, industry, or template..."
                 value={searchQuery}
@@ -587,6 +589,7 @@ export default function TemplatesPage() {
               />
               {searchQuery && (
                 <button
+                  data-testid="clear-search-btn"
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-colors"
                   aria-label="Clear search"
@@ -602,6 +605,7 @@ export default function TemplatesPage() {
             {['Software Engineer', 'Healthcare', 'Finance', 'Legal', 'Education'].map(q => (
               <button
                 key={q}
+                data-testid={`quick-search-${q.toLowerCase().replace(/\s+/g, '-')}`}
                 onClick={() => setSearchQuery(q)}
                 className="text-xs px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-[#2257a7] hover:text-[#2257a7] transition-colors font-medium shadow-sm"
               >
@@ -644,7 +648,7 @@ export default function TemplatesPage() {
               ))}
             </div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div data-testid="no-templates-found" className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-200/60 flex items-center justify-center mb-3">
                 <LayoutTemplate className="w-8 h-8 text-[#2257a7]" />
               </div>
