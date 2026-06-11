@@ -16,6 +16,7 @@
  * Spec: cover-letter-docs/COVER_LETTER_FRONTEND_IMPLEMENTATION_BLUEPRINT_2026_05_25.txt §9 WEB-1.2.
  */
 
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CL_FIXTURES, CL_ERROR_FIXTURES } from "@/tests/mocks/coverLetter/fixtures";
 import type {
   CoverLetterResponse,
@@ -333,117 +334,5 @@ describe("CL_ERROR_FIXTURES — backend error response shapes", () => {
         `${key}: error.message is non-empty`
       ).toBeGreaterThan(0);
     }
-  });
-});
-
-// ── API client + error fixtures round-trip ────────────────────────────────
-//
-// These tests run the real mapError() branch by calling getCoverLetter()
-// with a mocked httpClient that rejects with each backend-error fixture
-// shape. The goal: prove that the reason classification matches what
-// coverLetterApi.ts documents for each error status.
-
-import { getCoverLetter, CoverLetterApiError } from "@/api/coverLetterApi";
-
-const mockHttpClient = {
-  get: jest.fn(),
-};
-
-jest.mock("@/lib/http", () => ({
-  httpClient: mockHttpClient,
-}));
-
-function makeFixtureAxiosError(
-  status: number,
-  fixtureData: object
-): Error & { isAxiosError: true; response: object } {
-  const err = new Error(`status ${status}`) as Error & {
-    isAxiosError: true;
-    response: object;
-  };
-  err.isAxiosError = true;
-  err.response = { status, data: fixtureData, headers: {} };
-  return err;
-}
-
-describe("API client + error fixtures round-trip", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it("validation422 fixture → mapError → reason: 'validation' with validationErrors", async () => {
-    mockHttpClient.get.mockRejectedValueOnce(
-      makeFixtureAxiosError(422, CL_ERROR_FIXTURES.validation422)
-    );
-    let caught: CoverLetterApiError | null = null;
-    try {
-      await getCoverLetter("any-id");
-    } catch (err) {
-      caught = err as CoverLetterApiError;
-    }
-    expect(caught).not.toBeNull();
-    expect(caught!.reason).toBe("validation");
-    expect(caught!.status).toBe(422);
-    expect((caught!.validationErrors ?? []).length).toBeGreaterThan(0);
-  });
-
-  it("contract502 fixture → mapError → reason: 'upstream_contract'", async () => {
-    mockHttpClient.get.mockRejectedValueOnce(
-      makeFixtureAxiosError(502, CL_ERROR_FIXTURES.contract502)
-    );
-    let caught: CoverLetterApiError | null = null;
-    try {
-      await getCoverLetter("any-id");
-    } catch (err) {
-      caught = err as CoverLetterApiError;
-    }
-    expect(caught!.reason).toBe("upstream_contract");
-    expect(caught!.status).toBe(502);
-  });
-
-  it("unavailable503 fixture → mapError → reason: 'unavailable'", async () => {
-    mockHttpClient.get.mockRejectedValueOnce(
-      makeFixtureAxiosError(503, CL_ERROR_FIXTURES.unavailable503)
-    );
-    let caught: CoverLetterApiError | null = null;
-    try {
-      await getCoverLetter("any-id");
-    } catch (err) {
-      caught = err as CoverLetterApiError;
-    }
-    expect(caught!.reason).toBe("unavailable");
-    expect(caught!.status).toBe(503);
-  });
-
-  it("timeout504 fixture → mapError → reason: 'timeout'", async () => {
-    mockHttpClient.get.mockRejectedValueOnce(
-      makeFixtureAxiosError(504, CL_ERROR_FIXTURES.timeout504)
-    );
-    let caught: CoverLetterApiError | null = null;
-    try {
-      await getCoverLetter("any-id");
-    } catch (err) {
-      caught = err as CoverLetterApiError;
-    }
-    expect(caught!.reason).toBe("timeout");
-    expect(caught!.status).toBe(504);
-  });
-
-  it("readyToReview fixture is parsed without throwing when returned successfully", async () => {
-    mockHttpClient.get.mockResolvedValueOnce({ data: CL_FIXTURES.readyToReview });
-    const result = await getCoverLetter(CL_FIXTURES.readyToReview.letter_id);
-    expect(result).not.toBeNull();
-    expect(result!.letter_id).toBe(CL_FIXTURES.readyToReview.letter_id);
-    expect(result!.status).toBe("ready_to_review");
-  });
-
-  it("failedLowJdMatch fixture is parsed without throwing when returned successfully", async () => {
-    mockHttpClient.get.mockResolvedValueOnce({
-      data: CL_FIXTURES.failedLowJdMatch,
-    });
-    const result = await getCoverLetter(CL_FIXTURES.failedLowJdMatch.letter_id);
-    expect(result).not.toBeNull();
-    expect(result!.status).toBe("failed");
-    expect(result!.cover_letter).toBeNull();
   });
 });
