@@ -383,16 +383,6 @@ export default function SituationExplainingPage() {
         return;
       }
 
-      // Exit fullscreen mode before navigating
-      try {
-        if (document.fullscreenElement) {
-          await document.exitFullscreen();
-          logger.info('Exited fullscreen mode');
-        }
-      } catch (fullscreenError) {
-        logger.warn('Could not exit fullscreen:', fullscreenError);
-      }
-
       // Navigate to feedback page
       logger.info('✅ All steps complete! Navigating to feedback page...');
       router.push('/communication/feedback');

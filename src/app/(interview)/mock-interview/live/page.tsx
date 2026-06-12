@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { createLiveSession, LiveCreateResponse } from "@/api/mockInterviewApi";
 import {
   Mic,
+  Video,
+  VideoOff,
   Volume2,
   AlertCircle,
   CheckCircle2,
@@ -19,6 +21,7 @@ import {
 
 type SetupPhase = "preflight" | "pre-interview" | "connecting";
 type MicCheckState = "idle" | "checking" | "ok" | "denied" | "error";
+type CamCheckState = "idle" | "checking" | "ok" | "denied" | "error";
 
 // ─── Mock questions preview ───────────────────────────────────────────────────
 
@@ -38,6 +41,7 @@ const MOCK_QUESTIONS_PREVIEW = [
 
 function PreflightScreen({ onContinue }: { onContinue: () => void }) {
   const [micState, setMicState] = useState<MicCheckState>("idle");
+  const [camState, setCamState] = useState<CamCheckState>("idle");
   const [quietConfirmed, setQuietConfirmed] = useState(false);
 
   const testMicrophone = async () => {
@@ -52,7 +56,19 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
     }
   };
 
-  const canContinue = micState === "ok" && quietConfirmed;
+  const testCamera = async () => {
+    setCamState("checking");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream.getTracks().forEach((t) => t.stop());
+      setCamState("ok");
+    } catch (err) {
+      const e = err as DOMException;
+      setCamState(e.name === "NotAllowedError" ? "denied" : "error");
+    }
+  };
+
+  const canContinue = micState === "ok" && camState === "ok" && quietConfirmed;
 
   return (
     <div className="max-w-md mx-auto px-4 sm:px-6 py-10">
@@ -92,7 +108,7 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
                   {micState === "idle" && "Not checked yet"}
                   {micState === "checking" && "Requesting access…"}
                   {micState === "ok" && "Microphone detected and working"}
-                  {micState === "denied" && "Permission denied — allow mic access in browser settings"}
+                  {micState === "denied" && "Microphone access blocked. Allow mic in your browser, then click Retry."}
                   {micState === "error" && "Could not access microphone — check hardware"}
                 </p>
               </div>
@@ -107,7 +123,54 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
               ) : micState === "ok" ? (
                 <><RefreshCw size={12} /> Re-test</>
               ) : (
-                <><Mic size={12} /> Test Microphone</>
+                <><Mic size={12} /> {micState === "denied" ? "Retry" : "Test Microphone"}</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Camera check */}
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                camState === "ok" ? "bg-[#2557a7]/10" : "bg-gray-100"
+              }`}>
+                {camState === "ok" ? (
+                  <CheckCircle2 size={18} className="text-[#2557a7]" />
+                ) : camState === "denied" || camState === "error" ? (
+                  <VideoOff size={18} className="text-gray-500" />
+                ) : (
+                  <Video size={18} className="text-gray-500" />
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Camera</p>
+                <p className={`text-xs mt-0.5 ${
+                  camState === "ok" ? "text-[#2557a7]"
+                  : camState === "denied" ? "text-gray-600"
+                  : camState === "error" ? "text-gray-500"
+                  : "text-gray-500"
+                }`}>
+                  {camState === "idle" && "Not checked yet"}
+                  {camState === "checking" && "Requesting access…"}
+                  {camState === "ok" && "Camera detected and working"}
+                  {camState === "denied" && "Camera access blocked. Allow camera in your browser, then click Retry."}
+                  {camState === "error" && "Could not access camera — check hardware"}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={testCamera}
+              disabled={camState === "checking"}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#2557a7] text-white text-xs font-semibold rounded-lg hover:bg-[#1e4a8f] disabled:opacity-50 transition-colors"
+            >
+              {camState === "checking" ? (
+                <><Loader2 size={12} className="animate-spin" /> Checking</>
+              ) : camState === "ok" ? (
+                <><RefreshCw size={12} /> Re-test</>
+              ) : (
+                <><Video size={12} /> {camState === "denied" ? "Retry" : "Test Camera"}</>
               )}
             </button>
           </div>
@@ -151,7 +214,7 @@ function PreflightScreen({ onContinue }: { onContinue: () => void }) {
         disabled={!canContinue}
         className="w-full py-3.5 bg-[#2557a7] text-white rounded-xl font-bold text-sm hover:bg-[#1e4a8f] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md"
       >
-        {canContinue ? "Continue to Interview Setup →" : "Complete all checks to continue"}
+        {canContinue ? "Continue to Interview Setup →" : "Test microphone & camera to continue"}
       </button>
     </div>
   );
@@ -281,8 +344,19 @@ export default function LiveSetupPage() {
   }, []);
 
   const handleStart = async () => {
-    // Enter fullscreen now — within this click gesture — so it carries into the
-    // interview page (programmatic fullscreen needs a user gesture).
+    // Unlock HTMLMediaElement autoplay — play a silent clip via new Audio() so
+    // the browser marks this origin as "audio permitted" before we navigate.
+    // AudioContext unlocks only the Web Audio API; new Audio() needs its own unlock.
+    try {
+      const unlock = new Audio(
+        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="
+      );
+      unlock.volume = 0;
+      await unlock.play().catch(() => {});
+      unlock.pause();
+    } catch { /* ignore — proceed anyway */ }
+
+    // Enter fullscreen within the same gesture
     try {
       if (!document.fullscreenElement) {
         await document.documentElement.requestFullscreen();

@@ -81,8 +81,9 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [isEmailReady, setIsEmailReady] = useState(false);
 
-  // Get user email for scoped localStorage keys
+  // Fetch email before rendering template to avoid flash between global and scoped localStorage keys
   useEffect(() => {
     const fetchUserEmail = async () => {
       try {
@@ -93,6 +94,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         }
       } catch (err) {
         logger.warn('Failed to get user email for scoped storage', err);
+      } finally {
+        setIsEmailReady(true);
       }
     };
 
@@ -592,7 +595,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             width: "100%",
           }}
         >
-          {renderTemplate()}
+          {isEmailReady ? renderTemplate() : (
+            <div className="w-full flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -11,7 +11,7 @@ import {
 } from "@/api/mockInterviewApi";
 import {
   Mic,
-  MicOff,
+
   Video,
   VideoOff,
   Clock,
@@ -272,31 +272,56 @@ function CompletedScreen({ sessionId }: { sessionId: string }) {
 }
 
 // ─── TTS audio playback helper ───────────────────────────────────────────────
-// Decodes base64 TTS audio from the WebSocket and plays it.
-// Calls `onEnd` when playback finishes (or immediately if audio is null/muted).
+
+// Decode URL-safe or standard base64 into a Uint8Array.
+function decodeBase64(b64: string): Uint8Array {
+  const normalized = b64
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(b64.length / 4) * 4, "=");
+  const binary = atob(normalized);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// Try MPEG first, then WAV, then OGG — we don't always know what the backend sends.
+const TTS_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/ogg; codecs=opus", "audio/webm"];
+
 function playTtsAudio(
   base64Audio: string | null,
   mutedRef: React.RefObject<boolean>,
   audioRef: React.RefObject<HTMLAudioElement | null>,
   onEnd: () => void,
 ) {
-  // Stop any currently playing TTS
   if (audioRef.current) {
     audioRef.current.pause();
     audioRef.current = null;
   }
 
   if (!base64Audio || mutedRef.current) {
-    // No audio or muted — wait a moment so the UI phase shows briefly, then continue
     setTimeout(onEnd, 1500);
     return;
   }
 
+  let bytes: Uint8Array;
   try {
-    const binary = atob(base64Audio);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: "audio/mpeg" });
+    bytes = decodeBase64(base64Audio);
+  } catch {
+    setTimeout(onEnd, 1500);
+    return;
+  }
+
+  let mimeIndex = 0;
+
+  const tryNext = () => {
+    if (mimeIndex >= TTS_MIME_TYPES.length) {
+      // All formats failed — pause briefly so the question text stays readable.
+      setTimeout(onEnd, 2000);
+      return;
+    }
+    const mime = TTS_MIME_TYPES[mimeIndex++];
+    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     audioRef.current = audio;
@@ -309,15 +334,17 @@ function playTtsAudio(
     audio.onerror = () => {
       URL.revokeObjectURL(url);
       audioRef.current = null;
-      onEnd(); // continue even if playback fails
+      tryNext(); // wrong format — try the next MIME type
     };
     audio.play().catch(() => {
-      // Autoplay blocked by browser policy — fall back to timeout
-      setTimeout(onEnd, 2000);
+      // Autoplay blocked even after unlock — wait for the user to read the question.
+      URL.revokeObjectURL(url);
+      audioRef.current = null;
+      setTimeout(onEnd, 3000);
     });
-  } catch {
-    setTimeout(onEnd, 1500);
-  }
+  };
+
+  tryNext();
 }
 
 // ─── Main Live Interview Page ─────────────────────────────────────────────────
@@ -333,7 +360,7 @@ export default function LiveInterviewSessionPage() {
   const [questionNumber, setQuestionNumber] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [timeLeft, setTimeLeft] = useState(120);
-  const [isMuted, setIsMuted] = useState(false);
+  const [timeLimitTotal, setTimeLimitTotal] = useState(120);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const isAudioMutedRef = useRef(false); // ref so WS handler sees latest value without stale closure
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null); // current TTS audio element
@@ -348,7 +375,6 @@ export default function LiveInterviewSessionPage() {
   // ─── Camera self-view + fullscreen ─────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [cameraOn, setCameraOn] = useState(true);
   const [cameraError, setCameraError] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -383,26 +409,28 @@ export default function LiveInterviewSessionPage() {
     }
   }, [cameraStream]);
 
-  const toggleCamera = useCallback(() => {
-    setCameraOn((on) => {
-      const next = !on;
-      cameraStream?.getVideoTracks().forEach((t) => { t.enabled = next; });
-      return next;
-    });
-  }, [cameraStream]);
+  const phaseRef = useRef<InterviewPhase>("connecting");
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
-  // Track fullscreen state so the toggle button shows the right icon
+  // Track fullscreen; re-enter and warn if user exits mid-interview
   useEffect(() => {
-    const sync = () => setIsFullscreen(!!document.fullscreenElement);
+    const sync = () => {
+      const inFullscreen = !!document.fullscreenElement;
+      setIsFullscreen(inFullscreen);
+      if (!inFullscreen && phaseRef.current !== "completed") {
+        document.documentElement.requestFullscreen().catch(() => {});
+        if (fullscreenWarningTimerRef.current) clearTimeout(fullscreenWarningTimerRef.current);
+        setShowFullscreenWarning(true);
+        fullscreenWarningTimerRef.current = setTimeout(() => setShowFullscreenWarning(false), 3000);
+      }
+    };
     document.addEventListener("fullscreenchange", sync);
     sync();
     return () => document.removeEventListener("fullscreenchange", sync);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else {
+    if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
     }
   }, []);
@@ -420,6 +448,9 @@ export default function LiveInterviewSessionPage() {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     };
   }, []);
+
+  const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
+  const fullscreenWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showEndModal, setShowEndModal] = useState(false);
   const [showReconnectModal, setShowReconnectModal] = useState(false);
@@ -441,18 +472,86 @@ export default function LiveInterviewSessionPage() {
     }
   }, []);
 
+  const autoSubmitRef = useRef<(() => void) | null>(null);
+
   const startTimer = useCallback((duration: number) => {
     stopTimer();
     setTimeLeft(duration);
     timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
-        if (t <= 1) { stopTimer(); return 0; }
+        if (t <= 1) {
+          stopTimer();
+          autoSubmitRef.current?.();
+          return 0;
+        }
         return t - 1;
       });
     }, 1000);
   }, [stopTimer]);
 
   useEffect(() => () => stopTimer(), [stopTimer]);
+
+  // ─── Microphone recording → send audio_chunk over WebSocket ───────────────
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioSeqRef = useRef(0);
+
+  useEffect(() => {
+    if (phase !== "listening") {
+      // Stop and discard the recorder when not in listening phase
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+      }
+      mediaRecorderRef.current = null;
+      return;
+    }
+
+    let recorder: MediaRecorder | null = null;
+    let localStream: MediaStream | null = null;
+    audioSeqRef.current = 0; // reset sequence counter for each new question
+
+    navigator.mediaDevices
+      .getUserMedia({ audio: true, video: false })
+      .then((stream) => {
+        localStream = stream;
+
+        // Pick the best supported codec for streaming
+        const mimeType =
+          ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find(
+            (m) => MediaRecorder.isTypeSupported(m)
+          ) ?? "";
+
+        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        mediaRecorderRef.current = recorder;
+
+        recorder.ondataavailable = (evt) => {
+          if (evt.data.size === 0) return;
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            // readAsDataURL gives "data:<mime>;base64,<data>" — extract the base64 part
+            const b64 = (reader.result as string).split(",")[1];
+            if (b64 && wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(
+                JSON.stringify({ type: "audio_chunk", data: b64, sequence: audioSeqRef.current++ })
+              );
+            }
+          };
+          reader.readAsDataURL(evt.data);
+        };
+
+        recorder.start(250); // emit a chunk every 250 ms for real-time STT
+      })
+      .catch(() => {
+        // Mic permission denied or unavailable — live transcript will be empty
+      });
+
+    return () => {
+      if (recorder && recorder.state !== "inactive") {
+        try { recorder.stop(); } catch { /* ignore */ }
+      }
+      localStream?.getTracks().forEach((t) => t.stop());
+      mediaRecorderRef.current = null;
+    };
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wsSend = useCallback((msg: WsClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -508,7 +607,9 @@ export default function LiveInterviewSessionPage() {
         setTranscript("");
         setPartialTranscript("");
         setPhase(msg.is_follow_up ? "follow-up" : "ai-talking");
-        const afterAudio = () => { setPhase("listening"); startTimer(msg.time_limit_s ?? 120); };
+        // Use server's time_limit_s; fall back to 120 only when server sends 0 or omits it
+        const limit = msg.time_limit_s || 120;
+        const afterAudio = () => { setPhase("listening"); setTimeLimitTotal(limit); startTimer(limit); };
         playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, afterAudio);
         break;
       }
@@ -623,6 +724,12 @@ export default function LiveInterviewSessionPage() {
     wsSend({ type: "end_answer" });
   }, [partialTranscript, stopTimer, wsSend]);
 
+  // Keep autoSubmitRef pointing at the latest handleEndAnswer so the timer
+  // can fire it without capturing a stale closure.
+  useEffect(() => {
+    autoSubmitRef.current = handleEndAnswer;
+  }, [handleEndAnswer]);
+
   const handleEndInterview = useCallback(() => {
     stopTimer();
     setShowEndModal(false);
@@ -671,6 +778,13 @@ export default function LiveInterviewSessionPage() {
 
       <div className="min-h-[calc(100vh-56px)] bg-gray-50 flex flex-col">
         {/* Score toast */}
+        {showFullscreenWarning && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-gray-900 text-white rounded-xl px-4 py-2.5 shadow-[0_4px_24px_rgba(0,0,0,0.30)]">
+            <AlertCircle size={14} className="text-yellow-400 shrink-0" />
+            <p className="text-xs font-semibold">Fullscreen is required during the interview</p>
+          </div>
+        )}
+
         {scoreToast && (
           <div className="fixed top-4 right-4 z-40 flex items-center gap-2.5 bg-white border border-[#2557a7]/20 rounded-xl px-4 py-2.5 shadow-[0_4px_24px_rgba(0,0,0,0.10)]">
             <CheckCircle2 size={14} className="text-[#2557a7] shrink-0" />
@@ -694,15 +808,13 @@ export default function LiveInterviewSessionPage() {
             playsInline
             muted
             className={`h-full w-full scale-x-[-1] object-cover transition-opacity ${
-              cameraOn && !cameraError ? "opacity-100" : "opacity-0"
+              !cameraError ? "opacity-100" : "opacity-0"
             }`}
           />
-          {(!cameraOn || cameraError) && (
+          {cameraError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-400">
               <VideoOff size={20} />
-              <span className="text-[10px] font-medium">
-                {cameraError ? "Camera unavailable" : "Camera off"}
-              </span>
+              <span className="text-[10px] font-medium">Camera unavailable</span>
             </div>
           )}
           <span className="absolute bottom-1 left-2 text-[10px] font-medium text-white/90 drop-shadow">
@@ -729,13 +841,15 @@ export default function LiveInterviewSessionPage() {
               <Clock size={11} />
               {sessionType} Interview
             </span>
-            <button
-              onClick={toggleFullscreen}
-              className="flex items-center justify-center w-8 h-8 bg-gray-100 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors"
-              aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
-            >
-              {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-            </button>
+            {!isFullscreen && (
+              <button
+                onClick={toggleFullscreen}
+                className="flex items-center justify-center w-8 h-8 bg-gray-100 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors"
+                aria-label="Enter full screen"
+              >
+                <Maximize2 size={13} />
+              </button>
+            )}
             <button
               onClick={() => setShowEndModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-500 border border-gray-200 rounded-lg text-xs font-semibold hover:bg-gray-200 transition-colors"
@@ -874,28 +988,20 @@ export default function LiveInterviewSessionPage() {
 
             {/* Controls */}
             <div className="flex items-center justify-center gap-4">
-              <button
-                onClick={() => setIsMuted((m) => !m)}
-                className={`w-12 h-12 rounded-full flex items-center justify-center border transition-all ${
-                  isMuted ? "bg-gray-100 border-gray-200 text-gray-400" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50 shadow-sm"
-                }`}
-                aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+              {/* Mic and camera status indicators — not toggleable during session */}
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center border bg-white border-[#2557a7]/30 text-[#2557a7] shadow-sm"
+                title="Microphone is active"
               >
-                {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
-              </button>
+                <Mic size={18} />
+              </div>
 
-              <button
-                onClick={toggleCamera}
-                disabled={cameraError}
-                className={`w-12 h-12 rounded-full flex items-center justify-center border transition-all disabled:cursor-not-allowed ${
-                  !cameraOn || cameraError
-                    ? "bg-gray-100 border-gray-200 text-gray-400"
-                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50 shadow-sm"
-                }`}
-                aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center border bg-white border-[#2557a7]/30 text-[#2557a7] shadow-sm"
+                title="Camera is active"
               >
-                {cameraOn && !cameraError ? <Video size={18} /> : <VideoOff size={18} />}
-              </button>
+                <Video size={18} />
+              </div>
 
               {phase === "listening" && (
                 <div className="flex flex-col items-center gap-2">
@@ -910,7 +1016,7 @@ export default function LiveInterviewSessionPage() {
               )}
 
               {phase === "listening" && (
-                <QuestionTimer secondsLeft={timeLeft} total={120} />
+                <QuestionTimer secondsLeft={timeLeft} total={timeLimitTotal} />
               )}
 
               <button

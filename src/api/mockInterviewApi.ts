@@ -205,7 +205,8 @@ export const generateNotes = async (data: GenerateNotesRequest): Promise<Generat
     logger.debug('📝 Generating mock interview notes', data);
     const response = await httpClient.post<GenerateNotesResponse>(
       '/mock-interview/generate-notes',
-      data as unknown as Record<string, unknown>
+      data as unknown as Record<string, unknown>,
+      { timeout: 180_000 } // 3 min — AI generation takes longer than the default 30s
     );
     logger.info('✅ Notes generated successfully');
     return response.data;

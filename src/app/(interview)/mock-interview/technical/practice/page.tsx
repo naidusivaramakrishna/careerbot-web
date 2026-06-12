@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight,
@@ -47,11 +47,7 @@ function TechnicalPracticeContent() {
   const [answeredMap, setAnsweredMap] = useState<Record<string, AnswerState>>({});
   const [currentAnswer, setCurrentAnswer] = useState<AnswerState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showTextFallback, setShowTextFallback] = useState(false);
-  const [textAnswer, setTextAnswer] = useState("");
   const [sessionLoading, setSessionLoading] = useState(true);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Map UI category IDs to backend-accepted values
   const categoryMap: Record<string, string> = {
@@ -83,15 +79,6 @@ function TechnicalPracticeContent() {
     }).finally(() => setSessionLoading(false));
   }, [category, backendCategory]);
 
-  useEffect(() => {
-    if (!currentAnswer && !isSubmitting && !showTextFallback) {
-      setElapsedSeconds(0);
-      timerRef.current = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [currentAnswer, isSubmitting, showTextFallback]);
 
   const question = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
@@ -99,7 +86,6 @@ function TechnicalPracticeContent() {
 
   const handleRecordingComplete = useCallback(async (blob: Blob) => {
     if (!sessionId || !question) {
-      setShowTextFallback(true);
       return;
     }
     setIsSubmitting(true);
@@ -126,50 +112,14 @@ function TechnicalPracticeContent() {
       setAnsweredMap((m) => ({ ...m, [question.id]: answer }));
       setCurrentAnswer(answer);
     } catch {
-      setShowTextFallback(true);
+      /* recording failed — user can try again */
     } finally {
       setIsSubmitting(false);
     }
   }, [sessionId, question]);
 
-  const handleTextSubmit = useCallback(async () => {
-    if (textAnswer.trim().length < 20 || !sessionId || !question) return;
-    setIsSubmitting(true);
-    setCurrentAnswer(null);
-    setShowTextFallback(false);
-
-    try {
-      const textBlob = new Blob([textAnswer], { type: "text/plain" });
-      const formData = new FormData();
-      formData.append("audio", textBlob, "text-answer.txt");
-      formData.append("session_id", sessionId);
-      formData.append("question_id", question.id);
-
-      const apiResponse = await submitPracticeAnswer(formData) as unknown as SubmitAnswerResponse;
-      const answer: AnswerState = {
-        transcript: textAnswer,
-        weightedScore: apiResponse.scores.weighted_score,
-        feedback: apiResponse.feedback.improvements.join(" ") + " (Note: This answer was typed. Try speaking next time.)",
-        dimensions: [
-          { label: "Content", score: apiResponse.scores.content_score, weight: "40%" },
-          { label: "Clarity", score: apiResponse.scores.clarity_score, weight: "30%" },
-          { label: "Structure", score: apiResponse.scores.structure_score, weight: "20%" },
-          { label: "Length", score: apiResponse.scores.length_score, weight: "10%" },
-        ],
-      };
-      setAnsweredMap((m) => ({ ...m, [question.id]: answer }));
-      setCurrentAnswer(answer);
-    } catch {
-      /* leave text fallback visible */
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [sessionId, question, textAnswer]);
-
   const handleNext = () => {
     setCurrentAnswer(null);
-    setShowTextFallback(false);
-    setTextAnswer("");
     const newCount = Object.keys(answeredMap).length;
     setPracticeAnswered(newCount);
     if (isLastQuestion) {
@@ -267,57 +217,12 @@ function TechnicalPracticeContent() {
 
       {/* Answer section */}
       {!currentAnswer && !isSubmitting && (
-        <div className="space-y-3">
-          {/* Audio recorder */}
-          {!showTextFallback && (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Mic size={14} className="text-[#2557a7]" />
-                <p className="text-sm font-semibold text-gray-900">Record Your Answer</p>
-                {elapsedSeconds > 0 && (
-                  <span className={`ml-auto text-xs font-mono ${elapsedSeconds > 120 ? "text-gray-400" : "text-gray-500"}`}>
-                    {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, "0")}
-                  </span>
-                )}
-              </div>
-              <AudioRecorder onRecordingComplete={handleRecordingComplete} />
-              <button
-                onClick={() => setShowTextFallback(true)}
-                className="mt-3 text-xs text-gray-400 hover:text-gray-600 underline transition-colors"
-              >
-                Use text instead
-              </button>
-            </div>
-          )}
-
-          {/* Text fallback */}
-          {showTextFallback && (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <p className="text-sm font-semibold text-gray-900 mb-3">Type Your Answer</p>
-              <textarea
-                value={textAnswer}
-                onChange={(e) => setTextAnswer(e.target.value)}
-                placeholder="Type your answer here (minimum 20 characters)…"
-                rows={5}
-                className="w-full text-sm text-gray-800 border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:border-transparent placeholder-gray-400"
-              />
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={() => { setShowTextFallback(false); setTextAnswer(""); }}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm"
-                >
-                  <Mic size={14} /> Use Mic
-                </button>
-                <button
-                  onClick={handleTextSubmit}
-                  disabled={textAnswer.trim().length < 20 || isSubmitting}
-                  className="flex-1 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-semibold hover:bg-[#1e4a8f] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                >
-                  Submit Answer
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Mic size={14} className="text-[#2557a7]" />
+            <p className="text-sm font-semibold text-gray-900">Record Your Answer</p>
+          </div>
+          <AudioRecorder onRecordingComplete={handleRecordingComplete} />
         </div>
       )}
 

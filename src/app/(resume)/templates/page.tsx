@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Search, LayoutTemplate, Sparkles } from 'lucide-react';
 import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';
 import logger from '@/lib/logger';
@@ -193,6 +194,9 @@ interface DomainModal {
 }
 
 export default function TemplatesPage() {
+  const searchParams = useSearchParams();
+  const urlResumeId = searchParams.get("resumeId") || undefined;
+  const urlSource = searchParams.get("source") || undefined;
   const [categories, setCategories] = useState<string[]>([]);
   const [templates, setTemplates] = useState<TemplateResponse[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -695,6 +699,8 @@ export default function TemplatesPage() {
           domainFamily={selectedDomainModal.domainFamily}
           templates={groupedTemplates[selectedDomainModal.domainFamily]?.[selectedDomainModal.domainKey] || []}
           onClose={() => setSelectedDomainModal(null)}
+          sourceResumeId={urlResumeId}
+          source={urlSource}
         />
       )}
     </div>

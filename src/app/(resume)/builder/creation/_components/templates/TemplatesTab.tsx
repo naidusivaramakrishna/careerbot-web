@@ -9,7 +9,7 @@ import logger from "@/lib/logger";
 import { TEMPLATE_DEFAULT_STYLES, STYLE_CATALOGUES } from "../../_utils/templateStyles";
 import CatalogueTab from "./CatalogueTab";
 import { getProfile } from "@/api/userApi";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder";
 
 const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
@@ -112,6 +112,8 @@ interface TemplatesTabProps {
 
 const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const source = searchParams.get("source");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [activePanel, setActivePanel] = useState<"templates" | "style">("templates");
@@ -652,7 +654,13 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           {/* More Templates Button */}
           <div className="mt-8 flex justify-center">
             <button
-              onClick={() => router.push('/templates')}
+              onClick={() => {
+                const params = new URLSearchParams();
+                if (resumeId) params.set("resumeId", resumeId);
+                if (source) params.set("source", source);
+                const qs = params.toString();
+                router.push(`/templates${qs ? `?${qs}` : ''}`);
+              }}
               className="px-6 py-2.5 bg-[#2557a7] hover:bg-[#1f4e98] text-white font-semibold cursor-pointer rounded-lg transition-all duration-200 text-sm"
             >
               Browse More Templates

@@ -20,7 +20,8 @@
 # next.js
 /.next/
 /out/
-
+!MSW_INTEGRATION_GUIDE.md
+!TESTING_GUIDE.md
 # production
 /build
 

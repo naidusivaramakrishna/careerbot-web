@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { submitFinalReport } from '@/api/communicationApi';
 import { getProfile } from '@/api/userApi';
 // import Sidebar from '@/components/layout/Sidebar';
@@ -12,6 +12,13 @@ export default function FeedbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isTimeout = searchParams.get('reason') === 'timeout';
+
+  // Exit fullscreen when feedback page loads — assessment is over regardless of how we got here
+  useEffect(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');

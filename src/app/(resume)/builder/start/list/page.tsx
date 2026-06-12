@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, useCallback, Suspense } from 'react'
 import { toast } from 'sonner';
-import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getResumeScore, ResumeResponse } from '@/api/resumeApi';
+import { getAllResumesUnified, deleteResume as deleteResumeApi, downloadResume, getBuilderScore, ResumeResponse } from '@/api/resumeApi';
 import { getProfile } from '@/api/userApi';
 import { downloadEnhancedResume } from '@/api/enhancerApi';
 import type { EnhancedResumeSummary } from '@/types/api.types';
@@ -95,17 +95,18 @@ const ResumeListContent = () => {
     try {
       setLoading(true);
 
-      // Fetch profile name as fallback for resumes with no fullname set
-      let profileName = '';
-      try {
-        const profile = await getProfile();
-        profileName = profile.full_name || profile.username || '';
-      } catch {
-        // best-effort
-      }
+      // Fetch profile and resumes in parallel — profile is only a name fallback
+      const [profileResult, resumesResult] = await Promise.allSettled([
+        getProfile(),
+        getAllResumesUnified(),
+      ]);
 
-      // Single unified call — returns both builder and enhanced resumes
-      const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
+      const profileName = profileResult.status === 'fulfilled'
+        ? (profileResult.value.full_name || profileResult.value.username || '')
+        : '';
+
+      if (resumesResult.status === 'rejected') throw resumesResult.reason;
+      const { builder_resumes, enhanced_resumes } = resumesResult.value;
 
       // Transform enhanced resumes (summary shape — no enhanced_data)
       const transformedEnhanced: Resume[] = enhanced_resumes.map((item: EnhancedResumeSummary) => {
@@ -129,24 +130,25 @@ const ResumeListContent = () => {
         };
       });
 
-      // Transform builder resumes
+      // Transform builder resumes and show list immediately
       const transformedData = transformResumeData(builder_resumes as unknown as ResumeResponse[], profileName);
-
-      // Fetch scores for builder resumes only
-      const resumesWithScores = await Promise.all(
-        transformedData.map(async (resume) => {
-          try {
-            const scoreData = await getResumeScore(resume.id);
-            return { ...resume, score: scoreData.overall_score };
-          } catch {
-            return resume;
-          }
-        })
-      );
-
-      // Merge: builder resumes first, then enhanced resumes
-      const merged = [...resumesWithScores, ...transformedEnhanced];
+      const merged = [...transformedData, ...transformedEnhanced];
       setResumes(merged);
+      setLoading(false);
+
+      // Load scores in the background — update each card as its score arrives
+      transformedData.forEach(async (resume) => {
+        try {
+          const scoreData = await getBuilderScore(resume.id);
+          if (scoreData.score > 0) {
+            setResumes(prev =>
+              prev.map(r => r.id === resume.id ? { ...r, score: scoreData.score } : r)
+            );
+          }
+        } catch {
+          // leave score as 0
+        }
+      });
     } catch (err) {
       const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       if (error.response?.status === 401 || error.message?.includes("sign in")) {

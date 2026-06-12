@@ -577,8 +577,25 @@ export default function Sidebar() {
   };
   const activeId = getActiveId();
 
+  // Track the last resume-related page the user visited so the resume icon restores it exactly
+  useEffect(() => {
+    if (pathname.startsWith('/builder/creation/')) {
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      sessionStorage.setItem('last_resume_path', pathname + search);
+    } else if (pathname === '/builder/start/list' || pathname === '/builder/start') {
+      sessionStorage.setItem('last_resume_path', pathname);
+    }
+  }, [pathname]);
+
   const handleNavigation = async (item: { id: string; path: string; smartNav?: boolean }) => {
     if (item.smartNav) {
+      // Restore exactly where the user last was in the resume section
+      const lastResumePath = sessionStorage.getItem('last_resume_path');
+      if (lastResumePath) {
+        router.push(lastResumePath);
+        return;
+      }
+      // No recorded path (new user / post-logout) — decide between list and start
       try {
         const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
         const hasAny = builder_resumes.length > 0 || enhanced_resumes.length > 0;
