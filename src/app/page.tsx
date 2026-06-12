@@ -6,10 +6,8 @@ import { useTenant } from '@/contexts/TenantContext';
 import { sanitizeAuthRedirect } from '@/lib/authRedirect';
 import LandingNavbar from './(landing)/_components/LandingNavbar';
 import HeroSection from './(landing)/_components/HeroSection';
-import TrustBadgeRow from './(landing)/_components/TrustBadgeRow';
-import SocialProofBar from './(landing)/_components/SocialProofBar';
+import ProblemStatement from './(landing)/_components/ProblemStatement';
 import FeaturesSection from './(landing)/_components/FeaturesSection';
-import TemplateGallery from './(landing)/_components/TemplateGallery';
 import HowItWorks from './(landing)/_components/HowItWorks';
 import UserSegments from './(landing)/_components/UserSegments';
 import Testimonials from './(landing)/_components/Testimonials';
@@ -72,10 +70,8 @@ export default function Home() {
       <main>
         <LandingNavbar onOpenSignup={openSignup} onOpenSignin={openSignin} />
         <HeroSection />
-        <TrustBadgeRow />
-        <SocialProofBar />
+        <ProblemStatement />
         <FeaturesSection />
-        <TemplateGallery onOpenSignup={openSignup} />
         <HowItWorks />
         <UserSegments />
         <Testimonials />

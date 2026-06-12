@@ -95,8 +95,14 @@ export async function deleteAllNotifications(): Promise<void> {
 /**
  * Get unread notification count
  */
-export async function getUnreadNotificationCount(): Promise<{ unread_count: number }> {
-  const response = await httpClient.get<{ unread_count: number }>('/notifications/count');
+export async function getUnreadNotificationCount(
+  options: { skipAuthRedirect?: boolean } = {}
+): Promise<{ unread_count: number }> {
+  const response = await httpClient.get<{ unread_count: number }>('/notifications/count', {
+    headers: {
+      ...(options.skipAuthRedirect && { 'X-Skip-Login-Redirect': 'true' }),
+    },
+  });
   return response.data;
 }
 
@@ -118,9 +124,16 @@ export interface NotificationListResponse {
 /**
  * Get paginated list of notifications
  */
-export async function getNotifications(page: number = 1, limit: number = 20): Promise<NotificationListResponse> {
+export async function getNotifications(
+  page: number = 1,
+  limit: number = 20,
+  options: { skipAuthRedirect?: boolean } = {}
+): Promise<NotificationListResponse> {
   const response = await httpClient.get<NotificationListResponse>('/notifications', {
     params: { page, limit },
+    headers: {
+      ...(options.skipAuthRedirect && { 'X-Skip-Login-Redirect': 'true' }),
+    },
   });
   // Normalize: backend may return `_id` (MongoDB) on some notifications instead of `id`
   response.data.items = response.data.items.map((item) => {

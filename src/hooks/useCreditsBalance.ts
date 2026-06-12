@@ -23,7 +23,7 @@ export function useCreditsBalance(options: UseCreditsBalanceOptions = {}) {
     try {
       setLoading(true);
       setError(null);
-      const creditsData = await getCreditsBalance();
+      const creditsData = await getCreditsBalance({ skipAuthRedirect: true });
       setData(creditsData);
     } catch (err) {
       console.error('Failed to fetch credits balance:', err);

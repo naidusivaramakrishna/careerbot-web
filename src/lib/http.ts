@@ -179,6 +179,11 @@ client.interceptors.response.use(
     const skipAuthRedirect =
       originalRequest?.headers?.get?.('X-Skip-Auth-Redirect') === 'true' ||
       originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true';
+    // skipLoginRedirect: still attempts token refresh on 401, but does NOT
+    // redirect to login if the refresh also fails (user is unauthenticated).
+    const skipLoginRedirect =
+      originalRequest?.headers?.get?.('X-Skip-Login-Redirect') === 'true' ||
+      originalRequest?.headers?.['X-Skip-Login-Redirect'] === 'true';
 
     // 403 = tenant mismatch — do NOT attempt token refresh, just reject
     if (error.response?.status === 403) {
@@ -244,7 +249,7 @@ client.interceptors.response.use(
       originalRequest.url?.includes('/auth/refresh') ||
       originalRequest.url?.includes('/admin/auth/refresh')
     ) {
-      if (isSessionFresh()) {
+      if (isSessionFresh() || skipLoginRedirect) {
         return Promise.reject(error);
       }
       clearAllTokens();
@@ -280,7 +285,13 @@ client.interceptors.response.use(
       const endpoint = isAdmin
         ? '/admin/auth/refresh'
         : '/auth/refresh';
-      await client.post(endpoint, {});
+      await client.post(
+        endpoint,
+        {},
+        skipLoginRedirect
+          ? { headers: { 'X-Skip-Login-Redirect': 'true' } }
+          : undefined
+      );
       window.dispatchEvent(
         new Event(isAdmin ? 'adminTokenUpdated' : 'tokenUpdated')
       );
@@ -300,7 +311,7 @@ client.interceptors.response.use(
 
       // Don't redirect if the failure is a transient backend crash OR if the tokens
       // are fresh (user just logged in) — in both cases the session is still valid.
-      if (isRefreshBackendCrash || isSessionFresh()) {
+      if (isRefreshBackendCrash || isSessionFresh() || skipLoginRedirect) {
         processQueue(refreshError, null, isAdmin);
         return Promise.reject(refreshError);
       }

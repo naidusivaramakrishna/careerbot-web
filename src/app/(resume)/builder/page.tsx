@@ -6,6 +6,7 @@ import Image from "next/image";
 import {
   ArrowRight,
   BarChart3,
+  ChevronRight,
   CheckCircle2,
   Clock,
   Download,
@@ -271,6 +272,16 @@ export default function ResumeLandingPage() {
           </div>
         </nav>
       </header>
+
+      <div className="border-b border-slate-100 bg-slate-50">
+        <div className="mx-auto flex max-w-6xl items-center gap-1.5 px-4 py-3">
+          <Link href="/" className="text-xs font-medium text-slate-500 transition-colors hover:text-[#2557a7]">
+            Home
+          </Link>
+          <ChevronRight size={13} className="text-slate-300" />
+          <span className="text-xs font-semibold text-[#2557a7]">Resume Builder</span>
+        </div>
+      </div>
 
       <section id="overview" className="relative scroll-mt-20 overflow-hidden bg-[linear-gradient(135deg,#f8fbff_0%,#eef6ff_48%,#eaf7f5_100%)] pb-20 pt-10 lg:pb-24 lg:pt-14">
         <div

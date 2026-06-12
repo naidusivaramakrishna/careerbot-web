@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { parseJDText } from '@/api/parserApi';
 import { extractResume } from '@/api/resumeParsingApi';
+import SignUpModal from '@/components/SignUpModal';
 import { useHasParsedResume } from '@/hooks/useHasParsedResume';
 import { useLatestParsedResume } from '@/hooks/useLatestParsedResume';
 import { useGenerateCoverLetter } from '@/hooks/useGenerateCoverLetter';
@@ -28,23 +29,33 @@ type ParsedResumeBlob = Record<string, unknown>;
 export default function CoverLetterNewPage() {
   const gate = useHasParsedResume();
   const [uploadedResume, setUploadedResume] = useState<ParsedResumeBlob | null>(null);
+  const [showSignIn, setShowSignIn] = useState(false);
   const uploader = useCoverLetterResumeUpload(async (resume) => {
     setUploadedResume(resume);
     await gate.refetch();
-  });
+  }, () => setShowSignIn(true));
 
   if (gate.isLoading && gate.hasResume === null) {
     return <PageLoader />;
   }
   if (gate.hasResume === false && !uploadedResume) {
     return (
-      <NoResumePrompt
-        isRefreshing={gate.isLoading}
-        isUploading={uploader.isUploading}
-        uploadError={uploader.uploadError}
-        onRefresh={() => void gate.refetch()}
-        onUpload={(file) => void uploader.uploadResume(file)}
-      />
+      <>
+        <NoResumePrompt
+          isRefreshing={gate.isLoading}
+          isUploading={uploader.isUploading}
+          uploadError={uploader.uploadError}
+          onRefresh={() => void gate.refetch()}
+          onUpload={(file) => void uploader.uploadResume(file)}
+        />
+        <SignUpModal
+          open={showSignIn}
+          onClose={() => setShowSignIn(false)}
+          initialFormType="signin"
+          redirectTo="/cover-letter/new"
+          onSuccess={() => void gate.refetch()}
+        />
+      </>
     );
   }
   return <FormHost uploadedResume={uploadedResume} />;
@@ -62,10 +73,11 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
   const [localUploadedResume, setLocalUploadedResume] = useState<ParsedResumeBlob | null>(
     uploadedResume ?? null
   );
+  const [showSignIn, setShowSignIn] = useState(false);
   const uploader = useCoverLetterResumeUpload(async (resume) => {
     setLocalUploadedResume(resume);
     await latest.refetch();
-  });
+  }, () => setShowSignIn(true));
   const resume = localUploadedResume ?? latest.resume;
   const parsedResumeId = getCoverLetterParsedResumeId(resume);
 
@@ -106,13 +118,22 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
 
   if (!resume || !parsedResumeId) {
     return (
-      <NoResumePrompt
-        isRefreshing={latest.isLoading}
-        isUploading={uploader.isUploading}
-        uploadError={uploader.uploadError}
-        onRefresh={() => void latest.refetch()}
-        onUpload={(file) => void uploader.uploadResume(file)}
-      />
+      <>
+        <NoResumePrompt
+          isRefreshing={latest.isLoading}
+          isUploading={uploader.isUploading}
+          uploadError={uploader.uploadError}
+          onRefresh={() => void latest.refetch()}
+          onUpload={(file) => void uploader.uploadResume(file)}
+        />
+        <SignUpModal
+          open={showSignIn}
+          onClose={() => setShowSignIn(false)}
+          initialFormType="signin"
+          redirectTo="/cover-letter/new"
+          onSuccess={() => void latest.refetch()}
+        />
+      </>
     );
   }
 
@@ -196,7 +217,6 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
       <div className="max-w-2xl mx-auto px-4 py-8">
         <CoverLetterForm
           isSubmitting={isPreparing || generation.isLoading}
-          initialJd={initialJd}
           apiError={apiError}
           validationErrors={
             apiError === 'Please fix the highlighted fields and try again.' &&
@@ -248,7 +268,8 @@ function getGenerateNotFoundMessage(message: string): string {
 }
 
 function useCoverLetterResumeUpload(
-  onUploaded: (resume: ParsedResumeBlob) => Promise<void>
+  onUploaded: (resume: ParsedResumeBlob) => Promise<void>,
+  onAuthRequired?: () => void
 ) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -263,7 +284,7 @@ function useCoverLetterResumeUpload(
     setIsUploading(true);
     setUploadError(null);
     try {
-      const parsed = await extractResume(file, { skipAuthRedirect: true });
+      const parsed = await extractResume(file, { skipLoginRedirect: true });
       const mappedResume = {
         parsed_data: parsed.parsed_data,
         parsed_resume_id: parsed.resume_id,
@@ -281,17 +302,50 @@ function useCoverLetterResumeUpload(
       toast.success('Resume parsed. Continue with your cover letter.');
       await onUploaded(mappedResume);
     } catch (err) {
-      const message = err instanceof Error
-        ? err.message
-        : 'Could not upload this resume. Please try another file.';
+      if (isUnauthorizedError(err)) {
+        onAuthRequired?.();
+      }
+      const message = getResumeUploadErrorMessage(err);
       setUploadError(message);
       toast.error(message);
     } finally {
       setIsUploading(false);
     }
-  }, [onUploaded]);
+  }, [onUploaded, onAuthRequired]);
 
   return { isUploading, uploadError, uploadResume };
+}
+
+function isUnauthorizedError(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return status === 401 || status === 403;
+}
+
+function getResumeUploadErrorMessage(err: unknown): string {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  if (status === 401 || status === 403) {
+    return 'Please sign in to upload and parse your resume. We will keep you in the cover-letter flow.';
+  }
+
+  const data = (err as { response?: { data?: unknown } })?.response?.data;
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    const detail = record.detail;
+    if (typeof detail === 'string') return detail;
+    const error = record.error;
+    if (error && typeof error === 'object') {
+      const message = (error as Record<string, unknown>).message;
+      if (typeof message === 'string') return message;
+    }
+    const message = record.message;
+    if (typeof message === 'string') return message;
+  }
+
+  if (err instanceof Error && !/^Request failed with status code \d+$/.test(err.message)) {
+    return err.message;
+  }
+
+  return 'Could not upload this resume. Please try another file.';
 }
 
 function PageLoader() {

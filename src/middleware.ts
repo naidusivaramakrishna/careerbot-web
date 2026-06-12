@@ -13,6 +13,9 @@ const publicRoutes = [
     '/forgot-password',
     '/resend-verification',
     "/browse-templates",
+    "/blog",
+    "/terms-of-service",
+    "/privacy-policy",
     // Builder and cover-letter creation flow remain public. Cover-letter
     // export/download handles auth at the action level.
     "/builder",
@@ -64,7 +67,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // Landing pages accessible without auth (exact path only — sub-paths remain protected)
-    const publicLandingPages = ['/jobmatch', '/ats'];
+    const publicLandingPages = ['/jobmatch', '/ats', '/payments'];
     if (publicLandingPages.includes(pathname)) {
         return NextResponse.next();
     }

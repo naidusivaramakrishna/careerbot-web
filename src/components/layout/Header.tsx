@@ -91,9 +91,9 @@ export default function Header() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const profile = await getProfile();
+        const profile = await getProfile({ skipAuthRedirect: true });
         setUserProfile(profile);
-        const picRes = await getProfilePicture();
+        const picRes = await getProfilePicture({ skipAuthRedirect: true });
         if (picRes?.picture_url) {
           const fullUrl = picRes.picture_url.startsWith('http')
             ? picRes.picture_url

@@ -156,7 +156,7 @@ export function PricingPlans({ onSelectPlan, currentPlanId }: PricingPlansProps)
       <div className="text-center max-w-2xl mx-auto">
         <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold px-4 py-1.5 rounded-full mb-4">
           <Zap className="w-3.5 h-3.5" />
-          No hidden fees. Cancel anytime.
+          No hidden fees. Secure payment.
         </div>
         <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">
           Invest in your career.<br className="hidden sm:block" />
@@ -240,7 +240,7 @@ export function PricingPlans({ onSelectPlan, currentPlanId }: PricingPlansProps)
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          Cancel anytime, no penalties
+          Secure checkout, no hidden charges
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
@@ -327,7 +327,7 @@ export function PricingPlans({ onSelectPlan, currentPlanId }: PricingPlansProps)
                   <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
                 ))}
               </div>
-              <p className="text-gray-700 text-sm leading-relaxed mb-4">"{t.body}"</p>
+              <p className="text-gray-700 text-sm leading-relaxed mb-4">&quot;{t.body}&quot;</p>
               <div>
                 <p className="font-semibold text-gray-900 text-sm">{t.name}</p>
                 <p className="text-gray-400 text-xs">{t.role}</p>

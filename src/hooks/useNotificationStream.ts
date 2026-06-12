@@ -95,7 +95,7 @@ export function useNotificationStream(options: UseNotificationStreamOptions = {}
 
   // ── Fetch existing notifications on mount ─────────────────────────────────
   useEffect(() => {
-    getNotifications(1, 4)
+    getNotifications(1, 4, { skipAuthRedirect: true })
       .then(({ items, unread_count }) => {
         setNotifications(items);
         setUnreadCount(unread_count);
