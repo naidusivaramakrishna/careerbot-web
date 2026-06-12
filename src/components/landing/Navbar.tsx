@@ -9,12 +9,9 @@ import {
   ChevronDown,
   FileText,
   ScanSearch,
-  Mail,
   Briefcase,
   Target,
   Zap,
-  Mic,
-  ClipboardList,
   Languages,
 } from 'lucide-react';
 
@@ -50,16 +47,16 @@ const RESUME_ITEMS: DropdownItem[] = [
     href: '/builder',
   },
   {
+    icon: <FileText size={18} />,
+    label: 'Resume Templates',
+    description: 'Browse 70+ templates',
+    href: '/browse-templates',
+  },
+  {
     icon: <ScanSearch size={18} />,
     label: 'ATS Scanner',
     description: 'Check ATS score',
-    href: '/atslogin',
-  },
-  {
-    icon: <Mail size={18} />,
-    label: 'Cover Letter',
-    description: 'AI-powered letters',
-    href: '/cover-letter',
+    href: '/ats',
   },
 ];
 
@@ -74,7 +71,7 @@ const JOBS_ITEMS: DropdownItem[] = [
     icon: <Target size={18} />,
     label: 'Job Match',
     description: 'Match your resume to job listings',
-    href: '/job-match',
+    href: '/jobmatch',
   },
   {
     icon: <Zap size={18} />,
@@ -82,21 +79,6 @@ const JOBS_ITEMS: DropdownItem[] = [
     description: 'All jobs from top boards in one',
     href: '#coming-soon',
     comingSoon: true,
-  },
-];
-
-const INTERVIEW_ITEMS: DropdownItem[] = [
-  {
-    icon: <Mic size={18} />,
-    label: 'Mock Interview',
-    description: 'AI-powered interview simulation',
-    href: '/mock-interview',
-  },
-  {
-    icon: <ClipboardList size={18} />,
-    label: 'Mock Test',
-    description: 'Practice with real exam questions',
-    href: '/mock-test',
   },
 ];
 
@@ -126,12 +108,6 @@ const DROPDOWN_GROUPS: DropdownGroup[] = [
     items: JOBS_ITEMS,
   },
   {
-    id: 'interview',
-    label: 'Interview',
-    sectionHeader: 'INTERVIEW PREP',
-    items: INTERVIEW_ITEMS,
-  },
-  {
     id: 'assessments',
     label: 'Assessments',
     sectionHeader: 'SKILL ASSESSMENTS',
@@ -141,8 +117,11 @@ const DROPDOWN_GROUPS: DropdownGroup[] = [
 ];
 
 const DIRECT_LINKS = [
-  { label: 'Blog', href: '#coming-soon', comingSoon: true },
-  { label: 'Pricing', href: '#coming-soon', comingSoon: true },
+  { label: 'Cover Letter', href: '/cover-letter' },
+  { label: 'Mock Interview', href: '/mock-interview' },
+  { label: 'Mock Test', href: '/mock-test' },
+  { label: 'Blog', href: '/blog' },
+  { label: 'Pricing', href: '/payments' },
 ];
 
 /* ─────────────────────────────────────────────

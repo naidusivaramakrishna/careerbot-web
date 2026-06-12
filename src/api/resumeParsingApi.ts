@@ -423,7 +423,7 @@ export interface ResumeExtractResponse {
  */
 export const extractResume = async (
     file: File,
-    options: { skipAuthRedirect?: boolean } = {}
+    options: { skipAuthRedirect?: boolean; skipLoginRedirect?: boolean } = {}
 ): Promise<ResumeExtractResponse> => {
     try {
         const formData = new FormData();
@@ -438,6 +438,9 @@ export const extractResume = async (
                     "Content-Type": "multipart/form-data",
                     ...(options.skipAuthRedirect && {
                         "X-Skip-Auth-Redirect": "true",
+                    }),
+                    ...(options.skipLoginRedirect && {
+                        "X-Skip-Login-Redirect": "true",
                     }),
                 },
             }

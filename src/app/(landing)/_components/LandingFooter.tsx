@@ -1,22 +1,51 @@
 import Link from 'next/link';
-import { Bot } from 'lucide-react';
+import {
+  Bot,
+  Briefcase,
+  FileText,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
-const columns = [
+interface FooterColumn {
+  heading: string;
+  links: {
+    label: string;
+    href: string;
+  }[];
+}
+
+interface ProofItem {
+  icon: LucideIcon;
+  label: string;
+}
+
+const columns: FooterColumn[] = [
   {
-    heading: 'Product',
+    heading: 'Resume tools',
     links: [
-      { label: 'ATS Scanner', href: '/atslogin' },
       { label: 'Resume Builder', href: '/builder' },
-      { label: 'Job Search', href: '/jobs' },
+      { label: 'Resume Templates', href: '/browse-templates' },
+      { label: 'ATS Scanner', href: '/ats' },
       { label: 'Cover Letter', href: '/cover-letter' },
+    ],
+  },
+  {
+    heading: 'Career tools',
+    links: [
+      { label: 'Job Search', href: '/jobs' },
+      { label: 'Job Match', href: '/jobmatch' },
       { label: 'Mock Interview', href: '/mock-interview' },
-      { label: 'Pricing', href: '/#pricing' },
+      { label: 'Mock Test', href: '/mock-test' },
     ],
   },
   {
     heading: 'Company',
     links: [
+      { label: 'Blog', href: '/blog' },
       { label: 'How It Works', href: '/#how-it-works' },
+      { label: 'Pricing', href: '/payments' },
       { label: 'Contact', href: 'mailto:support@careerbot.com' },
     ],
   },
@@ -24,25 +53,43 @@ const columns = [
     heading: 'Legal',
     links: [
       { label: 'Terms of Service', href: '/terms-of-service' },
+      { label: 'Privacy Policy', href: '/privacy-policy' },
     ],
   },
 ];
 
+const proofItems: ProofItem[] = [
+  { icon: FileText, label: '70+ resume templates' },
+  { icon: ShieldCheck, label: 'ATS-friendly workflows' },
+  { icon: Briefcase, label: 'Global job search tools' },
+];
+
 export default function LandingFooter() {
   return (
-    <footer className="bg-slate-900 text-slate-400">
-      <div className="mx-auto max-w-6xl px-4 pb-8 pt-14">
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex flex-col gap-3">
+    <footer className="relative overflow-hidden text-blue-100" style={{ backgroundColor: '#163f7d' }}>
+      <div className="relative mx-auto max-w-6xl px-4 pb-8 pt-14 lg:px-8">
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr]">
+          <div className="flex flex-col gap-4">
             <Link href="/" className="flex w-fit items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#2557a7]">
-                <Bot size={14} color="white" strokeWidth={2.2} />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-lg shadow-blue-950/20">
+                <Bot size={17} color="#2557a7" strokeWidth={2.2} />
               </div>
-              <span className="text-sm font-bold tracking-tight text-white">CareerBot</span>
+              <span className="text-lg font-bold tracking-tight text-white">CareerBot</span>
             </Link>
-            <p className="text-sm leading-relaxed">
-              Resume-ready. Job-ready. Interview-ready. Built for India&apos;s job market.
+            <p className="max-w-sm text-sm leading-relaxed text-blue-100">
+              Resume-ready, job-ready, and interview-ready career workflows for job seekers worldwide.
             </p>
+            <div className="flex flex-col gap-2">
+              {proofItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.label} className="flex items-center gap-2 text-xs font-semibold text-blue-50">
+                    <Icon size={14} className="text-white" />
+                    {item.label}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {columns.map((column) => (
@@ -51,7 +98,7 @@ export default function LandingFooter() {
               <ul className="flex flex-col gap-2.5">
                 {column.links.map((link) => (
                   <li key={link.label}>
-                    <Link href={link.href} className="text-sm text-slate-400 transition-colors hover:text-white">
+                    <Link href={link.href} className="text-sm text-blue-100 transition-colors hover:text-white">
                       {link.label}
                     </Link>
                   </li>
@@ -61,8 +108,15 @@ export default function LandingFooter() {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-6 sm:flex-row">
-          <p className="text-xs text-slate-500">Copyright 2026 CareerBot. All rights reserved.</p>
+        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/20 pt-6 sm:flex-row">
+          <p className="text-xs text-blue-100/80">Copyright 2026 CareerBot. All rights reserved.</p>
+          <a
+            href="mailto:support@careerbot.com"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-blue-100 transition-colors hover:text-white"
+          >
+            <Mail size={14} />
+            support@careerbot.com
+          </a>
         </div>
       </div>
     </footer>

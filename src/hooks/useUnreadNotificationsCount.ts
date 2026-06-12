@@ -23,7 +23,7 @@ export function useUnreadNotificationsCount(options: UseUnreadNotificationsCount
     try {
       setLoading(true);
       setError(null);
-      const response = await getUnreadNotificationCount();
+      const response = await getUnreadNotificationCount({ skipAuthRedirect: true });
       setUnreadCount(response.unread_count);
     } catch (err) {
       console.error('Failed to fetch unread count:', err);

@@ -64,7 +64,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       setError(null);
-      const summary = await getDashboardSummary();
+      const summary = await getDashboardSummary({ skipAuthRedirect: true });
       if (!mountedRef.current) return;
       setData(summary);
       setCreditsRemaining(summary.plan.credits_remaining);

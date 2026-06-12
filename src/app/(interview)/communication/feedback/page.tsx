@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { submitFinalReport } from '@/api/communicationApi';
 import { getProfile } from '@/api/userApi';
 // import Sidebar from '@/components/layout/Sidebar';
@@ -9,6 +9,14 @@ import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
 
 export default function FeedbackPage() {
+  return (
+    <Suspense fallback={<FeedbackPageLoader />}>
+      <FeedbackPageContent />
+    </Suspense>
+  );
+}
+
+function FeedbackPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isTimeout = searchParams.get('reason') === 'timeout';
@@ -212,6 +220,15 @@ export default function FeedbackPage() {
 
         </div>
       </main>
+    </div>
+  );
+}
+
+function FeedbackPageLoader() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#2557a7]" />
+      <span className="sr-only">Loading feedback page...</span>
     </div>
   );
 }

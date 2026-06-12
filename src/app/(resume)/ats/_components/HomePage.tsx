@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { ChevronUp } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight, ChevronRight, ChevronUp } from "lucide-react";
 import CTABand from "./landing/CTABand";
 import FAQPage from "./landing/FAQPage";
 import FeaturesSection from "./landing/FeaturesSection";
@@ -36,6 +38,41 @@ export default function HomePage() {
 
   return (
     <>
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
+          <Link href="/" className="flex items-center gap-1.5 transition-opacity hover:opacity-80" aria-label="CareerBot home">
+            <Image
+              src="/assets/icons/Logo.png"
+              alt="CareerBot"
+              width={46}
+              height={46}
+              className="shrink-0"
+              style={{ filter: "hue-rotate(8deg) saturate(130%) brightness(68%)" }}
+              priority
+            />
+            <span className="text-lg font-black tracking-tight text-[#2557a7]">CareerBOT</span>
+          </Link>
+
+          <Link
+            href="/ats/scan"
+            className="inline-flex items-center gap-2 rounded-full bg-[#2557a7] px-4 py-2 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] active:scale-95"
+          >
+            Check Resume
+            <ArrowRight size={14} />
+          </Link>
+        </nav>
+      </header>
+
+      <div className="bg-white">
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 pt-6 text-xs font-medium text-slate-500">
+          <Link href="/" className="transition-colors hover:text-[#2557a7]">
+            Home
+          </Link>
+          <ChevronRight size={14} className="text-slate-300" />
+          <span className="text-slate-700">ATS Scanner</span>
+        </div>
+      </div>
+
       <HeroSection onScanClick={openModal} />
       <FeaturesSection />
       <ATSScannerChecks />
