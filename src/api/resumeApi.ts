@@ -300,8 +300,14 @@ export const createResumeFromParsed = async (
 };
 
 // ==================== GET ALL RESUMES (UNIFIED) ====================
-export const getAllResumesUnified = async (): Promise<import('@/types/api.types').AllResumesResponse> => {
-  const response = await httpClient.get<import('@/types/api.types').AllResumesResponse>('/resumes/all');
+export const getAllResumesUnified = async (
+  options: { skipAuthRedirect?: boolean } = {}
+): Promise<import('@/types/api.types').AllResumesResponse> => {
+  const response = await httpClient.get<import('@/types/api.types').AllResumesResponse>('/resumes/all', {
+    headers: {
+      ...(options.skipAuthRedirect && { 'X-Skip-Auth-Redirect': 'true' }),
+    },
+  });
   return response.data;
 };
 

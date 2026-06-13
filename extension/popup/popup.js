@@ -55,7 +55,12 @@ async function apiFetch(path, options = {}) {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers },
   });
-  if (!res.ok) throw new Error(`${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try { const d = await res.json(); detail = JSON.stringify(d); } catch { /* ignore */ }
+    console.error(`[apiFetch] ${res.status} ${path}`, detail);
+    throw new Error(`${res.status}: ${detail}`);
+  }
   return res.json();
 }
 
@@ -820,7 +825,25 @@ async function generateCoverLetter() {
   errorEl.classList.add('hidden');
 
   try {
-    const resumeId = await resolveResumeId(null, cachedResumeId || null);
+    // Step 1: resolve parsed_resume_id.
+    // Priority: cachedResumeId (set after Analyze) → upload selectedFileJD → upload selectedFile
+    let parsedResumeId = cachedResumeId || null;
+    if (!parsedResumeId) {
+      const fileToUpload = selectedFileJD || selectedFile || null;
+      if (fileToUpload) {
+        parsedResumeId = await uploadResume(fileToUpload);
+      }
+    }
+    if (!parsedResumeId) throw new Error('No resume found. Please upload a resume first.');
+
+    // Step 2: resolve jd_id — use cached if available, else parse now
+    let jdId = cachedJdId || null;
+    if (!jdId) {
+      const jdResult = await parseJDInExtension(jdText);
+      if (!jdResult.jd_id) throw new Error('Could not parse job description. Please try again.');
+      jdId = jdResult.jd_id;
+    }
+
     const idempotencyKey = `ext-cl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const res = await apiFetch('/cover-letter/generate', {
@@ -830,18 +853,32 @@ async function generateCoverLetter() {
         'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify({
-        job_description: jdText,
-        job_title:       jobMeta.title   || null,
-        company_name:    jobMeta.company || null,
-        resume_id:       resumeId        || null,
-        options:         { include_debug_metadata: false },
+        parsed_resume_id: parsedResumeId,
+        jd_id:            jdId,
+        ...(jobMeta.title || jobMeta.company ? {
+          application_context: {
+            ...(jobMeta.company && { company_name: jobMeta.company }),
+            ...(jobMeta.title   && { role_title:   jobMeta.title }),
+            source: 'user',
+          },
+        } : {}),
+        options: { include_debug_metadata: false },
       }),
     });
 
     clLetterId = res?.letter_id || res?.id || null;
-    const content = res?.content || res?.cover_letter || res?.letter || '';
+    // plain_text is the ready-to-display string; cover_letter is a structured object
+    const content = res?.plain_text || res?.content || res?.letter || '';
 
     genEl.classList.add('hidden');
+
+    // If we have a letter_id, open directly in CareerBot web app instead of showing raw text
+    if (clLetterId) {
+      chrome.tabs.create({ url: `${PORTAL_URL}/cover-letter/${clLetterId}` });
+      window.close();
+      return;
+    }
+
     outputEl.value = content;
     outputEl.classList.remove('hidden');
 

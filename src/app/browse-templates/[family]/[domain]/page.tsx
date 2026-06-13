@@ -152,6 +152,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Template not found</h1>
           <p className="text-slate-500 mb-6">We couldn&apos;t find a template for that category.</p>
           <button
+            data-testid="browse-all-templates-btn"
             onClick={() => router.push("/browse-templates")}
             className="px-6 py-2.5 bg-[#2257a7] text-white rounded-lg font-semibold hover:bg-[#184284] transition"
           >
@@ -232,7 +233,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
 
         {/* ── Loading overlay ── */}
         {isApplying && (
-          <div className="fixed inset-0 z-9999 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-xl">
+          <div data-testid="loading-overlay" className="fixed inset-0 z-9999 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-xl">
             <div className="relative flex items-center justify-center mb-6">
               <div className="absolute w-20 h-20 rounded-full border-4 border-blue-400/30 animate-ping" />
               <div className="absolute w-16 h-16 rounded-full border-4 border-blue-500/20 animate-ping" style={{ animationDelay: "0.2s" }} />
@@ -251,6 +252,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
               <span className="text-lg font-bold text-gray-900 tracking-tight">CareerBot</span>
             </div>
             <button
+              data-testid="back-to-templates-btn"
               onClick={() => router.push("/browse-templates")}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer hover:bg-blue-50"
               style={{ color: "#2257a7", border: "1.5px solid #bfdbfe" }}
@@ -386,6 +388,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
                     return (
                       <div key={level} className={`flex flex-col items-center ${idx === 3 ? "col-start-1" : ""} ${idx === 4 ? "col-start-2" : ""}`}>
                         <button
+                          data-testid={`career-level-btn-${level.toLowerCase().replace(/\s+/g, '-')}`}
                           onClick={() => setSelectedLevel(level)}
                           className={`level-card ${isSelected ? "selected" : ""} relative w-full rounded-xl overflow-hidden cursor-pointer`}
                           style={{
@@ -466,6 +469,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
                 {/* CTA buttons */}
                 <div className="space-y-2.5">
                   <button
+                    data-testid="use-template-btn"
                     onClick={handleApply}
                     disabled={isApplying}
                     className="shimmer-btn w-full text-white font-bold py-3.5 rounded-xl cursor-pointer flex items-center justify-center gap-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
@@ -484,6 +488,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
                   </button>
 
                   <button
+                    data-testid="browse-other-templates-btn"
                     onClick={() => router.push("/browse-templates")}
                     disabled={isApplying}
                     className="w-full py-2.5 rounded-xl cursor-pointer text-sm font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-all duration-200 disabled:opacity-50"

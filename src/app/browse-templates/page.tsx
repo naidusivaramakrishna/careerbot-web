@@ -202,6 +202,7 @@ export default function BrowseTemplatesPage() {
               return (
                 <div key={key} className="group flex flex-col">
                   <div
+                    data-testid={`catalogue-card-${key}`}
                     className="relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300"
                     style={{
                       boxShadow: isSelected
@@ -304,6 +305,7 @@ export default function BrowseTemplatesPage() {
             <div className="relative flex items-center bg-white rounded-xl shadow-sm ring-1 ring-slate-200 group-focus-within:ring-[#2257a7]/50 group-focus-within:shadow-md transition-all duration-200">
               <Search className="absolute left-3.5 w-4 h-4 text-slate-400 group-focus-within:text-[#2257a7] transition-colors" />
               <input
+                data-testid="template-search-input"
                 type="text"
                 placeholder="Search by role, industry, or template..."
                 value={searchQuery}
@@ -312,6 +314,7 @@ export default function BrowseTemplatesPage() {
               />
               {searchQuery && (
                 <button
+                  data-testid="clear-search-btn"
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3.5 w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors text-xs"
                 >
@@ -326,6 +329,7 @@ export default function BrowseTemplatesPage() {
             {QUICK_SEARCHES.map(q => (
               <button
                 key={q}
+                data-testid={`quick-search-${q.toLowerCase().replace(/\s+/g, '-')}`}
                 onClick={() => setSearchQuery(q)}
                 className="text-xs px-3 py-1 bg-white border border-slate-200 rounded-full text-slate-600 hover:border-[#2257a7] hover:text-[#2257a7] hover:bg-blue-50 transition-all duration-150 font-medium shadow-sm"
               >
@@ -350,13 +354,14 @@ export default function BrowseTemplatesPage() {
         <div className="flex-1 min-w-0 space-y-10">
           {selectedCategory === 'All' ? (
             visibleFamilies.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
+              <div data-testid="no-templates-found" className="flex flex-col items-center justify-center py-24 text-center">
                 <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4 shadow-sm">
                   <LayoutTemplate className="w-8 h-8 text-slate-400" />
                 </div>
                 <h3 className="text-xl font-semibold text-slate-700 mb-2">No templates found</h3>
                 <p className="text-slate-400 text-sm max-w-xs">Try a different search term or select a different industry.</p>
                 <button
+                  data-testid="clear-search-link"
                   onClick={() => setSearchQuery('')}
                   className="mt-5 text-sm text-[#2257a7] font-semibold hover:underline flex items-center gap-1.5"
                 >
@@ -458,6 +463,7 @@ export default function BrowseTemplatesPage() {
 
           <div className="flex items-center justify-center gap-4 flex-wrap">
             <button
+              data-testid="get-started-btn"
               onClick={() => { setInitialFormType("signup"); setAuthOpen(true) }}
               className="group flex items-center gap-2.5 px-8 py-3.5 bg-white text-[#2257a7] rounded-xl font-bold text-sm shadow-xl shadow-black/20 hover:bg-blue-50 hover:scale-[1.02] transition-all duration-200"
             >
@@ -466,6 +472,7 @@ export default function BrowseTemplatesPage() {
               <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </button>
             <button
+              data-testid="sign-in-btn"
               onClick={() => { setInitialFormType("signin"); setAuthOpen(true) }}
               className="px-8 py-3.5 border border-white/25 text-white rounded-xl font-semibold text-sm hover:bg-white/10 transition-all duration-200 backdrop-blur-sm"
             >

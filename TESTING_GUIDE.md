@@ -29,6 +29,10 @@ src/tests/unit/
 │   │   ├── CreditsContext.test.tsx (13 tests)
 │   │   └── CreditsApi.test.ts (27 tests)
 │   │
+│   ├── ats/
+│   │   ├── ATSLoginPage.test.tsx (20 tests)
+│   │   └── ATSHomePage.test.tsx (16 tests)
+│   │
 │   └── lib/
 │       └── computePreviewScore.test.ts (existing)
 ```
@@ -65,7 +69,10 @@ npm run test:settings
 # Credits Management (40 tests)
 npm run test:credits
 
-# All features combined (146 tests)
+# ATS Scanner & ATS Login (36 tests)
+npm run test:ats
+
+# All features combined (182 tests)
 npm run test:all-features
 ```
 
@@ -81,7 +88,8 @@ npm run test:all-features
 | **Mock Interview** | 18 | 1 | - | - | - |
 | **Settings** | 17 | 1 | - | - | - |
 | **Credits** | 40 | - | - | 1 | 1 |
-| **Total** | **146** | **5** | **3** | **1** | **1** |
+| **ATS Scanner** | 36 | 1 | 1 | 1 | - |
+| **Total** | **182** | **6** | **4** | **2** | **1** |
 
 ---
 
@@ -132,6 +140,17 @@ npm run test:all-features
 - Cross-tab and same-tab credit synchronization
 - Low balance detection
 - Credit cost calculations
+
+### **ATS Scanner**
+- Upload zone rendering and file input accepted formats
+- File validation: invalid type, oversized file (>10MB), valid PDF/DOCX/DOC
+- File preview: name, size in KB, "Ready to scan" indicator
+- Terms of service checkbox gates the scan button
+- Loading overlay during scan, redirect to report on success
+- Error modal for API failure and exceptions, "Try Again" dismissal
+- Landing page: all sections render (Hero, Features, CTABand, FAQ, Footer)
+- Upload modal opens from Hero / BeforeAfter / CTABand CTAs and closes correctly
+- `processResumeComplete` API: success, credit error normalization, cache hit, failure
 
 ---
 

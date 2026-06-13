@@ -59,6 +59,7 @@ export default function EducationCard({ edu, index, onEdit, onDelete }: Props) {
   return (
     <div
       key={edu.id || index}
+      data-testid={`education-card-${index}`}
       className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
     >
       <div>
@@ -92,6 +93,7 @@ export default function EducationCard({ edu, index, onEdit, onDelete }: Props) {
         <button
           type="button"
           onClick={() => onEdit(edu, index)}
+          data-testid={`education-edit-btn-${index}`}
           className="text-sm cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
         >
           <Pencil className="w-4 h-4" />
@@ -100,6 +102,7 @@ export default function EducationCard({ edu, index, onEdit, onDelete }: Props) {
         <button
           type="button"
           onClick={() => onDelete(edu.id, index)}
+          data-testid={`education-delete-btn-${index}`}
           className="border border-red-300 text-sm  cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
         >
           <Trash2 className="w-4 h-4 text-red-600" />

@@ -352,7 +352,7 @@ export default function JobCard(props: JobCardProps) {
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* ── Swappable content zone: fixed height, both faces absolute-inset ── */}
-        <div className="relative flex-1 overflow-hidden" style={{ minHeight: 230 }}>
+        <div className="relative flex-1 overflow-hidden" style={{ minHeight: 250 }}>
           <AnimatePresence mode="wait" initial={false}>
 
             {/* ── FACE A: Normal card content ── */}

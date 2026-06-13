@@ -118,12 +118,14 @@ const ForgotPasswordPage = () => {
         {status !== "success" ? (
           <form onSubmit={handleRequestReset} className="space-y-4" noValidate>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="forgot-email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
               </label>
               <input
-                id="email"
+                id="forgot-email"
+                name="email"
                 type="email"
+                data-testid="forgot-email-input"
                 autoFocus
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
@@ -131,11 +133,12 @@ const ForgotPasswordPage = () => {
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${emailError ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-[#2257a7]"}`}
                 disabled={status === "loading"}
               />
-              {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
+              {emailError && <p role="alert" className="text-red-500 text-sm mt-1">{emailError}</p>}
             </div>
 
             <button
               type="submit"
+              data-testid="send-reset-link-btn"
               disabled={status === "loading"}
               className="w-full bg-[#2257a7] hover:bg-[#184284] disabled:bg-[#2557a7] text-white font-semibold py-3 rounded-lg transition-colors cursor-pointer"
             >
@@ -151,6 +154,7 @@ const ForgotPasswordPage = () => {
 
             <button
               type="button"
+              data-testid="back-to-signin-btn"
               onClick={() => router.push("/?showLogin=true")}
               className="w-full bg-gray-200 cursor-pointer hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
             >
@@ -162,6 +166,8 @@ const ForgotPasswordPage = () => {
         {/* Success State Buttons */}
         {status === "success" && (
           <button
+            type="button"
+            data-testid="goto-signin-btn"
             onClick={() => router.push("/?showLogin=true")}
             className="w-full bg-[#2257a7] hover:bg-[#184284] cursor-pointer text-white font-semibold py-3 rounded-lg transition-colors"
           >
@@ -176,6 +182,7 @@ const ForgotPasswordPage = () => {
           </p>
           <button
             type="button"
+            data-testid="remember-password-signin-btn"
             onClick={() => router.push("/?showLogin=true")}
             className="text-sm text-[#2257a7] hover:text-[#184284] cursor-pointer font-semibold underline w-full text-center"
           >

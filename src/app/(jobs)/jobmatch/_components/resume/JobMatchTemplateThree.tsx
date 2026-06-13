@@ -228,7 +228,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
 
   const SectionActions = ({ sectionKey }: { sectionKey: string }) =>
     onEditSection || onDeleteSection ? (
-      <div className="absolute top-0 right-0 flex gap-1.5 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200 z-20">
+      <div className="absolute top-0 right-0 flex flex-col gap-1.5 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200 z-20">
         {onEditSection && (
           <button onClick={() => onEditSection(sectionKey)} title="Edit section"
             className="bg-blue-500 rounded-full p-1.5 shadow hover:bg-blue-600 transition-colors">

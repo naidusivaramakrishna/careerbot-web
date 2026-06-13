@@ -14,7 +14,7 @@ import { FaCheckCircle } from "react-icons/fa";
 import { RiSparkling2Fill } from "react-icons/ri";
 import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
 import JDHighlighter from "../highlighter/JDHighlighter";
-import { matcherAddSkill } from "@/api/parserApi";
+import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, parserAddSkills, parserRemoveSkills } from "@/api/parserApi";
 import ScoreBreakdown from "./ScoreBreakdown";
 import MatchPenalties from "./MatchPenalties";
 
@@ -136,6 +136,8 @@ export default function AnalysisContent({
     () => detectActiveSections(parsedResumeData)
   );
 
+  const [deletedSectionIds, setDeletedSectionIds] = React.useState<string[]>([]);
+
   // Custom sections added by user
   const [customSections, setCustomSections] = React.useState<{ id: string; label: string }[]>([]);
   const [showCustomInput, setShowCustomInput] = React.useState(false);
@@ -150,8 +152,10 @@ export default function AnalysisContent({
       contact:        d.contact ?? d.personalInfo ?? llm.contact ?? llm.personal_info ?? {},
       summary:        d.professionalSummary ?? d.professional_summary ?? d.summary ?? d.career_objective ?? llm.professionalSummary ?? llm.summary ?? "",
       education:      d.education ?? d.educational_qualifications ?? llm.education ?? [],
-      skills:         d.skills ?? d.technical_skills ?? llm.skills ?? llm.technical_skills ?? [],
-      softSkills:     d.soft_skills ?? d.softSkills ?? llm.soft_skills ?? [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      skills:         (d.skills ?? d.technical_skills ?? llm.skills ?? llm.technical_skills ?? []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? "")).filter(Boolean),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      softSkills:     (d.soft_skills ?? d.softSkills ?? llm.soft_skills ?? []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? "")).filter(Boolean),
       experience:     d.workExperience ?? d.work_experience ?? d.experience ?? llm.workExperience ?? llm.work_experience ?? [],
       internships:    d.internships ?? llm.internships ?? [],
       projects:       d.projects ?? d.project_details ?? llm.projects ?? [],
@@ -166,22 +170,78 @@ export default function AnalysisContent({
   const matchId: string | undefined =
     matchResults?.data?.id ?? matchResults?.data?._id ?? matchResults?.data?.match_id;
 
-  // Directly add a skill to the resume (no pending step)
-  const directAddSkill = React.useCallback(async (skill: string) => {
+  const resumeId: string | undefined =
+    matchResults?.data?.resume_id ??
+    matchResults?.resume_id ??
+    parsedResumeData?.resume_id ??
+    parsedResumeData?.parsed_data?.resume_id ??
+    parsedResumeData?.data?.resume_id;
+
+  // Live ATS score — updates when skills are added/removed
+  const initialScore = Math.min(100, Math.max(0, parseFloat(String(matchResults?.data?.ats_score || "0"))));
+  const [liveScore, setLiveScore] = React.useState<number>(initialScore);
+
+  // Add a skill: call enhance/apply (updates match score) + parserAddSkills (persists to resume doc for download)
+  const directAddSkill = React.useCallback(async (skill: string, suggestion_id?: string) => {
     const s = skill.trim();
     if (!s) return;
+    // Optimistic local update
     setAddedSkillFields((prev) => prev.includes(s) ? prev : [...prev, s]);
     setResumeSections((prev: Record<string, unknown>) => {
       const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
       if (existing.includes(s)) return prev;
       return { ...prev, skills: [...existing, s] };
     });
-    if (matchId) {
-      try { await matcherAddSkill(matchId, s); } catch { /* local state already updated */ }
+    // Update match score in backend and read new score from response
+    if (matchId && suggestion_id) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await matcherEnhanceApply(matchId, suggestion_id) as any;
+        const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+        if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+        else if (typeof newScore === "string") {
+          const n = parseFloat(newScore);
+          if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+        }
+      } catch { /* local state already updated */ }
     }
-  }, [matchId]);
+    // Always persist skill directly to resume document so download includes it
+    if (resumeId) {
+      try { await parserAddSkills(resumeId, s); } catch { /* best effort */ }
+    }
+  }, [matchId, resumeId]);
 
-  const score = Math.min(100, Math.max(0, parseInt(String(matchResults?.data?.ats_score || "0"))));
+  // Remove a skill: call enhance/remove + parserRemoveSkills
+  const directRemoveSkill = React.useCallback(async (skill: string, suggestion_id?: string) => {
+    const s = skill.trim();
+    setAddedSkillFields((prev) => prev.filter((x) => x !== s));
+    setResumeSections((prev: Record<string, unknown>) => {
+      const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+      return { ...prev, skills: existing.filter((x) => x !== s) };
+    });
+    if (matchId && suggestion_id) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await matcherEnhanceRemove(matchId, suggestion_id) as any;
+        const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+        if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+        else if (typeof newScore === "string") {
+          const n = parseFloat(newScore);
+          if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+        }
+      } catch { /* local state already updated */ }
+    }
+    if (resumeId) {
+      try { await parserRemoveSkills(resumeId, s); } catch { /* best effort */ }
+    }
+  }, [matchId, resumeId]);
+
+  const handleDownload = React.useCallback(async () => {
+    if (!resumeId) return;
+    try { await downloadResumePdf(resumeId); } catch { /* silent */ }
+  }, [resumeId]);
+
+  const score = liveScore;
 
   // Merge newly-added skills back into parsedData so the template renders them
   const mergedParsedData = React.useMemo(() => {
@@ -265,7 +325,7 @@ export default function AnalysisContent({
   ];
 
   return (
-    <div className="w-full h-screen bg-gray-50 overflow-hidden flex flex-col">
+    <div className="relative w-full h-screen bg-gray-50 overflow-hidden flex flex-col">
       <style>{`
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -274,82 +334,87 @@ export default function AnalysisContent({
       `}</style>
       <div className="flex flex-1 overflow-hidden">
 
-        {/* LEFT — Section list sidebar (edit mode only) */}
+        {/* LEFT — Section list sidebar (edit mode only) — fixed overlay, does not disturb layout */}
         {isEditMode && (
-          <div className="w-[320px] shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent flex flex-col">
-            <div className="px-4 pt-5 pb-3">
+          <>
+            {/* Backdrop blur — only within the content area */}
+            <div
+              className="absolute inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
+              onClick={() => setIsEditMode(false)}
+            />
+          <div className="absolute top-0 left-0 h-full z-50 w-[320px] bg-white border-r border-gray-100 overflow-y-auto flex flex-col animate-slide-in-left shadow-2xl" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+            {/* Sidebar Header */}
+            <div className="px-5 pt-5 pb-4 border-b border-gray-100 bg-white shrink-0">
               <button
                 onClick={() => setIsEditMode(false)}
-                className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-700 hover:text-[#2557a7] mb-4"
+                className="flex items-center gap-1.5 text-[12px] font-semibold text-gray-400 hover:text-[#2557a7] mb-4 transition-colors"
               >
-                <ArrowLeft className="w-4 h-4" /> Back to Preview
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Preview
               </button>
-              <p className="text-[18px] font-bold text-gray-900">Resume Sections</p>
-              <p className="text-xs text-gray-500 mt-0.5">Complete each section to build a perfect resume</p>
+              <div className="flex items-center gap-2.5">
+                <div className="w-1.5 h-6 rounded-full bg-[#2557a7]" />
+                <div>
+                  <p className="text-[16px] font-bold text-gray-900">Resume Sections</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Click a section to edit its content</p>
+                </div>
+              </div>
             </div>
 
             {/* Active sections */}
-            <div className="px-3 pb-2 space-y-2">
+            <div className="px-4 py-3 space-y-1.5">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Your Sections</p>
               {allActiveSections.map((section) => (
                 <div
                   key={section.id}
                   onClick={() => setOpenSection(section.id)}
-                  className="group relative py-1.5 overflow-hidden rounded-lg bg-white border border-gray-300 shadow-sm cursor-pointer hover:border-blue-200 transition-all duration-200"
+                  className="group flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-all duration-150"
                 >
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 group-hover:from-blue-100 group-hover:to-blue-100 text-[#2d2d2d] group-hover:text-[#2557a7] transition-all duration-200">
-                        <section.icon className="w-4 h-4" />
-                      </div>
-                      <span className="text-[15px] font-semibold text-gray-800 group-hover:text-[#2557a7] transition-colors duration-200">
-                        {section.label}
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-white border border-gray-200 group-hover:border-blue-200 group-hover:bg-blue-100 text-gray-500 group-hover:text-[#2557a7] transition-all">
+                      <section.icon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-[13px] font-semibold text-gray-700 group-hover:text-[#2557a7] transition-colors">
+                      {section.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {section.hasAI && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-violet-50 font-semibold text-violet-600 rounded-full border border-violet-100">
+                        <RiSparkling2Fill size={10} className="mr-0.5" />AI
                       </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {section.hasAI && (
-                        <span className="inline-flex items-center px-2 py-0.5 text-[11px] bg-[#efedf2] font-semibold text-black rounded-full">
-                          <RiSparkling2Fill size={12} className="text-[#2557a7] mr-0.5" />AI
-                        </span>
-                      )}
-                      <div className="w-6 h-6 flex items-center justify-center rounded-full bg-[#d9f7be]">
-                        <FaCheckCircle size={13} className="text-green-600" />
-                      </div>
-                      <div className="text-gray-400 group-hover:text-[#2557a7] group-hover:bg-blue-100 p-1 rounded-md transition-all duration-200">
-                        <ChevronRight size={16} />
-                      </div>
-                    </div>
+                    )}
+                    <FaCheckCircle size={12} className="text-emerald-400" />
+                    <ChevronRight size={14} className="text-gray-300 group-hover:text-[#2557a7] transition-colors" />
                   </div>
                 </div>
               ))}
             </div>
 
             {/* Add New Sections */}
-            <div className="px-3 pt-2 pb-2 border-t border-gray-200 mt-1">
-              <p className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-700 mb-2 mt-2">
-                <Plus className="w-4 h-4" /> Add New Sections
-              </p>
-              <div className="space-y-2">
+            <div className="px-4 py-3 border-t border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Add Sections</p>
+              <div className="space-y-1.5">
                 {additionalPredefined.map((section) => (
                   <div
                     key={section.id}
-                    className="group flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-gray-200 hover:border-blue-200 transition-all cursor-pointer"
+                    className="group flex items-center justify-between px-3 py-2 rounded-xl bg-white border border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all cursor-pointer"
                     onClick={() => addSection(section.id)}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 group-hover:from-blue-100 group-hover:to-blue-100 text-[#2d2d2d] group-hover:text-[#2557a7] transition-all duration-200">
-                        <section.icon className="w-4 h-4" />
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-50 border border-gray-200 group-hover:bg-blue-100 group-hover:border-blue-200 text-gray-400 group-hover:text-[#2557a7] transition-all">
+                        <section.icon className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-[14px] font-semibold text-gray-700 group-hover:text-[#2557a7]">
+                      <span className="text-[13px] font-semibold text-gray-500 group-hover:text-[#2557a7]">
                         {section.label}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
                       {section.hasAI && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-[#efedf2] font-semibold text-black rounded-full">
-                          <RiSparkling2Fill size={10} className="text-[#2557a7] mr-0.5" />AI
+                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-violet-50 font-semibold text-violet-600 rounded-full border border-violet-100">
+                          <RiSparkling2Fill size={10} className="mr-0.5" />AI
                         </span>
                       )}
-                      <Plus size={16} className="text-gray-400 group-hover:text-[#2557a7]" />
+                      <Plus size={14} className="text-gray-300 group-hover:text-[#2557a7] transition-colors" />
                     </div>
                   </div>
                 ))}
@@ -357,75 +422,70 @@ export default function AnalysisContent({
             </div>
 
             {/* Custom Sections */}
-            <div className="px-3 pt-2 pb-4 border-t border-gray-200 mt-1">
-              <p className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-700 mb-2 mt-2">
-                <AlignLeft className="w-4 h-4" /> Custom Sections
-              </p>
+            <div className="px-4 py-3 border-t border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Custom Sections</p>
               {showCustomInput ? (
-                <div className="flex gap-2">
+                <div className="space-y-2">
                   <input
                     autoFocus
                     type="text"
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") addCustomSection(); if (e.key === "Escape") setShowCustomInput(false); }}
-                    placeholder="Section name (e.g., Patents, Awards)"
-                    className="flex-1 px-3 py-2 text-sm border border-blue-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+                    placeholder="e.g. Patents, Volunteer Work"
+                    className="w-full px-3 py-2 text-[13px] border border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 bg-white"
                   />
-                  <button
-                    onClick={addCustomSection}
-                    className="px-3 py-2 text-sm font-semibold bg-[#2557a7] text-white rounded-lg hover:bg-[#1f4e98]"
-                  >
-                    Add
-                  </button>
-                  <button
-                    onClick={() => { setShowCustomInput(false); setCustomName(""); }}
-                    className="px-3 py-2 text-sm font-semibold border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={addCustomSection} className="flex-1 py-2 text-[12px] font-semibold bg-[#2557a7] text-white rounded-xl hover:bg-[#1f4e98] transition-colors">Add</button>
+                    <button onClick={() => { setShowCustomInput(false); setCustomName(""); }} className="flex-1 py-2 text-[12px] font-semibold border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+                  </div>
                 </div>
               ) : (
                 <button
                   onClick={() => setShowCustomInput(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold text-[#2557a7] border border-dashed border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-[12px] font-semibold text-[#2557a7] border border-dashed border-blue-200 rounded-xl hover:bg-blue-50 transition-colors"
                 >
-                  <Plus size={14} /> Add Custom Section
+                  <Plus size={13} /> Add Custom Section
                 </button>
               )}
             </div>
           </div>
+          </>
         )}
 
         {/* CENTER — Resume Preview (always visible) */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent bg-gray-50 border-r border-gray-200 px-18 py-5 space-y-4">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gray-50 shrink-0">
+        <div className="flex-1 overflow-y-auto bg-[#f1f5f9] border-r border-gray-200 px-8 py-6 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white shrink-0">
               <div className="flex items-center gap-3">
                 {onBackToUpload && (
                   <button
                     onClick={onBackToUpload}
-                    className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded border border-gray-200"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-gray-500 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Back
                   </button>
                 )}
-                <h3 className="text-[12px] font-bold text-gray-600 uppercase">Resume Preview</h3>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
+                  <h3 className="text-[13px] font-bold text-gray-700 tracking-wide uppercase">Resume Preview</h3>
+                </div>
               </div>
               <div className="flex items-center gap-2">
-                <button className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded border border-gray-200">
-                  <Download className="w-4 h-4" /> Download
+                <button onClick={handleDownload} disabled={!resumeId} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-gray-600 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Download className="w-3.5 h-3.5" /> Download
                 </button>
                 <button
                   onClick={() => setIsEditMode((v) => !v)}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded border border-gray-200"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-lg border transition-all ${isEditMode ? "bg-[#2557a7] text-white border-[#2557a7] hover:bg-[#1e4a96]" : "text-gray-600 border-gray-200 hover:text-[#2557a7] hover:bg-blue-50"}`}
                 >
-                  <Pencil className="w-4 h-4" />
+                  <Pencil className="w-3.5 h-3.5" />
                   {isEditMode ? "Close Editor" : "Edit"}
                 </button>
               </div>
             </div>
-            <div className="overflow-auto p-4" style={{ zoom: 1.1, scrollbarWidth: "thin", scrollbarColor: "#f3f4f6 transparent" }}>
+            <div className="overflow-auto p-5" style={{ zoom: 1.1, scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
               {pdfError ? (
                 <PDFPreviewError error={pdfError} />
               ) : (
@@ -439,6 +499,10 @@ export default function AnalysisContent({
                   parsedData={mergedParsedData}
                   resumeId=""
                   addedFields={{ skills: addedSkillFields }}
+                  editOverrides={resumeSections}
+                  onEditSection={(key) => { setIsEditMode(true); setOpenSection(key); }}
+                  onDeleteSection={(key) => { setDeletedSectionIds((prev) => [...prev, key]); setActiveSectionIds((prev) => prev.filter((id) => id !== key)); }}
+                  deletedSections={deletedSectionIds}
                 />
               )}
             </div>
@@ -452,46 +516,56 @@ export default function AnalysisContent({
           <MatchPenalties
             matchResult={matchResult}
             onAddSkill={directAddSkill}
+            onRemoveSkill={directRemoveSkill}
           />
         </div>
 
         {/* RIGHT — ATS Score + Job Description */}
-        <div className="w-125 shrink-0 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent bg-white border-l border-gray-200 p-4 space-y-4">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <h3 className="text-[11px] font-bold text-gray-600 mb-2 uppercase tracking-wide">ATS Match Score</h3>
-            <div className="flex flex-col items-center mb-3">
-              <div className="w-28 h-28">
+        <div className="w-[520px] shrink-0 overflow-y-auto bg-white border-l border-gray-100 p-5 space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+
+          {/* ATS Score Card */}
+          <div className="rounded-2xl border border-gray-100 bg-gradient-to-b from-[#f8faff] to-white shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
+              <h3 className="text-[12px] font-bold text-gray-700 uppercase tracking-wide">ATS Match Score</h3>
+            </div>
+            <div className="flex flex-col items-center mb-4">
+              <div className="w-32 h-32">
                 <MultiColorCircularScore value={score} />
               </div>
-              <p className="text-[10px] text-gray-500 mt-1.5">Overall Score</p>
+              <p className="text-[11px] text-gray-400 mt-2 font-medium">Overall Score</p>
             </div>
-            <div className="grid grid-cols-3 gap-1">
-              <div className="text-center">
-                <p className="text-[16px] font-bold text-red-600">{totalMissingCount}</p>
-                <p className="text-[10px] text-gray-500">Missing Skills</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center bg-red-50 rounded-xl py-2.5 border border-red-100">
+                <p className="text-[18px] font-bold text-red-500">{totalMissingCount}</p>
+                <p className="text-[10px] text-red-400 font-semibold mt-0.5">Missing</p>
               </div>
-              <div className="text-center">
-                <p className="text-[16px] font-bold text-green-600">{totalMatchedCount}</p>
-                <p className="text-[10px] text-gray-500">Matched Skills</p>
+              <div className="text-center bg-green-50 rounded-xl py-2.5 border border-green-100">
+                <p className="text-[18px] font-bold text-green-600">{totalMatchedCount}</p>
+                <p className="text-[10px] text-green-500 font-semibold mt-0.5">Matched</p>
               </div>
-              <div className="text-center">
-                <p className="text-[16px] font-bold text-blue-600">{activeSectionIds.length}</p>
-                <p className="text-[10px] text-gray-500">Sections</p>
+              <div className="text-center bg-blue-50 rounded-xl py-2.5 border border-blue-100">
+                <p className="text-[18px] font-bold text-[#2557a7]">{activeSectionIds.length}</p>
+                <p className="text-[10px] text-blue-400 font-semibold mt-0.5">Sections</p>
               </div>
             </div>
           </div>
 
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
-              <p className="text-[12px] font-bold text-gray-600 uppercase">Job Description</p>
+          {/* Job Description Card */}
+          <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-[#f8faff] border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
+                <p className="text-[12px] font-bold text-gray-700 uppercase tracking-wide">Job Description</p>
+              </div>
               <button
                 onClick={() => { try { navigator.clipboard.writeText(jdText); } catch {} }}
-                className="text-[10px] font-semibold text-gray-400 hover:text-blue-600 flex items-center gap-1"
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-gray-400 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg transition-all"
               >
                 <FileText className="w-3 h-3" /> Copy
               </button>
             </div>
-            <div className="p-3 max-h-[32rem] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-50 scrollbar-track-transparent">
+            <div className="p-4 max-h-[32rem] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
               {jdText ? (
                 <JDHighlighter
                   text={jdText}

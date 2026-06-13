@@ -339,10 +339,16 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
         return <ContactEditor value={localData ?? {}} onChange={setLocalData} />;
       case "summary":
         return <SummaryEditor value={typeof localData === "string" ? localData : ""} onChange={setLocalData} />;
-      case "skills":
-        return <TagsEditor value={Array.isArray(localData) ? localData : []} onChange={setLocalData} placeholder="Add technical skill (e.g. React)…" />;
-      case "softSkills":
-        return <TagsEditor value={Array.isArray(localData) ? localData : []} onChange={setLocalData} placeholder="Add soft skill (e.g. Leadership)…" />;
+      case "skills": {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const skillStrings = (Array.isArray(localData) ? localData : []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? String(s))).filter(Boolean);
+        return <TagsEditor value={skillStrings} onChange={setLocalData} placeholder="Add technical skill (e.g. React)…" />;
+      }
+      case "softSkills": {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const softStrings = (Array.isArray(localData) ? localData : []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? String(s))).filter(Boolean);
+        return <TagsEditor value={softStrings} onChange={setLocalData} placeholder="Add soft skill (e.g. Leadership)…" />;
+      }
       case "experience":
       case "internships": {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -398,8 +404,23 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
       case "languages":
         return <SimpleListEditor value={Array.isArray(localData) ? localData : []} onChange={setLocalData} addLabel="Add Language" defaultItem={{ language: "", proficiency: "" }}
           fields={[{ key: "language", label: "Language", placeholder: "e.g. English" }, { key: "proficiency", label: "Proficiency", placeholder: "e.g. Native, Fluent, Intermediate" }]} />;
+      case "hobbies": {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const hobbyStrings = (Array.isArray(localData) ? localData : []).map((s: any) => typeof s === "string" ? s : (s?.hobby ?? s?.name ?? String(s))).filter(Boolean);
+        return <TagsEditor value={hobbyStrings} onChange={setLocalData} placeholder="Add hobby or interest (e.g. Photography)…" />;
+      }
+      case "references":
+        return <SimpleListEditor value={Array.isArray(localData) ? localData : []} onChange={setLocalData} addLabel="Add Reference" defaultItem={{ name: "", title: "", company: "", email: "", phone: "" }}
+          fields={[
+            { key: "name", label: "Full Name", placeholder: "e.g. John Smith" },
+            { key: "title", label: "Job Title", placeholder: "e.g. Engineering Manager" },
+            { key: "company", label: "Company", placeholder: "e.g. Google" },
+            { key: "email", label: "Email", placeholder: "john@example.com" },
+            { key: "phone", label: "Phone", placeholder: "+91 9876543210" },
+          ]} />;
       default:
-        return <p className="text-sm text-gray-400 italic">No editor available for this section.</p>;
+        return <SimpleListEditor value={Array.isArray(localData) ? localData : []} onChange={setLocalData} addLabel="Add Entry" defaultItem={{ value: "" }}
+          fields={[{ key: "value", label: sectionLabel, placeholder: `Enter ${sectionLabel.toLowerCase()}…` }]} />;
     }
   };
 
@@ -409,8 +430,11 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[88vh] flex flex-col mx-4">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[75%] flex flex-col mx-4"
+        onClick={e => e.stopPropagation()}
+      >
 
         {/* Header — centered title like Resume Builder */}
         <div className="relative flex items-center justify-center px-6 py-4 border-b border-gray-100 shrink-0">
@@ -424,12 +448,12 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
         <div className="flex-1 overflow-hidden flex min-h-0">
 
           {/* Form area */}
-          <div className="flex-1 overflow-y-auto p-6 jm-sidebar-scroll" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+          <div className="flex-1 overflow-y-auto p-4 jm-sidebar-scroll" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
             {renderBody()}
           </div>
 
           {/* ATS Suggestions panel */}
-          <div className="w-[260px] shrink-0 border-l border-gray-100 bg-[#fffef5] p-5 overflow-y-auto jm-sidebar-scroll" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+          <div className="w-[220px] shrink-0 border-l border-gray-100 bg-[#fffef5] p-4 overflow-y-auto jm-sidebar-scroll" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
             <h3 className="text-[13px] font-bold text-gray-800 mb-3">ATS Suggestions</h3>
             <hr className="border-gray-200 mb-4" />
 
@@ -451,7 +475,7 @@ const JobMatchSectionEditor: React.FC<Props> = ({ sectionKey, sectionLabel, init
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 shrink-0">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 shrink-0">
           <div>
             {savedAt && (
               <span className="text-[12px] text-green-600 font-semibold">✓ Saved {savedAt}</span>

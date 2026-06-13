@@ -13,6 +13,7 @@ export default function CertificationCard({ cert, index, onEdit, onDelete }: Pro
     return (
         <div
             key={cert.id || index}
+            data-testid={`certification-card-${index}`}
             className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
         >
             <div>
@@ -36,6 +37,7 @@ export default function CertificationCard({ cert, index, onEdit, onDelete }: Pro
             <div className="flex gap-2 mt-2">
                 <button
                     type="button"
+                    data-testid={`certification-edit-btn-${index}`}
                     onClick={() => onEdit(cert, index)}
                     className="text-sm cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
                 >
@@ -44,6 +46,7 @@ export default function CertificationCard({ cert, index, onEdit, onDelete }: Pro
                 </button>
                 <button
                     type="button"
+                    data-testid={`certification-delete-btn-${index}`}
                     onClick={() => onDelete(cert.id, index)}
                     className="border border-red-300 text-sm  cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
                 >

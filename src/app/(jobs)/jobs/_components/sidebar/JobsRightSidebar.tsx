@@ -1,6 +1,7 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { useState } from "react";
+import { X } from "lucide-react";
 import TopPickCard from "./TopPickCard";
 import TrendingSkillsCard from "./TrendingSkillsCard";
 import SalaryInsights from "./SalaryInsights";
@@ -17,62 +18,70 @@ interface Job {
 }
 
 export default function JobsRightSidebar({ jobs = [], onChatOpen }: { jobs?: Job[]; onChatOpen?: () => void }) {
-  return (
-    <div className="flex flex-col h-full">
-      {/* Scrollable widgets */}
-      <div className="flex-1 overflow-y-auto divide-y divide-gray-100 min-h-0 scroll-smooth scrollbar-hide">
-        <TopPickCard jobs={jobs} />
-        <TrendingSkillsCard />
-        <SalaryInsights jobs={jobs} />
-      </div>
+  const [bubbleDismissed, setBubbleDismissed] = useState(false);
 
-      {/* Nancy AI card — sticky at bottom */}
-      <div className="shrink-0 border-t border-gray-100 px-4 py-4">
-        <div
-          className="rounded-2xl p-4 relative overflow-hidden"
-          style={{ background: "linear-gradient(145deg, #0d1b3e 0%, #162a56 50%, #1a3468 100%)" }}
-        >
-          <div
-            className="absolute top-0 right-0 w-28 h-28 pointer-events-none"
-            style={{
-              background: "radial-gradient(circle, rgba(59,130,246,0.25) 0%, transparent 70%)",
-              transform: "translate(40%, -40%)",
-            }}
-          />
-          <div className="flex items-center gap-3 mb-3 relative z-10">
-            <div className="relative shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/ac4923bc-9ee8-4734-ad60-fc93e8935797.png"
-                alt="Nancy AI"
-                className="w-10 h-10 rounded-xl object-cover ring-1 ring-white/20"
-              />
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0d1b3e]" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[13px] font-bold text-white leading-tight">Ask Nancy AI</span>
-                <span className="text-[8px] font-bold bg-blue-500/25 text-blue-300 px-1.5 py-0.5 rounded-full border border-blue-500/20">
-                  Beta
-                </span>
-              </div>
-              <p className="text-[10px] text-white/40 mt-0.5 leading-tight">AI career advisor · online now</p>
-            </div>
-          </div>
-          <p className="relative z-10 text-[11px] text-white/45 leading-relaxed mb-3">
-            Get personalized career advice, skill gaps &amp; job match insights
-          </p>
-          <button
-            type="button"
-            onClick={onChatOpen}
-            className="relative z-10 w-full flex items-center justify-center gap-2 py-2.5 rounded-full text-[12px] font-semibold text-white transition-all hover:bg-white/25 active:scale-[0.98]"
-            style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)" }}
-          >
-            <Sparkles size={12} className="text-blue-300" />
-            Chat with Nancy
-          </button>
+  return (
+    <>
+      {/* Scrollable widgets */}
+      <div className="flex-1 overflow-y-auto min-h-0 scroll-smooth scrollbar-hide px-3 py-3 space-y-3">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden" style={{ minHeight: 200 }}>
+          <TopPickCard jobs={jobs} />
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden" style={{ minHeight: 200 }}>
+          <TrendingSkillsCard />
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden" style={{ minHeight: 200 }}>
+          <SalaryInsights jobs={jobs} />
         </div>
       </div>
-    </div>
+
+      {/* Nancy AI — fixed floating widget bottom-right of viewport */}
+      <div className="fixed bottom-6 right-6 z-30 flex flex-col items-end gap-2">
+        {/* Speech bubble */}
+        {!bubbleDismissed && (
+          <div
+            className="relative bg-white rounded-2xl rounded-br-sm px-4 py-3 mb-1"
+            style={{
+              width: 220,
+              boxShadow: "0 4px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06)",
+              border: "1px solid rgba(0,0,0,0.07)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setBubbleDismissed(true)}
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Dismiss"
+            >
+              <X size={13} />
+            </button>
+            <p className="text-[13px] text-gray-700 leading-snug pr-4">
+              👋 Hi! I&apos;m Nancy.<br />Ask me about job matches, skill gaps &amp; career advice!
+            </p>
+          </div>
+        )}
+
+        {/* Avatar button */}
+        <button
+          type="button"
+          onClick={() => { setBubbleDismissed(false); onChatOpen?.(); }}
+          className="relative w-14 h-14 rounded-full hover:scale-105 active:scale-95 transition-transform"
+          style={{
+            padding: 2,
+            background: "#fff",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+            border: "2px solid #e5e7eb",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/ac4923bc-9ee8-4734-ad60-fc93e8935797.png"
+            alt="Nancy AI"
+            className="w-full h-full rounded-full object-cover"
+          />
+          <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-white" />
+        </button>
+      </div>
+    </>
   );
 }

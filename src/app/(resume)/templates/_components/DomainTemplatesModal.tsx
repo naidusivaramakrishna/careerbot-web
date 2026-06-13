@@ -217,7 +217,7 @@ export default function DomainTemplatesModal({
     <>
       {/* Full-screen loading overlay during navigation */}
       {isLoading && (
-        <div className="fixed inset-0 bg-slate-950/30 flex items-center justify-center z-60 backdrop-blur-lg">
+        <div data-testid="loading-overlay" className="fixed inset-0 bg-slate-950/30 flex items-center justify-center z-60 backdrop-blur-lg">
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-white/30 border-t-blue-500 rounded-full animate-spin" />
             <p className="text-black text-lg font-semibold">Loading Resume Builder...</p>
@@ -231,6 +231,7 @@ export default function DomainTemplatesModal({
       <div className="relative bg-white rounded-2xl ring-1 ring-slate-200 shadow-2xl overflow-hidden max-w-6xl w-full max-h-[90vh] overflow-y-auto">
         {/* Close Button */}
         <button
+          data-testid="modal-close-btn"
           onClick={onClose}
           className="absolute top-4 right-4 p-2 bg-white/80 backdrop-blur-sm hover:bg-slate-100 rounded-lg ring-1 ring-slate-200 transition-colors z-10"
         >
@@ -276,6 +277,7 @@ export default function DomainTemplatesModal({
                 return (
                   <div key={template.id || template._id} className="flex flex-col">
                     <button
+                      data-testid={`career-level-btn-${index}`}
                       onClick={() => handleSelectTemplate(index)}
                       className={`relative rounded-lg overflow-hidden ring-1 transition-all cursor-pointer group bg-linear-to-br from-slate-50 to-slate-100/60 p-2 ${
                         isSelected
@@ -374,6 +376,7 @@ export default function DomainTemplatesModal({
                 {/* Apply and Cancel Buttons */}
                 <div className="space-y-2">
                   <Button
+                    data-testid="apply-template-btn"
                     onClick={handleApplyTemplate}
                     disabled={isLoading}
                     className={`w-full text-white font-semibold py-3 rounded-lg cursor-pointer transition-all shadow-sm ${
@@ -392,6 +395,7 @@ export default function DomainTemplatesModal({
                     )}
                   </Button>
                   <button
+                    data-testid="cancel-btn"
                     onClick={onClose}
                     disabled={isLoading}
                     className={`w-full font-semibold py-2 rounded-lg cursor-pointer transition-colors ring-1 ${

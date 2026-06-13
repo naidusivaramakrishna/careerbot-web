@@ -174,9 +174,11 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 placeholder="Email Address"
                 value={loginForm.email}
                 onChange={handleChange}
+                data-testid="login-email-input"
+                id="login-email"
                 className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
             />
-            {activeLoginError === 'email' && <p className="text-red-500 text-xs -mt-2">{errors.email}</p>}
+            {activeLoginError === 'email' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
 
             <div className="relative">
                 <input
@@ -185,21 +187,26 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     placeholder="Password"
                     value={loginForm.password}
                     onChange={handleChange}
+                    data-testid="login-password-input"
+                    id="login-password"
                     className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
                 />
                 <button
                     type="button"
                     onClick={() => setShowPassword((p) => !p)}
+                    data-testid="toggle-login-password-btn"
+                    aria-label="Toggle password visibility"
                     className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                 >
                     {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
                 </button>
             </div>
 
-            {activeLoginError === 'password' && <p className="text-red-500 text-xs -mt-2">{errors.password}</p>}
-            {activeLoginError === 'login' && <p className="text-red-500 text-xs -mt-2">{errors.login}</p>}
+            {activeLoginError === 'password' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
+            {activeLoginError === 'login' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.login}</p>}
 
             <p
+                data-testid="forgot-password-link"
                 className="text-xs font-semibold cursor-pointer flex justify-end my-2 text-blue-500 hover:text-blue-700 transition-colors"
                 onClick={() => {
                     router.push('/forgot-password')
@@ -212,6 +219,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             <button
                 type="submit"
                 disabled={loading.login}
+                data-testid="login-submit-btn"
                 className="w-full py-3 rounded-xl font-semibold text-white text-sm bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 hover:opacity-90 transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-purple-200 flex items-center justify-center gap-2"
             >
                 {loading.login ? (
@@ -289,9 +297,11 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                                         placeholder="Username"
                                         value={signUpForm.username}
                                         onChange={handleChange}
+                                        data-testid="signup-username-input"
+                                        id="signup-username"
                                         className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.username ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
                                     />
-                                    {activeError === 'username' && <p className="text-red-500 text-xs -mt-2">{errors.username}</p>}
+                                    {activeError === 'username' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.username}</p>}
                                 </>
                             )}
 
@@ -301,9 +311,11 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                                 placeholder="Email Address"
                                 value={formType === "signup" ? signUpForm.email : loginForm.email}
                                 onChange={handleChange}
+                                data-testid="signup-email-input"
+                                id="signup-email"
                                 className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.email || (formType === "signin" && errors.login)) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
                             />
-                            {activeError === 'email' && <p className="text-red-500 text-xs -mt-2">{errors.email}</p>}
+                            {activeError === 'email' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
 
                             <div className="relative">
                                 <input
@@ -312,24 +324,29 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                                     placeholder="Password"
                                     value={formType === "signup" ? signUpForm.password : loginForm.password}
                                     onChange={handleChange}
+                                    data-testid="signup-password-input"
+                                    id="signup-password"
                                     className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.password || (formType === "signin" && errors.login)) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword((p) => !p)}
+                                    data-testid="toggle-password-btn"
+                                    aria-label="Toggle password visibility"
                                     className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                                 >
                                     {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
                                 </button>
                             </div>
-                            {activeError === 'password' && <p className="text-red-500 text-xs -mt-2">{errors.password}</p>}
-                            {activeError === 'login' && <p className="text-red-500 text-xs -mt-2">{errors.login}</p>}
+                            {activeError === 'password' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
+                            {activeError === 'login' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.login}</p>}
                         </div>
                     )
                 })()}
 
                 {formType === "signin" && (
                     <p
+                        data-testid="forgot-password-link"
                         className="text-xs font-semibold cursor-pointer flex justify-end my-2 text-[#1e0ce8] hover:text-blue-700 transition-colors"
                         onClick={() => {
                             router.push('/forgot-password')
@@ -343,6 +360,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 <button
                     onClick={formType === "signup" ? handleSignUp : handleLogin}
                     disabled={formType === "signup" ? loading.signUp : loading.login}
+                    data-testid="auth-submit-btn"
                     className="w-full mt-5 py-3 rounded-xl font-semibold text-white text-sm bg-[#2257a7] hover:bg-[#184284] transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                 >
                     {formType === "signup" ? (
@@ -376,6 +394,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             Already have an account?{" "}
                             <span
                                 onClick={() => setFormType("signin")}
+                                data-testid="switch-to-signin-link"
                                 className="text-[#1e0ce8] font-bold cursor-pointer hover:text-blue-700 transition-colors"
                             >
                                 Sign in
@@ -386,6 +405,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                             New to CareerBot?{" "}
                             <span
                                 onClick={() => setFormType("signup")}
+                                data-testid="switch-to-signup-link"
                                 className="text-[#1e0ce8] font-bold cursor-pointer hover:text-blue-700 transition-colors"
                             >
                                 Sign up
@@ -404,6 +424,8 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             <div className="relative w-full max-w-124 h-145 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
                 <button
                     onClick={onClose}
+                    data-testid="auth-modal-close-btn"
+                    aria-label="Close modal"
                     className="absolute top-5 right-5 p-1.5 cursor-pointer hover:bg-gray-100 rounded-full transition-colors"
                 >
                     <X className="h-4 w-4 text-gray-500" />

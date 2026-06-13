@@ -20,6 +20,7 @@ export default function TemplateCard({ template, onClick }: TemplateCardProps) {
 
   return (
     <div
+      data-testid={`template-card-${template.id || template._id}`}
       onClick={onClick}
       className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden hover:border-[#2557a7] hover:shadow-lg transition-all duration-200 cursor-pointer group"
     >
@@ -43,7 +44,7 @@ export default function TemplateCard({ template, onClick }: TemplateCardProps) {
 
         {/* Hover Overlay with Preview Button */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white text-[#2557a7] rounded-lg font-semibold shadow-lg hover:bg-gray-50 transition-colors">
+          <button data-testid="template-preview-btn" className="flex items-center gap-2 px-4 py-2 bg-white text-[#2557a7] rounded-lg font-semibold shadow-lg hover:bg-gray-50 transition-colors">
             <Eye className="w-4 h-4" />
             Preview
           </button>

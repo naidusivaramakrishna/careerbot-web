@@ -94,23 +94,26 @@ const ResendVerificationPage = () => {
         {status !== "success" ? (
           <form onSubmit={handleResendEmail} className="space-y-4" noValidate>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="resend-email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
               </label>
               <input
-                id="email"
+                id="resend-email"
+                name="email"
                 type="email"
+                data-testid="resend-email-input"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
                 placeholder="your@email.com"
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${emailError ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-[#2257a7]"}`}
                 disabled={status === "loading"}
               />
-              {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
+              {emailError && <p role="alert" className="text-red-500 text-sm mt-1">{emailError}</p>}
             </div>
 
             <button
               type="submit"
+              data-testid="resend-submit-btn"
               disabled={status === "loading"}
               className="w-full bg-[#2257a7] hover:bg-[#184284] disabled:bg-[#2557a7] text-white font-semibold py-3 rounded-lg transition-colors"
             >
@@ -126,6 +129,7 @@ const ResendVerificationPage = () => {
 
             <button
               type="button"
+              data-testid="back-to-signin-btn"
               onClick={() => router.push("/?showLogin=true")}
               className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
             >
@@ -137,6 +141,8 @@ const ResendVerificationPage = () => {
         {/* Success State Buttons */}
         {status === "success" && (
           <button
+            type="button"
+            data-testid="goto-signin-btn"
             onClick={() => router.push("/?showLogin=true")}
             className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
           >

@@ -36,6 +36,7 @@ export default function ConfirmDeleteModal({
                 <div className="flex justify-end gap-3 mt-4">
                     <button
                         type="button"
+                        data-testid="modal-cancel-btn"
                         onClick={onCancel}
                         disabled={loading}
                         className="px-4 py-2 text-sm rounded-md border border-neutral-300 hover:bg-neutral-100 cursor-pointer"
@@ -45,6 +46,7 @@ export default function ConfirmDeleteModal({
 
                     <button
                         type="button"
+                        data-testid="modal-confirm-btn"
                         onClick={onConfirm}
                         disabled={loading}
                         className="px-4 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 cursor-pointer"

@@ -23,6 +23,8 @@ export default function EmploymentInfoCard({
                     <button
                         type="button"
                         onClick={onEdit}
+                        data-testid="employment-info-edit-btn"
+                        aria-label="Edit employment info"
                         className="bg-background text-sm cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
                     >
                         <Pencil className="w-4 h-4" />

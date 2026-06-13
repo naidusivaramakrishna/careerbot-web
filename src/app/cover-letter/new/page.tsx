@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { parseJDText } from '@/api/parserApi';
 import { extractResume } from '@/api/resumeParsingApi';
+import SignUpModal from '@/components/SignUpModal';
 import { useHasParsedResume } from '@/hooks/useHasParsedResume';
 import { useLatestParsedResume } from '@/hooks/useLatestParsedResume';
 import { useGenerateCoverLetter } from '@/hooks/useGenerateCoverLetter';
@@ -28,23 +29,33 @@ type ParsedResumeBlob = Record<string, unknown>;
 export default function CoverLetterNewPage() {
   const gate = useHasParsedResume();
   const [uploadedResume, setUploadedResume] = useState<ParsedResumeBlob | null>(null);
+  const [showSignIn, setShowSignIn] = useState(false);
   const uploader = useCoverLetterResumeUpload(async (resume) => {
     setUploadedResume(resume);
     await gate.refetch();
-  });
+  }, () => setShowSignIn(true));
 
   if (gate.isLoading && gate.hasResume === null) {
     return <PageLoader />;
   }
   if (gate.hasResume === false && !uploadedResume) {
     return (
-      <NoResumePrompt
-        isRefreshing={gate.isLoading}
-        isUploading={uploader.isUploading}
-        uploadError={uploader.uploadError}
-        onRefresh={() => void gate.refetch()}
-        onUpload={(file) => void uploader.uploadResume(file)}
-      />
+      <>
+        <NoResumePrompt
+          isRefreshing={gate.isLoading}
+          isUploading={uploader.isUploading}
+          uploadError={uploader.uploadError}
+          onRefresh={() => void gate.refetch()}
+          onUpload={(file) => void uploader.uploadResume(file)}
+        />
+        <SignUpModal
+          open={showSignIn}
+          onClose={() => setShowSignIn(false)}
+          initialFormType="signin"
+          redirectTo="/cover-letter/new"
+          onSuccess={() => void gate.refetch()}
+        />
+      </>
     );
   }
   return <FormHost uploadedResume={uploadedResume} />;
@@ -52,6 +63,8 @@ export default function CoverLetterNewPage() {
 
 function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialJd = searchParams.get('jd') ?? '';
   const latest = useLatestParsedResume();
   const { userId } = useCurrentUserId();
   const lastAttemptKeyRef = useRef<string | null>(null);
@@ -60,10 +73,11 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
   const [localUploadedResume, setLocalUploadedResume] = useState<ParsedResumeBlob | null>(
     uploadedResume ?? null
   );
+  const [showSignIn, setShowSignIn] = useState(false);
   const uploader = useCoverLetterResumeUpload(async (resume) => {
     setLocalUploadedResume(resume);
     await latest.refetch();
-  });
+  }, () => setShowSignIn(true));
   const resume = localUploadedResume ?? latest.resume;
   const parsedResumeId = getCoverLetterParsedResumeId(resume);
 
@@ -83,17 +97,43 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
     },
   });
 
+  const autoTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      !autoTriggeredRef.current &&
+      initialJd.trim().length >= 50 &&
+      parsedResumeId &&
+      !latest.isLoading &&
+      !isPreparing &&
+      !generation.isLoading
+    ) {
+      autoTriggeredRef.current = true;
+      void handleSubmit({ job_description: initialJd.trim(), options: { tone: 'professional', min_words: 250, max_words: 400, include_debug_metadata: false } });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedResumeId, latest.isLoading]);
+
   if (latest.isLoading && !resume) return <PageLoader />;
 
   if (!resume || !parsedResumeId) {
     return (
-      <NoResumePrompt
-        isRefreshing={latest.isLoading}
-        isUploading={uploader.isUploading}
-        uploadError={uploader.uploadError}
-        onRefresh={() => void latest.refetch()}
-        onUpload={(file) => void uploader.uploadResume(file)}
-      />
+      <>
+        <NoResumePrompt
+          isRefreshing={latest.isLoading}
+          isUploading={uploader.isUploading}
+          uploadError={uploader.uploadError}
+          onRefresh={() => void latest.refetch()}
+          onUpload={(file) => void uploader.uploadResume(file)}
+        />
+        <SignUpModal
+          open={showSignIn}
+          onClose={() => setShowSignIn(false)}
+          initialFormType="signin"
+          redirectTo="/cover-letter/new"
+          onSuccess={() => void latest.refetch()}
+        />
+      </>
     );
   }
 
@@ -136,6 +176,18 @@ function FormHost({ uploadedResume }: { uploadedResume?: ParsedResumeBlob | null
     } finally {
       setIsPreparing(false);
     }
+  }
+
+  // When coming from extension (auto-triggered), show a full-screen loader instead of the form
+  if (initialJd.trim().length >= 50 && (isPreparing || generation.isLoading)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ backgroundColor: "#eef2fb" }}>
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-[#2557a7]" />
+        <p className="text-sm font-medium text-slate-600">
+          {isPreparing ? 'Preparing job description…' : 'Generating your cover letter…'}
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -216,7 +268,8 @@ function getGenerateNotFoundMessage(message: string): string {
 }
 
 function useCoverLetterResumeUpload(
-  onUploaded: (resume: ParsedResumeBlob) => Promise<void>
+  onUploaded: (resume: ParsedResumeBlob) => Promise<void>,
+  onAuthRequired?: () => void
 ) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -231,7 +284,7 @@ function useCoverLetterResumeUpload(
     setIsUploading(true);
     setUploadError(null);
     try {
-      const parsed = await extractResume(file, { skipAuthRedirect: true });
+      const parsed = await extractResume(file, { skipLoginRedirect: true });
       const mappedResume = {
         parsed_data: parsed.parsed_data,
         parsed_resume_id: parsed.resume_id,
@@ -249,17 +302,50 @@ function useCoverLetterResumeUpload(
       toast.success('Resume parsed. Continue with your cover letter.');
       await onUploaded(mappedResume);
     } catch (err) {
-      const message = err instanceof Error
-        ? err.message
-        : 'Could not upload this resume. Please try another file.';
+      if (isUnauthorizedError(err)) {
+        onAuthRequired?.();
+      }
+      const message = getResumeUploadErrorMessage(err);
       setUploadError(message);
       toast.error(message);
     } finally {
       setIsUploading(false);
     }
-  }, [onUploaded]);
+  }, [onUploaded, onAuthRequired]);
 
   return { isUploading, uploadError, uploadResume };
+}
+
+function isUnauthorizedError(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return status === 401 || status === 403;
+}
+
+function getResumeUploadErrorMessage(err: unknown): string {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  if (status === 401 || status === 403) {
+    return 'Please sign in to upload and parse your resume. We will keep you in the cover-letter flow.';
+  }
+
+  const data = (err as { response?: { data?: unknown } })?.response?.data;
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    const detail = record.detail;
+    if (typeof detail === 'string') return detail;
+    const error = record.error;
+    if (error && typeof error === 'object') {
+      const message = (error as Record<string, unknown>).message;
+      if (typeof message === 'string') return message;
+    }
+    const message = record.message;
+    if (typeof message === 'string') return message;
+  }
+
+  if (err instanceof Error && !/^Request failed with status code \d+$/.test(err.message)) {
+    return err.message;
+  }
+
+  return 'Could not upload this resume. Please try another file.';
 }
 
 function PageLoader() {

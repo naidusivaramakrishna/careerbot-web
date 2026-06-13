@@ -147,6 +147,8 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
                             {skill.name}
                             <button
                                 type="button"
+                                data-testid={`skill-delete-btn-${index}`}
+                                aria-label={`Remove ${skill.name}`}
                                 className="ml-1 text-gray-600  hover:text-black"
                                 onClick={() => handleDeleteSkill(index)}
                             >
@@ -163,6 +165,9 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
                     <div className='relative w-2/5'>
                         <input
                             type="text"
+                            data-testid="skill-input"
+                            id="new-skill"
+                            name="new_skill"
                             value={newSkill}
                             onChange={(e) => setNewSkill(e.target.value)}
                             onFocus={() => setIsFocused(true)}
@@ -183,6 +188,7 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
                                 {filteredSuggestions.map((skill) => (
                                     <div
                                         key={skill}
+                                        data-testid={`skill-suggestion-${skill.toLowerCase().replace(/\s+/g, '-')}`}
                                         onMouseDown={() => handleSelectSkill(skill)}
                                         className="px-3 py-2 cursor-pointer hover:bg-blue-100 transition-colors"
                                     >
@@ -194,6 +200,8 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
                     </div>
 
                     <button
+                        type="button"
+                        data-testid="add-skill-btn"
                         onClick={handleAddSkill}
                         disabled={isLoading || !newSkill.trim()}
                         className='bg-black text-white text-sm rounded-lg cursor-pointer px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed'

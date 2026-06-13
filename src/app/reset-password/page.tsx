@@ -155,7 +155,7 @@ const ResetPasswordContent = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100 px-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
         {/* Success State */}
         {resetSuccess && (
@@ -176,6 +176,8 @@ const ResetPasswordContent = () => {
             </div>
             <div className="space-y-3">
               <button
+                type="button"
+                data-testid="goto-signin-btn"
                 onClick={() => router.push("/?showLogin=true")}
                 className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
               >
@@ -194,9 +196,11 @@ const ResetPasswordContent = () => {
               </div>
             </div>
             <h1 className="text-2xl font-bold text-red-600 mb-2 text-center">Reset Failed</h1>
-            <p className="text-gray-600 mb-6 text-center">{resetError}</p>
+            <p role="alert" className="text-gray-600 mb-6 text-center">{resetError}</p>
             <div className="space-y-3">
               <button
+                type="button"
+                data-testid="try-again-btn"
                 onClick={() => {
                   if (token) {
                     setResetError("");
@@ -211,6 +215,8 @@ const ResetPasswordContent = () => {
                 Try Again
               </button>
               <button
+                type="button"
+                data-testid="back-to-signin-btn"
                 onClick={() => router.push("/?showLogin=true")}
                 className="w-full bg-gray-200 cursor-pointer hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
               >
@@ -229,13 +235,15 @@ const ResetPasswordContent = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* New Password */}
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-2">
                   New Password
                 </label>
                 <div className="relative">
                   <input
-                    id="password"
+                    id="new-password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
+                    data-testid="new-password-input"
                     autoFocus
                     value={formData.password}
                     onChange={(e) => { setFormData({ ...formData, password: e.target.value }); setFieldErrors(p => ({ ...p, password: "" })); }}
@@ -246,24 +254,28 @@ const ResetPasswordContent = () => {
                   />
                   <button
                     type="button"
+                    data-testid="toggle-new-password-btn"
+                    aria-label="Toggle new password visibility"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
                     {showPassword ? <EyeClosed size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-                {fieldErrors.password && <p className="text-red-500 text-sm mt-1">{fieldErrors.password}</p>}
+                {fieldErrors.password && <p role="alert" className="text-red-500 text-sm mt-1">{fieldErrors.password}</p>}
               </div>
 
               {/* Confirm Password */}
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-2">
                   Confirm Password
                 </label>
                 <div className="relative">
                   <input
-                    id="confirmPassword"
+                    id="confirm-password"
+                    name="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
+                    data-testid="confirm-password-input"
                     value={formData.confirmPassword}
                     onChange={(e) => { setFormData({ ...formData, confirmPassword: e.target.value }); setFieldErrors(p => ({ ...p, confirmPassword: "" })); }}
                     placeholder="Confirm password"
@@ -273,19 +285,22 @@ const ResetPasswordContent = () => {
                   />
                   <button
                     type="button"
+                    data-testid="toggle-confirm-password-btn"
+                    aria-label="Toggle confirm password visibility"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
                     {showConfirmPassword ? <EyeClosed size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-                {fieldErrors.confirmPassword && <p className="text-red-500 text-sm mt-1">{fieldErrors.confirmPassword}</p>}
+                {fieldErrors.confirmPassword && <p role="alert" className="text-red-500 text-sm mt-1">{fieldErrors.confirmPassword}</p>}
               </div>
 
               <PasswordRequirements password={formData.password} />
 
               <button
                 type="submit"
+                data-testid="reset-password-submit-btn"
                 disabled={isResetting}
                 className="w-full bg-[#2257a7] hover:bg-[#184284] disabled:bg-[#2557a7] text-white font-semibold py-3 rounded-lg transition-colors"
               >
@@ -301,6 +316,7 @@ const ResetPasswordContent = () => {
 
               <button
                 type="button"
+                data-testid="back-to-signin-btn"
                 onClick={() => router.push("/?showLogin=true")}
                 className="w-full bg-gray-200 cursor-pointer hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
               >

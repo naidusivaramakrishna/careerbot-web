@@ -121,8 +121,15 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             setUploading(true)
             toast.loading("Uploading and parsing your resume...", { id: "resume-upload" })
 
+            // 1️⃣ Extract resume first — some backends auto-save parsed data to profile
+            const result: ResumeExtractResponse = await extractResume(file);
+
+            // 2️⃣ Map to ProfileData format
+            const mapped = mapResumeToProfile(result);
+
             // =====================================================
-            // 1️⃣ DELETE old data before adding newly imported data
+            // 3️⃣ DELETE existing data AFTER parse so we also clear
+            //    any entries auto-saved by the parse endpoint itself
             // =====================================================
 
             // DELETE EDUCATION
@@ -174,12 +181,6 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             } catch (err) {
                 logger.warn("Error deleting certifications:", err);
             }
-
-            // 1️⃣ Extract resume
-            const result: ResumeExtractResponse = await extractResume(file);
-
-            // 2️⃣ Map to ProfileData format
-            const mapped = mapResumeToProfile(result);
 
             // Ensure mapped is defined
             if (!mapped) {
@@ -556,9 +557,13 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                             onChange={handleResumeUpload}
                             className="hidden"
                             disabled={uploading}
+                            id="quick-resume-upload"
+                            name="resume"
+                            data-testid="quick-resume-upload-input"
                         />
                         <div
                             onClick={() => !uploading && fileInputRef.current?.click()}
+                            data-testid="upload-resume-area"
                             className={`flex items-center gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg ${uploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                                 }`}
                         >
@@ -667,7 +672,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     </div>
                     <h3 className='my-4 font-semibold text-lg'>Upgrade Your Plan</h3>
                     <p className='text-center text-[#818798] text-sm'>Get unlimited ats scans, job applications, AI resume optimization, and priority support.</p>
-                    <button onClick={() => router.push('/payments')} className='rounded-lg my-4 text-sm text-white border border-neutral-200 gap-2 cursor-pointer bg-linear-to-r from-[#2200FF] to-[#1800B3] w-full px-4 py-2.5'>
+                    <button type="button" onClick={() => router.push('/payments')} data-testid="upgrade-now-btn" className='rounded-lg my-4 text-sm text-white border border-neutral-200 gap-2 cursor-pointer bg-linear-to-r from-[#2200FF] to-[#1800B3] w-full px-4 py-2.5'>
                         <span>Upgrade Now</span>
                     </button>
 
@@ -676,7 +681,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     <MessageSquare className='w-8 h-8 text-[#7B899D]' />
                     <h3 className='my-4 font-semibold text-[#344256] text-lg'>Need Help?</h3>
                     <p className='text-[#7B899D] text-sm'>Get expert advice on optimizing your profile.</p>
-                    <button className='rounded-lg text-sm my-4 font-semibold text-black border border-[#DDE2E9] gap-2 cursor-pointer bg-[#F9F9FA] w-full px-4 py-2.5'>
+                    <button type="button" data-testid="contact-support-btn" className='rounded-lg text-sm my-4 font-semibold text-black border border-[#DDE2E9] gap-2 cursor-pointer bg-[#F9F9FA] w-full px-4 py-2.5'>
                         <span className='text-[#344256]'>Contact Support</span>
                     </button>
                 </div>

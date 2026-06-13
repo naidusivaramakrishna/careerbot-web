@@ -19,6 +19,7 @@ export default function CertificationList({ certificationList, onEdit, onDelete,
                 <button
                     type="button"
                     onClick={onAdd}
+                    data-testid="add-certification-btn"
                     className="bg-[#2257a7] text-white text-sm cursor-pointer flex gap-2 items-center px-4 py-2 rounded-lg"
                 >
                     <FaAward className="w-4 h-4" />

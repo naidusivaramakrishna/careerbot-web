@@ -168,7 +168,7 @@ export const getProfile = async (options?: { skipAuthRedirect?: boolean }): Prom
         // ✅ httpOnly cookies sent automatically by httpClient with withCredentials
         const response = await httpClient.get<ApiResponse<UserProfile>>(
             '/profile/',
-            options?.skipAuthRedirect ? { headers: { 'X-Skip-Auth-Redirect': 'true' } } : undefined
+            options?.skipAuthRedirect ? { headers: { 'X-Skip-Login-Redirect': 'true' } } : undefined
         );
 
         let profileData: UserProfile;
@@ -675,9 +675,14 @@ export const uploadProfilePicture = async (file: File): Promise<ProfilePictureRe
 /**
  * Get current user's profile picture
  */
-export const getProfilePicture = async (): Promise<ProfilePictureResponse> => {
+export const getProfilePicture = async (
+    options?: { skipAuthRedirect?: boolean }
+): Promise<ProfilePictureResponse> => {
     try {
-        const response = await httpClient.get<ProfilePictureResponse>("/profile/picture");
+        const response = await httpClient.get<ProfilePictureResponse>(
+            "/profile/picture",
+            options?.skipAuthRedirect ? { headers: { 'X-Skip-Login-Redirect': 'true' } } : undefined
+        );
         return response.data;
     } catch (error: unknown) {
         const axiosError = error as { response?: { status?: number } };

@@ -16,6 +16,10 @@ import { mockResponses, mockErrors } from './api-mocks';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
+// httpClient falls back to baseURL='/api/v1' in tests (NEXT_PUBLIC_BASE_URL unset).
+// In jsdom, '/api/v1' resolves to 'http://localhost/api/v1/...'.
+const API_V1 = 'http://localhost/api/v1';
+
 export const handlers = [
   // ==================== Dashboard API ====================
   http.get(`${API_BASE}/dashboard/summary`, () => {
@@ -111,6 +115,100 @@ export const handlers = [
     return HttpResponse.json(mockResponses.mockInterview.interviewComplete);
   }),
 
+  // ==================== Jobs API ====================
+  http.get(`${API_BASE}/v1/jobs/all`, () => {
+    return HttpResponse.json(mockResponses.jobs.jobList);
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/list`, () => {
+    return HttpResponse.json({
+      success: true,
+      data: mockResponses.jobs.jobList.data.map(({ id, title, company, location, job_type }) => ({
+        id, title, company, location, job_type,
+      })),
+    });
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/matched`, () => {
+    return HttpResponse.json(mockResponses.jobs.smartMatch);
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/analytics/stats`, () => {
+    return HttpResponse.json(mockResponses.jobs.analytics);
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/health`, () => {
+    return HttpResponse.json({ success: true, data: { status: 'ok' } });
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/:jobId`, () => {
+    return HttpResponse.json(mockResponses.jobs.jobDetail);
+  }),
+
+  http.post(`${API_BASE}/v1/jobs/`, () => {
+    return HttpResponse.json({ success: true, data: mockResponses.jobs.jobDetail.data });
+  }),
+
+  http.put(`${API_BASE}/v1/jobs/:jobId`, () => {
+    return HttpResponse.json({ success: true, data: mockResponses.jobs.jobDetail.data });
+  }),
+
+  http.delete(`${API_BASE}/v1/jobs/:jobId`, () => {
+    return HttpResponse.json({ success: true, data: { id: 'job-001' } });
+  }),
+
+  http.post(`${API_BASE}/v1/jobs/:jobId/apply`, () => {
+    return HttpResponse.json(mockResponses.jobs.application);
+  }),
+
+  http.get(`${API_BASE}/v1/jobs/:jobId/applications`, () => {
+    return HttpResponse.json({
+      job_id: 'job-001',
+      total: 1,
+      applications: [mockResponses.jobs.application],
+    });
+  }),
+
+  http.post(`${API_BASE}/v1/jobs/:jobId/chat`, () => {
+    return HttpResponse.json(mockResponses.jobs.chatResponse);
+  }),
+
+  http.delete(`${API_BASE}/v1/jobs/cache/clear`, () => {
+    return HttpResponse.json({ success: true, data: { message: 'Cache cleared' } });
+  }),
+
+  // ==================== ATS API ====================
+  http.post(`${API_BASE}/v1/parser/parse_resume/`, () => {
+    return HttpResponse.json(mockResponses.ats.parsed);
+  }),
+
+  http.post(`${API_BASE}/v1/resume/enhance`, () => {
+    return HttpResponse.json(mockResponses.ats.enhanced);
+  }),
+
+  http.get(`${API_BASE}/v1/resumes/`, () => {
+    return HttpResponse.json(mockResponses.ats.resumeList);
+  }),
+
+  http.get(`${API_BASE}/v1/resumes/:resumeId`, () => {
+    return HttpResponse.json(mockResponses.ats.resumeDetail);
+  }),
+
+  http.delete(`${API_BASE}/v1/resumes/:resumeId`, () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.delete(`${API_BASE}/v1/parser/clear-cache/:resumeId`, () => {
+    return new HttpResponse(null, { status: 200 });
+  }),
+
+  http.get(`${API_BASE}/v1/parser/download/:resumeId`, () => {
+    return new HttpResponse(new Blob(['pdf-content'], { type: 'application/pdf' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/pdf' },
+    });
+  }),
+
   // ==================== User API ====================
   http.get(`${API_BASE}/user/profile`, () => {
     return HttpResponse.json({
@@ -127,6 +225,56 @@ export const handlers = [
       name: 'John Doe Updated',
     });
   }),
+
+  // ==================== httpClient endpoints (templates/catalogues feature) ====================
+  // httpClient uses baseURL='/api/v1' in tests → resolves to 'http://localhost/api/v1/...'
+
+  http.get(`${API_V1}/profile/`, () =>
+    HttpResponse.json({
+      id: 'user-123',
+      email: 'test@example.com',
+      username: 'testuser',
+      full_name: 'Test User',
+      phone_number: '+1234567890',
+      location: 'Test City',
+      linkedin_url: 'https://linkedin.com/in/testuser',
+    })
+  ),
+
+  http.get(`${API_V1}/resumes`, () =>
+    HttpResponse.json([
+      {
+        id: 'resume-1',
+        _id: 'resume-1',
+        personalInfo: { fullname: 'Test User', email: 'test@example.com' },
+        updatedAt: '2024-01-01T00:00:00Z',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+    ])
+  ),
+
+  http.post(`${API_V1}/resumes/`, () =>
+    HttpResponse.json({
+      id: 'new-resume-123',
+      _id: 'new-resume-123',
+      personalInfo: {
+        fullname: 'Test User',
+        email: 'test@example.com',
+        phone: '+1234567890',
+        location: 'Test City',
+        linkedinUrl: 'https://linkedin.com/in/testuser',
+        portfolioUrl: '',
+      },
+      updatedAt: '2024-01-01T00:00:00Z',
+      createdAt: '2024-01-01T00:00:00Z',
+    })
+  ),
+
+  // Auth refresh: return 401 immediately so the interceptor fails fast
+  // rather than attempting a real network call in tests
+  http.post(`${API_V1}/auth/refresh`, () =>
+    HttpResponse.json({ detail: 'Token expired' }, { status: 401 })
+  ),
 ];
 
 /**

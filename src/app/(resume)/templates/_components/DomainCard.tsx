@@ -21,6 +21,7 @@ export default function DomainCard({
 
   return (
     <button
+      data-testid={`domain-card-${domainName.toLowerCase().replace(/\s+/g, '-')}`}
       onClick={onClick}
       className="relative bg-white rounded-xl ring-1 ring-slate-200 overflow-hidden shadow-sm hover:ring-[#2257a7] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group cursor-pointer text-left flex flex-col"
     >

@@ -760,7 +760,17 @@ export const getProgressAnalytics = async (): Promise<ProgressAnalytics> => {
       typeof raw.best_score  === 'number' ? raw.best_score  :
       typeof raw.highest_score === 'number' ? raw.highest_score : 0;
 
-    // Grade based on accuracy percentage
+    const total_tests = raw.total_tests ?? raw.tests_taken ?? 0;
+
+    // If the backend has nothing real for this user — no tests taken AND no
+    // score AND no best — refuse to synthesize a fake "Grade F / Stable"
+    // payload. Throw so the page's .catch hides the card entirely.
+    if (total_tests === 0 && average_score === 0 && best_score === 0 && average_accuracy === undefined) {
+      throw new Error('No analytics data yet — user has no completed tests');
+    }
+
+    // Grade based on accuracy percentage. Only computed when we have at least
+    // one real numeric signal above; otherwise we'd have thrown.
     const pct = average_accuracy ?? (average_score > 0 ? average_score : 0);
     let overall_grade = 'F';
     if (pct >= 90) overall_grade = 'A';
@@ -780,7 +790,7 @@ export const getProgressAnalytics = async (): Promise<ProgressAnalytics> => {
     }
 
     analyticsData = {
-      total_tests:       raw.total_tests ?? raw.tests_taken ?? 0,
+      total_tests,
       average_score,
       average_accuracy,
       best_score,
@@ -880,26 +890,29 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
       return { topic, accuracy, suggestion };
     };
 
-    const buildResult = (items: any[]): WeakAreasAnalytics => {
+    const buildResult = (items: any[], backendRecs: unknown): WeakAreasAnalytics => {
       let weakItems = items.filter(isWeakItem);
       if (weakItems.length === 0) weakItems = items; // show all if nothing flagged
       const weakAreas = weakItems.map(toWeakArea).sort((a, b) => a.accuracy - b.accuracy);
-      return {
-        weak_areas: weakAreas,
-        recommendations: weakAreas.length > 0
-          ? [`Focus on: ${weakAreas.slice(0, 3).map((w: any) => w.topic).join(', ')}`, 'Practice weak areas regularly', 'Take topic-specific mock tests to improve']
-          : ['Keep practicing all sections', 'Take more mock tests'],
-      };
+      // Only forward recommendations that the backend actually sent. Removed
+      // the previous "Focus on: X, Y, Z" / "Practice weak areas regularly"
+      // fabrications — those were frontend boilerplate that looked like real
+      // backend advice. If the backend has nothing to say, render nothing.
+      const recommendations: string[] = Array.isArray(backendRecs)
+        ? backendRecs.filter((r): r is string => typeof r === 'string' && r.trim().length > 0)
+        : [];
+      return { weak_areas: weakAreas, recommendations };
     };
 
     // Map backend response format to frontend WeakAreasAnalytics format
+    const backendRecs = response.data?.recommendations;
     if (response.data?.data && Array.isArray(response.data.data)) {
-      analyticsData = buildResult(response.data.data);
+      analyticsData = buildResult(response.data.data, backendRecs);
     } else if (response.data?.weak_areas && Array.isArray(response.data.weak_areas)) {
       // Don't pass through raw — normalise accuracy values
-      analyticsData = buildResult(response.data.weak_areas);
+      analyticsData = buildResult(response.data.weak_areas, backendRecs);
     } else if (Array.isArray(response.data)) {
-      analyticsData = buildResult(response.data);
+      analyticsData = buildResult(response.data, backendRecs);
     }
 
     if (!analyticsData) {
@@ -949,22 +962,33 @@ export const getLeaderboard = async (): Promise<Leaderboard> => {
         : Array.isArray(raw.entries) ? raw.entries
         : [];
 
-      const entries: LeaderboardEntry[] = list.map((item: any, idx: number) => {
-        const rawAcc = item.accuracy ?? item.accuracy_pct ?? item.accuracy_percentage;
-        const rawTests = item.tests_completed ?? item.total_tests ?? item.tests;
-        return {
-          rank: item.rank ?? idx + 1,
-          name: item.display_name ?? item.username ?? item.name ?? item.user_name
-            ?? (item.is_current_user ? 'You' : `Rank ${idx + 1}`),
-          score: (item.score ?? item.total_score ?? item.avg_score) != null
-            ? Math.round((item.score ?? item.total_score ?? item.avg_score) * 10) / 10
-            : undefined,
-          accuracy: rawAcc != null ? Math.round(rawAcc) : undefined,
-          tests_completed: rawTests != null ? rawTests : undefined,
-          last_test_date: item.last_test_date ?? item.date ?? item.last_attempt,
-          badge: item.badge ?? undefined,
-        };
-      });
+      // Only include entries with a real name field. The old code invented
+      // "Rank N" when names were missing — that produced fake-looking output
+      // for users when the backend payload was sparse. Better to drop the
+      // entry entirely so the leaderboard renders fewer real entries than
+      // pretend to have data we don't.
+      const entries: LeaderboardEntry[] = list
+        .map((item: any, idx: number): LeaderboardEntry | null => {
+          const realName: string | undefined =
+            item.display_name ?? item.username ?? item.name ?? item.user_name
+            ?? (item.is_current_user ? 'You' : undefined);
+          if (!realName) return null;
+
+          const rawAcc = item.accuracy ?? item.accuracy_pct ?? item.accuracy_percentage;
+          const rawTests = item.tests_completed ?? item.total_tests ?? item.tests;
+          return {
+            rank: item.rank ?? idx + 1,
+            name: realName,
+            score: (item.score ?? item.total_score ?? item.avg_score) != null
+              ? Math.round((item.score ?? item.total_score ?? item.avg_score) * 10) / 10
+              : undefined,
+            accuracy: rawAcc != null ? Math.round(rawAcc) : undefined,
+            tests_completed: rawTests != null ? rawTests : undefined,
+            last_test_date: item.last_test_date ?? item.date ?? item.last_attempt,
+            badge: item.badge ?? undefined,
+          };
+        })
+        .filter((e: LeaderboardEntry | null): e is LeaderboardEntry => e !== null);
 
       leaderboardData = {
         period: raw.period || 'All Time',

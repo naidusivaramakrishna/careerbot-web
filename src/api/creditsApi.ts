@@ -55,8 +55,14 @@ export interface CreditCheckResponse {
  * Returns the user's current credit balance and plan information.
  * Useful for real-time credit updates without fetching the entire dashboard.
  */
-export async function getCreditsBalance(): Promise<CreditsBalance> {
-  const response = await httpClient.get<CreditsBalance>('/credits/balance');
+export async function getCreditsBalance(
+  options: { skipAuthRedirect?: boolean } = {}
+): Promise<CreditsBalance> {
+  const response = await httpClient.get<CreditsBalance>('/credits/balance', {
+    headers: {
+      ...(options.skipAuthRedirect && { 'X-Skip-Login-Redirect': 'true' }),
+    },
+  });
   return response.data;
 }
 
