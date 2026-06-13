@@ -16,6 +16,7 @@ import JobsRightSidebar from "./sidebar/JobsRightSidebar";
 import NancyChat from "./chat/NancyChat";
 import JobSkeleton from "./JobSkeleton";
 import JobsFilterSidebar from "./JobsFilterSidebar";
+import { matchesJobFilters } from "./utils/jobFilterUtils";
 
 // ── Normalized shape used throughout the component ──
 interface NormalizedJob {
@@ -345,119 +346,9 @@ export default function JobsContents() {
 
       // Apply other filters (same logic as All Jobs tab)
       if (selectedFilters.length > 0) {
-        const WORK_MODEL_OPTIONS = ["onsite", "hybrid", "remote"];
-        const TYPE_FILTERS = ["full-time", "contract", "part-time", "internship"];
-
-        const selectedWorkModels = selectedFilters.filter((f) =>
-          WORK_MODEL_OPTIONS.includes(f.toLowerCase())
+        filtered = filtered.filter((job) =>
+          matchesJobFilters(job, selectedFilters)
         );
-        const selectedTypeFilters = selectedFilters.filter((f) =>
-          TYPE_FILTERS.includes(f.toLowerCase())
-        );
-        const yearsFilter = selectedFilters.find((f) => f.startsWith("years:"));
-        const yearsValue = yearsFilter ? yearsFilter.replace("years:", "") : null;
-        const salaryFilter = selectedFilters.find((f) => f.startsWith("salary:"));
-        const salaryLabel = salaryFilter ? salaryFilter.replace("salary:", "") : "Any salary";
-        const locationFilters = selectedFilters
-          .filter((f) => f.startsWith("location:"))
-          .map((f) => f.replace("location:", "").toLowerCase());
-        const educationFilters = selectedFilters
-          .filter((f) => f.startsWith("education:"))
-          .map((f) => f.replace("education:", "").toLowerCase());
-
-        filtered = filtered.filter((job) => {
-          const jobMode = (job.mode || "").toLowerCase();
-          const effectiveMode = jobMode || "onsite";
-          const matchesWorkModel =
-            selectedWorkModels.length === 0 ||
-            selectedWorkModels.some((f) => {
-              const fl = f.toLowerCase();
-              if (fl === "onsite")
-                return (
-                  effectiveMode.includes("on-site") ||
-                  effectiveMode.includes("onsite") ||
-                  effectiveMode.includes("office") ||
-                  effectiveMode === "onsite"
-                );
-              if (fl === "hybrid") return jobMode.includes("hybrid");
-              if (fl === "remote") return jobMode.includes("remote");
-              return false;
-            });
-
-          const matchesType =
-            selectedTypeFilters.length === 0 ||
-            selectedTypeFilters.some((f) => job.type.toLowerCase() === f.toLowerCase());
-
-          const matchesYears = (() => {
-            if (!yearsValue) return true;
-            const expStr = job.experience || "";
-            const nums = String(expStr).match(/\d+/g);
-            if (yearsValue === "Fresher") {
-              if (!nums) return true;
-              return parseInt(nums[0], 10) === 0;
-            }
-            const selectedYear =
-              yearsValue === "11+ yrs" ? 11 : parseInt(yearsValue, 10);
-            if (isNaN(selectedYear)) return true;
-            if (!nums) return selectedYear === 0;
-            const minExp = parseInt(nums[0], 10);
-            if (selectedYear === 11) return minExp >= 11;
-            return minExp === selectedYear;
-          })();
-
-          const matchesSalary = (() => {
-            if (salaryLabel === "Any salary") return true;
-            const salaryStr = job.salary || "";
-            if (!salaryStr) return true;
-            const cleaned = salaryStr.replace(/[₹,]/g, "").toLowerCase();
-            const rangeMatch = cleaned.match(
-              /(\d+\.?\d*)\s*[lk]?\s*-\s*(\d+\.?\d*)\s*[lk]/
-            );
-            let salaryNum = 0;
-            if (rangeMatch) {
-              const maxVal = parseFloat(rangeMatch[2]);
-              const unit = cleaned.match(/[lk]/);
-              if (unit?.[0] === "l") salaryNum = maxVal * 100000;
-              else if (unit?.[0] === "k") salaryNum = maxVal * 1000;
-              else salaryNum = maxVal;
-            } else {
-              const lakhMatch = cleaned.match(/(\d+\.?\d*)\s*l/);
-              const kMatch = cleaned.match(/(\d+\.?\d*)\s*k/);
-              const numMatch = cleaned.match(/(\d+)/);
-              if (lakhMatch) salaryNum = parseFloat(lakhMatch[1]) * 100000;
-              else if (kMatch) salaryNum = parseFloat(kMatch[1]) * 1000;
-              else if (numMatch) salaryNum = parseFloat(numMatch[1]);
-            }
-            if (salaryNum === 0) return false;
-            const lpaMatch = salaryLabel.match(/(\d+)\s*LPA\+/i);
-            const minVal = lpaMatch
-              ? parseInt(lpaMatch[1]) * 100000
-              : parseInt(salaryLabel.replace(/[₹L+]/g, "")) * 100000;
-            return salaryNum >= minVal;
-          })();
-
-          const matchesLocation = (() => {
-            if (locationFilters.length === 0) return true;
-            const jobCity = (job.location || "").split(",")[0].trim().toLowerCase();
-            return locationFilters.some((loc) => jobCity === loc);
-          })();
-
-          const matchesEducation = (() => {
-            if (educationFilters.length === 0) return true;
-            const jobEdu = (job.education || "").toLowerCase();
-            if (!jobEdu) return false;
-            return educationFilters.some((edu) => jobEdu.includes(edu));
-          })();
-
-          return (
-            matchesWorkModel &&
-            matchesType &&
-            matchesYears &&
-            matchesSalary &&
-            matchesLocation &&
-            matchesEducation
-          );
-        });
       }
 
       setFilteredJobs(sortJobs(filtered, filterSort));
@@ -478,134 +369,9 @@ export default function JobsContents() {
     // searchQuery and roleFilter are server-side (sent as `q`) — skip client filter
 
     if (selectedFilters.length > 0) {
-      const WORK_MODEL_OPTIONS = ["onsite", "hybrid", "remote anywhere in the india"];
-      const TYPE_FILTERS = ["full-time", "contract", "part-time", "internship"];
-
-      const selectedWorkModels = selectedFilters.filter((f) =>
-        WORK_MODEL_OPTIONS.includes(f.toLowerCase())
+      filtered = filtered.filter((job) =>
+        matchesJobFilters(job, selectedFilters, { includeSource: true })
       );
-      const selectedTypeFilters = selectedFilters.filter((f) =>
-        TYPE_FILTERS.includes(f.toLowerCase())
-      );
-      const yearsFilter = selectedFilters.find((f) => f.startsWith("years:"));
-      const yearsValue = yearsFilter ? yearsFilter.replace("years:", "") : null;
-      const salaryFilter = selectedFilters.find((f) => f.startsWith("salary:"));
-      const salaryLabel = salaryFilter ? salaryFilter.replace("salary:", "") : "Any salary";
-      const locationFilters = selectedFilters
-        .filter((f) => f.startsWith("location:"))
-        .map((f) => f.replace("location:", "").toLowerCase());
-      const educationFilters = selectedFilters
-        .filter((f) => f.startsWith("education:"))
-        .map((f) => f.replace("education:", "").toLowerCase());
-
-      // source: is radio-style chip — backend /jobs/all ignores it, so filter client-side
-      const sourceFilterVal = selectedFilters
-        .find((f) => f.startsWith("source:"))
-        ?.replace("source:", "")
-        .toLowerCase();
-
-      const serverHandledLocation =
-        locationFilters.length <= 1 || selectedLocation !== "All Locations";
-
-      filtered = filtered.filter((job) => {
-        const jobMode = (job.mode || "").toLowerCase();
-        const effectiveMode = jobMode || "onsite";
-        const matchesWorkModel =
-          selectedWorkModels.length === 0 ||
-          selectedWorkModels.some((f) => {
-            const fl = f.toLowerCase();
-            if (fl === "onsite")
-              return (
-                effectiveMode.includes("on-site") ||
-                effectiveMode.includes("onsite") ||
-                effectiveMode.includes("office") ||
-                effectiveMode === "onsite"
-              );
-            if (fl === "hybrid") return jobMode.includes("hybrid");
-            if (fl === "remote anywhere in the india") return jobMode.includes("remote");
-            return false;
-          });
-
-        const matchesType =
-          selectedTypeFilters.length === 0 ||
-          selectedTypeFilters.some((f) => job.type.toLowerCase() === f.toLowerCase());
-
-        const matchesYears = (() => {
-          if (!yearsValue) return true;
-          const expStr = job.experience || "";
-          const nums = String(expStr).match(/\d+/g);
-          if (yearsValue === "Fresher") {
-            if (!nums) return true;
-            return parseInt(nums[0], 10) === 0;
-          }
-          const selectedYear =
-            yearsValue === "11+ yrs" ? 11 : parseInt(yearsValue, 10);
-          if (isNaN(selectedYear)) return true;
-          if (!nums) return selectedYear === 0;
-          const minExp = parseInt(nums[0], 10);
-          if (selectedYear === 11) return minExp >= 11;
-          return minExp === selectedYear;
-        })();
-
-        const matchesSalary = (() => {
-          if (salaryLabel === "Any salary") return true;
-          const salaryStr = job.salary || "";
-          if (!salaryStr) return true;
-          const cleaned = salaryStr.replace(/[₹,]/g, "").toLowerCase();
-          const rangeMatch = cleaned.match(
-            /(\d+\.?\d*)\s*[lk]?\s*-\s*(\d+\.?\d*)\s*[lk]/
-          );
-          let salaryNum = 0;
-          if (rangeMatch) {
-            const maxVal = parseFloat(rangeMatch[2]);
-            const unit = cleaned.match(/[lk]/);
-            if (unit?.[0] === "l") salaryNum = maxVal * 100000;
-            else if (unit?.[0] === "k") salaryNum = maxVal * 1000;
-            else salaryNum = maxVal;
-          } else {
-            const lakhMatch = cleaned.match(/(\d+\.?\d*)\s*l/);
-            const kMatch = cleaned.match(/(\d+\.?\d*)\s*k/);
-            const numMatch = cleaned.match(/(\d+)/);
-            if (lakhMatch) salaryNum = parseFloat(lakhMatch[1]) * 100000;
-            else if (kMatch) salaryNum = parseFloat(kMatch[1]) * 1000;
-            else if (numMatch) salaryNum = parseFloat(numMatch[1]);
-          }
-          if (salaryNum === 0) return false;
-          const lpaMatch = salaryLabel.match(/(\d+)\s*LPA\+/i);
-          const minVal = lpaMatch
-            ? parseInt(lpaMatch[1]) * 100000
-            : parseInt(salaryLabel.replace(/[₹L+]/g, "")) * 100000;
-          return salaryNum >= minVal;
-        })();
-
-        // Server handled single location — client-filter only for multi-location chips
-        const matchesLocation = (() => {
-          if (locationFilters.length === 0) return true;
-          if (serverHandledLocation) return true;
-          const jobCity = (job.location || "").split(",")[0].trim().toLowerCase();
-          return locationFilters.some((loc) => jobCity === loc);
-        })();
-
-        const matchesEducation = (() => {
-          if (educationFilters.length === 0) return true;
-          const jobEdu = (job.education || "").toLowerCase();
-          if (!jobEdu) return false;
-          return educationFilters.some((edu) => jobEdu.includes(edu));
-        })();
-
-        const matchesSource = !sourceFilterVal ||
-          (job.source || "").toLowerCase().includes(sourceFilterVal);
-
-        return (
-          matchesWorkModel &&
-          matchesType &&
-          matchesYears &&
-          matchesSalary &&
-          matchesLocation &&
-          matchesEducation &&
-          matchesSource
-        );
-      });
     }
 
     setFilteredJobs(sortJobs(filtered, filterSort));

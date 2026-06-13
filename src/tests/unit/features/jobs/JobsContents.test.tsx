@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { useState } from 'react';
 import '@testing-library/jest-dom';
+import { matchesJobFilters } from '@/app/(jobs)/jobs/_components/utils/jobFilterUtils';
 
 // ─── Top-level mock functions (ESM-safe) ──────────────────────────────────────
 
@@ -207,6 +208,42 @@ function JobsContentsWrapper() {
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
+
+describe('matchesJobFilters', () => {
+  it('applies work model, type, experience, salary, location and education filters together', () => {
+    const result = matchesJobFilters(
+      {
+        mode: 'Remote',
+        type: 'Full-time',
+        experience: '2 years',
+        salary: '₹15-25 LPA',
+        location: 'Delhi, India',
+        education: 'B.Tech in Computer Science',
+        source: 'linkedin',
+      },
+      ['remote', 'full-time', 'years:2', 'salary:₹20 LPA+', 'location:Delhi', 'education:b tech']
+    );
+
+    expect(result).toBe(true);
+  });
+
+  it('rejects jobs that do not meet the selected salary threshold', () => {
+    const result = matchesJobFilters(
+      {
+        mode: 'On-site',
+        type: 'Full-time',
+        experience: '5 years',
+        salary: '₹8-12 LPA',
+        location: 'Bangalore, India',
+        education: 'MCA',
+        source: 'naukri',
+      },
+      ['salary:₹20 LPA+']
+    );
+
+    expect(result).toBe(false);
+  });
+});
 
 describe('JobsContents', () => {
   beforeEach(() => {

@@ -521,46 +521,48 @@ export default function AnalysisContent({
         </div>
 
         {/* RIGHT — ATS Score + Job Description */}
-        <div className="w-[520px] shrink-0 overflow-y-auto bg-white border-l border-gray-100 p-5 space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+        <div className="w-[520px] shrink-0 overflow-y-auto bg-[#f6f8fc] border-l border-gray-200 p-5 space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
 
           {/* ATS Score Card */}
-          <div className="rounded-2xl border border-gray-100 bg-gradient-to-b from-[#f8faff] to-white shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
-              <h3 className="text-[12px] font-bold text-gray-700 uppercase tracking-wide">ATS Match Score</h3>
-            </div>
-            <div className="flex flex-col items-center mb-4">
-              <div className="w-32 h-32">
-                <MultiColorCircularScore value={score} />
+          <div className="rounded-2xl border border-[#dce8f8] bg-white shadow-sm overflow-hidden">
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg, #5896d7, #2557a7)" }} />
+                <h3 className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">ATS Match Score</h3>
               </div>
-              <p className="text-[11px] text-gray-400 mt-2 font-medium">Overall Score</p>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="text-center bg-red-50 rounded-xl py-2.5 border border-red-100">
-                <p className="text-[18px] font-bold text-red-500">{totalMissingCount}</p>
-                <p className="text-[10px] text-red-400 font-semibold mt-0.5">Missing</p>
+              <div className="flex flex-col items-center mb-4">
+                <div className="w-32 h-32 drop-shadow-sm">
+                  <MultiColorCircularScore value={score} />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wide uppercase">Overall Score</p>
               </div>
-              <div className="text-center bg-green-50 rounded-xl py-2.5 border border-green-100">
-                <p className="text-[18px] font-bold text-green-600">{totalMatchedCount}</p>
-                <p className="text-[10px] text-green-500 font-semibold mt-0.5">Matched</p>
-              </div>
-              <div className="text-center bg-blue-50 rounded-xl py-2.5 border border-blue-100">
-                <p className="text-[18px] font-bold text-[#2557a7]">{activeSectionIds.length}</p>
-                <p className="text-[10px] text-blue-400 font-semibold mt-0.5">Sections</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#fff5f5,#fef2f2)", borderColor: "#fecaca" }}>
+                  <p className="text-[18px] font-extrabold text-red-500">{totalMissingCount}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#f87171" }}>Missing</p>
+                </div>
+                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#f0fdf4,#dcfce7)", borderColor: "#bbf7d0" }}>
+                  <p className="text-[18px] font-extrabold text-green-600">{totalMatchedCount}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#4ade80" }}>Matched</p>
+                </div>
+                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#eff6ff,#dbeafe)", borderColor: "#bfdbfe" }}>
+                  <p className="text-[18px] font-extrabold text-[#2557a7]">{activeSectionIds.length}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#60a5fa" }}>Sections</p>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Job Description Card */}
-          <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-[#f8faff] border-b border-gray-100">
+          <div className="rounded-2xl border border-[#dce8f8] bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e8eef8]" style={{ background: "linear-gradient(135deg,#f0f5ff,#e8eef8)" }}>
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
-                <p className="text-[12px] font-bold text-gray-700 uppercase tracking-wide">Job Description</p>
+                <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
+                <p className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">Job Description</p>
               </div>
               <button
                 onClick={() => { try { navigator.clipboard.writeText(jdText); } catch {} }}
-                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-gray-400 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg transition-all"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-[#2557a7] bg-white hover:bg-blue-50 rounded-lg border border-[#c7d9f5] transition-all shadow-sm"
               >
                 <FileText className="w-3 h-3" /> Copy
               </button>

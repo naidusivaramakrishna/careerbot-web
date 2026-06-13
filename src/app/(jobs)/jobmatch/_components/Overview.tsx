@@ -384,7 +384,22 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           padding: 64px 44px 40px;
         }
         @media (max-width: 1280px) { .jm-container { padding: 48px 32px 28px; } }
-        @media (max-width: 768px) { .jm-container { padding: 32px 16px 16px; } }
+        @media (max-width: 1024px) { .jm-container { padding: 36px 24px 24px; } }
+        @media (max-width: 768px)  { .jm-container { padding: 28px 16px 16px; } }
+        .jm-steps-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+          margin-bottom: 36px;
+        }
+        @media (max-width: 640px) {
+          .jm-steps-row { flex-direction: column; align-items: center; gap: 16px; }
+          .jm-steps-arrow { display: none; }
+          .jm-landing-card { padding: 28px 20px 24px !important; }
+        }
+        @media (max-width: 1024px) {
+          .jm-landing-card { padding: 32px 40px 28px !important; }
+        }
         .jm-action-btn:hover {
           background: #EEF4FF !important;
           border-color: rgba(37,87,167,0.25) !important;
@@ -425,7 +440,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
           {/* ── HERO ── */}
           <motion.div
-            style={{ maxWidth: 760, marginBottom: 28 }}
+            style={{ maxWidth: "min(760px, 100%)", marginBottom: 28 }}
             initial={{ opacity: 0, y: 20 }}
             animate={mounted ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
@@ -450,7 +465,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             </div>
 
             <h1 style={{
-              fontSize: "clamp(42px, 4.8vw, 64px)",
+              fontSize: "clamp(32px, 4.8vw, 64px)",
               fontWeight: 900, lineHeight: 1.04,
               letterSpacing: "-0.038em", margin: "0 0 14px",
             }}>
@@ -486,7 +501,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             animate={mounted ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.6, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
-            <div style={{
+            <div className="jm-landing-card" style={{
               background: "#fff",
               borderRadius: 12,
               boxShadow: "0 1px 4px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.08)",
@@ -495,16 +510,16 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             }}>
 
               {/* Steps row */}
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", marginBottom: 36 }}>
+              <div className="jm-steps-row">
                 {WIZARD_STEPS.map((step, idx) => (
                   <React.Fragment key={idx}>
                     {idx > 0 && (
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 44, flexShrink: 0, width: 100 }}>
+                      <div className="jm-steps-arrow" style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 44, flexShrink: 0, width: 100 }}>
                         <ArrowRight style={{ width: 18, height: 18, color: "#94A3B8" }} />
                       </div>
                     )}
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", flex: 1 }}>
-                      <span style={{ fontSize: 90, fontWeight: 800, lineHeight: 1, color: "#EBEBEB", display: "block", marginBottom: 10, letterSpacing: "-0.04em", userSelect: "none" }}>
+                      <span style={{ fontSize: "clamp(56px, 6vw, 90px)", fontWeight: 800, lineHeight: 1, color: "#EBEBEB", display: "block", marginBottom: 10, letterSpacing: "-0.04em", userSelect: "none" }}>
                         {idx + 1}
                       </span>
                       <p style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px", lineHeight: 1.3 }}>{step.title}</p>
@@ -852,19 +867,19 @@ We are looking for a Software Engineer with 3+ years of experience in React, Nod
                   return (
                     <div>
                       {/* Header */}
-                      <div style={{ textAlign: "center", marginBottom: 24 }}>
+                      <div style={{ textAlign: "center", marginBottom: 16 }}>
                         <div style={{
-                          width: 56, height: 56, borderRadius: "50%",
-                          background: "#f0fdf4", border: "2px solid #86efac",
+                          width: 44, height: 44, borderRadius: "50%",
+                          background: "#f0fdf4", border: "1.5px solid #86efac",
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          margin: "0 auto 14px",
+                          margin: "0 auto 10px",
                         }}>
-                          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M4 10l4 4 8-8"/>
                           </svg>
                         </div>
-                        <h3 style={{ fontSize: 26, fontWeight: 800, color: "#0f172a", margin: "0 0 10px" }}>Ready to Analyze</h3>
-                        <p style={{ fontSize: 15, color: "#64748B", margin: 0, lineHeight: 1.6 }}>
+                        <h3 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 6px" }}>Ready to Analyze</h3>
+                        <p style={{ fontSize: 13, color: "#64748B", margin: 0, lineHeight: 1.55 }}>
                           We&apos;ve received your resume and job description.<br />
                           Click the button below to get your AI match score.
                         </p>
@@ -874,26 +889,26 @@ We are looking for a Software Engineer with 3+ years of experience in React, Nod
                       <div style={{
                         background: "#fff",
                         border: "1px solid #E8EDF5",
-                        borderRadius: 18,
+                        borderRadius: 16,
                         overflow: "hidden",
-                        marginBottom: 20,
+                        marginBottom: 14,
                         boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
                       }}>
                         {/* Row: Resume */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 24px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px" }}>
                           <div style={{
-                            width: 48, height: 48, borderRadius: 12,
+                            width: 40, height: 40, borderRadius: 10,
                             background: "#F1F5F9",
                             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                           }}>
-                            <Upload style={{ width: 20, height: 20, color: "#2557a7" }} />
+                            <Upload style={{ width: 18, height: 18, color: "#2557a7" }} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Resume</p>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <p style={{ fontSize: 10.5, color: "#94A3B8", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Resume</p>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {uploadedFile ? uploadedFile.name : sessionResumeName || "Resume ready"}
                             </p>
-                            <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>Uploaded successfully</p>
+                            <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>Uploaded successfully</p>
                           </div>
                           <div style={{
                             display: "inline-flex", alignItems: "center", gap: 6,
@@ -911,20 +926,20 @@ We are looking for a Software Engineer with 3+ years of experience in React, Nod
                         <div style={{ height: 1, background: "#F1F5F9" }} />
 
                         {/* Row: Job Description */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 24px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px" }}>
                           <div style={{
-                            width: 48, height: 48, borderRadius: 12,
+                            width: 40, height: 40, borderRadius: 10,
                             background: "#F1F5F9",
                             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                           }}>
-                            <Link2 style={{ width: 20, height: 20, color: "#2557a7" }} />
+                            <Link2 style={{ width: 18, height: 18, color: "#2557a7" }} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 11, color: "#94A3B8", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Job Description</p>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <p style={{ fontSize: 10.5, color: "#94A3B8", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Job Description</p>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {jdLabel}
                             </p>
-                            <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>{jdSubLabel}</p>
+                            <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>{jdSubLabel}</p>
                           </div>
                           <div style={{
                             display: "inline-flex", alignItems: "center", gap: 6,
@@ -953,7 +968,7 @@ We are looking for a Software Engineer with 3+ years of experience in React, Nod
                       <button
                         onClick={analyzeMatch}
                         style={{
-                          width: "100%", height: 56, borderRadius: 14,
+                          width: "100%", height: 48, borderRadius: 14,
                           display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
                           fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em",
                           cursor: "pointer",
@@ -980,7 +995,7 @@ We are looking for a Software Engineer with 3+ years of experience in React, Nod
 
                       <p style={{
                         textAlign: "center", fontSize: 11.5, color: "#94A3B8",
-                        marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                        marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                       }}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
