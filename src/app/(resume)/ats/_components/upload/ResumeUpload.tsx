@@ -13,27 +13,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { FaFileUpload } from "react-icons/fa";
-import { formatFileSize } from "../../utils/helpers";
+import { formatFileSize, clearAtsUploadStorage, validateResumeFile } from "../../utils/helpers";
 import { processResumeComplete } from "@/api/resumeatsapi";
+import { buildAtsReportRoute, normalizeResumeScanError } from "../../utils/scanFlow";
 
 const PRIMARY_COLOR = "#0275dd";
-
-// Keys this flow writes to localStorage. Cleared targetedly instead of
-// localStorage.clear() so we don't wipe unrelated app state (auth hints,
-// other features' caches) that happens to share the same origin.
-const ATS_UPLOAD_KEYS = [
-  "uploadedResumeFile",
-  "uploadedFileName",
-  "uploadedFileSize",
-  "uploadedFileType",
-  "isImageBased",
-  "currentScore",
-  "atsAnalysisData",
-] as const;
-
-function clearAtsUploadStorage() {
-  ATS_UPLOAD_KEYS.forEach((k) => localStorage.removeItem(k));
-}
 
 const ResumeUpload: React.FC = () => {
   const router = useRouter();
@@ -106,13 +90,10 @@ const ResumeUpload: React.FC = () => {
   const onFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-    const allowed = ["pdf", "docx"];
-    if (!allowed.includes(ext)) {
-      setError("Invalid file type. Only .pdf, .docx are allowed.");
-      return;
-    }
+    const extErr = validateResumeFile(f);
+    if (extErr) { setError(extErr); return; }
 
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
     setError(null);
     setIsImageBased(false);
 
@@ -185,10 +166,7 @@ const ResumeUpload: React.FC = () => {
       setTimeout(() => setStep(3), 500);
     } catch (err: unknown) {
       clearInterval(progInt);
-      let message = "Processing failed. Try again.";
-      if (err instanceof Error && err.message) message = err.message;
-      else if (typeof err === "string") message = err;
-      setError(message);
+      setError(normalizeResumeScanError(err, "Processing failed. Try again."));
       setStep(0);
       setUploadedFile(null);
       setIsProcessing(false);
@@ -210,7 +188,9 @@ const ResumeUpload: React.FC = () => {
 
   const viewReport = () => {
     if (step === 3) {
-      router.push(`/atslogin/report`);
+      const cached = localStorage.getItem("atsAnalysisData");
+      const resumeId = cached ? JSON.parse(cached)?.resume_id : undefined;
+      router.push(buildAtsReportRoute(resumeId));
     }
   };
 

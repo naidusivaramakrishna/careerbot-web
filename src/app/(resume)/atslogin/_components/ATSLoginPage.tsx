@@ -2,9 +2,12 @@
 
 import { useState, useEffect, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Sparkles, Check, ArrowRight, Shield, Clock, X } from "lucide-react";
+import { Sparkles, Check, ArrowRight, Shield, Clock, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { processResumeComplete } from "@/api/resumeatsapi";
+import ErrorModal from "./ErrorModal";
+import { validateResumeFile, formatFileSize } from "@/app/(resume)/ats/utils/helpers";
+import { buildAtsReportRoute, normalizeResumeScanError } from "@/app/(resume)/ats/utils/scanFlow";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -179,8 +182,8 @@ function UploadZone({ isDragging, onDragOver, onDragLeave, onDrop }: UploadZoneP
 }
 
 function FilePreview({ file, onRemove, agreed, onAgree }: FilePreviewProps) {
-  const ext    = file.name.split(".").pop()?.toUpperCase() ?? "";
-  const sizeKB = (file.size / 1024).toFixed(0);
+  const ext      = file.name.split(".").pop()?.toUpperCase() ?? "";
+  const sizeKB   = formatFileSize(file.size);
 
   return (
     <div className="flex flex-col gap-4">
@@ -199,7 +202,7 @@ function FilePreview({ file, onRemove, agreed, onAgree }: FilePreviewProps) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[14px] font-semibold text-slate-900 truncate">{file.name}</p>
-          <p className="text-[12px] text-slate-400 mt-0.5">{sizeKB} KB · {ext}</p>
+          <p className="text-[12px] text-slate-400 mt-0.5">{sizeKB} · {ext}</p>
           <p className="text-[12px] text-emerald-600 mt-1.5 flex items-center gap-1.5 font-semibold">
             <Check className="w-3 h-3" strokeWidth={3} /> Ready to scan
           </p>
@@ -557,15 +560,8 @@ export default function ATSLoginPage() {
 
   const validateAndSetFile = (f: File) => {
     setError("");
-    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-    if (!["pdf", "docx", "doc"].includes(ext)) {
-      setError("Invalid file type. Only PDF, DOCX, and DOC are allowed.");
-      return;
-    }
-    if (f.size > 10 * 1024 * 1024) {
-      setError("File size exceeds 10MB. Please upload a smaller file.");
-      return;
-    }
+    const err = validateResumeFile(f, { allowDoc: true, checkSize: true });
+    if (err) { setError(err); return; }
     setFile(f);
   };
 
@@ -581,31 +577,14 @@ export default function ATSLoginPage() {
       setProgress(70);
       setLoadingPhase(AnalysisPhase.Analyzing);
       if (!result.success) {
-        let msg = "Upload failed";
-        if (result && typeof result === "object" && "error" in result) {
-          const e = (result as Record<string, unknown>).error;
-          msg = typeof e === "object" && e !== null && "message" in e
-            ? String((e as Record<string, unknown>).message)
-            : typeof e === "string" ? e : msg;
-        }
-        throw new Error(msg);
+        throw new Error(normalizeResumeScanError(result, "Upload failed"));
       }
       setProgress(100);
       setLoadingPhase(AnalysisPhase.Complete);
-      const resumeId = "resume_id" in result ? result.resume_id : "";
-      setTimeout(() => router.push(`/atslogin/report?resume_id=${resumeId}`), 600);
+      const resumeId = typeof result.resume_id === "string" ? result.resume_id : "";
+      setTimeout(() => router.push(buildAtsReportRoute(resumeId)), 600);
     } catch (err: unknown) {
-      let msg = "Unable to process your resume. Please try again.";
-      if (err instanceof Error) {
-        try {
-          const p = JSON.parse(err.message);
-          const m = p.message ?? p.error?.message ?? p.error ?? p.detail;
-          msg = typeof m === "string" ? m : err.message;
-        } catch {
-          msg = err.message || msg;
-        }
-      }
-      setError(msg);
+      setError(normalizeResumeScanError(err, "Unable to process your resume. Please try again."));
       setIsLoading(false);
       setProgress(0);
       setLoadingPhase("");
@@ -640,7 +619,7 @@ export default function ATSLoginPage() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden flex flex-col justify-center pt-12 pb-20" style={{ backgroundColor: "#FAFBFF" }}>
+    <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden flex flex-col justify-center pt-6 sm:pt-10 lg:pt-12 pb-12 lg:pb-20" style={{ backgroundColor: "#FAFBFF" }}>
 
       {/* ── Background layers ── */}
       {/* Dot grid */}
@@ -668,35 +647,11 @@ export default function ATSLoginPage() {
         }}
       />
 
-      {/* Error modal */}
-      {error && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-white rounded-2xl p-7 max-w-sm w-full"
-            style={{ boxShadow: "0 0 0 1px rgba(0,0,0,0.06), 0 12px 48px rgba(15,23,42,0.18)" }}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 bg-red-50 border border-red-100 rounded-xl grid place-items-center">
-                <AlertCircle className="h-4.5 w-4.5 text-red-500"/>
-              </div>
-              <h3 className="text-[16px] font-bold text-slate-900">Unable to Process</h3>
-            </div>
-            <p className="text-slate-500 mb-5 text-[13.5px] leading-relaxed">{error}</p>
-            <button
-              onClick={() => setError("")}
-              className="w-full py-3 text-white text-[14px] font-semibold rounded-xl transition-all"
-              style={{
-                background: "linear-gradient(135deg,#1a3a8f 0%,#2557a7 100%)",
-                boxShadow: "0 4px 16px rgba(37,87,167,0.35)",
-              }}
-            >
-              Try Again
-            </button>
-          </motion.div>
-        </div>
-      )}
+      <ErrorModal
+        error={error || null}
+        onClose={() => setError("")}
+        onRetry={handleScanResume}
+      />
 
       <AnimatePresence>
         {isLoading && (
@@ -710,7 +665,7 @@ export default function ATSLoginPage() {
       </AnimatePresence>
 
       {/* ── Main workspace ── */}
-      <div className="relative w-full max-w-275 xl:max-w-7xl 2xl:max-w-362.5 mx-auto px-6 xl:px-10 2xl:px-16">
+      <div className="relative w-full max-w-full xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-16">
 
         {/* ── Badge — above grid so heading aligns with card top ── */}
         <motion.div
@@ -735,7 +690,7 @@ export default function ATSLoginPage() {
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-[1fr_1.2fr] gap-[clamp(24px,4vw,72px)] items-start py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-[clamp(24px,4vw,72px)] items-start py-4">
 
           {/* ── LEFT: Hero content ── */}
           <motion.div
@@ -805,28 +760,10 @@ export default function ATSLoginPage() {
               </div>
             </div>
 
-            {/* Stats row */}
-            <div className="flex items-center gap-6">
-              {([
-                { value: "50K+", label: "Resumes analyzed" },
-                { value: "92%",  label: "Avg score lift"   },
-                { value: "<30s", label: "Analysis time"    },
-              ] as const).map(({ value, label }, i) => (
-                <Fragment key={label}>
-                  <div className="flex flex-col">
-                    <span className="font-black text-slate-900 leading-none"
-                      style={{ fontSize: "clamp(18px,1.8vw,24px)", letterSpacing: "-0.04em" }}
-                    >{value}</span>
-                    <span className="text-[11px] text-slate-400 font-medium mt-0.5">{label}</span>
-                  </div>
-                  {i < 2 && <div className="w-px h-8 bg-slate-200 shrink-0"/>}
-                </Fragment>
-              ))}
-            </div>
           </motion.div>
 
           {/* ── RIGHT: Upload card ── */}
-          <div className="relative pt-9">
+          <div className="relative pt-2">
             <div className="absolute -inset-x-6 -inset-y-4 pointer-events-none rounded-[2.5rem]"
               style={{
                 background: "radial-gradient(ellipse at 50% 60%,rgba(37,87,167,0.13) 0%,transparent 65%)",

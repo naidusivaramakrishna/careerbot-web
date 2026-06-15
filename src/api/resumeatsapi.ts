@@ -219,15 +219,6 @@ export const getAllResumes = async (): Promise<ResumeResponse[]> => {
   return response.json();
 };
 
-export const deleteResume = async (resumeId: string) => {
-  const response = await fetch(`${API_BASE}/api/v1/resumes/${resumeId}`, {
-    method: "DELETE",
-    credentials: "include",
-  });
-
-  if (!response.ok) throw new Error(await response.text());
-};
-
 export const downloadResume = async (
   resumeId: string,
   format: "pdf" | "docx" | "doc" = "pdf"

@@ -25,48 +25,73 @@ function SectionCard({ label, score, passText, children }: SectionCardProps) {
   const passed = score >= 100;
   const hasDetails = !!children && !passed;
 
-  const barColor = passed ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
+  const barGradient = passed
+    ? "linear-gradient(90deg,#4ade80,#22c55e)"
+    : score >= 60
+    ? "linear-gradient(90deg,#fbbf24,#f59e0b)"
+    : "linear-gradient(90deg,#f87171,#ef4444)";
+  const barColor  = passed ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
   const titleColor = passed ? "#16a34a" : "#dc2626";
-  const iconColor = passed ? "#22c55e" : "#ef4444";
+  const iconColor  = passed ? "#22c55e" : "#ef4444";
+  const cardBg    = passed ? "linear-gradient(145deg,#f0fdf4,#fff)" : "linear-gradient(145deg,#fff,#fff)";
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-6 py-5">
-        {/* Title row */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            {passed
-              ? <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: iconColor }} />
-              : <XCircle className="w-5 h-5 shrink-0" style={{ color: iconColor }} />
-            }
-            <span className="text-[15px] font-bold" style={{ color: titleColor }}>{label}</span>
+    <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden" style={{ background: cardBg }}>
+      <div className="flex">
+        <div className="flex-1 px-5 py-4">
+          {/* Title row */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              {passed
+                ? <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: iconColor }} />
+                : <XCircle className="w-5 h-5 shrink-0" style={{ color: iconColor }} />
+              }
+              <span className="text-[15px] font-bold" style={{ color: titleColor }}>{label}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-[13px] font-extrabold px-2 py-0.5 rounded-full"
+                style={{
+                  color: barColor,
+                  background: passed ? "#dcfce7" : score >= 60 ? "#fef3c7" : "#fee2e2",
+                  border: `1px solid ${passed ? "#bbf7d0" : score >= 60 ? "#fde68a" : "#fecaca"}`,
+                }}
+              >
+                {score.toFixed(score % 1 === 0 ? 0 : 1)}%
+              </span>
+              {hasDetails && (
+                <button
+                  onClick={() => setExpanded(v => !v)}
+                  className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-all"
+                >
+                  {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[14px] font-bold" style={{ color: barColor }}>
-              {score.toFixed(score % 1 === 0 ? 0 : 1)}%
-            </span>
-            {hasDetails && (
-              <button onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 transition-colors ml-1">
-                {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-            )}
+
+          {/* Progress bar */}
+          <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: "#f1f5f9" }}>
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{
+                width: `${score}%`,
+                background: barGradient,
+                boxShadow: `0 0 6px ${barColor}55`,
+              }}
+            />
           </div>
-        </div>
 
-        {/* Progress bar */}
-        <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${score}%`, background: barColor }}
-          />
+          {/* Pass message */}
+          {passed && (
+            <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl bg-green-50 border border-green-100">
+              <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              <p className="text-[12.5px] text-green-700">
+                <span className="font-semibold">Way to go!</span> {passText}
+              </p>
+            </div>
+          )}
         </div>
-
-        {/* Pass message */}
-        {passed && (
-          <p className="text-[13px] text-gray-500 mt-3">
-            <span className="font-semibold text-gray-700">Way to go!</span> {passText}
-          </p>
-        )}
       </div>
 
       {/* Details */}
@@ -86,11 +111,25 @@ interface ImpactGroupProps {
 }
 
 function ImpactGroup({ label, bolts, children }: ImpactGroupProps) {
+  const style = bolts >= 3
+    ? { bg: "#fff3f0", border: "#fecaca", text: "#c2410c", dot: "#ef4444" }
+    : bolts === 2
+    ? { bg: "#fffbeb", border: "#fde68a", text: "#b45309", dot: "#f59e0b" }
+    : { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8", dot: "#3b82f6" };
+
   return (
     <div className="space-y-3">
-      <div className="inline-flex items-center gap-1.5 bg-white border border-gray-200 rounded-full px-3.5 py-1.5 shadow-sm">
-        <span className="text-[13px]">{Array.from({ length: bolts }).map(() => "⚡").join("")}</span>
-        <span className="text-[12px] font-semibold text-gray-600">{label}</span>
+      <div
+        className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 shadow-sm"
+        style={{ background: style.bg, border: `1px solid ${style.border}` }}
+      >
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: style.dot, boxShadow: `0 0 5px ${style.dot}88` }}
+        />
+        <span className="text-[12px] font-bold tracking-wide" style={{ color: style.text }}>
+          {Array.from({ length: bolts }).map(() => "⚡").join("")} {label}
+        </span>
       </div>
       <div className="space-y-3">{children}</div>
     </div>
@@ -134,21 +173,28 @@ export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
 
   return (
     <div className="space-y-5">
-      <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">Score Breakdown</h3>
+      <div className="flex items-center gap-2.5 px-1">
+        <div className="w-1 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
+        <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Score Breakdown</h3>
+      </div>
 
       {/* HIGH IMPACT */}
       <ImpactGroup label="High Impact" bolts={3}>
         <SectionCard label="Hard Skills" score={techScore} passText="Your resume includes all of the Hard skills.">
           {missingTech.length > 0 && (
-            <ul className="space-y-2">
+            <div className="flex flex-wrap gap-2">
               {missingTech.map((s, i) => (
-                <li key={i} className="flex items-center gap-2 text-[13px] text-gray-700">
-                  <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                  <span className="font-semibold">{s.skill}</span>
-                  <span className="text-gray-400 text-[12px]">({s.importance})</span>
-                </li>
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold"
+                  style={{ background: "#fff0f0", border: "1px solid #fecaca", color: "#dc2626" }}
+                >
+                  <XCircle className="w-3 h-3 shrink-0" />
+                  {s.skill}
+                  <span className="text-[10px] font-medium opacity-60">· {s.importance}</span>
+                </span>
               ))}
-            </ul>
+            </div>
           )}
         </SectionCard>
       </ImpactGroup>
@@ -157,25 +203,33 @@ export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
       <ImpactGroup label="Medium Impact" bolts={2}>
         <SectionCard label="Soft Skills" score={softScore} passText="Your resume includes all of the Soft skills.">
           {missingSoft.length > 0 && (
-            <ul className="space-y-2">
+            <div className="flex flex-wrap gap-2">
               {missingSoft.map((s, i) => (
-                <li key={i} className="flex items-center gap-2 text-[13px] text-gray-700">
-                  <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />{s}
-                </li>
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold"
+                  style={{ background: "#fff0f0", border: "1px solid #fecaca", color: "#dc2626" }}
+                >
+                  <XCircle className="w-3 h-3 shrink-0" />{s}
+                </span>
               ))}
-            </ul>
+            </div>
           )}
         </SectionCard>
 
         <SectionCard label="Capabilities" score={capScore} passText="Your resume demonstrates all required capabilities.">
           {missingCap.length > 0 && (
-            <ul className="space-y-2">
+            <div className="flex flex-wrap gap-2">
               {missingCap.map((c, i) => (
-                <li key={i} className="flex items-center gap-2 text-[13px] text-gray-700">
-                  <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />{c}
-                </li>
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold"
+                  style={{ background: "#fff0f0", border: "1px solid #fecaca", color: "#dc2626" }}
+                >
+                  <XCircle className="w-3 h-3 shrink-0" />{c}
+                </span>
               ))}
-            </ul>
+            </div>
           )}
         </SectionCard>
 
@@ -199,9 +253,15 @@ export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
               {weakBullets.length > 0 && (
                 <ul className="space-y-3">
                   {weakBullets.map((b, i) => (
-                    <li key={i} className="rounded-xl bg-gray-50 border border-gray-100 p-3.5 space-y-1.5">
-                      <p className="text-[12px] text-red-400 line-through leading-snug">{b.original}</p>
-                      <p className="text-[12px] text-green-700 leading-snug font-medium">→ {b.improved}</p>
+                    <li key={i} className="rounded-xl overflow-hidden border border-gray-100 shadow-sm">
+                      <div className="flex items-start gap-2 px-3.5 py-2.5 bg-red-50 border-b border-red-100">
+                        <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider mt-0.5 shrink-0">Before</span>
+                        <p className="text-[12px] text-red-500 line-through leading-snug">{b.original}</p>
+                      </div>
+                      <div className="flex items-start gap-2 px-3.5 py-2.5 bg-green-50">
+                        <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider mt-0.5 shrink-0">After</span>
+                        <p className="text-[12px] text-green-700 leading-snug font-medium">{b.improved}</p>
+                      </div>
                     </li>
                   ))}
                 </ul>

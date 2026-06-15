@@ -121,56 +121,30 @@ export async function enhanceKeywords(resume_id: string): Promise<unknown> {
 }
 
 /* ========== ADD / REMOVE SKILLS — RESUME DIRECT UPDATE ========== */
-// PATCH /api/v1/parser/add-skills/{resume_id} - Add missing skills to resume
-// Request body: { skills: ["skill1", "skill2", ...] }
-// Response: Updated resume data with new skills
 
-export async function parserAddSkills(resume_id: string, skills: string | string[]) {
+async function patchResumeSkills(resume_id: string, skills: string | string[], action: "add" | "remove") {
   const skillArray = Array.isArray(skills) ? skills : [skills];
+  if (!resume_id?.trim()) throw new Error(`Invalid resume_id: ${resume_id}`);
+  if (!skillArray.length) throw new Error("No skills provided");
 
-  if (!resume_id?.trim()) {
-    throw new Error(`Invalid resume_id: ${resume_id}`);
-  }
-  if (!skillArray.length) {
-    throw new Error("No skills provided");
-  }
-
-  logger.api.request('PATCH', `/parser/add-skills/${resume_id}`, { skills: skillArray });
-
+  const endpoint = `/parser/${action}-skills/${resume_id}`;
+  logger.api.request('PATCH', endpoint, { skills: skillArray });
   try {
-    const res = await safePatch(`/parser/add-skills/${resume_id}`, { skills: skillArray });
-    logger.debug("Skills added successfully", { count: skillArray.length });
+    const res = await safePatch(endpoint, { skills: skillArray });
+    logger.debug(`Skills ${action}ed successfully`, { count: skillArray.length });
     return res;
   } catch (err: unknown) {
-    logger.api.error('PATCH', `/parser/add-skills/${resume_id}`, err);
+    logger.api.error('PATCH', endpoint, err);
     throw err;
   }
 }
 
-// PATCH /api/v1/parser/remove-skills/{resume_id} - Remove skills from resume
-// Request body: { skills: ["skill1", "skill2", ...] }
-// Response: Updated resume data with skills removed
+export async function parserAddSkills(resume_id: string, skills: string | string[]) {
+  return patchResumeSkills(resume_id, skills, "add");
+}
 
 export async function parserRemoveSkills(resume_id: string, skills: string | string[]) {
-  const skillArray = Array.isArray(skills) ? skills : [skills];
-
-  if (!resume_id?.trim()) {
-    throw new Error(`Invalid resume_id: ${resume_id}`);
-  }
-  if (!skillArray.length) {
-    throw new Error("No skills provided");
-  }
-
-  logger.api.request('PATCH', `/parser/remove-skills/${resume_id}`, { skills: skillArray });
-
-  try {
-    const res = await safePatch(`/parser/remove-skills/${resume_id}`, { skills: skillArray });
-    logger.debug("Skills removed successfully", { count: skillArray.length });
-    return res;
-  } catch (err: unknown) {
-    logger.api.error('PATCH', `/parser/remove-skills/${resume_id}`, err);
-    throw err;
-  }
+  return patchResumeSkills(resume_id, skills, "remove");
 }
 
 /* ========== JD PARSING ========== */
@@ -180,6 +154,14 @@ function isObject(v: unknown): v is Record<string, unknown> {
 
 function getRaw(err: unknown): unknown {
   return (err as { __raw?: unknown })?.__raw;
+}
+
+function handleDuplicateJd(err: unknown): ParseJDResponse {
+  const raw = getRaw(err) as { detail?: { error?: string; existing_id?: string } } | undefined;
+  if (raw?.detail?.error === "duplicate_jd") {
+    return { raw, jd_id: raw.detail?.existing_id, duplicate: true } as ParseJDResponse;
+  }
+  throw err as Error;
 }
 
 function extractJdId(data: unknown): string | null {
@@ -210,78 +192,33 @@ export async function parseJDFile(file: File) {
     const res = await safePost<unknown>(`/jd/extract?skip_duplicate_check=false`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-    return {
-      raw: res,
-      jd_id: extractJdId(res),
-      duplicate: false,
-    } as ParseJDResponse;
+    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
   } catch (err: unknown) {
-    const raw = getRaw(err) as unknown as { detail?: { error?: string; existing_id?: string } } | undefined;
-    if (raw?.detail?.error === "duplicate_jd") {
-      return {
-        raw,
-        jd_id: raw.detail.existing_id,
-        duplicate: true,
-      } as ParseJDResponse;
-    }
-    throw err;
+    return handleDuplicateJd(err);
   }
 }
 
-export async function parseJDText(
-  text: string,
-  options: { skipAuthRedirect?: boolean } = {},
-) {
+export async function parseJDText(text: string, options: { skipAuthRedirect?: boolean } = {}) {
   try {
     const res = await safePost<unknown>(`/jd/parse`, {
       jd_texts: [text],
       skip_duplicate_check: false,
-    }, options.skipAuthRedirect
-      ? {
-          headers: {
-            "X-Skip-Auth-Redirect": "true",
-          },
-        }
-      : undefined);
-    return {
-      raw: res,
-      jd_id: extractJdId(res),
-      duplicate: false,
-    } as ParseJDResponse;
+    }, options.skipAuthRedirect ? { headers: { "X-Skip-Auth-Redirect": "true" } } : undefined);
+    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
   } catch (err: unknown) {
-    const raw = getRaw(err) as unknown as { detail?: { error?: string; existing_id?: string } } | undefined;
-    if (raw?.detail?.error === "duplicate_jd") {
-      return {
-        raw,
-        jd_id: raw.detail.existing_id,
-        duplicate: true,
-      } as ParseJDResponse;
-    }
-    throw err;
+    return handleDuplicateJd(err);
   }
 }
 
 export async function parseJDUrl(url: string) {
   try {
     const res = await safePost<unknown>(`/jd/extract-url`, {
-      url: url,  // Backend expects singular 'url', not 'urls' array
+      url: url,
       skip_duplicate_check: false,
     });
-    return {
-      raw: res,
-      jd_id: extractJdId(res),
-      duplicate: false,
-    } as ParseJDResponse;
+    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
   } catch (err: unknown) {
-    const raw = getRaw(err) as unknown as { detail?: { error?: string; existing_id?: string } } | undefined;
-    if (raw?.detail?.error === "duplicate_jd") {
-      return {
-        raw,
-        jd_id: raw.detail.existing_id,
-        duplicate: true,
-      } as ParseJDResponse;
-    }
-    throw err;
+    return handleDuplicateJd(err);
   }
 }
 
@@ -309,27 +246,24 @@ export async function listAllMatches() {
 }
 
 /* ========== SCORE UPDATE — MATCHER LIVE UPDATE ========== */
-// POST /api/v1/matcher/live-update/{match_id}/add-skill - Add skill and update score
-// Request body: { "skill": "skill_name" } or { "skill_name": "value" }
-// Response: Updated match data with new ATS score
 
-export async function matcherAddSkill(match_id: string, skills: string | string[]) {
-  // Extract single skill - matcher endpoint expects singular skill
+const MATCHER_SKILL_ERRORS = {
+  add:    { key: "duplicate_skill",            msg: "Skill already exists in resume" },
+  remove: { key: "cannot_remove_original_skill", msg: "Cannot remove original skill from resume" },
+} as const;
+
+async function patchMatcherSkill(match_id: string, skills: string | string[], action: "add" | "remove") {
   const skill = Array.isArray(skills) ? skills[0] : skills;
   if (!skill || !skill.trim()) throw new Error("No skill provided");
 
-  const payload = { skill_to_add: skill.trim() };
-  logger.api.request('POST', `/matcher/live-update/${match_id}/add-skill`, payload);
+  const endpoint = `/matcher/live-update/${match_id}/${action}-skill`;
+  const payload = action === "add" ? { skill_to_add: skill.trim() } : { skill_to_remove: skill.trim() };
+  const { key: skipError, msg: skipMsg } = MATCHER_SKILL_ERRORS[action];
 
+  logger.api.request('POST', endpoint, payload);
   try {
-    const resp = await httpClient.post<Record<string, unknown>>(
-      `/matcher/live-update/${match_id}/add-skill`,
-      payload
-    );
-
-    logger.debug("Skill added to matcher", { match_id, skill });
-
-    // Normalize response to ensure consistent structure
+    const resp = await httpClient.post<Record<string, unknown>>(endpoint, payload);
+    logger.debug(`Skill ${action}ed from matcher`, { match_id, skill });
     const data = resp.data as Record<string, unknown>;
     return {
       success: true,
@@ -340,56 +274,22 @@ export async function matcherAddSkill(match_id: string, skills: string | string[
   } catch (err: unknown) {
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data;
-
-      if (raw?.error === "duplicate_skill" || raw?.detail?.error === "duplicate_skill") {
-        logger.warn("Skill already exists in resume", { match_id, skill });
-        return { skipped: true, data: null, reason: "duplicate_skill" };
+      if (raw?.error === skipError || raw?.detail?.error === skipError) {
+        logger.warn(skipMsg, { match_id, skill });
+        return { skipped: true, data: null, reason: skipError };
       }
     }
-    logger.api.error('POST', `/matcher/live-update/${match_id}/add-skill`, err);
+    logger.api.error('POST', endpoint, err);
     throw err;
   }
 }
 
-// POST /api/v1/matcher/live-update/{match_id}/remove-skill - Remove skill and update score
-// Request body: { "skill": "skill_name" }
-// Response: Updated match data with recalculated ATS score
+export async function matcherAddSkill(match_id: string, skills: string | string[]) {
+  return patchMatcherSkill(match_id, skills, "add");
+}
 
 export async function matcherRemoveSkill(match_id: string, skills: string | string[]) {
-  // Extract single skill - matcher endpoint expects singular skill
-  const skill = Array.isArray(skills) ? skills[0] : skills;
-  if (!skill || !skill.trim()) throw new Error("No skill provided");
-
-  const payload = { skill_to_remove: skill.trim() };
-  logger.api.request('POST', `/matcher/live-update/${match_id}/remove-skill`, payload);
-
-  try {
-    const resp = await httpClient.post<Record<string, unknown>>(
-      `/matcher/live-update/${match_id}/remove-skill`,
-      payload
-    );
-
-    logger.debug("Skill removed from matcher", { match_id, skill });
-
-    const data = resp.data as Record<string, unknown>;
-    return {
-      success: true,
-      data,
-      ats_scores: (data?.ats_scores as Record<string, unknown>) || { new: data?.new_ats_score },
-      updated_technical_skills: data?.updated_technical_skills as string[] | undefined,
-    };
-  } catch (err: unknown) {
-    if (axios.isAxiosError(err)) {
-      const raw = err.response?.data;
-
-      if (raw?.error === "cannot_remove_original_skill" || raw?.detail?.error === "cannot_remove_original_skill") {
-        logger.warn("Cannot remove original skill from resume", { match_id, skill });
-        return { skipped: true, data: null, reason: "cannot_remove_original_skill" };
-      }
-    }
-    logger.api.error('POST', `/matcher/live-update/${match_id}/remove-skill`, err);
-    throw err;
-  }
+  return patchMatcherSkill(match_id, skills, "remove");
 }
 
 /* ========== ENHANCE APPLY / REMOVE ========== */

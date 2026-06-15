@@ -1,6 +1,61 @@
 import { X, AlertTriangle, Lightbulb, CheckCircle } from "lucide-react";
 import type { AnalysisItem } from "./data";
 
+// ─── ATS localStorage keys ────────────────────────────────────────────────────
+
+export const ATS_UPLOAD_KEYS = [
+  "uploadedResumeFile",
+  "uploadedFileName",
+  "uploadedFileSize",
+  "uploadedFileType",
+  "isImageBased",
+  "currentScore",
+  "atsAnalysisData",
+] as const;
+
+export function clearAtsUploadStorage() {
+  ATS_UPLOAD_KEYS.forEach((k) => localStorage.removeItem(k));
+}
+
+// ─── File validation ──────────────────────────────────────────────────────────
+
+/** Returns an error string if the file extension or size is invalid, else null. */
+export function validateResumeFile(
+  file: File,
+  options: { allowDoc?: boolean; checkSize?: boolean } = {}
+): string | null {
+  const { allowDoc = false, checkSize = false } = options;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const allowed = allowDoc ? ["pdf", "docx", "doc"] : ["pdf", "docx"];
+  if (!allowed.includes(ext)) {
+    return `Invalid file type. Only ${allowed.map((e) => e.toUpperCase()).join(", ")} are allowed.`;
+  }
+  if (checkSize && file.size > 10 * 1024 * 1024) {
+    return "File size exceeds 10MB. Please upload a smaller file.";
+  }
+  return null;
+}
+
+// ─── Error extraction ─────────────────────────────────────────────────────────
+
+/** Extracts a readable message from an unknown caught error. */
+export function extractErrorMessage(
+  err: unknown,
+  fallback = "An error occurred. Please try again."
+): string {
+  if (err instanceof Error) {
+    try {
+      const p = JSON.parse(err.message);
+      const m = p.message ?? p.error?.message ?? p.error ?? p.detail;
+      return typeof m === "string" ? m : err.message;
+    } catch {
+      return err.message || fallback;
+    }
+  }
+  if (typeof err === "string") return err;
+  return fallback;
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
