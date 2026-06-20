@@ -8,16 +8,23 @@ import {
   ArrowLeft,
   Clock,
   Database,
+  History,
+  Loader2,
   Play,
   RotateCw,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { CodingTestApiError, fetchProblem } from '../_lib/api';
+import { GradingApiError, submitSolution } from '../_lib/gradingApi';
+import GradingResultPanel from '../_components/GradingResultPanel';
 import type {
   CodingProblemDetail,
   CodingTestLanguage,
+  SubmitSolutionResponse,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
+
+type SubmitState = 'idle' | 'submitting' | 'done';
 
 // Monaco must not run on the server.
 const CodeEditor = dynamic(() => import('../_components/CodeEditor'), {
@@ -81,12 +88,50 @@ export default function CodingProblemDetailPage() {
     return () => controller.abort();
   }, [slug, reloadKey]);
 
+  const [submitState, setSubmitState] = useState<SubmitState>('idle');
+  const [result, setResult] = useState<SubmitSolutionResponse | null>(null);
+  const [submitError, setSubmitError] = useState('');
+  const [needsAuth, setNeedsAuth] = useState(false);
+
   const resetToStarter = () => {
     if (!problem) return;
     setCode((prev) => ({
       ...prev,
       [language]: problem.starter_code[language] ?? '',
     }));
+  };
+
+  const handleSubmit = async () => {
+    if (!problem || submitState === 'submitting') return;
+    const source = code[language]?.trim();
+    if (!source) {
+      setSubmitError('Write some code before submitting.');
+      setResult(null);
+      setSubmitState('idle');
+      return;
+    }
+    setSubmitState('submitting');
+    setSubmitError('');
+    setNeedsAuth(false);
+    setResult(null);
+    try {
+      const res = await submitSolution({
+        problem_slug: problem.slug,
+        language,
+        code: code[language],
+      });
+      setResult(res);
+      setSubmitState('done');
+    } catch (err) {
+      setSubmitState('idle');
+      if (err instanceof GradingApiError && err.status === 401) {
+        setNeedsAuth(true);
+        return;
+      }
+      setSubmitError(
+        err instanceof Error ? err.message : 'Failed to submit your solution.',
+      );
+    }
   };
 
   return (
@@ -264,19 +309,56 @@ export default function CodingProblemDetailPage() {
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-slate-400">
-                  Run &amp; submit coming soon.
-                </p>
+                <Link
+                  href="/coding-test/history"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600"
+                >
+                  <History className="h-3.5 w-3.5" aria-hidden />
+                  My submissions
+                </Link>
                 <button
                   type="button"
-                  disabled
-                  title="Grading is not wired up yet"
-                  className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-400"
+                  onClick={handleSubmit}
+                  disabled={submitState === 'submitting'}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
                 >
-                  <Play className="h-4 w-4" aria-hidden />
-                  Run / Submit
+                  {submitState === 'submitting' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Grading…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" aria-hidden />
+                      Submit for grading
+                    </>
+                  )}
                 </button>
               </div>
+
+              {needsAuth && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" aria-hidden />
+                  <p className="text-sm text-indigo-700">
+                    Please{' '}
+                    <Link href="/?showLogin=true" className="font-semibold underline">
+                      sign in
+                    </Link>{' '}
+                    to submit your solution and save it to your history.
+                  </p>
+                </div>
+              )}
+
+              {submitError && !needsAuth && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
+                  <p className="text-sm text-rose-700">{submitError}</p>
+                </div>
+              )}
+
+              {submitState === 'done' && result && (
+                <GradingResultPanel result={result} />
+              )}
             </section>
           </div>
         )}

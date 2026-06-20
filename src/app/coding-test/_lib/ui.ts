@@ -20,3 +20,14 @@ export const DIFFICULTY_BADGE: Record<CodingTestDifficulty, string> = {
   medium: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200',
   hard: 'bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200',
 };
+
+/**
+ * Normalize a score to a finite integer in [0, 100], or null if the value is
+ * missing/non-finite. Defense-in-depth: the careerbot-api gateway already
+ * validates score range, but the UI must never render "140 / 100" if an
+ * unexpected value ever slips through.
+ */
+export function normalizeScore(score: number | null | undefined): number | null {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null;
+  return Math.min(100, Math.max(0, Math.round(score)));
+}

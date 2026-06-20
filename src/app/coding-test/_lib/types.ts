@@ -37,3 +37,69 @@ export interface CodingProblemListFilters {
   difficulty?: CodingTestDifficulty;
   tag?: string;
 }
+
+// ---- Grading (submit + history) -------------------------------------------
+// Shapes mirror careerbot-ai's GradingResult, passed through by the
+// careerbot-api gateway (POST /api/v1/coding-test/submit).
+
+export interface GradingCriterion {
+  name: string;
+  weight: number;
+  score: number;
+  feedback: string;
+  suggestions: string[];
+}
+
+export interface ScoreBreakdown {
+  correctness: GradingCriterion;
+  efficiency: GradingCriterion;
+  code_quality: GradingCriterion;
+  edge_cases: GradingCriterion;
+}
+
+export interface GradingResult {
+  total_score: number;
+  breakdown: ScoreBreakdown;
+  summary: string;
+  suggestions: string[];
+  grading_model?: string;
+}
+
+export interface SubmitSolutionRequest {
+  problem_slug: string;
+  language: CodingTestLanguage;
+  code: string;
+}
+
+export interface SubmitSolutionResponse {
+  submission_id: string;
+  problem_slug: string;
+  language: CodingTestLanguage;
+  score: number | null;
+  grading_result: GradingResult | null;
+  error: string | null;
+  submitted_at: string;
+}
+
+export interface HistoryEntry {
+  submission_id: string;
+  problem_slug: string;
+  language: CodingTestLanguage;
+  score: number | null;
+  submitted_at: string;
+}
+
+export interface HistoryResponse {
+  entries: HistoryEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+// Ordered criteria for stable rendering of the breakdown.
+export const CRITERION_ORDER: (keyof ScoreBreakdown)[] = [
+  'correctness',
+  'efficiency',
+  'code_quality',
+  'edge_cases',
+];
