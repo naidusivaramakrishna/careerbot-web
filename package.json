@@ -47,6 +47,7 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@hello-pangea/dnd": "^16.5.0",
+    "@monaco-editor/react": "^4.7.0",
     "@types/html-to-docx": "^1.8.1",
     "@types/js-cookie": "^3.0.6",
     "axios": "^1.13.2",
