@@ -20,6 +20,10 @@ const publicRoutes = [
     // export/download handles auth at the action level.
     "/builder",
     "/cover-letter",
+    // Coding-test practice (list + problem detail) is a public preview slice;
+    // the backing API is public/no-auth. Submit/grading will gate at the
+    // action level when wired up.
+    "/coding-test",
 ];
 
 const RECRUITER_PREFIX = '/recruiter';
