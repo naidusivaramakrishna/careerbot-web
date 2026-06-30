@@ -55,15 +55,15 @@ function TrendingSkillsCard() {
   return (
     <div>
       {/* Header */}
-      <div className="px-5 py-3.5 flex items-center justify-between">
+      <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#f0f4ff] flex items-center justify-center shrink-0">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-[#f0f4ff] shadow-inner shadow-white">
             <TrendingUp size={13} className="text-[#2557a7]" />
           </div>
           <div>
-            <h3 className="text-[13px] font-bold text-gray-900 leading-tight">Trending Skills</h3>
+            <h3 className="text-[14px] font-extrabold leading-tight text-slate-950">Trending Skills</h3>
             {period && (
-              <p className="text-[10px] text-gray-400">{period} · live demand</p>
+              <p className="text-[10.5px] font-medium text-slate-400">{period} · live demand</p>
             )}
           </div>
         </div>
@@ -80,10 +80,10 @@ function TrendingSkillsCard() {
         )}
       </div>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-slate-100" />
 
       {/* Content */}
-      <div className="px-4 py-3">
+      <div className="px-4 py-3.5">
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 7 }).map((_, i) => <SkeletonRow key={i} />)}
@@ -100,11 +100,11 @@ function TrendingSkillsCard() {
             </button>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-3.5">
             {skills.map((item, idx) => {
               const barWidth = Math.max(6, Math.round((item.demand_pct / maxDemand) * 100));
               return (
-                <div key={item.skill} className="flex items-center gap-3 group">
+                <div key={item.skill} className="group flex items-center gap-3">
                   {/* Rank */}
                   <span className="text-[10px] font-bold text-gray-300 w-3 shrink-0 text-right tabular-nums">
                     {idx + 1}
@@ -120,9 +120,9 @@ function TrendingSkillsCard() {
                   </span>
 
                   {/* Bar */}
-                  <div className="flex-1 h-2 rounded-full bg-gray-100/80 overflow-hidden">
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100 shadow-inner">
                     <div
-                      className={`h-full rounded-full bg-linear-to-r ${BAR_COLOR(item.demand_pct)}`}
+                      className={`h-full rounded-full bg-linear-to-r shadow-[0_0_14px_rgba(37,87,167,0.16)] ${BAR_COLOR(item.demand_pct)}`}
                       style={{ width: `${barWidth}%`, transition: "width 0.6s ease" }}
                     />
                   </div>
@@ -138,7 +138,7 @@ function TrendingSkillsCard() {
         )}
 
         {!loading && !error && skills.length > 0 && (
-          <p className="text-[10px] text-gray-400 mt-3 pt-2.5 border-t border-gray-100">
+          <p className="mt-3 border-t border-slate-100 pt-2.5 text-[10px] text-slate-400">
             % of active listings requiring each skill
           </p>
         )}

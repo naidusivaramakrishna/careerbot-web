@@ -12,6 +12,16 @@ RUN npm install --legacy-peer-deps
 # Copy the rest of your project files
 COPY . .
 
+# Build args for Next.js public env vars (baked in at build time)
+ARG NEXT_PUBLIC_BASE_URL
+ARG NEXT_PUBLIC_SERVER_URL
+ARG BACKEND_URL
+ARG JWT_SECRET
+ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
+ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
+ENV BACKEND_URL=$BACKEND_URL
+ENV JWT_SECRET=$JWT_SECRET
+
 # Build the Next.js app
 RUN npm run build
 

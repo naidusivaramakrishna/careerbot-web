@@ -45,7 +45,7 @@ export default function JobsTabs({
     { id: "all",     label: "All Jobs",    count: allCount > 0 ? allCount : undefined },
     { id: "new",     label: "New",         count: newCount     },
     { id: "saved",   label: "Saved",       count: savedCount   },
-    { id: "matched", label: "Smart Match", count: matchedCount, prefix: "✦ " },
+    { id: "matched", label: "Smart Match", count: matchedCount },
   ];
 
   const selectedLabel = FILTER_OPTIONS.find((o) => o.id === filterSort)?.label ?? "Most Recent";
@@ -61,9 +61,9 @@ export default function JobsTabs({
   }, [open]);
 
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 overflow-visible">
       {/* Tabs */}
-      <div className="flex gap-0">
+      <div className="flex min-w-0 flex-wrap gap-1">
         {TABS.map((tab) => {
           const isActive   = activeTab === tab.id;
           const isAI       = tab.id === "matched";
@@ -71,10 +71,10 @@ export default function JobsTabs({
             <button
               key={tab.id}
               onClick={() => onTabChange?.(tab.id)}
-              className={`relative flex items-center gap-1.5 px-4 pb-3.5 pt-2 text-[13.5px] font-semibold whitespace-nowrap transition-all duration-150 ${
+              className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-t-xl px-4 pb-3.5 pt-2 text-[13.5px] font-bold transition-all duration-150 ${
                 isActive
                   ? isAI ? "text-[#2557a7]" : "text-[#2557a7]"
-                  : "text-gray-500 hover:text-gray-800"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
               }`}
             >
               {isAI && (
@@ -110,13 +110,13 @@ export default function JobsTabs({
       </div>
 
       {/* Filter sort dropdown — only on Smart Match tab */}
-      {activeTab === "matched" && <div className="flex items-center gap-2 pb-3.5 shrink-0 relative">
+      {activeTab === "matched" && <div className="relative flex shrink-0 items-center gap-2 pb-3.5">
         {/* Dropdown trigger */}
         <button
           ref={btnRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-2 rounded-xl px-4 py-2 border border-gray-200 bg-white hover:border-[#2557a7]/30 hover:shadow-sm transition-all"
+          className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all hover:border-[#2557a7]/30 hover:shadow-md"
         >
           <span className="text-[13px] font-semibold leading-none text-gray-700">
             {selectedLabel}

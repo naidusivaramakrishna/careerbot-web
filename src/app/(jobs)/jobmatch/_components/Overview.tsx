@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import DOMPurify from "dompurify";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles, Upload, Link2, X, ChevronRight,
-  Eye, AlertCircle, Zap, CheckCircle2,
+  AlertCircle, CheckCircle2,
   ArrowRight,
 } from "lucide-react";
 import AnalysisContent from "./analysis/AnalysisContent";
@@ -125,14 +126,17 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
   const jdHtml = useMemo(() => {
     if (!jdText) return "";
+    // Escape raw text first so no user/external HTML can inject tags
     let h = jdText.replace(/[<>&]/g, ch => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[ch] || ch));
+    // Add highlight <mark> tags for matched skills
     jdSkills.forEach(s => {
       h = h.replace(
         new RegExp(`\\b(${s.replace(/\+/g, "\\+")})\\b`, "gi"),
         '<mark style="background:rgba(37,87,167,0.12);color:#2557a7;border-radius:3px;padding:0 2px">$1</mark>'
       );
     });
-    return h;
+    // Sanitize final HTML — only allow <mark> and safe inline styles
+    return DOMPurify.sanitize(h, { ALLOWED_TAGS: ["mark"], ALLOWED_ATTR: ["style"] });
   }, [jdText, jdSkills]);
 
   useEffect(() => {
@@ -379,18 +383,31 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     <>
       <style>{`
         .jm-container {
-          max-width: 1400px;
+          max-width: 1280px;
           margin: 0 auto;
-          padding: 64px 44px 40px;
+          padding: 42px 44px 38px;
         }
         @media (max-width: 1280px) { .jm-container { padding: 48px 32px 28px; } }
         @media (max-width: 1024px) { .jm-container { padding: 36px 24px 24px; } }
         @media (max-width: 768px)  { .jm-container { padding: 28px 16px 16px; } }
+        .jm-page-head {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 280px;
+          gap: 24px;
+          align-items: end;
+          margin-bottom: 24px;
+        }
+        .jm-workspace-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 18px;
+        }
         .jm-steps-row {
           display: flex;
           align-items: flex-start;
           justify-content: center;
-          margin-bottom: 36px;
+          gap: 18px;
         }
         @media (max-width: 640px) {
           .jm-steps-row { flex-direction: column; align-items: center; gap: 16px; }
@@ -398,7 +415,14 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           .jm-landing-card { padding: 28px 20px 24px !important; }
         }
         @media (max-width: 1024px) {
+          .jm-page-head { grid-template-columns: 1fr; }
+          .jm-workspace-grid { grid-template-columns: 1fr; }
           .jm-landing-card { padding: 32px 40px 28px !important; }
+        }
+        .jm-start-btn:focus-visible,
+        .jm-secondary-btn:focus-visible {
+          outline: 3px solid rgba(37,87,167,0.22);
+          outline-offset: 3px;
         }
         .jm-action-btn:hover {
           background: #EEF4FF !important;
@@ -407,8 +431,20 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
         }
         .jm-sample-item:hover { background: #F0F5FF !important; }
         .jm-start-btn:hover {
-          box-shadow: 0 10px 36px rgba(37,87,167,0.44) !important;
-          transform: translateY(-1px) !important;
+          box-shadow: 0 14px 34px rgba(37,87,167,0.34), 0 2px 0 rgba(255,255,255,0.18) inset !important;
+          transform: translateY(-2px) !important;
+        }
+        .jm-workflow-card:hover {
+          border-color: rgba(37,87,167,0.26) !important;
+          transform: translateY(-1px);
+        }
+        .jm-task-card {
+          transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+        .jm-task-card:hover {
+          transform: translateY(-2px);
+          border-color: rgba(37,87,167,0.28) !important;
+          box-shadow: 0 16px 34px rgba(15,23,42,0.08) !important;
         }
       `}</style>
 
@@ -435,12 +471,11 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
         <div className="absolute top-0 left-1/4 w-150 h-100 pointer-events-none" style={{
           background: "radial-gradient(ellipse, rgba(37,87,167,0.06) 0%, transparent 70%)",
         }} />
-
         <div className="jm-container">
 
           {/* ── HERO ── */}
           <motion.div
-            style={{ maxWidth: "min(760px, 100%)", marginBottom: 28 }}
+            style={{ maxWidth: "min(720px, 100%)", marginBottom: 26 }}
             initial={{ opacity: 0, y: 20 }}
             animate={mounted ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
@@ -448,11 +483,11 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             <div style={{ marginBottom: 16 }}>
               <span style={{
                 display: "inline-flex", alignItems: "center", gap: 8,
-                background: "#fff", border: "1px solid rgba(37,87,167,0.16)",
-                borderRadius: 99, padding: "5px 14px 5px 6px",
-                fontSize: 11, fontWeight: 700, letterSpacing: "0.09em",
+                background: "rgba(255,255,255,0.84)", border: "1px solid rgba(37,87,167,0.20)",
+                borderRadius: 999, padding: "6px 15px 6px 6px",
+                fontSize: 11, fontWeight: 800, letterSpacing: "0.1em",
                 color: "#2557a7", textTransform: "uppercase",
-                boxShadow: "0 2px 8px rgba(37,87,167,0.09)",
+                boxShadow: "0 1px 0 rgba(255,255,255,0.9) inset, 0 8px 22px rgba(37,87,167,0.10)",
               }}>
                 <span style={{
                   width: 22, height: 22, borderRadius: "50%", background: "#FFC85E",
@@ -465,31 +500,21 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             </div>
 
             <h1 style={{
-              fontSize: "clamp(32px, 4.8vw, 64px)",
-              fontWeight: 900, lineHeight: 1.04,
-              letterSpacing: "-0.038em", margin: "0 0 14px",
+              fontSize: "clamp(38px, 4.2vw, 54px)",
+              fontWeight: 850, lineHeight: 1.02,
+              letterSpacing: "-0.035em", margin: "0 0 12px",
             }}>
               <span style={{ color: "#0f172a" }}>Job </span>
               <span style={{ color: "#2557a7" }}>Match</span>
             </h1>
 
-            <p style={{ fontSize: 16.5, color: "#4A5568", lineHeight: 1.65, maxWidth: 560, margin: "0 0 20px" }}>
-              Upload your resume and paste a job description to get an instant AI-powered match score with actionable gap insights.
+            <p style={{ fontSize: 15.5, color: "#475569", lineHeight: 1.58, maxWidth: 620, margin: "0 0 20px" }}>
+              Upload a resume, add the target job description, and generate a focused fit report with gaps and next edits.
             </p>
 
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 22px", marginBottom: 18 }}>
-              {[
-                { label: "AI-powered matching", el: <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2557a7", display: "inline-block" }} /> },
-                { label: "Skills gap analysis",  el: <Zap style={{ width: 13, height: 13, color: "#2557a7" }} /> },
-                { label: "Results in ~30s",      el: <Eye style={{ width: 13, height: 13, color: "#2557a7" }} /> },
-              ].map(({ label, el }, i) => (
-                <React.Fragment key={label}>
-                  {i > 0 && <span style={{ width: 1, height: 14, background: "#C8D6E8", display: "inline-block" }} />}
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, color: "#4A5568", fontWeight: 500 }}>
-                    {el}{label}
-                  </span>
-                </React.Fragment>
-              ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#64748B", fontSize: 12.5, fontWeight: 700 }}>
+                <CheckCircle2 style={{ width: 15, height: 15, color: "#16a34a" }} />
+                Private analysis. No workflow changes required.
             </div>
 
           </motion.div>
@@ -504,55 +529,114 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             <div className="jm-landing-card" style={{
               background: "#fff",
               borderRadius: 12,
-              boxShadow: "0 1px 4px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.08)",
-              border: "1px solid #EBEBEB",
-              padding: "40px 80px 36px",
+              boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 12px 28px rgba(15,23,42,0.07)",
+              border: "1px solid #DDE7F4",
+              padding: "18px",
             }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, marginBottom: 16 }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: 14, color: "#0f172a", fontWeight: 850, letterSpacing: "-0.01em" }}>
+                    Create match analysis
+                  </p>
+                  <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#64748B", lineHeight: 1.45 }}>
+                    Complete the inputs below to generate your report.
+                  </p>
+                </div>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  height: 28, padding: "0 10px", borderRadius: 999,
+                  background: "#F8FAFC", border: "1px solid #E2E8F0",
+                  color: "#64748B", fontSize: 11.5, fontWeight: 750,
+                  whiteSpace: "nowrap",
+                }}>
+                  <CheckCircle2 style={{ width: 13, height: 13, color: "#16a34a" }} />
+                  Private
+                </span>
+              </div>
 
               {/* Steps row */}
               <div className="jm-steps-row">
                 {WIZARD_STEPS.map((step, idx) => (
                   <React.Fragment key={idx}>
                     {idx > 0 && (
-                      <div className="jm-steps-arrow" style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 44, flexShrink: 0, width: 100 }}>
-                        <ArrowRight style={{ width: 18, height: 18, color: "#94A3B8" }} />
+                      <div className="jm-steps-arrow" style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: 28, alignSelf: "center" }}>
+                        <ArrowRight style={{ width: 15, height: 15, color: "#94A3B8" }} />
                       </div>
                     )}
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", flex: 1 }}>
-                      <span style={{ fontSize: "clamp(56px, 6vw, 90px)", fontWeight: 800, lineHeight: 1, color: "#EBEBEB", display: "block", marginBottom: 10, letterSpacing: "-0.04em", userSelect: "none" }}>
+                    <div
+                      className="jm-workflow-card"
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 12,
+                        flex: 1,
+                        minWidth: 180,
+                        minHeight: 108,
+                        padding: 14,
+                        borderRadius: 10,
+                        border: idx === 0 ? "1px solid rgba(37,87,167,0.28)" : "1px solid #E2E8F0",
+                        background: idx === 0 ? "linear-gradient(180deg,#FFFFFF 0%,#F4F8FF 100%)" : "#F8FAFC",
+                        transition: "all 0.18s ease",
+                      }}
+                    >
+                      <span style={{
+                        width: 32, height: 32, borderRadius: 9,
+                        background: idx === 0 ? "#2557a7" : "#fff",
+                        color: idx === 0 ? "#fff" : "#64748B",
+                        border: idx === 0 ? "1px solid #2557a7" : "1px solid #DDE7F4",
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 12.5, fontWeight: 900, flexShrink: 0,
+                      }}>
                         {idx + 1}
                       </span>
-                      <p style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px", lineHeight: 1.3 }}>{step.title}</p>
-                      <p style={{ fontSize: 13, color: "#94A3B8", margin: 0, lineHeight: 1.55, maxWidth: 200 }}>{step.desc}</p>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 14, fontWeight: 850, color: "#0f172a", margin: "0 0 5px", lineHeight: 1.2 }}>{step.title}</p>
+                        <p style={{ fontSize: 12.5, color: "#64748B", margin: 0, lineHeight: 1.42 }}>{step.desc}</p>
+                      </div>
                     </div>
                   </React.Fragment>
                 ))}
               </div>
 
               {/* CTA button */}
-              <div style={{ textAlign: "center" }}>
+              <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 16,
+                flexWrap: "wrap",
+                marginTop: 16,
+                paddingTop: 16,
+                borderTop: "1px solid #EEF2F7",
+              }}>
+                <p style={{ margin: 0, fontSize: 12.5, color: "#64748B", fontWeight: 650 }}>
+                  Analysis starts after your resume and job description are added.
+                </p>
                 <button
                   onClick={() => setWizardStep(1)}
+                  className="jm-start-btn"
                   style={{
                     display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    height: 42, padding: "0 36px", borderRadius: 12,
-                    background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-                    color: "#fff", fontSize: 14, fontWeight: 700,
+                    height: 40, padding: "0 16px", borderRadius: 10,
+                    background: "#2557a7",
+                    color: "#fff", fontSize: 13, fontWeight: 850,
                     border: "none", cursor: "pointer",
-                    boxShadow: "0 4px 18px rgba(37,87,167,0.35)",
+                    boxShadow: "0 8px 20px rgba(37,87,167,0.22)",
                     transition: "all 0.2s ease",
-                    letterSpacing: "0.01em",
+                    letterSpacing: 0,
+                    gap: 7,
                   }}
                   onMouseEnter={e => {
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 28px rgba(37,87,167,0.48)";
+                    (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 12px 26px rgba(37,87,167,0.28)";
                     (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
                   }}
                   onMouseLeave={e => {
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 18px rgba(37,87,167,0.35)";
+                    (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 20px rgba(37,87,167,0.22)";
                     (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
                   }}
                 >
-                  Check My Match Score
+                  Start analysis
+                  <ArrowRight style={{ width: 14, height: 14 }} />
                 </button>
               </div>
 

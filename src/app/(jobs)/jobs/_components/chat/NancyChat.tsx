@@ -10,9 +10,9 @@ function BotAvatar() {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/assets/images/login_bot.svg"
+      src="/images/ac4923bc-9ee8-4734-ad60-fc93e8935797.png"
       alt="Nancy"
-      className="w-full h-full object-contain"
+      className="h-full w-full object-cover"
     />
   );
 }
@@ -129,22 +129,24 @@ export default function NancyChat({
 
   return (
     <>
-      <div className="w-full h-full bg-white flex flex-col overflow-hidden rounded-none">
+      <div className="flex h-full w-full flex-col overflow-hidden rounded-none bg-white">
         {/* HEADER */}
-        <div className="shrink-0 px-5 py-3.5 bg-linear-to-r from-[#2557a7] to-[#1a409e] flex items-center justify-between">
+        <div className="relative shrink-0 overflow-hidden bg-[linear-gradient(145deg,#0f1d33_0%,#173463_55%,#2557a7_100%)] px-5 py-4">
+          <div className="absolute inset-x-0 top-0 h-px bg-white/30" />
+          <div className="relative flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center ring-2 ring-white/30 overflow-hidden shadow-md p-0.5">
+            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white p-0.5 shadow-[0_10px_24px_rgba(15,23,42,0.25)] ring-1 ring-white/40">
               <BotAvatar />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="font-bold text-sm text-white">Nancy</p>
+                <p className="text-sm font-extrabold text-white">Nancy</p>
                 <div className="flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-300" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-300" />
                   <span className="text-[11px] text-white/70">Online</span>
                 </div>
               </div>
-              <p className="text-[11px] text-white/60">AI Career Assistant</p>
+              <p className="text-[11px] font-medium text-white/60">AI career assistant</p>
             </div>
           </div>
 
@@ -154,7 +156,7 @@ export default function NancyChat({
               type="button"
               title="Open Nancy quick guidance"
               aria-label="Open Nancy quick guidance"
-              className="px-3 py-1.5 rounded-lg border border-white/20 text-white text-xs font-medium hover:bg-white/10 focus:outline-none transition-all duration-150 flex items-center gap-1.5"
+              className="flex items-center gap-1.5 rounded-xl border border-white/20 px-3 py-1.5 text-xs font-semibold text-white transition-all duration-150 hover:bg-white/10 focus:outline-none"
             >
               <HelpCircle size={13} />
               Guide
@@ -164,17 +166,18 @@ export default function NancyChat({
               type="button"
               title="Close Nancy chat"
               aria-label="Close Nancy chat"
-              className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-white/80 hover:text-white focus:outline-none transition-all duration-150"
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-white/80 transition-all duration-150 hover:bg-white/10 hover:text-white focus:outline-none"
             >
               <X size={17} />
             </button>
+          </div>
           </div>
         </div>
 
         {/* Job context strip */}
         {job?.title && (
-          <div className="shrink-0 px-5 py-2 bg-[#f0f4ff] border-b border-[#dce8ff]">
-            <p className="text-[11px] text-[#2557a7] font-medium truncate">
+          <div className="shrink-0 border-b border-[#dce8ff] bg-[#f5f8ff] px-5 py-2.5">
+            <p className="truncate text-[11px] font-semibold text-[#2557a7]">
               Chatting about: <span className="font-bold">{job.title}</span>
               {job.company ? ` · ${job.company}` : ""}
             </p>
@@ -182,7 +185,7 @@ export default function NancyChat({
         )}
 
         {/* CHAT BODY */}
-        <div className="flex-1 overflow-y-auto px-4 pt-0 pb-4 space-y-3 bg-[#f8f9fc]">
+        <div className="flex-1 space-y-3 overflow-y-auto bg-[linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] px-4 pb-4 pt-4">
           {messages.map((msg, idx) => (
             <div
               key={idx}
@@ -190,15 +193,15 @@ export default function NancyChat({
             >
               <div className="flex gap-2 w-full items-end">
                 {msg.type === "bot" && (
-                  <div className="w-10 h-10 rounded-full bg-[#e8f0fe] border border-[#c7d9ff] flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#c7d9ff] bg-white p-0.5 shadow-sm">
                     <BotAvatar />
                   </div>
                 )}
                 <div
-                  className={`max-w-[320px] px-4 py-2.5 rounded-2xl whitespace-pre-wrap text-sm leading-relaxed ${
+                  className={`max-w-[320px] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                     msg.type === "user"
-                      ? "bg-[#2557a7] text-white rounded-br-sm shadow-md shadow-[#2557a7]/20"
-                      : "bg-white text-gray-800 border border-gray-100 rounded-bl-sm shadow-sm"
+                      ? "rounded-br-sm bg-[#2557a7] text-white shadow-md shadow-[#2557a7]/20"
+                      : "rounded-bl-sm border border-white bg-white text-gray-800 shadow-[0_10px_24px_rgba(15,23,42,0.07)]"
                   }`}
                 >
                   {msg.text}
@@ -237,10 +240,10 @@ export default function NancyChat({
           {/* Typing indicator */}
           {isTyping && (
             <div className="flex gap-2 items-end">
-              <div className="w-10 h-10 rounded-full bg-[#e8f0fe] border border-[#c7d9ff] flex items-center justify-center shrink-0 shadow-sm overflow-hidden p-1">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#c7d9ff] bg-white p-0.5 shadow-sm">
                 <BotAvatar />
               </div>
-              <div className="px-4 py-2.5 rounded-2xl rounded-bl-sm bg-white border border-gray-100 shadow-sm flex items-center gap-2">
+              <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-white bg-white px-4 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.07)]">
                 <span className="text-sm text-gray-500">Nancy is thinking</span>
                 <div className="flex gap-1">
                   {[0, 1, 2].map((i) => (
@@ -265,17 +268,17 @@ export default function NancyChat({
             return (
               <div className="mt-1 space-y-4">
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest px-1">
+                  <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Ask Nancy — Free
                   </p>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     {remaining.map((action, idx) => (
                       <button
                         key={idx}
                         type="button"
                         onClick={() => sendMessage(action)}
                         disabled={isTyping}
-                        className="text-left px-3 py-2 bg-white border border-gray-100 rounded-xl text-[12px] text-gray-700 hover:bg-[#f0f4ff] hover:border-[#2557a7]/30 hover:text-[#2557a7] shadow-sm focus:outline-none active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="rounded-xl border border-white bg-white px-3 py-2 text-left text-[12px] text-gray-700 shadow-[0_8px_18px_rgba(15,23,42,0.05)] transition-all duration-150 hover:border-[#2557a7]/30 hover:bg-[#f0f4ff] hover:text-[#2557a7] focus:outline-none active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {action}
                       </button>
@@ -290,7 +293,7 @@ export default function NancyChat({
         </div>
 
         {/* INPUT */}
-        <div className="shrink-0 px-4 py-3 border-t border-gray-100 bg-white">
+        <div className="shrink-0 border-t border-gray-100 bg-white px-4 py-3">
           <form onSubmit={handleSubmit} className="flex gap-2 items-center">
             <input
               value={input}
@@ -298,13 +301,13 @@ export default function NancyChat({
               disabled={isTyping}
               placeholder="Ask Nancy anything..."
               aria-label="Message Nancy"
-              className="flex-1 bg-[#f8f9fc] border border-gray-200 rounded-full px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#2557a7] focus:bg-white focus:ring-2 focus:ring-[#2557a7]/10 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 rounded-full border border-gray-200 bg-[#f8f9fc] px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition-all duration-200 focus:border-[#2557a7] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#2557a7]/10 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <button
               type="submit"
               aria-label="Send message"
               disabled={!input.trim() || isTyping}
-              className="shrink-0 w-9 h-9 rounded-full bg-[#2557a7] text-white flex items-center justify-center hover:bg-[#1f4e98] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#2557a7]/30 active:scale-95 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#2557a7] disabled:hover:shadow-none"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2557a7] text-white transition-all duration-150 hover:bg-[#1f4e98] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#2557a7]/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[#2557a7] disabled:hover:shadow-none"
             >
               {isTyping ? <Loader size={15} className="animate-spin" /> : <Send size={15} />}
             </button>

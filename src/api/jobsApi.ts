@@ -249,9 +249,23 @@ export const getMyJobs = async (skip = 0, limit = 20): Promise<ApiResponse<Job[]
   return response.data;
 };
 
-export const getCleanedJobs = async (skip = 0, limit = 20): Promise<ApiResponse<CleanedJob[]>> => {
+export const getCleanedJobs = async (params: JobSearchParams = {}): Promise<ApiResponse<CleanedJob[]>> => {
+  const limit = params.limit || 20;
+  const skip = params.skip ?? (params.page ? (params.page - 1) * limit : 0);
+
+  const backendParams: Record<string, unknown> = { skip, limit };
+  const q = params.q || params.query;
+  if (q) backendParams.q = q;
+  if (params.title)    backendParams.title    = params.title;
+  if (params.company)  backendParams.company  = params.company;
+  if (params.location) backendParams.location = params.location;
+  if (params.job_type) backendParams.job_type = params.job_type;
+  if (params.source)   backendParams.source   = params.source;
+  if (params.date_from) backendParams.date_from = params.date_from;
+  if (params.date_to)   backendParams.date_to   = params.date_to;
+
   const response = await httpClient.get<ApiResponse<CleanedJob[]>>('/jobs/aggregator/jobs/cleaned', {
-    params: { skip, limit },
+    params: backendParams,
     ...getRequestConfig(),
   });
   return response.data;

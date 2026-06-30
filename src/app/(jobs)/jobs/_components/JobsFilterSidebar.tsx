@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronDown,
   Building2,
@@ -1121,8 +1122,8 @@ export default function JobsFilterSidebar({
         </div>
       )}
 
-      {/* More Filters — right-side drawer */}
-      {showMoreFiltersModal && (() => {
+      {/* More Filters — portal drawer so it escapes sticky/overflow parents */}
+      {showMoreFiltersModal && typeof document !== "undefined" && createPortal((() => {
         const DRAWER_SECTIONS = [
           { key: "basic",        label: "Basic Job Criteria",        sub: "Job Type / Work Model / Experience" },
           { key: "compensation", label: "Compensation",              sub: "Annual Salary" },
@@ -1182,7 +1183,7 @@ export default function JobsFilterSidebar({
             activeSourceFilter={activeSourceFilter}
           />
         );
-      })()}
+      })(), document.body)}
     </div>
   );
 }
@@ -1343,14 +1344,12 @@ function DrawerContent(props: any) {
   };
 
   return (
-    <div className="fixed inset-0 z-50">
-      {/* Backdrop — covers the FULL screen so rounded corners show against dark overlay */}
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={props.onClose} />
+    <div className="fixed inset-0 z-[999]">
+      {/* Backdrop — click to close */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={props.onClose} />
 
-      {/* Animation wrapper — transform here, no clip */}
-      <div className="absolute right-0 top-14 bottom-2 w-[820px] animate-in slide-in-from-right duration-300">
-      {/* Drawer panel — rounded + clip here, no transform */}
-      <div className="h-full bg-white flex flex-col shadow-2xl rounded-l-3xl overflow-hidden">
+      {/* Left-side drawer — slides in from left */}
+      <div className="absolute right-0 top-0 bottom-0 w-[55vw] max-w-[780px] animate-in slide-in-from-right duration-300 flex flex-col bg-white shadow-[-8px_0_48px_rgba(15,23,42,0.18)] overflow-hidden">
 
         {/* ── Top bar ── */}
         <div className="flex items-center justify-between px-5 py-3.5 bg-white border-b border-gray-100">
@@ -1756,7 +1755,6 @@ function DrawerContent(props: any) {
 
           </div>
         </div>
-      </div>
       </div>
     </div>
   );

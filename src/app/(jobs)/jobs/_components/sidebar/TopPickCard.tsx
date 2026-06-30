@@ -28,24 +28,24 @@ function TopPickCard({ jobs = [] }: TopPickCardProps) {
   return (
     <div>
       {/* Header */}
-      <div className="px-5 py-3.5 flex items-center justify-between">
+      <div className="flex items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
+          <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 shadow-inner shadow-white">
             <Star size={13} className="text-amber-500 fill-amber-400" />
           </div>
           <div>
-            <h3 className="text-[13px] font-bold text-gray-900 leading-tight">Top picks for you</h3>
-            <p className="text-[10px] text-gray-400">Personalised · refreshed hourly</p>
+            <h3 className="text-[14px] font-extrabold leading-tight text-slate-950">Top picks for you</h3>
+            <p className="text-[10.5px] font-medium text-slate-400">Personalised · refreshed hourly</p>
           </div>
         </div>
         {topPicks.length > 0 && (
-          <span className="text-[8px] font-bold text-[#2557a7] bg-[#f0f4ff] px-2 py-0.5 rounded-full uppercase tracking-wider">
+          <span className="rounded-full bg-[#f0f4ff] px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#2557a7]">
             Live
           </span>
         )}
       </div>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-slate-100" />
 
       {/* Job list */}
       <div className="px-3 py-2.5">
@@ -58,11 +58,11 @@ function TopPickCard({ jobs = [] }: TopPickCardProps) {
             </div>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {topPicks.map((job, idx) => (
               <div
                 key={job.id}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#f0f4ff]/60 group cursor-pointer transition-all hover:shadow-[0_1px_5px_rgba(37,87,167,0.08)] hover:-translate-y-px"
+                className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-transparent px-3 py-3 transition-all hover:-translate-y-px hover:border-blue-100 hover:bg-[#f7faff] hover:shadow-[0_10px_24px_rgba(37,87,167,0.08)]"
               >
                 {/* Rank badge */}
                 <span className={`w-5 h-5 rounded-full border text-[9px] font-black flex items-center justify-center shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${RANK_COLORS[idx]}`}>
@@ -71,7 +71,7 @@ function TopPickCard({ jobs = [] }: TopPickCardProps) {
 
                 {/* Content */}
                 <div className="min-w-0 flex-1">
-                  <p className="text-[12.5px] font-semibold text-gray-800 truncate group-hover:text-[#2557a7] transition-colors leading-tight">
+                  <p className="truncate text-[13px] font-extrabold leading-tight text-slate-800 transition-colors group-hover:text-[#2557a7]">
                     {job.title}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -97,7 +97,7 @@ function TopPickCard({ jobs = [] }: TopPickCardProps) {
                     {Math.round(job.matchScore)}%
                   </span>
                 ) : (
-                  <ArrowRight size={13} className="shrink-0 text-gray-300 group-hover:text-[#2557a7] transition-colors" />
+                  <ArrowRight size={13} className="shrink-0 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-[#2557a7]" />
                 )}
               </div>
             ))}
@@ -106,7 +106,7 @@ function TopPickCard({ jobs = [] }: TopPickCardProps) {
       </div>
 
       {/* Footer */}
-      <div className="border-t border-gray-100 px-4 py-2.5">
+      <div className="border-t border-slate-100 px-4 py-3">
         <button
           type="button"
           className="w-full flex items-center justify-center gap-1.5 text-[11.5px] font-semibold text-[#2557a7] hover:text-[#1f4e98] hover:gap-2 transition-all"

@@ -2,8 +2,8 @@
 
 import { useState, useEffect, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Check, ArrowRight, Shield, Clock, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, Check, ArrowRight, Shield, Clock, X, UploadCloud, UserRound, Briefcase, GraduationCap, BadgeCheck, Tags, FileCheck2, BookOpenCheck } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { processResumeComplete } from "@/api/resumeatsapi";
 import ErrorModal from "./ErrorModal";
 import { validateResumeFile, formatFileSize } from "@/app/(resume)/ats/utils/helpers";
@@ -65,14 +65,24 @@ const DROPZONE_INDICATORS = [
 ] as const;
 
 const LIVE_MESSAGES = [
-  "Analyzing resume structure and formatting...",
-  "Checking ATS keyword compatibility...",
-  "Matching skills against industry standards...",
-  "Scanning for formatting inconsistencies...",
-  "Optimizing readability and flow score...",
-  "Generating AI-powered improvement suggestions...",
-  "Cross-referencing industry-specific keywords...",
+  "Analyzing work experience...",
+  "Checking ATS compatibility...",
+  "Finding missing keywords...",
+  "Evaluating resume structure...",
+  "Calculating recruiter readability...",
 ] as const;
+
+const ANALYSIS_CHECKLIST = [
+  { label: "Resume Uploaded", start: 0, Icon: UploadCloud },
+  { label: "Contact Information", start: 15, Icon: UserRound },
+  { label: "Experience Analysis", start: 35, Icon: Briefcase },
+  { label: "Education Review", start: 45, Icon: GraduationCap },
+  { label: "Skills Validation", start: 55, Icon: BadgeCheck },
+  { label: "Keyword Optimization", start: 70, Icon: Tags },
+  { label: "ATS Formatting Check", start: 82, Icon: FileCheck2 },
+  { label: "Readability Analysis", start: 92, Icon: BookOpenCheck },
+] as const;
+
 
 const WORKFLOW = [
   { id: "upload",  label: "Upload",  icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg> },
@@ -99,9 +109,7 @@ interface UploadZoneProps {
 
 interface LoadingOverlayProps {
   displayProgress: number;
-  displaySlide: number;
   loadingPhase: AnalysisPhase | "";
-  stepStatus: (i: number) => "done" | "active" | "pending";
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -234,7 +242,140 @@ function FilePreview({ file, onRemove, agreed, onAgree }: FilePreviewProps) {
   );
 }
 
-function LoadingOverlay({ displayProgress, displaySlide, loadingPhase }: LoadingOverlayProps) {
+function LoadingOverlay({ displayProgress, loadingPhase }: LoadingOverlayProps) {
+  const isComplete = loadingPhase === AnalysisPhase.Complete;
+  const reduceMotion = useReducedMotion();
+  const [liveMsg, setLiveMsg] = useState(0);
+
+  useEffect(() => {
+    if (isComplete || reduceMotion) return;
+    const id = setInterval(() => setLiveMsg((m) => (m + 1) % LIVE_MESSAGES.length), 3000);
+    return () => clearInterval(id);
+  }, [isComplete, reduceMotion]);
+
+  const ringSize = 155;
+  const center = ringSize / 2;
+  const radius = 58;
+  const circumference = 2 * Math.PI * radius;
+  const clampedProgress = Math.max(0, Math.min(100, displayProgress));
+  const progressLabel = Math.round(clampedProgress);
+  const remainingSeconds = Math.max(0, Math.ceil((100 - clampedProgress) * 18 / 28));
+
+  return (
+    <motion.div
+      key="loading-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-4"
+      style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(8px)" }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.93, y: 18 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.93, y: 18 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="relative w-full max-w-lg overflow-hidden rounded-2xl"
+        style={{
+          background: "linear-gradient(135deg,#FFFFFF 0%,#F8FAFC 48%,#EEF6FF 100%)",
+          boxShadow: "0 0 0 1px rgba(226,232,240,0.95), 0 24px 60px rgba(15,23,42,0.30), 0 8px 20px rgba(15,23,42,0.10)",
+        }}
+      >
+        <div className="relative z-10 px-4 py-3 flex flex-col items-center gap-2">
+          {!isComplete ? (
+            <>
+              {/* Ring card */}
+              <div className="w-full rounded-2xl border border-[#E8EEF7] bg-linear-to-b from-white to-[#F0F6FF] px-4 py-3 flex flex-col items-center gap-2"
+                style={{ boxShadow: "0 4px 24px rgba(37,99,235,0.08)" }}>
+
+                <p className="text-[15px] font-bold text-[#2563EB]">Premium ATS Scan</p>
+
+                {/* Ring */}
+                <div className="relative grid place-items-center" style={{ width: ringSize, height: ringSize }}>
+                  {/* Glow */}
+                  <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 70%)", filter: "blur(8px)" }} />
+
+                  <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`} overflow="visible">
+                    <defs>
+                      <linearGradient id="atsRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#1D4ED8" />
+                        <stop offset="100%" stopColor="#60A5FA" />
+                      </linearGradient>
+                    </defs>
+                    {/* Track */}
+                    <circle cx={center} cy={center} r={radius} fill="white" stroke="#DBEAFE" strokeWidth="16" />
+                    {/* Progress arc */}
+                    <motion.circle
+                      cx={center} cy={center} r={radius}
+                      fill="none" stroke="url(#atsRingGrad)" strokeWidth="16" strokeLinecap="round"
+                      strokeDasharray={circumference}
+                      initial={{ strokeDashoffset: circumference }}
+                      animate={{ strokeDashoffset: circumference * (1 - clampedProgress / 100) }}
+                      transition={{ duration: reduceMotion ? 0 : 0.6, ease: "easeOut" }}
+                      style={{ transform: "rotate(-90deg)", transformOrigin: `${center}px ${center}px`, filter: "drop-shadow(0 0 6px rgba(37,99,235,0.5))" }}
+                    />
+                  </svg>
+
+                  {/* Center content */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
+                    <span className="text-[34px] font-black text-[#101828] leading-none tabular-nums">{progressLabel}%</span>
+                    <span className="text-[12px] font-medium text-[#6B7280]">{remainingSeconds} sec left</span>
+                  </div>
+                </div>
+
+                {/* Live message */}
+                <AnimatePresence mode="wait">
+                  <motion.p
+                    key={liveMsg}
+                    initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2 }}
+                    className="text-[14px] font-bold text-[#2563EB] text-center"
+                  >
+                    {LIVE_MESSAGES[liveMsg]}
+                  </motion.p>
+                </AnimatePresence>
+              </div>
+
+              {/* Checklist */}
+              <div className="w-full rounded-[8px] border border-[#E6EAF0] overflow-hidden bg-white">
+                {ANALYSIS_CHECKLIST.map((item, index) => {
+                  const next = ANALYSIS_CHECKLIST[index + 1]?.start ?? 101;
+                  const done = clampedProgress >= next;
+                  const scanning = !done && clampedProgress >= item.start;
+                  return (
+                    <div key={item.label} className="flex h-8 items-center gap-3 border-b border-[#F1F5F9] px-4 last:border-b-0">
+                      <span className="grid h-3 w-3 shrink-0 place-items-center rounded-full" style={{ background: done ? "#ECFDF3" : scanning ? "#FFFBEB" : "#F1F5F9", color: done ? "#22C55E" : scanning ? "#F59E0B" : "#94A3B8" }}>
+                        {done ? <Check className="h-2 w-2" strokeWidth={3} /> : scanning ? (
+                          <motion.span animate={reduceMotion ? undefined : { rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} className="block h-2.5 w-2.5 rounded-full border border-current border-t-transparent" />
+                        ) : <span className="h-1 w-1 rounded-full bg-current" />}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#101828]">{item.label}</span>
+                      <span className="text-[12px] font-bold" style={{ color: done ? "#16A34A" : scanning ? "#F59E0B" : "#94A3B8" }}>
+                        {done ? "Done" : scanning ? "Scanning" : "Queued"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center py-4 text-center">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
+                <Check className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />
+              </div>
+              <p className="text-[13px] font-bold text-slate-900">Analysis Complete</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Redirecting...</p>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function LegacyLoadingOverlay({ displayProgress, displaySlide, loadingPhase }: { displayProgress: number; displaySlide: number; loadingPhase: AnalysisPhase | "" }) {
   const isComplete = loadingPhase === AnalysisPhase.Complete;
   const [liveMsg, setLiveMsg] = useState(0);
 
@@ -542,7 +683,6 @@ export default function ATSLoginPage() {
   const [loadingPhase,    setLoadingPhase]    = useState<AnalysisPhase | "">("");
   const [progress,        setProgress]        = useState(0);
   const [displayProgress, setDisplayProgress] = useState(0);
-  const [displaySlide,    setDisplaySlide]    = useState(0);
 
   const canScan = Boolean(file && agreed);
 
@@ -591,13 +731,6 @@ export default function ATSLoginPage() {
     }
   };
 
-  const stepStatus = (i: number): "done" | "active" | "pending" => {
-    const thresholds = [30, 70, 100];
-    if (displayProgress > thresholds[i]) return "done";
-    if (displayProgress >= (i === 0 ? 0 : thresholds[i - 1])) return "active";
-    return "pending";
-  };
-
   useEffect(() => {
     if (!isLoading) { setDisplayProgress(0); return; }
     const ceiling = progress >= 100 ? 100 : progress >= 70 ? 95 : 68;
@@ -609,12 +742,6 @@ export default function ATSLoginPage() {
     }, 120);
     return () => clearInterval(id);
   }, [isLoading, progress]);
-
-  useEffect(() => {
-    if (!isLoading || loadingPhase === AnalysisPhase.Complete) { setDisplaySlide(0); return; }
-    const id = setInterval(() => setDisplaySlide((s) => (s + 1) % SLIDES.length), 3500);
-    return () => clearInterval(id);
-  }, [isLoading, loadingPhase]);
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -657,9 +784,7 @@ export default function ATSLoginPage() {
         {isLoading && (
           <LoadingOverlay
             displayProgress={displayProgress}
-            displaySlide={displaySlide}
             loadingPhase={loadingPhase}
-            stepStatus={stepStatus}
           />
         )}
       </AnimatePresence>

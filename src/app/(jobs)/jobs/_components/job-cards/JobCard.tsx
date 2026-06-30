@@ -83,13 +83,6 @@ const BAND_CIRCLE_COLORS: Record<string, string> = {
   low:     "#9ca3af",
 };
 
-const BAND_LABEL_COLORS: Record<string, string> = {
-  strong:  "text-emerald-300",
-  good:    "text-sky-200",
-  partial: "text-teal-300",
-  low:     "text-gray-300",
-};
-
 const deriveExperienceLevelFromYears = (yearsStr?: string): string | null => {
   if (!yearsStr) return null;
   const matches = yearsStr.match(/\d+/g);
@@ -230,6 +223,7 @@ export default function JobCard(props: JobCardProps) {
   const skillChips = props.skills
     ? props.skills.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6)
     : [];
+  const hasMissingSkills = !!props.missing_skills?.length;
   const isNew = (() => {
     const d = props.created_at || props.posted_date;
     if (!d) return false;
@@ -242,7 +236,6 @@ export default function JobCard(props: JobCardProps) {
   const circleC = 2 * Math.PI * circleR;
   const circleOffset = circleC - ((props.matchScore || 0) / 100) * circleC;
   const circleStroke = props.match_band ? (BAND_CIRCLE_COLORS[props.match_band] || "#14b8a6") : "#14b8a6";
-  const circleLabelColor = props.match_band ? (BAND_LABEL_COLORS[props.match_band] || "text-teal-400") : "text-teal-400";
   const circleLabel = props.match_band ? (BAND_LABELS[props.match_band] || props.match_band.toUpperCase()) : "";
 
   const skillsNode = (() => {
@@ -340,11 +333,11 @@ export default function JobCard(props: JobCardProps) {
     <>
     {/* Card: outer flex row so dark panel can span full height as a sibling */}
     <motion.div
-      className="group relative bg-white rounded-2xl overflow-hidden flex border border-gray-100"
-      style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.02)" }}
+      className="group relative flex overflow-hidden rounded-[22px] border border-white bg-white"
+      style={{ boxShadow: "0 14px 38px rgba(15,23,42,0.07), 0 1px 0 rgba(255,255,255,0.9)" }}
       whileHover={{
-        y: -3,
-        boxShadow: "0 16px 48px rgba(0,0,0,0.12), 0 4px 16px rgba(37,87,167,0.08), 0 0 0 1px rgba(37,87,167,0.12)",
+        y: -4,
+        boxShadow: "0 22px 60px rgba(15,23,42,0.12), 0 8px 24px rgba(37,87,167,0.10), 0 0 0 1px rgba(37,87,167,0.14)",
       }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
     >
@@ -352,7 +345,7 @@ export default function JobCard(props: JobCardProps) {
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* ── Swappable content zone: fixed height, both faces absolute-inset ── */}
-        <div className="relative flex-1 overflow-hidden" style={{ minHeight: 250 }}>
+        <div className="relative flex-1 overflow-hidden" style={{ minHeight: hasMissingSkills ? 282 : 214 }}>
           <AnimatePresence mode="wait" initial={false}>
 
             {/* ── FACE A: Normal card content ── */}
@@ -365,9 +358,9 @@ export default function JobCard(props: JobCardProps) {
                 transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
                 className="absolute inset-0 flex flex-col"
               >
-                <div className="flex items-start gap-3.5 px-5 pt-4 pb-0">
+                <div className="flex items-start gap-3.5 px-5 pt-[18px] pb-0">
                   {/* Logo */}
-                  <div className={`h-12 w-12 shrink-0 flex items-center justify-center rounded-2xl ${logoColor.bg} overflow-hidden ring-1 ring-black/5 shadow-[0_2px_8px_rgba(0,0,0,0.08)]`}>
+                  <div className={`flex h-[54px] w-[54px] shrink-0 items-center justify-center overflow-hidden rounded-[18px] ${logoColor.bg} ring-1 ring-black/5 shadow-[0_10px_22px_rgba(15,23,42,0.11)]`}>
                     {props.logo && props.logo.trim() && !logoError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={props.logo} alt={props.company} width={56} height={56}
@@ -384,7 +377,7 @@ export default function JobCard(props: JobCardProps) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           {(props.created_at || props.posted_date) && (
-                            <span className="text-[11.5px] text-gray-400 font-medium">
+                            <span className="text-[11.5px] font-semibold text-slate-400">
                               {formatPostedTime(props.created_at || props.posted_date)}
                             </span>
                           )}
@@ -395,56 +388,56 @@ export default function JobCard(props: JobCardProps) {
                             </span>
                           )}
                         </div>
-                        <h3 className="text-[16px] font-bold text-gray-900 leading-snug hover:text-[#2557a7] transition-colors duration-150 cursor-pointer line-clamp-1">
+                        <h3 className="line-clamp-1 cursor-pointer text-[18px] font-extrabold leading-snug text-slate-950 transition-colors duration-150 hover:text-[#2557a7]">
                           {props.title || "Job Title"}
                         </h3>
-                        <p className="text-[12.5px] text-gray-500 mt-0.5 truncate">
-                          <span className="text-gray-700 font-semibold">{props.company || "Company"}</span>
+                        <p className="mt-0.5 truncate text-[13px] text-slate-500">
+                          <span className="font-bold text-slate-700">{props.company || "Company"}</span>
                           {sourceLabel && <span className="text-gray-400"> · {sourceLabel}</span>}
                         </p>
                       </div>
                       <button ref={menuBtnRef} type="button" onClick={handleMenuOpen}
-                        className="p-1.5 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-all shrink-0 opacity-0 group-hover:opacity-100 mt-0.5"
+                        className="mt-0.5 shrink-0 rounded-xl p-1.5 text-slate-300 opacity-0 transition-all hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100"
                         title="More options" aria-label="More options">
                         <MoreHorizontal size={16} />
                       </button>
                     </div>
                   </div>
                 </div>
-                <div className="px-5 pt-2.5 pb-3">
+                <div className="px-5 pt-3.5 pb-3">
                   <div className="flex flex-wrap gap-1.5">
                     {props.location && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11.5px] text-gray-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
                         <MapPin size={11} className="text-gray-400 shrink-0" />
                         <span className="truncate max-w-[110px]">{props.location}</span>
                       </span>
                     )}
                     {props.type && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11.5px] text-gray-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
                         <Briefcase size={11} className="text-gray-400 shrink-0" />
                         {props.type}
                       </span>
                     )}
                     {props.mode && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11.5px] text-gray-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
                         <Home size={11} className="text-gray-400 shrink-0" />
                         {props.mode}
                       </span>
                     )}
                     {level && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11.5px] text-gray-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
                         <Layers size={11} className="text-gray-400 shrink-0" />
                         {level}
                       </span>
                     )}
                     {props.experience && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-full text-[11.5px] text-gray-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
                         <Calendar size={11} className="text-gray-400 shrink-0" />
                         {props.experience}
                       </span>
                     )}
                     {props.salary && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-100 rounded-full text-[11.5px] text-emerald-700 font-medium">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11.5px] font-bold text-emerald-700">
                         <CircleDollarSign size={11} className="text-emerald-500 shrink-0" />
                         {props.salary}
                       </span>
@@ -569,7 +562,7 @@ export default function JobCard(props: JobCardProps) {
         </div>
 
         {/* Action row */}
-        <div className="border-t border-gray-100 flex items-center justify-between px-5 py-3 gap-3 bg-[#f9fafb]">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-[linear-gradient(180deg,#fbfdff_0%,#f4f7fb_100%)] px-5 py-3">
           {/* Left: applicant count + match analysis */}
           <div className="flex items-center gap-2.5 min-w-0">
             {props.applicant_count !== undefined && props.applicant_count !== null && (
@@ -583,7 +576,7 @@ export default function JobCard(props: JobCardProps) {
               <button
                 type="button"
                 onClick={() => setShowMatchModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all shrink-0 hover:scale-[1.03] active:scale-[0.97]"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-all hover:scale-[1.03] active:scale-[0.97]"
                 style={{
                   background: "linear-gradient(135deg, #5896d7, #1f4e98)",
                   color: "white",
@@ -607,7 +600,7 @@ export default function JobCard(props: JobCardProps) {
               whileHover={{ scale: 1.12 }}
               whileTap={{ scale: 0.88 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className={`w-8 h-8 flex items-center justify-center rounded-xl border transition-all duration-200 ${
+              className={`flex h-9 w-9 items-center justify-center rounded-2xl border transition-all duration-200 ${
                 isSaved ? "bg-red-50 border-red-200 text-red-500" : "bg-white border-gray-200 text-gray-400 hover:bg-red-50 hover:border-red-200 hover:text-red-400"
               }`}
               title={isSaved ? "Remove from saved" : "Save job"}
@@ -620,7 +613,7 @@ export default function JobCard(props: JobCardProps) {
               type="button"
               onClick={props.onBotClick}
               aria-label="Ask Nancy AI about this job"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#eef3ff] hover:bg-[#dde8ff] text-[12px] font-semibold text-[#2557a7] border border-[#2557a7]/10 hover:border-[#2557a7]/25 transition-all shrink-0"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#2557a7]/10 bg-white px-3.5 py-2 text-[12px] font-bold text-[#2557a7] shadow-sm transition-all hover:border-[#2557a7]/25 hover:bg-[#eef3ff] hover:shadow-md"
             >
               <Sparkles size={11} className="text-[#2557a7]" />
               Ask Nancy
@@ -633,12 +626,12 @@ export default function JobCard(props: JobCardProps) {
               whileHover={!isApplied && !isSubmitting ? { scale: 1.03 } : undefined}
               whileTap={!isApplied && !isSubmitting ? { scale: 0.96 } : undefined}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className={`inline-flex items-center gap-1.5 px-5 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap transition-all duration-150 ${
+              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-5 py-2.5 text-[13px] font-bold transition-all duration-150 ${
                 isSubmitting
                   ? "bg-emerald-400 text-white cursor-wait opacity-70"
                   : isApplied
                   ? "bg-gray-100 text-gray-500 cursor-default"
-                  : "bg-[#2557a7] hover:bg-[#1f4e98] text-white shadow-sm hover:shadow-[0_4px_16px_rgba(37,87,167,0.4)] active:scale-[0.97]"
+                  : "bg-[#2557a7] text-white shadow-[0_8px_20px_rgba(37,87,167,0.22)] hover:bg-[#1f4e98] hover:shadow-[0_12px_26px_rgba(37,87,167,0.34)] active:scale-[0.97]"
               }`}
             >
               {isSubmitting ? "Applying…" : isApplied ? "✓ Applied" : "Apply Now"}
@@ -651,12 +644,12 @@ export default function JobCard(props: JobCardProps) {
       {/* ── RIGHT: AI match panel ── */}
       {hasMatchScore && props.match_band && (
         <div
-          className="shrink-0 w-[120px] flex flex-col cursor-pointer select-none"
+          className="flex w-[128px] shrink-0 cursor-pointer select-none flex-col"
           onClick={handleScoreHover}
         >
           <div
-            className="flex-1 flex flex-col items-center justify-center gap-2.5 px-3 py-4 relative overflow-hidden group/panel transition-all duration-300"
-            style={{ background: "linear-gradient(160deg, #111e35 0%, #172640 45%, #1c2f52 100%)" }}
+            className="group/panel relative flex flex-1 flex-col items-center justify-center gap-2.5 overflow-hidden px-3 py-4 transition-all duration-300"
+            style={{ background: "linear-gradient(160deg, #0f1d33 0%, #172b4a 46%, #214b86 100%)" }}
           >
             {/* Ambient glow behind ring */}
             <div className="absolute inset-0 pointer-events-none transition-opacity duration-300 group-hover/panel:opacity-100"

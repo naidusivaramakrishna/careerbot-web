@@ -66,6 +66,25 @@ async function safePatch<T = unknown>(url: string, data?: unknown, config?: Axio
   }
 }
 
+async function safePut<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  try {
+    logApiRequest('PUT', url, data);
+    const typedData = data as Record<string, unknown> | undefined;
+    const response = await httpClient.put<T>(url, typedData, config);
+    logApiResponse('PUT', url, response.status, response.headers['x-trace-id']);
+    return response.data;
+  } catch (err: unknown) {
+    logApiError('PUT', url, err);
+    if (axios.isAxiosError(err)) {
+      const raw = err.response?.data ?? err.message;
+      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
+      apiError.__raw = raw;
+      throw apiError;
+    }
+    throw err;
+  }
+}
+
 async function safeDelete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
   try {
     logApiRequest('DELETE', url);
@@ -294,6 +313,14 @@ export async function matcherRemoveSkill(match_id: string, skills: string | stri
 
 /* ========== ENHANCE APPLY / REMOVE ========== */
 
+export async function matcherUpdateSections(
+  match_id: string,
+  sections: { sectionName: string; items: ({ title?: string; description?: string } | string)[] }[],
+  replace = false
+) {
+  return await safePut(`/matcher/${match_id}/sections`, { sections, replace });
+}
+
 export async function matcherEnhanceApply(match_id: string, suggestion_id: string, fix_type = "auto", value?: string) {
   const resp = await httpClient.post<Record<string, unknown>>(
     `/matcher/enhance/apply/${match_id}`,
@@ -312,9 +339,9 @@ export async function matcherEnhanceRemove(match_id: string, suggestion_id: stri
 
 /* ========== RESUME DOWNLOAD ========== */
 
-export async function downloadResumePdf(resume_id: string, filename?: string): Promise<void> {
+export async function downloadResumePdf(resume_id: string, filename?: string, match_id?: string): Promise<void> {
   const response = await httpClient.get(`/parser/download/${resume_id}`, {
-    params: { format: "pdf", use_original: false, preserve_template: false },
+    params: { format: "pdf", use_original: false, preserve_template: false, ...(match_id ? { match_id } : {}) },
     responseType: "blob",
   });
   const contentDisposition = (response.headers as Record<string, string>)["content-disposition"] ?? "";
@@ -347,5 +374,6 @@ export const parserApi = {
   listAllMatches,
   matcherAddSkill,
   matcherRemoveSkill,
+  matcherUpdateSections,
 };
 export default parserApi;

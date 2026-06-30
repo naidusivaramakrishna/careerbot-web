@@ -46,6 +46,28 @@ const states = {
 function showState(name) {
   Object.values(states).forEach(el => el.classList.add('hidden'));
   if (states[name]) states[name].classList.remove('hidden');
+  // Stop polling as soon as we leave the login state
+  if (name !== 'login') stopLoginPoll();
+}
+
+function unlockRail(unlock) {
+  ['sb-analyze', 'sb-dashboard'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    if (unlock) {
+      btn.classList.remove('sr-locked');
+      btn.removeAttribute('aria-disabled');
+      btn.title = id === 'sb-analyze' ? 'Analyze' : 'Tracker';
+    } else {
+      btn.classList.add('sr-locked');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.title = id === 'sb-analyze' ? 'Sign in to unlock Analyze' : 'Sign in to unlock Tracker';
+    }
+  });
+  const profileWrap = document.querySelector('.sr-profile-wrap');
+  if (profileWrap) profileWrap.classList.toggle('rail-profile-hidden', !unlock);
+  const caption = document.querySelector('.sr-unlock-caption');
+  if (caption) caption.style.display = unlock ? 'none' : '';
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -62,6 +84,35 @@ async function apiFetch(path, options = {}) {
     throw new Error(`${res.status}: ${detail}`);
   }
   return res.json();
+}
+
+
+// Clear auth cookies on both the portal and backend origins so the session
+// is truly gone regardless of which host set them.
+async function clearAuthCookies() {
+  if (!chrome.cookies?.remove) return;
+  const origins = [
+    PORTAL_URL.replace(/\/$/, ''),
+    BASE_URL.replace(/\/api\/v1\/?$/, ''),
+  ];
+  const names = ['access_token', 'refresh_token', 'admin_access_token', 'admin_refresh_token'];
+  await Promise.allSettled(
+    origins.flatMap(url =>
+      names.map(name => new Promise(r => chrome.cookies.remove({ url, name }, r)))
+    )
+  );
+}
+
+function isValidUser(data) {
+  if (!data || typeof data !== 'object') return false;
+  const u = data.user || data;
+  return Boolean(u.email || u.id || u._id || u.full_name || u.name);
+}
+
+async function verifyExtensionUser() {
+  const result = await apiFetch('/extension/verify');
+  if (!isValidUser(result)) throw new Error('Not signed in');
+  return result;
 }
 
 async function uploadResume(file) {
@@ -199,8 +250,8 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   const pctEl = document.getElementById('score-pct');
   if (pctEl) pctEl.textContent = `${Math.round(score)}%`;
 
-  // Animate arc  (circumference for r=68 → 2*π*68 ≈ 427)
-  const circumference = 427;
+  // Animate arc  (circumference for r=46 → 2*π*46 ≈ 289)
+  const circumference = 289;
   const arc = document.getElementById('score-arc');
   if (arc) {
     const color = score >= 80 ? '#22c55e' : score >= 60 ? '#2557a7' : score >= 40 ? '#f59e0b' : '#ef4444';
@@ -339,10 +390,11 @@ function bindFileInput(inputId, displayId, fileVar) {
       if (fileVar === 'idle') selectedFile = file;
       else selectedFileJD = file;
       display.textContent = file.name;
-      // Enable analyze button when file selected in idle state
+      // Enable analyze button only when both file and JD text are present
       if (fileVar === 'idle') {
         const btn = document.getElementById('btn-manual-tailor');
-        if (btn) btn.disabled = false;
+        const jdText = document.getElementById('manual-jd-input')?.value?.trim();
+        if (btn) btn.disabled = !jdText;
       }
     }
   });
@@ -366,11 +418,11 @@ function setupJDToggles() {
     toggleBtn.addEventListener('click', clickHandler);
     if (row) row.addEventListener('click', (e) => { if (e.target !== toggleBtn) clickHandler(); });
   }
-  // Enable analyze when JD typed
+  // Enable analyze only when both JD text and a resume file are present
   if (jdInput) {
     jdInput.addEventListener('input', () => {
       const btn = document.getElementById('btn-manual-tailor');
-      if (btn) btn.disabled = !jdInput.value.trim();
+      if (btn) btn.disabled = !(jdInput.value.trim() && selectedFile);
     });
   }
 
@@ -389,20 +441,48 @@ function setupJDToggles() {
   }
 }
 
+// ─── Poll for login while login state is visible ──────────────────────────────
+let _loginPollTimer = null;
+
+function startLoginPoll() {
+  if (_loginPollTimer) return;
+  _loginPollTimer = setInterval(async () => {
+    // Stop polling if login state is no longer visible
+    if (states.login?.classList.contains('hidden')) {
+      stopLoginPoll();
+      return;
+    }
+    try {
+      const user = await verifyExtensionUser();
+      stopLoginPoll();
+      updateProfileCard(user);
+      unlockRail(true);
+      setupIdleState();
+      await applyStoredJD(user);
+    } catch { /* still not signed in */ }
+  }, 2000);
+}
+
+function stopLoginPoll() {
+  if (_loginPollTimer) { clearInterval(_loginPollTimer); _loginPollTimer = null; }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   showState('loading');
 
   let user;
   try {
-    user = await apiFetch('/extension/verify');
+    user = await verifyExtensionUser();
   } catch {
     updateProfileCard(null);
     showState('login');
+    startLoginPoll();
     return;
   }
 
   updateProfileCard(user);
+  unlockRail(true);
 
   // Set up idle state once (event listeners attached once here)
   setupIdleState();
@@ -421,15 +501,28 @@ async function init() {
     }
   });
 
-  // Re-check when popup regains focus (e.g. user clicks "Tailor Resume" on banner
-  // while popup window was already open and in idle state)
-  window.addEventListener('focus', () => applyStoredJD(user));
+  // Re-check when popup regains focus. If the user signed in on the web while
+  // the side panel stayed open, detect the new web auth cookie and unlock.
+  window.addEventListener('focus', async () => {
+    if (!states.login?.classList.contains('hidden')) {
+      try {
+        user = await verifyExtensionUser();
+        stopLoginPoll();
+        updateProfileCard(user);
+        unlockRail(true);
+        setupIdleState();
+      } catch {
+        return;
+      }
+    }
+    applyStoredJD(user);
+  });
 }
 
 // ─── Get the currently active browser tab (not popup/extension pages) ────────
 async function getActiveBrowserTab() {
   try {
-    const tabs = await chrome.tabs.query({ active: true });
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     return tabs.find(t =>
       t.url &&
       !t.url.startsWith('chrome-extension://') &&
@@ -684,12 +777,14 @@ function setNavActive(id) {
 }
 
 document.getElementById('sb-analyze')?.addEventListener('click', async () => {
+  if (!states.login?.classList.contains('hidden')) return;
   setNavActive('sb-analyze');
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
   showState(detectedJD ? 'jdDetected' : 'idle');
 });
 
 document.getElementById('sb-dashboard')?.addEventListener('click', () => {
+  if (!states.login?.classList.contains('hidden')) return;
   setNavActive('sb-dashboard');
   chrome.tabs.create({ url: `${PORTAL_URL}/dashboard` });
 });
@@ -712,10 +807,10 @@ function updateProfileCard(user) {
     if (nameEl)   nameEl.textContent   = displayName;
     if (subEl)    subEl.textContent    = email;
 
-    // Populate sidebar profile popover
-    const srpName  = document.getElementById('srp-name');
-    const srpEmail = document.getElementById('srp-email');
-    const srAvatar = document.getElementById('sr-avatar-initials');
+    // Populate sidebar profile popover and header avatar
+    const srpName      = document.getElementById('srp-name');
+    const srpEmail     = document.getElementById('srp-email');
+    const srAvatar     = document.getElementById('sr-avatar-initials');
     if (srpName)  srpName.textContent  = displayName;
     if (srpEmail) srpEmail.textContent = email;
     if (srAvatar) srAvatar.textContent = (displayName[0] || 'U').toUpperCase();
@@ -723,9 +818,14 @@ function updateProfileCard(user) {
       btnEl.textContent = 'Sign Out';
       btnEl.className   = 'rpc-btn danger';
       btnEl.onclick = async () => {
-        await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+        try {
+          await fetch(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
+        } catch { /* silent */ }
+        await clearAuthCookies();
         updateProfileCard(null);
+        unlockRail(false);
         showState('login');
+        startLoginPoll();
       };
     }
     // Avatar image if available
@@ -745,6 +845,12 @@ function updateProfileCard(user) {
       btnEl.className   = 'rpc-btn';
       btnEl.onclick = () => chrome.tabs.create({ url: `${PORTAL_URL}/?showLogin=true` });
     }
+    const srpName  = document.getElementById('srp-name');
+    const srpEmail = document.getElementById('srp-email');
+    const srAvatar = document.getElementById('sr-avatar-initials');
+    if (srpName)  srpName.textContent  = 'My Account';
+    if (srpEmail) srpEmail.textContent = '';
+    if (srAvatar) srAvatar.textContent = '';
   }
 }
 
@@ -764,11 +870,15 @@ document.getElementById('srp-dashboard')?.addEventListener('click', () => {
 document.getElementById('srp-signout')?.addEventListener('click', async () => {
   profilePopover?.classList.remove('open');
   try {
-    await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetch(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch { /* silent */ }
+  await clearAuthCookies();
   await chrome.storage.local.remove('detectedJD');
   chrome.action.setBadgeText({ text: '' });
+  updateProfileCard(null);
+  unlockRail(false);
   showState('login');
+  startLoginPoll();
 });
 
 document.getElementById('sb-feedback')?.addEventListener('click', () => {
@@ -782,15 +892,29 @@ document.getElementById('sb-settings')?.addEventListener('click', () => {
 
 
 // ─── Auth buttons ─────────────────────────────────────────────────────────────
-document.getElementById('btn-login')?.addEventListener('click', () => {
+function openLoginTab() {
   chrome.tabs.create({ url: `${PORTAL_URL}/?showLogin=true` });
-});
+}
+
+document.getElementById('btn-login')?.addEventListener('click', openLoginTab);
+document.getElementById('btn-login-simple')?.addEventListener('click', openLoginTab);
+document.getElementById('btn-login-new')?.addEventListener('click', openLoginTab);
+document.getElementById('btn-login-link')?.addEventListener('click', openLoginTab);
 document.getElementById('btn-signup')?.addEventListener('click', () => {
   chrome.tabs.create({ url: `${PORTAL_URL}/signup` });
 });
+document.getElementById('btn-signup-new')?.addEventListener('click', () => {
+  chrome.tabs.create({ url: `${PORTAL_URL}/signup` });
+});
 document.getElementById('footer-logout')?.addEventListener('click', async () => {
-  await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+  try {
+    await fetch(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
+  } catch { /* silent */ }
+  await clearAuthCookies();
+  updateProfileCard(null);
+  unlockRail(false);
   showState('login');
+  startLoginPoll();
 });
 document.getElementById('footer-settings')?.addEventListener('click', () => {
   chrome.tabs.create({ url: `${PORTAL_URL}/dashboard/profile` });

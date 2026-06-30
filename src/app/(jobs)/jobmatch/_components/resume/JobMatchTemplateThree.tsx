@@ -90,9 +90,18 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const phone = toStr(ov.contact?.phone || data?.contact?.phone || contact.phone || contact.phone_number || parsedData.personalInfo?.phone);
   const location = toStr(ov.contact?.location || data?.contact?.location || contact.location || parsedData.personalInfo?.location);
   const socialLinks = parsedData.social_links || llmData.social_links || parsedData.personalInfo || {};
-  const linkedin = toStr(ov.contact?.linkedin || socialLinks.linkedIn || socialLinks.linkedin || socialLinks.linkedinUrl || contact.linkedin);
-  const github = toStr(ov.contact?.github || socialLinks.github || socialLinks.GitHub || socialLinks.githubUrl || contact.github);
-  const portfolio = toStr(ov.contact?.portfolio || socialLinks.portfolio || socialLinks.website || socialLinks.portifolioUrl || contact.website);
+  const resolveLink = (val: unknown): string => {
+    if (!val) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "object" && val !== null) {
+      const o = val as Record<string, unknown>;
+      return toStr(o.url || o.link || o.href || "");
+    }
+    return "";
+  };
+  const linkedin = toStr(ov.contact?.linkedin) || resolveLink(socialLinks.linkedin) || resolveLink(socialLinks.linkedIn) || toStr(socialLinks.linkedinUrl || contact.linkedin);
+  const github = toStr(ov.contact?.github) || resolveLink(socialLinks.github) || resolveLink(socialLinks.GitHub) || toStr(socialLinks.githubUrl || contact.github);
+  const portfolio = toStr(ov.contact?.portfolio) || resolveLink(socialLinks.portfolio) || toStr(socialLinks.website || socialLinks.portifolioUrl || contact.website);
 
   let professionalSummary = ov.summary ?? (
     parsedData.professionalSummary || parsedData.professional_summary ||
@@ -142,11 +151,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const newlyAddedSoftSkillsSet = new Set(newlyAddedSoftSkills.map((s: string) => s.toLowerCase()));
   if (newlyAddedSoftSkills.length > 0) softSkills = [...softSkills, ...newlyAddedSoftSkills];
 
-  let internships = ov.internships ?? (parsedData.internships || parsedData.internship_details || llmData.internships || []);
+  let internships = ov.internships ?? (parsedData.internships || parsedData.internship || parsedData.internship_details || llmData.internships || llmData.internship || []);
   if (!Array.isArray(internships)) internships = [];
 
   let certifications = ov.certifications ?? (
-    parsedData.certifications || parsedData.certificates || parsedData.certification_details ||
+    parsedData.certifications || parsedData.certification || parsedData.certificates || parsedData.certification_details ||
     parsedData.professional_certifications || parsedData.courses || parsedData.training ||
     llmData.certifications || llmData.certificates || llmData.certification_details ||
     llmData.professional_certifications || llmData.courses || llmData.training ||
@@ -159,7 +168,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     if (typeof c === "string") return c.trim() !== "";
     if (typeof c === "object") {
       const o = c as Record<string, unknown>;
-      return !!(o.name || o.title || o.certification || o.course_name || o.course ||
+      return !!(o.name || o.full_name || o.title || o.certification || o.course_name || o.course ||
                 o.certification_name || o.certificate_name || o.cert_name);
     }
     return false;
@@ -477,7 +486,16 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const startDate = toStr(proj.startDate || proj.start_date || "");
                   const endDate = toStr(proj.endDate || proj.end_date || proj.date || proj.period || "");
                   const dateStr = startDate || endDate ? `${formatDate(startDate)}${startDate && endDate ? " – " : ""}${formatDate(endDate)}` : "";
-                  const desc = proj.description || proj.details || null;
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const unwrapProjItems = (arr: any[]) => arr.map((r: any) => typeof r === "object" ? toStr(r.text || r.description || r.value || "") : toStr(r)).filter(Boolean);
+                  const desc = (() => {
+                    if (proj.description) return proj.description;
+                    if (proj.details) return proj.details;
+                    const resps = Array.isArray(proj.responsibilities) ? unwrapProjItems(proj.responsibilities) : [];
+                    const achvs = Array.isArray(proj.achievements) ? unwrapProjItems(proj.achievements) : [];
+                    const combined = [...resps, ...achvs];
+                    return combined.length ? combined : null;
+                  })();
                   const rawTech = proj.technologies || proj.techStack || proj.tools;
                   const tech: string[] = Array.isArray(rawTech) ? rawTech.map((t: unknown) => toStr(t)).filter(Boolean) : rawTech ? [toStr(rawTech)].filter(Boolean) : [];
                   const isModified = hlIdx("projects", idx);
@@ -565,7 +583,15 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   const startDate = toStr(intern.startDate || intern.start_date || intern.from || "");
                   const endDate = intern.currentlyWorking ? "Present" : toStr(intern.endDate || intern.end_date || intern.to || "");
                   const dateStr = duration || (startDate ? `${formatDate(startDate)}${endDate ? ` – ${formatDate(endDate)}` : ""}` : "");
-                  const desc = intern.description || intern.responsibilities || null;
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const unwrapItems = (arr: any[]) => arr.map((r: any) => typeof r === "object" ? toStr(r.text || r.description || r.value || "") : toStr(r)).filter(Boolean);
+                  const desc = (() => {
+                    if (intern.description) return intern.description;
+                    const resps = Array.isArray(intern.responsibilities) ? unwrapItems(intern.responsibilities) : [];
+                    const achvs = Array.isArray(intern.achievements) ? unwrapItems(intern.achievements) : [];
+                    const combined = [...resps, ...achvs];
+                    return combined.length ? combined : null;
+                  })();
                   const isModified = hlIdx("internships", idx);
                   return (
                     <div key={idx} className="page-break-inside-avoid" style={{
@@ -578,6 +604,11 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                         {dateStr && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
                       </div>
                       {role && <div style={{ fontSize: "13.5px", fontStyle: "italic", color: "#374151", marginTop: "1px" }}>{role}</div>}
+                      {Array.isArray(intern.tech_stack) && intern.tech_stack.length > 0 && (
+                        <p style={{ fontSize: "13px", color: "#4b5563", fontStyle: "italic", margin: "2px 0 0" }}>
+                          <strong>Stack:</strong> {intern.tech_stack.map((t: unknown) => toStr(t)).filter(Boolean).join(", ")}
+                        </p>
+                      )}
                       {desc && renderBullets(desc)}
                     </div>
                   );
@@ -595,7 +626,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                   {certifications.map((cert: any, idx: number) => {
                     const certName = typeof cert === "string"
                       ? cert
-                      : toStr(cert.name || cert.title || cert.certification || cert.course_name || cert.course || cert.certification_name || cert.certificate_name || cert.cert_name || "");
+                      : toStr(cert.name || cert.full_name || cert.title || cert.certification || cert.course_name || cert.course || cert.certification_name || cert.certificate_name || cert.cert_name || "");
                     const issuedBy = typeof cert === "object" ? toStr(cert.issuedBy || cert.issued_by || cert.organization || cert.issuer || cert.institution || "") : "";
                     const year = typeof cert === "object" ? toStr(cert.year || cert.date || cert.issue_date || cert.completion_date || "") : "";
                     if (!certName) return null;
