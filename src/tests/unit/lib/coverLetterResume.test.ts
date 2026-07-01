@@ -10,6 +10,7 @@
 
 import {
   getCoverLetterParsedResumeId,
+  getCoverLetterResumeSource,
   hasCoverLetterUsableResume,
   type CoverLetterResumeCandidate,
 } from "@/lib/coverLetterResume";
@@ -39,6 +40,14 @@ describe("getCoverLetterParsedResumeId()", () => {
   it("returns resume_id when parsed_resume_id is absent", () => {
     const resume: CoverLetterResumeCandidate = { resume_id: "rid-002" };
     expect(getCoverLetterParsedResumeId(resume)).toBe("rid-002");
+  });
+
+  it("returns builder resume_id when source is builder", () => {
+    const resume: CoverLetterResumeCandidate = {
+      source: "builder",
+      resume_id: "builder-rid-002",
+    };
+    expect(getCoverLetterParsedResumeId(resume)).toBe("builder-rid-002");
   });
 
   it("returns parser_resume_id when parsed_resume_id and resume_id are absent", () => {
@@ -148,6 +157,17 @@ describe("getCoverLetterParsedResumeId()", () => {
 });
 
 // ── hasCoverLetterUsableResume() ───────────────────────────────────────────
+
+describe("getCoverLetterResumeSource()", () => {
+  it("returns builder for builder resumes", () => {
+    expect(getCoverLetterResumeSource({ source: "builder" })).toBe("builder");
+  });
+
+  it("defaults to parser for missing or unknown source", () => {
+    expect(getCoverLetterResumeSource({})).toBe("parser");
+    expect(getCoverLetterResumeSource({ source: "unknown" })).toBe("parser");
+  });
+});
 
 describe("hasCoverLetterUsableResume()", () => {
   it("returns true when resume has a usable parsed ID", () => {

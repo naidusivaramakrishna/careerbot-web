@@ -24,6 +24,8 @@ import type {
   CoverLetterListItem,
   CoverLetterStatus,
   JdMatchStatus,
+  JdMatchSummary,
+  KeywordReport,
 } from "@/types/coverLetter";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -158,6 +160,23 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
     it("has reason === null", () => {
       expect(cl.reason).toBeNull();
     });
+
+    it("has jd_match_summary with expected shape", () => {
+      expect(cl.jd_match_summary).not.toBeNull();
+      expect(typeof cl.jd_match_summary!.jd_match_pct).toBe("number");
+      expect(typeof cl.jd_match_summary!.total).toBe("number");
+      expect(typeof cl.jd_match_summary!.met).toBe("number");
+      expect(typeof cl.jd_match_summary!.partial).toBe("number");
+      expect(typeof cl.jd_match_summary!.missing).toBe("number");
+    });
+
+    it("has keyword_report with expected shape", () => {
+      expect(cl.keyword_report).not.toBeNull();
+      expect(Array.isArray(cl.keyword_report!.used_keywords)).toBe(true);
+      expect(typeof cl.keyword_report!.keyword_coverage_pct).toBe("number");
+      expect(typeof cl.keyword_report!.coverage_explanation).toBe("string");
+      expect(typeof cl.keyword_report!.keyword_counts).toBe("object");
+    });
   });
 
   // ── needsReview specific ──────────────────────────────────────────────
@@ -179,6 +198,10 @@ describe("CL_FIXTURES — CoverLetterResponse contract", () => {
 
     it("has reason === null", () => {
       expect(cl.reason).toBeNull();
+    });
+
+    it("has at least one warning (needs_review contract invariant)", () => {
+      expect(cl.warnings.length).toBeGreaterThan(0);
     });
   });
 

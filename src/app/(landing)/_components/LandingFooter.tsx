@@ -44,7 +44,6 @@ const columns: FooterColumn[] = [
     heading: 'Company',
     links: [
       { label: 'Blog', href: '/blog' },
-      { label: 'How It Works', href: '/#how-it-works' },
       { label: 'Pricing', href: '/payments' },
       { label: 'Contact', href: 'mailto:support@careerbot.com' },
     ],

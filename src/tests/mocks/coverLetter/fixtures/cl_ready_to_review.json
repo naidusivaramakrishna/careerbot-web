@@ -32,6 +32,13 @@
     {"requirement": "Kubernetes", "status": "not_found", "supporting_claim_ids": [], "used_in_letter": false},
     {"requirement": "Observability tooling", "status": "partial", "supporting_claim_ids": [], "used_in_letter": false}
   ],
+  "jd_match_summary": {"jd_match_pct": 75.0, "total": 6, "met": 4, "partial": 1, "missing": 1},
+  "keyword_report": {
+    "used_keywords": ["Python", "FastAPI", "MongoDB"],
+    "keyword_coverage_pct": 75.0,
+    "coverage_explanation": "3 of 4 selected keywords used in the letter.",
+    "keyword_counts": {"Python": 2, "FastAPI": 1, "MongoDB": 1}
+  },
   "grounding": {
     "claim_catalog_size": 14,
     "high_confidence_claims": 14,

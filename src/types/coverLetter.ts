@@ -17,11 +17,17 @@
 // ── closed enums (Literal types reject unknown values) ─────────
 export type CoverLetterStatus = "ready_to_review" | "needs_review" | "failed";
 
-export type CoverLetterTone = "professional";
+export type CoverLetterTone = "professional" | "warm" | "concise";
 
 export type CoverLetterExportFormat = "pdf" | "docx";
 
-export type CoverLetterTemplateId = "classic" | "modern" | "compact";
+export type CoverLetterTemplateId =
+  | "classic"
+  | "modern"
+  | "compact"
+  | "executive"
+  | "minimal"
+  | "signature";
 
 export type AppContextSource = "user" | "jd" | "unknown";
 
@@ -46,7 +52,10 @@ export type CoverLetterReason =
   | "claim_catalog_empty"
   | "unbacked_claim_removed"
   | "low_confidence_fact_used"
-  | "thin_claim_catalog";
+  | "thin_claim_catalog"
+  | "short_letter_warning"
+  | "long_letter_warning"
+  | "review_required";
 
 // Supported resume-parser schema versions on the request — must
 // match `_SUPPORTED_RESUME_SCHEMA_VERSIONS` in the api-side schema.
@@ -79,6 +88,7 @@ export interface GenerateOptions {
 
 export interface CoverLetterGenerateRequest {
   parsed_resume_id: string;
+  resume_source?: CoverLetterDefaultResumeSource;
   jd_id: string;
   application_context?: ApplicationContext | null;
   options?: GenerateOptions;
@@ -90,7 +100,55 @@ export interface CoverLetterFormSubmit {
   options?: GenerateOptions;
 }
 
+export interface CoverLetterUpdateRequest {
+  role_title?: string | null;
+  company_name?: string | null;
+  plain_text?: string | null;
+}
+
 // ── response sub-types ─────────────────────────────────────────
+export type CoverLetterDefaultResumeSource = "parser" | "builder";
+
+export interface CoverLetterDefaultResumeResponse {
+  source: CoverLetterDefaultResumeSource | null;
+  resume_id: string | null;
+  display_name: string | null;
+  status: string | null;
+  updated_at: string | null;
+  is_usable_for_cover_letter: boolean;
+  is_user_default?: boolean;
+  selection_reason?: "user_default" | "latest_usable" | "fallback" | string;
+  summary?: {
+    years_experience: number | null;
+    skills_count: number;
+    ats_keywords_count: number;
+    education_count: number;
+    experience_count: number;
+    project_count: number;
+    internship_count: number;
+  } | null;
+}
+
+export interface CoverLetterDefaultResumeRequest {
+  resume_id: string;
+  resume_source: CoverLetterDefaultResumeSource;
+}
+
+export interface CoverLetterResumeOption {
+  source: CoverLetterDefaultResumeSource;
+  resume_id: string;
+  display_name: string;
+  status?: string | null;
+  updated_at?: string | null;
+  is_usable_for_cover_letter: boolean;
+  is_user_default?: boolean;
+  summary?: CoverLetterDefaultResumeResponse["summary"];
+}
+
+export interface CoverLetterResumeOptionsResponse {
+  resumes: CoverLetterResumeOption[];
+}
+
 export interface CoverLetter {
   greeting: string;
   opening: string;
@@ -119,6 +177,36 @@ export interface JdMatchMatrixEntry {
   used_in_letter?: boolean;
 }
 
+export interface JdMatchSummary {
+  jd_match_pct: number;
+  total: number;
+  met: number;
+  partial: number;
+  missing: number;
+}
+
+export interface SafeKeywordSuggestion {
+  keyword: string;
+  message: string;
+}
+
+export interface KeywordReport {
+  used_keywords: string[];
+  keyword_coverage_pct: number;
+  /** dict[str, str] on the server — key is the keyword, value is the usage note. */
+  coverage_explanation: Record<string, string>;
+  keyword_counts: Record<string, number>;
+  partial_keywords: string[];
+  missing_keywords: string[];
+  evidence_usage_pct: number;
+  readability_score: number;
+  ats_risk: string;
+  keyword_stuffing_score: number;
+  missing_required: string[];
+  missing_preferred: string[];
+  safe_suggestions: SafeKeywordSuggestion[];
+}
+
 export interface Grounding {
   claim_catalog_size?: number;
   high_confidence_claims?: number;
@@ -135,6 +223,7 @@ export interface ResponseMetadata {
   tokens_used?: number;
   llm_calls?: number;
   model?: string;
+  stage1_fallback_reason?: string | null;
 }
 
 export interface CoverLetterWarning {
@@ -155,6 +244,9 @@ export interface CoverLetterWarning {
  *   - status !== "failed"  → cover_letter / plain_text MUST be present,
  *                            reason MUST be null
  */
+/** Where the cover letter response was served from on this request. */
+export type CacheSource = "ai" | "redis" | "mongodb";
+
 export interface CoverLetterResponse {
   letter_id: string;
   /** ISO-8601 UTC string (JSON serialization of datetime). */
@@ -164,10 +256,14 @@ export interface CoverLetterResponse {
   plain_text: string | null;
   generation_status: GenerationStatus;
   jd_match_matrix: JdMatchMatrixEntry[];
+  jd_match_summary?: JdMatchSummary | null;
+  keyword_report?: KeywordReport | null;
   grounding: Grounding;
   metadata: ResponseMetadata;
   warnings: CoverLetterWarning[];
   reason: CoverLetterReason | null;
+  /** "ai" = freshly generated; "redis" = Redis hot cache; "mongodb" = MongoDB semantic cache. */
+  cache_source: CacheSource;
 }
 
 // ── list view ──────────────────────────────────────────────────

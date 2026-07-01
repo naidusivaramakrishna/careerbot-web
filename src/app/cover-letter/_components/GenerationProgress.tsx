@@ -47,23 +47,23 @@ export default function GenerationProgress({
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-        <div className="flex justify-center mb-6">
+    <div className="flex min-h-[calc(100vh-7rem)] items-center justify-center px-4 py-8">
+      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl 2xl:p-8">
+        <div className="mb-5 flex justify-center 2xl:mb-6">
           <div
-            className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-[#2557a7]"
+            className="h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-[#2557a7] 2xl:h-16 2xl:w-16"
             role="status"
             aria-label="Generating cover letter"
           />
         </div>
-        <h2 className="text-xl font-bold text-gray-900 text-center mb-1">
+        <h2 className="mb-1 text-center text-lg font-bold text-gray-900 2xl:text-xl">
           Generating your cover letter…
         </h2>
-        <p className="text-sm text-gray-500 text-center mb-6">
+        <p className="mb-5 text-center text-sm text-gray-500 2xl:mb-6">
           This usually takes 20–40 seconds.
         </p>
 
-        <ul role="list" aria-live="polite" className="space-y-2 mb-6">
+        <ul role="list" aria-live="polite" className="mb-5 space-y-2 2xl:mb-6">
           {STEPS.map((step) => {
             const status = stepStatus(step.appearAt, elapsed);
             return (
@@ -107,7 +107,7 @@ export default function GenerationProgress({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-gray-100 px-4 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400"
           >
             Cancel
           </button>

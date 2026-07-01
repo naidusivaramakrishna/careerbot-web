@@ -23,15 +23,16 @@ const CoverLetterDashboardShell = dynamic(
  * dashboard experience (same as Resume Builder and ATS Scanner).
  */
 export default function CoverLetterLayout({ children }: { children: ReactNode }) {
-  const enabled = process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED === "true";
   const pathname = usePathname();
+  const enabled = process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED === "true";
+  const isPublicLandingPage = pathname === "/cover-letter";
+
+  if (isPublicLandingPage) {
+    return children;
+  }
 
   if (!enabled) {
     return <FeatureUnavailableScreen />;
-  }
-
-  if (pathname === "/cover-letter") {
-    return <>{children}</>;
   }
 
   return (

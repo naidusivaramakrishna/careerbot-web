@@ -8,6 +8,7 @@
  *   POST   /api/v1/cover-letter/generate       generateCoverLetter
  *   GET    /api/v1/cover-letter/{letter_id}    getCoverLetter
  *   GET    /api/v1/cover-letter                listCoverLetters
+ *   PATCH  /api/v1/cover-letter/{letter_id}    updateCoverLetter
  *   DELETE /api/v1/cover-letter/{letter_id}    deleteCoverLetter
  *
  * Goes through `httpClient` (axios wrapper at src/lib/http.ts)
@@ -20,11 +21,15 @@ import axios from "axios";
 import { httpClient } from "@/lib/http";
 import type {
   CoverLetterExportFormat,
+  CoverLetterDefaultResumeRequest,
+  CoverLetterDefaultResumeResponse,
   CoverLetterGenerateRequest,
   CoverLetterListResponse,
+  CoverLetterResumeOptionsResponse,
   CoverLetterResponse,
   CoverLetterTemplateCatalogResponse,
   CoverLetterTemplateId,
+  CoverLetterUpdateRequest,
   ListCoverLettersParams,
 } from "@/types/coverLetter";
 import type { CoverLetterApiErrorReason } from "@/lib/coverLetterMessages";
@@ -332,6 +337,81 @@ export async function listCoverLetterTemplates(): Promise<CoverLetterTemplateCat
   }
 }
 
+export async function getDefaultCoverLetterResume(): Promise<CoverLetterDefaultResumeResponse> {
+  try {
+    const { data } = await httpClient.get<CoverLetterDefaultResumeResponse>(
+      `${BASE}/default-resume`,
+      {
+        headers: {
+          "X-Skip-Auth-Redirect": "true",
+        },
+      },
+    );
+    return data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+export async function listCoverLetterResumeOptions(): Promise<CoverLetterResumeOptionsResponse> {
+  try {
+    const { data } = await httpClient.get<CoverLetterResumeOptionsResponse>(
+      `${BASE}/default-resume/options`,
+      {
+        headers: {
+          "X-Skip-Auth-Redirect": "true",
+        },
+      },
+    );
+    return data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+export async function setDefaultCoverLetterResume(
+  body: CoverLetterDefaultResumeRequest,
+): Promise<CoverLetterDefaultResumeResponse> {
+  try {
+    const { data } = await httpClient.put<CoverLetterDefaultResumeResponse>(
+      `${BASE}/default-resume`,
+      body,
+      {
+        headers: {
+          "X-Skip-Auth-Redirect": "true",
+        },
+      },
+    );
+    return data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+export async function updateCoverLetter(
+  letterId: string,
+  body: CoverLetterUpdateRequest,
+): Promise<CoverLetterResponse | null> {
+  try {
+    const { data } = await httpClient.patch<CoverLetterResponse>(
+      `${BASE}/${encodeURIComponent(letterId)}`,
+      body,
+      {
+        headers: {
+          "X-Skip-Auth-Redirect": "true",
+        },
+      },
+    );
+    return data;
+  } catch (err) {
+    const mapped = mapError(err);
+    if (mapped.reason === "not_found") {
+      return null;
+    }
+    throw mapped;
+  }
+}
+
 export interface DownloadCoverLetterParams {
   format: CoverLetterExportFormat;
   template_id: CoverLetterTemplateId;
@@ -349,6 +429,7 @@ export async function downloadCoverLetter(
         responseType: "blob",
         headers: {
           "X-Skip-Auth-Redirect": "true",
+          "X-Skip-Login-Redirect": "true",
         },
       },
     );
@@ -409,10 +490,12 @@ function triggerBlobDownload(blob: Blob, filename: string) {
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  link.rel = "noopener";
+  link.style.display = "none";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
 
 export type { CoverLetterApiErrorReason } from "@/lib/coverLetterMessages";

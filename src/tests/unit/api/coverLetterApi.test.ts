@@ -38,6 +38,7 @@ vi.mock("@/lib/http", () => ({
   httpClient: {
     post: vi.fn(),
     get: vi.fn(),
+    patch: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -45,8 +46,10 @@ vi.mock("@/lib/http", () => ({
 // Import after mocking
 import {
   generateCoverLetter,
+  getDefaultCoverLetterResume,
   getCoverLetter,
   listCoverLetters,
+  updateCoverLetter,
   deleteCoverLetter,
   CoverLetterApiError,
 } from "@/api/coverLetterApi";
@@ -467,6 +470,102 @@ describe("listCoverLetters()", () => {
 });
 
 // ── deleteCoverLetter() ───────────────────────────────────────────────────
+
+describe("getDefaultCoverLetterResume()", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("GETs the default cover letter resume", async () => {
+    const responseData = {
+      source: "parser",
+      resume_id: "resume-1",
+      display_name: "Asha Resume.pdf",
+      status: "parsed",
+      updated_at: "2026-06-27T10:00:00Z",
+      is_usable_for_cover_letter: true,
+    };
+    mockHttpClient.get.mockResolvedValueOnce({ data: responseData });
+
+    const result = await getDefaultCoverLetterResume();
+
+    expect(result).toEqual(responseData);
+    expect(mockHttpClient.get).toHaveBeenCalledWith(
+      "/cover-letter/default-resume",
+      { headers: { "X-Skip-Auth-Redirect": "true" } },
+    );
+  });
+
+  it("throws a mapped error on failure", async () => {
+    mockHttpClient.get.mockRejectedValueOnce(makeAxiosError(401));
+
+    await expect(getDefaultCoverLetterResume()).rejects.toMatchObject({
+      reason: "unauthorized",
+    });
+  });
+});
+
+describe("updateCoverLetter()", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("PATCHes role and company metadata", async () => {
+    const responseData = { letter_id: "abc", status: "ready_to_review" };
+    mockHttpClient.patch.mockResolvedValueOnce({ data: responseData });
+
+    const result = await updateCoverLetter("abc", {
+      role_title: "Platform Engineer",
+      company_name: "Globex",
+    });
+
+    expect(result).toEqual(responseData);
+    expect(mockHttpClient.patch).toHaveBeenCalledWith(
+      "/cover-letter/abc",
+      { role_title: "Platform Engineer", company_name: "Globex" },
+      { headers: { "X-Skip-Auth-Redirect": "true" } },
+    );
+  });
+
+  it("PATCHes edited cover letter text", async () => {
+    const responseData = { letter_id: "abc", status: "ready_to_review" };
+    mockHttpClient.patch.mockResolvedValueOnce({ data: responseData });
+
+    const result = await updateCoverLetter("abc", {
+      plain_text: "Dear Hiring Manager,\n\nEdited letter text.",
+    });
+
+    expect(result).toEqual(responseData);
+    expect(mockHttpClient.patch).toHaveBeenCalledWith(
+      "/cover-letter/abc",
+      { plain_text: "Dear Hiring Manager,\n\nEdited letter text." },
+      { headers: { "X-Skip-Auth-Redirect": "true" } },
+    );
+  });
+
+  it("returns null on a 404", async () => {
+    mockHttpClient.patch.mockRejectedValueOnce(makeAxiosError(404));
+    const result = await updateCoverLetter("missing-id", {
+      role_title: "Platform Engineer",
+    });
+    expect(result).toBeNull();
+  });
+
+  it("throws a mapped error on non-404 errors", async () => {
+    mockHttpClient.patch.mockRejectedValueOnce(makeAxiosError(422));
+    await expect(updateCoverLetter("bad-id", { role_title: "" })).rejects.toMatchObject({
+      reason: "validation",
+    });
+  });
+
+  it("URL-encodes the letterId in the request path", async () => {
+    mockHttpClient.patch.mockResolvedValueOnce({ data: {} });
+    await updateCoverLetter("letter/with/slashes", { company_name: "Globex" });
+
+    const url: string = mockHttpClient.patch.mock.calls[0][0];
+    expect(url).toContain("letter%2Fwith%2Fslashes");
+  });
+});
 
 describe("deleteCoverLetter()", () => {
   beforeEach(() => {

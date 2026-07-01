@@ -3,14 +3,19 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
   ArrowRight,
   Briefcase,
+  Brain,
+  Calculator,
   ChevronDown,
   ClipboardList,
+  Code2,
   FileText,
   LayoutTemplate,
   Mail,
+  MessageCircle,
   Menu,
   Mic,
   ScanSearch,
@@ -48,7 +53,6 @@ interface DropdownGroup {
 interface DirectLink {
   label: string;
   href: string;
-  sectionId: string;
   ariaLabel: string;
 }
 
@@ -116,23 +120,63 @@ const jobsGroup: DropdownGroup = {
   ],
 };
 
+const mockTestGroup: DropdownGroup = {
+  id: 'mock-test',
+  label: 'Mock Test',
+  sectionHeader: 'Assessment practice',
+  highlight: {
+    title: 'Practice by skill area',
+    description: 'Start focused tests for aptitude, reasoning, technical, and communication readiness.',
+    href: '/mock-test',
+    cta: 'View all tests',
+  },
+  items: [
+    {
+      icon: <Calculator size={18} />,
+      label: 'Arithmetic',
+      description: 'Percentages, ratios, time-work',
+      href: '/mock-test/custom?category=arithmetic',
+    },
+    {
+      icon: <ClipboardList size={18} />,
+      label: 'Aptitude',
+      description: 'Quant, data, verbal ability',
+      href: '/mock-test/custom?category=aptitude',
+    },
+    {
+      icon: <Brain size={18} />,
+      label: 'Reasoning',
+      description: 'Logic, sequences, coding patterns',
+      href: '/mock-test/custom?category=reasoning',
+    },
+    {
+      icon: <Code2 size={18} />,
+      label: 'Technical',
+      description: 'DSA, SQL, OOP, programming',
+      href: '/mock-test/custom?category=technical',
+    },
+    {
+      icon: <MessageCircle size={18} />,
+      label: 'Communication Assessment',
+      description: 'Speaking and workplace communication',
+      href: '/communication',
+    },
+  ],
+};
+
 /**
  * Exact left-to-right order of all nav items.
  * Resume Tools → Cover Letter → Jobs → Mock Interview → Mock Test → Blog → Pricing
  */
 const navItems: NavItem[] = [
   { kind: 'dropdown', group: resumeGroup },
-  { kind: 'link', link: { label: 'Cover Letter', href: '/cover-letter', sectionId: '', ariaLabel: 'Cover Letter Generator' } },
+  { kind: 'link', link: { label: 'Cover Letter', href: '/cover-letter', ariaLabel: 'Cover Letter Generator' } },
   { kind: 'dropdown', group: jobsGroup },
-  { kind: 'link', link: { label: 'Mock Interview', href: '/mock-interview', sectionId: '', ariaLabel: 'Mock Interview Practice' } },
-  { kind: 'link', link: { label: 'Mock Test', href: '/mock-test', sectionId: '', ariaLabel: 'Mock Test Practice' } },
-  { kind: 'link', link: { label: 'Blog', href: '/blog', sectionId: 'blog', ariaLabel: 'Go to blog' } },
-  { kind: 'link', link: { label: 'Pricing', href: '/payments', sectionId: 'pricing', ariaLabel: 'View pricing page' } },
+  { kind: 'link', link: { label: 'Mock Interview', href: '/mock-interview', ariaLabel: 'Mock Interview Practice' } },
+  { kind: 'dropdown', group: mockTestGroup },
+  { kind: 'link', link: { label: 'Blog', href: '/blog', ariaLabel: 'Go to blog' } },
+  { kind: 'link', link: { label: 'Pricing', href: '/payments', ariaLabel: 'View pricing page' } },
 ];
-
-const anchorLinks = navItems
-  .filter((item): item is { kind: 'link'; link: DirectLink } => item.kind === 'link' && item.link.sectionId !== '')
-  .map((item) => item.link);
 
 /* ─── Sub-components ─────────────────────────────────────────────────── */
 
@@ -172,7 +216,7 @@ function DesktopDropdown({
       <button
         aria-haspopup="true"
         aria-expanded={active}
-        className={`flex items-center gap-1 rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors ${
+        className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-2 text-[13px] font-semibold transition-colors xl:px-3.5 xl:text-sm ${
           active ? 'bg-blue-50 text-[#2557a7]' : 'cursor-pointer text-gray-700 hover:bg-blue-50 hover:text-[#2557a7]'
         }`}
       >
@@ -280,50 +324,17 @@ const mobileLinkIcons: Record<string, React.ReactNode> = {
 /* ─── Root component ─────────────────────────────────────────────────── */
 
 export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNavbarProps) {
+  const pathname = usePathname();
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>('resume');
-  const [activeSection, setActiveSection] = useState<string | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 4);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  useEffect(() => {
-    const sectionIds = anchorLinks.map((l) => l.sectionId).filter(Boolean);
-
-    const updateActiveSection = () => {
-      if (window.location.pathname !== '/') {
-        setActiveSection(null);
-        return;
-      }
-      const active = sectionIds
-        .map((id) => {
-          const section = document.getElementById(id);
-          if (!section) return null;
-          const rect = section.getBoundingClientRect();
-          return { id, top: rect.top, bottom: rect.bottom };
-        })
-        .filter(Boolean)
-        .find((s) => s && s.top <= 120 && s.bottom > 120);
-
-      setActiveSection(active?.id ?? null);
-    };
-
-    updateActiveSection();
-    window.addEventListener('scroll', updateActiveSection, { passive: true });
-    window.addEventListener('resize', updateActiveSection);
-    window.addEventListener('hashchange', updateActiveSection);
-
-    return () => {
-      window.removeEventListener('scroll', updateActiveSection);
-      window.removeEventListener('resize', updateActiveSection);
-      window.removeEventListener('hashchange', updateActiveSection);
-    };
   }, []);
 
   useEffect(() => {
@@ -365,11 +376,11 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
   return (
     <>
       <header
-        className={`sticky top-0 z-50 h-16 border-b border-slate-200 bg-white/95 backdrop-blur transition-shadow duration-200 ${
+        className={`sticky top-0 z-50 h-[72px] border-b border-slate-200 bg-white/95 backdrop-blur transition-shadow duration-200 ${
           scrolled ? 'shadow-sm' : ''
         }`}
       >
-        <nav className="mx-auto flex h-full max-w-screen-xl items-center justify-between gap-4 px-4 lg:px-8">
+        <nav className="mx-auto flex h-full max-w-screen-xl items-center justify-between gap-2 px-3 lg:px-3 xl:gap-4 xl:px-8">
           {/* Logo */}
           <Link href="/" className="-ml-1 flex shrink-0 items-center transition-opacity hover:opacity-80" aria-label="CareerBOT home">
             <Image
@@ -377,15 +388,15 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
               alt="CareerBot"
               width={54}
               height={54}
-              className="-mr-1 shrink-0"
+              className="-mr-1 h-11 w-11 shrink-0 xl:h-[54px] xl:w-[54px]"
               style={{ filter: 'hue-rotate(8deg) saturate(130%) brightness(68%)' }}
               priority
             />
-            <span className="text-xl font-bold tracking-tight text-[#2557a7]">CareerBOT</span>
+            <span className="text-base font-bold tracking-tight text-[#2557a7] xl:text-xl">CareerBOT</span>
           </Link>
 
           {/* Desktop nav — items render in declared order */}
-          <div className="hidden flex-1 items-center justify-center gap-1 lg:flex">
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex xl:gap-2">
             {navItems.map((item, i) => {
               if (item.kind === 'dropdown') {
                 return (
@@ -400,7 +411,7 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
                 );
               }
               const { link } = item;
-              const isActive = link.sectionId !== '' && activeSection === link.sectionId;
+              const isActive = pathname === link.href;
               return (
                 <Link
                   key={link.href + link.label + i}
@@ -408,7 +419,7 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
                   aria-label={link.ariaLabel}
                   aria-current={isActive ? 'page' : undefined}
                   onClick={() => setActiveDropdown(null)}
-                  className={`cursor-pointer rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors ${
+                  className={`cursor-pointer whitespace-nowrap rounded-full px-2 py-2 text-[13px] font-semibold transition-colors xl:px-3.5 xl:text-sm ${
                     isActive
                       ? 'bg-blue-50 text-[#2557a7]'
                       : 'text-gray-700 hover:bg-blue-50 hover:text-[#2557a7]'
@@ -422,19 +433,19 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
 
           {/* Auth buttons */}
           <div className="flex shrink-0 items-center gap-2">
-            <div className="hidden items-center gap-2 lg:flex">
+            <div className="hidden items-center gap-1.5 lg:flex xl:gap-2">
               <button
                 onClick={handleSignin}
-                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-[13px] font-semibold text-gray-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7]"
+                className="cursor-pointer whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] xl:px-4 xl:text-sm"
               >
                 Sign In
               </button>
               <Link
                 href="/builder/start"
                 onClick={() => setActiveDropdown(null)}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-[#2557a7] px-4 py-2 text-[13px] font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_8px_22px_rgba(37,87,167,0.28)] active:scale-95"
+                className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_8px_22px_rgba(37,87,167,0.28)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
               >
-                <ShieldCheck size={14} />
+                <ShieldCheck size={13} className="xl:h-3.5 xl:w-3.5" />
                 Get Started Free
               </Link>
             </div>
@@ -455,7 +466,7 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
         <div className="fixed inset-0 z-[60] lg:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={closeMobile} aria-hidden="true" />
           <div className="absolute right-0 top-0 flex h-full w-[min(88vw,340px)] flex-col bg-white shadow-xl">
-            <div className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 px-4">
+            <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-gray-200 px-4">
               <Link href="/" onClick={closeMobile} className="flex items-center transition-opacity hover:opacity-80">
                 <Image
                   src="/assets/icons/Logo.png"
@@ -490,7 +501,7 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
                   );
                 }
                 const { link } = item;
-                const isActive = link.sectionId !== '' && activeSection === link.sectionId;
+                const isActive = pathname === link.href;
                 const icon = mobileLinkIcons[link.label];
                 return (
                   <Link

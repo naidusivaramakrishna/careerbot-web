@@ -241,6 +241,19 @@ export async function parseJDUrl(url: string) {
   }
 }
 
+export async function parseJDByJob(jobId: string) {
+  try {
+    const res = await safePost<unknown>(`/jd/parse-by-job/${encodeURIComponent(jobId)}`);
+    return {
+      raw: res,
+      jd_id: extractJdId(res),
+      duplicate: Boolean(isObject(res) && res['from_cache']),
+    } as ParseJDResponse;
+  } catch (err: unknown) {
+    return handleDuplicateJd(err);
+  }
+}
+
 /* ========== MATCHING ========== */
 export async function matchResumeAndJD(resume_id: string, jd_id: string) {
   const data = await safePost(`/matcher/match`, {

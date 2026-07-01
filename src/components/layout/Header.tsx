@@ -233,7 +233,7 @@ export default function Header() {
                         <Bell size={20} className="text-[#5896d7]" />
                       </div>
                       <p className="text-sm font-semibold text-gray-700">All caught up!</p>
-                      <p className="text-xs text-gray-400 mt-0.5">No notifications right now</p>
+                      <p className="text-[13px] text-gray-400 mt-0.5">No notifications right now</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-50">
@@ -278,7 +278,7 @@ export default function Header() {
 
                             {/* Content */}
                             <div className="flex-1 min-w-0">
-                              <p className={`text-xs font-bold leading-snug ${n.read ? 'text-gray-600' : 'text-gray-900'}`}>
+                              <p className={`text-[13px] font-bold leading-snug ${n.read ? 'text-gray-600' : 'text-gray-900'}`}>
                                 {n.title}
                               </p>
                               <p className="text-[11px] text-gray-500 leading-relaxed mt-0.5 line-clamp-2">
@@ -319,7 +319,7 @@ export default function Header() {
                   <Link
                     href="/alerts"
                     onClick={() => setShowNotifs(false)}
-                    className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-[12px] font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+                    className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
                     style={{ background: "#2557a7" }}
                   >
                     View All Notifications
@@ -342,7 +342,7 @@ export default function Header() {
               {profilePicUrl ? (
                 <Image src={profilePicUrl} alt="Profile" width={32} height={32} className="object-cover w-full h-full" unoptimized />
               ) : (
-                <span className="text-white text-xs font-bold">{displayInitial}</span>
+                <span className="text-white text-[13px] font-bold">{displayInitial}</span>
               )}
             </button>
 
@@ -351,7 +351,7 @@ export default function Header() {
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
                   {displayEmail && (
-                    <p className="text-xs text-gray-500 truncate mt-0.5">{displayEmail}</p>
+                    <p className="text-[13px] text-gray-500 truncate mt-0.5">{displayEmail}</p>
                   )}
                 </div>
                 <Link
