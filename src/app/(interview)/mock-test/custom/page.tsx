@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { ChevronRight, Play, AlertCircle, Wand2 } from 'lucide-react';
 import HighlightBox from '../_components/HighlightBox';
 
@@ -9,22 +9,6 @@ type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Mixed';
 
 const categoryOptions = ['Aptitude', 'Arithmetic', 'Reasoning', 'Technical'] as const;
 type Category = typeof categoryOptions[number];
-
-const categoryBySlug: Record<string, Category> = {
-  aptitude: 'Aptitude',
-  arithmetic: 'Arithmetic',
-  reasoning: 'Reasoning',
-  technical: 'Technical',
-};
-
-function getInitialCategories(categoryParam: string | null): Category[] {
-  if (!categoryParam) return ['Aptitude'];
-  const categories = categoryParam
-    .split(',')
-    .map((item) => categoryBySlug[item.trim().toLowerCase()])
-    .filter((item): item is Category => Boolean(item));
-  return categories.length ? Array.from(new Set(categories)) : ['Aptitude'];
-}
 
 const difficultyOptions: Difficulty[] = ['Easy', 'Medium', 'Hard', 'Mixed'];
 
@@ -42,11 +26,8 @@ const diffMeta: Record<Difficulty, { emoji: string; color: string; bg: string; b
 
 export default function CustomTestPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  const [categories, setCategories] = useState<Category[]>(() =>
-    getInitialCategories(searchParams.get('category') ?? searchParams.get('categories')),
-  );
+  const [categories, setCategories] = useState<Category[]>(['Aptitude']);
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [questionCount] = useState(30);
   const [negativeMarking, setNegativeMarking] = useState(false);
