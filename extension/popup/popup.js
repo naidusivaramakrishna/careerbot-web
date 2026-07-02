@@ -18,6 +18,30 @@ function cbIconFallback(parent, size) { // safe: static SVG, no user data
 const BASE_URL   = CAREERBOT_CONFIG.BASE_URL;
 const PORTAL_URL = CAREERBOT_CONFIG.PORTAL_URL;
 
+// ─── Upload / input constraints ───────────────────────────────────────────────
+const MAX_RESUME_FILE_BYTES = 10 * 1024 * 1024; // 10MB
+const ALLOWED_RESUME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+];
+const ALLOWED_RESUME_EXTENSIONS = ['.pdf', '.docx'];
+const MAX_JD_TEXT_LENGTH = 30000; // ~30k chars — generous for a real JD, caps abuse
+
+function validateResumeFile(file) {
+  if (!file) return 'No file selected.';
+  if (file.size === 0) return 'The selected file is empty.';
+  if (file.size > MAX_RESUME_FILE_BYTES) return 'Resume file is too large (max 10MB).';
+  const name = (file.name || '').toLowerCase();
+  const hasAllowedExt = ALLOWED_RESUME_EXTENSIONS.some(ext => name.endsWith(ext));
+  const hasAllowedType = !file.type || ALLOWED_RESUME_TYPES.includes(file.type);
+  if (!hasAllowedExt || !hasAllowedType) return 'Only PDF and DOCX resumes are supported.';
+  return null;
+}
+
+function clampJdText(text) {
+  return typeof text === 'string' ? text.slice(0, MAX_JD_TEXT_LENGTH) : '';
+}
+
 // ─── Sidebar rail toggle ───────────────────────────────────────────────────────
 const sideRail   = document.querySelector('.side-rail');
 const openBtn    = document.getElementById('btn-open-rail');
@@ -71,8 +95,23 @@ function unlockRail(unlock) {
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
+const API_TIMEOUT_MS = 20000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timed out. Please try again.');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     ...options,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -81,7 +120,11 @@ async function apiFetch(path, options = {}) {
     let detail = '';
     try { const d = await res.json(); detail = JSON.stringify(d); } catch { /* ignore */ }
     console.error(`[apiFetch] ${res.status} ${path}`, detail);
-    throw new Error(`${res.status}: ${detail}`);
+    // Keep the detailed error server-side only; show a generic message to the user.
+    const err = new Error('Something went wrong. Please try again.');
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
   }
   return res.json();
 }
@@ -90,21 +133,52 @@ async function apiFetch(path, options = {}) {
 // Clear auth cookies on both the portal and backend origins so the session
 // is truly gone regardless of which host set them.
 async function clearAuthCookies() {
-  if (!chrome.cookies?.remove) return;
+  if (!chrome.cookies?.remove) return true;
   const origins = [
     PORTAL_URL.replace(/\/$/, ''),
     BASE_URL.replace(/\/api\/v1\/?$/, ''),
   ];
   const names = ['access_token', 'refresh_token', 'admin_access_token', 'admin_refresh_token'];
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     origins.flatMap(url =>
-      names.map(name => new Promise(r => chrome.cookies.remove({ url, name }, r)))
+      names.map(name => new Promise((resolve) => {
+        chrome.cookies.remove({ url, name }, (removed) => {
+          // removed is null if the cookie didn't exist or couldn't be removed
+          // (e.g. url didn't match the cookie's domain/path attributes).
+          resolve({ url, name, removed: Boolean(removed) || !chrome.runtime.lastError });
+        });
+      }))
     )
   );
+
+  // Re-check that no session cookie actually remains, since `remove` can
+  // silently no-op if the url doesn't match the cookie's domain/path.
+  let stillPresent = false;
+  for (const url of origins) {
+    for (const name of names) {
+      const cookie = await new Promise((resolve) => chrome.cookies.get({ url, name }, resolve));
+      if (cookie) { stillPresent = true; break; }
+    }
+    if (stillPresent) break;
+  }
+  if (stillPresent) console.warn('[clearAuthCookies] a session cookie may still be present after logout');
+  return !stillPresent;
+}
+
+// Requires the backend to confirm an authenticated flag, not just the
+// presence of fields that a non-auth error payload could also contain.
+function isSafeHttpUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function isValidUser(data) {
   if (!data || typeof data !== 'object') return false;
+  if (data.authenticated === false || data.success === false || data.error) return false;
   const u = data.user || data;
   return Boolean(u.email || u.id || u._id || u.full_name || u.name);
 }
@@ -116,9 +190,11 @@ async function verifyExtensionUser() {
 }
 
 async function uploadResume(file) {
+  const validationError = validateResumeFile(file);
+  if (validationError) throw new Error(validationError);
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(`${BASE_URL}/parser/parse_resume/`, {
+  const res = await fetchWithTimeout(`${BASE_URL}/parser/parse_resume/`, {
     method: 'POST',
     credentials: 'include',
     body: form,
@@ -130,11 +206,11 @@ async function uploadResume(file) {
 
 // ─── Parse JD in extension (handles duplicate JD gracefully) ──────────────────
 async function parseJDInExtension(jdText) {
-  const res = await fetch(`${BASE_URL}/jd/parse`, {
+  const res = await fetchWithTimeout(`${BASE_URL}/jd/parse`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jd_texts: [jdText], skip_duplicate_check: false }),
+    body: JSON.stringify({ jd_texts: [clampJdText(jdText)], skip_duplicate_check: false }),
   });
   const data = await res.json();
   if (!res.ok) {
@@ -142,7 +218,8 @@ async function parseJDInExtension(jdText) {
     if (data?.detail?.error === 'duplicate_jd' && data?.detail?.existing_id) {
       return { jd_id: data.detail.existing_id };
     }
-    throw new Error(data?.detail?.msg || data?.detail || data?.message || `JD parse error ${res.status}`);
+    console.error(`[parseJDInExtension] ${res.status}`, data);
+    throw new Error('Could not analyze job description. Please try again.');
   }
   let jdId = data.jd_id || data.id;
   if (!jdId && Array.isArray(data.results) && data.results.length) {
@@ -159,6 +236,7 @@ let cachedJobMeta   = null;
 
 // ─── Analyze match score and show results in popup ────────────────────────────
 async function analyzeScore(jdText, jobMeta, file, selectedId) {
+  jdText = clampJdText(jdText);
   showState('processing');
   const stepEl = document.getElementById('processing-step');
   const fillEl = document.getElementById('progress-fill');
@@ -184,7 +262,7 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
 
     // Step 3: Match
     setStep('Calculating match score…', 80);
-    const matchRes = await fetch(`${BASE_URL}/matcher/match`, {
+    const matchRes = await fetchWithTimeout(`${BASE_URL}/matcher/match`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -386,16 +464,29 @@ function bindFileInput(inputId, displayId, fileVar) {
   if (!input || !display) return;
   input.addEventListener('change', () => {
     const file = input.files[0];
-    if (file) {
-      if (fileVar === 'idle') selectedFile = file;
-      else selectedFileJD = file;
-      display.textContent = file.name;
-      // Enable analyze button only when both file and JD text are present
+    if (!file) return;
+
+    const validationError = validateResumeFile(file);
+    if (validationError) {
+      alert(validationError);
+      input.value = '';
+      if (fileVar === 'idle') selectedFile = null; else selectedFileJD = null;
+      display.textContent = 'No file selected';
       if (fileVar === 'idle') {
         const btn = document.getElementById('btn-manual-tailor');
-        const jdText = document.getElementById('manual-jd-input')?.value?.trim();
-        if (btn) btn.disabled = !jdText;
+        if (btn) btn.disabled = true;
       }
+      return;
+    }
+
+    if (fileVar === 'idle') selectedFile = file;
+    else selectedFileJD = file;
+    display.textContent = file.name;
+    // Enable analyze button only when both file and JD text are present
+    if (fileVar === 'idle') {
+      const btn = document.getElementById('btn-manual-tailor');
+      const jdText = document.getElementById('manual-jd-input')?.value?.trim();
+      if (btn) btn.disabled = !jdText;
     }
   });
 }
@@ -442,13 +533,29 @@ function setupJDToggles() {
 }
 
 // ─── Poll for login while login state is visible ──────────────────────────────
-let _loginPollTimer = null;
+// Backs off from 2s up to 30s, and stops entirely after ~10 minutes so an
+// abandoned login-state popup doesn't hammer the backend forever.
+let _loginPollTimer  = null;
+let _loginPollDelay  = 2000;
+const LOGIN_POLL_MAX_DELAY = 30000;
+const LOGIN_POLL_MAX_TOTAL = 10 * 60 * 1000;
+let _loginPollStartedAt = 0;
 
 function startLoginPoll() {
   if (_loginPollTimer) return;
-  _loginPollTimer = setInterval(async () => {
+  _loginPollDelay = 2000;
+  _loginPollStartedAt = Date.now();
+  scheduleNextLoginPoll();
+}
+
+function scheduleNextLoginPoll() {
+  _loginPollTimer = setTimeout(async () => {
     // Stop polling if login state is no longer visible
     if (states.login?.classList.contains('hidden')) {
+      stopLoginPoll();
+      return;
+    }
+    if (Date.now() - _loginPollStartedAt > LOGIN_POLL_MAX_TOTAL) {
       stopLoginPoll();
       return;
     }
@@ -459,12 +566,15 @@ function startLoginPoll() {
       unlockRail(true);
       setupIdleState();
       await applyStoredJD(user);
+      return;
     } catch { /* still not signed in */ }
-  }, 2000);
+    _loginPollDelay = Math.min(_loginPollDelay * 1.5, LOGIN_POLL_MAX_DELAY);
+    scheduleNextLoginPoll();
+  }, _loginPollDelay);
 }
 
 function stopLoginPoll() {
-  if (_loginPollTimer) { clearInterval(_loginPollTimer); _loginPollTimer = null; }
+  if (_loginPollTimer) { clearTimeout(_loginPollTimer); _loginPollTimer = null; }
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -573,21 +683,24 @@ function setCompanyLogo(meta) {
 
   const showInitials = () => {
     if (!initialsEl) return;
-    const words    = company.trim().split(/\s+/);
+    const words    = company.trim().split(/\s+/).filter(Boolean);
     const initials = words.length >= 2
-      ? words[0][0] + words[1][0]
-      : words[0].slice(0, 2);
-    initialsEl.textContent   = initials.toUpperCase();
+      ? (words[0][0] || '') + (words[1][0] || '')
+      : (words[0] || '?').slice(0, 2);
+    initialsEl.textContent   = (initials || '?').toUpperCase();
     initialsEl.style.display = 'flex';
     if (fallbackEl) fallbackEl.style.display = 'none';
   };
 
-  // Guess company domain from name
+  // Guess company domain from name — clamp length to keep the logo-provider
+  // request well-formed even if `company` is unexpectedly long.
   const domain = company
     .toLowerCase()
+    .slice(0, 100)
     .replace(/\b(ltd|limited|inc|corp|corporation|pvt|private|technologies|technology|solutions|services|group|global|india|infotech|infosystems|motors|healthcare)\b/g, '')
     .replace(/[^a-z0-9]/g, '')
-    .trim() + '.com';
+    .trim()
+    .slice(0, 63) + '.com';
 
   const sources = [
     `https://logo.clearbit.com/${domain}`,
@@ -706,6 +819,7 @@ async function loadResumesIntoSelect(selectEl) {
 
 // ─── Core tailor flow ─────────────────────────────────────────────────────────
 async function doTailor(jdText, jobMeta, resumeId) {
+  jdText = clampJdText(jdText);
   showState('processing');
   const stepEl = document.getElementById('processing-step');
   const fillEl = document.getElementById('progress-fill');
@@ -819,7 +933,7 @@ function updateProfileCard(user) {
       btnEl.className   = 'rpc-btn danger';
       btnEl.onclick = async () => {
         try {
-          await fetch(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
+          await fetchWithTimeout(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
         } catch { /* silent */ }
         await clearAuthCookies();
         updateProfileCard(null);
@@ -828,8 +942,8 @@ function updateProfileCard(user) {
         startLoginPoll();
       };
     }
-    // Avatar image if available
-    if (avatarEl && user.avatar) {
+    // Avatar image if available — only allow http(s) URLs from the API response.
+    if (avatarEl && user.avatar && isSafeHttpUrl(user.avatar)) {
       const img = document.createElement('img');
       img.src = user.avatar;
       img.alt = '';
@@ -870,7 +984,7 @@ document.getElementById('srp-dashboard')?.addEventListener('click', () => {
 document.getElementById('srp-signout')?.addEventListener('click', async () => {
   profilePopover?.classList.remove('open');
   try {
-    await fetch(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetchWithTimeout(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch { /* silent */ }
   await clearAuthCookies();
   await chrome.storage.local.remove('detectedJD');
@@ -908,7 +1022,7 @@ document.getElementById('btn-signup-new')?.addEventListener('click', () => {
 });
 document.getElementById('footer-logout')?.addEventListener('click', async () => {
   try {
-    await fetch(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetchWithTimeout(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch { /* silent */ }
   await clearAuthCookies();
   updateProfileCard(null);
@@ -925,7 +1039,7 @@ let clLetterId = null;
 
 async function generateCoverLetter() {
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-  const jdText  = detectedJD?.jd  || document.getElementById('jd-textarea-main')?.value?.trim() || '';
+  const jdText  = clampJdText(detectedJD?.jd  || document.getElementById('jd-textarea-main')?.value?.trim() || '');
   const jobMeta = detectedJD?.meta || {};
 
   if (!jdText) {
@@ -1033,6 +1147,8 @@ document.getElementById('btn-cl-copy')?.addEventListener('click', () => {
       copyBtn.classList.remove('copied');
       copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy`;
     }, 2000);
+  }).catch(() => {
+    alert('Could not copy to clipboard. Please select and copy the text manually.');
   });
 });
 

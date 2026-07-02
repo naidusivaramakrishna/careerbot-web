@@ -655,10 +655,22 @@ const ATSResumePreview: React.FC<ATSResumePreviewProps> = ({ data: rawData }) =>
   const phone    = toStr(contact.phone || contact.phone_number || "");
   const location = toStr(contact.location || "");
 
-  const linkedin   = extractUrl(socialLinks.linkedin   || socialLinks.linkedIn);
-  const github     = extractUrl(socialLinks.github     || socialLinks.GitHub);
-  const portfolio  = extractUrl(socialLinks.portfolio  || socialLinks.Portfolio);
-  const hackerrank = extractUrl(socialLinks.hackerrank);
+  const SOCIAL_LABELS: Record<string, string> = {
+    linkedin: "LinkedIn", github: "GitHub", gitlab: "GitLab",
+    stackoverflow: "Stack Overflow", hackerrank: "HackerRank",
+    hackerearth: "HackerEarth", codechef: "CodeChef", leetcode: "LeetCode",
+    portfolio: "Portfolio",
+  };
+  const profileLinks = Object.keys(socialLinks)
+    .map((key) => {
+      const raw = socialLinks[key];
+      const url = extractUrl(raw);
+      if (!url) return null;
+      if (typeof raw === "object" && raw.valid === false) return null;
+      const label = SOCIAL_LABELS[key.toLowerCase()] || key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      return { key, label, url };
+    })
+    .filter((v): v is { key: string; label: string; url: string } => v !== null);
 
   const sections = buildSectionOrder(parsedData);
 
@@ -693,38 +705,14 @@ const ATSResumePreview: React.FC<ATSResumePreviewProps> = ({ data: rawData }) =>
                   : part}
               </span>
             ))}
-            {linkedin && (
-              <span>
-                {(email || phone || location) && <span style={{ margin: "0 5px", color: "#9ca3af" }}>|</span>}
-                <a href={linkedin.startsWith("http") ? linkedin : `https://${linkedin}`}
+            {profileLinks.map(({ key, label, url }, i) => (
+              <span key={key}>
+                {(i > 0 || email || phone || location) && <span style={{ margin: "0 5px", color: "#9ca3af" }}>|</span>}
+                <a href={url.startsWith("http") ? url : `https://${url}`}
                   target="_blank" rel="noopener noreferrer"
-                  style={{ color: "#1d4ed8", textDecoration: "none" }}>LinkedIn</a>
+                  style={{ color: "#1d4ed8", textDecoration: "none" }}>{label}</a>
               </span>
-            )}
-            {github && (
-              <span>
-                <span style={{ margin: "0 5px", color: "#9ca3af" }}>|</span>
-                <a href={github.startsWith("http") ? github : `https://${github}`}
-                  target="_blank" rel="noopener noreferrer"
-                  style={{ color: "#1d4ed8", textDecoration: "none" }}>GitHub</a>
-              </span>
-            )}
-            {portfolio && (
-              <span>
-                <span style={{ margin: "0 5px", color: "#9ca3af" }}>|</span>
-                <a href={portfolio.startsWith("http") ? portfolio : `https://${portfolio}`}
-                  target="_blank" rel="noopener noreferrer"
-                  style={{ color: "#1d4ed8", textDecoration: "none" }}>Portfolio</a>
-              </span>
-            )}
-            {hackerrank && (
-              <span>
-                <span style={{ margin: "0 5px", color: "#9ca3af" }}>|</span>
-                <a href={hackerrank.startsWith("http") ? hackerrank : `https://${hackerrank}`}
-                  target="_blank" rel="noopener noreferrer"
-                  style={{ color: "#1d4ed8", textDecoration: "none" }}>HackerRank</a>
-              </span>
-            )}
+            ))}
           </p>
           <hr style={{ border: "none", borderTop: "1.5px solid #111827", margin: "10px 0 0" }} />
         </div>

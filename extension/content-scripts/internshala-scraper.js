@@ -8,9 +8,9 @@
   style.textContent = `
     #careerbot-banner {
       position: fixed !important;
-      bottom: 24px !important;
+      top: 50% !important;
       right: 24px !important;
-      top: auto !important;
+      bottom: auto !important;
       left: auto !important;
       width: auto !important;
       height: auto !important;
@@ -24,9 +24,9 @@
       box-shadow: none !important;
       background: transparent !important;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-      transform: none !important;
+      transform: translateY(-50%) !important;
       pointer-events: auto !important;
-      inset: auto 24px 24px auto !important;
+      inset: 50% 24px auto auto !important;
     }
   `;
   (document.head || document.documentElement).appendChild(style);
@@ -69,21 +69,27 @@
     };
   }
 
+  let lastDetectedJd = null;
+
   function tryDetect() {
     if (!isJobPage()) return;
     const jd = extractJobDescription();
     if (!jd) return;
+
+    if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
+    lastDetectedJd = jd;
+
     const meta = extractMeta();
-    chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } });
+    chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } }).catch(() => {});
     injectBanner(meta, jd);
   }
 
   function injectBanner(meta, jd) {
-    if (document.getElementById('cb-shadow-host')) return;
+    document.getElementById('cb-shadow-host')?.remove();
 
     const host = document.createElement('div');
     host.id = 'cb-shadow-host';
-    host.style.cssText = 'position:fixed!important;bottom:24px!important;right:24px!important;top:auto!important;left:auto!important;z-index:2147483647!important;pointer-events:auto!important;margin:0!important;padding:0!important;border:none!important;background:transparent!important;';
+    host.style.cssText = 'position:fixed!important;top:50%!important;right:24px!important;bottom:auto!important;left:auto!important;transform:translateY(-50%)!important;z-index:2147483647!important;pointer-events:auto!important;margin:0!important;padding:0!important;border:none!important;background:transparent!important;';
 
     const shadow = host.attachShadow({ mode: 'open' });
 
@@ -91,10 +97,11 @@
     style.textContent = `
   :host {
     position: fixed !important;
-    bottom: 24px !important;
+    top: 50% !important;
     right: 24px !important;
-    top: auto !important;
+    bottom: auto !important;
     left: auto !important;
+    transform: translateY(-50%) !important;
     z-index: 2147483647 !important;
     pointer-events: auto !important;
     display: block !important;
@@ -137,6 +144,13 @@
     align-items: center;
     justify-content: center;
     font-size: 17px;
+    overflow: hidden;
+  }
+
+  .cb-icon img {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
   }
 
   .cb-meta {
@@ -248,13 +262,14 @@
     const companyEl = wrap.querySelector('.cb-company');
     if (meta.company) { companyEl.textContent = meta.company; } else { companyEl.remove(); }
     wrap.querySelector('.cb-badge').textContent = meta.source || 'careerbot';
+    setBrandIcon(wrap.querySelector('.cb-icon'));
 
     shadow.appendChild(style);
     shadow.appendChild(wrap);
     document.body.appendChild(host);
 
     shadow.getElementById('cb-tailor-btn').addEventListener('click', () => {
-      chrome.runtime.sendMessage({ type: 'JD_TAILOR_NOW', data: { jd, meta } });
+      chrome.runtime.sendMessage({ type: 'JD_TAILOR_NOW', data: { jd, meta } }).catch(() => {});
       host.remove();
     });
 
@@ -264,4 +279,15 @@
   }
 
   setTimeout(tryDetect, 2000);
+
+  // Show the CareerBot brand icon in the banner (static — not the company's logo).
+  function setBrandIcon(iconEl) {
+    if (!iconEl) return;
+    const img = document.createElement('img');
+    img.src = chrome.runtime.getURL('icons/logo.png');
+    img.alt = 'CareerBot';
+    img.onerror = () => { iconEl.textContent = '✨'; };
+    iconEl.replaceChildren(img);
+  }
+
 })();

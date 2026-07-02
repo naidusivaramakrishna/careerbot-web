@@ -695,6 +695,7 @@ export default function ATSLoginPage() {
   };
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) validateAndSetFile(e.target.files[0]);
+    e.target.value = "";
   };
   const handleRemoveFile = () => { setFile(null); setError(""); setAgreed(false); };
 
