@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Twitter, Linkedin, Github, Mail, Sparkles } from "lucide-react";
+import { Twitter, Linkedin, Github, Mail, Sparkles, ScanSearch } from "lucide-react";
 import Link from "next/link";
 
 const links = {
@@ -38,6 +38,21 @@ const Footer = () => {
 
       {/* ── Main footer body ── */}
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-14">
+        <div className="mb-10 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-white shadow-[0_18px_48px_rgba(0,0,0,0.18)] lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <h2 className="text-xl font-black leading-tight">Ready to check your ATS score?</h2>
+            <p className="mt-2 max-w-xl text-sm font-medium leading-6 text-white/65">
+              Upload your resume and find formatting issues, keyword gaps, and recruiter-facing improvements.
+            </p>
+          </div>
+          <Link
+            href="/ats/scan"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-black text-[#2557a7] transition hover:bg-[#eef4ff]"
+          >
+            <ScanSearch size={16} />
+            Scan My Resume
+          </Link>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr_1fr_1fr] gap-10">
 
           {/* Brand column */}

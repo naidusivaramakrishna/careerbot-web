@@ -175,7 +175,14 @@ export default function CoverLetterPage() {
         <SampleOutputSection />
         <FinalCTA />
       </main>
-      <LandingFooter />
+      <LandingFooter
+        cta={{
+          title: "Ready to send a stronger cover letter?",
+          description: "Create a tailored draft from your resume and target role in minutes.",
+          href: "/cover-letter/new",
+          label: "Create My Cover Letter",
+        }}
+      />
       <SignUpModal
         open={showModal}
         onClose={() => setShowModal(false)}

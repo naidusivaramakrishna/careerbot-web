@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { ArrowRight, ChevronRight, Clock, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Clock, Search } from 'lucide-react';
+import LandingNavbar from '@/app/(landing)/_components/LandingNavbar';
 import LandingFooter from '@/app/(landing)/_components/LandingFooter';
+import SignUpModal from '@/components/SignUpModal';
+import { useTenant } from '@/contexts/TenantContext';
+import { sanitizeAuthRedirect } from '@/lib/authRedirect';
 
 const categories = ['All', 'Resume', 'ATS', 'Cover Letter', 'Interview', 'Job Search'];
 
@@ -37,47 +39,53 @@ const articles = [
 
 export default function BlogPage() {
   const [activeCategory, setActiveCategory] = useState('All');
+  const [showModal, setShowModal] = useState(false);
+  const [initialFormType, setInitialFormType] = useState<'signup' | 'signin'>('signup');
+  const [authRedirectTo, setAuthRedirectTo] = useState<string | undefined>();
+  const { setActiveTenant } = useTenant();
 
   const filteredArticles = useMemo(
     () => articles.filter((article) => activeCategory === 'All' || article.category === activeCategory),
     [activeCategory],
   );
 
+  const openSignup = () => {
+    setInitialFormType('signup');
+    setShowModal(true);
+  };
+
+  const openSignin = () => {
+    setInitialFormType('signin');
+    setShowModal(true);
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tenantId = params.get('tenant_id');
+
+    if (tenantId) setActiveTenant(tenantId);
+
+    if (params.get('showLogin') === 'true') {
+      setAuthRedirectTo(sanitizeAuthRedirect(params.get('next')));
+      setTimeout(() => openSignin(), 0);
+      if (params.get('verified') === 'true') {
+        sessionStorage.setItem('emailVerified', 'true');
+      }
+      window.history.replaceState({}, '', '/blog');
+    }
+
+    const handleOpenLogin = () => openSignin();
+    window.addEventListener('openLoginModal', handleOpenLogin);
+    return () => window.removeEventListener('openLoginModal', handleOpenLogin);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <main className="min-h-screen bg-white" style={{ fontFamily: 'var(--font-montserrat, Montserrat, sans-serif)' }}>
-      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-          <Link href="/" className="flex items-center gap-1.5 transition-opacity hover:opacity-80" aria-label="CareerBot home">
-            <Image
-              src="/assets/icons/Logo.png"
-              alt="CareerBot"
-              width={46}
-              height={46}
-              className="shrink-0"
-              style={{ filter: 'hue-rotate(8deg) saturate(130%) brightness(68%)' }}
-              priority
-            />
-            <span className="text-lg font-black tracking-tight text-[#2557a7]">CareerBOT</span>
-          </Link>
-
-          <Link
-            href="/builder/start"
-            className="inline-flex items-center gap-2 rounded-full bg-[#2557a7] px-4 py-2 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] active:scale-95"
-          >
-            Start Free
-            <ArrowRight size={14} />
-          </Link>
-        </nav>
-      </header>
-
+    <>
+      <main className="min-h-screen bg-white" style={{ fontFamily: 'var(--font-montserrat, Montserrat, sans-serif)' }}>
+      <LandingNavbar onOpenSignup={openSignup} onOpenSignin={openSignin} />
       <section className="bg-[linear-gradient(135deg,#ffffff_0%,#f4f8ff_58%,#eaf2ff_100%)]">
-        <div className="mx-auto max-w-6xl px-4 pb-14 pt-8 lg:px-8">
-          <div className="mb-7 flex items-center gap-2 text-xs font-medium text-slate-500">
-            <Link href="/" className="transition-colors hover:text-[#2557a7]">Home</Link>
-            <ChevronRight size={15} className="text-slate-300" />
-            <span className="text-slate-700">Blog</span>
-          </div>
-
+        <div className="mx-auto max-w-6xl px-4 pb-14 pt-12 lg:px-8">
           <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
             <div>
               <span className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-widest text-[#2557a7] shadow-sm">
@@ -136,7 +144,22 @@ export default function BlogPage() {
         </div>
       </section>
 
-      <LandingFooter />
-    </main>
+      <LandingFooter
+        cta={{
+          title: 'Turn career advice into a stronger resume.',
+          description: 'Start with the free builder and apply the guidance from these articles.',
+          href: '/builder/start',
+          label: 'Build My Resume Free',
+        }}
+      />
+      </main>
+
+      <SignUpModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        initialFormType={initialFormType}
+        redirectTo={authRedirectTo}
+      />
+    </>
   );
 }

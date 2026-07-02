@@ -10,13 +10,15 @@ import logger from "@/lib/logger";
 const ResumeTableRow = ({
   resume,
   onDownload,
-  downloading
+  downloading,
+  creationUrl,
 }: {
   resume: Resume;
   index: number;
   onDelete: () => void;
   onDownload: () => void;
   downloading: boolean;
+  creationUrl?: string;
 }) => {
   const router = useRouter();
   const displayScore = resume.score || 0;
@@ -72,10 +74,9 @@ const ResumeTableRow = ({
     logger.info("Opening resume:", resume.id);
     localStorage.removeItem("resumeData");
     localStorage.setItem("current_resume_id", resume.id);
-    const url = resume.source === 'enhanced'
+    router.push(creationUrl ?? (resume.source === 'enhanced'
       ? `/builder/creation/${resume.id}?source=enhanced`
-      : `/builder/creation/${resume.id}`;
-    router.push(url);
+      : `/builder/creation/${resume.id}`));
   };
 
   const getInitials = (fullname: string) => {

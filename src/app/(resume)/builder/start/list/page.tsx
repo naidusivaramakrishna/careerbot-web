@@ -11,10 +11,9 @@ import DownloadModal from '../_components/DownloadModal';
 import ResumeTableRow from '../_components/ResumeTableRow';
 import AddResumeModal from '../_components/AddResumeModal';
 import UploadResumeModal from '../_components/UploadResumeModal';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import logger from "@/lib/logger";
 import { createResumeWithAuth } from '@/api/resumeApi';
-import AuthModal from '@/components/SignUpModal';
 
 export interface Resume {
   id: string;
@@ -32,6 +31,7 @@ export interface Resume {
 
 const ResumeListContent = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -42,6 +42,17 @@ const ResumeListContent = () => {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  const buildCreationUrl = useCallback((resumeId: string, source?: Resume["source"]) => {
+    const params = new URLSearchParams();
+    if (source === "enhanced") params.set("source", "enhanced");
+    const returnTo = searchParams.get("return_to");
+    if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
+      params.set("return_to", returnTo);
+    }
+    const query = params.toString();
+    return `/builder/creation/${encodeURIComponent(resumeId)}${query ? `?${query}` : ""}`;
+  }, [searchParams]);
 
 
   const getInitials = (name: string) => {
@@ -239,7 +250,7 @@ const ResumeListContent = () => {
       const newResume = await createResumeWithAuth();
       localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: newResume.id, data: newResume }));
       localStorage.setItem("current_resume_id", newResume.id);
-      router.push("/templates");
+      router.push(buildCreationUrl(newResume.id));
     } catch (err) {
       const error = err as { response?: { status?: number } };
       if (error?.response?.status === 401 || error?.response?.status === 403) {
@@ -376,6 +387,7 @@ const ResumeListContent = () => {
                       setSelectedResumeId(resume.id);
                       setDownloadModalOpen(true);
                     }}
+                    creationUrl={buildCreationUrl(resume.id, resume.source)}
                     downloading={downloading}
                   />
                 ))

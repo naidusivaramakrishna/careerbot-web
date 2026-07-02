@@ -67,12 +67,19 @@ export default function PricingPage() {
 
       {/* Page content */}
       <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-14 pb-24 lg:px-8">
+        <div id="plans" className="mx-auto max-w-6xl px-4 py-14 pb-24 lg:px-8">
           <PricingPlans onSelectPlan={handleSelectPlan} />
         </div>
       </main>
 
-      <LandingFooter />
+      <LandingFooter
+        cta={{
+          title: 'Choose the plan that fits your job search.',
+          description: 'Compare free and paid options, then upgrade when you need more career tools.',
+          href: '/payments#plans',
+          label: 'Review Plans',
+        }}
+      />
     </div>
   );
 }

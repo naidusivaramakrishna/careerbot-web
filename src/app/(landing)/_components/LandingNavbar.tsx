@@ -174,7 +174,7 @@ const navItems: NavItem[] = [
   { kind: 'dropdown', group: jobsGroup },
   { kind: 'link', link: { label: 'Mock Interview', href: '/mock-interview', ariaLabel: 'Mock Interview Practice' } },
   { kind: 'dropdown', group: mockTestGroup },
-  { kind: 'link', link: { label: 'Blog', href: '/blog', ariaLabel: 'Go to blog' } },
+  { kind: 'link', link: { label: 'Blog', href: '/blog', ariaLabel: 'Read CareerBot blog' } },
   { kind: 'link', link: { label: 'Pricing', href: '/payments', ariaLabel: 'View pricing page' } },
 ];
 
@@ -318,7 +318,7 @@ function MobileAccordion({
 const mobileLinkIcons: Record<string, React.ReactNode> = {
   'Cover Letter': <Mail size={15} />,
   'Mock Interview': <Mic size={15} />,
-  'Mock Test': <ClipboardList size={15} />,
+  Blog: <FileText size={15} />,
 };
 
 /* ─── Root component ─────────────────────────────────────────────────── */
@@ -380,7 +380,7 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
           scrolled ? 'shadow-sm' : ''
         }`}
       >
-        <nav className="mx-auto flex h-full max-w-screen-xl items-center justify-between gap-2 px-3 lg:px-3 xl:gap-4 xl:px-8">
+        <nav className="mx-auto flex h-full max-w-[1240px] items-center justify-between gap-2 px-3 lg:px-3 xl:gap-4 xl:px-8">
           {/* Logo */}
           <Link href="/" className="-ml-1 flex shrink-0 items-center transition-opacity hover:opacity-80" aria-label="CareerBOT home">
             <Image
@@ -388,11 +388,11 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
               alt="CareerBot"
               width={54}
               height={54}
-              className="-mr-1 h-11 w-11 shrink-0 xl:h-[54px] xl:w-[54px]"
+                className="-mr-1 h-10 w-10 shrink-0 xl:h-11 xl:w-11"
               style={{ filter: 'hue-rotate(8deg) saturate(130%) brightness(68%)' }}
               priority
             />
-            <span className="text-base font-bold tracking-tight text-[#2557a7] xl:text-xl">CareerBOT</span>
+            <span className="text-base font-black tracking-tight text-[#0d5be1] xl:text-xl">CareerBOT</span>
           </Link>
 
           {/* Desktop nav — items render in declared order */}

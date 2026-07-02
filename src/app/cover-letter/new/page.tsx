@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { listCoverLetterResumeOptions, setDefaultCoverLetterResume } from "@/api/coverLetterApi";
 import { parseJDByJob, parseJDFile, parseJDText, parseJDUrl } from "@/api/parserApi";
+import { getResumeById } from "@/api/resumeApi";
 import { extractResume } from "@/api/resumeParsingApi";
 import SignUpModal from "@/components/SignUpModal";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
@@ -312,9 +313,69 @@ export default function CoverLetterNewPage() {
   }, [activeStep]);
 
   const defaultResumeBlob = toDefaultResumeBlob(defaultResume.defaultResume);
+  const requestedResumeId = searchParams.get("resume_id");
+  const requestedResumeSourceParam = searchParams.get("resume_source");
+  const requestedResumeSource =
+    requestedResumeSourceParam === "builder" || requestedResumeSourceParam === "parser"
+      ? requestedResumeSourceParam
+      : null;
 
   useEffect(() => {
-    if (uploadedResume || selectedResume || defaultResume.isLoading || defaultResumeBlob) {
+    if (!requestedResumeId || !requestedResumeSource || uploadedResume) {
+      return;
+    }
+
+    const selectedResumeId = getCoverLetterParsedResumeId(selectedResume);
+    const selectedResumeSource = getCoverLetterResumeSource(selectedResume);
+    if (selectedResumeId === requestedResumeId && selectedResumeSource === requestedResumeSource) {
+      return;
+    }
+
+    let cancelled = false;
+    listCoverLetterResumeOptions()
+      .then(async (result) => {
+        if (cancelled || uploadedResume) return;
+        const requestedResume = result.resumes.find(
+          (option) => option.resume_id === requestedResumeId && option.source === requestedResumeSource,
+        );
+        if (requestedResume) {
+          const selectedBlob = toResumeOptionBlob({
+            ...requestedResume,
+            is_user_default: false,
+          });
+          if (requestedResume.source === "builder") {
+            try {
+              const builderResume = await getResumeById(requestedResume.resume_id);
+              const builderDisplayName = getBuilderResumeDisplayName(builderResume) ?? requestedResume.display_name;
+              setSelectedResume({
+                ...selectedBlob,
+                builder_resume: builderResume,
+                personalInfo: builderResume.personalInfo,
+                professionalSummary: builderResume.professionalSummary,
+                display_name: builderDisplayName,
+                name: builderDisplayName,
+              });
+              return;
+            } catch {
+              // If details fail, still use the option response so generation can continue.
+            }
+          }
+          setSelectedResume(selectedBlob);
+        } else {
+          toast.error("Could not find the selected resume. Choose another resume to continue.");
+        }
+      })
+      .catch(() => {
+        toast.error("Could not load the selected resume. Choose another resume to continue.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedResumeId, requestedResumeSource, selectedResume, uploadedResume]);
+
+  useEffect(() => {
+    if (requestedResumeId || uploadedResume || selectedResume || defaultResume.isLoading || defaultResumeBlob) {
       return;
     }
 
@@ -336,9 +397,10 @@ export default function CoverLetterNewPage() {
     return () => {
       cancelled = true;
     };
-  }, [defaultResume.isLoading, defaultResumeBlob, selectedResume, uploadedResume]);
+  }, [defaultResume.isLoading, defaultResumeBlob, requestedResumeId, selectedResume, uploadedResume]);
 
-  const resume = uploadedResume ?? selectedResume ?? defaultResumeBlob ?? latest.resume;
+  const fallbackResume = requestedResumeId ? null : defaultResumeBlob ?? latest.resume;
+  const resume = uploadedResume ?? selectedResume ?? fallbackResume;
   const parsedResumeId = getCoverLetterParsedResumeId(resume);
   const resumeSource = getCoverLetterResumeSource(resume);
   const selectedTemplate = templateStyles.find((template) => template.id === selectedTemplateId) ?? templateStyles[1];
@@ -485,7 +547,17 @@ export default function CoverLetterNewPage() {
         resume_source: option.source,
       });
       setUploadedResume(null);
-      setSelectedResume(toDefaultResumeBlob(nextDefault));
+      setSelectedResume(
+        toDefaultResumeBlob({
+          ...nextDefault,
+          is_user_default: true,
+          selection_reason: "user_default",
+        })
+        ?? toResumeOptionBlob({
+          ...option,
+          is_user_default: true,
+        }),
+      );
       setResumeOptions((items) =>
         items.map((item) => ({
           ...item,
@@ -513,8 +585,19 @@ export default function CoverLetterNewPage() {
         resume_id: parsedResumeId,
         resume_source: resumeSource as "parser" | "builder",
       });
+      const currentResumeAsDefault =
+        resume && parsedResumeId === getCoverLetterParsedResumeId(resume) && resumeSource === getCoverLetterResumeSource(resume)
+          ? { ...resume, is_user_default: true }
+          : null;
       setUploadedResume(null);
-      setSelectedResume(toDefaultResumeBlob(nextDefault));
+      setSelectedResume(
+        currentResumeAsDefault
+        ?? toDefaultResumeBlob({
+          ...nextDefault,
+          is_user_default: true,
+          selection_reason: "user_default",
+        }),
+      );
       setResumeOptions((items) =>
         items.map((item) => ({
           ...item,
@@ -1341,16 +1424,39 @@ function TrustItem({
 
 function getResumeDisplayName(resume: ParsedResumeBlob | null): string {
   if (!resume) return "Selected resume";
+  const personalInfo = resume.personalInfo as Record<string, unknown> | undefined;
+  const builderResume = resume.builder_resume as Record<string, unknown> | undefined;
+  const builderPersonalInfo = builderResume?.personalInfo as Record<string, unknown> | undefined;
+  const professionalSummary = resume.professionalSummary as Record<string, unknown> | undefined;
+  const builderProfessionalSummary = builderResume?.professionalSummary as Record<string, unknown> | undefined;
   const directName = [
     resume.display_name,
     resume.source_file_name,
     resume.file_name,
     resume.filename,
     resume.name,
+    personalInfo?.fullname,
+    professionalSummary?.targetRole,
+    builderPersonalInfo?.fullname,
+    builderProfessionalSummary?.targetRole,
     (resume.parsed_data as Record<string, unknown> | undefined)?.source_file_name,
     (resume.parsed_data as Record<string, unknown> | undefined)?.file_name,
   ].find((value) => typeof value === "string" && value.trim().length > 0);
-  return typeof directName === "string" ? directName : "Parsed resume";
+  return typeof directName === "string" ? directName : "Resume";
+}
+
+function getBuilderResumeDisplayName(resume: unknown): string | null {
+  if (!resume || typeof resume !== "object") return null;
+  const record = resume as Record<string, unknown>;
+  const personalInfo = record.personalInfo as Record<string, unknown> | undefined;
+  const professionalSummary = record.professionalSummary as Record<string, unknown> | undefined;
+  const directName = [
+    personalInfo?.fullname,
+    professionalSummary?.targetRole,
+    record.display_name,
+    record.name,
+  ].find((value) => typeof value === "string" && value.trim().length > 0);
+  return typeof directName === "string" ? directName.trim() : null;
 }
 
 function toDefaultResumeBlob(
