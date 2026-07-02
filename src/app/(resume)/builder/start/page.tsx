@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useState, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { getAllResumesUnified } from '@/api/resumeApi';
 import EmptyState from './_components/EmptyState';
@@ -45,15 +45,8 @@ const PageShell = ({ children }: { children: React.ReactNode }) => (
 
 const ResumePage = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
-
-  const getReturnToQuery = useCallback(() => {
-    const returnTo = searchParams.get("return_to");
-    if (!returnTo?.startsWith("/") || returnTo.startsWith("//")) return "";
-    return `?return_to=${encodeURIComponent(returnTo)}`;
-  }, [searchParams]);
 
   const checkForResumes = useCallback(async () => {
     try {
@@ -64,7 +57,7 @@ const ResumePage = () => {
       const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
 
       if (builder_resumes.length > 0 || enhanced_resumes.length > 0) {
-        router.push(`/builder/start/list${getReturnToQuery()}`);
+        router.push('/builder/start/list');
         return;
       }
 
@@ -79,7 +72,7 @@ const ResumePage = () => {
     } finally {
       setLoading(false);
     }
-  }, [getReturnToQuery, router]);
+  }, [router]);
 
   useEffect(() => {
     checkForResumes();
