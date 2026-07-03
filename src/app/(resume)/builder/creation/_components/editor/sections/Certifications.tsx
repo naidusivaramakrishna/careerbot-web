@@ -10,8 +10,8 @@ import SectionTipsPanel from "../SectionTipsPanel";
 
 interface CertificationEntry {
   name: string;
-  issuer: string;
-  issueDate: string;
+  issuedBy: string;
+  year: string;
   expiryDate?: string;
   credentialId?: string;
   credentialUrl?: string;
@@ -20,8 +20,8 @@ interface CertificationEntry {
 
 const emptyCertification = (): CertificationEntry => ({
   name: "",
-  issuer: "",
-  issueDate: "",
+  issuedBy: "",
+  year: "",
   expiryDate: "",
   credentialId: "",
   credentialUrl: "",
@@ -47,12 +47,17 @@ const Certifications: React.FC = () => {
   const formScrollRef = useRef<HTMLDivElement>(null);
 
   const hasValidData = (entry: CertificationEntry): boolean => {
-    return !!(entry.name || entry.issuer || entry.issueDate || entry.expiryDate || entry.credentialId);
+    return !!(entry.name || entry.issuedBy || entry.year || entry.expiryDate || entry.credentialId);
   };
 
   const [savedEntries, setSavedEntries] = useState<CertificationEntry[]>(() => {
     if (resumeData.certifications && resumeData.certifications.length) {
-      const validEntries = resumeData.certifications.filter(hasValidData);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const validEntries = (resumeData.certifications as any[]).map((c) => ({
+        ...c,
+        issuedBy: c.issuedBy || c.issuer || '',
+        year: c.year || '',
+      })).filter(hasValidData);
       return validEntries;
     }
     return [];
@@ -203,18 +208,18 @@ const Certifications: React.FC = () => {
                   <div className="text-base font-bold text-gray-900">
                     {certification.name || "No certification name"}
                   </div>
-                  
+
                   {/* Issued By */}
-                  {certification.issuer && (
+                  {certification.issuedBy && (
                     <div className="text-sm text-gray-700">
-                      {certification.issuer}
+                      {certification.issuedBy}
                     </div>
                   )}
 
-                  {/* Issue Date and Expiry Date */}
+                  {/* Year and Expiry Date */}
                   <div className="flex gap-2 text-xs text-gray-600">
-                    {certification.issueDate && (
-                      <span>Issued: {certification.issueDate}</span>
+                    {certification.year && (
+                      <span>Issued: {certification.year}</span>
                     )}
                     {certification.expiryDate && (
                       <span>• Expires: {certification.expiryDate}</span>
@@ -236,21 +241,19 @@ const Certifications: React.FC = () => {
                     disabled={deletingIndex === index}
                     className="p-2 text-xs hover:bg-[#e5e5e5] rounded-full disabled:opacity-50"
                   >
-                    <RiEdit2Fill size={20} className="text-[#595959]"/>
+                    <RiEdit2Fill size={20} className="text-[#595959]" />
                   </button>
                   <button
                     type="button"
                     onClick={() => removeCertification(index)}
                     disabled={deletingIndex === index}
-                    className={`p-2 text-xs hover:bg-[#e5e5e5] rounded-full ${
-                      deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                  >
-                    <Trash2 
-                      size={20} 
-                      className={`text-[#595959] hover:text-red-500 ${
-                        deletingIndex === index ? "animate-pulse" : ""
+                    className={`p-2 text-xs hover:bg-[#e5e5e5] rounded-full ${deletingIndex === index ? "opacity-50 cursor-not-allowed" : ""
                       }`}
+                  >
+                    <Trash2
+                      size={20}
+                      className={`text-[#595959] hover:text-red-500 ${deletingIndex === index ? "animate-pulse" : ""
+                        }`}
                     />
                   </button>
                 </div>
@@ -265,7 +268,7 @@ const Certifications: React.FC = () => {
               onClick={addNewEntry}
               className="flex w-fit p-3 items-center justify-center text-xs font-semibold bg-[#e5e5e5] hover:bg-[#2557a7] rounded-full transition-colors group"
             >
-              <LuPlus size={20} className="text-[#595959] group-hover:text-white"/>
+              <LuPlus size={20} className="text-[#595959] group-hover:text-white" />
             </button>
           </div>
         </div>
@@ -275,7 +278,7 @@ const Certifications: React.FC = () => {
       {editingEntries.length > 0 && (
         <div className="flex gap-6 items-start">
           {/* Left Side: Scrollable Form Fields Section */}
-          <div 
+          <div
             ref={formScrollRef}
             className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
           >
@@ -321,24 +324,24 @@ const Certifications: React.FC = () => {
                         </label>
                         <input
                           type="text"
-                          value={certification.issuer}
+                          value={certification.issuedBy}
                           placeholder="Organization Name"
-                          onChange={(e) => handleChange(editIndex, "issuer", e.target.value)}
+                          onChange={(e) => handleChange(editIndex, "issuedBy", e.target.value)}
                           maxLength={100}
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]`}
                         />
                       </div>
                     </div>
 
-                    {/* Issue Date & Expiry Date */}
+                    {/* Issue Year & Expiry Date */}
                     <div className="flex gap-4">
                       <div className="flex flex-col gap-1 flex-1">
-                        <label className="text-sm font-semibold text-[#3b3b3b]">Issue Date</label>
+                        <label className="text-sm font-semibold text-[#3b3b3b]">Issue Year</label>
                         <input
                           type="text"
-                          value={certification.issueDate}
-                          placeholder="MMM YY"
-                          onChange={(e) => handleChange(editIndex, "issueDate", e.target.value)}
+                          value={certification.year}
+                          placeholder="YYYY"
+                          onChange={(e) => handleChange(editIndex, "year", e.target.value)}
                           className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]"
                         />
                       </div>

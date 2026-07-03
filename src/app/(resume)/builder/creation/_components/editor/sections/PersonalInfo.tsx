@@ -29,43 +29,40 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false);
   const [isGovernmentTemplate, setIsGovernmentTemplate] = useState(false);
   const [isHealthcareTemplate, setIsHealthcareTemplate] = useState(false);
+  const [isLegalTemplate, setIsLegalTemplate] = useState(false);
+  const [isResearchScholarTemplate, setIsResearchScholarTemplate] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Get domain from localStorage to check if it's government_standard or healthcare
   useEffect(() => {
     try {
-      let isGov = false;
-      let isHealthcare = false;
-
-      // First, try localStorage
-      const userEmail = resumeData.personalInfo?.email || '';
+      const userEmail = resumeData.personalInfo?.email || localStorage.getItem('userEmail') || '';
       const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
-      const careerLevelStorage = localStorage.getItem(careerLevelKey);
+      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
 
-      if (careerLevelStorage) {
+      const careerLevelStorage = localStorage.getItem(careerLevelKey);
+      const selectedTemplateId = localStorage.getItem(selectedTemplateKey);
+
+      let domainFamily = '';
+
+      if (careerLevelStorage && selectedTemplateId) {
         const careerLevels = JSON.parse(careerLevelStorage) as Array<{
+          id?: string | number;
           domain_family?: string;
         }>;
-        isGov = careerLevels.some(t => t.domain_family === 'government_standard');
-        isHealthcare = careerLevels.some(t => t.domain_family === 'healthcare');
+        const activeTemplate = careerLevels.find(t => String(t.id) === String(selectedTemplateId));
+        domainFamily = activeTemplate?.domain_family || '';
       }
 
-      // If not found in localStorage, check if government/healthcare fields exist in formData
-      if (!isGov && !isHealthcare) {
-        const hasGovFields = formData['dateOfBirth'] || formData['nationality'] || formData['category'] || formData['languages'];
-        const hasHealthcareFields = formData['titlePrefix'] || formData['qualifications'];
-        isGov = !!hasGovFields;
-        isHealthcare = !!hasHealthcareFields;
-      }
-
-      setIsGovernmentTemplate(isGov);
-      setIsHealthcareTemplate(isHealthcare);
-      logger.info('Government template detected:', isGov);
-      logger.info('Healthcare template detected:', isHealthcare);
+      setIsGovernmentTemplate(domainFamily === 'government_standard');
+      setIsHealthcareTemplate(domainFamily === 'healthcare');
+      setIsLegalTemplate(domainFamily === 'legal');
+      setIsResearchScholarTemplate(domainFamily === 'research_scholar');
+      logger.info('Active template domain_family:', domainFamily);
     } catch (err) {
       logger.warn('Error checking template domain:', err);
     }
-  }, [resumeData.personalInfo?.email, formData]);
+  }, [resumeData.personalInfo?.email]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -314,16 +311,35 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         {/* Healthcare Template Fields */}
         {isHealthcareTemplate && (
           <>
-            {/* Divider */}
             <div className="my-2 border-t border-gray-300 w-full"></div>
-
-            {/* Healthcare-Specific Section Label */}
             <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Healthcare - Professional Details</p>
-
-            {/* Row 5: Title Prefix + Qualifications */}
             <div className="flex gap-10">
               {renderGovField("titlePrefix", "Title/Prefix", "e.g., DR., PROF., MR.", "text", 20)}
               {renderGovField("qualifications", "Qualifications", "e.g., MBBS, MD, DM, MS", "text", 100)}
+            </div>
+          </>
+        )}
+
+        {/* Legal Template Fields */}
+        {isLegalTemplate && (
+          <>
+            <div className="my-2 border-t border-gray-300 w-full"></div>
+            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Legal - Professional Details</p>
+            <div className="flex gap-10">
+              {renderGovField("qualifications", "Qualifications", "e.g., LLB, LLD, BA LLB", "text", 100)}
+              <div className="w-full" />
+            </div>
+          </>
+        )}
+
+        {/* Research Scholar Template Fields */}
+        {isResearchScholarTemplate && (
+          <>
+            <div className="my-2 border-t border-gray-300 w-full"></div>
+            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Research Scholar - Academic Details</p>
+            <div className="flex gap-10">
+              {renderGovField("qualifications", "Qualifications", "e.g., PhD, M.Phil, MSc", "text", 100)}
+              <div className="w-full" />
             </div>
           </>
         )}

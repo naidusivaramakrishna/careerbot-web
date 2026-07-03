@@ -16,6 +16,7 @@ import {
   CAREER_LEVELS,
   FALLBACK_IMAGE,
 } from "./_data/constants"
+import { resolveTemplateImageUrl } from "@/lib/imageUtils"
 
 const TRUST_BADGES = ['100% ATS Friendly', '14+ Industries', 'Free to browse']
 const QUICK_SEARCHES = ['Software Engineer', 'Healthcare', 'Finance', 'Legal', 'Education']
@@ -99,10 +100,10 @@ export default function BrowseTemplatesPage() {
       {/* ── Navigation ────────────────────────────────────────── */}
       <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-xl border-b border-gray-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-8 py-3.5 flex justify-between items-center">
-          <div className="flex items-center gap-1">
+          <button onClick={() => router.push('/')} className="flex items-center gap-1 cursor-pointer">
             <Image src="/assets/icons/Logo.png" alt="CareerBot" width={52} height={52} />
             <span className="text-lg font-bold text-gray-900 tracking-tight">CareerBot</span>
-          </div>
+          </button>
 
           {/* Step indicator */}
           <div className="hidden lg:flex items-center gap-2 text-sm">
@@ -387,7 +388,7 @@ export default function BrowseTemplatesPage() {
                         key={domain}
                         domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
                         templateCount={CAREER_LEVELS.length}
-                        previewImage={FAMILY_TEMPLATES[family]?.image || FALLBACK_IMAGE}
+                        previewImage={resolveTemplateImageUrl(FAMILY_TEMPLATES[family]?.previewUrl) || FAMILY_TEMPLATES[family]?.image || FALLBACK_IMAGE}
                         onClick={() => handleDomainSelect(family, domain)}
                       />
                     ))}
@@ -424,7 +425,7 @@ export default function BrowseTemplatesPage() {
                           key={domain}
                           domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
                           templateCount={CAREER_LEVELS.length}
-                          previewImage={FAMILY_TEMPLATES[selectedCategory]?.image || FALLBACK_IMAGE}
+                          previewImage={resolveTemplateImageUrl(FAMILY_TEMPLATES[selectedCategory]?.previewUrl) || FAMILY_TEMPLATES[selectedCategory]?.image || FALLBACK_IMAGE}
                           onClick={() => handleDomainSelect(selectedCategory, domain)}
                         />
                       ))}

@@ -36,6 +36,8 @@
     "test:integration:templates": "vitest src/tests/integration/features/templates-catalogues",
     "test:profile": "vitest src/tests/unit/features/profile",
     "test:integration:profile": "vitest src/tests/integration/features/profile",
+    "test:auth": "vitest src/tests/unit/features/auth",
+    "test:integration:auth": "vitest src/tests/integration/features/auth",
     "test:pre-commit": "npm run test:integration && npm test"
   },
   "dependencies": {

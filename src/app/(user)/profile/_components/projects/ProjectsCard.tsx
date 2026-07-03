@@ -1,7 +1,8 @@
-import { Calendar, Pencil, Trash2 } from "lucide-react";
+import { Calendar, FolderKanban, Link, Pencil, Trash2 } from "lucide-react";
 import { Projects } from "@/api/userApi";
 import { format } from "date-fns";
 import DOMPurify from 'dompurify';
+
 interface Props {
     pro: Partial<Projects>;
     index: number;
@@ -14,17 +15,12 @@ function formatDateRange(start?: string | Date, end?: string | Date): string {
 
     const parseDate = (value?: string | Date) => {
         if (!value) return null;
-
         if (typeof value === "string") {
             const trimmed = value.trim();
-
-            // Explicit present check
             if (trimmed.toLowerCase() === "present") return "Present";
-
             const parsed = new Date(trimmed);
             return isNaN(parsed.getTime()) ? null : parsed;
         }
-
         return value;
     };
 
@@ -34,104 +30,96 @@ function formatDateRange(start?: string | Date, end?: string | Date): string {
     const formattedStart =
         parsedStart instanceof Date ? format(parsedStart, "MMM yyyy") : start;
 
-    // FIXED LOGIC
     let formattedEnd;
     if (!end) {
-        formattedEnd = "Present"; // no end date means currently ongoing
+        formattedEnd = "Present";
     } else if (parsedEnd === "Present") {
         formattedEnd = "Present";
     } else if (parsedEnd instanceof Date) {
         formattedEnd = format(parsedEnd, "MMM yyyy");
     } else {
-        // If parse fails, fallback to original text — NOT Present
         formattedEnd = String(end);
     }
 
     return `${formattedStart} – ${formattedEnd}`;
 }
 
-
 export default function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
     const sanitizedDescription = pro.description
         ? DOMPurify.sanitize(pro.description.replace(/\n/g, '<br />'))
         : '';
+
     return (
         <div
             key={pro.id || index}
             data-testid={`project-card-${index}`}
-            className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
+            className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-4 flex items-start justify-between gap-3"
         >
-            <div>
-                {pro.project_name && (
-                    <h3 className="font-semibold text-lg">{pro.project_name}</h3>
-                )}
-                {pro.role && pro.role.trim() !== '' && (
-                    <p className="text-base font-semibold text-neutral-700">
-                        <span className="text-[#2200FF]">{pro.role}</span>
-                    </p>
-                )}
-                <div className="flex gap-4 items-center text-neutral-500 my-4">
-                    {pro.start_date && (
-                        <div className="flex gap-1 items-center text-neutral-500">
-                            <Calendar className="w-5 h-5" />
-                            <span className="text-sm">{formatDateRange(pro.start_date, pro.end_date)}</span>
-                        </div>
-                    )}
-                    {pro.project_link && pro.project_link.trim() !== '' && (
-                        <div>
-                            <a href={pro.project_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-sm">
-                                GitHub
-                            </a>
-                        </div>
-                    )}
+            <div className="flex gap-3 min-w-0 flex-1">
+                <div className="w-9 h-9 bg-[#EEF3FB] rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <FolderKanban className="w-5 h-5 text-[#2257a7]" />
                 </div>
-                {pro.technologies && pro.technologies.trim() !== '' && (
-                    <div className="flex flex-col gap-2">
-                        <span className="text-base font-semibold">
-                            Technologies:
-                        </span>
-
-                        <div className="flex flex-wrap gap-2 mb-2">
-                            {pro.technologies
-                                ?.split(",")
-                                .map((technology: string, index: number) => (
-                                    <span
-                                        key={index}
-                                        className="text-xs bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg cursor-pointer"
-                                    >
-                                        {technology.trim()}
-                                    </span>
-                                ))}
-                        </div>
+                <div className="min-w-0 flex-1">
+                    {pro.project_name && (
+                        <h3 className="font-semibold text-sm text-gray-900 leading-snug">{pro.project_name}</h3>
+                    )}
+                    {pro.role && pro.role.trim() !== '' && (
+                        <p className="text-sm text-[#2257a7] font-medium mt-0.5">{pro.role}</p>
+                    )}
+                    <div className="flex flex-wrap gap-3 items-center mt-2">
+                        {pro.start_date && (
+                            <span className="flex items-center gap-1 text-xs text-gray-500">
+                                <Calendar className="w-3.5 h-3.5 shrink-0" />
+                                {formatDateRange(pro.start_date, pro.end_date)}
+                            </span>
+                        )}
+                        {pro.project_link && pro.project_link.trim() !== '' && (
+                            <a
+                                href={pro.project_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-[#2257a7] hover:underline"
+                            >
+                                <Link className="w-3.5 h-3.5" />
+                                Project Link
+                            </a>
+                        )}
                     </div>
-                )}
-                {sanitizedDescription && (
-                    <>
-                        <p className="text-black text-base font-semibold">Description: </p>
+                    {pro.technologies && pro.technologies.trim() !== '' && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                            {pro.technologies.split(",").map((tech, i) => (
+                                <span key={i} className="text-xs bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md">
+                                    {tech.trim()}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    {sanitizedDescription && (
                         <div
-                            className="text-sm text-gray-800 space-y-2 resume-description"
+                            className="text-xs text-gray-600 mt-3 space-y-1 resume-description leading-relaxed"
                             dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
                         />
-                    </>
-                )}
+                    )}
+                </div>
             </div>
-            <div className="flex gap-2 mt-2">
+
+            <div className="flex gap-1.5 shrink-0 mt-0.5">
                 <button
                     type="button"
                     data-testid={`project-edit-btn-${index}`}
                     onClick={() => onEdit(pro, index)}
-                    className="text-sm cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
+                    className="flex items-center gap-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 hover:bg-gray-100 rounded-md px-2.5 py-1.5 transition"
                 >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-3.5 h-3.5" />
                     Edit
                 </button>
                 <button
                     type="button"
                     data-testid={`project-delete-btn-${index}`}
                     onClick={() => onDelete(pro.id, index)}
-                    className="border border-red-300 text-sm  cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
+                    className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-md px-2.5 py-1.5 transition"
                 >
-                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <Trash2 className="w-3.5 h-3.5" />
                     Delete
                 </button>
             </div>

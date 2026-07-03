@@ -1,5 +1,16 @@
 import type { NextConfig } from 'next';
 
+// Parse the backend server URL so Next.js <Image> allows it in all environments.
+// NEXT_PUBLIC_SERVER_URL is set per environment in .env.local / .env.production etc.
+const _serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
+const _parsed = new URL(_serverUrl);
+const _serverRemotePattern = {
+  protocol: _parsed.protocol.replace(':', '') as 'http' | 'https',
+  hostname: _parsed.hostname,
+  ...(_parsed.port ? { port: _parsed.port } : {}),
+  pathname: '/**',
+};
+
 const nextConfig: NextConfig = {
   reactStrictMode: false, // ✅ Make sure this is here
 
@@ -25,6 +36,7 @@ const nextConfig: NextConfig = {
     // return empty buffers when the backend is down, causing LRUCache size=0 crash.
     unoptimized: process.env.NODE_ENV === 'development',
     remotePatterns: [
+      _serverRemotePattern,
       {
         protocol: "http",
         hostname: "localhost",

@@ -996,18 +996,33 @@ export const publishResume = async (resumeId: string): Promise<void> => {
 // ==================== DOWNLOAD RESUME ====================
 export const downloadResume = async (
   resumeId: string,
-  format: 'pdf' | 'doc' | 'docx'
+  format: 'pdf' | 'doc' | 'docx',
+  catalogueTemplateId?: string,
+  domainTemplateId?: string,
+  sectionBgColor?: string,
+  accentColor?: string,
+  sectionOrder?: string[],
+  fontFamily?: string,
+  lineSpacing?: string
 ): Promise<Blob> => {
-  
+
   try {
-    logger.debug("⬇️ Downloading resume:", resumeId, "Format:", format);
+    logger.debug("⬇️ Downloading resume:", resumeId, "Format:", format, "Catalogue:", catalogueTemplateId, "Domain:", domainTemplateId, "SectionBg:", sectionBgColor, "SectionOrder:", sectionOrder, "Font:", fontFamily, "LineSpacing:", lineSpacing);
 
     const backendFormat = format === 'doc' ? 'docx' : format;
+    const params = new URLSearchParams({ format: backendFormat });
+    if (catalogueTemplateId) params.append('catalogue_template_id', catalogueTemplateId);
+    if (domainTemplateId) params.append('template_id', domainTemplateId);
+    if (sectionBgColor) params.append('section_bg_color', sectionBgColor);
+    if (accentColor) params.append('accent_color', accentColor);
+    if (sectionOrder && sectionOrder.length > 0) params.append('section_order', JSON.stringify(sectionOrder));
+    if (fontFamily) params.append('font_family', fontFamily);
+    if (lineSpacing) params.append('line_height', lineSpacing);
 
-    logger.debug("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?format=${backendFormat}`);
+    logger.debug("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?${params.toString()}`);
 
     const response = await httpClient.get<Blob>(
-      `/resumes/${resumeId}/download?format=${backendFormat}`,
+      `/resumes/${resumeId}/download?${params.toString()}`,
       {
         responseType: 'blob',
       }

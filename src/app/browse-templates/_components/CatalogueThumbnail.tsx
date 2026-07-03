@@ -213,7 +213,7 @@ function EclipseThumbnail({ sectionBgColor }: { sectionBgColor?: string }) {
             overflow: 'hidden',
           }}
         >
-          <span style={{ fontWeight: 600 }}>howard.jones@gmail.com</span>
+          <span >howard.jones@gmail.com</span>
           <span>+1 (415) 555-2671</span>
           <span>linkedin.com/in/hjones</span>
           <span>github.com/hjones</span>
@@ -383,16 +383,20 @@ function CrimsonThumbnail({ accentColor }: { accentColor?: string }) {
         >
           Jessie Smith
         </div>
-        <div style={{ fontSize: '7px', fontWeight: 'bold', marginBottom: '3px' }}>
+        <div style={{ fontSize: '7px', marginBottom: '3px' }}>
           Human Resource Manager
         </div>
         <div style={{ borderTop: `3px solid ${accent}`, margin: '4px 0' }} />
         <div style={{ fontSize: '6px', marginTop: '4px' }}>
-          New York, USA, 4759 Sunnydale Lane, Plano, TX 75071, United States
+          email@youremail.com
+          {'  •  '}
+          New York, USA
           {'  •  '}
           (469) 385-2948
           {'  •  '}
-          email@youremail.com
+          LinkedIn
+          {'  •  '}
+          GitHub
         </div>
       </div>
 
@@ -720,7 +724,6 @@ function ForestThumbnail({ accentColor }: { accentColor?: string }) {
     >
       {/* Header */}
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '6.5px', marginBottom: '2px' }}>Senior Sales Associate</div>
         <div
           style={{
             fontSize: '17px',
@@ -731,13 +734,13 @@ function ForestThumbnail({ accentColor }: { accentColor?: string }) {
         >
           Samantha Williams
         </div>
-        <div style={{ fontSize: '6px', marginBottom: '2px' }}>
-          <span style={{ fontWeight: 'bold' }}>Address:</span> New York, NY, 10001
-          {'   •   '}
-          <span style={{ fontWeight: 'bold' }}>Email address:</span> samantha.williams@example.com
-        </div>
-        <div style={{ fontSize: '6px' }}>
-          <span style={{ fontWeight: 'bold' }}>Phone number:</span> (555) 789-1234
+        <div style={{ fontSize: '6.5px', marginBottom: '2px' }}>Senior Sales Associate</div>
+        <div style={{ fontSize: '6.5px', marginBottom: '2px' }}>New York, NY</div>
+        <div className="flex gap-2 items-center justify-center">
+          <span>samantha.williams@example.com</span>
+          <span>(555) 789-1234</span>
+          <span>LinkedIn</span>
+          <span>GitHub</span>
         </div>
       </div>
 
@@ -785,14 +788,12 @@ function ForestThumbnail({ accentColor }: { accentColor?: string }) {
       </ForestSection>
 
       <ForestSection title="SKILLS" accent={accent}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '14px', rowGap: '0' }}>
-          <ForestSkillBullet>Project Management</ForestSkillBullet>
-          <ForestSkillBullet>Data-driven Decision Making</ForestSkillBullet>
-          <ForestSkillBullet>SQL & Excel</ForestSkillBullet>
-          <ForestSkillBullet>Financial Analysis</ForestSkillBullet>
-          <ForestSkillBullet>Business Intelligence tools</ForestSkillBullet>
-          <ForestSkillBullet>Statistical Modeling</ForestSkillBullet>
-        </div>
+        <SkillRow label="Programming Languages" value="Java, Python, JavaScript" />
+        <SkillRow label="Web Technologies" value="HTML, CSS, TypeScript" />
+        <SkillRow label="Frameworks" value="React.js, Node.js, Express.js" />
+        <SkillRow label="Database" value="MongoDB, MySQL, PostgreSQL, Firebase" />
+        <SkillRow label="Testing" value="Jest, React Testing Library, Postman, Manual Testing" />
+        <SkillRow label="Tools & DevOps" value="Git, GitHub, VS Code, Jira, Docker basics" />
       </ForestSection>
     </div>
   )
@@ -833,7 +834,7 @@ function ForestExpEntry({
   return (
     <div style={{ marginBottom: '4px' }}>
       <div style={{ fontSize: '7px' }}>
-        <span style={{ color: accent, fontWeight: 'bold' }}>{role}</span> | {date}
+        <span style={{ fontWeight: 'bold' }}>{role}</span> | {date}
       </div>
       <div style={{ fontSize: '6.5px', marginTop: '1px' }}>{company}</div>
       <ul style={{ margin: '2px 0 0', padding: 0, listStyle: 'none' }}>
@@ -871,28 +872,12 @@ function ForestEduEntry({
 }) {
   return (
     <div style={{ marginBottom: '3px' }}>
-      <div style={{ fontSize: '7px', fontWeight: 'bold', color: accent }}>
+      <div style={{ fontSize: '7px', fontWeight: 'bold' }}>
         {institution} | {degree}
       </div>
       <div style={{ fontSize: '6.5px', marginTop: '1px' }}>
         {subject} | {date}
       </div>
-    </div>
-  )
-}
-
-function ForestSkillBullet({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: '6px',
-        paddingLeft: '7px',
-        textIndent: '-5px',
-        marginBottom: '1px',
-        lineHeight: 1.45,
-      }}
-    >
-      • {children}
     </div>
   )
 }
@@ -927,17 +912,18 @@ function SlateThumbnail({ accentColor }: { accentColor?: string }) {
       >
         Jessie Smith
       </div>
-      <div style={{ fontSize: '7px', fontWeight: 'bold', marginBottom: '5px' }}>
+      <div style={{ fontSize: '7px', marginBottom: '5px' }}>
         Human Resource Manager
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: '6px', gap: '6px' }}>
-        <span>New York, USA, 4759 Sunnydale Lane, Plano, TX 75071, United States</span>
+        <div className="flex gap-2">
+          <span>New York, USA</span>
+          <span>(469) 385-2948</span>
+          <span>LinkedIn</span>
+          <span>GitHub</span>
+        </div>
         <span style={{ flexShrink: 0 }}>email@youremail.com</span>
       </div>
-      <div style={{ fontSize: '6px', marginTop: '1px' }}>(469) 385-2948</div>
-
-      {/* Main divider (accent) */}
-      <div style={{ borderTop: `1.5px solid ${accent}`, margin: '6px 0' }} />
 
       <SlateSection title="Summary" accent={accent}>
         <p style={{ fontSize: '5.5px', textAlign: 'justify', margin: 0, lineHeight: 1.45 }}>
@@ -1197,7 +1183,7 @@ function PillarExpEntry({
 }) {
   return (
     <div style={{ marginBottom: '4px' }}>
-      <div style={{ fontSize: '7px', fontWeight: 'bold', color: accent }}>{role}</div>
+      <div style={{ fontSize: '7px', fontWeight: 'bold' }}>{role}</div>
       <div style={{ fontSize: '6.5px', marginTop: '1px' }}>{company}</div>
       <div style={{ fontSize: '6.5px', marginTop: '0.5px' }}>{date}</div>
       <ul style={{ margin: '2px 0 0', padding: 0, listStyle: 'none' }}>
@@ -1233,7 +1219,7 @@ function PillarEduEntry({
 }) {
   return (
     <div style={{ marginBottom: '3px' }}>
-      <div style={{ fontSize: '7px', fontWeight: 'bold', color: accent }}>{degree}</div>
+      <div style={{ fontSize: '7px', fontWeight: 'bold' }}>{degree}</div>
       <div style={{ fontSize: '6.5px', marginTop: '1px' }}>{school}</div>
       <div style={{ fontSize: '6.5px', marginTop: '0.5px' }}>{date}</div>
     </div>

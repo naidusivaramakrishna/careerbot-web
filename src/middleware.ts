@@ -45,12 +45,13 @@ function redirectToLogin(request: NextRequest): NextResponse {
     return NextResponse.redirect(target);
 }
 
-function roleAllows(pathname: string, role: string | undefined): boolean {
+function roleAllows(pathname: string, actor: string | undefined): boolean {
+    const a = actor?.toLowerCase();
     if (pathname.startsWith(ADMIN_PREFIX)) {
-        return role === 'admin';
+        return a === 'admin';
     }
     if (pathname.startsWith(RECRUITER_PREFIX)) {
-        return role === 'recruiter' || role === 'admin';
+        return a === 'recruiter' || a === 'admin';
     }
     return true;
 }
@@ -106,7 +107,7 @@ export async function middleware(request: NextRequest) {
                 token,
                 new TextEncoder().encode(process.env.JWT_SECRET)
             );
-            if (!roleAllows(pathname, payload.role as string | undefined)) {
+            if (!roleAllows(pathname, payload.actor as string | undefined)) {
                 return NextResponse.redirect(new URL('/403', request.url));
             }
             return NextResponse.next();
@@ -153,7 +154,7 @@ export async function middleware(request: NextRequest) {
                         newAccess,
                         new TextEncoder().encode(process.env.JWT_SECRET)
                     );
-                    if (!roleAllows(pathname, payload.role as string | undefined)) {
+                    if (!roleAllows(pathname, payload.actor as string | undefined)) {
                         return NextResponse.redirect(new URL('/403', request.url));
                     }
                     // Re-issue the navigation with the refreshed cookies; the
