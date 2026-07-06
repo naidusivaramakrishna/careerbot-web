@@ -1,38 +1,3 @@
-// ==================== PLAN TYPES ====================
-// Import PlanItem from API to ensure type consistency
-export type { PlanItem } from '@/api/adminPlansApi';
-
-export interface PlanFormData {
-    planName: string;
-    price: string;
-    resumeLimit: string;
-    jobLimit: string;
-    aiCredits: string;
-    templates: string;
-    features: string[];
-}
-
-export interface CreatePlanPayload {
-    name: string;
-    price: number;
-    resume_scan_limit: number | string;
-    job_application_limit: number | string;
-    ai_credits: number | string;
-    templates: 'limited' | 'premium' | 'unlimited';
-    features: string[];
-    is_active: boolean;
-}
-
-export interface UpdatePlanPayload {
-    name: string;
-    price: number;
-    resume_scan_limit: number | string;
-    job_application_limit: number | string;
-    ai_credits: number | string;
-    templates: 'limited' | 'premium' | 'unlimited';
-    features: string[];
-}
-
 // ==================== FEATURE FLAGS TYPES ====================
 export interface FeatureFlag {
     key: string;
@@ -86,19 +51,7 @@ export interface AdminData {
 }
 
 // ==================== TAB TYPES ====================
-export type TabType = 'Subscription Plans' | 'Feature Flags' | 'System configuration' | 'Security';
+export type TabType = 'Feature Flags' | 'System configuration' | 'Security';
 
 // ==================== MODAL TYPES ====================
 export type ModalMode = 'add' | 'edit';
-
-export interface AddPlanModalProps {
-    open: boolean;
-    onClose: () => void;
-    onApply: () => void;
-    onDelete?: () => void;
-    onSetPopular?: () => void;
-    mode?: ModalMode;
-    formData: PlanFormData;
-    setFormData: (data: PlanFormData) => void;
-    isPopular?: boolean;
-}
