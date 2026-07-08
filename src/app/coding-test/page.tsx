@@ -1,294 +1,280 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ChevronRight, Code2, RotateCw, SearchX } from 'lucide-react';
+import { ArrowLeft, Zap } from 'lucide-react';
 import { fetchProblems } from './_lib/api';
-import type {
-  CodingProblemSummary,
-  CodingTestDifficulty,
-  CodingTestLanguage,
-} from './_lib/types';
-import { DIFFICULTIES, DIFFICULTY_BADGE, LANGUAGES } from './_lib/ui';
+import { fetchHistory, fetchQuota } from './_lib/gradingApi';
+import type { CodingTestLanguage, QuotaResponse } from './_lib/types';
 
-type LoadState = 'loading' | 'error' | 'ready';
+type Progress = { solved: number; attempted: number; accuracy: number };
 
-export default function CodingProblemsListPage() {
-  const [problems, setProblems] = useState<CodingProblemSummary[]>([]);
-  const [total, setTotal] = useState(0);
-  const [state, setState] = useState<LoadState>('loading');
-  const [errorMessage, setErrorMessage] = useState('');
+const LANG_CONFIG: {
+  value: CodingTestLanguage;
+  label: string;
+  icon: React.ReactNode;
+}[] = [
+  { value: 'python', label: 'Python', icon: <PythonIcon /> },
+  { value: 'java',   label: 'Java',   icon: <JavaIcon /> },
+  { value: 'c',      label: 'C',      icon: <CIcon /> },
+  { value: 'cpp',    label: 'C++',    icon: <CppIcon /> },
+];
 
-  // Filters
-  const [language, setLanguage] = useState<CodingTestLanguage | ''>('');
-  const [difficulty, setDifficulty] = useState<CodingTestDifficulty | ''>('');
-  const [tag, setTag] = useState<string>('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [baseTagOptions, setBaseTagOptions] = useState<string[]>([]);
+const CIRC = 2 * Math.PI * 36; // ≈ 226.2
+
+export default function CodingPracticeHub() {
+  const [totalProblems, setTotalProblems] = useState<number | null>(null);
+  const [progress, setProgress] = useState<Progress>({ solved: 0, attempted: 0, accuracy: 0 });
+  const [quota, setQuota] = useState<QuotaResponse | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const controller = new AbortController();
-    setState('loading');
-    setErrorMessage('');
-
-    fetchProblems(
-      {
-        language: language || undefined,
-        difficulty: difficulty || undefined,
-        tag: tag || undefined,
-      },
-      controller.signal,
-    )
-      .then((res) => {
-        setProblems(res.problems);
-        setTotal(res.total);
-        setState('ready');
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setErrorMessage(
-          err instanceof Error ? err.message : 'Something went wrong.',
+    // All 113 problems have starter code in every language, so one call gives
+    // the accurate total for every language card.
+    Promise.all([
+      fetchProblems().then((r) => r.total),
+      fetchHistory(1, 100).catch(() => null),
+      fetchQuota().catch(() => null),
+    ]).then(([total, history, q]) => {
+      setTotalProblems(total);
+      if (history) {
+        const uniqueSlugs = new Set(history.entries.map((e) => e.problem_slug));
+        const solvedSlugs = new Set(
+          history.entries.filter((e) => (e.score ?? 0) >= 70).map((e) => e.problem_slug),
         );
-        setState('error');
-      });
+        const attempted = uniqueSlugs.size;
+        const solved = solvedSlugs.size;
+        setProgress({
+          solved,
+          attempted,
+          accuracy: attempted > 0 ? Math.round((solved / attempted) * 100) : 0,
+        });
+      }
+      setQuota(q);
+      setReady(true);
+    });
+  }, []);
 
-    return () => controller.abort();
-  }, [language, difficulty, tag, reloadKey]);
-
-  // Tag options come from a query that OMITS the `tag` filter (but respects
-  // language/difficulty), so selecting a tag never collapses the dropdown to
-  // just that tag. Runs independently of the main, tag-filtered fetch.
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchProblems(
-      {
-        language: language || undefined,
-        difficulty: difficulty || undefined,
-      },
-      controller.signal,
-    )
-      .then((res) => {
-        const set = new Set(res.problems.map((p) => p.tag).filter(Boolean));
-        setBaseTagOptions(Array.from(set).sort((a, b) => a.localeCompare(b)));
-      })
-      .catch((err) => {
-        // Non-fatal: keep the previous tag options. The main fetch surfaces
-        // user-visible errors; the tag dropdown should not break the page.
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-      });
-
-    return () => controller.abort();
-  }, [language, difficulty, reloadKey]);
-
-  // Always include the currently-selected tag so the dropdown can still show it
-  // even if it is absent from the latest base set.
-  const tagOptions = useMemo(() => {
-    const set = new Set(baseTagOptions);
-    if (tag) set.add(tag);
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [baseTagOptions, tag]);
-
-  const hasActiveFilters = Boolean(language || difficulty || tag);
+  const arc = (progress.accuracy / 100) * CIRC;
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:py-12">
-        <header className="mb-6">
+      <div className="mx-auto max-w-5xl px-4 py-10 sm:py-14">
+
+        {/* Back to dashboard */}
+        <Link
+          href="/dashboard"
+          className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          Back to Dashboard
+        </Link>
+
+        {/* Header */}
+        <header className="mb-8">
           <div className="flex items-center gap-2 text-indigo-600">
-            <Code2 className="h-5 w-5" aria-hidden />
-            <span className="text-sm font-semibold uppercase tracking-wide">
-              Coding Practice
-            </span>
+            <span className="font-mono text-sm font-semibold tracking-wide">&lt;/&gt; PRACTICE</span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">
+          <h1 className="mt-1 text-3xl font-extrabold text-slate-900 sm:text-4xl">
             Coding Problems
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Browse problems and practice in Python, Java, or C++.
+          <p className="mt-2 max-w-xl text-sm text-slate-500">
+            Choose a programming language to start practicing. Each track has curated
+            problems ranging from easy to hard.
           </p>
         </header>
 
-        {/* Filters */}
-        <section
-          className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3"
-          aria-label="Filters"
-        >
-          <FilterSelect
-            label="Language"
-            value={language}
-            onChange={(v) => setLanguage(v as CodingTestLanguage | '')}
-            options={[
-              { value: '', label: 'All languages' },
-              ...LANGUAGES.map((l) => ({ value: l.value, label: l.label })),
-            ]}
-          />
-          <FilterSelect
-            label="Difficulty"
-            value={difficulty}
-            onChange={(v) => setDifficulty(v as CodingTestDifficulty | '')}
-            options={[
-              { value: '', label: 'All difficulties' },
-              ...DIFFICULTIES.map((d) => ({
-                value: d,
-                label: d.charAt(0).toUpperCase() + d.slice(1),
-              })),
-            ]}
-          />
-          <FilterSelect
-            label="Tag"
-            value={tag}
-            onChange={setTag}
-            options={[
-              { value: '', label: 'All tags' },
-              ...tagOptions.map((t) => ({ value: t, label: t })),
-            ]}
-          />
-          {hasActiveFilters && (
-            <div className="sm:col-span-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setLanguage('');
-                  setDifficulty('');
-                  setTag('');
-                }}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
-              >
-                Clear filters
-              </button>
-            </div>
-          )}
-        </section>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
 
-        {/* Results */}
-        {state === 'loading' && <ListSkeleton />}
+          {/* ── Language cards + browse link ─────────────────────────── */}
+          <div className="flex-1">
+            <h2 className="mb-4 text-base font-semibold text-slate-800">Select a Language</h2>
 
-        {state === 'error' && (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 p-8 text-center">
-            <AlertCircle className="h-8 w-8 text-rose-500" aria-hidden />
-            <p className="text-sm font-medium text-rose-700">{errorMessage}</p>
-            <button
-              type="button"
-              onClick={() => setReloadKey((k) => k + 1)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700"
-            >
-              <RotateCw className="h-4 w-4" aria-hidden />
-              Retry
-            </button>
-          </div>
-        )}
-
-        {state === 'ready' && problems.length === 0 && (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white p-10 text-center">
-            <SearchX className="h-8 w-8 text-slate-400" aria-hidden />
-            <p className="text-sm font-medium text-slate-700">
-              No problems match these filters.
-            </p>
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  setLanguage('');
-                  setDifficulty('');
-                  setTag('');
-                }}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        )}
-
-        {state === 'ready' && problems.length > 0 && (
-          <>
-            <p className="mb-3 text-sm text-slate-500" aria-live="polite">
-              Showing {problems.length} of {total} problem
-              {total === 1 ? '' : 's'}
-            </p>
-            <ul className="space-y-2">
-              {problems.map((p) => (
-                <li key={p.slug}>
-                  <Link
-                    href={`/coding-test/${p.slug}`}
-                    className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-indigo-300 hover:shadow-sm"
-                  >
-                    <div className="min-w-0">
-                      <h2 className="truncate font-semibold text-slate-900 group-hover:text-indigo-700">
-                        {p.title}
-                      </h2>
-                      <p className="mt-0.5 truncate text-xs text-slate-500">
-                        {p.tag}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${DIFFICULTY_BADGE[p.difficulty]}`}
-                      >
-                        {p.difficulty}
-                      </span>
-                      <ChevronRight
-                        className="h-5 w-5 text-slate-300 group-hover:text-indigo-500"
-                        aria-hidden
-                      />
-                    </div>
-                  </Link>
-                </li>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {LANG_CONFIG.map((lang) => (
+                <Link
+                  key={lang.value}
+                  href={`/coding-test/problems?language=${lang.value}`}
+                  className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+                >
+                  <div className="shrink-0">{lang.icon}</div>
+                  <div>
+                    <p className="text-base font-semibold text-slate-900">{lang.label}</p>
+                    <p className="text-sm text-slate-500">
+                      {ready ? `${totalProblems} Problems` : '— Problems'}
+                    </p>
+                  </div>
+                </Link>
               ))}
-            </ul>
-          </>
-        )}
+            </div>
+
+            <p className="mt-6 text-sm text-slate-500">
+              You can also{' '}
+              <Link
+                href="/coding-test/problems"
+                className="font-medium text-indigo-600 hover:underline"
+              >
+                browse all problems
+              </Link>{' '}
+              and filter by language, difficulty, or tag.
+            </p>
+          </div>
+
+          {/* ── Right sidebar ─────────────────────────────────────────── */}
+          <div className="flex w-full flex-col gap-4 lg:w-64 lg:shrink-0">
+
+            {/* YOUR PROGRESS */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                Your Progress
+              </p>
+              <div className="flex items-center gap-4">
+                {/* Donut chart */}
+                <svg width="90" height="90" viewBox="0 0 100 100" className="shrink-0">
+                  {/* Track */}
+                  <circle cx="50" cy="50" r="36" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                  {/* Arc */}
+                  <circle
+                    cx="50" cy="50" r="36"
+                    fill="none"
+                    stroke="#f97316"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray={`${arc} ${CIRC}`}
+                    transform="rotate(-90 50 50)"
+                  />
+                  <text x="50" y="47" textAnchor="middle" fill="#94a3b8" fontSize="14" fontWeight="600">
+                    {progress.attempted === 0 ? '--' : `${progress.accuracy}%`}
+                  </text>
+                  <text x="50" y="60" textAnchor="middle" fill="#cbd5e1" fontSize="9">
+                    accuracy
+                  </text>
+                </svg>
+                {/* Stats */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-baseline justify-between gap-6">
+                    <span className="text-sm font-medium text-orange-500">Solved</span>
+                    <span className="text-sm font-semibold text-slate-700">{progress.solved}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-6">
+                    <span className="text-sm font-medium text-indigo-500">Attempted</span>
+                    <span className="text-sm font-semibold text-slate-700">{progress.attempted}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-6">
+                    <span className="text-sm font-medium text-slate-600">Accuracy</span>
+                    <span className="text-sm font-semibold text-slate-700">
+                      {progress.attempted === 0 ? '0%' : `${progress.accuracy}%`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* GRADING CREDITS */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <Zap className="h-3.5 w-3.5 text-amber-500" aria-hidden />
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  Grading Credits
+                </p>
+              </div>
+              {quota ? (
+                <>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-4xl font-extrabold text-slate-900">
+                      {quota.submissions_remaining}
+                    </span>
+                    <span className="text-sm text-slate-400">submissions left</span>
+                  </div>
+                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-amber-400 transition-all"
+                      style={{
+                        width: `${Math.min(100, (quota.submissions_remaining / 50) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">
+                    {quota.cost_per_submission} credit per submission · {quota.plan} plan
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-400">Sign in to view your credits.</p>
+              )}
+            </div>
+
+          </div>
+        </div>
       </div>
     </main>
   );
 }
 
-function FilterSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
+/* ── Language icon components ─────────────────────────────────────────────── */
+
+function PythonIcon() {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-600">
-        {label}
-      </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-      >
-        {options.map((o) => (
-          <option key={o.value || '__all__'} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        {/* Python-style two-tone snake icon */}
+        <path
+          d="M18 2C13 2 10 4.5 10 8v3h8v1H7C4 12 2 14.5 2 18s2 6 5 6.5V28c0 3.5 3 6 8 6 5 0 8-2.5 8-6v-3h-8v-1h11c3 0 5-2.5 5-6.5s-2-6.5-5-6.5h-1V8c0-3.5-3-6-7-6z"
+          fill="#3776ab"
+        />
+        <path
+          d="M18 34c5 0 8-2.5 8-6v-3h-8v-1h11c3 0 5-2.5 5-6.5s-2-6-5-6.5V8c0-3.5-3-6-8-6-5 0-8 2.5-8 6v3h8v1H7c-3 0-5 2.5-5 6s2 6.5 5 7V28c0 3.5 3 6 8 6h3z"
+          fill="#ffd43b"
+          opacity="0.85"
+        />
+        <circle cx="14" cy="10" r="1.5" fill="white" />
+        <circle cx="22" cy="26" r="1.5" fill="white" />
+      </svg>
+    </div>
   );
 }
 
-function ListSkeleton() {
+function JavaIcon() {
   return (
-    <ul className="space-y-2" aria-hidden>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <li
-          key={i}
-          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4"
-        >
-          <div className="w-full">
-            <div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" />
-            <div className="mt-2 h-3 w-1/5 animate-pulse rounded bg-slate-100" />
-          </div>
-          <div className="h-5 w-16 animate-pulse rounded-full bg-slate-200" />
-        </li>
-      ))}
-    </ul>
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50">
+      <svg width="32" height="36" viewBox="0 0 32 36" fill="none">
+        {/* Coffee cup silhouette */}
+        <path
+          d="M6 14h16l-2 14H8L6 14z"
+          fill="#f59e0b"
+        />
+        <path
+          d="M22 16h3a3 3 0 010 6h-3"
+          stroke="#f59e0b"
+          strokeWidth="2"
+          strokeLinecap="round"
+          fill="none"
+        />
+        <path
+          d="M8 12c0 0 1.5-3 4-4.5C14.5 6 13 3 13 3"
+          stroke="#f59e0b"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          fill="none"
+          opacity="0.7"
+        />
+        <path d="M5 30h20" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+function CIcon() {
+  return (
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600">
+      <span className="text-xl font-extrabold text-white">C</span>
+    </div>
+  );
+}
+
+function CppIcon() {
+  return (
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-700">
+      <span className="text-base font-extrabold tracking-tight text-white">C++</span>
+    </div>
   );
 }

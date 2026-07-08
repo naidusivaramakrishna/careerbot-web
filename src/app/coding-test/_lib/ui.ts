@@ -6,6 +6,7 @@ export const LANGUAGES: { value: CodingTestLanguage; label: string }[] = [
   { value: 'python', label: 'Python' },
   { value: 'java', label: 'Java' },
   { value: 'cpp', label: 'C++' },
+  { value: 'c', label: 'C' },
 ];
 
 // Monaco language id per backend language key.
@@ -13,6 +14,7 @@ export const MONACO_LANGUAGE: Record<CodingTestLanguage, string> = {
   python: 'python',
   java: 'java',
   cpp: 'cpp',
+  c: 'c',
 };
 
 export const DIFFICULTY_BADGE: Record<CodingTestDifficulty, string> = {

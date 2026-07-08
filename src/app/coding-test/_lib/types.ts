@@ -1,5 +1,5 @@
 export type CodingTestDifficulty = 'easy' | 'medium' | 'hard';
-export type CodingTestLanguage = 'python' | 'java' | 'cpp';
+export type CodingTestLanguage = 'python' | 'java' | 'cpp' | 'c';
 
 export interface CodingProblemSummary {
   slug: string;
@@ -103,3 +103,20 @@ export const CRITERION_ORDER: (keyof ScoreBreakdown)[] = [
   'code_quality',
   'edge_cases',
 ];
+
+// ---- Quota (authenticated) -------------------------------------------------
+
+export interface QuotaResponse {
+  credits_remaining: number;
+  cost_per_submission: number;
+  submissions_remaining: number;
+  plan: string;
+}
+
+// ---- Code execution (run without grading) ----------------------------------
+
+export interface RunResult {
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+}

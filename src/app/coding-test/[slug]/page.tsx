@@ -10,24 +10,39 @@ import {
   Database,
   History,
   Loader2,
+  Pause,
   Play,
   RotateCw,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { CodingTestApiError, fetchProblem } from '../_lib/api';
-import { GradingApiError, submitSolution } from '../_lib/gradingApi';
+import { fetchQuota, GradingApiError, submitSolution } from '../_lib/gradingApi';
+import { RunApiError, runCode } from '../_lib/runApi';
 import GradingResultPanel from '../_components/GradingResultPanel';
+import OutputPanel from '../_components/OutputPanel';
+import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
   CodingProblemDetail,
   CodingTestLanguage,
+  QuotaResponse,
+  RunResult,
   SubmitSolutionResponse,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
 type SubmitState = 'idle' | 'submitting' | 'done';
+type RunState = 'idle' | 'running' | 'done';
+
+const TIMER_DEFAULT = 45 * 60; // 45 minutes in seconds
+
+function formatTimer(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 // Monaco must not run on the server.
-const CodeEditor = dynamic(() => import('../_components/CodeEditor'), {
+const CodeEditor = dynamic<CodeEditorProps>(() => import('../_components/CodeEditor'), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center rounded-lg border border-slate-700 bg-[#1e1e1e] text-sm text-slate-400">
@@ -37,6 +52,8 @@ const CodeEditor = dynamic(() => import('../_components/CodeEditor'), {
 });
 
 type LoadState = 'loading' | 'error' | 'notfound' | 'ready';
+
+
 
 export default function CodingProblemDetailPage() {
   // React 18 compat: `React.use()` crashes on React 18. `useParams()` from
@@ -56,6 +73,7 @@ export default function CodingProblemDetailPage() {
     python: '',
     java: '',
     cpp: '',
+    c: '',
   });
 
   useEffect(() => {
@@ -67,9 +85,10 @@ export default function CodingProblemDetailPage() {
       .then((res) => {
         setProblem(res);
         setCode({
-          python: res.starter_code.python ?? '',
-          java: res.starter_code.java ?? '',
-          cpp: res.starter_code.cpp ?? '',
+          python: localStorage.getItem(`code:${slug}:python`) ?? res.starter_code.python ?? '',
+          java: localStorage.getItem(`code:${slug}:java`) ?? res.starter_code.java ?? '',
+          cpp: localStorage.getItem(`code:${slug}:cpp`) ?? res.starter_code.cpp ?? '',
+          c: localStorage.getItem(`code:${slug}:c`) ?? res.starter_code.c ?? '',
         });
         setState('ready');
       })
@@ -92,13 +111,76 @@ export default function CodingProblemDetailPage() {
   const [result, setResult] = useState<SubmitSolutionResponse | null>(null);
   const [submitError, setSubmitError] = useState('');
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [noCredits, setNoCredits] = useState(false);
+
+  const [quota, setQuota] = useState<QuotaResponse | null>(null);
+
+  useEffect(() => {
+    fetchQuota()
+      .then(setQuota)
+      .catch(() => {}); // silent — user may not be signed in
+  }, []);
+
+  const [runState, setRunState] = useState<RunState>('idle');
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [runError, setRunError] = useState('');
+
+  const [timerSeconds, setTimerSeconds] = useState(TIMER_DEFAULT);
+  const [timerRunning, setTimerRunning] = useState(false);
+
+  useEffect(() => {
+    if (!timerRunning || timerSeconds === 0) {
+      if (timerSeconds === 0) setTimerRunning(false);
+      return;
+    }
+    const id = setInterval(() => setTimerSeconds((s) => s - 1), 1000);
+    return () => clearInterval(id);
+  }, [timerRunning, timerSeconds]);
+
+  const clearRunOutput = () => {
+    setRunResult(null);
+    setRunError('');
+    setRunState('idle');
+  };
 
   const resetToStarter = () => {
     if (!problem) return;
+    localStorage.removeItem(`code:${slug}:${language}`);
     setCode((prev) => ({
       ...prev,
       [language]: problem.starter_code[language] ?? '',
     }));
+    clearRunOutput();
+  };
+
+  const handleRun = async () => {
+    if (runState === 'running') return;
+    const source = code[language]?.trim();
+    if (!source) {
+      setRunError('Write some code before running.');
+      setRunResult(null);
+      return;
+    }
+    setRunState('running');
+    setRunError('');
+    setRunResult(null);
+    try {
+      const res = await runCode(
+        language,
+        code[language],
+        problem?.examples?.map((e) => ({ input: e.input, output: e.output })),
+      );
+      setRunResult(res);
+      setRunState('done');
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setRunState('idle');
+      setRunError(
+        err instanceof RunApiError || err instanceof Error
+          ? err.message
+          : 'Failed to run your code.',
+      );
+    }
   };
 
   const handleSubmit = async () => {
@@ -113,6 +195,7 @@ export default function CodingProblemDetailPage() {
     setSubmitState('submitting');
     setSubmitError('');
     setNeedsAuth(false);
+    setNoCredits(false);
     setResult(null);
     try {
       const res = await submitSolution({
@@ -122,10 +205,23 @@ export default function CodingProblemDetailPage() {
       });
       setResult(res);
       setSubmitState('done');
+      setQuota((q) =>
+        q
+          ? {
+              ...q,
+              submissions_remaining: Math.max(0, q.submissions_remaining - 1),
+              credits_remaining: Math.max(0, q.credits_remaining - q.cost_per_submission),
+            }
+          : q,
+      );
     } catch (err) {
       setSubmitState('idle');
       if (err instanceof GradingApiError && err.status === 401) {
         setNeedsAuth(true);
+        return;
+      }
+      if (err instanceof GradingApiError && err.status === 402) {
+        setNoCredits(true);
         return;
       }
       setSubmitError(
@@ -133,6 +229,11 @@ export default function CodingProblemDetailPage() {
       );
     }
   };
+
+  const timerColor =
+    timerSeconds < 120 ? 'text-red-600 animate-pulse' :
+    timerSeconds < 300 ? 'text-amber-500' :
+    'text-slate-600';
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -276,7 +377,7 @@ export default function CodingProblemDetailPage() {
                     <button
                       key={l.value}
                       type="button"
-                      onClick={() => setLanguage(l.value)}
+                      onClick={() => { setLanguage(l.value); clearRunOutput(); }}
                       aria-pressed={language === l.value}
                       className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
                         language === l.value
@@ -288,23 +389,55 @@ export default function CodingProblemDetailPage() {
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={resetToStarter}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600"
-                >
-                  <RotateCw className="h-3.5 w-3.5" aria-hidden />
-                  Reset
-                </button>
+                <div className="flex items-center gap-3">
+                  {/* Countdown timer */}
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-slate-400" aria-hidden />
+                    <span className={`font-mono text-sm font-semibold tabular-nums ${timerColor}`}>
+                      {formatTimer(timerSeconds)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setTimerRunning((r) => !r)}
+                      title={timerRunning ? 'Pause timer' : 'Start timer'}
+                      className="text-slate-400 transition hover:text-indigo-600"
+                    >
+                      {timerRunning
+                        ? <Pause className="h-3.5 w-3.5" aria-hidden />
+                        : <Play className="h-3.5 w-3.5" aria-hidden />}
+                    </button>
+                    {!timerRunning && timerSeconds < TIMER_DEFAULT && (
+                      <button
+                        type="button"
+                        onClick={() => setTimerSeconds(TIMER_DEFAULT)}
+                        title="Reset timer to 45:00"
+                        className="text-slate-400 transition hover:text-slate-600"
+                      >
+                        <RotateCw className="h-3 w-3" aria-hidden />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={resetToStarter}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" aria-hidden />
+                    Reset
+                  </button>
+                </div>
               </div>
 
               <div className="h-[460px] min-h-[320px]">
                 <CodeEditor
                   language={language}
                   value={code[language]}
-                  onChange={(v) =>
-                    setCode((prev) => ({ ...prev, [language]: v }))
-                  }
+                  onChange={(v) => {
+                    setCode((prev) => ({ ...prev, [language]: v }));
+                    localStorage.setItem(`code:${slug}:${language}`, v);
+                  }}
+                  onCtrlEnter={handleSubmit}
                 />
               </div>
 
@@ -316,25 +449,61 @@ export default function CodingProblemDetailPage() {
                   <History className="h-3.5 w-3.5" aria-hidden />
                   My submissions
                 </Link>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={submitState === 'submitting'}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
-                >
-                  {submitState === 'submitting' ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                      Grading…
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4" aria-hidden />
-                      Submit for grading
-                    </>
+                <div className="flex items-center gap-2">
+                  {quota !== null && (
+                    <span className={`text-xs tabular-nums ${quota.submissions_remaining === 0 ? 'text-rose-500' : 'text-slate-400'}`}>
+                      {quota.submissions_remaining} left
+                    </span>
                   )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleRun}
+                    disabled={runState === 'running' || submitState === 'submitting'}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                  >
+                    {runState === 'running' ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        Running…
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4" aria-hidden />
+                        Run
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={submitState === 'submitting' || runState === 'running' || quota?.submissions_remaining === 0}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                  >
+                    {submitState === 'submitting' ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        Grading…
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4" aria-hidden />
+                        Submit for grading
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
+
+              {runError && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
+                  <p className="text-sm text-rose-700">{runError}</p>
+                </div>
+              )}
+
+              {runState === 'done' && runResult && (
+                <OutputPanel result={runResult} />
+              )}
 
               {needsAuth && (
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
@@ -349,7 +518,16 @@ export default function CodingProblemDetailPage() {
                 </div>
               )}
 
-              {submitError && !needsAuth && (
+              {noCredits && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
+                  <p className="text-sm text-amber-700">
+                    You have no grading submissions remaining. Please upgrade your plan to continue.
+                  </p>
+                </div>
+              )}
+
+              {submitError && !needsAuth && !noCredits && (
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
                   <p className="text-sm text-rose-700">{submitError}</p>

@@ -1,17 +1,23 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import type { CodingTestLanguage } from '../_lib/types';
 import { MONACO_LANGUAGE } from '../_lib/ui';
 
-interface CodeEditorProps {
+export interface CodeEditorProps {
   language: CodingTestLanguage;
   value: string;
   onChange: (value: string) => void;
+  onCtrlEnter?: () => void;
 }
 
-export default function CodeEditor({ language, value, onChange }: CodeEditorProps) {
+export default function CodeEditor({ language, value, onChange, onCtrlEnter }: CodeEditorProps) {
+  // Ref keeps the callback current across renders without re-registering the action.
+  const onCtrlEnterRef = useRef(onCtrlEnter);
+  useEffect(() => { onCtrlEnterRef.current = onCtrlEnter; }, [onCtrlEnter]);
+
   return (
     <div className="h-full w-full overflow-hidden rounded-lg border border-slate-700 bg-[#1e1e1e]">
       <Editor
@@ -20,6 +26,14 @@ export default function CodeEditor({ language, value, onChange }: CodeEditorProp
         language={MONACO_LANGUAGE[language]}
         value={value}
         onChange={(v) => onChange(v ?? '')}
+        onMount={(editor, monaco) => {
+          editor.addAction({
+            id: 'submit-code',
+            label: 'Submit Code (Ctrl+Enter)',
+            keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+            run: () => onCtrlEnterRef.current?.(),
+          });
+        }}
         loading={
           <div className="flex h-full items-center justify-center text-slate-400">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
