@@ -5,9 +5,7 @@ export const TABS = [
     'Security'
 ] as const;
 
-export const LOGIN_METHODS = ['email', 'google'] as const;
-export const FILE_TYPES = ['jpg', 'png', 'pdf', 'docx'] as const;
-export const FILE_SIZE_OPTIONS = [1, 2, 5, 10] as const;
+export const LOGIN_METHODS = ['email', 'google', 'linkedin'] as const;
 
 // ==================== HELPER FUNCTIONS ====================
 export const capitalizeFirst = (str: string): string => {

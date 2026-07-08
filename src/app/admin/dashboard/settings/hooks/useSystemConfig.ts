@@ -35,6 +35,18 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
         }
     }, []);
 
+    const notifyMaintenanceCache = useCallback(async (enabled: boolean) => {
+        try {
+            await fetch('/api/maintenance-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled }),
+            });
+        } catch {
+            // non-critical — middleware cache will self-refresh within 30 s
+        }
+    }, []);
+
     const handleUpdateSystemConfig = useCallback(async () => {
         if (!systemConfig) return;
 
@@ -53,6 +65,7 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
             });
 
             setSystemConfig(updatedConfig);
+            await notifyMaintenanceCache(updatedConfig.maintenance_mode);
             toast.success('System configuration updated successfully');
         } catch (error: unknown) {
             logger.error('Error updating system config:', error);
@@ -60,7 +73,7 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
         } finally {
             setLoading(false);
         }
-    }, [systemConfig]);
+    }, [systemConfig, notifyMaintenanceCache]);
 
     const handleResetSystemConfig = useCallback(async () => {
         if (!confirm('Are you sure you want to reset all settings to default values?')) {
@@ -71,6 +84,7 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
             setLoading(true);
             const defaultConfig = await resetSystemConfig();
             setSystemConfig(defaultConfig);
+            await notifyMaintenanceCache(defaultConfig.maintenance_mode);
             toast.success('System configuration reset to defaults');
         } catch (error: unknown) {
             logger.error('Error resetting system config:', error);
@@ -78,7 +92,7 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notifyMaintenanceCache]);
 
     const updateConfigField = useCallback(<K extends keyof SystemConfig>(
         field: K,

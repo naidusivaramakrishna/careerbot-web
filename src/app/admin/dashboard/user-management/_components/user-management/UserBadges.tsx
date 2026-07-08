@@ -16,11 +16,9 @@ const statusStyles = {
 } as const
 
 const subscriptionStyles = {
+    free: 'text-blue-600 underline decoration-blue-500',
     pro: 'text-pink-600 underline decoration-pink-500',
-    basic: 'text-green-600 underline decoration-green-500',
-    enterprise: 'text-red-600 underline decoration-red-500',
-    premium: 'text-purple-600 underline decoration-purple-500',
-    free: 'text-blue-600 underline decoration-blue-500'
+    max: 'text-purple-600 underline decoration-purple-500',
 } as const
 
 export const UserStatusBadge = memo(({ status }: UserStatusBadgeProps) => {
