@@ -12,6 +12,7 @@ import {
 import ProfileFillModal from "./ProfileFillModal";
 import { useResumeProfileFill } from "@/hooks/useResumeProfileFill";
 import { toast } from "sonner";
+import CodingPracticeCard from "@/components/dashboard/CodingPracticeCard";
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
 const greeting = () => {
@@ -758,6 +759,7 @@ const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
           </div>
           <div className="lg:col-span-5 flex flex-col gap-5">
             <MarketCard roles={trending_roles ?? []} />
+            <CodingPracticeCard />
             <UsagePanel
               creditsUsed={creditsUsed}
               creditsTotal={plan.credits_total}

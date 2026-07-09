@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import { fetchHistory, GradingApiError } from '../_lib/gradingApi';
+import { fetchProblems } from '../_lib/api';
 import type { HistoryEntry } from '../_lib/types';
 import { normalizeScore } from '../_lib/ui';
 
@@ -36,6 +37,15 @@ export default function CodingTestHistoryPage() {
   const [state, setState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [titleMap, setTitleMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetchProblems().then((res) => {
+      const map: Record<string, string> = {};
+      for (const p of res.problems) map[p.slug] = p.title;
+      setTitleMap(map);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -154,7 +164,7 @@ export default function CodingTestHistoryPage() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-800">
-                        {e.problem_slug}
+                        {titleMap[e.problem_slug] ?? e.problem_slug}
                       </p>
                       <p className="text-xs text-slate-400">
                         {e.language} · {formatDate(e.submitted_at)}

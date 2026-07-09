@@ -169,7 +169,7 @@ function buildJavaTestHarness(userCode: string, examples: Example[]): string {
 
   // Insert a main method that prints example expectations (read-only reminder).
   const exampleComment = examples
-    .map((e, i) => `    // Test ${i + 1}: ${e.input} → ${e.output}`)
+    .map((e, i) => `    // Test ${i + 1}: ${e.input} -> ${e.output}`)
     .join('\n');
 
   // Try to insert main() before the last closing brace of the class
@@ -192,7 +192,7 @@ function buildCppTestHarness(userCode: string, examples: Example[]): string {
   if (examples.length === 0) return userCode;
 
   const exampleComment = examples
-    .map((e, i) => `// Test ${i + 1}: ${e.input} → ${e.output}`)
+    .map((e, i) => `// Test ${i + 1}: ${e.input} -> ${e.output}`)
     .join('\n');
 
   return [
@@ -212,7 +212,7 @@ function buildCTestHarness(userCode: string, examples: Example[]): string {
   if (examples.length === 0) return userCode;
 
   const exampleComment = examples
-    .map((e, i) => `// Test ${i + 1}: ${e.input} → ${e.output}`)
+    .map((e, i) => `// Test ${i + 1}: ${e.input} -> ${e.output}`)
     .join('\n');
 
   return [
@@ -288,9 +288,9 @@ export async function POST(req: NextRequest) {
 
   const data = await wandboxRes.json();
 
-  const stdout: string = data.program_output ?? '';
-  const compilerErr: string = data.compiler_output ?? data.compiler_error ?? '';
-  const programErr: string = data.program_error ?? '';
+  const stdout: string = data.program_output || '';
+  const compilerErr: string = data.compiler_output || data.compiler_error || '';
+  const programErr: string = data.program_error || '';
   const stderr = [compilerErr, programErr].filter(Boolean).join('\n');
   const exitCode = Number.parseInt(String(data.status ?? '0'), 10) || 0;
 

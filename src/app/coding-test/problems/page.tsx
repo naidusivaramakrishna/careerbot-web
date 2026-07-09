@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, ChevronLeft, ChevronRight, Code2, RotateCw, SearchX } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Circle, Code2, RotateCw, SearchX } from 'lucide-react';
 import { fetchProblems } from '../_lib/api';
+import { fetchHistory, GradingApiError } from '../_lib/gradingApi';
 import type {
   CodingProblemSummary,
   CodingTestDifficulty,
@@ -13,6 +14,9 @@ import type {
 import { DIFFICULTIES, DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
 type LoadState = 'loading' | 'error' | 'ready';
+type ProblemStatus = 'solved' | 'attempted';
+
+const PAGE_SIZE = 20;
 
 export default function CodingProblemsListPage() {
   const searchParams = useSearchParams();
@@ -32,10 +36,35 @@ export default function CodingProblemsListPage() {
   const [state, setState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
+  const [page, setPage] = useState(1);
+  const [statusMap, setStatusMap] = useState<Record<string, ProblemStatus>>({});
+
+  // Silently fetch submission history to mark solved/attempted problems.
+  useEffect(() => {
+    fetchHistory(1, 200)
+      .then((res) => {
+        const map: Record<string, ProblemStatus> = {};
+        for (const e of res.entries) {
+          const cur = map[e.problem_slug];
+          const isSolved = (e.score ?? 0) >= 70;
+          if (!cur || (isSolved && cur !== 'solved')) {
+            map[e.problem_slug] = isSolved ? 'solved' : 'attempted';
+          }
+        }
+        setStatusMap(map);
+      })
+      .catch((err) => {
+        // 401 = not signed in; silently ignore so unauthenticated users still
+        // see the list. Any other error is also non-critical here.
+        if (err instanceof GradingApiError) return;
+      });
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     setState('loading');
     setErrorMessage('');
+    setPage(1);
     fetchProblems(
       { language: language || undefined, difficulty: difficulty || undefined, tag: tag || undefined },
       controller.signal,
@@ -67,6 +96,9 @@ export default function CodingProblemsListPage() {
   }, [baseTagOptions, tag]);
 
   const hasActiveFilters = Boolean(language || difficulty || tag);
+
+  const totalPages = Math.max(1, Math.ceil(problems.length / PAGE_SIZE));
+  const visibleProblems = problems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -177,31 +209,69 @@ export default function CodingProblemsListPage() {
         {state === 'ready' && problems.length > 0 && (
           <>
             <p className="mb-3 text-sm text-slate-500" aria-live="polite">
-              Showing {problems.length} of {total} problem{total === 1 ? '' : 's'}
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, problems.length)} of {total} problem{total === 1 ? '' : 's'}
             </p>
             <ul className="space-y-2">
-              {problems.map((p) => (
-                <li key={p.slug}>
-                  <Link
-                    href={`/coding-test/${p.slug}${language ? `?language=${language}` : ''}`}
-                    className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
-                  >
-                    <div className="min-w-0">
-                      <h2 className="truncate font-semibold text-slate-900 group-hover:text-indigo-700">
-                        {p.title}
-                      </h2>
-                      <p className="mt-0.5 truncate text-xs text-slate-500">{p.tag}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${DIFFICULTY_BADGE[p.difficulty]}`}>
-                        {p.difficulty}
-                      </span>
-                      <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500" aria-hidden />
-                    </div>
-                  </Link>
-                </li>
-              ))}
+              {visibleProblems.map((p) => {
+                const status = statusMap[p.slug];
+                return (
+                  <li key={p.slug}>
+                    <Link
+                      href={`/coding-test/${p.slug}${language ? `?language=${language}` : ''}`}
+                      className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        {status === 'solved' ? (
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" aria-label="Solved" />
+                        ) : status === 'attempted' ? (
+                          <Circle className="h-4 w-4 shrink-0 text-amber-400" aria-label="Attempted" />
+                        ) : (
+                          <Circle className="h-4 w-4 shrink-0 text-slate-200" aria-hidden />
+                        )}
+                        <div className="min-w-0">
+                          <h2 className="truncate font-semibold text-slate-900 group-hover:text-indigo-700">
+                            {p.title}
+                          </h2>
+                          <p className="mt-0.5 truncate text-xs text-slate-500">{p.tag}</p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${DIFFICULTY_BADGE[p.difficulty]}`}>
+                          {p.difficulty}
+                        </span>
+                        <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500" aria-hidden />
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
+
+            {totalPages > 1 && (
+              <div className="mt-5 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  disabled={page <= 1}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 hover:enabled:border-indigo-300"
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden />
+                  Previous
+                </button>
+                <span className="text-sm text-slate-400">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  disabled={page >= totalPages}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 hover:enabled:border-indigo-300"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

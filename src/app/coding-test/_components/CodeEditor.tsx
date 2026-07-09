@@ -42,6 +42,8 @@ export default function CodeEditor({ language, value, onChange, onCtrlEnter }: C
         }
         options={{
           ariaLabel: `Code editor for ${language}`,
+          accessibilitySupport: 'on',
+          accessibilityPageSize: 10,
           fontSize: 14,
           minimap: { enabled: false },
           scrollBeyondLastLine: false,

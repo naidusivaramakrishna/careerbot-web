@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Zap } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { fetchProblems } from './_lib/api';
-import { fetchHistory, fetchQuota } from './_lib/gradingApi';
-import type { CodingTestLanguage, QuotaResponse } from './_lib/types';
+import { fetchHistory } from './_lib/gradingApi';
+import type { CodingTestLanguage } from './_lib/types';
+import QuotaBanner from '@/components/coding-test/QuotaBanner';
+import OnboardingModal from '@/components/coding-test/OnboardingModal';
 
 type Progress = { solved: number; attempted: number; accuracy: number };
 
@@ -22,20 +24,29 @@ const LANG_CONFIG: {
 
 const CIRC = 2 * Math.PI * 36; // ≈ 226.2
 
+const ONBOARDING_KEY = 'coding_test_onboarded';
+
 export default function CodingPracticeHub() {
   const [totalProblems, setTotalProblems] = useState<number | null>(null);
   const [progress, setProgress] = useState<Progress>({ solved: 0, attempted: 0, accuracy: 0 });
-  const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [ready, setReady] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Check localStorage after mount (SSR-safe).
+  useEffect(() => {
+    if (!localStorage.getItem(ONBOARDING_KEY)) setShowOnboarding(true);
+  }, []);
+
+  const dismissOnboarding = () => {
+    localStorage.setItem(ONBOARDING_KEY, '1');
+    setShowOnboarding(false);
+  };
 
   useEffect(() => {
-    // All 113 problems have starter code in every language, so one call gives
-    // the accurate total for every language card.
     Promise.all([
       fetchProblems().then((r) => r.total),
       fetchHistory(1, 100).catch(() => null),
-      fetchQuota().catch(() => null),
-    ]).then(([total, history, q]) => {
+    ]).then(([total, history]) => {
       setTotalProblems(total);
       if (history) {
         const uniqueSlugs = new Set(history.entries.map((e) => e.problem_slug));
@@ -50,7 +61,6 @@ export default function CodingPracticeHub() {
           accuracy: attempted > 0 ? Math.round((solved / attempted) * 100) : 0,
         });
       }
-      setQuota(q);
       setReady(true);
     });
   }, []);
@@ -59,6 +69,8 @@ export default function CodingPracticeHub() {
 
   return (
     <main className="min-h-screen bg-slate-50">
+      {showOnboarding && <OnboardingModal onDismiss={dismissOnboarding} />}
+
       <div className="mx-auto max-w-5xl px-4 py-10 sm:py-14">
 
         {/* Back to dashboard */}
@@ -171,37 +183,7 @@ export default function CodingPracticeHub() {
             </div>
 
             {/* GRADING CREDITS */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-2">
-                <Zap className="h-3.5 w-3.5 text-amber-500" aria-hidden />
-                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                  Grading Credits
-                </p>
-              </div>
-              {quota ? (
-                <>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-4xl font-extrabold text-slate-900">
-                      {quota.submissions_remaining}
-                    </span>
-                    <span className="text-sm text-slate-400">submissions left</span>
-                  </div>
-                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-amber-400 transition-all"
-                      style={{
-                        width: `${Math.min(100, (quota.submissions_remaining / 50) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <p className="mt-2 text-xs text-slate-400">
-                    {quota.cost_per_submission} credit per submission · {quota.plan} plan
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-slate-400">Sign in to view your credits.</p>
-              )}
-            </div>
+            <QuotaBanner />
 
           </div>
         </div>

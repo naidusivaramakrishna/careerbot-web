@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   ArrowLeft,
   Clock,
   Database,
+  FileText,
   History,
   Loader2,
   Pause,
@@ -20,6 +21,7 @@ import { fetchQuota, GradingApiError, submitSolution } from '../_lib/gradingApi'
 import { RunApiError, runCode } from '../_lib/runApi';
 import GradingResultPanel from '../_components/GradingResultPanel';
 import OutputPanel from '../_components/OutputPanel';
+import QuotaBanner from '@/components/coding-test/QuotaBanner';
 import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
   CodingProblemDetail,
@@ -60,6 +62,11 @@ export default function CodingProblemDetailPage() {
   // next/navigation works on React 18 + 19 and decodes the dynamic segment.
   const params = useParams<{ slug: string }>();
   const slug = typeof params?.slug === 'string' ? params.slug : '';
+  const searchParams = useSearchParams();
+  const langParam = searchParams.get('language');
+  const backHref = langParam
+    ? `/coding-test/problems?language=${langParam}`
+    : '/coding-test/problems';
 
   const [problem, setProblem] = useState<CodingProblemDetail | null>(null);
   const [state, setState] = useState<LoadState>('loading');
@@ -112,6 +119,7 @@ export default function CodingProblemDetailPage() {
   const [submitError, setSubmitError] = useState('');
   const [needsAuth, setNeedsAuth] = useState(false);
   const [noCredits, setNoCredits] = useState(false);
+  const [serviceDown, setServiceDown] = useState(false);
 
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
 
@@ -128,6 +136,11 @@ export default function CodingProblemDetailPage() {
   const [timerSeconds, setTimerSeconds] = useState(TIMER_DEFAULT);
   const [timerRunning, setTimerRunning] = useState(false);
 
+  const [plainEditor, setPlainEditor] = useState(false);
+  useEffect(() => {
+    if (localStorage.getItem('coding_test_plain_editor')) setPlainEditor(true);
+  }, []);
+
   useEffect(() => {
     if (!timerRunning || timerSeconds === 0) {
       if (timerSeconds === 0) setTimerRunning(false);
@@ -136,6 +149,15 @@ export default function CodingProblemDetailPage() {
     const id = setInterval(() => setTimerSeconds((s) => s - 1), 1000);
     return () => clearInterval(id);
   }, [timerRunning, timerSeconds]);
+
+  const togglePlainEditor = () => {
+    setPlainEditor((prev) => {
+      const next = !prev;
+      if (next) localStorage.setItem('coding_test_plain_editor', '1');
+      else localStorage.removeItem('coding_test_plain_editor');
+      return next;
+    });
+  };
 
   const clearRunOutput = () => {
     setRunResult(null);
@@ -196,6 +218,7 @@ export default function CodingProblemDetailPage() {
     setSubmitError('');
     setNeedsAuth(false);
     setNoCredits(false);
+    setServiceDown(false);
     setResult(null);
     try {
       const res = await submitSolution({
@@ -224,6 +247,10 @@ export default function CodingProblemDetailPage() {
         setNoCredits(true);
         return;
       }
+      if (err instanceof GradingApiError && (err.status === 502 || err.status === 503)) {
+        setServiceDown(true);
+        return;
+      }
       setSubmitError(
         err instanceof Error ? err.message : 'Failed to submit your solution.',
       );
@@ -239,7 +266,7 @@ export default function CodingProblemDetailPage() {
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl px-4 py-6">
         <Link
-          href="/coding-test"
+          href={backHref}
           className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
@@ -426,20 +453,51 @@ export default function CodingProblemDetailPage() {
                     <RotateCw className="h-3.5 w-3.5" aria-hidden />
                     Reset
                   </button>
+                  <button
+                    type="button"
+                    onClick={togglePlainEditor}
+                    title={plainEditor ? 'Switch to Monaco code editor' : 'Switch to plain text editor (screen-reader friendly)'}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600"
+                  >
+                    <FileText className="h-3.5 w-3.5" aria-hidden />
+                    {plainEditor ? 'Code editor' : 'Plain text'}
+                  </button>
                 </div>
               </div>
 
               <div className="h-[460px] min-h-[320px]">
-                <CodeEditor
-                  language={language}
-                  value={code[language]}
-                  onChange={(v) => {
-                    setCode((prev) => ({ ...prev, [language]: v }));
-                    localStorage.setItem(`code:${slug}:${language}`, v);
-                  }}
-                  onCtrlEnter={handleSubmit}
-                />
+                {plainEditor ? (
+                  <textarea
+                    aria-label={`Plain text code editor for ${language}`}
+                    value={code[language]}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setCode((prev) => ({ ...prev, [language]: v }));
+                      localStorage.setItem(`code:${slug}:${language}`, v);
+                    }}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSubmit();
+                      }
+                    }}
+                    spellCheck={false}
+                    className="h-full w-full resize-none rounded-lg border border-slate-700 bg-[#1e1e1e] p-3 font-mono text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                ) : (
+                  <CodeEditor
+                    language={language}
+                    value={code[language]}
+                    onChange={(v) => {
+                      setCode((prev) => ({ ...prev, [language]: v }));
+                      localStorage.setItem(`code:${slug}:${language}`, v);
+                    }}
+                    onCtrlEnter={handleSubmit}
+                  />
+                )}
               </div>
+
+              <QuotaBanner quota={quota} variant="strip" className="mt-3" />
 
               <div className="mt-3 flex items-center justify-between gap-3">
                 <Link
@@ -450,11 +508,6 @@ export default function CodingProblemDetailPage() {
                   My submissions
                 </Link>
                 <div className="flex items-center gap-2">
-                  {quota !== null && (
-                    <span className={`text-xs tabular-nums ${quota.submissions_remaining === 0 ? 'text-rose-500' : 'text-slate-400'}`}>
-                      {quota.submissions_remaining} left
-                    </span>
-                  )}
                   <button
                     type="button"
                     onClick={handleRun}
@@ -527,7 +580,25 @@ export default function CodingProblemDetailPage() {
                 </div>
               )}
 
-              {submitError && !needsAuth && !noCredits && (
+              {serviceDown && (
+                <div className="mt-3 flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
+                    <p className="text-sm text-rose-700">
+                      The AI grading service is temporarily unavailable. Your code is safe — please try again in a moment.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    className="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {submitError && !needsAuth && !noCredits && !serviceDown && (
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
                   <p className="text-sm text-rose-700">{submitError}</p>
