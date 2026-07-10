@@ -39,6 +39,8 @@ import {
   ListChecks,
   Loader2,
 } from "lucide-react";
+import { CodingPerformanceSection } from "@/components/interview/CodingPerformanceSection";
+import type { CodingRoundData } from "@/components/interview/CodingPerformanceSection";
 
 // ─── UI report shape ─────────────────────────────────────────────────────────
 
@@ -71,6 +73,7 @@ interface UiReport {
   strengths: string[];
   areas_to_improve: string[];
   questions: UiQuestion[];
+  coding_round?: CodingRoundData;
 }
 
 /** Map API ReportResponse → UI shape */
@@ -117,6 +120,7 @@ function mapReport(api: ReportResponse): UiReport {
       filler_count: a.filler_count ?? 0,
       feedback: a.feedback,
     })),
+    coding_round: (api as unknown as { coding_round?: CodingRoundData }).coding_round,
   };
 }
 
@@ -591,6 +595,11 @@ export default function ReportPage() {
           ))}
         </div>
       </div>
+
+      {/* Coding round performance */}
+      {report.coding_round && (
+        <CodingPerformanceSection data={report.coding_round} />
+      )}
 
       {/* Hinglish Note */}
       {report.hinglish_phrases.length > 0 && (

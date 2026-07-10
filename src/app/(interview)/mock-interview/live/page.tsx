@@ -165,12 +165,14 @@ function PreInterviewScreen({
   onStart,
   onTypeChange,
   starting,
+  codingRoundEnabled,
 }: {
-  sessionType: "HR" | "Technical" | "Mixed";
+  sessionType: "HR" | "Technical" | "Mixed" | "Technical + Coding";
   isMobile: boolean;
   onStart: () => void;
-  onTypeChange: (t: "HR" | "Technical" | "Mixed") => void;
+  onTypeChange: (t: "HR" | "Technical" | "Mixed" | "Technical + Coding") => void;
   starting: boolean;
+  codingRoundEnabled: boolean;
 }) {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
@@ -199,11 +201,11 @@ function PreInterviewScreen({
       {/* Session type */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5 mb-5">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Interview Type</p>
-        <div className="grid grid-cols-3 gap-2">
-          {(["HR", "Technical", "Mixed"] as const).map((t) => (
+        <div className={`grid gap-2 ${codingRoundEnabled ? "grid-cols-4" : "grid-cols-3"}`}>
+          {(["HR", "Technical", "Mixed", ...(codingRoundEnabled ? ["Technical + Coding"] : [])] as const).map((t) => (
             <button
               key={t}
-              onClick={() => onTypeChange(t)}
+              onClick={() => onTypeChange(t as "HR" | "Technical" | "Mixed" | "Technical + Coding")}
               className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
                 sessionType === t
                   ? "bg-[#2557a7] text-white shadow-md"
@@ -273,8 +275,9 @@ function PreInterviewScreen({
 export default function LiveSetupPage() {
   const router = useRouter();
   const [phase, setPhase] = useState<SetupPhase>("preflight");
-  const [sessionType, setSessionType] = useState<"HR" | "Technical" | "Mixed">("HR");
+  const [sessionType, setSessionType] = useState<"HR" | "Technical" | "Mixed" | "Technical + Coding">("HR");
   const [isMobile, setIsMobile] = useState(false);
+  const codingRoundEnabled = process.env.NEXT_PUBLIC_MOCK_INTERVIEW_CODING_ROUND_ENABLED === "true";
 
   useEffect(() => {
     setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
@@ -292,8 +295,8 @@ export default function LiveSetupPage() {
     }
     setPhase("connecting");
     try {
-      const typeMap: Record<string, "hr" | "technical" | "mixed"> = {
-        HR: "hr", Technical: "technical", Mixed: "mixed",
+      const typeMap: Record<string, "hr" | "technical" | "mixed" | "technical_coding"> = {
+        HR: "hr", Technical: "technical", Mixed: "mixed", "Technical + Coding": "technical_coding",
       };
       const data: LiveCreateResponse = await createLiveSession({
         session_type: typeMap[sessionType],
@@ -317,6 +320,7 @@ export default function LiveSetupPage() {
       onStart={handleStart}
       onTypeChange={setSessionType}
       starting={phase === "connecting"}
+      codingRoundEnabled={codingRoundEnabled}
     />
   );
 }
