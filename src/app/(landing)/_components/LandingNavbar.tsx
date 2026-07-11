@@ -376,11 +376,11 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
   return (
     <>
       <header
-        className={`sticky top-0 z-50 h-[72px] border-b border-slate-200 bg-white/95 backdrop-blur transition-shadow duration-200 ${
-          scrolled ? 'shadow-sm' : ''
+        className={`sticky top-0 z-50 px-3 pt-2 transition-all duration-200 ${
+          scrolled ? 'pb-2' : 'pb-0'
         }`}
       >
-        <nav className="mx-auto flex h-full max-w-[1240px] items-center justify-between gap-2 px-3 lg:px-3 xl:gap-4 xl:px-8">
+        <nav className="mx-auto flex h-[78px] max-w-[1590px] items-center justify-between gap-2 rounded-[18px] border border-slate-200/80 bg-white/92 px-5 shadow-[0_14px_38px_rgba(15,35,75,0.08)] backdrop-blur-xl lg:px-[72px] xl:gap-4">
           {/* Logo */}
           <Link href="/" className="-ml-1 flex shrink-0 items-center transition-opacity hover:opacity-80" aria-label="CareerBOT home">
             <Image
@@ -392,11 +392,11 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
               style={{ filter: 'hue-rotate(8deg) saturate(130%) brightness(68%)' }}
               priority
             />
-            <span className="text-base font-black tracking-tight text-[#0d5be1] xl:text-xl">CareerBOT</span>
+            <span className="text-base font-black tracking-tight text-[#2b78bc] xl:text-xl">CareerBOT</span>
           </Link>
 
           {/* Desktop nav — items render in declared order */}
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex xl:gap-2">
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 lg:flex xl:gap-4">
             {navItems.map((item, i) => {
               if (item.kind === 'dropdown') {
                 return (
@@ -436,14 +436,14 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
             <div className="hidden items-center gap-1.5 lg:flex xl:gap-2">
               <button
                 onClick={handleSignin}
-                className="cursor-pointer whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-700 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] xl:px-4 xl:text-sm"
+                className="cursor-pointer whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-700 shadow-[0_6px_16px_rgba(15,35,75,0.08)] transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] xl:px-4 xl:text-sm"
               >
                 Sign In
               </button>
               <Link
                 href="/builder/start"
                 onClick={() => setActiveDropdown(null)}
-                className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_8px_22px_rgba(37,87,167,0.28)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
+                className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
               >
                 <ShieldCheck size={13} className="xl:h-3.5 xl:w-3.5" />
                 Get Started Free

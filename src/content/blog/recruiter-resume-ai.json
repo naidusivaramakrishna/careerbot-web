@@ -1,0 +1,20 @@
+{
+  "slug": "recruiter-resume-ai",
+  "title": "How to build a recruiter-friendly resume with AI",
+  "category": "resume",
+  "tag": "Resume",
+  "readTimeMinutes": 12,
+  "publishedAt": "2026-07-09T09:00:00.000Z",
+  "updatedAt": "2026-07-08T09:00:00.000Z",
+  "excerpt": "A practical guide to writing clearer sections, stronger bullets, and cleaner exports before your next application.",
+  "illustration": "resume",
+  "featured": true,
+  "author": "CareerBOT Team",
+  "body": [
+    "Recruiters spend seconds, not minutes, scanning a resume before deciding whether to read further. That means structure and clarity matter as much as the work you've actually done.",
+    "Start with a clean section order: contact details, a short professional summary, experience, skills, and education. Avoid tables, columns, or graphics that can break when a resume is parsed by an applicant tracking system.",
+    "Every bullet under your experience should follow a simple pattern: what you did, how you did it, and the measurable result. \"Improved onboarding flow\" says little. \"Redesigned onboarding flow, cutting new-hire setup time from 45 to 12 minutes\" gives a recruiter something concrete to remember.",
+    "Once the structure is solid, use AI suggestions to tighten language rather than invent achievements. The best use of AI here is editing — turning a vague draft into a sharper, metric-backed version of something you actually did.",
+    "Before you export, check that your formatting survives a plain-text copy-paste. If your bullets, headers, and dates still read cleanly with no styling, an ATS will parse them correctly too."
+  ]
+}

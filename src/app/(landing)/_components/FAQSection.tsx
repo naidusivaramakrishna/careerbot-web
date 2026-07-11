@@ -70,7 +70,7 @@ function FAQItem({ faq, index }: { faq: { q: string; a: string }; index: number 
 export default function FAQSection() {
   return (
     <section className="bg-white py-8">
-      <div className="mx-auto max-w-[1080px] px-4">
+      <div className="mx-auto max-w-[760px] px-4">
         <div className="text-center">
           <span className="inline-flex rounded-full bg-[#eef5ff] px-3 py-1.5 text-[10px] font-black uppercase text-[#2557a7]">
             FAQ
@@ -80,7 +80,7 @@ export default function FAQSection() {
           </h2>
         </div>
 
-        <div className="mt-7 grid gap-4 md:grid-cols-3">
+        <div className="mt-7 flex flex-col gap-4">
           {faqs.map((faq, index) => (
             <FAQItem key={faq.q} faq={faq} index={index} />
           ))}

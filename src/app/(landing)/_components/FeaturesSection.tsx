@@ -29,7 +29,7 @@ const features: {
     description: 'Create ATS-friendly resumes in minutes with AI suggestions and proven templates.',
     cta: 'Build Resume',
     href: '/builder/start',
-    color: '#0d5be1',
+    color: '#2b78bc',
     bg: '#eef5ff',
   },
   {
@@ -209,12 +209,12 @@ export function CareerPromoSection() {
               <ul className="mt-5 space-y-3">
                 {card.bullets.map((item) => (
                   <li key={item} className="flex items-center gap-3 text-sm font-bold text-[#243a68]">
-                    <CheckCircle2 size={18} className="shrink-0 fill-[#0d5be1] text-white" />
+                    <CheckCircle2 size={18} className="shrink-0 fill-[#2b78bc] text-white" />
                     {item}
                   </li>
                 ))}
               </ul>
-              <Link href={card.href} className="mt-6 inline-flex w-fit items-center gap-2 text-sm font-black text-[#0d5be1]">
+              <Link href={card.href} className="mt-6 inline-flex w-fit items-center gap-2 text-sm font-black text-[#2b78bc]">
                 {card.cta}
                 <ArrowRight size={15} />
               </Link>

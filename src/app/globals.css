@@ -2,15 +2,15 @@
 
 :root {
   /* --font-montserrat kept as alias so interview/cover-letter pages that reference it still resolve */
-  --font-montserrat: var(--font-sans, 'Inter', system-ui, sans-serif);
+  --font-montserrat: var(--font-sans, system-ui, sans-serif);
 }
 
-/* Base Typography */
+/* Base Typography — Inter across the UI (self-hosted via next/font) */
 body {
-  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-weight: 400;
   font-size: 14px;
-  line-height: 21px;
+  line-height: 22px;
 }
 
 @layer utilities {

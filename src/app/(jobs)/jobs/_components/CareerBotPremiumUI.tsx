@@ -736,7 +736,7 @@ export default function CareerBotPremiumUI() {
         height: "calc(100vh - 56px)",
         overflow: "hidden",
         backgroundColor: "var(--cb-bg3)",
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
         fontSize: 13,
         color: "var(--cb-tx)",
       }}>

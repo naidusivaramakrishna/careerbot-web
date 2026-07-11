@@ -3,7 +3,7 @@ import axios from "axios";
 import type { AxiosRequestConfig } from 'axios';
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import logger from "@/lib/logger";
-import type { ParseResumeResponse, ParseJDResponse, ResumeData, ATSScore } from '@/types/api.types';
+import type { ParseResumeResponse, ParseFromProfileResponse, ParseJDResponse, ResumeData, ATSScore } from '@/types/api.types';
 
 /* ========== SAFE HELPERS ========== */
 interface ApiErrorWithRaw extends Error {
@@ -104,36 +104,62 @@ async function safeDelete<T = unknown>(url: string, config?: AxiosRequestConfig)
 }
 
 /* ========== PARSER FUNCTIONS ========== */
-export async function parseResume(file: File): Promise<ParseResumeResponse> {
+
+export interface PreviewOptions {
+  template_id?: string;
+  template_json?: string;
+  use_original?: boolean;
+  preserve_template?: boolean;
+  preserve_exact?: boolean;
+  use_run_level_formatting?: boolean;
+}
+
+export async function parseResume(file: File, options: { force_refresh?: boolean } = {}): Promise<ParseResumeResponse> {
   const form = new FormData();
   form.append("file", file);
-  return await safePost<ParseResumeResponse>(`/parser/parse_resume/`, form, {
+  const qs = options.force_refresh ? '?force_refresh=true' : '';
+  return await safePost<ParseResumeResponse>(`/parser/parse_resume/${qs}`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+}
+
+export async function parseResumeFromProfile(): Promise<ParseFromProfileResponse> {
+  return await safePost<ParseFromProfileResponse>(`/parser/parse-from-profile`);
 }
 
 export async function getResume(resume_id: string): Promise<ResumeData> {
   return await safeGet<ResumeData>(`/parser/get_resume/?resume_id=${resume_id}`);
 }
 
-export async function previewResume(resume_id: string): Promise<ResumeData> {
-  return await safeGet<ResumeData>(`/parser/preview/${resume_id}`);
+export async function previewResume(resume_id: string, options: PreviewOptions = {}): Promise<ResumeData> {
+  const params = new URLSearchParams();
+  if (options.template_id) params.set('template_id', options.template_id);
+  if (options.template_json) params.set('template_json', options.template_json);
+  if (options.use_original != null) params.set('use_original', String(options.use_original));
+  if (options.preserve_template != null) params.set('preserve_template', String(options.preserve_template));
+  if (options.preserve_exact != null) params.set('preserve_exact', String(options.preserve_exact));
+  if (options.use_run_level_formatting != null) params.set('use_run_level_formatting', String(options.use_run_level_formatting));
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return await safeGet<ResumeData>(`/parser/preview/${resume_id}${qs}`);
 }
 
-export async function downloadResumeJson(resume_id: string): Promise<ResumeData> {
-  return await safeGet<ResumeData>(`/parser/download/${resume_id}`);
+export async function downloadResumeJson(resume_id: string, options: PreviewOptions = {}): Promise<ResumeData> {
+  const params = new URLSearchParams();
+  if (options.template_id) params.set('template_id', options.template_id);
+  if (options.template_json) params.set('template_json', options.template_json);
+  if (options.use_original != null) params.set('use_original', String(options.use_original));
+  if (options.preserve_template != null) params.set('preserve_template', String(options.preserve_template));
+  if (options.preserve_exact != null) params.set('preserve_exact', String(options.preserve_exact));
+  if (options.use_run_level_formatting != null) params.set('use_run_level_formatting', String(options.use_run_level_formatting));
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return await safeGet<ResumeData>(`/parser/download/${resume_id}${qs}`);
 }
 
 export async function deleteResume(resume_id: string): Promise<void> {
   await safeDelete(`/parser/delete_resume/${resume_id}`);
 }
 
-export async function calculateATS(resume_id: string): Promise<ATSScore> {
-  return await safePost<ATSScore>(`/parser/calculate_ats_score/${resume_id}`, {
-    force_recalculate: true,
-    disable_cache: true,
-  });
-}
+// calculateATS removed — ATS scoring is now bundled with the enhance endpoint on the backend.
 
 export async function enhanceKeywords(resume_id: string): Promise<unknown> {
   return await safePost<unknown>(`/parser/keyword_enhancement/${resume_id}`);
@@ -352,14 +378,32 @@ export async function matcherEnhanceRemove(match_id: string, suggestion_id: stri
 
 /* ========== RESUME DOWNLOAD ========== */
 
-export async function downloadResumePdf(resume_id: string, filename?: string, match_id?: string): Promise<void> {
+export async function downloadResumePdf(
+  resume_id: string,
+  filename?: string,
+  match_id?: string,
+  options: PreviewOptions & { format?: 'pdf' | 'docx' } = {}
+): Promise<void> {
+  const { format = 'pdf', ...previewOpts } = options;
   const response = await httpClient.get(`/parser/download/${resume_id}`, {
-    params: { format: "pdf", use_original: false, preserve_template: false, ...(match_id ? { match_id } : {}) },
+    params: {
+      format,
+      use_original: previewOpts.use_original ?? false,
+      preserve_template: previewOpts.preserve_template ?? false,
+      ...(previewOpts.preserve_exact != null && { preserve_exact: previewOpts.preserve_exact }),
+      ...(previewOpts.use_run_level_formatting != null && { use_run_level_formatting: previewOpts.use_run_level_formatting }),
+      ...(previewOpts.template_json && { template_json: previewOpts.template_json }),
+      ...(previewOpts.template_id && { template_id: previewOpts.template_id }),
+      ...(match_id ? { match_id } : {}),
+    },
     responseType: "blob",
   });
   const contentDisposition = (response.headers as Record<string, string>)["content-disposition"] ?? "";
   const serverFilename = contentDisposition.match(/filename="?([^"]+)"?/)?.[1];
-  const blob = new Blob([response.data as BlobPart], { type: "application/pdf" });
+  const mimeType = format === 'docx'
+    ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    : 'application/pdf';
+  const blob = new Blob([response.data as BlobPart], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -373,15 +417,19 @@ export async function downloadResumePdf(resume_id: string, filename?: string, ma
 /* ========== EXPORT ========== */
 export const parserApi = {
   parseResume,
+  parseResumeFromProfile,
   getResume,
+  previewResume,
+  downloadResumeJson,
+  downloadResumePdf,
   deleteResume,
-  calculateATS,
   enhanceKeywords,
   parserAddSkills,
   parserRemoveSkills,
   parseJDFile,
   parseJDText,
   parseJDUrl,
+  parseJDByJob,
   matchResumeAndJD,
   getMatchAnalytics,
   listAllMatches,

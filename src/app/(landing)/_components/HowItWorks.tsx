@@ -55,7 +55,7 @@ export default function HowItWorks() {
                   viewport={{ once: true, margin: '-50px' }}
                   transition={{ duration: 0.4, delay: index * 0.08 }}
                 >
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white text-[#0d5be1] shadow-[0_16px_28px_rgba(0,0,0,0.16)]">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white text-[#2b78bc] shadow-[0_16px_28px_rgba(0,0,0,0.16)]">
                     <Icon size={25} strokeWidth={2.7} />
                   </div>
                   <h3 className="mt-5 text-sm font-black leading-snug">{step.title}</h3>
