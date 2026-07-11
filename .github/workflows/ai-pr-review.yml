@@ -1,16 +1,12 @@
 name: AI PR Review (Claude + Codex)
 
 on:
-  # Review the moment a PR is opened or a new commit is pushed.
   pull_request:
     types: [opened, synchronize, reopened]
-  # On-demand: comment `/ai-review` on a PR.
   issue_comment:
     types: [created]
-  # Idempotent safety-net sweep of all open PRs.
   schedule:
     - cron: "*/30 * * * *"
-  # Manual: one PR (input) or blank = sweep all.
   workflow_dispatch:
     inputs:
       pr:
@@ -35,14 +31,12 @@ jobs:
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        startsWith(github.event.comment.body, '/ai-review'))
-    # Same self-hosted laptop runner as careerbot-api. Register this repo's
-    # runner with the label `ai-review` (see scripts/ai_review/RUNNER_SETUP.txt).
     runs-on: [self-hosted, ai-review]
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Self-hosted box: the `claude` + `codex` CLIs are already logged in as the
-      # runner user, so we do NOT inject ANTHROPIC_API_KEY / OPENAI_API_KEY
-      # (empty unset secrets would override and break local CLI auth).
+      # Next.js build sometimes needs a public API base at build time; harmless default.
+      NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL || '/api/v1' }}
+
     steps:
       - name: Checkout (full history for merge-base + at-SHA reads)
         uses: actions/checkout@v4
@@ -52,16 +46,16 @@ jobs:
         id: t
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "args=--pr ${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "args=--pr ${{ github.event.pull_request.number }} --dynamic" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "issue_comment" ]; then
-            echo "args=--pr ${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+            echo "args=--pr ${{ github.event.issue.number }} --dynamic" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pr }}" ]; then
-            echo "args=--pr ${{ github.event.inputs.pr }}" >> "$GITHUB_OUTPUT"
+            echo "args=--pr ${{ github.event.inputs.pr }} --dynamic" >> "$GITHUB_OUTPUT"
           else
-            echo "args=--all" >> "$GITHUB_OUTPUT"
+            echo "args=--all --dynamic" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run two-model static review (Claude finds, Codex cross-checks)
+      - name: Run review (T1 static + T2 build/lint)
         run: |
           python3 scripts/ai_review/ai_pr_review.py \
             --repo "${{ github.repository }}" \
