@@ -1,0 +1,110 @@
+================================================================================
+AI PR REVIEW AGENT — GO-LIVE SETUP (self-hosted runner + secrets + test DB)
+================================================================================
+Verified for THIS box (2026-07-08): x86_64, systemd present, Podman rootless with
+careerbot-mongodb (mongo:7.0, --auth) + careerbot-redis running, mongosh in the mongo
+container, gh admin on the repo, and claude/codex AUTHENTICATED VIA STORED CONFIG
+(~/.claude.json, ~/.codex) for user `intelicore`.
+
+>>> KEY SIMPLIFICATION: run the runner AS `intelicore`. Then claude + codex are already
+>>> logged in (stored config) and gh/podman DBs are reachable. You DO NOT need the
+>>> ANTHROPIC_API_KEY / OPENAI_API_KEY secrets — only DATABASE_URI_TEST.
+
+Run all of this as user `intelicore` on this box.
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 1 — Create the throwaway test DB + grant the app user (never use prod `careerbot`)
+────────────────────────────────────────────────────────────────────────────────
+# Use the Mongo ADMIN creds (in the gitignored .env — the commented
+# `mongodb://admin:***@localhost:27017/...authSource=admin` line). Do NOT hardcode.
+ADMIN_PW='<paste Mongo admin password from .env>'
+
+podman exec -i careerbot-mongodb mongosh \
+  -u admin -p "$ADMIN_PW" --authenticationDatabase admin --quiet --eval '
+    // grant the existing app user readWrite on a separate test DB
+    db.getSiblingDB("careerbot").grantRolesToUser(
+      "careerbot_user", [{ role: "readWrite", db: "careerbot_test" }]);
+    // touch the DB so it exists
+    db.getSiblingDB("careerbot_test").createCollection("_bootstrap");
+    print("careerbot_test ready; careerbot_user granted readWrite");
+  '
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 2 — Register the self-hosted GitHub Actions runner (labels: self-hosted, ai-review)
+────────────────────────────────────────────────────────────────────────────────
+REPO=intelicoreai/careerbot-api
+mkdir -p ~/actions-runner && cd ~/actions-runner
+
+# latest runner (check https://github.com/actions/runner/releases for a newer tag)
+RUNNER_VER=2.319.1
+curl -fsSL -o runner.tgz \
+  "https://github.com/actions/runner/releases/download/v${RUNNER_VER}/actions-runner-linux-x64-${RUNNER_VER}.tar.gz"
+tar xzf runner.tgz && rm runner.tgz
+
+# mint a registration token with gh (you have admin)
+REG_TOKEN=$(gh api -X POST "repos/${REPO}/actions/runners/registration-token" --jq .token)
+
+./config.sh --url "https://github.com/${REPO}" --token "$REG_TOKEN" \
+  --name careerbot-ai-review --labels self-hosted,ai-review \
+  --work _work --unattended --replace
+
+# CRITICAL: give jobs the PATH to claude/codex/gh/python (systemd service env is minimal).
+# The runner reads a `.env` file in its dir and injects it into every job.
+cat > ~/actions-runner/.env <<'ENV'
+PATH=/home/intelicore/.local/bin:/home/intelicore/bin:/home/intelicore/.nvm/versions/node/v22.18.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOME=/home/intelicore
+ENV
+
+# install as a service that runs AS intelicore (so claude/codex stored auth is found)
+sudo ./svc.sh install intelicore
+sudo ./svc.sh start
+sudo ./svc.sh status        # should show "active (running)"
+
+# --- FALLBACK if systemd/svc.sh is unavailable (e.g. WSL without systemd) ---
+#   setsid nohup ./run.sh >~/actions-runner/runner.log 2>&1 &
+
+# verify the runner shows up + is online:
+gh api "repos/${REPO}/actions/runners" --jq '.runners[] | {name,status,labels:[.labels[].name]}'
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 3 — Secrets (only ONE is required)
+────────────────────────────────────────────────────────────────────────────────
+REPO=intelicoreai/careerbot-api
+# REQUIRED — the authenticated test-DB URI (careerbot_user pw is in .env). authSource
+# stays `careerbot` because that's where the user is defined.
+gh secret set DATABASE_URI_TEST --repo "$REPO" \
+  --body 'mongodb://careerbot_user:<careerbot_user pw from .env>@127.0.0.1:27017/careerbot_test?authSource=careerbot'
+
+# OPTIONAL — only if the runner does NOT inherit the stored claude/codex config
+# (i.e. you run it as a different user). Normally NOT needed on this box:
+# gh secret set ANTHROPIC_API_KEY --repo "$REPO" --body 'sk-ant-...'
+# gh secret set OPENAI_API_KEY    --repo "$REPO" --body 'sk-...'
+
+# GITHUB_TOKEN is provided automatically (workflow has pull-requests: write).
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 4 — Turn it on + smoke test
+────────────────────────────────────────────────────────────────────────────────
+# The workflow (.github/workflows/ai-pr-review.yml) already: sweeps all open PRs every
+# 30 min, responds to `/ai-review` comments, and runs the dynamic tier against the
+# ephemeral... (reused) podman DBs. First, smoke-test on ONE PR without waiting:
+
+gh workflow run "AI PR Review (Claude + Codex)" --repo intelicoreai/careerbot-api -f pr=60
+gh run watch --repo intelicoreai/careerbot-api $(gh run list --repo intelicoreai/careerbot-api -w "AI PR Review (Claude + Codex)" -L1 --json databaseId --jq '.[0].databaseId')
+
+# or just comment `/ai-review` on any PR. Confirm a review comment appears, then let
+# the 30-min schedule take over.
+
+────────────────────────────────────────────────────────────────────────────────
+NOTES / GUARDRAILS
+────────────────────────────────────────────────────────────────────────────────
+- Runner MUST run as `intelicore` (svc.sh install intelicore) so claude/codex stored
+  auth + gh + the podman DB ports are available. Running as root breaks all three.
+- Confirm the `claude -p` headless flag on your version:  claude -p "hello"  (should
+  print to stdout and exit). If your CLI differs, adjust claude_pass() in ai_pr_review.py.
+- The dynamic tier writes to careerbot_test ONLY. Never point DATABASE_URI_TEST at the
+  live `careerbot` DB — the suite creates/drops collections.
+- To pause the bot: `sudo ./svc.sh stop` (or disable the schedule in the workflow).
+- Security: rotate the Mongo passwords out of the committed-history-safe .env into a
+  secret store when convenient; .env is already gitignored (verified).
+================================================================================
