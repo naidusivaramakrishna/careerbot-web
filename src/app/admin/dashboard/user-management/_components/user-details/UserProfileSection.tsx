@@ -47,7 +47,7 @@ export const UserProfileSection = memo(({
                     </div>
                     <div className="flex items-center gap-2">
                         <CreditCard size={16} className="text-gray-500" />
-                        <span className="capitalize">{user.subscription || 'Free'} Plan</span>
+                        <span className="capitalize">{user.subscription?.plan || 'Free'} Plan</span>
                     </div>
                     <div className="flex items-center gap-2 col-span-2">
                         <span className="font-medium">Role:</span>

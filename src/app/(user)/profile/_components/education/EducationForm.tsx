@@ -27,7 +27,6 @@ export default function EducationForm({
     return error?.message;
   };
 
-
   const toISODate = (value: string): string => {
     const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})$/;
     const match = value.match(ddmmyyyy);
@@ -51,13 +50,21 @@ export default function EducationForm({
     }));
   };
 
+  const inputClass = (field: string) =>
+    `w-full border text-sm rounded-lg px-3 py-2.5 bg-gray-50 outline-none transition
+     focus:ring-2 focus:ring-[#2257a7]/20 focus:border-[#2257a7] focus:bg-white
+     ${getFieldError(field)
+       ? "border-red-400 bg-red-50 focus:ring-red-200 focus:border-red-400"
+       : "border-gray-200 hover:border-gray-300"
+     }`;
 
   return (
-    <div className="flex flex-col gap-2 mb-4">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-2 gap-4">
+
         {/* Institution */}
-        <div className="flex flex-col gap-3">
-          <label className="text-sm font-semibold">School/College</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-gray-600">School / College</label>
           <input
             type="text"
             name="institution"
@@ -65,13 +72,11 @@ export default function EducationForm({
             data-testid="edu-institution-input"
             value={educationForm.institution || ""}
             onChange={handleChange}
-            className={`border p-2.5 text-sm rounded-lg bg-gray-100 transition-colors ${getFieldError("institution")
-                ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
-                : "border-neutral-200"
-              }`}
+            placeholder="e.g. MIT, Stanford University"
+            className={inputClass("institution")}
           />
           {getFieldError("institution") && (
-            <p className="text-red-600 text-xs mt-1" role="alert">{getFieldError("institution")}</p>
+            <p className="text-red-500 text-xs" role="alert">{getFieldError("institution")}</p>
           )}
         </div>
 
@@ -85,6 +90,8 @@ export default function EducationForm({
           }
           placeholder="Search or type degree..."
           error={getFieldError("degree")}
+          labelClassName="text-xs font-medium text-gray-600"
+          containerClassName="flex flex-col gap-1.5 w-full min-w-0"
         />
 
         {/* Stream */}
@@ -97,11 +104,13 @@ export default function EducationForm({
           }
           placeholder="Search or type stream..."
           error={getFieldError("stream")}
+          labelClassName="text-xs font-medium text-gray-600"
+          containerClassName="flex flex-col gap-1.5 w-full min-w-0"
         />
 
         {/* GPA */}
-        <div className="flex flex-col gap-3">
-          <label className="text-sm font-semibold">GPA</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-gray-600">GPA</label>
           <input
             type="number"
             name="cgpa"
@@ -112,21 +121,18 @@ export default function EducationForm({
             max="10"
             value={educationForm.cgpa || ""}
             onChange={handleChange}
-            placeholder="e.g., 7.5"
-            className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError("cgpa")
-                ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
-                : "border-neutral-200"
-              }`}
+            placeholder="e.g. 7.5"
+            className={inputClass("cgpa")}
           />
           {getFieldError("cgpa") && (
-            <p className="text-red-600 text-xs mt-1" role="alert">{getFieldError("cgpa")}</p>
+            <p className="text-red-500 text-xs" role="alert">{getFieldError("cgpa")}</p>
           )}
         </div>
 
         {/* Dates */}
         {["start_date", "end_date"].map((field) => (
-          <div key={field} className="flex flex-col gap-3">
-            <label className="text-sm font-semibold">
+          <div key={field} className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-gray-600">
               {field === "start_date" ? "Start Date" : "End Date"}
             </label>
             <input
@@ -136,29 +142,33 @@ export default function EducationForm({
               data-testid={`edu-${field}-input`}
               value={String((educationForm as Record<string, unknown>)[field] || "")}
               onChange={handleChange}
-              className={`border p-2.5 text-sm rounded-lg bg-gray-100 outline-neutral-500 transition-colors ${getFieldError(field)
-                  ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500"
-                  : "border-neutral-200"
-                }`}
+              className={inputClass(field)}
             />
             {getFieldError(field) && (
-              <p className="text-red-600 text-xs mt-1" role="alert">{getFieldError(field)}</p>
+              <p className="text-red-500 text-xs" role="alert">{getFieldError(field)}</p>
             )}
           </div>
         ))}
+      </div>
 
-        {/* Buttons */}
-        <div className="col-span-2 flex gap-2 justify-self-end mt-2">
-          <button
-            type="button"
-            onClick={onSave}
-            data-testid="edu-save-btn"
-            disabled={loading}
-            className="bg-[#2257a7] text-white px-4 py-1.5 cursor-pointer rounded"
-          >
-            {loading ? "Saving..." : "Save"}
-          </button>
-        </div>
+      {/* Actions */}
+      <div className="flex gap-2 justify-end pt-1 border-t border-gray-100">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 hover:bg-gray-100 rounded-lg transition"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          data-testid="edu-save-btn"
+          disabled={loading}
+          className="px-4 py-2 text-sm font-medium text-white bg-[#2257a7] hover:bg-[#1a4590] rounded-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {loading ? "Saving..." : "Save"}
+        </button>
       </div>
     </div>
   );

@@ -20,7 +20,37 @@ const publicRoutes = [
     // export/download handles auth at the action level.
     "/builder",
     "/cover-letter",
+    // Maintenance page — always accessible
+    "/maintenance",
 ];
+
+// Edge-runtime module-level maintenance cache.
+// TTL is intentionally short (5 s) so that when an admin enables maintenance
+// the change propagates to users within 5 s instead of 30 s. The Node.js
+// route handler at /api/maintenance-status is updated synchronously by
+// useSystemConfig on every save, so it always has the latest value.
+let maintenanceEdgeCache: { enabled: boolean; checkedAt: number } = {
+    enabled: false,
+    checkedAt: 0,
+};
+
+async function isMaintenanceMode(requestUrl: string): Promise<boolean> {
+    const now = Date.now();
+    if (now - maintenanceEdgeCache.checkedAt < 5_000) {
+        return maintenanceEdgeCache.enabled;
+    }
+    try {
+        const url = new URL('/api/maintenance-status', requestUrl);
+        const res = await fetch(url, { cache: 'no-store' });
+        if (res.ok) {
+            const data: { maintenance: boolean } = await res.json();
+            maintenanceEdgeCache = { enabled: Boolean(data.maintenance), checkedAt: now };
+        }
+    } catch {
+        // keep stale value on error — fail open is safer than blocking all traffic
+    }
+    return maintenanceEdgeCache.enabled;
+}
 
 const RECRUITER_PREFIX = '/recruiter';
 const ADMIN_PREFIX = '/admin';
@@ -45,12 +75,15 @@ function redirectToLogin(request: NextRequest): NextResponse {
     return NextResponse.redirect(target);
 }
 
-function roleAllows(pathname: string, role: string | undefined): boolean {
+const ADMIN_ROLES = new Set(['admin', 'super_admin', 'moderator', 'support']);
+
+function roleAllows(pathname: string, actor: string | undefined): boolean {
+    const a = actor?.toLowerCase();
     if (pathname.startsWith(ADMIN_PREFIX)) {
-        return role === 'admin';
+        return !!(a && ADMIN_ROLES.has(a));
     }
     if (pathname.startsWith(RECRUITER_PREFIX)) {
-        return role === 'recruiter' || role === 'admin';
+        return a === 'recruiter' || !!(a && ADMIN_ROLES.has(a));
     }
     return true;
 }
@@ -72,11 +105,23 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Check for both regular and admin-prefixed token names
-    const token = request.cookies.get('access_token')?.value ||
-                  request.cookies.get('admin_access_token')?.value;
-    const refreshToken = request.cookies.get('refresh_token')?.value ||
-                         request.cookies.get('admin_refresh_token')?.value;
+    // Maintenance mode — only for regular user routes (admin/recruiter bypass so
+    // admins can always reach the dashboard to turn maintenance off)
+    const isAdminOrRecruiter =
+        pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
+    if (!isAdminOrRecruiter && await isMaintenanceMode(request.url)) {
+        return NextResponse.redirect(new URL('/maintenance', request.url));
+    }
+
+    // For admin paths, prefer admin_access_token to avoid stale user session
+    // cookies causing false 403s when both cookies coexist in the browser.
+    const isAdminPath = pathname.startsWith(ADMIN_PREFIX);
+    const token = isAdminPath
+        ? (request.cookies.get('admin_access_token')?.value || request.cookies.get('access_token')?.value)
+        : (request.cookies.get('access_token')?.value || request.cookies.get('admin_access_token')?.value);
+    const refreshToken = isAdminPath
+        ? (request.cookies.get('admin_refresh_token')?.value || request.cookies.get('refresh_token')?.value)
+        : (request.cookies.get('refresh_token')?.value || request.cookies.get('admin_refresh_token')?.value);
 
     if (!token && !refreshToken) {
         return redirectToLogin(request);
@@ -106,7 +151,7 @@ export async function middleware(request: NextRequest) {
                 token,
                 new TextEncoder().encode(process.env.JWT_SECRET)
             );
-            if (!roleAllows(pathname, payload.role as string | undefined)) {
+            if (!roleAllows(pathname, payload.actor as string | undefined)) {
                 return NextResponse.redirect(new URL('/403', request.url));
             }
             return NextResponse.next();
@@ -153,7 +198,7 @@ export async function middleware(request: NextRequest) {
                         newAccess,
                         new TextEncoder().encode(process.env.JWT_SECRET)
                     );
-                    if (!roleAllows(pathname, payload.role as string | undefined)) {
+                    if (!roleAllows(pathname, payload.actor as string | undefined)) {
                         return NextResponse.redirect(new URL('/403', request.url));
                     }
                     // Re-issue the navigation with the refreshed cookies; the

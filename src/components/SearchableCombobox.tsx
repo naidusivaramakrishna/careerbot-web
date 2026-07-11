@@ -10,6 +10,8 @@ interface SearchableComboboxProps {
   onChange: (value: string) => void;
   placeholder?: string;
   error?: string;
+  labelClassName?: string;
+  containerClassName?: string;
 }
 
 export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
@@ -19,6 +21,8 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   onChange,
   placeholder = "Search or type to add...",
   error,
+  labelClassName,
+  containerClassName,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -94,12 +98,12 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   }, []);
 
   return (
-    <div className="flex flex-col gap-3 w-full min-w-0" ref={containerRef}>
-      <label className="text-sm font-semibold">{label}</label>
+    <div className={containerClassName ?? "flex flex-col gap-3 w-full min-w-0"} ref={containerRef}>
+      <label className={labelClassName ?? "text-sm font-semibold"}>{label}</label>
 
       <div className="relative">
         {/* Input Field */}
-        <div className="flex items-center  border border-neutral-200 rounded-lg bg-gray-100 overflow-hidden">
+        <div className="flex items-center border border-gray-200 rounded-lg bg-gray-50 overflow-hidden hover:border-gray-300 focus-within:ring-2 focus-within:ring-[#2257a7]/20 focus-within:border-[#2257a7] transition">
           <input
             ref={inputRef}
             type="text"
@@ -107,7 +111,7 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
             onChange={handleInputChange}
             onFocus={() => setIsOpen(true)}
             placeholder={placeholder}
-            className="flex-1 p-2.5 text-sm outline-none bg-gray-100 "
+            className="flex-1 p-2.5 text-sm outline-none bg-gray-50 focus:bg-white transition"
           />
 
           {/* Clear Button */}

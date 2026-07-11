@@ -10,8 +10,8 @@ const ProfileContent = () => {
 
     return (
         <div className="ml-4">
-            <h1 className="text-2xl font-bold mt-4">Profile</h1>
-            <div className="min-h-screen  bg-gray-200 px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
+            <h1 className="text-xl font-bold mt-4 text-gray-800">Profile</h1>
+            <div className="min-h-screen bg-[#F4F6F9] px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px]">
                 <div className="flex gap-4 w-full">
                     <MainSection />
                     <RightSection

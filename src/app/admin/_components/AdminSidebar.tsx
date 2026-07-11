@@ -1,6 +1,6 @@
 "use client"
 import { adminLogout } from '@/api/adminAuthApi';
-import { Activity, Briefcase, LayoutDashboard, LogOut, Settings, UserPlus, Users } from 'lucide-react';
+import { Activity, LayoutDashboard, LogOut, Settings, UserPlus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useState } from 'react'
@@ -9,7 +9,6 @@ const menu = [
     { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
     { label: "User Management", href: "/admin/dashboard/user-management", icon: Users },
     { label: "Admin Management", href: "/admin/dashboard/admin-management", icon: UserPlus },
-    { label: "Job Management", href: "/admin/dashboard/job-management", icon: Briefcase },
     { label: "System Monitoring", href: "/admin/dashboard/system-monitoring", icon: Activity },
     { label: "Settings", href: "/admin/dashboard/settings", icon: Settings },
 ];

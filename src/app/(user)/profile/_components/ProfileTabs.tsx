@@ -11,7 +11,6 @@ import PersonalInfoSection from "./PersonalInfoSection";
 import SkillsSection from "./SkillsSection";
 import EmploymentInfoSection from "./employmentInfo/EmploymentInfoSection";
 import ResumeSection from "./ResumeSection";
-import logger from "@/lib/logger";
 import ProjectsSection from "./projects/ProjectsSection";
 import { FaAward, FaBriefcase, FaFolderOpen, FaStar, FaUserCircle, FaUserGraduate } from "react-icons/fa";
 import { FiFileText } from "react-icons/fi";
@@ -31,10 +30,8 @@ export default function ProfileTabs({
   const { profileData, activeTab, setActiveTab, clearSidebarActive } = useProfileContext();
   const [tempProfile, setTempProfile] = useState(profile);
 
-  // Sync tempProfile with profileData from context
   useEffect(() => {
     setTempProfile(profileData);
-    logger.info("Profile Data synced in ProfileTabs:", profileData); // Debug log
   }, [profileData]);
 
   const profileTabs = [
@@ -83,9 +80,9 @@ export default function ProfileTabs({
     {
       label: "Resume",
       text: "Resume",
-      icon: <FileUp />,
+      icon: <FileUp size={14} />,
       content: <ResumeSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
-    }
+    },
   ];
 
   const handleTabChange = (label: string) => {

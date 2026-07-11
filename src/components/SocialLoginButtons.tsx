@@ -19,58 +19,44 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup", redirectTo })
     )
   }
 
-  // Use BACKEND OAuth for Google (gives you tokens for your API)
+  const extractErrorMessage = (error: unknown, fallback: string): string => {
+    if (error instanceof Object && 'response' in error) {
+      const res = (error as Record<string, unknown>).response as Record<string, unknown> | null
+      if (res) {
+        const status = res.status as number
+        // Use backend message directly for client errors (4xx)
+        if (status >= 400 && status < 500) {
+          const data = res.data as Record<string, unknown> | undefined
+          const backendMessage = (data?.error as Record<string, unknown> | undefined)?.message as string | undefined
+          if (backendMessage) return backendMessage
+        }
+        if (status === 503) {
+          return fallback.replace('Failed to initiate', '') + ' is temporarily unavailable. Please try email sign-in instead.'
+        }
+      }
+    }
+    const mappedError = mapAuthError(error, 'login')
+    if (mappedError && !mappedError.includes('Something went wrong')) return mappedError
+    return fallback
+  }
+
   const handleGoogleLogin = async () => {
     try {
       storeRedirectTarget()
       const loginUrl = await getGoogleLoginUrl()
       window.location.href = loginUrl
     } catch (error) {
-      // Check for service unavailability (503)
-      const isServiceUnavailable =
-        error instanceof Object && 'response' in error &&
-        typeof (error as Record<string, unknown>).response === 'object' &&
-        (error as Record<string, unknown>).response !== null &&
-        (error as Record<string, Record<string, unknown>>).response.status === 503;
-
-      let errorMessage = 'Failed to initiate Google login';
-      if (isServiceUnavailable) {
-        errorMessage = 'Google sign-in is temporarily unavailable. Please try email sign-in instead.';
-      } else {
-        // Map other errors to user-friendly messages
-        const mappedError = mapAuthError(error, 'login');
-        if (mappedError && !mappedError.includes('Something went wrong')) {
-          errorMessage = mappedError;
-        }
-      }
-      toast.error(errorMessage)
+      toast.error(extractErrorMessage(error, 'Failed to initiate Google login'))
     }
   }
-  // Use BACKEND OAuth for LinkedIn
+
   const handleLinkedInLogin = async () => {
     try {
       storeRedirectTarget()
       const loginUrl = await getLinkedInLoginUrl()
       window.location.href = loginUrl
     } catch (error) {
-      // Check for service unavailability (503)
-      const isServiceUnavailable =
-        error instanceof Object && 'response' in error &&
-        typeof (error as Record<string, unknown>).response === 'object' &&
-        (error as Record<string, unknown>).response !== null &&
-        (error as Record<string, Record<string, unknown>>).response.status === 503;
-
-      let errorMessage = 'Failed to initiate LinkedIn login';
-      if (isServiceUnavailable) {
-        errorMessage = 'LinkedIn sign-in is temporarily unavailable. Please try email sign-in instead.';
-      } else {
-        // Map other errors to user-friendly messages
-        const mappedError = mapAuthError(error, 'login');
-        if (mappedError && !mappedError.includes('Something went wrong')) {
-          errorMessage = mappedError;
-        }
-      }
-      toast.error(errorMessage)
+      toast.error(extractErrorMessage(error, 'Failed to initiate LinkedIn login'))
     }
   }
 

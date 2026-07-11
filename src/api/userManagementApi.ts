@@ -8,7 +8,7 @@ export interface UserListQueryParams {
     page_size?: number;
     role?: 'user' | 'admin' | 'moderator';
     status?: 'active' | 'inactive' | 'suspended' | 'pending_verification';
-    subscription?: 'free' | 'basic' | 'premium' | 'pro' | 'enterprise';
+    subscription?: 'free' | 'pro' | 'max';
     search?: string;
     created_from?: string; // ISO format date
     created_to?: string; // ISO format date
@@ -47,17 +47,15 @@ export interface UserDetailsResponse {
     status: string;
     joined_at: string;
     last_login: string | null;
-    subscription: string | null;
+    subscription: Subscription | null;
     resumes: Resume[];
     payments: Payment[];
     activity: UserActivityLog[];
 }
 
 export interface UpdateUserRequest {
-    email?: string;
     full_name?: string;
     role?: 'user' | 'admin' | 'moderator';
-    subscription_plan?: 'free' | 'basic' | 'premium' | 'pro' | 'enterprise';
 }
 
 export interface UpdateUserResponse {
@@ -104,11 +102,22 @@ export interface Resume {
     download_url: string;
 }
 
+export interface Subscription {
+    plan: string | null;
+    billing_cycle: string | null;
+    amount: number | null;
+    currency: string | null;
+    started_at: string | null;
+}
+
 export interface Payment {
-    id: string;
-    amount: number;
-    created_at: string;
-    status: 'completed' | 'pending' | 'failed';
+    amount: number | null;
+    currency: string | null;
+    status: string | null;
+    feature: string | null;
+    plan: string | null;
+    payment_method: string | null;
+    date: string | null;
 }
 
 export interface UserActivityQueryParams {

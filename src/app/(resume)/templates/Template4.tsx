@@ -7,7 +7,7 @@ import { ExternalLink } from "lucide-react";
 interface Props {
   data: ResumeData;
   style: ResumeStyle;
-  careerLevel?: "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level";
+  careerLevel?: "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Manager";
   domainFamily?: string;
   sectionOrder?: string[];
   onPageCountChange?: (count: number) => void;
@@ -37,10 +37,12 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
 
   const getSectionTitle = (section: string): string => {
     if (section === "Professional Summary") {
-      return careerLevel === "Fresher" ? "OBJECTIVE" : "PROFESSIONAL SUMMARY";
+      if (careerLevel === "Fresher") return "OBJECTIVE";
+      if (careerLevel === "Manager") return "EXECUTIVE SUMMARY";
+      return "PROFESSIONAL SUMMARY";
     }
     if (section === "Skills") {
-      return "SKILLS AND TOOLS";
+      return (careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Manager") ? "CORE COMPETENCIES" : "SKILLS AND TOOLS";
     }
     if (section === "Work Experience") {
       return "PROFESSIONAL EXPERIENCE";
@@ -110,17 +112,6 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     marginBottom: "4px",
   };
 
-  const getContactInfo = () => {
-    const parts = [];
-    if (personalInfo.location) parts.push(personalInfo.location);
-    if (personalInfo.email) parts.push(personalInfo.email);
-    if (personalInfo.phone) parts.push(`${personalInfo.countryCode}${personalInfo.phone}`);
-    if (personalInfo.linkedinUrl) parts.push(personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, ''));
-    if (personalInfo.portfolioUrl) parts.push(personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, ''));
-    if (personalInfo.githubUrl) parts.push(personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, ''));
-    return parts.join(" | ");
-  };
-
   const extractTextFromHTML = (html: string): string => {
     const text = html
       .replace(/<\/div>/g, ' ')
@@ -171,7 +162,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                         .join(' ');
                       return (
                         <div key={category} style={{ marginBottom: "6px" }}>
-                          <span style={{ fontWeight: "600", fontSize: "10px" }}>{categoryLabel}:</span>
+                          <span style={{ ...titleStyle, fontSize: "10px" }}>{categoryLabel}:</span>
                           <span style={{ marginLeft: "4px", fontSize: "10px" }}>{skillArr.join(", ")}</span>
                         </div>
                       );
@@ -217,13 +208,13 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                       <span style={{ ...baseTextStyle, fontSize: "11px" }}>, {formatDate(exp.startDate)} - {exp.currentlyWorking ? "Current" : formatDate(exp.endDate)}</span>
                     </div>
                     <div style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "11px", marginBottom: "4px" }}>
-                      {exp.company}{exp.location ? `, ${exp.location}` : ""}
+                      {exp.company}{exp.location ? <span style={{ fontWeight: "normal" }}>{`, ${exp.location}`}</span> : ""}
                     </div>
                   </>
                 ) : layoutVariant === "classic" ? (
                   <>
                     <div style={{ marginBottom: "2px" }}>
-                      <span style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px", textTransform: "uppercase", color: style.headingColor }}>{exp.role}</span>
+                      <span style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px", color: style.headingColor }}>{exp.role}</span>
                       <span style={{ ...baseTextStyle, fontSize: "11px" }}> | {formatDate(exp.startDate)} — {exp.currentlyWorking ? "Present" : formatDate(exp.endDate)}</span>
                     </div>
                     <div style={{ ...baseTextStyle, fontSize: "11px", marginBottom: "4px" }}>
@@ -233,7 +224,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : layoutVariant === "classic-formal" ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
-                      <h3 style={{ ...baseTextStyle, fontWeight: "bold", margin: 0, fontSize: "12px" }}>{exp.role}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{exp.role}</h3>
                       <span style={{ ...baseTextStyle, fontSize: "12px", whiteSpace: "nowrap", marginLeft: "8px" }}>
                         {formatDate(exp.startDate)} — {exp.currentlyWorking ? "Present" : formatDate(exp.endDate)}
                       </span>
@@ -244,7 +235,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   </>
                 ) : layoutVariant === "slate" ? (
                   <>
-                    <h3 style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px", margin: "0 0 2px 0" }}>{exp.role}</h3>
+                    <h3 style={{ ...titleStyle, fontSize: "12px", margin: "0 0 2px 0" }}>{exp.role}</h3>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
                       <span style={{ ...baseTextStyle, fontSize: "11px", fontStyle: "italic" }}>
                         {exp.company}{exp.location ? `, ${exp.location}` : ""}
@@ -256,7 +247,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   </>
                 ) : layoutVariant === "pillar" || layoutVariant === "ember" ? (
                   <>
-                    <div style={{ fontWeight: "bold", fontSize: "12px", color: style.headingColor, marginBottom: "2px" }}>{exp.role}</div>
+                    <div style={{ ...titleStyle, fontSize: "12px", marginBottom: "2px" }}>{exp.role}</div>
                     <div style={{ ...baseTextStyle, fontSize: "10px", marginBottom: "2px" }}>
                       {exp.company}{exp.location ? ` | ${exp.location}` : ""}
                     </div>
@@ -267,16 +258,21 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : (
                   <>
                     <div style={{ marginBottom: "4px" }} className="flex items-center gap-2">
-                      <h3 style={{ ...headingStyle, margin: 0, textTransform: "capitalize", fontSize: "12px" }}>{exp.company}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, textTransform: "capitalize", fontSize: "12px" }}>{exp.company}</h3>
                       {exp.location && <span className="text-[12px]"> | {exp.location}</span>}
                     </div>
-                    <p style={{ ...baseTextStyle, fontWeight: "bold", margin: "4px 0", fontSize: "12px" }} className="flex items-center gap-2">
+                    <p style={{ ...titleStyle, margin: "4px 0", fontSize: "12px" }} className="flex items-center gap-2">
                       {exp.role}
                       <span style={{ ...baseTextStyle, fontSize: "12px", fontWeight: "500" }}>
                         | {formatDate(exp.startDate)} – {exp.currentlyWorking ? "Present" : formatDate(exp.endDate)}
                       </span>
                     </p>
                   </>
+                )}
+                {exp.technologies && exp.technologies.length > 0 && (
+                  <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>
+                    <span style={{ fontWeight: "600", fontStyle: "italic" }}>Tech Stack:</span> <span className="italic">{exp.technologies.join(", ")}</span>
+                  </p>
                 )}
                 {exp.description && (
                   <div style={{ paddingLeft: "20px", marginTop: "4px" }}>
@@ -302,7 +298,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 {layoutVariant === "executive" ? (
                   <>
                     <div style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px", marginBottom: "2px" }}>
-                      {edu.degree}{edu.startDate ? `, ${formatDate(edu.startDate)} - ${formatDate(edu.endDate)}` : ""}
+                      {edu.degree}{edu.startDate ? <span style={{ fontWeight: "normal" }}>{`, ${formatDate(edu.startDate)} - ${formatDate(edu.endDate)}`}</span> : ""}
                     </div>
                     <div style={{ ...baseTextStyle, fontSize: "11px", marginBottom: "2px" }}>{edu.school}</div>
                     {edu.scoreValue && <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>{edu.scoreType}: {edu.scoreValue}</p>}
@@ -320,7 +316,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : layoutVariant === "classic-formal" ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
-                      <h3 style={{ ...baseTextStyle, fontWeight: "bold", margin: 0, fontSize: "12px" }}>{edu.school}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{edu.school}</h3>
                       <span style={{ ...baseTextStyle, fontSize: "12px", whiteSpace: "nowrap", marginLeft: "8px" }}>
                         {formatDate(edu.startDate)} — {formatDate(edu.endDate)}
                       </span>
@@ -338,7 +334,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   </>
                 ) : layoutVariant === "pillar" || layoutVariant === "ember" ? (
                   <>
-                    <div style={{ fontWeight: "bold", fontSize: "12px", color: style.headingColor, marginBottom: "2px" }}>{edu.degree}</div>
+                    <div style={{ ...titleStyle, fontSize: "12px", marginBottom: "2px" }}>{edu.degree}</div>
                     <div style={{ ...baseTextStyle, fontSize: "10px", marginBottom: "2px" }}>{edu.school}</div>
                     <div style={{ ...baseTextStyle, fontSize: "10px", marginBottom: "4px" }}>
                       {formatDate(edu.startDate)}{edu.endDate ? ` - ${formatDate(edu.endDate)}` : ""}
@@ -348,7 +344,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : layoutVariant === "aether" ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
-                      <h3 style={{ ...baseTextStyle, fontWeight: "bold", margin: 0, fontSize: "12px" }}>{edu.degree}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{edu.degree}</h3>
                       <span style={{ ...baseTextStyle, fontSize: "12px" }}>
                         {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
                       </span>
@@ -361,7 +357,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
-                      <h3 style={{ ...headingStyle, margin: 0, textTransform: "capitalize" }}>{edu.degree}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, textTransform: "capitalize" }}>{edu.degree}</h3>
                       <span style={{ ...baseTextStyle, fontSize: "12px" }}>
                         {formatDate(edu.startDate)} – {formatDate(edu.endDate)}
                       </span>
@@ -385,11 +381,11 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={{ paddingLeft: "20px" }}>
               {certifications.map((cert, idx) => (
                 <div key={idx} style={{ ...baseTextStyle, marginBottom: "4px", fontSize: "12px" }}>
-                  • <span style={{ fontWeight: "600" }}>{cert.name}</span>
-                  {cert.issuer && <span> - {cert.issuer}</span>}
-                  {(cert.issueDate || cert.expiryDate) && <span> | </span>}
-                  {cert.issueDate && <span>{cert.issueDate}</span>}
-                  {cert.issueDate && cert.expiryDate && <span> – </span>}
+                  • <span style={{ ...titleStyle }}>{cert.name}</span>
+                  {(cert.issuer) && <span> - {cert.issuer}</span>}
+                  {((cert.issueDate) || cert.expiryDate) && <span> | </span>}
+                  {(cert.issueDate) && <span>{cert.issueDate}</span>}
+                  {(cert.issueDate) && cert.expiryDate && <span> – </span>}
                   {cert.expiryDate && <span>{cert.expiryDate}</span>}
                 </div>
               ))}
@@ -407,17 +403,17 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 {layoutVariant === "executive" ? (
                   <>
                     <div style={{ marginBottom: "2px" }}>
-                      <span style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px" }}>{intern.role}</span>
+                      <span style={{ ...titleStyle, fontSize: "12px" }}>{intern.role}</span>
                       <span style={{ ...baseTextStyle, fontSize: "11px" }}>, {formatDate(intern.startDate)} - {intern.currentlyWorking ? "Current" : formatDate(intern.endDate)}</span>
                     </div>
-                    <div style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "11px", marginBottom: "4px" }}>
-                      {intern.company}{intern.location ? `, ${intern.location}` : ""}
+                    <div style={{ ...titleStyle, fontSize: "11px", marginBottom: "4px" }}>
+                      {intern.company}{intern.location ? <span style={{ fontWeight: "normal" }}>{`, ${intern.location}`}</span> : ""}
                     </div>
                   </>
                 ) : layoutVariant === "classic" ? (
                   <>
                     <div style={{ marginBottom: "2px" }}>
-                      <span style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px", textTransform: "uppercase" }}>{intern.role}</span>
+                      <span style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px", color: style.headingColor }}>{intern.role}</span>
                       <span style={{ ...baseTextStyle, fontSize: "11px" }}> | {formatDate(intern.startDate)} — {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}</span>
                     </div>
                     <div style={{ ...baseTextStyle, fontSize: "11px", marginBottom: "4px" }}>
@@ -427,7 +423,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : layoutVariant === "classic-formal" ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
-                      <h3 style={{ ...baseTextStyle, fontWeight: "bold", margin: 0, fontSize: "12px" }}>{intern.role}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, fontSize: "12px" }}>{intern.role}</h3>
                       <span style={{ ...baseTextStyle, fontSize: "12px", whiteSpace: "nowrap", marginLeft: "8px" }}>
                         {formatDate(intern.startDate)} — {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}
                       </span>
@@ -438,7 +434,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   </>
                 ) : layoutVariant === "slate" ? (
                   <>
-                    <h3 style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px", margin: "0 0 2px 0" }}>{intern.role}</h3>
+                    <h3 style={{ ...titleStyle, fontSize: "12px", margin: "0 0 2px 0" }}>{intern.role}</h3>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
                       <span style={{ ...baseTextStyle, fontSize: "11px", fontStyle: "italic" }}>
                         {intern.company}{intern.location ? `, ${intern.location}` : ""}
@@ -450,7 +446,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                   </>
                 ) : layoutVariant === "pillar" || layoutVariant === "ember" ? (
                   <>
-                    <div style={{ fontWeight: "bold", fontSize: "12px", color: style.headingColor, marginBottom: "2px" }}>{intern.role}</div>
+                    <div style={{ ...titleStyle, fontSize: "12px", marginBottom: "2px" }}>{intern.role}</div>
                     <div style={{ ...baseTextStyle, fontSize: "10px", marginBottom: "2px" }}>
                       {intern.company}{intern.location ? ` | ${intern.location}` : ""}
                     </div>
@@ -461,16 +457,21 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 ) : (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                      <h3 style={{ ...headingStyle, margin: 0, textTransform: "capitalize" }}>{intern.role}</h3>
+                      <h3 style={{ ...titleStyle, margin: 0, textTransform: "capitalize" }}>{intern.role}</h3>
                       <span style={{ ...baseTextStyle, fontSize: "12px" }}>
-                        {formatDate(intern.startDate)} – {formatDate(intern.endDate)}
+                        {formatDate(intern.startDate)} – {intern.currentlyWorking ? "Present" : formatDate(intern.endDate)}
                       </span>
                     </div>
                     <p style={{ ...baseTextStyle, fontWeight: "500", margin: "4px 0", fontSize: "12px", fontStyle: "italic" }}>
-                      {intern.company}
+                      {intern.company && <span style={{ ...titleStyle }}>{intern.company}</span>}
                       {intern.location && <span> | {intern.location}</span>}
                     </p>
                   </>
+                )}
+                {intern.technologies && intern.technologies.length > 0 && (
+                  <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>
+                    <span style={{ ...titleStyle, fontStyle: "italic" }}>Tech Stack:</span> <span className="italic">{intern.technologies.join(", ")}</span>
+                  </p>
                 )}
                 {intern.description && (
                   <div style={{ paddingLeft: "20px", marginTop: "4px" }}>
@@ -493,12 +494,25 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={sectionBorderStyle("12px")} />
             {projects.map((proj, idx) => (
               <div key={idx} style={{ marginBottom: "4px" }}>
-                <h3 style={{ ...headingStyle, margin: 0, textTransform: "capitalize" }}>
-                  {proj.title}
-                </h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "2px" }}>
+                  <h3 style={{ ...titleStyle, fontSize: "12px", margin: 0, textTransform: "capitalize" }}>
+                    {proj.title}
+                  </h3>
+                  {(proj.startDate || proj.endDate || proj.link) && (
+                    <span style={{ ...baseTextStyle, fontSize: "11px", whiteSpace: "nowrap", marginLeft: "8px" }}>
+                      {(proj.startDate || proj.endDate) && (
+                        <>{formatDate(proj.startDate)}{proj.startDate && proj.endDate ? " — " : ""}{formatDate(proj.endDate)}</>
+                      )}
+                      {(proj.startDate || proj.endDate) && proj.link && " | "}
+                      {proj.link && (
+                        <a href={proj.link} style={{ color: "#2563eb", textDecoration: "underline", fontWeight: "bold" }}>GitHub</a>
+                      )}
+                    </span>
+                  )}
+                </div>
                 {proj.technologies.length > 0 && (
                   <p style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>
-                    <span style={{ fontWeight: "600", fontStyle: "italic" }}>Technologies:</span> <span className="italic">{proj.technologies.join(", ")}</span>
+                    <span style={{ ...titleStyle, fontStyle: "italic" }}>Tech Stack:</span> <span className="italic">{proj.technologies.join(", ")}</span>
                   </p>
                 )}
                 {proj.description && (
@@ -522,10 +536,10 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={sectionBorderStyle("12px")} />
             <div className="grid grid-cols-2 gap-2">
               {languages.map((lang, idx) => (
-                <div key={idx} style={{ display: "flex", alignItems: "flex-start", fontSize:"11px", ...baseTextStyle }}>
+                <div key={idx} style={{ display: "flex", alignItems: "flex-start", fontSize: "11px", ...baseTextStyle }}>
                   <span style={{ marginRight: "6px" }}>•</span>
                   <span>
-                    <span style={{ fontWeight: "600", fontSize: "11px" }}>{lang.language} </span> <span style={{ fontSize: "11px" }}> - {lang.proficiency}</span>
+                    <span style={{ ...titleStyle, fontSize: "11px" }}>{lang.language} </span> <span style={{ fontSize: "11px" }}> - {lang.proficiency}</span>
                   </span>
                 </div>
               ))}
@@ -542,7 +556,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               <div key={idx} style={{ marginBottom: "8px", display: "flex", alignItems: "flex-start" }}>
                 <span style={{ marginRight: "8px", ...baseTextStyle }}>•</span>
                 <div style={baseTextStyle}>
-                  <span style={{ fontWeight: "600", fontSize: "12px" }}>{award.title}</span>
+                  <span style={{ ...titleStyle, fontSize: "12px" }}>{award.title}</span>
                   <span style={{ fontSize: "12px" }}> - {award.issuedBy} ({award.year})</span>
                 </div>
               </div>
@@ -558,7 +572,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {achievements.map((achievement, idx) => (
               <div key={idx} style={{ marginBottom: "4px" }}>
                 <div style={{ ...baseTextStyle, fontSize: "12px" }}>
-                  • <span style={{ fontWeight: "600" }}>{achievement.title}</span>
+                  • <span style={{ ...titleStyle }}>{achievement.title}</span>
                   {achievement.description && <span>, {achievement.description}</span>}
                   {achievement.date && <span> | {formatDate(achievement.date)}</span>}
                 </div>
@@ -574,26 +588,25 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={sectionBorderStyle("12px")} />
             {publications.map((pub, idx) => (
               <div key={idx} style={{ marginBottom: "12px" }}>
-                <h3 style={{ ...titleStyle, margin: "0 0 4px 0", fontWeight: "600", fontSize: "12px", display: "flex", alignItems: "center" }}>
-                  <span>{pub.title}</span>
-                  {pub.url && (
-                    <a
-                      href={pub.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={pub.url}
-                      style={{ marginLeft: "6px", color: style.headingColor, display: "flex", alignItems: "center", opacity: 0.7 }}
-                    >
-                      <ExternalLink size={12} />
-                    </a>
-                  )}
+                <h3 style={{ ...titleStyle, margin: "0 0 4px 0", fontSize: "12px" }}>
+                  {pub.title}
                 </h3>
-                <p style={{ ...baseTextStyle, fontSize: "12px", margin: "4px 0" }}>
-                  {pub.authors}
-                </p>
-                <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
-                  <span style={{ fontStyle: "italic" }}>{pub.publicationName}</span> | {formatDate(pub.date)}
-                </p>
+                {pub.authors && (
+                  <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
+                    <span style={{ fontWeight: "600" }}>Authors:</span> {pub.authors}
+                  </p>
+                )}
+                {(pub.publicationName || pub.date) && (
+                  <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
+                    <span style={{ fontStyle: "italic" }}>{pub.publicationName}</span>{pub.publicationName && pub.date ? ` | ${formatDate(pub.date)}` : formatDate(pub.date)}
+                  </p>
+                )}
+                {pub.url && (
+                  <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
+                    <span style={{ fontWeight: "600" }}>URL:</span>{" "}
+                    <a href={pub.url} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>{pub.url}</a>
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -607,7 +620,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {hobbies.map((hobby, idx) => (
               <div key={idx} style={{ marginBottom: "10px" }}>
                 <div className="flex gap-2">
-                  <h3 style={{ ...titleStyle, fontSize: "12px", fontWeight: "600", margin: "0 0 4px 0" }}>{hobby.name}</h3>
+                  <h3 style={{ ...titleStyle, fontSize: "12px", margin: "0 0 4px 0" }}>{hobby.name}</h3>
                   {hobby.proficiencyLevel && (
                     <span style={{ ...baseTextStyle, fontSize: "11px" }}> - ({hobby.proficiencyLevel})</span>
                   )}
@@ -631,27 +644,25 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading("INTERESTS")}
             <div style={sectionBorderStyle("12px")} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-              {interests.map((interest, idx) => (
-                <div key={idx} style={{ ...baseTextStyle }}>
-                  <div className="flex gap-2">
-                    <div style={{ ...titleStyle, fontWeight: "600", fontSize: "12px" }}>{interest.name}</div>
-                    {interest.category && (
-                      <div style={{ fontSize: "11px" }}> - ({interest.category})</div>
-                    )}
-                  </div>
-                  {interest.description && (
-                    <div style={{ marginTop: "4px", paddingLeft: "20px" }}>
-                      {extractTextFromHTML(interest.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
-                        <div key={lineIdx} style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>
-                          • {line.trim()}
-                        </div>
-                      ))}
-                    </div>
+            {interests.map((interest, idx) => (
+              <div key={idx} style={{ ...baseTextStyle }}>
+                <div className="flex gap-2">
+                  <div style={{ ...titleStyle, fontSize: "12px" }}>{interest.name}</div>
+                  {interest.category && (
+                    <div style={{ fontSize: "11px" }}> - ({interest.category})</div>
                   )}
                 </div>
-              ))}
-            </div>
+                {interest.description && (
+                  <div style={{ marginTop: "4px", paddingLeft: "20px" }}>
+                    {extractTextFromHTML(interest.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
+                      <div key={lineIdx} style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>
+                        • {line.trim()}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         ) : null;
 
@@ -664,7 +675,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               <div key={idx} style={{ marginBottom: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <div>
-                    <h3 style={{ ...titleStyle, margin: 0, fontSize: "13px", fontWeight: "600" }}>{vol.role}</h3>
+                    <h3 style={{ ...titleStyle, margin: 0, fontSize: "13px" }}>{vol.role}</h3>
                     <p style={{ ...baseTextStyle, fontSize: "12px", margin: "4px 0 0 0" }}>
                       {vol.organization}
                     </p>
@@ -685,7 +696,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div style={sectionBorderStyle("12px")} />
             {references.map((ref, idx) => (
               <div key={idx} style={{ marginBottom: "12px" }}>
-                <h3 style={{ ...titleStyle, margin: 0, fontSize: "13px", fontWeight: "600" }}>{ref.name}</h3>
+                <h3 style={{ ...titleStyle, margin: 0, fontSize: "13px" }}>{ref.name}</h3>
                 <p style={{ ...baseTextStyle, fontSize: "12px", margin: "4px 0 2px 0" }}>{ref.relation}</p>
                 <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>{ref.contact}</p>
               </div>
@@ -703,9 +714,11 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     : personalInfo.fullname || "Full Name";
 
   const sectionBorderStyle = (mb: string): React.CSSProperties =>
-    layoutVariant === "centered" || layoutVariant === "slate"
+    layoutVariant === "centered"
       ? { borderBottom: `1px solid ${style.headingColor}`, paddingTop: "8px", marginBottom: mb }
-      : { marginBottom: mb };
+      : layoutVariant === "slate"
+        ? { borderBottom: `1px solid ${accent}`, paddingTop: "4px", marginBottom: mb }
+        : { marginBottom: mb };
 
   const renderSectionHeading = (title: string) => {
     if (layoutVariant === "classic-formal") {
@@ -715,18 +728,11 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         </h2>
       );
     }
-    if (layoutVariant === "executive") {
+    if (layoutVariant === "executive" || layoutVariant === "slate") {
       return (
         <h2 style={{ color: accent, fontSize: style.headingFontSize, fontWeight: "bold", marginBottom: "6px" }}>
           {title.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
         </h2>
-      );
-    }
-    if (layoutVariant === "slate") {
-      return (
-        <div style={{ color: accent, fontSize: style.headingFontSize, fontWeight: "bold", margin: 0 }}>
-          {title.charAt(0).toUpperCase() + title.slice(1).toLowerCase()}
-        </div>
       );
     }
     if (layoutVariant === "centered") {
@@ -757,37 +763,38 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       return (
         <div style={{ marginBottom: "16px" }}>
           <div style={{ textAlign: "right" }}>
-            <h1 style={{ fontSize: "22px", fontWeight: "bold", color: accent, margin: "0 0 6px 0" }}>
+            <h1 style={{ fontSize: "22px", fontWeight: "bold", color: accent, margin: "0 0 4px 0" }}>
               {displayName}
             </h1>
+            {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0", fontWeight: "500" }}>{professionalSummary.targetRole}</p>}
             {personalInfo.email && (
-              <p style={{ ...baseTextStyle, color: style.headingColor, fontSize: "10px", margin: "1px 0" }}>
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
                 {personalInfo.email}
               </p>
             )}
             {personalInfo.phone && (
-              <p style={{ ...baseTextStyle, color: style.headingColor, fontSize: "10px", margin: "1px 0" }}>
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
                 {personalInfo.countryCode}{personalInfo.phone}
               </p>
             )}
             {personalInfo.location && (
-              <p style={{ ...baseTextStyle, color: style.headingColor, fontSize: "10px", margin: "1px 0" }}>
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
                 {personalInfo.location}
               </p>
             )}
             {personalInfo.linkedinUrl && (
-              <p style={{ ...baseTextStyle, color: style.headingColor, fontSize: "10px", margin: "1px 0" }}>
-                {personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '')}
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
+                <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a>
               </p>
             )}
             {personalInfo.portfolioUrl && (
-              <p style={{ ...baseTextStyle, color: style.headingColor, fontSize: "10px", margin: "1px 0" }}>
-                {personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, '')}
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
+                <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a>
               </p>
             )}
             {personalInfo.githubUrl && (
-              <p style={{ ...baseTextStyle, color: style.headingColor, fontSize: "10px", margin: "1px 0" }}>
-                {personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, '')}
+              <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
+                <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a>
               </p>
             )}
           </div>
@@ -802,11 +809,11 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>{professionalSummary.targetRole}</p>}
           {personalInfo.location && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "2px 0" }}>{personalInfo.location}</p>}
           <div style={{ display: "flex", justifyContent: "center", gap: "24px", margin: "6px 0" }}>
-            {personalInfo.email && <span style={{ ...baseTextStyle, fontSize: "11px", fontWeight: "600" }}>{personalInfo.email}</span>}
+            {personalInfo.email && <span style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.email}</span>}
             {personalInfo.phone && <span style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.countryCode}{personalInfo.phone}</span>}
-            {personalInfo.linkedinUrl && <span style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-            {personalInfo.portfolioUrl && <span style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-            {personalInfo.githubUrl && <span style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
+            {personalInfo.linkedinUrl && <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ ...baseTextStyle, fontSize: "11px", color: "blue", textDecoration: "underline" }}>LinkedIn</a>}
+            {personalInfo.portfolioUrl && <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ ...baseTextStyle, fontSize: "11px", color: "blue", textDecoration: "underline" }}>Portfolio</a>}
+            {personalInfo.githubUrl && <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ ...baseTextStyle, fontSize: "11px", color: "blue", textDecoration: "underline" }}>GitHub</a>}
           </div>
           <hr style={{ border: "none", borderTop: `1px solid ${style.bodyColor}`, margin: "8px 0 16px 0" }} />
         </div>
@@ -814,33 +821,35 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     }
     if (layoutVariant === "executive") {
       const contactParts: string[] = [];
+      if (personalInfo.email) contactParts.push(personalInfo.email);
       if (personalInfo.location) contactParts.push(personalInfo.location);
       if (personalInfo.phone) contactParts.push(`${personalInfo.countryCode}${personalInfo.phone}`);
-      if (personalInfo.email) contactParts.push(personalInfo.email);
-      if (personalInfo.linkedinUrl) contactParts.push(personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, ''));
-      if (personalInfo.portfolioUrl) contactParts.push(personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, ''));
-      if (personalInfo.githubUrl) contactParts.push(personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, ''));
       return (
         <div style={{ textAlign: "center", marginBottom: "4px" }}>
           <h1 style={{ ...nameStyle, textAlign: "center", fontSize: "26px", marginBottom: "4px", textTransform: "none" }}>{displayName}</h1>
           {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0" }}>{professionalSummary.targetRole}</p>}
-          <hr style={{ border: "none", borderTop: `3px solid ${style.headingColor}`, margin: "6px 0" }} />
-          <p style={{ ...baseTextStyle, fontSize: "10px", margin: "6px 0 16px 0" }}>{contactParts.join(" • ")}</p>
+          <hr style={{ border: "none", borderTop: `3px solid ${style.accentColor}`, margin: "6px 0" }} />
+          <p style={{ ...baseTextStyle, fontSize: "10px", margin: "6px 0 16px 0" }}>
+            {contactParts.join(" • ")}
+            {personalInfo.linkedinUrl && <>{contactParts.length > 0 ? " • " : ""}<a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a></>}
+            {personalInfo.portfolioUrl && <>{(contactParts.length > 0 || personalInfo.linkedinUrl) ? " • " : ""}<a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a></>}
+            {personalInfo.githubUrl && <>{(contactParts.length > 0 || personalInfo.linkedinUrl || personalInfo.portfolioUrl) ? " • " : ""}<a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a></>}
+          </p>
         </div>
       );
     }
     if (layoutVariant === "classic") {
       return (
         <div style={{ textAlign: "center", marginBottom: "4px" }}>
-          {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px 0" }}>{professionalSummary.targetRole}</p>}
           <h1 style={{ ...nameStyle, textAlign: "center", fontSize: "26px", marginBottom: "6px" }}>{displayName}</h1>
+          {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px 0" }}>{professionalSummary.targetRole}</p>}
           {personalInfo.location && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "2px 0" }}>{personalInfo.location}</p>}
           <div style={{ display: "flex", justifyContent: "center", gap: "20px", margin: "4px 0", ...baseTextStyle, fontSize: "11px" }}>
             {personalInfo.email && <span>{personalInfo.email}</span>}
             {personalInfo.phone && <span>{personalInfo.countryCode}{personalInfo.phone}</span>}
-            {personalInfo.linkedinUrl && <span>{personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-            {personalInfo.portfolioUrl && <span>{personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-            {personalInfo.githubUrl && <span>{personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
+            {personalInfo.linkedinUrl && <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a>}
+            {personalInfo.portfolioUrl && <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a>}
+            {personalInfo.githubUrl && <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a>}
           </div>
           <hr style={{ border: "none", borderTop: `1px solid #d1d5db`, margin: "10px 0 16px 0" }} />
         </div>
@@ -848,26 +857,25 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     }
     if (layoutVariant === "aether") {
       const contactParts: string[] = [];
-      const urlParts: string[] = [];
       if (personalInfo.email) contactParts.push(personalInfo.email);
       if (personalInfo.phone) contactParts.push(`${personalInfo.countryCode}${personalInfo.phone}`);
       if (personalInfo.location) contactParts.push(personalInfo.location);
-      if (personalInfo.linkedinUrl) urlParts.push(personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, ''));
-      if (personalInfo.portfolioUrl) urlParts.push(personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, ''));
-      if (personalInfo.githubUrl) urlParts.push(personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, ''));
       return (
         <div style={{ marginBottom: "16px" }}>
           <h1 style={{ fontSize: "26px", fontWeight: "bold", color: accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
             {displayName}
           </h1>
+          {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px 0", fontWeight: "500" }}>{professionalSummary.targetRole}</p>}
           {contactParts.length > 0 && (
             <p style={{ ...baseTextStyle, fontSize: "10px", margin: "0 0 2px 0" }}>
               {contactParts.join(" | ")}
             </p>
           )}
-          {urlParts.length > 0 && (
+          {(personalInfo.linkedinUrl || personalInfo.portfolioUrl || personalInfo.githubUrl) && (
             <p style={{ ...baseTextStyle, fontSize: "10px", margin: "0 0 12px 0" }}>
-              {urlParts.join(" | ")}
+              {personalInfo.linkedinUrl && <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a>}
+              {personalInfo.portfolioUrl && <>{personalInfo.linkedinUrl ? " | " : ""}<a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a></>}
+              {personalInfo.githubUrl && <>{(personalInfo.linkedinUrl || personalInfo.portfolioUrl) ? " | " : ""}<a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a></>}
             </p>
           )}
         </div>
@@ -877,9 +885,10 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       return (
         <div>
           <div style={{ borderLeft: `3px solid ${accent}`, paddingLeft: "12px", marginBottom: "10px" }}>
-            <h1 style={{ fontSize: "22px", fontWeight: "bold", color: accent, margin: "0 0 6px 0" }}>
+            <h1 style={{ fontSize: "22px", fontWeight: "bold", color: accent, margin: "0 0 4px 0" }}>
               {displayName}
             </h1>
+            {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0", fontWeight: "500" }}>{professionalSummary.targetRole}</p>}
             {personalInfo.email && (
               <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
                 {personalInfo.email}
@@ -897,17 +906,17 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             )}
             {personalInfo.linkedinUrl && (
               <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
-                {personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '')}
+                <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a>
               </p>
             )}
             {personalInfo.portfolioUrl && (
               <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
-                {personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, '')}
+                <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a>
               </p>
             )}
             {personalInfo.githubUrl && (
               <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
-                {personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, '')}
+                <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a>
               </p>
             )}
           </div>
@@ -919,17 +928,17 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       return (
         <div style={{ marginBottom: "16px" }}>
           <h1 style={{ ...nameStyle, textAlign: "left", fontSize: "24px", marginBottom: "2px", textTransform: "none" }}>{displayName}</h1>
-          {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontWeight: "bold", fontSize: "12px", margin: "0 0 4px 0" }}>{professionalSummary.targetRole}</p>}
-          <div style={{ display: "flex", justifyContent: "space-between", ...baseTextStyle, fontSize: "11px", marginBottom: "2px" }}>
-            {personalInfo.location && <span>{personalInfo.location}</span>}
-            {personalInfo.email && <span>{personalInfo.email}</span>}
-          </div>
-          {(personalInfo.phone || personalInfo.linkedinUrl || personalInfo.portfolioUrl || personalInfo.githubUrl) && (
-            <div style={{ display: "flex", gap: "16px", ...baseTextStyle, fontSize: "11px" }}>
-              {personalInfo.phone && <span>{personalInfo.countryCode}{personalInfo.phone}</span>}
-              {personalInfo.linkedinUrl && <span>{personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-              {personalInfo.portfolioUrl && <span>{personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-              {personalInfo.githubUrl && <span>{personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, '')}</span>}
+          {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: "0 0 4px 0" }}>{professionalSummary.targetRole}</p>}
+          {(personalInfo.location || personalInfo.phone || personalInfo.linkedinUrl || personalInfo.portfolioUrl || personalInfo.githubUrl || personalInfo.email) && (
+            <div style={{ display: "flex", justifyContent: "space-between", ...baseTextStyle, fontSize: "11px" }}>
+              <div style={{ display: "flex", gap: "16px" }}>
+                {personalInfo.location && <span>{personalInfo.location}</span>}
+                {personalInfo.phone && <span>{personalInfo.countryCode}{personalInfo.phone}</span>}
+                {personalInfo.linkedinUrl && <a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a>}
+                {personalInfo.portfolioUrl && <a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a>}
+                {personalInfo.githubUrl && <a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a>}
+              </div>
+              {personalInfo.email && <span>{personalInfo.email}</span>}
             </div>
           )}
         </div>
@@ -947,9 +956,9 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               {personalInfo.email && <div>{personalInfo.email}</div>}
               {personalInfo.phone && <div>{personalInfo.countryCode}{personalInfo.phone}</div>}
               {personalInfo.location && <div>{personalInfo.location}</div>}
-              {personalInfo.linkedinUrl && <div>{personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '')}</div>}
-              {personalInfo.portfolioUrl && <div>{personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, '')}</div>}
-              {personalInfo.githubUrl && <div>{personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, '')}</div>}
+              {personalInfo.linkedinUrl && <div><a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a></div>}
+              {personalInfo.portfolioUrl && <div><a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a></div>}
+              {personalInfo.githubUrl && <div><a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a></div>}
             </div>
           </div>
           <hr style={{ border: "none", borderTop: `2px solid ${style.headingColor}`, margin: "0 0 16px 0" }} />
@@ -966,12 +975,12 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               <div>
                 {personalInfo.email && <div>{personalInfo.email}</div>}
                 {personalInfo.location && <div>{personalInfo.location}</div>}
-                {personalInfo.portfolioUrl && <div>{personalInfo.portfolioUrl.replace(/^https?:\/\/(www\.)?/, '')}</div>}
+                {personalInfo.portfolioUrl && <div><a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a></div>}
               </div>
               <div>
                 {personalInfo.phone && <div>{personalInfo.countryCode}{personalInfo.phone}</div>}
-                {personalInfo.linkedinUrl && <div>{personalInfo.linkedinUrl.replace(/^https?:\/\/(www\.)?/, '')}</div>}
-                {personalInfo.githubUrl && <div>{personalInfo.githubUrl.replace(/^https?:\/\/(www\.)?/, '')}</div>}
+                {personalInfo.linkedinUrl && <div><a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a></div>}
+                {personalInfo.githubUrl && <div><a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a></div>}
               </div>
             </div>
           </div>
@@ -983,7 +992,12 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       <div style={{ marginBottom: "16px" }}>
         <h1 className="text-4xl font-bold uppercase" style={nameStyle}>{displayName}</h1>
         {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: 0, textAlign: "center", fontWeight: "500", marginBottom: "8px" }}>{professionalSummary.targetRole}</p>}
-        <p style={{ ...baseTextStyle, fontSize: "10px", margin: 0, textAlign: "center" }}>{getContactInfo()}</p>
+        <p style={{ ...baseTextStyle, fontSize: "10px", margin: 0, textAlign: "center" }}>
+          {[personalInfo.email, personalInfo.location, personalInfo.phone ? `${personalInfo.countryCode}${personalInfo.phone}` : ""].filter(Boolean).join(" | ")}
+          {personalInfo.linkedinUrl && <>{(personalInfo.location || personalInfo.email || personalInfo.phone) ? " | " : ""}<a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a></>}
+          {personalInfo.portfolioUrl && <>{(personalInfo.location || personalInfo.email || personalInfo.phone || personalInfo.linkedinUrl) ? " | " : ""}<a href={personalInfo.portfolioUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>Portfolio</a></>}
+          {personalInfo.githubUrl && <>{(personalInfo.location || personalInfo.email || personalInfo.phone || personalInfo.linkedinUrl || personalInfo.portfolioUrl) ? " | " : ""}<a href={personalInfo.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>GitHub</a></>}
+        </p>
       </div>
     );
   };

@@ -16,6 +16,7 @@ interface DashboardChartProps {
     dataKeys?: string[];
     colors?: string[];
     xAxisKey?: string;
+    dualAxis?: boolean;
 }
 
 const DashboardChartComponent: React.FC<DashboardChartProps> = ({
@@ -25,7 +26,8 @@ const DashboardChartComponent: React.FC<DashboardChartProps> = ({
     height = 250,
     dataKeys = [],
     colors = ['#3b82f6', '#f97316'],
-    xAxisKey = 'month'
+    xAxisKey = 'month',
+    dualAxis = false,
 }) => {
     const renderChart = () => {
         switch (type) {
@@ -74,9 +76,18 @@ const DashboardChartComponent: React.FC<DashboardChartProps> = ({
                             stroke="#d1d5db"
                         />
                         <YAxis
+                            yAxisId="left"
                             tick={{ fill: '#6b7280', fontSize: 12 }}
                             stroke="#d1d5db"
                         />
+                        {dualAxis && (
+                            <YAxis
+                                yAxisId="right"
+                                orientation="right"
+                                tick={{ fill: '#6b7280', fontSize: 12 }}
+                                stroke="#d1d5db"
+                            />
+                        )}
                         <Tooltip
                             contentStyle={{
                                 borderRadius: '8px',
@@ -95,6 +106,7 @@ const DashboardChartComponent: React.FC<DashboardChartProps> = ({
                                 fill={colors[index % colors.length]}
                                 radius={[4, 4, 0, 0]}
                                 animationDuration={300}
+                                yAxisId={dualAxis && index > 0 ? 'right' : 'left'}
                             />
                         ))}
                     </BarChart>

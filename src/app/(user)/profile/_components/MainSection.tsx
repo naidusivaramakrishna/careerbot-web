@@ -11,6 +11,66 @@ import { getProfile, getProfilePicture, uploadProfilePicture, deleteProfilePictu
 import { logger } from '@/lib/logger';
 import { EmailVerificationBanner } from '@/components/EmailVerificationBanner';
 
+interface ProfileAvatarProps {
+  selectedImage: string | null;
+  isHovering: boolean;
+  onHoverEnter: () => void;
+  onHoverLeave: () => void;
+  onDelete: (e: React.MouseEvent) => void;
+  onUpload: () => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+const ProfileAvatar = ({
+  selectedImage, isHovering, onHoverEnter, onHoverLeave,
+  onDelete, onUpload, fileInputRef, onChange,
+}: ProfileAvatarProps) => (
+  <div
+    className="relative w-20 h-20 shrink-0"
+    onMouseEnter={onHoverEnter}
+    onMouseLeave={onHoverLeave}
+  >
+    <div className="w-full h-full rounded-full border-2 border-[#2257a7] bg-gray-100 overflow-hidden flex items-center justify-center">
+      {selectedImage ? (
+        <Image src={selectedImage} alt="profile" fill className="object-cover rounded-full" unoptimized={selectedImage.startsWith('http')} />
+      ) : (
+        <Image src="/assets/icons/user_icon.svg" alt="user-icon" width={36} height={36} />
+      )}
+    </div>
+    {isHovering && selectedImage && (
+      <button
+        type="button"
+        onClick={onDelete}
+        data-testid="delete-profile-pic-btn"
+        aria-label="Delete profile picture"
+        className="absolute top-0 right-0 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center hover:scale-110 transition"
+      >
+        <X className="w-3 h-3 text-white" />
+      </button>
+    )}
+    <button
+      type="button"
+      onClick={onUpload}
+      data-testid="upload-profile-pic-btn"
+      aria-label="Upload profile picture"
+      className="absolute bottom-0 right-0 w-6 h-6 bg-[#2257a7] rounded-full flex items-center justify-center hover:scale-110 transition shadow"
+    >
+      <Camera className="w-3.5 h-3.5 text-white" />
+    </button>
+    <input
+      type="file"
+      accept="image/*"
+      className="hidden"
+      ref={fileInputRef}
+      id="profile-picture"
+      name="profile_picture"
+      data-testid="profile-pic-input"
+      onChange={onChange}
+    />
+  </div>
+);
+
 const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const { profileData, setProfileData, setActiveTab, setProfilePicUrl } = useProfileContext();
   const personalInfoRef = useRef<PersonalInfoRef | null>(null);
@@ -172,262 +232,155 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   // Show loading state
   if (loading) {
     return (
-      <div className="flex-4 min-w-0 overflow-hidden bg-white rounded-2xl my-4 shadow-md p-4 flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-[#2200ff] border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-gray-600">Loading your profile...</span>
+      <div className="flex-4 min-w-0 overflow-hidden bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-[#2257a7] border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-gray-500 text-sm">Loading your profile...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-4 min-w-0 overflow-hidden bg-white rounded-2xl my-4 shadow-md p-4 flex flex-col">
+    <div className="flex-4 min-w-0 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col my-4">
       {/* Email Verification Banner */}
       {userEmail && !isEmailVerified && (
-        <div className="mb-4">
+        <div className="px-6 pt-4">
           <EmailVerificationBanner userEmail={userEmail} isVerified={isEmailVerified} />
         </div>
       )}
 
-      {!hasProfileData && (
-        <div className="flex items-center gap-6 bg-[#F9FAFB] p-6">
-          {/* Profile Image */}
-          <div
-            className="relative w-24 h-24"
-            onMouseEnter={() => setIsHoveringImage(true)}
-            onMouseLeave={() => setIsHoveringImage(false)}
-          >
-            <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#2257a7] overflow-hidden">
-              {selectedImage ? (
-                <Image
-                  src={selectedImage}
-                  alt="profile"
-                  fill
-                  className="object-cover rounded-full"
-                  unoptimized={selectedImage.startsWith('http')}
-                />
-              ) : (
-                <Image
-                  src="/assets/icons/user_icon.svg"
-                  alt="user-icon"
-                  width={40}
-                  height={40}
-                />
-              )}
-            </div>
-
-            {/* Delete icon - shows on hover if image exists */}
-            {isHoveringImage && selectedImage && (
-              <div
-                onClick={handleDeleteImage}
-                data-testid="delete-profile-pic-btn"
-                aria-label="Delete profile picture"
-                role="button"
-                className="bg-red-500 flex items-center justify-center absolute top-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
-              >
-                <X className="w-4 h-4 text-white" />
-              </div>
-            )}
-
-            {/* Camera icon */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              data-testid="upload-profile-pic-btn"
-              aria-label="Upload profile picture"
-              role="button"
-              className="bg-[#2257a7] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
-            >
-              <Camera className="w-4 h-4 text-white" />
-            </div>
-
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              ref={fileInputRef}
-              id="profile-picture"
-              name="profile_picture"
-              data-testid="profile-pic-input"
+      {/* ── Profile Header ── */}
+      <div className="px-6 pt-6 pb-5 border-b border-gray-100">
+        {!hasProfileData ? (
+          /* Welcome state */
+          <div className="flex items-center gap-5">
+            <ProfileAvatar
+              selectedImage={selectedImage}
+              isHovering={isHoveringImage}
+              onHoverEnter={() => setIsHoveringImage(true)}
+              onHoverLeave={() => setIsHoveringImage(false)}
+              onDelete={handleDeleteImage}
+              onUpload={() => fileInputRef.current?.click()}
+              fileInputRef={fileInputRef}
               onChange={handleImageChange}
             />
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">
+                Welcome, {username ?? "User"}
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Complete your profile to unlock personalised job matches.
+              </p>
+            </div>
           </div>
-          {/* Welcome Text */}
-          <div className='text-center flex-1'>
-            <h1 className="text-2xl font-semibold text-black">
-              Welcome to CareerBot,{" "}
-              {username ? username : "User"}
-            </h1>
-            <p className="text-gray-600 text-base">
-              Let&apos;s create your profile and connect you to your dream role.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {hasProfileData && (
-        <div className='flex flex-col gap-3'>
-          {/* Profile Info */}
-          <div className="flex-1">
-            <div className='flex items-center gap-4'>
-              <div
-                className="relative w-24 h-24"
-                onMouseEnter={() => setIsHoveringImage(true)}
-                onMouseLeave={() => setIsHoveringImage(false)}
-              >
-                <div className="w-full h-full flex items-center justify-center bg-[#D9D9D9] rounded-full border-2 border-[#2257a7] overflow-hidden">
-                  {selectedImage ? (
-                    <Image
-                      src={selectedImage}
-                      alt="profile"
-                      fill
-                      className="object-cover w-full h-full rounded-full"
-                      unoptimized={selectedImage.startsWith('http')}
-                    />
-                  ) : (
-                    <Image
-                      src="/assets/icons/user_icon.svg"
-                      alt="user-icon"
-                      width={40}
-                      height={40}
-                    />
-                  )}
-                </div>
-
-                {/* Delete icon - shows on hover if image exists */}
-                {isHoveringImage && selectedImage && (
-                  <div
-                    onClick={handleDeleteImage}
-                    data-testid="delete-profile-pic-btn"
-                    aria-label="Delete profile picture"
-                    role="button"
-                    className="bg-gray-500 flex items-center justify-center absolute top-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
-                  >
-                    <X className="w-4 h-4 text-white" />
-                  </div>
+        ) : (
+          /* Filled profile state */
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-5">
+              <ProfileAvatar
+                selectedImage={selectedImage}
+                isHovering={isHoveringImage}
+                onHoverEnter={() => setIsHoveringImage(true)}
+                onHoverLeave={() => setIsHoveringImage(false)}
+                onDelete={handleDeleteImage}
+                onUpload={() => fileInputRef.current?.click()}
+                fileInputRef={fileInputRef}
+                onChange={handleImageChange}
+              />
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl font-semibold text-gray-900 leading-tight">
+                  {profileData?.personalInformation?.fullName}
+                </h2>
+                {profileData?.personalInformation?.headline && (
+                  <p className="text-sm text-[#2257a7] font-medium mt-0.5">
+                    {profileData.personalInformation.headline}
+                  </p>
                 )}
-
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  data-testid="upload-profile-pic-btn"
-                  aria-label="Upload profile picture"
-                  role="button"
-                  className="bg-[#2257a7] flex items-center justify-center absolute bottom-0 right-0 w-6 h-6 rounded-full cursor-pointer hover:scale-105 transition"
-                >
-                  <Camera className="w-4 h-4 text-white" />
-                </div>
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  ref={fileInputRef}
-                  id="profile-picture"
-                  name="profile_picture"
-                  data-testid="profile-pic-input"
-                  onChange={handleImageChange}
-                />
-              </div>
-              <div className='text-gray-600'>
-                <h1 className="uppercase text-black text-xl font-semibold">{profileData?.personalInformation?.fullName}</h1>
-                <span className='text-neutral-600 text-sm'>{profileData?.personalInformation?.headline || ""}</span>
-                <div className='flex justify-between gap-6 mt-1'>
+                <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2">
                   {profileData?.personalInformation?.location && (
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-4 w-4" />
-                      <span className='text-sm'>{profileData?.personalInformation?.location}</span>
-                    </div>
+                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <MapPin className="h-3.5 w-3.5 shrink-0" />
+                      {profileData.personalInformation.location}
+                    </span>
                   )}
                   {profileData?.personalInformation?.email && (
-                    <div className="flex items-center gap-1">
-                      <Mail className="h-4 w-4" />
-                      <span className='text-sm'>{profileData?.personalInformation?.email}</span>
-                    </div>
+                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <Mail className="h-3.5 w-3.5 shrink-0" />
+                      {profileData.personalInformation.email}
+                    </span>
                   )}
                   {profileData?.personalInformation?.phone && (
-                    <div className="flex items-center gap-1">
-                      <Phone className="h-4 w-4" />
-                      <span className='text-sm'>{profileData?.personalInformation?.phone}</span>
-                    </div>
+                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <Phone className="h-3.5 w-3.5 shrink-0" />
+                      {profileData.personalInformation.phone}
+                    </span>
+                  )}
+                </div>
+
+                {/* Social links */}
+                <div className="flex gap-2 mt-3">
+                  {profileData?.personalInformation?.linkedin ? (
+                    <a
+                      href={profileData.personalInformation.linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="linkedin-link"
+                      className="flex items-center gap-1.5 text-xs font-medium text-[#0A66C2] bg-blue-50 border border-blue-100 rounded-md px-3 py-1.5 hover:bg-blue-100 transition"
+                    >
+                      <Image src="/assets/icons/linkedin-icon.svg" alt="linkedin" width={14} height={14} />
+                      LinkedIn
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid="add-linkedin-btn"
+                      onClick={() => { setActiveTab("Personal Information"); setTimeout(() => personalInfoRef.current?.focusLinkedin(), 100); }}
+                      className="flex items-center gap-1.5 text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 hover:bg-gray-100 transition"
+                    >
+                      <Image src="/assets/icons/linkedin-icon.svg" alt="linkedin" width={14} height={14} />
+                      Add LinkedIn
+                    </button>
+                  )}
+
+                  {profileData?.personalInformation?.github ? (
+                    <a
+                      href={profileData.personalInformation.github}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="github-link"
+                      className="flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 hover:bg-gray-100 transition"
+                    >
+                      <Github className="w-3.5 h-3.5" />
+                      GitHub
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid="add-github-btn"
+                      onClick={() => { setActiveTab("Personal Information"); setTimeout(() => personalInfoRef.current?.focusGithub(), 100); }}
+                      className="flex items-center gap-1.5 text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 hover:bg-gray-100 transition"
+                    >
+                      <Github className="w-3.5 h-3.5" />
+                      Add GitHub
+                    </button>
                   )}
                 </div>
               </div>
             </div>
-          </div>
-          {profileData?.personalInformation?.summary && (
-            <span className='text-neutral-600 border border-gray-400 rounded-lg text-sm my-4 p-2'>{profileData.personalInformation.summary}</span>
-          )}
 
-          {/* Action Buttons */}
-          <div className='flex gap-3'>
-            {/* LinkedIn Button */}
-            {profileData?.personalInformation?.linkedin ? (
-              <a
-                href={profileData.personalInformation.linkedin.startsWith("https:www.linkedin")
-                  ? profileData.personalInformation.linkedin
-                  : `${profileData.personalInformation.linkedin}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid="linkedin-link"
-                className='flex text-sm gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition text-[#0A66C2]'
-              >
-                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20} />
-                <span className='font-semibold'>LinkedIn</span>
-              </a>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("Personal Information");
-                  setTimeout(() => {
-                    personalInfoRef.current?.focusLinkedin();
-                  }, 100);
-                }}
-                data-testid="add-linkedin-btn"
-                className='flex gap-2 text-md items-center border shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition'
-              >
-                {/* <Linkedin className='w-5 h-5' /> */}
-                <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={20} height={20} />
-                <span className='font-semibold'>Update</span>
-              </button>
-            )}
-
-            {/* GitHub Button */}
-            {profileData?.personalInformation?.github ? (
-              <a
-                href={profileData.personalInformation.github.startsWith("https:www.github")
-                  ? profileData.personalInformation.github
-                  : `${profileData.personalInformation.github}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid="github-link"
-                className='flex gap-2 text-sm items-center border  shadow-sm bg-white rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition text-black'
-              >
-                <Github className='w-5 h-5' />
-                <span className='font-semibold'>GitHub</span>
-              </a>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("Personal Information");
-                  setTimeout(() => {
-                    personalInfoRef.current?.focusGithub();
-                  }, 100);
-                }}
-                data-testid="add-github-btn"
-                className='flex gap-2 text-sm items-center border shadow-sm bg-white rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-50 transition'
-              >
-                <Github className='w-4 h-4' />
-                <span className='font-semibold'>Connect</span>
-              </button>
+            {/* Summary */}
+            {profileData?.personalInformation?.summary && (
+              <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 rounded-lg px-4 py-3 border border-gray-100">
+                {profileData.personalInformation.summary}
+              </p>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Tabs */}
-      <div className='mt-8'>
+      {/* ── Tabs ── */}
+      <div className="px-6 pt-2 mb-8">
         <ProfileTabs
           profile={profileData}
           setProfile={setProfileData}

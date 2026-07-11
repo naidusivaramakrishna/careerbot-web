@@ -1,6 +1,6 @@
 import { Projects } from "@/api/userApi";
 import ProjectsCard from "./ProjectsCard";
-import { FaFolderOpen } from "react-icons/fa";
+import { Plus } from "lucide-react";
 
 interface Props {
     projectsList: Partial<Projects>[];
@@ -11,22 +11,22 @@ interface Props {
 
 export default function ProjectsList({ projectsList, onEdit, onDelete, onAdd }: Props) {
     return (
-        <>
+        <div className="flex flex-col gap-3">
             {projectsList.map((pro, index) => (
                 <ProjectsCard key={pro.id || index} pro={pro} index={index} onEdit={onEdit} onDelete={onDelete} />
             ))}
 
-            <div className="flex justify-self-end">
+            <div className="flex justify-end pt-1">
                 <button
                     type="button"
                     onClick={onAdd}
                     data-testid="add-project-btn"
-                    className="bg-[#2257a7] text-white text-sm cursor-pointer flex gap-2 items-center px-4 py-2 rounded-lg"
+                    className="flex items-center gap-1.5 text-sm font-medium text-[#2257a7] border border-[#2257a7] bg-[#EEF3FB] hover:bg-[#dde8f7] px-4 py-2 rounded-lg transition"
                 >
-                    <FaFolderOpen className="w-4 h-4" />
-                    <span>Add Projects</span>
+                    <Plus className="w-4 h-4" />
+                    Add Project
                 </button>
             </div>
-        </>
+        </div>
     );
 }

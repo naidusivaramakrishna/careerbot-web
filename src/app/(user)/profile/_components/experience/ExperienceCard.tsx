@@ -1,4 +1,4 @@
-import { Calendar, MapPin, Pencil, Trash2 } from "lucide-react";
+import { Briefcase, Calendar, MapPin, Pencil, Trash2 } from "lucide-react";
 import { formatDateRange } from "@/utils/formatDate";
 import { Experience } from "@/api/userApi";
 import DOMPurify from 'dompurify';
@@ -10,68 +10,79 @@ interface Props {
     onDelete: (id?: string, index?: number) => void;
 }
 
+const jobTypeLabel: Record<string, string> = {
+    full_time: "Full-time",
+    part_time: "Part-time",
+    contract: "Contract",
+    internship: "Internship",
+    freelance: "Freelance",
+};
+
 export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) {
     const sanitizedDescription = exp.description
         ? DOMPurify.sanitize(exp.description.replace(/\n/g, '<br />'))
         : '';
+
     return (
         <div
             key={exp.id || index}
             data-testid={`experience-card-${index}`}
-            className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
+            className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-4 flex items-start justify-between gap-3"
         >
-            <div>
-                <h3 className="font-semibold text-lg">{exp.job_title}</h3>
-                {exp.company && (
-                    <p className="text-base text-[#2200FF]  font-semibold">
-                        {exp.company}
-                    </p>
-                )}
-                <div className="flex gap-4 items-center text-neutral-500 my-4">
-                    {exp.location && (
-                        <div className="flex gap-1 items-center">
-                            <MapPin className="w-5 h-5" />
-                            <span className="text-sm">{exp.location}</span>
-                        </div>
-                    )}
-                    {formatDateRange(exp.start_date, exp.end_date) && (
-                        <div className="flex gap-1 items-center text-neutral-500">
-                            <Calendar className="w-5 h-5" />
-                            <span className="text-sm">{formatDateRange(exp.start_date, exp.end_date)}</span>
-                        </div>
-                    )}
-                    {exp.job_type && (
-                        <span className="rounded-full px-3 py-1 bg-[#f2f4f5] text-sm font-semibold text-black/70">{exp.job_type}</span>
-                    )}
+            <div className="flex gap-3 min-w-0 flex-1">
+                <div className="w-9 h-9 bg-[#EEF3FB] rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <Briefcase className="w-5 h-5 text-[#2257a7]" />
                 </div>
-                {sanitizedDescription && (
-                    <>
-                        <p className="text-black text-base font-semibold">Responsibilities: </p>
+                <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-sm text-gray-900 leading-snug">{exp.job_title}</h3>
+                    {exp.company && (
+                        <p className="text-sm text-[#2257a7] font-medium mt-0.5">{exp.company}</p>
+                    )}
+                    <div className="flex flex-wrap gap-3 items-center mt-2">
+                        {exp.location && (
+                            <span className="flex items-center gap-1 text-xs text-gray-500">
+                                <MapPin className="w-3.5 h-3.5 shrink-0" />
+                                {exp.location}
+                            </span>
+                        )}
+                        {formatDateRange(exp.start_date, exp.end_date) && (
+                            <span className="flex items-center gap-1 text-xs text-gray-500">
+                                <Calendar className="w-3.5 h-3.5 shrink-0" />
+                                {formatDateRange(exp.start_date, exp.end_date)}
+                            </span>
+                        )}
+                        {exp.job_type && (
+                            <span className="text-xs font-medium text-gray-700 bg-gray-100 rounded-full px-2.5 py-0.5">
+                                {jobTypeLabel[exp.job_type] || exp.job_type}
+                            </span>
+                        )}
+                    </div>
+                    {sanitizedDescription && (
                         <div
-                            className="text-sm text-gray-800 space-y-2 resume-description"
+                            className="text-xs text-gray-600 mt-3 space-y-1 resume-description leading-relaxed"
                             dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
                         />
-                    </>
-                )}
+                    )}
+                </div>
             </div>
-            <div className="flex gap-2 mt-2">
+
+            <div className="flex gap-1.5 shrink-0 mt-0.5">
                 <button
                     type="button"
                     data-testid={`experience-edit-btn-${index}`}
                     onClick={() => onEdit(exp, index)}
-                    className="text-sm cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
+                    className="flex items-center gap-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 hover:bg-gray-100 rounded-md px-2.5 py-1.5 transition"
                 >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-3.5 h-3.5" />
                     Edit
                 </button>
-
                 <button
                     type="button"
                     data-testid={`experience-delete-btn-${index}`}
                     onClick={() => onDelete(exp.id, index)}
-                    className="border border-red-300 text-sm  cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
+                    className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-md px-2.5 py-1.5 transition"
                 >
-                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <Trash2 className="w-3.5 h-3.5" />
                     Delete
                 </button>
             </div>

@@ -39,8 +39,8 @@ const RecentActivityList = dynamic(() => import('./_components/RecentActivityLis
 // Immediate loading components
 import { ErrorState } from './_components/ErrorState';
 
-// Import mock data and constants
-import { userGrowthData, revenueData, CHART_COLORS, PERIOD_MAP } from './_constants/mockData';
+// Import constants
+import { CHART_COLORS, PERIOD_MAP } from './_constants/mockData';
 
 // Import access control
 import { useAdminAccess } from '../_hooks/useAdminAccess';
@@ -161,20 +161,23 @@ const DashboardContent = () => {
 
   // Memoized subscription chart data
   const subscriptionChartData = useMemo(() => {
-    if (!dashboardData?.subscription_breakdown?.length) {
-      return [
-        { name: "Free", value: 59 },
-        { name: "Basic", value: 20 },
-        { name: "Pro", value: 16 },
-        { name: "Enterprise", value: 10 },
-      ];
-    }
+    if (!dashboardData?.subscription_breakdown?.length) return [];
     return dashboardData.subscription_breakdown.map(item => ({
       name: item.plan_name,
       value: item.percentage,
       count: item.count
     })) as Array<{ name: string; value: number; count?: number }>;
   }, [dashboardData?.subscription_breakdown]);
+
+  const userGrowthData = useMemo(
+    () => dashboardData?.user_growth ?? [],
+    [dashboardData?.user_growth]
+  );
+
+  const revenueData = useMemo(
+    () => dashboardData?.revenue_subscriptions ?? [],
+    [dashboardData?.revenue_subscriptions]
+  );
 
   // Show skeleton loading on first load
   if (loading && !dashboardData) {
@@ -276,6 +279,7 @@ const DashboardContent = () => {
             dataKeys={['revenue', 'subscriptions']}
             colors={['#3b82f6', '#f97316']}
             xAxisKey="month"
+            dualAxis
           />
         </Suspense>
 

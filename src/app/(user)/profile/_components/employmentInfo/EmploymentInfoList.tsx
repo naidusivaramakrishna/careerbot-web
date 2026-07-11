@@ -1,4 +1,4 @@
-import { FileText } from "lucide-react";
+import { Plus } from "lucide-react";
 import { EmploymentInfo } from "@/api/userApi";
 import EmploymentInfoCard from "./EmploymentInfoCard";
 
@@ -17,15 +17,15 @@ export default function EmploymentInfoList({
 }: Props) {
     if (!employmentInfo) {
         return (
-            <div className="flex justify-self-end">
+            <div className="flex justify-end pt-1">
                 <button
                     type="button"
                     onClick={onAdd}
                     data-testid="add-employment-info-btn"
-                    className="bg-[#2257a7] text-white text-sm cursor-pointer flex gap-2 items-center px-4 py-2 rounded-lg"
+                    className="flex items-center gap-1.5 text-sm font-medium text-[#2257a7] border border-[#2257a7] bg-[#EEF3FB] hover:bg-[#dde8f7] px-4 py-2 rounded-lg transition"
                 >
-                    <FileText className="w-4 h-4" />
-                    <span>Add Employment Info</span>
+                    <Plus className="w-4 h-4" />
+                    Add Employment Info
                 </button>
             </div>
         );

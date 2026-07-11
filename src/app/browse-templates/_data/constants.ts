@@ -1,37 +1,189 @@
-export const FAMILY_TEMPLATES: Record<string, { id: number; image: string; description: string }> = {
-  software_engineering:          { id: 1,  image: '/assets/templates/software_engineering.png', description: 'Modern template for tech professionals' },
-  healthcare:                    { id: 2,  image: '/assets/templates/healthcare.png',            description: 'Professional template for healthcare' },
-  finance:                       { id: 3,  image: '/assets/templates/finance.png',               description: 'Professional layout for finance professionals' },
-  education:                     { id: 4,  image: '/assets/templates/education.png',             description: 'Template for educators and academics' },
-  cybersecurity:                 { id: 5,  image: '/assets/templates/cybersecurity.png',         description: 'Specialized template for security professionals' },
-  core_engineering:              { id: 6,  image: '/assets/templates/core-engineering.png',      description: 'Template for mechanical, civil, and core engineers' },
-  electronics_and_vlsi:          { id: 7,  image: '/assets/templates/electronics_vlsi.png',      description: 'Technical template for electronics professionals' },
-  government_standard:           { id: 8,  image: '/assets/templates/government_standard.png',   description: 'Official format for government job applications' },
-  legal:                         { id: 9,  image: '/assets/templates/legal.png',                 description: 'Professional template for legal professionals' },
-  logistics_warehouse_operations:{ id: 10, image: '/assets/templates/logistics.png',             description: 'Template for logistics and warehouse operations' },
-  marine_merchant_navy:          { id: 11, image: '/assets/templates/marine_merchant.png',       description: 'Professional template for maritime professionals' },
-  modern_minimal_template:       { id: 12, image: '/assets/templates/modern_minimal.png',        description: 'Clean and minimal design for any profession' },
-  research_scholar:              { id: 13, image: '/assets/templates/research_scholar.png',      description: 'Academic template for researchers and scholars' },
-  sales_business_development:    { id: 14, image: '/assets/templates/sales_business.png',        description: 'Dynamic template for sales professionals' },
-  general_professional:          { id: 1,  image: '/assets/templates/software_engineering.png',  description: 'Professional template for any industry' },
+export const FAMILY_TEMPLATES: Record<string, { id: number; image: string; previewUrl: string; previewUrls: Record<string, string>; description: string }> = {
+  software_engineering: {
+    id: 1, image: '/assets/templates/software_engineering.png',
+    previewUrl: '/assets/templates/previews/software_engineering_early_career_resume.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/software_engineering_fresher_resume.png',
+      'Early Career': '/assets/templates/previews/software_engineering_early_career_resume.png',
+      'Mid-Level':    '/assets/templates/previews/software_engineering_mid_level_resume.png',
+      'Lead':         '/assets/templates/previews/software_engineering_lead_resume.png',
+      'Manager':      '/assets/templates/previews/software_engineering_manager_resume.png',
+    },
+    description: 'Modern template for tech professionals',
+  },
+  healthcare: {
+    id: 2, image: '/assets/templates/healthcare.png',
+    previewUrl: '/assets/templates/previews/healthcare_early_career_resume.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/healthcare_fresher_resume.png',
+      'Early Career': '/assets/templates/previews/healthcare_early_career_resume.png',
+      'Mid-Level':    '/assets/templates/previews/healthcare_mid_level_resume.png',
+      'Senior-Level': '/assets/templates/previews/healthcare_senior_level_resume.png',
+    },
+    description: 'Professional template for healthcare',
+  },
+  finance: {
+    id: 3, image: '/assets/templates/finance.png',
+    previewUrl: '/assets/templates/previews/finance_early_career_resume.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/finance_fresher_resume.png',
+      'Early Career': '/assets/templates/previews/finance_early_career_resume.png',
+      'Mid-Level':    '/assets/templates/previews/finance_mid_level_resume.png',
+      'Senior-Level': '/assets/templates/previews/finance_senior_level_resume.png',
+    },
+    description: 'Professional layout for finance professionals',
+  },
+  education: {
+    id: 4, image: '/assets/templates/education.png',
+    previewUrl: '/assets/templates/previews/education_early_career_resume.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/education_fresher_resume.png',
+      'Early Career': '/assets/templates/previews/education_early_career_resume.png',
+      'Mid-Level':    '/assets/templates/previews/education_mid_level_resume.png',
+      'Senior-Level': '/assets/templates/previews/education_senior_level_resume.png',
+    },
+    description: 'Template for educators and academics',
+  },
+  cybersecurity: {
+    id: 5, image: '/assets/templates/cybersecurity.png',
+    previewUrl: '/assets/templates/previews/cybersecurity_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/cybersecurity_fresher.png',
+      'Early Career': '/assets/templates/previews/cybersecurity_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/cybersecurity_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/cybersecurity_senior_level.png',
+    },
+    description: 'Specialized template for security professionals',
+  },
+  core_engineering: {
+    id: 6, image: '/assets/templates/core-engineering.png',
+    previewUrl: '/assets/templates/previews/core_engineering_early_career_resume.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/core_engineering_fresher_resume.png',
+      'Early Career': '/assets/templates/previews/core_engineering_early_career_resume.png',
+      'Mid-Level':    '/assets/templates/previews/core_engineering_mid_level_resume.png',
+      'Senior-Level': '/assets/templates/previews/core_engineering_senior_level_resume.png',
+      'Manager':      '/assets/templates/previews/core_engineering_manager_resume.png',
+    },
+    description: 'Template for mechanical, civil, and core engineers',
+  },
+  electronics_and_vlsi: {
+    id: 7, image: '/assets/templates/electronics_vlsi.png',
+    previewUrl: '/assets/templates/previews/electronics_and_vlsi_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/electronics_and_vlsi_fresher.png',
+      'Early Career': '/assets/templates/previews/electronics_and_vlsi_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/electronics_and_vlsi_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/electronics_and_vlsi_senior_level.png',
+    },
+    description: 'Technical template for electronics professionals',
+  },
+  government_standard: {
+    id: 8, image: '/assets/templates/government_standard.png',
+    previewUrl: '/assets/templates/previews/government_standard_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/government_standard_fresher.png',
+      'Early Career': '/assets/templates/previews/government_standard_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/government_standard_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/government_standard_senior_level.png',
+    },
+    description: 'Official format for government job applications',
+  },
+  legal: {
+    id: 9, image: '/assets/templates/legal.png',
+    previewUrl: '/assets/templates/previews/legal_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/legal_fresher.png',
+      'Early Career': '/assets/templates/previews/legal_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/legal_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/legal_senior_level.png',
+    },
+    description: 'Professional template for legal professionals',
+  },
+  logistics_warehouse_operations: {
+    id: 10, image: '/assets/templates/logistics.png',
+    previewUrl: '/assets/templates/previews/logistics_warehouse_operations_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/logistics_warehouse_operations_fresher.png',
+      'Early Career': '/assets/templates/previews/logistics_warehouse_operations_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/logistics_warehouse_operations_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/logistics_warehouse_operations_senior_level.png',
+    },
+    description: 'Template for logistics and warehouse operations',
+  },
+  marine_merchant_navy: {
+    id: 11, image: '/assets/templates/marine_merchant.png',
+    previewUrl: '/assets/templates/previews/marine_merchant_navy_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/marine_merchant_navy_fresher.png',
+      'Early Career': '/assets/templates/previews/marine_merchant_navy_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/marine_merchant_navy_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/marine_merchant_navy_senior_level.png',
+    },
+    description: 'Professional template for maritime professionals',
+  },
+  modern_minimal_template: {
+    id: 12, image: '/assets/templates/modern_minimal.png',
+    previewUrl: '/assets/templates/previews/modern_minimal_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/modern_minimal_fresher.png',
+      'Early Career': '/assets/templates/previews/modern_minimal_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/modern_minimal_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/modern_minimal_senior_level.png',
+    },
+    description: 'Clean and minimal design for any profession',
+  },
+  research_scholar: {
+    id: 13, image: '/assets/templates/research_scholar.png',
+    previewUrl: '/assets/templates/previews/research_scholar_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/research_scholar_fresher.png',
+      'Early Career': '/assets/templates/previews/research_scholar_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/research_scholar_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/research_scholar_senior_level.png',
+    },
+    description: 'Academic template for researchers and scholars',
+  },
+  sales_business_development: {
+    id: 14, image: '/assets/templates/sales_business.png',
+    previewUrl: '/assets/templates/previews/sales_business_development_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/sales_business_development_fresher.png',
+      'Early Career': '/assets/templates/previews/sales_business_development_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/sales_business_development_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/sales_business_development_senior_level.png',
+    },
+    description: 'Dynamic template for sales professionals',
+  },
+  general_professional: {
+    id: 1, image: '/assets/templates/software_engineering.png',
+    previewUrl: '/assets/templates/previews/classic_clean_early_career.png',
+    previewUrls: {
+      'Fresher':      '/assets/templates/previews/classic_clean_fresher.png',
+      'Early Career': '/assets/templates/previews/classic_clean_early_career.png',
+      'Mid-Level':    '/assets/templates/previews/classic_clean_mid_level.png',
+      'Senior-Level': '/assets/templates/previews/classic_clean_senior_level.png',
+    },
+    description: 'Professional template for any industry',
+  },
 }
 
 export const FAMILY_DOMAINS: Record<string, string[]> = {
-  software_engineering:           ['software_engineering', 'web_development', 'full_stack_development', 'mobile_development', 'devops', 'cloud_engineering', 'data_science', 'machine_learning', 'ux_ui_design'],
-  core_engineering:               ['mechanical_engineering', 'civil_engineering', 'chemical_engineering', 'aerospace_engineering', 'automotive_engineering', 'construction_engineering', 'robotics', 'plc_scada'],
-  healthcare:                     ['doctor_physician', 'surgeon', 'clinical_nurse', 'pharmacist', 'physiotherapist', 'radiologist', 'medical_lab_scientist', 'healthcare_administrator'],
-  finance:                        ['accounting', 'financial_planning', 'financial_analysis', 'investment_banking', 'corporate_finance', 'banking', 'audit', 'risk_management', 'mba_general_management'],
-  education:                      ['professor', 'associate_professor', 'assistant_professor', 'senior_lecturer', 'lecturer', 'teacher', 'academic_researcher', 'education_director', 'department_head'],
-  cybersecurity:                  ['cybersecurity', 'application_security', 'penetration_testers', 'soc_analysts', 'incident_response', 'digital_forensics', 'security_engineers', 'grc', 'compliance_officers'],
-  electronics_and_vlsi:           ['embedded_systems', 'vlsi_design', 'semiconductor', 'iot', 'automation'],
-  government_standard:            ['civil_services', 'defense', 'drdo', 'isro', 'psu', 'ias', 'railways', 'ciso'],
-  legal:                          ['ip_attorneys', 'law_firms', 'legal_operations', 'paralegals'],
-  logistics_warehouse_operations: ['operations', 'procurement', 'scm', 'warehousing', 'distribution', 'freight', 'shipping', 'port_operations', 'demand_planning'],
-  marine_merchant_navy:           ['merchant_navy', 'marine_engineering', 'naval_architecture', 'offshore'],
-  modern_minimal_template:        ['hr', 'marketing', 'product_management', 'management_consulting', 'design', 'insurance', 'hospitality_management'],
-  research_scholar:               ['academic_researcher', 'biotech', 'pharma', 'life_sciences', 'regulatory_affairs'],
-  sales_business_development:     ['sales', 'business_development', 'account_management', 'growth', 'marketing', 'startups'],
-  general_professional:           ['general_professional', 'hr', 'operations', 'management_consulting'],
+  software_engineering: ['cloud_computing', 'computer_applications', 'computer_science_engineering', 'cybersecurity', 'data_science', 'devops_engineering', 'full_stack_development', 'information_technology', 'mobile_development', 'software_engineering', 'web_development'],
+  core_engineering: ['aerospace_engineering', 'automotive_engineering', 'chemical_engineering', 'civil_engineering', 'construction_engineering', 'mechanical_engineering'],
+  healthcare: ['clinical_nurse', 'doctor_physician', 'healthcare_administrator', 'medical_lab_scientist', 'pharmacist', 'physiotherapist', 'radiologist', 'surgeon'],
+  finance: ['accounting', 'audit', 'banking', 'corporate_finance', 'financial_analysis', 'financial_planning', 'insurance', 'investment_banking', 'management_consulting', 'risk_management'],
+  education: ['academic_researcher', 'assistant_professor', 'associate_professor', 'education_coordinator', 'lecturer', 'professor', 'teacher', 'visiting_faculty'],
+  cybersecurity: ['application_security', 'ciso', 'digital_forensics', 'grc', 'incident_response', 'penetration_testers', 'security_engineers', 'soc_analysts'],
+  electronics_and_vlsi: ['automation', 'embedded_systems', 'iot', 'plc_scada', 'robotics', 'semiconductor', 'vlsi_design'],
+  government_standard: ['civil_services', 'defense', 'drdo', 'ias', 'isro', 'psu', 'railways'],
+  legal: ['compliance_officers', 'ip_attorneys', 'law_firms', 'legal_operations', 'paralegals', 'regulatory_affairs'],
+  logistics_warehouse_operations: ['demand_planning', 'distribution', 'freight', 'inventory_management', 'procurement', 'scm', 'warehousing'],
+  marine_merchant_navy: ['marine_engineering', 'merchant_navy', 'naval_architecture', 'offshore', 'port_operations', 'shipping'],
+  modern_minimal_template: ['design', 'growth', 'marketing', 'product_management', 'startups', 'ux_ui_design'],
+  research_scholar: ['biotech', 'clinical_trials', 'life_sciences', 'pharma', 'R&D', 'regulatory_affairs'],
+  sales_business_development: ['account_management', 'business_development', 'hospitality_management', 'hr', 'mba_general_management', 'operations', 'sales'],
+  general_professional: ['cloud_engineering', 'data_science', 'devops', 'full_stack_development', 'machine_learning', 'mobile_development', 'software_engineering', 'web_development'],
 }
 
 export const DOMAIN_NAMES: Record<string, string> = {
@@ -53,12 +205,13 @@ export const DOMAIN_NAMES: Record<string, string> = {
 }
 
 export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
+  // Engineering domains
   aerospace_engineering: 'Aerospace Engineer',
   automotive_engineering: 'Automotive Engineer',
   chemical_engineering: 'Chemical Engineer',
   civil_engineering: 'Civil Engineer',
   construction_engineering: 'Construction Engineer',
-  devops: 'DevOps Engineer',
+  devops_engineering: 'DevOps Engineer',
   embedded_systems: 'Embedded Systems Engineer',
   marine_engineering: 'Marine Engineer',
   mechanical_engineering: 'Mechanical Engineer',
@@ -67,6 +220,8 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   vlsi_design: 'VLSI Design Engineer',
   robotics: 'Robotics Engineer',
   plc_scada: 'PLC/SCADA Engineer',
+
+  // Education domains
   professor: 'Professor',
   associate_professor: 'Associate Professor',
   assistant_professor: 'Assistant Professor',
@@ -81,7 +236,9 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   education_director: 'Education Director',
   education_coordinator: 'Education Coordinator',
   department_head: 'Department Head',
-  doctor_physician: 'Doctor / Physician',
+
+  // Healthcare domains
+  doctor_physician: 'Doctor/Physician',
   surgeon: 'Surgeon',
   clinical_nurse: 'Clinical Nurse',
   pharmacist: 'Pharmacist',
@@ -89,10 +246,13 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   radiologist: 'Radiologist',
   medical_lab_scientist: 'Medical Lab Scientist',
   healthcare_administrator: 'Healthcare Administrator',
+  clinical_trials: 'Clinical Trials Specialist',
+  life_sciences: 'Life Sciences Professional',
+
+  // IT & Technology domains
   software_engineering: 'Software Engineer',
   data_science: 'Data Scientist',
   cloud_computing: 'Cloud Computing Specialist',
-  cloud_engineering: 'Cloud Engineer',
   cybersecurity: 'Cybersecurity Specialist',
   application_security: 'Application Security Engineer',
   security_engineers: 'Security Engineer',
@@ -100,11 +260,19 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   penetration_testers: 'Penetration Tester',
   soc_analysts: 'SOC Analyst',
   digital_forensics: 'Digital Forensics Specialist',
-  ux_ui_design: 'UX / UI Designer',
-  web_development: 'Web Developer',
+  information_technology: 'IT Professional',
+  computer_science_engineering: 'Computer Science Engineer',
+  computer_applications: 'Computer Applications Specialist',
+  iot: 'IOT Engineer',
+  ux_ui_design: 'UX/UI Designer',
+  web_development: 'Web Development',
   full_stack_development: 'Full Stack Developer',
   mobile_development: 'Mobile Developer',
-  machine_learning: 'Machine Learning Engineer',
+  cloud_engineering: 'Cloud Engineer',
+  devops: 'DevOps Engineer',
+  machine_learning: 'Machine Learning',
+
+  // Finance domains
   accounting: 'Accountant',
   financial_planning: 'Financial Planner',
   financial_analysis: 'Financial Analyst',
@@ -113,11 +281,15 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   banking: 'Banking Professional',
   audit: 'Audit Professional',
   risk_management: 'Risk Manager',
-  mba_general_management: 'MBA / General Management',
+  mba_general_management: 'MBA General Management',
+
+  // Legal domains
   ip_attorneys: 'IP Attorney',
-  law_firms: 'Lawyer / Law Firm Professional',
+  law_firms: 'Lawyer/Law Firm Professional',
   legal_operations: 'Legal Operations Specialist',
   paralegals: 'Paralegal',
+
+  // HR & Business domains
   hr: 'HR Professional',
   account_management: 'Account Manager',
   sales: 'Sales Professional',
@@ -126,6 +298,8 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   product_management: 'Product Manager',
   growth: 'Growth Specialist',
   startups: 'Startup Professional',
+
+  // Operations & Logistics domains
   operations: 'Operations Manager',
   procurement: 'Procurement Specialist',
   scm: 'Supply Chain Manager',
@@ -136,6 +310,8 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   shipping: 'Shipping Specialist',
   warehousing: 'Warehouse Manager',
   port_operations: 'Port Operations Specialist',
+
+  // Government & Defense domains
   civil_services: 'Civil Services Officer',
   defense: 'Defense Professional',
   drdo: 'DRDO Scientist',
@@ -146,18 +322,21 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   ciso: 'CISO',
   compliance_officers: 'Compliance Officer',
   grc: 'GRC Specialist',
+
+  // Merchant Navy & Shipping
   merchant_navy: 'Merchant Navy Officer',
   offshore: 'Offshore Professional',
+
+  // Other domains
   biotech: 'Biotech Professional',
   pharma: 'Pharmaceutical Professional',
   hospitality_management: 'Hospitality Manager',
   insurance: 'Insurance Professional',
   regulatory_affairs: 'Regulatory Affairs Specialist',
+  'R&D': 'R&D Professional',
   management_consulting: 'Management Consultant',
   design: 'Designer',
   automation: 'Automation Specialist',
-  iot: 'IoT Engineer',
-  life_sciences: 'Life Sciences Professional',
   general_professional: 'General Professional',
 }
 
