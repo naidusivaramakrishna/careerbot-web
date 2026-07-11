@@ -2,7 +2,7 @@ import { isAuthenticated } from "./authApi";
 import { getCorrelationId } from "@/lib/correlationId";
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import { enhanceResume } from "./enhancerApi";
-import { calculateATS, getResume } from "./parserApi";
+import { getResume } from "./parserApi";
 
 const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
@@ -86,13 +86,7 @@ export const clearCacheForResume = async (resumeId: string) => {
 };
 
 /* ------------------------------------------------------
-   STEP 3 — Calculate ATS Score
-   Delegates to parserApi.calculateATS to avoid duplication.
------------------------------------------------------- */
-export const fetchAtsScore = (resumeId: string) => calculateATS(resumeId);
-
-/* ------------------------------------------------------
-   STEP 4 — Complete Resume → ATS Flow
+   STEP 3 — Complete Resume → ATS Flow
    Step 1: POST /parser/parse_resume/ → resume_id + parsed_data
    Step 2: POST /resume/enhance       → enhancer_state.ats_breakdown (ATS score)
 ------------------------------------------------------ */
