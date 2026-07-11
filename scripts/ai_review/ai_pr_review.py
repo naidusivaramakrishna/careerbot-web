@@ -103,6 +103,26 @@ def upsert_comment(repo, pr, body):
         run(["gh", "pr", "comment", str(pr), "--repo", repo, "--body-file", path])
 
 
+# ── PR context (description + human conversation) ───────────────────────────
+def pr_context(repo, pr):
+    """Fetch the PR title, description, and human comments so the reviewer
+    understands the author's INTENT — not just the diff. Excludes the bot's own
+    ai-review comments to avoid feeding it its own prior output."""
+    meta = json.loads(out(["gh", "pr", "view", str(pr), "--repo", repo,
+                           "--json", "title,body"]) or "{}")
+    title = (meta.get("title") or "").strip()
+    body = (meta.get("body") or "").strip()
+    raw = out(["gh", "api", f"repos/{repo}/issues/{pr}/comments", "--paginate",
+               "-q", ".[] | select((.body // \"\") | contains(\"<!-- ai-review:\") | not) "
+                     "| \"[\\(.user.login)] \\(.body)\""])
+    convo = [l for l in raw.splitlines() if l.strip()][-12:]  # last dozen human comments
+    parts = [f"TITLE: {title}"]
+    parts.append("DESCRIPTION:\n" + (body[:4000] if body else "(none provided)"))
+    if convo:
+        parts.append("CONVERSATION (author/reviewers, newest last):\n" + "\n".join(convo)[:4000])
+    return "\n\n".join(parts)
+
+
 # ── T0 scope guard ──────────────────────────────────────────────────────────
 def scope_guard(base, head):
     files = [l for l in out(["git", "diff", "--numstat", f"{base}...{head}"]).splitlines() if l.strip()]
@@ -122,21 +142,34 @@ def scope_guard(base, head):
 CLAUDE_PROMPT = """You are a top-1% senior backend reviewer + SDET reviewing ONE PR.
 Review ONLY diff {base}...{head} (three-dot). Read files AT head SHA {head}. Follow the
 repo review checklist (docs/claude_split/**/*_pr_review_checklist.md) and CLAUDE.md.
+
+FIRST read the author's stated INTENT below (PR description + conversation). Review the
+diff AGAINST that intent: (a) does the code do what the description claims — flag any claim
+the diff does not actually deliver; (b) if a change looks like a bug but the description shows
+it is deliberate, reframe to "verify callers/tests/docs migrated" instead of "bug"; (c) if the
+description leaves a contract/back-compat question open, make verifying it a finding.
+
+=== AUTHOR INTENT (PR description + conversation) ===
+{context}
+=== END INTENT ===
+
 Output: a KPI line (P0/P1/P2/P3 + verdict BLOCK|CHANGES-REQUESTED|ACCEPT-WITH-FIXES|ACCEPT),
 then each finding as [sev] title | file:line | quoted code | why | fix. Add an SDET note
 (tests added/updated? removal-orphans deleted?). Evidence-only; no speculation."""
 
 
-def claude_pass(base, head):
-    return run(["claude", "-p", CLAUDE_PROMPT.format(base=base, head=head)],
+def claude_pass(base, head, context):
+    return run(["claude", "-p", CLAUDE_PROMPT.format(base=base, head=head, context=context)],
                timeout=900).stdout or "_no output_"
 
 
-def codex_pass(base, head, claude):
+def codex_pass(base, head, claude, context):
     prompt = (f"ROLE: OUTSIDER senior reviewer. Cross-check the review below AND find what it "
-              f"missed. Inspect only diff {base}...{head}. file:line evidence required. For each "
-              f"finding CONFIRM|REFUTE|REGRADE; then MISSED [sev]+file:line; OVERALL verdict.\n\n"
-              f"=== REVIEW TO CROSS-CHECK ===\n{claude}\n")
+              f"missed. Inspect only diff {base}...{head}. file:line evidence required. Use the "
+              f"author's INTENT to judge whether flagged 'bugs' are deliberate and whether the "
+              f"diff actually delivers what the description claims. For each finding "
+              f"CONFIRM|REFUTE|REGRADE; then MISSED [sev]+file:line; OVERALL verdict.\n\n"
+              f"=== AUTHOR INTENT ===\n{context}\n\n=== REVIEW TO CROSS-CHECK ===\n{claude}\n")
     return run(["codex", "review", "-"], stdin=prompt, timeout=900).stdout or "_no output_"
 
 
@@ -345,8 +378,9 @@ def review_one(repo, pr, cfg, dynamic, live, dry_run, force):
         if not dry_run: upsert_comment(repo, pr, body)
         return
 
-    claude = claude_pass(base, head)
-    codex = codex_pass(base, head, claude)
+    context = pr_context(repo, pr)
+    claude = claude_pass(base, head, context)
+    codex = codex_pass(base, head, claude, context)
     dyn = run_dynamic(cfg, base, head) if dynamic else None
     live_res = run_live_llm(cfg) if live else None
     body = build_report(head, stats, claude, codex, dyn, live_res)
