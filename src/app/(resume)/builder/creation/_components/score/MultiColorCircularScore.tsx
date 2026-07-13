@@ -45,54 +45,31 @@ export default function MultiColorCircularScore({
   const greenMax = 70;
   const orangeMax = 90;
 
-  const greenVal = Math.min(animatedValue, greenMax);
-  const orangeVal =
-    animatedValue > greenMax
-      ? Math.min(animatedValue - greenMax, orangeMax - greenMax)
-      : 0;
-  const redVal = animatedValue > orangeMax ? animatedValue - orangeMax : 0;
+  const pathColor =
+    animatedValue > orangeMax ? "#ef4444" // red
+      : animatedValue > greenMax ? "#f59e0b" // orange
+      : "#16a34a"; // green
 
   return (
     <div className="relative w-full h-full">
-      {/* Green layer */}
       <CircularProgressbarWithChildren
-        value={greenVal}
+        value={animatedValue}
         maxValue={100}
         styles={buildStyles({
-          pathColor: "#16a34a", // green
-          trailColor: "transparent",
+          pathColor,
+          trailColor: "#e5e7eb", // gray background — always visible for the unfilled remainder
         })}
       >
-        {/* Orange layer */}
-        <CircularProgressbarWithChildren
-          value={greenVal + orangeVal}
-          maxValue={100}
-          styles={buildStyles({
-            pathColor: "#f59e0b", // orange
-            trailColor: "transparent",
-          })}
-        >
-          {/* Red layer */}
-          <CircularProgressbarWithChildren
-            value={greenVal + orangeVal + redVal}
-            maxValue={100}
-            styles={buildStyles({
-              pathColor: "#ef4444", // red
-              trailColor: "#e5e7eb", // gray background
-            })}
-          >
-            {/* Center text */}
-            <div className="flex flex-col items-center justify-center text-center">
-              <span className="text-xl font-bold text-gray-800">
-                {animatedValue}
-              </span>
-              {/* Optional label */}
-              {/* <span className="text-xs uppercase tracking-wide text-gray-500">
-                Resume Score
-              </span> */}
-            </div>
-          </CircularProgressbarWithChildren>
-        </CircularProgressbarWithChildren>
+        {/* Center text */}
+        <div className="flex flex-col items-center justify-center text-center">
+          <span className="text-xl font-bold text-gray-800">
+            {animatedValue}
+          </span>
+          {/* Optional label */}
+          {/* <span className="text-xs uppercase tracking-wide text-gray-500">
+            Resume Score
+          </span> */}
+        </div>
       </CircularProgressbarWithChildren>
     </div>
   );

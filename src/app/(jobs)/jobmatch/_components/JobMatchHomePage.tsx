@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import SignUpModal from "@/components/SignUpModal";
+import LandingNavbar from "@/app/(landing)/_components/LandingNavbar";
+import LandingFooter from "@/app/(landing)/_components/LandingFooter";
 import HeroSection from "./landing/HeroSection";
 import FeaturesSection from "./landing/FeaturesSection";
 import ResumeEditorSection from "./landing/ResumeEditorSection";
@@ -9,7 +12,6 @@ import TestimonialsSection from "./landing/TestimonialsSection";
 import ComparisonTable from "./landing/ComparisonTable";
 import CTABand from "./landing/CTABand";
 import FAQSection from "./landing/FAQSection";
-import Footer from "@/app/(resume)/ats/_components/landing/Footer";
 
 function BackToTop() {
   const [visible, setVisible] = useState(false);
@@ -40,8 +42,21 @@ export default function JobMatchHomePage() {
   const router = useRouter();
   const handleAnalyzeClick = () => router.push("/jobmatch/app");
 
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authFormType, setAuthFormType] = useState<"signup" | "signin">("signup");
+
+  const openSignup = () => {
+    setAuthFormType("signup");
+    setShowAuthModal(true);
+  };
+  const openSignin = () => {
+    setAuthFormType("signin");
+    setShowAuthModal(true);
+  };
+
   return (
     <>
+      <LandingNavbar onOpenSignup={openSignup} onOpenSignin={openSignin} />
       <HeroSection onAnalyzeClick={handleAnalyzeClick} />
       <FeaturesSection />
       <ResumeEditorSection />
@@ -49,8 +64,21 @@ export default function JobMatchHomePage() {
       <ComparisonTable />
       <CTABand onAnalyzeClick={handleAnalyzeClick} />
       <FAQSection />
-      <Footer />
+      <LandingFooter
+        cta={{
+          title: "Ready to see how well your resume matches the job?",
+          description: "Get your match score for free. No credit card required.",
+          href: "/jobmatch/app",
+          label: "Match My Resume",
+        }}
+      />
       <BackToTop />
+
+      <SignUpModal
+        open={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialFormType={authFormType}
+      />
     </>
   );
 }

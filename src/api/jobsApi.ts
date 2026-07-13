@@ -192,7 +192,13 @@ export const deleteJob = async (jobId: string): Promise<ApiResponse<{ id: string
 };
 
 export const getJobById = async (jobId: string): Promise<ApiResponse<Job>> => {
-  const response = await httpClient.get<ApiResponse<Job>>(`/jobs/${jobId}`, getRequestConfig());
+  // NOTE: there is no GET /jobs/{job_id} route on the backend (that path only
+  // has PUT/DELETE for recruiter CRUD) — candidate-safe single-job lookup by
+  // id goes through /jobs/all?id=... instead.
+  const response = await httpClient.get<ApiResponse<Job>>('/jobs/all', {
+    params: { id: jobId },
+    ...getRequestConfig(),
+  });
   return response.data;
 };
 

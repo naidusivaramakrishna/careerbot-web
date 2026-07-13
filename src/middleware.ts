@@ -68,7 +68,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // Landing pages accessible without auth (exact path only — sub-paths remain protected)
-    const publicLandingPages = ['/jobmatch', '/ats', '/payments'];
+    const publicLandingPages = ['/jobmatch', '/ats', '/jobs', '/payments'];
     if (publicLandingPages.includes(pathname)) {
         return NextResponse.next();
     }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { useState } from 'react';
 import '@testing-library/jest-dom';
-import { matchesJobFilters } from '@/app/(jobs)/jobs/_components/utils/jobFilterUtils';
+import { matchesJobFilters } from '@/app/(jobs)/jobslogin/_components/utils/jobFilterUtils';
 
 // ─── Top-level mock functions (ESM-safe) ──────────────────────────────────────
 

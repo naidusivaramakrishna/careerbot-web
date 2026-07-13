@@ -204,6 +204,71 @@ function extractJdId(data: unknown): string | null {
   return null;
 }
 
+const JD_TEXT_FIELDS = ['text', 'content', 'jd_text', 'extracted_text', 'raw_text', 'full_text', 'description', 'job_description'];
+
+function firstTextField(obj: Record<string, unknown>): string | null {
+  for (const key of JD_TEXT_FIELDS) {
+    const val = obj[key];
+    if (typeof val === 'string' && val.trim()) return val;
+  }
+  return null;
+}
+
+// Job description bodies run to hundreds of characters — far longer than any id,
+// filename, or status field — so once known field names fail, the longest string
+// in the payload is almost certainly the extracted text.
+const JD_TEXT_MIN_LENGTH = 80;
+const JD_TEXT_SKIP_KEYS = new Set([
+  'id', 'jd_id', '_id', 'existing_id', 'match_id', 'resume_id', 'user_id',
+  'file_name', 'filename', 'url', 'trace_id', 'request_id', 'status', 'error', 'message',
+]);
+
+function findLongestString(data: unknown, depth = 0): string | null {
+  if (depth > 4) return null;
+  if (typeof data === 'string') {
+    return data.trim().length >= JD_TEXT_MIN_LENGTH ? data : null;
+  }
+  if (Array.isArray(data)) {
+    let best: string | null = null;
+    for (const item of data) {
+      const candidate = findLongestString(item, depth + 1);
+      if (candidate && (!best || candidate.length > best.length)) best = candidate;
+    }
+    return best;
+  }
+  if (isObject(data)) {
+    let best: string | null = null;
+    for (const [key, val] of Object.entries(data)) {
+      if (JD_TEXT_SKIP_KEYS.has(key.toLowerCase())) continue;
+      const candidate = findLongestString(val, depth + 1);
+      if (candidate && (!best || candidate.length > best.length)) best = candidate;
+    }
+    return best;
+  }
+  return null;
+}
+
+function extractJdText(data: unknown): string | null {
+  if (!isObject(data)) return null;
+
+  const results = data['results'];
+  if (Array.isArray(results) && results.length && isObject(results[0])) {
+    const fromResults = firstTextField(results[0] as Record<string, unknown>);
+    if (fromResults) return fromResults;
+  }
+
+  const direct = firstTextField(data);
+  if (direct) return direct;
+
+  const inner = data['data'];
+  if (isObject(inner)) {
+    const fromInner = firstTextField(inner);
+    if (fromInner) return fromInner;
+  }
+
+  return findLongestString(data);
+}
+
 export async function parseJDFile(file: File) {
   const form = new FormData();
   form.append("files", file);
@@ -211,7 +276,7 @@ export async function parseJDFile(file: File) {
     const res = await safePost<unknown>(`/jd/extract?skip_duplicate_check=false`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
+    return { raw: res, jd_id: extractJdId(res), jd_text: extractJdText(res), duplicate: false } as ParseJDResponse;
   } catch (err: unknown) {
     return handleDuplicateJd(err);
   }
@@ -223,7 +288,7 @@ export async function parseJDText(text: string, options: { skipAuthRedirect?: bo
       jd_texts: [text],
       skip_duplicate_check: false,
     }, options.skipAuthRedirect ? { headers: { "X-Skip-Auth-Redirect": "true" } } : undefined);
-    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
+    return { raw: res, jd_id: extractJdId(res), jd_text: extractJdText(res) ?? text, duplicate: false } as ParseJDResponse;
   } catch (err: unknown) {
     return handleDuplicateJd(err);
   }
@@ -235,7 +300,7 @@ export async function parseJDUrl(url: string) {
       url: url,
       skip_duplicate_check: false,
     });
-    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
+    return { raw: res, jd_id: extractJdId(res), jd_text: extractJdText(res), duplicate: false } as ParseJDResponse;
   } catch (err: unknown) {
     return handleDuplicateJd(err);
   }

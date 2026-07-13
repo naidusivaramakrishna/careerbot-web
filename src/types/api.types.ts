@@ -220,6 +220,7 @@ export interface JobDescription {
 export interface ParseJDResponse {
   raw: Record<string, unknown>;
   jd_id: string | null;
+  jd_text?: string | null;
   duplicate: boolean;
 }
 

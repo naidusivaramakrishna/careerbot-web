@@ -25,16 +25,12 @@ const afterItems = [
   "Skills section fully optimized",
 ];
 
-interface BeforeAfterSectionProps {
-  onScanClick?: () => void;
-}
-
 const cardVariant = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { duration: 0.35, delay: i * 0.05 } }),
 };
 
-export default function BeforeAfterSection({ onScanClick }: BeforeAfterSectionProps) {
+export default function BeforeAfterSection() {
   return (
     <section
       className="py-14 md:py-20"
@@ -62,17 +58,6 @@ export default function BeforeAfterSection({ onScanClick }: BeforeAfterSectionPr
             If your resume has formatting issues, missing keywords, or vague bullets — it gets
             rejected automatically, even if you&apos;re a perfect fit.
           </p>
-          <button
-            onClick={onScanClick}
-            className="inline-flex items-center gap-2 font-bold px-7 py-3 rounded-full transition-all duration-300 text-sm hover:scale-105 active:scale-100 text-white"
-            style={{
-              background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-              boxShadow: "0 4px 16px rgba(37,87,167,0.30)",
-            }}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Scan Your Resume for Free
-          </button>
         </motion.div>
 
         {/* Two-column comparison */}

@@ -8,6 +8,7 @@ interface FooterCta {
   description: string;
   href: string;
   label: string;
+  onClick?: () => void;
 }
 
 const defaultCta: FooterCta = {
@@ -67,13 +68,24 @@ export default function LandingFooter({ cta = defaultCta }: { cta?: FooterCta })
           <div className="rounded-lg bg-[#143e7c] px-7 py-7 text-white shadow-[0_18px_48px_rgba(0,0,0,0.18)] ring-1 ring-white/15">
             <h2 className="text-xl font-black leading-tight">{cta.title}</h2>
             <p className="mt-3 text-sm font-medium leading-6 text-blue-100">{cta.description}</p>
-            <Link
-              href={cta.href}
-              className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-white text-sm font-black text-[#2557a7] transition hover:bg-[#eef5ff]"
-            >
-              <Sparkles size={16} />
-              {cta.label}
-            </Link>
+            {cta.onClick ? (
+              <button
+                type="button"
+                onClick={cta.onClick}
+                className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-white text-sm font-black text-[#2557a7] transition hover:bg-[#eef5ff]"
+              >
+                <Sparkles size={16} />
+                {cta.label}
+              </button>
+            ) : (
+              <Link
+                href={cta.href}
+                className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-white text-sm font-black text-[#2557a7] transition hover:bg-[#eef5ff]"
+              >
+                <Sparkles size={16} />
+                {cta.label}
+              </Link>
+            )}
           </div>
 
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-[1.28fr_0.8fr_0.8fr_0.72fr_0.72fr]">
