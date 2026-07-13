@@ -1,0 +1,20 @@
+{
+  "slug": "ats-scanner-checklist",
+  "title": "What an ATS scanner should check before you apply",
+  "category": "ats",
+  "tag": "ATS",
+  "readTimeMinutes": 8,
+  "publishedAt": "2026-07-05T09:00:00.000Z",
+  "updatedAt": "2026-07-04T09:00:00.000Z",
+  "excerpt": "Learn the resume structure, keyword, and formatting checks that help reduce avoidable screening issues.",
+  "illustration": "ats",
+  "featured": false,
+  "author": "CareerBOT Team",
+  "body": [
+    "An ATS scan is not magic — it's mostly pattern matching against the job description. Before you apply, run through the same checks the system does.",
+    "First, keyword coverage: does your resume include the exact skill and tool names from the posting, not just close synonyms? \"Node.js\" and \"NodeJS\" can be read differently depending on the parser.",
+    "Second, section headers: use conventional labels like \"Experience\" and \"Education\" rather than creative alternatives. Non-standard headers are a common reason content gets dropped during parsing.",
+    "Third, formatting: single-column layouts, standard fonts, and no embedded text inside images. Anything the parser can't read is treated as if it doesn't exist.",
+    "Finally, file format: export as PDF unless the posting specifically asks for DOCX. Most modern ATS platforms handle PDF text extraction reliably, and it preserves your formatting exactly as designed."
+  ]
+}

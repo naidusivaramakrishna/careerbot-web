@@ -60,7 +60,7 @@ export default function UserSegments() {
                   viewport={{ once: true, margin: '-60px' }}
                   transition={{ duration: 0.38, delay: index * 0.05 }}
                 >
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef5ff] text-[#0d5be1]">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef5ff] text-[#2b78bc]">
                     <Icon size={27} strokeWidth={2.5} />
                   </div>
                   <h3 className="mt-4 text-sm font-black text-[#08143f]">{segment.title}</h3>

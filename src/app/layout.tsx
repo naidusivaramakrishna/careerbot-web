@@ -6,6 +6,8 @@ import "./globals.css";
 // import "@/app/(jobs)/jobmatch/_components/_styles/docx-preview.css";
 import ClientLayout from "./ClientLayout";
 
+// Inter for the entire UI — self-hosted by next/font at build time
+// (no runtime requests to Google).
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],

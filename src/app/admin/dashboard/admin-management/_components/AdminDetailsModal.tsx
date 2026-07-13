@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { X, Shield, Calendar, Activity, Edit2, Ban, Key, Lock } from "lucide-react";
+import { X, Shield, Calendar, Activity, Edit2, Ban, Key, Lock, Eye, EyeOff } from "lucide-react";
 import Dropdown from "@/components/common/CustomDropdown";
 import {
     getAdminDetails,
@@ -407,7 +407,7 @@ const StatusDialog: React.FC<{
                         New Status
                     </label>
                     <Dropdown
-                        options={["ACTIVE", "SUSPENDED", "INACTIVE"]}
+                        options={["Status","ACTIVE", "SUSPENDED", "INACTIVE"]}
                         defaultValue={Object.keys(statusMap).find(key => statusMap[key] === statusForm.status)}
                         onChange={(value) => setStatusForm({ ...statusForm, status: statusMap[value] })}
                         bgColor="bg-gray-100"
@@ -455,7 +455,9 @@ const ResetPasswordDialog: React.FC<{
     onUpdate: () => void;
     onClose: () => void;
     adminName: string;
-}> = ({ passwordForm, setPasswordForm, actionLoading, onUpdate, onClose, adminName }) => (
+}> = ({ passwordForm, setPasswordForm, actionLoading, onUpdate, onClose, adminName }) => {
+    const [showPassword, setShowPassword] = useState(false);
+    return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-2">Reset Admin Password</h3>
@@ -465,13 +467,22 @@ const ResetPasswordDialog: React.FC<{
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                         New Password (minimum 8 characters)
                     </label>
-                    <input
-                        type="password"
-                        value={passwordForm.new_password}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                        placeholder="Enter new password..."
-                    />
+                    <div className="relative">
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            value={passwordForm.new_password}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg p-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                            placeholder="Enter new password..."
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(v => !v)}
+                            className="absolute inset-y-0 right-2 flex items-center text-gray-500 hover:text-gray-700"
+                        >
+                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                    </div>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -503,6 +514,7 @@ const ResetPasswordDialog: React.FC<{
             </div>
         </div>
     </div>
-);
+    );
+};
 
 export default AdminDetailsModal;

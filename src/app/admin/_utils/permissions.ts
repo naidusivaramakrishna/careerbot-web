@@ -9,7 +9,6 @@ export type AdminPageKey =
   | 'dashboard'
   | 'user-management'
   | 'admin-management'
-  | 'job-management'
   | 'system-monitoring'
   | 'settings';
 
@@ -21,7 +20,6 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   'dashboard': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'user-management': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'admin-management': ['SUPER_ADMIN'],
-  'job-management': ['SUPER_ADMIN', 'ADMIN'],
   'system-monitoring': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'settings': ['SUPER_ADMIN'],
 };

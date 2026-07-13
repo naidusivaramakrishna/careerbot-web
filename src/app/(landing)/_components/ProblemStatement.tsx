@@ -6,14 +6,13 @@ import {
   CheckCircle2,
   Clock3,
   Download,
-  FileText,
   Frown,
   Layers,
   RefreshCw,
   Rocket,
   Send,
+  Sparkles,
   Target,
-  Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -25,10 +24,10 @@ type ProblemCard = {
   imageAlt: string;
   imageClassName: string;
   color: string;
-  iconBg: string;
+  iconGradient: [string, string];
+  tint: string;
   footerIcon: LucideIcon;
   footer: string;
-  footerBg: string;
 };
 
 const problems: ProblemCard[] = [
@@ -39,12 +38,12 @@ const problems: ProblemCard[] = [
       'Most resume tools make candidates fight spacing, sections, exports, and template consistency before the content is even ready.',
     image: '/images/landing/problem-formatting.png',
     imageAlt: 'Resume formatting issue preview with a warning badge',
-    imageClassName: 'w-full max-w-[168px] xl:max-w-[190px] 2xl:max-w-[222px]',
-    color: '#1167e8',
-    iconBg: '#eef5ff',
+    imageClassName: 'w-full max-w-[136px] xl:max-w-[152px] 2xl:max-w-[168px]',
+    color: '#2557A7',
+    iconGradient: ['#F6F9FF', '#EDF4FF'],
+    tint: '#EEF4FC',
     footerIcon: Frown,
     footer: 'Wastes time and kills your confidence',
-    footerBg: '#eef5ff',
   },
   {
     icon: RefreshCw,
@@ -53,12 +52,12 @@ const problems: ProblemCard[] = [
       'A generic resume rarely matches the job description. Candidates need faster ways to tailor bullets, skills, and summaries.',
     image: '/images/landing/problem-versions.png',
     imageAlt: 'Role-specific resume version selector',
-    imageClassName: 'w-full max-w-[166px] xl:max-w-[188px] 2xl:max-w-[220px]',
-    color: '#16a56f',
-    iconBg: '#eafaf2',
+    imageClassName: 'w-full max-w-[134px] xl:max-w-[150px] 2xl:max-w-[166px]',
+    color: '#10B981',
+    iconGradient: ['#F3FDF9', '#E6FBF2'],
+    tint: '#EAFAF3',
     footerIcon: Target,
     footer: 'Missed matches due to irrelevant resumes',
-    footerBg: '#eafaf2',
   },
   {
     icon: Send,
@@ -67,12 +66,12 @@ const problems: ProblemCard[] = [
       'Responsibilities often sound flat without metrics, ownership, tools, and outcomes recruiters can scan quickly.',
     image: '/images/landing/problem-impact.png',
     imageAlt: 'Before and after bullet improvement preview',
-    imageClassName: 'w-full max-w-[174px] xl:max-w-[198px] 2xl:max-w-[232px]',
-    color: '#7c3cff',
-    iconBg: '#f4efff',
+    imageClassName: 'w-full max-w-[140px] xl:max-w-[158px] 2xl:max-w-[174px]',
+    color: '#8B5CF6',
+    iconGradient: ['#FAF7FF', '#F3EEFF'],
+    tint: '#F5F0FF',
     footerIcon: Rocket,
     footer: 'Lower chances of getting noticed',
-    footerBg: '#f4efff',
   },
   {
     icon: Download,
@@ -81,54 +80,62 @@ const problems: ProblemCard[] = [
       'Before applying, job seekers need a clean PDF or DOCX that looks professional and stays readable after download.',
     image: '/images/landing/problem-export.png',
     imageAlt: 'Resume export preview with PDF and DOCX badges',
-    imageClassName: 'w-full max-w-[156px] xl:max-w-[178px] 2xl:max-w-[205px]',
-    color: '#f97316',
-    iconBg: '#fff1e8',
+    imageClassName: 'w-full max-w-[126px] xl:max-w-[140px] 2xl:max-w-[154px]',
+    color: '#F97316',
+    iconGradient: ['#FFF9F5', '#FFF0E4'],
+    tint: '#FFF2E9',
     footerIcon: Clock3,
     footer: 'Delays applications and costs opportunities',
-    footerBg: '#fff1e8',
   },
 ];
 
-const highlights = [
-  { icon: FileText, value: '12,400+', label: 'Resumes improved', color: '#1167e8', bg: '#eef5ff' },
-  { icon: CheckCircle2, value: '95%', label: 'ATS pass rate', color: '#16a56f', bg: '#eafaf2' },
-  { icon: Zap, value: '50,000+', label: 'Jobs matched', color: '#7c3cff', bg: '#f4efff' },
-  { icon: Download, value: '1M+', label: 'Exports generated', color: '#f97316', bg: '#fff1e8' },
-];
+const cardVariants = {
+  hidden: { opacity: 0, y: 40 },
+  visible: { opacity: 1, y: 0 },
+};
 
 export default function ProblemStatement() {
   return (
-    <section className="scroll-mt-24 overflow-hidden bg-white py-10 lg:py-12 2xl:py-16">
-      <div className="mx-auto w-full max-w-[1464px] px-4 sm:px-6 lg:px-6 2xl:px-0">
+    <section className="scroll-mt-24 relative overflow-hidden bg-[#FBFCFF] py-10 lg:py-14 xl:py-16 2xl:py-20">
+      {/* Background effects */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute left-1/2 -top-[120px] h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-[#2557A7] opacity-[0.08] blur-[180px]" />
+        <div className="absolute -bottom-24 -right-24 h-[420px] w-[420px] rounded-full bg-white opacity-20 blur-[140px]" />
+      </div>
+
+      <div className="mx-auto w-full max-w-[1440px] px-5 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
         <motion.div
-          className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-[220px_repeat(4,minmax(0,1fr))] xl:grid-cols-[250px_repeat(4,minmax(0,1fr))] 2xl:grid-cols-[285px_repeat(4,minmax(0,1fr))] 2xl:gap-5"
-          initial={false}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-70px' }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="grid min-w-0 gap-5 md:grid-cols-2 lg:grid-cols-[240px_repeat(4,minmax(0,1fr))] xl:grid-cols-[300px_repeat(4,minmax(0,1fr))] 2xl:grid-cols-[360px_repeat(4,minmax(0,1fr))] 2xl:gap-6"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-80px' }}
+          transition={{ staggerChildren: 0.1 }}
         >
-          <div className="flex min-w-0 flex-col justify-center py-2 md:col-span-2 lg:col-span-1 lg:pr-3 2xl:pr-5">
-            <span className="w-fit rounded-full bg-[#edf5ff] px-4 py-2 text-[11px] font-black uppercase leading-none text-[#0969e8]">
+          <motion.div
+            className="flex min-w-0 flex-col justify-center py-2 md:col-span-2 lg:col-span-1 lg:pr-3 2xl:pr-5"
+            variants={cardVariants}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          >
+            <span className="w-fit rounded-full bg-[#edf5ff] px-4 py-2 text-[11px] font-bold uppercase leading-none tracking-wide text-[#2557A7]">
               The problem
             </span>
-            <h2 className="mt-7 max-w-[760px] text-[34px] font-black leading-[1.18] tracking-normal text-[#08143f] sm:text-[42px] lg:max-w-none lg:text-[32px] xl:text-[36px] 2xl:mt-8 2xl:text-[39px]">
+            <h2 className="mb-[26px] mt-7 max-w-[760px] text-[30px] font-bold leading-[1.22] tracking-tight text-[#081C45] sm:text-[36px] lg:max-w-none lg:mb-6 lg:text-[28px] xl:mb-8 xl:text-[34px] 2xl:mb-10 2xl:text-[42px]">
               A resume shouldn&apos;t feel like a design project before{' '}
-              <span className="text-[#0b67e8]">every application.</span>
+              <span className="text-[#2557A7]">every application.</span>
             </h2>
-            <p className="mt-6 max-w-[620px] text-[16px] font-semibold leading-7 text-[#435373] lg:max-w-[220px] lg:text-[13px] lg:leading-6 xl:max-w-[250px] xl:text-[14px] 2xl:mt-8 2xl:max-w-[285px] 2xl:text-[16px] 2xl:leading-7">
+            <p className="mb-6 max-w-[620px] text-[15px] font-normal leading-7 text-[#4F5D73] lg:mb-7 lg:max-w-[230px] lg:text-[13px] lg:leading-6 xl:mb-8 xl:max-w-[280px] xl:text-[15px] xl:leading-7 2xl:mb-[42px] 2xl:max-w-[320px] 2xl:text-[17px] 2xl:leading-[30px]">
               Most tools make you fight formatting, guess what to write, and repeat the same work. CareerBot fixes that - so you can focus
               on getting hired.
             </p>
-            <div className="mt-7 space-y-4">
+            <div className="space-y-3 lg:space-y-3 2xl:space-y-[18px]">
               {['AI-powered suggestions', 'Role-specific optimization', 'Clean, recruiter-friendly exports'].map((item) => (
-                <div key={item} className="flex items-center gap-3 text-[14px] font-black text-[#0b1746] lg:text-[12px] xl:text-[13px] 2xl:text-[14px]">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 fill-[#2278f3] text-white" strokeWidth={3} />
+                <div key={item} className="flex items-center gap-3 text-[14px] font-semibold text-[#0b1746] lg:text-[12px] xl:text-[13px] 2xl:text-[14px]">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 fill-[#2557A7] text-white" strokeWidth={3} />
                   <span>{item}</span>
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {problems.map((problem, index) => {
             const Icon = problem.icon;
@@ -137,45 +144,83 @@ export default function ProblemStatement() {
             return (
               <motion.article
                 key={problem.title}
-                className="flex min-h-[430px] min-w-0 flex-col rounded-xl border border-[#d8e6fb] bg-white p-4 shadow-[0_18px_46px_rgba(15,67,142,0.07)] transition hover:-translate-y-1 hover:shadow-[0_22px_54px_rgba(15,67,142,0.12)] lg:min-h-[500px] lg:p-5 xl:min-h-[560px] xl:p-6 2xl:min-h-[620px] 2xl:p-7"
-                initial={false}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-60px' }}
-                transition={{ duration: 0.4, ease: 'easeOut', delay: index * 0.04 }}
+                className="group relative flex min-h-[340px] min-w-0 cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[rgba(37,87,167,0.08)] bg-white/[.98] px-5 pb-4 pt-5 backdrop-blur-[16px] transition-all duration-[350ms] ease-out hover:-translate-y-2 hover:scale-[1.015] lg:min-h-[368px] lg:px-6 lg:pb-5 lg:pt-6 xl:min-h-[400px] xl:rounded-[22px] xl:px-7 2xl:min-h-[430px] 2xl:rounded-[24px] 2xl:px-7 2xl:pb-5 2xl:pt-6"
+                style={{
+                  boxShadow:
+                    '0 1px 2px rgba(16,24,40,.03), 0 8px 24px rgba(37,87,167,.05), 0 20px 60px rgba(37,87,167,.08), 0 40px 120px rgba(37,87,167,.06)',
+                }}
+                variants={cardVariants}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow =
+                    '0 4px 12px rgba(37,87,167,.06), 0 16px 48px rgba(37,87,167,.10), 0 40px 100px rgba(37,87,167,.12)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow =
+                    '0 1px 2px rgba(16,24,40,.03), 0 8px 24px rgba(37,87,167,.05), 0 20px 60px rgba(37,87,167,.08), 0 40px 120px rgba(37,87,167,.06)';
+                }}
               >
-                <div className="flex items-start justify-between">
+                {/* Top accent glow behind icon */}
+                <div
+                  className="pointer-events-none absolute left-5 top-5 h-[100px] w-[100px] rounded-full opacity-[0.18] blur-[60px] transition-opacity duration-300 ease-out group-hover:opacity-[0.28] 2xl:left-7 2xl:top-6"
+                  style={{ backgroundColor: problem.color }}
+                />
+
+                <div className="relative flex items-start justify-between">
                   <div
-                    className="flex h-12 w-12 items-center justify-center rounded-xl 2xl:h-14 2xl:w-14"
-                    style={{ backgroundColor: problem.iconBg, color: problem.color }}
+                    className="flex h-10 w-10 items-center justify-center rounded-[12px] transition-transform duration-300 ease-out group-hover:rotate-3 2xl:h-[52px] 2xl:w-[52px] 2xl:rounded-[16px]"
+                    style={{
+                      background: `linear-gradient(180deg, ${problem.iconGradient[0]}, ${problem.iconGradient[1]})`,
+                      color: problem.color,
+                      boxShadow: '0 12px 30px rgba(37,87,167,.10)',
+                    }}
                   >
-                    <Icon className="h-6 w-6 2xl:h-[29px] 2xl:w-[29px]" strokeWidth={2.8} />
+                    <Icon className="h-5 w-5 2xl:h-6 2xl:w-6" strokeWidth={2.6} />
                   </div>
-                  <span className="text-[22px] font-black leading-none text-[#9cbcff] 2xl:text-[24px]">{String(index + 1).padStart(2, '0')}</span>
+                  <span
+                    className="text-[22px] font-bold leading-none 2xl:text-[30px]"
+                    style={{ color: '#081C45', opacity: 0.28 }}
+                  >
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
                 </div>
 
-                <h3 className="mt-7 text-[17px] font-black leading-[1.22] text-[#08143f] xl:text-[19px] 2xl:mt-8 2xl:text-[22px]">{problem.title}</h3>
-                <p className="mt-4 text-[12px] font-semibold leading-6 text-[#4b5d7d] xl:text-[13px] 2xl:mt-5 2xl:text-[15px] 2xl:leading-7">{problem.description}</p>
+                <h3 className="relative mt-4 text-[16px] font-bold leading-[1.3] text-[#081C45] xl:mt-5 xl:text-[18px] 2xl:mt-5 2xl:text-[19px]">
+                  {problem.title}
+                </h3>
+                <p className="relative mt-2 text-[12px] font-normal leading-[1.5] text-[#55657C] xl:mt-3 xl:text-[13px] xl:leading-6 2xl:mt-3 2xl:text-[14px] 2xl:leading-[24px]">
+                  {problem.description}
+                </p>
 
-                <div className="mt-auto flex h-[130px] items-center justify-center pt-5 lg:h-[150px] lg:pt-6 xl:h-[175px] 2xl:h-[205px] 2xl:pt-8">
+                <div className="relative mt-auto flex h-[78px] items-center justify-center px-[15px] pt-3 lg:h-[86px] xl:h-[94px] 2xl:h-[100px] 2xl:px-[17px] 2xl:pt-3">
                   <Image
                     src={problem.image}
                     alt={problem.imageAlt}
                     width={1084}
                     height={932}
                     className={problem.imageClassName}
-                    sizes="(max-width: 768px) 70vw, (max-width: 1279px) 170px, (max-width: 1536px) 200px, 250px"
+                    sizes="(max-width: 768px) 70vw, (max-width: 1279px) 190px, (max-width: 1536px) 220px, 250px"
                   />
                 </div>
 
-                <div className="mt-5 border-t border-[#dfe9f7] pt-4 2xl:mt-7 2xl:pt-5">
+                {/* Gradient divider */}
+                <div className="relative mt-3 h-px w-full bg-[linear-gradient(90deg,transparent,#DCE7F7,transparent)] 2xl:mt-3" />
+
+                {/* Bottom pain box */}
+                <div
+                  className="relative mt-3 rounded-[14px] border border-[rgba(37,87,167,0.06)] bg-[#FCFDFF] p-[12px] 2xl:mt-3 2xl:p-[14px]"
+                  style={{ boxShadow: '0 10px 30px rgba(37,87,167,.05)' }}
+                >
                   <div className="flex items-center gap-3">
                     <div
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg 2xl:h-9 2xl:w-9"
-                      style={{ backgroundColor: problem.footerBg, color: problem.color }}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg 2xl:h-8 2xl:w-8"
+                      style={{ backgroundColor: problem.tint, color: problem.color }}
                     >
-                      <FooterIcon className="h-5 w-5 2xl:h-[22px] 2xl:w-[22px]" strokeWidth={2.6} />
+                      <FooterIcon className="h-4 w-4 2xl:h-[18px] 2xl:w-[18px]" strokeWidth={2.4} />
                     </div>
-                    <p className="text-[12px] font-black leading-snug text-[#17234f] xl:text-[13px] 2xl:text-[15px]">{problem.footer}</p>
+                    <p className="text-[11px] font-semibold leading-snug text-[#17234f] xl:text-[12px] 2xl:text-[14px]">
+                      {problem.footer}
+                    </p>
                   </div>
                 </div>
               </motion.article>
@@ -184,47 +229,15 @@ export default function ProblemStatement() {
         </motion.div>
 
         <motion.div
-          className="mt-10 rounded-xl border border-[#d8e6fb] bg-white px-5 py-6 shadow-[0_18px_46px_rgba(15,67,142,0.07)] lg:px-6 2xl:mt-16 2xl:px-9 2xl:py-7"
-          initial={false}
+          className="mt-10 flex items-center justify-center gap-3 rounded-[18px] border border-[rgba(37,87,167,0.06)] bg-[#FCFDFF] px-6 py-5 text-center text-[15px] font-semibold text-[#081C45] 2xl:mt-14 2xl:py-6 2xl:text-[17px]"
+          style={{ boxShadow: '0 10px 30px rgba(37,87,167,.05)' }}
+          initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-60px' }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
         >
-          <div className="grid min-w-0 gap-6 md:grid-cols-2 lg:grid-cols-[1.25fr_0.02fr_repeat(4,1fr)] lg:items-center 2xl:gap-8">
-            <div className="flex items-center gap-6">
-              <Image
-                src="/images/landing/problem-bot-icon.png"
-                alt="CareerBot assistant icon"
-                width={72}
-                height={72}
-                className="h-[64px] w-[64px] rounded-xl shadow-[0_12px_28px_rgba(13,37,120,0.14)]"
-              />
-              <div>
-                <h3 className="text-[18px] font-black text-[#08143f]">CareerBot changes the experience.</h3>
-                <p className="mt-2 max-w-[430px] text-[15px] font-semibold leading-6 text-[#435373]">
-                  Smart content suggestions, role-based optimization, and one-click clean exports - built to help you get hired faster.
-                </p>
-              </div>
-            </div>
-            <div className="hidden h-20 w-px bg-[#cddbf0] lg:block" />
-            {highlights.map((item) => {
-              const Icon = item.icon;
-
-              return (
-                <div key={item.label} className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: item.bg, color: item.color }}>
-                    <Icon size={27} strokeWidth={2.8} />
-                  </div>
-                  <div>
-                    <p className="text-[25px] font-black leading-none" style={{ color: item.color }}>
-                      {item.value}
-                    </p>
-                    <p className="mt-2 text-[13px] font-semibold text-[#435373]">{item.label}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <Sparkles className="h-4 w-4 shrink-0 text-[#2557A7]" strokeWidth={2.4} />
+          <span>CareerBot removes friction at every step - so your resume works for you, not against you.</span>
         </motion.div>
       </div>
     </section>

@@ -51,6 +51,29 @@ export default function ClientLayout({
     return () => document.removeEventListener('click', forceSameTab, true);
   }, []);
 
+  // Poll maintenance status every 15 s — redirect to /maintenance if enabled.
+  // Skipped on admin/recruiter routes so admins can always reach their
+  // dashboard to turn maintenance off.
+  useEffect(() => {
+    const isAdminOrRecruiter =
+      pathname?.startsWith('/admin') || pathname?.startsWith('/recruiter');
+    if (isAdminOrRecruiter || pathname?.startsWith('/maintenance')) return;
+
+    const check = async () => {
+      try {
+        const res = await fetch('/api/maintenance-status', { cache: 'no-store' });
+        if (res.ok) {
+          const data: { maintenance: boolean } = await res.json();
+          if (data.maintenance) router.replace('/maintenance');
+        }
+      } catch { /* non-critical */ }
+    };
+
+    check(); // immediate check on mount / route change
+    const id = setInterval(check, 15_000);
+    return () => clearInterval(id);
+  }, [pathname, router]);
+
   // Listen for logout events from HTTP interceptor
   // When token refresh fails, http.ts redirects to login
   // This ensures redirect happens even without API calls if using a logout endpoint

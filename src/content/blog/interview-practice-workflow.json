@@ -1,0 +1,20 @@
+{
+  "slug": "interview-practice-workflow",
+  "title": "Prepare for interviews with a simple practice workflow",
+  "category": "interview",
+  "tag": "Interview",
+  "readTimeMinutes": 9,
+  "publishedAt": "2026-06-28T09:00:00.000Z",
+  "updatedAt": "2026-07-06T09:00:00.000Z",
+  "excerpt": "Structure your answer practice, mock interviews, and test preparation so every application has a follow-through plan.",
+  "illustration": "interview",
+  "featured": false,
+  "author": "CareerBOT Team",
+  "body": [
+    "Most interview prep fails not from lack of effort but from lack of structure. A short, repeatable workflow beats hours of unfocused review.",
+    "Start by listing the five questions you're most likely to face for this specific role — usually a mix of \"tell me about yourself,\" a behavioral question tied to the job description, and a technical or scenario question.",
+    "For behavioral questions, draft answers using a simple situation-action-result shape. Keep each answer under two minutes when spoken aloud; longer answers tend to lose the interviewer's attention.",
+    "Practice out loud, not just in your head. The gap between a mentally-rehearsed answer and a spoken one is usually bigger than people expect — mock interviews close that gap fast.",
+    "Finally, debrief after every real interview: write down the questions you were actually asked and how you'd improve the answer next time. That feedback loop compounds faster than generic prep."
+  ]
+}
