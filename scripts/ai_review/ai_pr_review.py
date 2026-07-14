@@ -19,7 +19,9 @@ load_config() for the schema + defaults). This one script serves every repo.
 
 Idempotency: each comment carries `<!-- ai-review:<headSHA> -->`. A PR whose
 current head already has a review comment is SKIPPED (unless --force / --live),
-so the 30-min sweep only reviews new/changed PRs.
+so the 30-min sweep only reviews new/changed PRs. Each NEW commit gets its own
+fresh review comment (visible per-commit history); a forced/live re-run of the
+same head edits that commit's comment in place instead of posting a duplicate.
 
 Never merges. Advisory. A human approves.
 """
@@ -93,10 +95,17 @@ def existing_review_sha(repo, pr):
 
 
 def upsert_comment(repo, pr, body):
-    cid, _ = existing_review_sha(repo, pr)
+    # Post a FRESH review comment for each new commit so every push gets its own
+    # report and the PR keeps a visible per-commit review history. Only EDIT the
+    # existing comment in place when re-reviewing the SAME head SHA (e.g. a
+    # forced/live re-run), so repeated runs on one commit don't spam duplicates.
+    cur = MARKER_RE.search(body)
+    cur_sha = cur.group(1) if cur else None
+    cid, last_sha = existing_review_sha(repo, pr)
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
         f.write(body); path = f.name
-    if cid:
+    same_commit = bool(cid and last_sha and cur_sha and last_sha == cur_sha)
+    if same_commit:
         run(["gh", "api", f"repos/{repo}/issues/comments/{cid}", "-X", "PATCH",
              "-F", f"body=@{path}"])
     else:
@@ -127,9 +136,16 @@ def pr_context(repo, pr):
 def scope_guard(base, head):
     files = [l for l in out(["git", "diff", "--numstat", f"{base}...{head}"]).splitlines() if l.strip()]
     added = sum(int(c.split("\t")[0]) for c in files if c.split("\t")[0].isdigit())
+    removed = sum(int(p[1]) for p in (c.split("\t") for c in files)
+                  if len(p) > 1 and p[1].isdigit())
+    # Fully-deleted files (D) — surfaced prominently so a human confirms the
+    # removal was intentional (cleanup/optimization) and not an accidental drop.
+    deleted = [l for l in out(["git", "diff", "--diff-filter=D", "--name-only",
+                               f"{base}...{head}"]).splitlines() if l.strip()]
     commits = int(out(["git", "rev-list", "--count", f"{base}..{head}"]) or 0)
     authors = len({a for a in out(["git", "log", "--format=%an", f"{base}..{head}"]).splitlines() if a})
-    stats = {"files": len(files), "added": added, "commits": commits, "authors": authors}
+    stats = {"files": len(files), "added": added, "removed": removed,
+             "deleted": deleted, "commits": commits, "authors": authors}
     reasons = []
     if stats["files"] > MAX_FILES: reasons.append(f"{stats['files']} files>{MAX_FILES}")
     if stats["added"] > MAX_ADDED_LINES: reasons.append(f"+{stats['added']}>{MAX_ADDED_LINES}")
@@ -153,9 +169,17 @@ description leaves a contract/back-compat question open, make verifying it a fin
 {context}
 === END INTENT ===
 
+DELETIONS: if this diff DELETES files or removes functions/classes/exports/routes,
+treat each removal as suspect until proven safe. For EVERY deleted file or removed
+symbol, grep the repo AT head for remaining importers/callers/route-registrations/
+config references; a surviving reference to a deleted target is a [P0] break. If the
+description says the removal is intentional cleanup, downgrade to "verify no orphaned
+references remain" and name the greps you'd run. Never assume a deletion is safe.
+
 Output: a KPI line (P0/P1/P2/P3 + verdict BLOCK|CHANGES-REQUESTED|ACCEPT-WITH-FIXES|ACCEPT),
 then each finding as [sev] title | file:line | quoted code | why | fix. Add an SDET note
-(tests added/updated? removal-orphans deleted?). Evidence-only; no speculation."""
+(tests added/updated? removal-orphans deleted?) and a DELETIONS note (each deleted file:
+intentional? orphaned refs?). Evidence-only; no speculation."""
 
 
 def claude_pass(base, head, context):
@@ -168,7 +192,11 @@ def codex_pass(base, head, claude, context):
               f"missed. Inspect only diff {base}...{head}. file:line evidence required. Use the "
               f"author's INTENT to judge whether flagged 'bugs' are deliberate and whether the "
               f"diff actually delivers what the description claims. For each finding "
-              f"CONFIRM|REFUTE|REGRADE; then MISSED [sev]+file:line; OVERALL verdict.\n\n"
+              f"CONFIRM|REFUTE|REGRADE; then MISSED [sev]+file:line; OVERALL verdict. "
+              f"DELETIONS: independently check every deleted file / removed symbol for "
+              f"surviving importers, callers, route registrations, or config references "
+              f"AT head — a live reference to a deleted target is a [P0] the first pass "
+              f"may have missed.\n\n"
               f"=== AUTHOR INTENT ===\n{context}\n\n=== REVIEW TO CROSS-CHECK ===\n{claude}\n")
     return run(["codex", "review", "-"], stdin=prompt, timeout=900).stdout or "_no output_"
 
@@ -332,9 +360,19 @@ def build_report(head, stats, claude, codex, dyn, live):
 
 </details>
 """ if live_md is not None else "")
+    deleted = stats.get("deleted") or []
+    if deleted:
+        shown = "\n".join(f"- `{f}`" for f in deleted[:40])
+        more = f"\n- …and {len(deleted) - 40} more" if len(deleted) > 40 else ""
+        del_block = (f"\n> ⚠️ **{len(deleted)} file(s) deleted — confirm this removal is "
+                     f"intentional** (cleanup/optimization) and not an accidental drop. "
+                     f"Verify nothing still imports/calls/registers them.\n{shown}{more}\n")
+    else:
+        del_block = ""
     return f"""## 🤖 AI Code Review — Claude + Codex (advisory)
 
-**Scope:** {stats['files']} files, +{stats['added']} lines, {stats['commits']} commits, {stats['authors']} author(s). Advisory — a human still approves/merges. Findings **confirmed by both** models are highest-confidence.
+**Scope:** {stats['files']} files, +{stats['added']}/-{stats.get('removed', 0)} lines, {stats['commits']} commits, {stats['authors']} author(s). Advisory — a human still approves/merges. Findings **confirmed by both** models are highest-confidence.
+{del_block}
 
 <details open><summary><b>T1 · Claude static review</b></summary>
 
