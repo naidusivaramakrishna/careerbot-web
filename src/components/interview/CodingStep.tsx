@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import {
-  Play, Send, Clock, Loader2, CheckCircle2, BookOpen, AlertCircle,
+  Play, BarChart2, Clock, Loader2, CheckCircle2, BookOpen, AlertCircle,
 } from "lucide-react";
 import type {
   CodingTestLanguage,
@@ -55,17 +55,17 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
   const [code, setCode] = useState("");
   const [timeLeft, setTimeLeft] = useState(timeLimitS);
   const [isRunning, setIsRunning] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGrading, setIsGrading] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
-  const [submitResult, setSubmitResult] = useState<SubmitSolutionResponse | null>(null);
+  const [gradingResult, setGradingResult] = useState<SubmitSolutionResponse | null>(null);
   const [showStatement, setShowStatement] = useState(true);
   const [outputOpen, setOutputOpen] = useState(false);
+  const [outputTab, setOutputTab] = useState<"run" | "grade">("run");
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasExpiredRef = useRef(false);
   const hasSubmittedRef = useRef(false);
 
-  // Load problem detail on mount
   useEffect(() => {
     fetchProblem(problemSlug)
       .then((p) => {
@@ -75,12 +75,10 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
       .catch(() => setLoadError("Could not load problem. Please continue with the interview."));
   }, [problemSlug]);
 
-  // Swap starter code on language change
   useEffect(() => {
     if (problem) setCode(problem.starter_code[language] ?? "");
   }, [language, problem]);
 
-  // Countdown timer
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
@@ -103,9 +101,10 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
   }, []);
 
   const handleRun = useCallback(async () => {
-    if (!problem || isRunning || isSubmitting) return;
+    if (!problem || isRunning || isGrading) return;
     setIsRunning(true);
     setRunResult(null);
+    setOutputTab("run");
     setOutputOpen(true);
     try {
       const r = await runCode(language, code, problem.examples);
@@ -115,20 +114,21 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
     } finally {
       setIsRunning(false);
     }
-  }, [problem, language, code, isRunning, isSubmitting]);
+  }, [problem, language, code, isRunning, isGrading]);
 
-  const handleSubmit = useCallback(async () => {
-    if (!problem || isSubmitting || submitResult) return;
-    setIsSubmitting(true);
+  const handleGrade = useCallback(async () => {
+    if (!problem || isGrading || gradingResult) return;
+    setIsGrading(true);
     stopTimer();
+    setOutputTab("grade");
     setOutputOpen(true);
     try {
       const r = await submitSolution({ problem_slug: problemSlug, language, code });
-      setSubmitResult(r);
+      setGradingResult(r);
       hasSubmittedRef.current = true;
       onSubmitted(r);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Submission failed.";
+      const msg = err instanceof Error ? err.message : "Grading failed.";
       const fallback: SubmitSolutionResponse = {
         submission_id: "",
         problem_slug: problemSlug,
@@ -138,18 +138,18 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
         error: msg,
         submitted_at: new Date().toISOString(),
       };
-      setSubmitResult(fallback);
+      setGradingResult(fallback);
       onSubmitted(fallback);
     } finally {
-      setIsSubmitting(false);
+      setIsGrading(false);
     }
-  }, [problem, problemSlug, language, code, isSubmitting, submitResult, stopTimer, onSubmitted]);
+  }, [problem, problemSlug, language, code, isGrading, gradingResult, stopTimer, onSubmitted]);
 
   const fmt = (s: number) =>
     `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 
   const isLow = timeLeft > 0 && timeLeft < 120;
-  const isDone = !!submitResult;
+  const isGraded = !!gradingResult;
 
   if (loadError) {
     return (
@@ -185,7 +185,7 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
             {LANGUAGES.map((l) => (
               <button
                 key={l.value}
-                disabled={isDone}
+                disabled={isGraded}
                 onClick={() => setLanguage(l.value)}
                 className={`px-2 py-0.5 rounded text-xs font-semibold transition-all disabled:opacity-50 ${
                   language === l.value
@@ -208,25 +208,25 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
           </button>
           <button
             onClick={handleRun}
-            disabled={isRunning || isSubmitting || isDone}
+            disabled={isRunning || isGrading || isGraded}
             className="flex items-center gap-1 px-2.5 py-1 bg-gray-800 text-white rounded text-xs font-semibold hover:bg-gray-700 transition-all disabled:opacity-50"
           >
             {isRunning ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
             Run
           </button>
+          {/* Grade Code button */}
           <button
-            onClick={handleSubmit}
-            disabled={isSubmitting || isDone || timeLeft === 0}
+            onClick={handleGrade}
+            disabled={isGrading || isGraded || isRunning || timeLeft === 0}
             className="flex items-center gap-1 px-2.5 py-1 bg-[#2557a7] text-white rounded text-xs font-semibold hover:bg-[#1e4a8f] transition-all disabled:opacity-50"
           >
-            {isSubmitting ? (
-              <Loader2 size={11} className="animate-spin" />
-            ) : isDone ? (
-              <CheckCircle2 size={11} />
+            {isGrading ? (
+              <><Loader2 size={11} className="animate-spin" /> Grading…</>
+            ) : isGraded ? (
+              <><CheckCircle2 size={11} /> Graded</>
             ) : (
-              <Send size={11} />
+              <><BarChart2 size={11} /> Grade Code</>
             )}
-            {isDone ? "Submitted" : "Submit"}
           </button>
         </div>
       </div>
@@ -261,12 +261,8 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
                     key={i}
                     className="bg-gray-50 border border-gray-200 rounded p-2 mb-1.5 font-mono text-[11px]"
                   >
-                    <p>
-                      <span className="font-semibold">Input:</span> {ex.input}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Output:</span> {ex.output}
-                    </p>
+                    <p><span className="font-semibold">Input:</span> {ex.input}</p>
+                    <p><span className="font-semibold">Output:</span> {ex.output}</p>
                     {ex.explanation && (
                       <p className="text-gray-500 mt-0.5">{ex.explanation}</p>
                     )}
@@ -300,23 +296,61 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
               language={language}
               value={code}
               onChange={setCode}
-              onCtrlEnter={handleSubmit}
+              onCtrlEnter={handleRun}
             />
           </div>
 
           {outputOpen && (
-            <div className="h-48 shrink-0 border-t border-gray-200 overflow-y-auto">
-              {submitResult ? (
-                <div className="p-2 bg-white h-full overflow-y-auto">
-                  <GradingResultPanel result={submitResult} />
-                </div>
-              ) : runResult ? (
-                <OutputPanel result={runResult} />
-              ) : (
-                <div className="flex items-center justify-center h-full bg-[#1e1e1e]">
-                  <Loader2 size={16} className="text-gray-500 animate-spin" />
-                </div>
-              )}
+            <div className="shrink-0 border-t border-gray-200">
+              {/* Tab switcher between run output and grading */}
+              <div className="flex border-b border-gray-200 bg-white">
+                <button
+                  onClick={() => setOutputTab("run")}
+                  className={`px-3 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
+                    outputTab === "run"
+                      ? "border-gray-800 text-gray-800"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  Output
+                </button>
+                <button
+                  onClick={() => setOutputTab("grade")}
+                  className={`px-3 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
+                    outputTab === "grade"
+                      ? "border-[#2557a7] text-[#2557a7]"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  Grading Result
+                  {isGraded && <CheckCircle2 size={10} className="inline ml-1 text-green-500" />}
+                </button>
+              </div>
+
+              <div className="h-48 overflow-y-auto">
+                {outputTab === "grade" ? (
+                  <div className="p-2 bg-white h-full overflow-y-auto">
+                    {isGrading ? (
+                      <div className="flex items-center justify-center h-full gap-2 text-sm text-gray-500">
+                        <Loader2 size={16} className="animate-spin text-[#2557a7]" />
+                        Grading your solution…
+                      </div>
+                    ) : gradingResult ? (
+                      <GradingResultPanel result={gradingResult} />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-xs text-gray-400">
+                        Click &quot;Grade Code&quot; to evaluate your solution.
+                      </div>
+                    )}
+                  </div>
+                ) : runResult ? (
+                  <OutputPanel result={runResult} />
+                ) : (
+                  <div className="flex items-center justify-center h-full bg-[#1e1e1e]">
+                    <Loader2 size={16} className="text-gray-500 animate-spin" />
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

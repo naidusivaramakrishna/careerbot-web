@@ -1,146 +1,211 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertCircle,
-  ArrowLeft,
-  Clock,
-  Database,
-  FileText,
-  History,
-  Loader2,
-  Pause,
-  Play,
-  RotateCw,
+  AlertCircle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
+  Clock, Database, FileText, Keyboard, Loader2, Maximize2, Minimize2,
+  Pause, Play, RotateCw, ShieldAlert, X,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { CodingTestApiError, fetchProblem } from '../_lib/api';
-import { fetchQuota, GradingApiError, submitSolution } from '../_lib/gradingApi';
+import { CodingTestApiError, fetchProblem, fetchProblems } from '../_lib/api';
 import { RunApiError, runCode } from '../_lib/runApi';
-import GradingResultPanel from '../_components/GradingResultPanel';
 import OutputPanel from '../_components/OutputPanel';
-import QuotaBanner from '@/components/coding-test/QuotaBanner';
+import TestCasePanel from '../_components/TestCasePanel';
 import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
-  CodingProblemDetail,
-  CodingTestLanguage,
-  QuotaResponse,
-  RunResult,
-  SubmitSolutionResponse,
+  CodingProblemDetail, CodingProblemSummary, CodingTestLanguage, RunResult,
+  ParsedTestResults, TestCaseResult,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
-type SubmitState = 'idle' | 'submitting' | 'done';
-type RunState = 'idle' | 'running' | 'done';
-
-const TIMER_DEFAULT = 45 * 60; // 45 minutes in seconds
-
-function formatTimer(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-// Monaco must not run on the server.
-const CodeEditor = dynamic<CodeEditorProps>(() => import('../_components/CodeEditor'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full items-center justify-center rounded-lg border border-slate-700 bg-[#1e1e1e] text-sm text-slate-400">
-      Loading editor…
-    </div>
-  ),
-});
-
+/* ─────────────────────────────────────────────────────────────
+   Constants
+───────────────────────────────────────────────────────────── */
+type RunState  = 'idle' | 'running' | 'done';
 type LoadState = 'loading' | 'error' | 'notfound' | 'ready';
 
+const TIMER_DEFAULT    = 45 * 60;
+const SPLIT_DEFAULT    = 40;
+const SPLIT_MIN        = 18;
+const SPLIT_MAX        = 70;
+const CONSOLE_DEFAULT  = 180;
+const CONSOLE_MIN      = 72;
+const CONSOLE_MAX      = 460;
 
+function formatTimer(s: number) {
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
 
+const CodeEditor = dynamic<CodeEditorProps>(
+  () => import('../_components/CodeEditor'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center bg-[#1e1e1e] text-sm text-slate-400">
+        Loading editor…
+      </div>
+    ),
+  },
+);
+
+/* ─────────────────────────────────────────────────────────────
+   Parse Python harness output into per-test-case results
+   Harness emits: "Test N: ✓ PASS  output=…" / "✗ FAIL  got=… expected=…" / "✗ ERROR …"
+───────────────────────────────────────────────────────────── */
+function parseTestResults(
+  stdout: string,
+  examples: { input: string; output: string }[],
+): ParsedTestResults {
+  const total = examples.length;
+  let passed = 0;
+  let failed = 0;
+
+  const results: TestCaseResult[] = examples.map((ex, i) => {
+    const n = i + 1;
+    const line = stdout.split('\n').find((l) => l.startsWith(`Test ${n}:`)) ?? '';
+
+    if (line.includes('✓ PASS')) {
+      passed++;
+      const m = line.match(/output=(.+)$/);
+      return {
+        index: n, input: ex.input, expected: ex.output,
+        actual: m?.[1]?.trim() ?? ex.output,
+        status: 'pass' as const,
+      };
+    }
+    if (line.includes('✗ FAIL')) {
+      failed++;
+      const m = line.match(/got=(.+?)\s+expected=/);
+      return {
+        index: n, input: ex.input, expected: ex.output,
+        actual: m?.[1]?.trim() ?? '',
+        status: 'fail' as const,
+      };
+    }
+    failed++;
+    const m = line.match(/✗ ERROR\s+(.+)$/);
+    return {
+      index: n, input: ex.input, expected: ex.output,
+      actual: m?.[1]?.trim() ?? 'Error during execution',
+      status: 'error' as const,
+    };
+  });
+
+  return { results, passed, failed, total };
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Shortcuts modal (extracted to keep render clean)
+───────────────────────────────────────────────────────────── */
+function ShortcutsModal({ onClose }: { onClose: () => void }) {
+  const shortcuts = [
+    { keys: ['Ctrl', 'Enter'],          action: 'Run Code' },
+    { keys: ['Esc'],                    action: 'Exit Full Screen' },
+    { keys: ['Ctrl', 'S'],              action: 'Save Code (auto-save)' },
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="mx-4 w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900">Keyboard Shortcuts</h2>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="space-y-3">
+          {shortcuts.map(({ keys, action }) => (
+            <div key={action} className="flex items-center justify-between">
+              <span className="text-sm text-slate-600">{action}</span>
+              <div className="flex items-center gap-1">
+                {keys.map((k, i) => (
+                  <span key={k} className="flex items-center gap-1">
+                    <kbd className="rounded border border-slate-300 bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700">{k}</kbd>
+                    {i < keys.length - 1 && <span className="text-xs text-slate-400">+</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-[11px] text-slate-400">More shortcuts available in the Monaco editor via F1.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Page
+───────────────────────────────────────────────────────────── */
 export default function CodingProblemDetailPage() {
-  // React 18 compat: `React.use()` crashes on React 18. `useParams()` from
-  // next/navigation works on React 18 + 19 and decodes the dynamic segment.
-  const params = useParams<{ slug: string }>();
-  const slug = typeof params?.slug === 'string' ? params.slug : '';
+  const router       = useRouter();
+  const params       = useParams<{ slug: string }>();
+  const slug         = typeof params?.slug === 'string' ? params.slug : '';
   const searchParams = useSearchParams();
-  const langParam = searchParams.get('language');
-  const backHref = langParam
-    ? `/coding-test/problems?language=${langParam}`
+  const backHref     = searchParams.get('language')
+    ? `/coding-test/problems?language=${searchParams.get('language')}`
     : '/coding-test/problems';
 
-  const [problem, setProblem] = useState<CodingProblemDetail | null>(null);
-  const [state, setState] = useState<LoadState>('loading');
+  /* ── problem data ── */
+  const [problem,      setProblem]      = useState<CodingProblemDetail | null>(null);
+  const [loadState,    setLoadState]    = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
+  const [reloadKey,    setReloadKey]    = useState(0);
 
   const [language, setLanguage] = useState<CodingTestLanguage>('python');
-  // Per-language editor contents. Seeded from starter on first load; the user's
-  // edits in each language are preserved when switching back and forth.
-  const [code, setCode] = useState<Record<CodingTestLanguage, string>>({
-    python: '',
-    java: '',
-    cpp: '',
-    c: '',
+  const [code, setCode]         = useState<Record<CodingTestLanguage, string>>({
+    python: '', java: '', cpp: '', c: '',
   });
 
   useEffect(() => {
-    const controller = new AbortController();
-    setState('loading');
+    const ctrl = new AbortController();
+    setLoadState('loading');
     setErrorMessage('');
-
-    fetchProblem(slug, controller.signal)
+    fetchProblem(slug, ctrl.signal)
       .then((res) => {
         setProblem(res);
         setCode({
           python: localStorage.getItem(`code:${slug}:python`) ?? res.starter_code.python ?? '',
-          java: localStorage.getItem(`code:${slug}:java`) ?? res.starter_code.java ?? '',
-          cpp: localStorage.getItem(`code:${slug}:cpp`) ?? res.starter_code.cpp ?? '',
-          c: localStorage.getItem(`code:${slug}:c`) ?? res.starter_code.c ?? '',
+          java:   localStorage.getItem(`code:${slug}:java`)   ?? res.starter_code.java   ?? '',
+          cpp:    localStorage.getItem(`code:${slug}:cpp`)    ?? res.starter_code.cpp    ?? '',
+          c:      localStorage.getItem(`code:${slug}:c`)      ?? res.starter_code.c      ?? '',
         });
-        setState('ready');
+        setLoadState('ready');
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         if (err instanceof CodingTestApiError && err.status === 404) {
-          setState('notfound');
-          return;
+          setLoadState('notfound'); return;
         }
-        setErrorMessage(
-          err instanceof Error ? err.message : 'Something went wrong.',
-        );
-        setState('error');
+        setErrorMessage(err instanceof Error ? err.message : 'Something went wrong.');
+        setLoadState('error');
       });
-
-    return () => controller.abort();
+    return () => ctrl.abort();
   }, [slug, reloadKey]);
 
-  const [submitState, setSubmitState] = useState<SubmitState>('idle');
-  const [result, setResult] = useState<SubmitSolutionResponse | null>(null);
-  const [submitError, setSubmitError] = useState('');
-  const [needsAuth, setNeedsAuth] = useState(false);
-  const [noCredits, setNoCredits] = useState(false);
-  const [serviceDown, setServiceDown] = useState(false);
-
-  const [quota, setQuota] = useState<QuotaResponse | null>(null);
-
+  /* ── problem list (for prev/next navigation) ── */
+  const [problemList, setProblemList] = useState<CodingProblemSummary[]>([]);
   useEffect(() => {
-    fetchQuota()
-      .then(setQuota)
-      .catch(() => {}); // silent — user may not be signed in
+    fetchProblems().then((r) => setProblemList(r.problems)).catch(() => {});
   }, []);
 
-  const [runState, setRunState] = useState<RunState>('idle');
-  const [runResult, setRunResult] = useState<RunResult | null>(null);
-  const [runError, setRunError] = useState('');
+  const currentIndex = problemList.findIndex((p) => p.slug === slug);
+  const prevProblem  = currentIndex > 0 ? problemList[currentIndex - 1] : null;
+  const nextProblem  = currentIndex < problemList.length - 1 ? problemList[currentIndex + 1] : null;
 
+  const navigateTo = (target: CodingProblemSummary) => {
+    router.push(`/coding-test/${target.slug}`);
+  };
+
+  /* ── run ── */
+  const [runState,  setRunState]  = useState<RunState>('idle');
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [runError,  setRunError]  = useState('');
+
+  /* ── timer ── */
   const [timerSeconds, setTimerSeconds] = useState(TIMER_DEFAULT);
   const [timerRunning, setTimerRunning] = useState(false);
-
-  const [plainEditor, setPlainEditor] = useState(false);
-  useEffect(() => {
-    if (localStorage.getItem('coding_test_plain_editor')) setPlainEditor(true);
-  }, []);
-
   useEffect(() => {
     if (!timerRunning || timerSeconds === 0) {
       if (timerSeconds === 0) setTimerRunning(false);
@@ -150,203 +215,515 @@ export default function CodingProblemDetailPage() {
     return () => clearInterval(id);
   }, [timerRunning, timerSeconds]);
 
-  const togglePlainEditor = () => {
-    setPlainEditor((prev) => {
-      const next = !prev;
-      if (next) localStorage.setItem('coding_test_plain_editor', '1');
-      else localStorage.removeItem('coding_test_plain_editor');
-      return next;
-    });
-  };
+  /* ── plain editor ── */
+  const [plainEditor, setPlainEditor] = useState(false);
+  useEffect(() => {
+    if (localStorage.getItem('coding_test_plain_editor')) setPlainEditor(true);
+  }, []);
 
-  const clearRunOutput = () => {
-    setRunResult(null);
-    setRunError('');
-    setRunState('idle');
-  };
+  /* ── auto-save indicator ── */
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerSave = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveStatus('saved');
+    saveTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+  }, []);
+
+  /* ── tab-switch detection ── */
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [showTabWarning, setShowTabWarning] = useState(false);
+  const tabSwitchRef = useRef(0);
+  useEffect(() => {
+    const onVis  = () => {
+      if (document.visibilityState === 'hidden') {
+        tabSwitchRef.current += 1;
+        setTabSwitchCount(tabSwitchRef.current);
+        setShowTabWarning(true);
+      }
+    };
+    const onBlur = () => {
+      tabSwitchRef.current += 1;
+      setTabSwitchCount(tabSwitchRef.current);
+      setShowTabWarning(true);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
+
+  /* ── maximize ── */
+  const [isMaximized, setIsMaximized] = useState(false);
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape' && isMaximized) setIsMaximized(false); };
+    document.addEventListener('keydown', fn);
+    return () => document.removeEventListener('keydown', fn);
+  }, [isMaximized]);
+
+  /* ── keyboard shortcuts dialog ── */
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  /* ── split pane ── */
+  const [leftPct,          setLeftPct]          = useState(SPLIT_DEFAULT);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [isDesktop,        setIsDesktop]        = useState(false);
+  const [isDragging,       setIsDragging]       = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mql    = window.matchMedia('(min-width: 1024px)');
+    const update = (e: MediaQueryListEvent | MediaQueryList) => setIsDesktop(e.matches);
+    update(mql);
+    mql.addEventListener('change', update);
+    return () => mql.removeEventListener('change', update);
+  }, []);
+
+  const startDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPanelCollapsed) return;
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+    const startX   = e.clientX;
+    const startPct = leftPct;
+    setIsDragging(true);
+    const onMove = (mv: PointerEvent) => {
+      const w      = container.offsetWidth;
+      const newPct = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, startPct + ((mv.clientX - startX) / w) * 100));
+      setLeftPct(newPct);
+    };
+    const onUp = () => {
+      setIsDragging(false);
+      document.body.style.cursor     = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup',   onUp);
+    };
+    document.body.style.cursor     = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup',   onUp);
+  }, [leftPct, isPanelCollapsed]);
+
+  /* ── console panel ── */
+  const [consoleHeight,    setConsoleHeight]    = useState(CONSOLE_DEFAULT);
+  const [consoleCollapsed, setConsoleCollapsed] = useState(false);
+  const [consoleTab,       setConsoleTab]       = useState<'output' | 'tests'>('output');
+
+  /* ── test case results (from last Run) ── */
+  const [testRunData, setTestRunData] = useState<ParsedTestResults | null>(null);
+
+  const startConsoleResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = consoleHeight;
+    const onMove = (mv: PointerEvent) => {
+      const delta = startY - mv.clientY;
+      setConsoleHeight(Math.max(CONSOLE_MIN, Math.min(CONSOLE_MAX, startH + delta)));
+    };
+    const onUp = () => {
+      document.body.style.cursor     = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup',   onUp);
+    };
+    document.body.style.cursor     = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup',   onUp);
+  }, [consoleHeight]);
+
+  /* ── helpers ── */
+  const clearRunOutput = useCallback(() => {
+    setRunResult(null); setRunError(''); setRunState('idle'); setTestRunData(null);
+  }, []);
 
   const resetToStarter = () => {
     if (!problem) return;
     localStorage.removeItem(`code:${slug}:${language}`);
-    setCode((prev) => ({
-      ...prev,
-      [language]: problem.starter_code[language] ?? '',
-    }));
+    setCode((prev) => ({ ...prev, [language]: problem.starter_code[language] ?? '' }));
     clearRunOutput();
   };
 
-  const handleRun = async () => {
+  const togglePlainEditor = () => {
+    setPlainEditor((prev) => {
+      const next = !prev;
+      if (next) localStorage.setItem('coding_test_plain_editor', '1');
+      else      localStorage.removeItem('coding_test_plain_editor');
+      return next;
+    });
+  };
+
+  const handleRun = useCallback(async () => {
     if (runState === 'running') return;
-    const source = code[language]?.trim();
-    if (!source) {
-      setRunError('Write some code before running.');
-      setRunResult(null);
-      return;
-    }
-    setRunState('running');
-    setRunError('');
-    setRunResult(null);
+    const src = code[language]?.trim();
+    if (!src) { setRunError('Write some code before running.'); setRunResult(null); return; }
+    setRunState('running'); setRunError(''); setRunResult(null); setTestRunData(null);
+    setConsoleCollapsed(false);
+    setConsoleTab('output');
     try {
       const res = await runCode(
-        language,
-        code[language],
+        language, code[language],
         problem?.examples?.map((e) => ({ input: e.input, output: e.output })),
       );
-      setRunResult(res);
-      setRunState('done');
+      setRunResult(res); setRunState('done');
+      if (language === 'python' && problem?.examples && problem.examples.length > 0) {
+        const parsed = parseTestResults(res.stdout, problem.examples);
+        setTestRunData(parsed);
+        setConsoleTab('tests');
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setRunState('idle');
-      setRunError(
-        err instanceof RunApiError || err instanceof Error
-          ? err.message
-          : 'Failed to run your code.',
-      );
+      setRunError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to run your code.');
     }
-  };
+  }, [runState, code, language, problem]);
 
-  const handleSubmit = async () => {
-    if (!problem || submitState === 'submitting') return;
-    const source = code[language]?.trim();
-    if (!source) {
-      setSubmitError('Write some code before submitting.');
-      setResult(null);
-      setSubmitState('idle');
-      return;
-    }
-    setSubmitState('submitting');
-    setSubmitError('');
-    setNeedsAuth(false);
-    setNoCredits(false);
-    setServiceDown(false);
-    setResult(null);
-    try {
-      const res = await submitSolution({
-        problem_slug: problem.slug,
-        language,
-        code: code[language],
-      });
-      setResult(res);
-      setSubmitState('done');
-      setQuota((q) =>
-        q
-          ? {
-              ...q,
-              submissions_remaining: Math.max(0, q.submissions_remaining - 1),
-              credits_remaining: Math.max(0, q.credits_remaining - q.cost_per_submission),
-            }
-          : q,
-      );
-    } catch (err) {
-      setSubmitState('idle');
-      if (err instanceof GradingApiError && err.status === 401) {
-        setNeedsAuth(true);
-        return;
-      }
-      if (err instanceof GradingApiError && err.status === 402) {
-        setNoCredits(true);
-        return;
-      }
-      if (err instanceof GradingApiError && (err.status === 502 || err.status === 503)) {
-        setServiceDown(true);
-        return;
-      }
-      setSubmitError(
-        err instanceof Error ? err.message : 'Failed to submit your solution.',
-      );
-    }
-  };
+  /* ── derived ── */
+  const isReady = loadState === 'ready' && !!problem;
 
-  const timerColor =
-    timerSeconds < 120 ? 'text-red-600 animate-pulse' :
-    timerSeconds < 300 ? 'text-amber-500' :
-    'text-slate-600';
+  /* Timer pill colours */
+  const timerBadge = timerSeconds < 120
+    ? 'bg-red-50 border-red-200 text-red-600'
+    : timerSeconds < 300
+    ? 'bg-amber-50 border-amber-200 text-amber-600'
+    : 'bg-emerald-50 border-emerald-200 text-emerald-700';
+  const timerBadgeDark = timerSeconds < 120
+    ? 'bg-red-900/30 border-red-700 text-red-400 animate-pulse'
+    : timerSeconds < 300
+    ? 'bg-amber-900/30 border-amber-700 text-amber-400'
+    : 'bg-slate-800 border-slate-700 text-slate-300';
 
+  /* Panel widths */
+  const leftStyle = isDesktop
+    ? {
+        width:      isPanelCollapsed ? 0 : `${leftPct}%`,
+        overflow:   isPanelCollapsed ? 'hidden' : undefined,
+        transition: 'width 200ms ease',
+        minWidth:   0,
+      } as React.CSSProperties
+    : undefined;
+
+  const rightStyle = isDesktop
+    ? {
+        width:      isPanelCollapsed ? '100%' : `${100 - leftPct}%`,
+        transition: 'width 200ms ease',
+        flex:       'none',
+      } as React.CSSProperties
+    : undefined;
+
+  /* ── shared editor node ── */
+  const saveCode = useCallback((lang: CodingTestLanguage, val: string, currentSlug: string) => {
+    localStorage.setItem(`code:${currentSlug}:${lang}`, val);
+    triggerSave();
+  }, [triggerSave]);
+
+  const editorNode = plainEditor ? (
+    <textarea
+      aria-label={`Plain text code editor for ${language}`}
+      value={code[language]}
+      onChange={(e) => {
+        const v = e.target.value;
+        setCode((p) => ({ ...p, [language]: v }));
+        saveCode(language, v, slug);
+      }}
+      onKeyDown={(e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleRun(); }
+      }}
+      spellCheck={false}
+      className="h-full w-full resize-none bg-[#1e1e1e] p-3 font-mono text-base text-slate-200 focus:outline-none"
+    />
+  ) : (
+    <CodeEditor
+      language={language}
+      value={code[language]}
+      onChange={(v) => {
+        setCode((p) => ({ ...p, [language]: v }));
+        saveCode(language, v, slug);
+      }}
+      onCtrlEnter={handleRun}
+      onLanguageChange={(lang) => { setLanguage(lang); clearRunOutput(); }}
+      languages={LANGUAGES}
+    />
+  );
+
+  /* ════════════════════════════════════════════════════════
+     RENDER
+  ════════════════════════════════════════════════════════ */
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl px-4 py-6">
-        <Link
-          href={backHref}
-          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to problems
-        </Link>
+    <main className="flex flex-col bg-slate-50 lg:h-screen lg:overflow-hidden">
 
-        {state === 'loading' && <DetailSkeleton />}
+      {/* ── Modals ── */}
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
 
-        {state === 'notfound' && (
-          <StatusCard
-            title="Problem not found"
-            message={`No problem exists for "${slug}".`}
-            tone="neutral"
-          >
-            <Link
-              href="/coding-test"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
-            >
-              Browse all problems
-            </Link>
-          </StatusCard>
-        )}
-
-        {state === 'error' && (
-          <StatusCard title="Couldn’t load this problem" message={errorMessage} tone="error">
-            <button
-              type="button"
-              onClick={() => setReloadKey((k) => k + 1)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700"
-            >
-              <RotateCw className="h-4 w-4" aria-hidden />
-              Retry
+      {showTabWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-md rounded-xl border border-amber-300 bg-white p-6 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-amber-500" aria-hidden />
+              <div className="flex-1">
+                <h2 className="text-base font-semibold text-slate-900">Tab Switch Detected</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  You left this session{' '}
+                  <span className="font-bold text-amber-600">{tabSwitchCount} time{tabSwitchCount !== 1 ? 's' : ''}</span>.
+                  Stay on this tab.
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowTabWarning(false)} className="text-slate-400 hover:text-slate-600" aria-label="Dismiss">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <button type="button" onClick={() => setShowTabWarning(false)}
+              className="mt-4 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">
+              Resume Practice
             </button>
-          </StatusCard>
-        )}
+          </div>
+        </div>
+      )}
 
-        {state === 'ready' && problem && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Left: statement */}
-            <section className="rounded-xl border border-slate-200 bg-white p-5">
-              <div className="flex items-start justify-between gap-3">
-                <h1 className="text-xl font-bold text-slate-900">
-                  {problem.title}
-                </h1>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${DIFFICULTY_BADGE[problem.difficulty]}`}
+      {/* ── Maximized overlay ── */}
+      {isMaximized && problem && (
+        <div className="fixed inset-0 z-40 flex flex-col bg-[#1e1e1e]">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-700 bg-[#252526] px-4 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-semibold text-slate-200">{problem.title}</span>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${DIFFICULTY_BADGE[problem.difficulty]}`}>
+                {problem.difficulty}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition-colors ${timerBadgeDark}`}>
+                <Clock className="h-3.5 w-3.5" aria-hidden />
+                <span className="font-mono text-sm font-semibold tabular-nums">{formatTimer(timerSeconds)}</span>
+                <button type="button" onClick={() => setTimerRunning((r) => !r)} className="opacity-70 hover:opacity-100 transition-opacity">
+                  {timerRunning ? <Pause className="h-3.5 w-3.5" aria-hidden /> : <Play className="h-3.5 w-3.5" aria-hidden />}
+                </button>
+                {!timerRunning && timerSeconds < TIMER_DEFAULT && (
+                  <button type="button" onClick={() => setTimerSeconds(TIMER_DEFAULT)} className="opacity-60 hover:opacity-100">
+                    <RotateCw className="h-3 w-3" aria-hidden />
+                  </button>
+                )}
+              </div>
+              <button type="button" onClick={resetToStarter} className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-indigo-400 transition">
+                <RotateCw className="h-3.5 w-3.5" aria-hidden />Reset
+              </button>
+              <button type="button" onClick={togglePlainEditor} className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-indigo-400 transition">
+                <FileText className="h-3.5 w-3.5" aria-hidden />{plainEditor ? 'Code editor' : 'Plain text'}
+              </button>
+              <button type="button" onClick={handleRun} disabled={runState === 'running'}
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:bg-emerald-800 transition">
+                {runState === 'running'
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Running…</>
+                  : <><Play className="h-3.5 w-3.5" aria-hidden />Run</>}
+              </button>
+              <button type="button" onClick={() => setIsMaximized(false)}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-600 px-2 py-1.5 text-xs font-medium text-slate-300 hover:border-indigo-500 hover:text-indigo-400 transition">
+                <Minimize2 className="h-3.5 w-3.5" aria-hidden />
+                <span className="hidden sm:inline">Exit full screen</span>
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden p-2">{editorNode}</div>
+          {(runError || (runState === 'done' && runResult)) && (
+            <div className="shrink-0 border-t border-slate-700">
+              {runError && (
+                <div className="flex items-start gap-2 bg-[#252526] p-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" aria-hidden />
+                  <p className="text-sm text-rose-400">{runError}</p>
+                </div>
+              )}
+              {runState === 'done' && runResult && <OutputPanel result={runResult} />}
+            </div>
+          )}
+          <div className="shrink-0 border-t border-slate-800 px-4 py-1 text-center">
+            <span className="text-[10px] text-slate-600">
+              Press <kbd className="rounded border border-slate-700 px-1 font-mono text-[10px] text-slate-500">Esc</kbd> to exit
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          TOP NAV BAR
+      ════════════════════════════════════════ */}
+      <nav className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2">
+        {/* Left: back + prev/next + title */}
+        <div className="flex min-w-0 items-center gap-2">
+          <Link href={backHref}
+            className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-slate-500 hover:text-indigo-600 transition">
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            <span className="hidden sm:inline">Back</span>
+          </Link>
+
+          {/* Prev/Next navigation */}
+          {problemList.length > 0 && (
+            <>
+              <div className="h-4 w-px shrink-0 bg-slate-200" aria-hidden />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => prevProblem && navigateTo(prevProblem)}
+                  disabled={!prevProblem}
+                  title={prevProblem ? `Previous: ${prevProblem.title}` : 'No previous problem'}
+                  className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-30"
                 >
+                  <ChevronLeft className="h-4 w-4" aria-hidden />
+                </button>
+                <span className="whitespace-nowrap text-xs text-slate-400 tabular-nums">
+                  {currentIndex >= 0 ? `${currentIndex + 1} / ${problemList.length}` : '— / —'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => nextProblem && navigateTo(nextProblem)}
+                  disabled={!nextProblem}
+                  title={nextProblem ? `Next: ${nextProblem.title}` : 'No next problem'}
+                  className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            </>
+          )}
+
+          {isReady && (
+            <>
+              <div className="h-4 w-px shrink-0 bg-slate-200" aria-hidden />
+              <span className="truncate text-sm font-semibold text-slate-800">{problem!.title}</span>
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${DIFFICULTY_BADGE[problem!.difficulty]}`}>
+                {problem!.difficulty}
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Right: controls */}
+        {isReady && (
+          <div className="flex shrink-0 items-center gap-2">
+            {/* ── Timer pill ── */}
+            <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition-colors duration-500 ${timerBadge}`}>
+              <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="font-mono text-sm font-semibold tabular-nums">{formatTimer(timerSeconds)}</span>
+              <button
+                type="button"
+                onClick={() => setTimerRunning((r) => !r)}
+                title={timerRunning ? 'Pause timer' : 'Start timer'}
+                className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+              >
+                {timerRunning ? <Pause className="h-3.5 w-3.5" aria-hidden /> : <Play className="h-3.5 w-3.5" aria-hidden />}
+              </button>
+              {!timerRunning && timerSeconds < TIMER_DEFAULT && (
+                <button
+                  type="button"
+                  onClick={() => setTimerSeconds(TIMER_DEFAULT)}
+                  title="Reset timer"
+                  className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                >
+                  <RotateCw className="h-3 w-3" aria-hidden />
+                </button>
+              )}
+            </div>
+
+            <div className="h-4 w-px bg-slate-200" aria-hidden />
+
+            <button type="button" onClick={resetToStarter}
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-indigo-600 transition">
+              <RotateCw className="h-3.5 w-3.5" aria-hidden />
+              <span className="hidden sm:inline">Reset</span>
+            </button>
+            <button type="button" onClick={togglePlainEditor}
+              title={plainEditor ? 'Switch to Monaco editor' : 'Switch to plain text editor'}
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-indigo-600 transition">
+              <FileText className="h-3.5 w-3.5" aria-hidden />
+              <span className="hidden sm:inline">{plainEditor ? 'Code editor' : 'Plain text'}</span>
+            </button>
+            <button type="button" onClick={() => setShowShortcuts(true)}
+              title="Keyboard shortcuts"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-indigo-600 transition">
+              <Keyboard className="h-3.5 w-3.5" aria-hidden />
+              <span className="hidden lg:inline">Shortcuts</span>
+            </button>
+            <button type="button" onClick={() => setIsMaximized(true)} title="Full screen editor"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-indigo-600 transition">
+              <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+              <span className="hidden sm:inline">Full screen</span>
+            </button>
+          </div>
+        )}
+      </nav>
+
+      {/* ════════════════════════════════════════
+          NON-READY STATES
+      ════════════════════════════════════════ */}
+      {loadState !== 'ready' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          {loadState === 'loading' && <DetailSkeleton />}
+          {loadState === 'notfound' && (
+            <StatusCard title="Problem not found" message={`No problem exists for "${slug}".`} tone="neutral">
+              <Link href="/coding-test"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
+                Browse all problems
+              </Link>
+            </StatusCard>
+          )}
+          {loadState === 'error' && (
+            <StatusCard title="Couldn't load this problem" message={errorMessage} tone="error">
+              <button type="button" onClick={() => setReloadKey((k) => k + 1)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700">
+                <RotateCw className="h-4 w-4" aria-hidden />Retry
+              </button>
+            </StatusCard>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          SPLIT PANE
+      ════════════════════════════════════════ */}
+      {isReady && problem && (
+        <div
+          ref={containerRef}
+          className={`flex flex-col lg:flex-1 lg:flex-row lg:overflow-hidden${isDragging ? ' select-none' : ''}`}
+        >
+
+          {/* ── Left panel: problem statement ── */}
+          <section
+            className="overflow-y-auto border-b border-slate-200 bg-white lg:border-b-0 lg:border-r"
+            style={leftStyle}
+          >
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3">
+                <h1 className="text-2xl font-bold leading-tight text-slate-900">{problem.title}</h1>
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${DIFFICULTY_BADGE[problem.difficulty]}`}>
                   {problem.difficulty}
                 </span>
               </div>
-              <p className="mt-1 text-xs font-medium text-slate-500">
-                {problem.tag}
-              </p>
+              <p className="mt-1 text-sm font-medium text-slate-500">{problem.tag}</p>
 
-              <div className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+              {/* Statement */}
+              <div className="mt-5 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
                 {problem.statement}
               </div>
 
+              {/* Examples */}
               {problem.examples.length > 0 && (
-                <div className="mt-6">
-                  <h2 className="mb-2 text-sm font-semibold text-slate-900">
-                    Examples
-                  </h2>
+                <div className="mt-7">
+                  <h2 className="mb-3 text-base font-semibold text-slate-900">Examples</h2>
                   <div className="space-y-3">
                     {problem.examples.map((ex, i) => (
-                      <div
-                        key={i}
-                        className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
-                      >
-                        <p className="font-mono text-xs text-slate-700">
-                          <span className="font-semibold">Input:</span> {ex.input}
+                      <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                        <p className="font-mono text-sm leading-6 text-slate-700">
+                          <span className="font-semibold text-slate-500">Input:</span>{' '}{ex.input}
                         </p>
-                        <p className="mt-1 font-mono text-xs text-slate-700">
-                          <span className="font-semibold">Output:</span>{' '}
-                          {ex.output}
+                        <p className="mt-1 font-mono text-sm leading-6 text-slate-700">
+                          <span className="font-semibold text-slate-500">Output:</span>{' '}{ex.output}
                         </p>
                         {ex.explanation && (
-                          <p className="mt-1 text-xs text-slate-500">
-                            <span className="font-semibold">Explanation:</span>{' '}
-                            {ex.explanation}
+                          <p className="mt-2 text-sm leading-6 text-slate-500">
+                            <span className="font-semibold">Explanation:</span>{' '}{ex.explanation}
                           </p>
                         )}
                       </div>
@@ -355,14 +732,14 @@ export default function CodingProblemDetailPage() {
                 </div>
               )}
 
+              {/* Constraints */}
               {problem.constraints.length > 0 && (
-                <div className="mt-6">
-                  <h2 className="mb-2 text-sm font-semibold text-slate-900">
-                    Constraints
-                  </h2>
-                  <ul className="list-inside list-disc space-y-1">
+                <div className="mt-7">
+                  <h2 className="mb-3 text-base font-semibold text-slate-900">Constraints</h2>
+                  <ul className="space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                     {problem.constraints.map((c, i) => (
-                      <li key={i} className="font-mono text-xs text-slate-600">
+                      <li key={i} className="flex items-start gap-2 font-mono text-sm text-slate-600">
+                        <span className="mt-0.5 text-indigo-400">•</span>
                         {c}
                       </li>
                     ))}
@@ -370,274 +747,254 @@ export default function CodingProblemDetailPage() {
                 </div>
               )}
 
-              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <Clock className="h-4 w-4 text-slate-400" aria-hidden />
+              {/* Complexity */}
+              <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3.5">
+                  <Clock className="h-4 w-4 shrink-0 text-indigo-400" aria-hidden />
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-400">
-                      Expected time
-                    </p>
-                    <p className="font-mono text-sm text-slate-700">
-                      {problem.expected_time_complexity}
-                    </p>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Expected time</p>
+                    <p className="mt-0.5 font-mono text-sm font-medium text-slate-700">{problem.expected_time_complexity}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <Database className="h-4 w-4 text-slate-400" aria-hidden />
+                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3.5">
+                  <Database className="h-4 w-4 shrink-0 text-indigo-400" aria-hidden />
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-400">
-                      Expected space
-                    </p>
-                    <p className="font-mono text-sm text-slate-700">
-                      {problem.expected_space_complexity}
-                    </p>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Expected space</p>
+                    <p className="mt-0.5 font-mono text-sm font-medium text-slate-700">{problem.expected_space_complexity}</p>
                   </div>
                 </div>
               </div>
-            </section>
+            </div>
+          </section>
 
-            {/* Right: editor */}
-            <section className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5">
-                  {LANGUAGES.map((l) => (
-                    <button
-                      key={l.value}
-                      type="button"
-                      onClick={() => { setLanguage(l.value); clearRunOutput(); }}
-                      aria-pressed={language === l.value}
-                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                        language === l.value
-                          ? 'bg-white text-indigo-700 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {l.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-3">
-                  {/* Countdown timer */}
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-slate-400" aria-hidden />
-                    <span className={`font-mono text-sm font-semibold tabular-nums ${timerColor}`}>
-                      {formatTimer(timerSeconds)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setTimerRunning((r) => !r)}
-                      title={timerRunning ? 'Pause timer' : 'Start timer'}
-                      className="text-slate-400 transition hover:text-indigo-600"
-                    >
-                      {timerRunning
-                        ? <Pause className="h-3.5 w-3.5" aria-hidden />
-                        : <Play className="h-3.5 w-3.5" aria-hidden />}
-                    </button>
-                    {!timerRunning && timerSeconds < TIMER_DEFAULT && (
-                      <button
-                        type="button"
-                        onClick={() => setTimerSeconds(TIMER_DEFAULT)}
-                        title="Reset timer to 45:00"
-                        className="text-slate-400 transition hover:text-slate-600"
-                      >
-                        <RotateCw className="h-3 w-3" aria-hidden />
-                      </button>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={resetToStarter}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" aria-hidden />
-                    Reset
-                  </button>
-                  <button
-                    type="button"
-                    onClick={togglePlainEditor}
-                    title={plainEditor ? 'Switch to Monaco code editor' : 'Switch to plain text editor (screen-reader friendly)'}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600"
-                  >
-                    <FileText className="h-3.5 w-3.5" aria-hidden />
-                    {plainEditor ? 'Code editor' : 'Plain text'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="h-[460px] min-h-[320px]">
-                {plainEditor ? (
-                  <textarea
-                    aria-label={`Plain text code editor for ${language}`}
-                    value={code[language]}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setCode((prev) => ({ ...prev, [language]: v }));
-                      localStorage.setItem(`code:${slug}:${language}`, v);
-                    }}
-                    onKeyDown={(e) => {
-                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSubmit();
-                      }
-                    }}
-                    spellCheck={false}
-                    className="h-full w-full resize-none rounded-lg border border-slate-700 bg-[#1e1e1e] p-3 font-mono text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                ) : (
-                  <CodeEditor
-                    language={language}
-                    value={code[language]}
-                    onChange={(v) => {
-                      setCode((prev) => ({ ...prev, [language]: v }));
-                      localStorage.setItem(`code:${slug}:${language}`, v);
-                    }}
-                    onCtrlEnter={handleSubmit}
-                  />
-                )}
-              </div>
-
-              <QuotaBanner quota={quota} variant="strip" className="mt-3" />
-
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <Link
-                  href="/coding-test/history"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600"
-                >
-                  <History className="h-3.5 w-3.5" aria-hidden />
-                  My submissions
-                </Link>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleRun}
-                    disabled={runState === 'running' || submitState === 'submitting'}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
-                  >
-                    {runState === 'running' ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                        Running…
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4" aria-hidden />
-                        Run
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={submitState === 'submitting' || runState === 'running' || quota?.submissions_remaining === 0}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
-                  >
-                    {submitState === 'submitting' ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                        Grading…
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4" aria-hidden />
-                        Submit for grading
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {runError && (
-                <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
-                  <p className="text-sm text-rose-700">{runError}</p>
-                </div>
-              )}
-
-              {runState === 'done' && runResult && (
-                <OutputPanel result={runResult} />
-              )}
-
-              {needsAuth && (
-                <div className="mt-3 flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" aria-hidden />
-                  <p className="text-sm text-indigo-700">
-                    Please{' '}
-                    <Link href="/?showLogin=true" className="font-semibold underline">
-                      sign in
-                    </Link>{' '}
-                    to submit your solution and save it to your history.
-                  </p>
-                </div>
-              )}
-
-              {noCredits && (
-                <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
-                  <p className="text-sm text-amber-700">
-                    You have no grading submissions remaining. Please upgrade your plan to continue.
-                  </p>
-                </div>
-              )}
-
-              {serviceDown && (
-                <div className="mt-3 flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
-                    <p className="text-sm text-rose-700">
-                      The AI grading service is temporarily unavailable. Your code is safe — please try again in a moment.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    className="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-
-              {submitError && !needsAuth && !noCredits && !serviceDown && (
-                <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
-                  <p className="text-sm text-rose-700">{submitError}</p>
-                </div>
-              )}
-
-              {submitState === 'done' && result && (
-                <GradingResultPanel result={result} />
-              )}
-            </section>
+          {/* ── Draggable vertical divider with collapse toggle (desktop only) ── */}
+          <div
+            role="separator"
+            aria-label="Drag to resize panels"
+            onPointerDown={startDrag}
+            className={`group relative hidden lg:flex w-[5px] shrink-0 items-center justify-center bg-slate-100 transition-colors hover:bg-indigo-50 active:bg-indigo-100 ${isPanelCollapsed ? 'cursor-default' : 'cursor-col-resize'}`}
+          >
+            <div className="h-10 w-[3px] rounded-full bg-slate-300 transition-colors group-hover:bg-indigo-400 group-active:bg-indigo-500" />
+            {/* Collapse / expand button */}
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => setIsPanelCollapsed((c) => !c)}
+              className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 flex h-7 w-5 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 shadow-sm opacity-0 transition-opacity group-hover:opacity-100 hover:border-indigo-400 hover:text-indigo-600"
+              aria-label={isPanelCollapsed ? 'Expand problem panel' : 'Collapse problem panel'}
+            >
+              {isPanelCollapsed
+                ? <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                : <ChevronLeft  className="h-3.5 w-3.5" aria-hidden />}
+            </button>
           </div>
-        )}
-      </div>
+
+          {/* ── Right panel: editor + console + run bar ── */}
+          <section
+            className="flex min-h-[520px] flex-col overflow-hidden bg-white lg:min-h-0 lg:flex-none"
+            style={rightStyle}
+          >
+            {/* Editor fills remaining height */}
+            <div className="flex-1 overflow-hidden">
+              {editorNode}
+            </div>
+
+            {/* ── Console panel (persistent, resizable, collapsible) ── */}
+            <div
+              className="shrink-0 overflow-hidden border-t border-slate-200 bg-[#1e1e1e]"
+              style={{
+                height:     consoleCollapsed ? 34 : consoleHeight,
+                transition: 'height 200ms ease',
+              }}
+            >
+              {/* Console header — drag handle + tab bar */}
+              <div
+                className="flex cursor-ns-resize select-none items-center border-b border-[#3e3e3e] bg-[#252526]"
+                onPointerDown={startConsoleResize}
+              >
+                {/* Tabs */}
+                <div className="flex items-center">
+                  {(['output', 'tests'] as const).map((tab) => {
+                    const LABELS = { output: 'Output', tests: 'Test Cases' };
+                    const active = consoleTab === tab;
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => setConsoleTab(tab)}
+                        className={`flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                          active
+                            ? 'border-indigo-500 text-slate-200'
+                            : 'border-transparent text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        {LABELS[tab]}
+                        {tab === 'tests' && testRunData && (
+                          <span className={`rounded-full px-1.5 py-px text-[9px] font-bold leading-none ${
+                            testRunData.passed === testRunData.total
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-rose-600 text-white'
+                          }`}>
+                            {testRunData.passed}/{testRunData.total}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Right-side status + actions */}
+                <div className="flex flex-1 items-center justify-end gap-1 pr-2">
+                  {consoleTab === 'output' && runState === 'running' && (
+                    <Loader2 className="h-3 w-3 animate-spin text-slate-400" aria-hidden />
+                  )}
+                  {consoleTab === 'output' && runState === 'done' && runResult && (
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      runResult.exit_code === 0
+                        ? 'bg-emerald-900/40 text-emerald-400'
+                        : 'bg-rose-900/40 text-rose-400'
+                    }`}>
+                      {runResult.exit_code === 0 ? '✓ Exit 0' : `✗ Exit ${runResult.exit_code}`}
+                    </span>
+                  )}
+                  {consoleTab === 'output' && (runState === 'done' || (runState === 'idle' && !!runError)) && (
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={clearRunOutput}
+                      className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 transition hover:bg-[#3c3c3c] hover:text-slate-300"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => setConsoleCollapsed((c) => !c)}
+                    className="rounded p-0.5 text-slate-500 transition hover:bg-[#3c3c3c] hover:text-slate-200"
+                    aria-label={consoleCollapsed ? 'Expand console' : 'Collapse console'}
+                  >
+                    {consoleCollapsed
+                      ? <ChevronUp   className="h-3.5 w-3.5" aria-hidden />
+                      : <ChevronDown className="h-3.5 w-3.5" aria-hidden />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Console body — tab content */}
+              {!consoleCollapsed && (
+                <div className="overflow-y-auto" style={{ height: consoleHeight - 34 }}>
+                  {/* Output tab */}
+                  {consoleTab === 'output' && (
+                    <div className="p-3">
+                      {runState === 'idle' && !runError && (
+                        <p className="font-mono text-[13px] italic text-slate-500">
+                          No output yet — press{' '}
+                          <span className="font-semibold text-emerald-400">Run Code</span>{' '}
+                          to execute.
+                        </p>
+                      )}
+                      {runState === 'running' && (
+                        <p className="font-mono text-[13px] italic text-slate-400">Running your code…</p>
+                      )}
+                      {runError && (
+                        <pre className="whitespace-pre-wrap font-mono text-[13px] leading-5 text-rose-400">{runError}</pre>
+                      )}
+                      {runState === 'done' && runResult && (
+                        <>
+                          {runResult.stdout && (
+                            <pre className="whitespace-pre-wrap font-mono text-[13px] leading-5 text-slate-200">
+                              {runResult.stdout}
+                            </pre>
+                          )}
+                          {runResult.stderr && (
+                            <pre className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-5 text-rose-400">
+                              {runResult.stderr}
+                            </pre>
+                          )}
+                          {!runResult.stdout && !runResult.stderr && (
+                            <p className="font-mono text-[13px] italic text-slate-500">
+                              Program exited with no output.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Test Cases tab */}
+                  {consoleTab === 'tests' && (
+                    testRunData ? (
+                      <TestCasePanel
+                        results={testRunData.results}
+                        passed={testRunData.passed}
+                        failed={testRunData.failed}
+                        total={testRunData.total}
+                        language={language}
+                        exitCode={runResult?.exit_code}
+                        showVerdict
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center p-3">
+                        <p className="font-mono text-[13px] italic text-slate-500">
+                          Press{' '}
+                          <span className="font-semibold text-emerald-400">Run Code</span>{' '}
+                          to see per-test-case results.
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Run bar ── */}
+            <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2.5">
+              {/* Auto-save indicator */}
+              <div
+                className={`flex items-center gap-1 text-xs font-medium text-emerald-600 transition-opacity duration-300 ${
+                  saveStatus === 'saved' ? 'opacity-100' : 'opacity-0'
+                }`}
+                aria-live="polite"
+              >
+                <Check className="h-3.5 w-3.5" aria-hidden />
+                Saved
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRun}
+                disabled={runState === 'running'}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {runState === 'running'
+                  ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden />Running…</>
+                  : <><Play className="h-4 w-4" aria-hidden />Run Code</>}
+              </button>
+            </div>
+          </section>
+
+        </div>
+      )}
     </main>
   );
 }
 
+/* ─────────────────────────────────────────────────────────────
+   StatusCard
+───────────────────────────────────────────────────────────── */
 function StatusCard({
-  title,
-  message,
-  tone,
-  children,
+  title, message, tone, children,
 }: {
-  title: string;
-  message: string;
-  tone: 'error' | 'neutral';
-  children?: React.ReactNode;
+  title: string; message: string; tone: 'error' | 'neutral'; children?: React.ReactNode;
 }) {
   const isError = tone === 'error';
   return (
-    <div
-      className={`flex flex-col items-center gap-3 rounded-xl border p-10 text-center ${
-        isError ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-white'
-      }`}
-    >
-      <AlertCircle
-        className={`h-8 w-8 ${isError ? 'text-rose-500' : 'text-slate-400'}`}
-        aria-hidden
-      />
+    <div className={`flex flex-col items-center gap-3 rounded-xl border p-10 text-center ${
+      isError ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-white'
+    }`}>
+      <AlertCircle className={`h-8 w-8 ${isError ? 'text-rose-500' : 'text-slate-400'}`} aria-hidden />
       <h1 className="text-base font-semibold text-slate-800">{title}</h1>
       {message && <p className="text-sm text-slate-500">{message}</p>}
       {children}
@@ -645,22 +1002,22 @@ function StatusCard({
   );
 }
 
+/* ─────────────────────────────────────────────────────────────
+   DetailSkeleton
+───────────────────────────────────────────────────────────── */
 function DetailSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="flex gap-4">
+      <div className="flex-1 rounded-xl border border-slate-200 bg-white p-5">
         <div className="h-6 w-1/2 animate-pulse rounded bg-slate-200" />
         <div className="mt-3 h-3 w-1/4 animate-pulse rounded bg-slate-100" />
         <div className="mt-5 space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-3 w-full animate-pulse rounded bg-slate-100"
-            />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-3 w-full animate-pulse rounded bg-slate-100" />
           ))}
         </div>
       </div>
-      <div className="h-[520px] animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+      <div className="flex-1 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
     </div>
   );
 }

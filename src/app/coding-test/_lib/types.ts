@@ -120,3 +120,42 @@ export interface RunResult {
   stderr: string;
   exit_code: number;
 }
+
+// ---- Per-test-case execution results (parsed from Python harness output) ---
+
+export interface TestCaseResult {
+  index: number;      // 1-based
+  input: string;
+  expected: string;
+  actual: string;
+  status: 'pass' | 'fail' | 'error';
+}
+
+export interface ParsedTestResults {
+  results: TestCaseResult[];
+  passed: number;
+  failed: number;
+  total: number;
+}
+
+// ---- Submission verdict (derived client-side from SubmitSolutionResponse) --
+
+export type SubmitVerdict =
+  | 'Accepted'
+  | 'Partial'
+  | 'Wrong Answer'
+  | 'Runtime Error'
+  | 'Compilation Error';
+
+export interface SubmissionResult {
+  verdict: SubmitVerdict;
+  score: number;
+  hiddenPassed: number;
+  hiddenTotal: number;
+  samplePassed: number;
+  sampleTotal: number;
+  summary: string;
+  suggestions: string[];
+  submittedAt: string;
+  submissionId: string;
+}

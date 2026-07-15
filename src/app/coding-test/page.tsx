@@ -8,6 +8,7 @@ import { fetchHistory } from './_lib/gradingApi';
 import type { CodingTestLanguage } from './_lib/types';
 import QuotaBanner from '@/components/coding-test/QuotaBanner';
 import OnboardingModal from '@/components/coding-test/OnboardingModal';
+import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 
 type Progress = { solved: number; attempted: number; accuracy: number };
 
@@ -24,21 +25,23 @@ const LANG_CONFIG: {
 
 const CIRC = 2 * Math.PI * 36; // ≈ 226.2
 
-const ONBOARDING_KEY = 'coding_test_onboarded';
+const onboardingKey = (userId: string) => `coding_test_onboarded_${userId}`;
 
 export default function CodingPracticeHub() {
+  const { userId } = useCurrentUserId();
   const [totalProblems, setTotalProblems] = useState<number | null>(null);
   const [progress, setProgress] = useState<Progress>({ solved: 0, attempted: 0, accuracy: 0 });
   const [ready, setReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Check localStorage after mount (SSR-safe).
+  // Check localStorage after userId resolves (SSR-safe, per-user key).
   useEffect(() => {
-    if (!localStorage.getItem(ONBOARDING_KEY)) setShowOnboarding(true);
-  }, []);
+    if (!userId) return;
+    if (!localStorage.getItem(onboardingKey(userId))) setShowOnboarding(true);
+  }, [userId]);
 
   const dismissOnboarding = () => {
-    localStorage.setItem(ONBOARDING_KEY, '1');
+    if (userId) localStorage.setItem(onboardingKey(userId), '1');
     setShowOnboarding(false);
   };
 
