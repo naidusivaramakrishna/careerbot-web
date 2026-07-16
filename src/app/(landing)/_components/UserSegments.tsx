@@ -29,7 +29,7 @@ const segments = [
 export default function UserSegments() {
   return (
     <section className="bg-white py-11">
-      <div className="mx-auto max-w-[1240px] px-4 lg:px-8">
+      <div className="mx-auto max-w-[1728px] px-5 lg:px-[60px]">
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
           <motion.div
             initial={false}
