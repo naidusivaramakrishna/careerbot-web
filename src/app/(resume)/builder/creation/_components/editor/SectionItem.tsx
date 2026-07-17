@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { FaCheckCircle } from 'react-icons/fa';
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
 import { RiSparkling2Fill } from 'react-icons/ri';
 import { deleteResumeSection } from "@/api/resumeApi"; // ✅ Import the delete API
+
+import type { AtsSectionIssue } from "../../_utils/atsMissing";
 
 interface Props {
   title: string;
@@ -20,6 +22,7 @@ interface Props {
   isDragging?: boolean;
   resumeId?: string;
   sectionKey?: string;
+  atsIssue?: AtsSectionIssue;
 }
 
 const SectionItem: React.FC<Props> = ({
@@ -36,6 +39,7 @@ const SectionItem: React.FC<Props> = ({
   isDragging,
   resumeId,
   sectionKey,
+  atsIssue,
 }) => {
   const [hovered, setHovered] = useState(false);
   const [deleteHovered, setDeleteHovered] = useState(false);
@@ -50,6 +54,7 @@ const SectionItem: React.FC<Props> = ({
   };
 
   const showDelete = !disableDelete && hovered && !isActive;
+  const isMissing = Boolean(atsIssue);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -102,67 +107,89 @@ const SectionItem: React.FC<Props> = ({
 
   return (
     <div
-      className={`group relative transition-transform duration-200 ${
-        hovered ? "scale-[1.01]" : "scale-100"
-      }`}
+      className="group relative"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <div className="flex items-stretch gap-2">
         <div className="flex-1 relative">
           <div
-            className={`relative py-1.5 overflow-hidden rounded-lg transition-all duration-300 shadow-sm ${
-              isActive
-                ? "bg-[#ffffff] border border-blue-200"
-                : "bg-[#ffffff] border border-gray-300"
+            className={`relative overflow-hidden rounded-lg border transition-all duration-200 ${
+              isMissing
+                ? isActive
+                  ? "border-rose-300 bg-rose-50 shadow-sm"
+                  : "border-rose-200 bg-rose-50/80 hover:border-rose-300"
+                : isActive
+                  ? "border-blue-200 bg-blue-50/40 shadow-sm"
+                  : isComplete
+                    ? "border-emerald-200 bg-emerald-50/55 hover:border-emerald-300"
+                    : "border-slate-200 bg-white hover:border-blue-200"
             }`}
           >
             {/* Header */}
             <div
-              className="flex items-center justify-between px-3 py-2 cursor-pointer relative"
+              className="relative grid min-h-[58px] cursor-pointer grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2"
               onClick={handleHeaderClick}
             >
-              {/* Left Section: Icon + Title */}
-              <div className="flex items-center gap-3">
-                <div
-                  {...(dragHandleProps || {})}
-                  className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 ${
-                    isActive
-                      ? "bg-[#2557a7] text-white shadow"
-                      : "bg-gradient-to-br from-gray-100 to-gray-200 group-hover:from-blue-100 group-hover:to-blue-100 text-[#2d2d2d] group-hover:text-[#2557a7]"
-                  }`}
-                >
-                  {icon}
-                </div>
+              <div
+                {...(dragHandleProps || {})}
+                className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
+                  isMissing
+                    ? "bg-rose-600 text-white shadow-sm shadow-rose-100"
+                  : isActive
+                      ? "bg-[#2557a7] text-white shadow-sm"
+                      : isComplete
+                        ? "bg-emerald-600 text-white shadow-sm shadow-emerald-100"
+                        : "bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-[#2557a7]"
+                }`}
+              >
+                {icon}
+              </div>
 
+              <div className="min-w-0 self-center text-left">
                 <span
-                  className={`text-[15px] font-semibold transition-colors duration-200 ${
-                    isActive ? "text-[#2557a7]" : "text-gray-800"
+                  className={`block truncate text-[13px] font-black leading-5 transition-colors duration-200 ${
+                    isMissing ? "text-rose-700" : isActive ? "text-[#2557a7]" : "text-slate-900"
                   }`}
                 >
                   {title}
                 </span>
+                {isMissing ? (
+                  <span className="block truncate text-[11px] font-black leading-4 text-rose-600">
+                    Missing +{atsIssue.impact} ATS
+                  </span>
+                ) : (
+                  <span className={`block truncate text-[11px] font-bold leading-4 ${isComplete ? "text-emerald-700" : "text-slate-400"}`}>
+                    {isComplete ? "Complete" : "Edit section"}
+                  </span>
+                )}
               </div>
 
-              {/* Right Section: AI Icon + Check + Chevron */}
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-[54px] shrink-0 items-center justify-end gap-1.5">
+                {isMissing && (
+                  <AlertTriangle size={15} className="shrink-0 text-rose-500" />
+                )}
                 {ai && (
-                  <span className="inline-flex items-center px-2 py-0.5 text-xs bg-[#efedf2] font-semibold text-black rounded-full">
+                  <span className="inline-flex h-6 items-center rounded-full bg-blue-50 px-1.5 text-[10px] font-black text-[#2557a7]">
                     <RiSparkling2Fill size={14} className="text-[#2557a7] fill-[#2557a7] mr-0.5"/>AI  
                   </span>
                 )}
 
-                {isComplete && (
-                  <div className="w-6 h-6 flex items-center justify-center rounded-full bg-[#d9f7be] text-white">
+                {isComplete && !isMissing && (
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-white">
                     <FaCheckCircle size={14} className="text-green-600 rounded-full" />
                   </div>
                 )}
 
+                {!isMissing && (
+                  <Pencil size={15} className="hidden text-slate-500 transition group-hover:text-[#2557a7] min-[1280px]:block" />
+                )}
+
                 <div
-                  className={`transition-all duration-300 p-1 rounded-md ${
+                  className={`rounded-md p-1 transition-all duration-200 ${
                     isActive
                       ? "text-[#2557a7] bg-blue-100"
-                      : "text-gray-400 group-hover:text-[#2557a7] group-hover:bg-blue-100"
+                      : "text-slate-400 group-hover:text-[#2557a7] group-hover:bg-blue-50"
                   }`}
                 >
                   {isActive ? (
@@ -264,9 +291,3 @@ const SectionItem: React.FC<Props> = ({
 };
 
 export default SectionItem;
-
-
-
-
-
-

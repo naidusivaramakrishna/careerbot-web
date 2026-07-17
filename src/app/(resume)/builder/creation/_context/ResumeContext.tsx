@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
 import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
 import logger from "@/lib/logger";
+import { getAtsScoreValue } from "../_utils/atsMissing";
 
 // Extract country code from a combined phone string like "+911234567890"
 function splitPhone(phone: string): { countryCode: string; phoneNumber: string } {
@@ -266,6 +267,7 @@ interface ResumeContextType {
   updateCustomFieldValue: (sectionId: string, fieldId: string, value: string | string[]) => void;
   deleteCustomField: (sectionId: string, fieldId: string) => void;
   applyAutoFix: (suggestionId: string) => Promise<void>;
+  applyManualFix: (suggestionId: string, value: string) => Promise<void>;
 }
 
 const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
@@ -962,13 +964,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     }));
   };
 
-  const applyAutoFix = async (suggestionId: string): Promise<void> => {
-    if (!resumeIdProp) return;
-    const response = await applyFix({
-      enhancer_state: resumeIdProp,
-      suggestion_id: suggestionId,
-      fix_type: "auto",
-    });
+  const syncApplyFixResponse = (response: Awaited<ReturnType<typeof applyFix>>, suggestionId: string) => {
     if (response.success && response.enhancer_state) {
       // Re-map raw parser resume into builder format
       const mapped = mapParserOutputToBuilderData({
@@ -999,14 +995,44 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           qualifications: mapped.personalInfo?.qualifications || prev.personalInfo.qualifications || '',
         },
       }));
-      if (response.enhancer_state.ats_breakdown) {
-        setEnhancedAtsScore(response.enhancer_state.ats_breakdown as unknown as ATSScore);
+      const nextAtsScore =
+        (response.enhancer_state.ats_breakdown as unknown as ATSScore | undefined) ??
+        (response.ats_display ? ({ ats_display: response.ats_display } as unknown as ATSScore) : undefined);
+      if (nextAtsScore) {
+        setEnhancedAtsScore(prev => {
+          const nextValue = getAtsScoreValue(nextAtsScore);
+          const prevValue = getAtsScoreValue(prev);
+          return nextValue > 0 || prevValue === 0 ? nextAtsScore : prev;
+        });
       }
-      // Delay removal so the "Applied!" button state is visible to the user before it disappears
-      setTimeout(() => {
+      if (response.suggestions) {
+        setEnhancedSuggestions(response.suggestions);
+      } else {
         setEnhancedSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      }, 1200);
+      }
     }
+  };
+
+  const applyAutoFix = async (suggestionId: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const response = await applyFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+      fix_type: "auto",
+    });
+    // Delay sync so the "Applied!" button state is visible to the user before it disappears
+    setTimeout(() => syncApplyFixResponse(response, suggestionId), 1200);
+  };
+
+  const applyManualFix = async (suggestionId: string, value: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const response = await applyFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+      fix_type: "manual",
+      value,
+    });
+    syncApplyFixResponse(response, suggestionId);
   };
 
   const createResume = async () => {
@@ -1047,6 +1073,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         updateCustomFieldValue,
         deleteCustomField,
         applyAutoFix,
+        applyManualFix,
       }}
     >
       {children}

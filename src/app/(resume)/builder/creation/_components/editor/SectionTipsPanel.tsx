@@ -49,7 +49,7 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
   staticTips,
   entryContent,
 }) => {
-  const { resumeSource, enhancedSuggestions, applyAutoFix } = useResume();
+  const { resumeSource, enhancedSuggestions, applyAutoFix, resumeData } = useResume();
   const [buttonStates, setButtonStates] = useState<Record<string, ButtonState>>({});
 
   const setButtonState = (id: string, state: ButtonState) =>
@@ -72,6 +72,17 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
 
     // Step 1: filter by section
     let matched = enhancedSuggestions.filter((s) => sectionKeys.includes(s.section));
+
+    matched = matched.filter((s) => {
+      const text = `${s.section} ${s.message}`.toLowerCase();
+      if (text.includes("linkedin") && resumeData.personalInfo.linkedinUrl?.trim()) return false;
+      if (text.includes("github") && resumeData.personalInfo.githubUrl?.trim()) return false;
+      if ((text.includes("portfolio") || text.includes("website")) && resumeData.personalInfo.portfolioUrl?.trim()) return false;
+      if (text.includes("phone") && resumeData.personalInfo.phone?.trim()) return false;
+      if (text.includes("email") && resumeData.personalInfo.email?.trim()) return false;
+      if (text.includes("location") && resumeData.personalInfo.location?.trim()) return false;
+      return true;
+    });
 
     // Step 2: if entryContent provided, further filter to only suggestions that mention
     // at least one identifier from this specific entry (case-insensitive)
