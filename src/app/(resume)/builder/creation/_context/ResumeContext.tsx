@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { getResumeById } from "@/api/resumeApi";
 import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
@@ -292,6 +292,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
   const [enhancedAtsScore, setEnhancedAtsScore] = useState<EnhancedAtsScore>(null);
   const [enhancedSuggestions, setEnhancedSuggestions] = useState<EnhancedSuggestion[]>([]);
+  const latestFixRequestRef = useRef(0);
 
   const [resumeData, setResumeData] = useState<ResumeData>(() => {
     // ✅ If resumeId is provided, don't use localStorage (we'll load from backend)
@@ -964,7 +965,13 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     }));
   };
 
-  const syncApplyFixResponse = (response: Awaited<ReturnType<typeof applyFix>>, suggestionId: string) => {
+  const syncApplyFixResponse = (
+    response: Awaited<ReturnType<typeof applyFix>>,
+    suggestionId: string,
+    requestId: number
+  ) => {
+    if (requestId !== latestFixRequestRef.current) return;
+
     if (response.success && response.enhancer_state) {
       // Re-map raw parser resume into builder format
       const mapped = mapParserOutputToBuilderData({
@@ -1015,24 +1022,27 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
   const applyAutoFix = async (suggestionId: string): Promise<void> => {
     if (!resumeIdProp) return;
+    const requestId = latestFixRequestRef.current + 1;
+    latestFixRequestRef.current = requestId;
     const response = await applyFix({
       enhancer_state: resumeIdProp,
       suggestion_id: suggestionId,
       fix_type: "auto",
     });
-    // Delay sync so the "Applied!" button state is visible to the user before it disappears
-    setTimeout(() => syncApplyFixResponse(response, suggestionId), 1200);
+    syncApplyFixResponse(response, suggestionId, requestId);
   };
 
   const applyManualFix = async (suggestionId: string, value: string): Promise<void> => {
     if (!resumeIdProp) return;
+    const requestId = latestFixRequestRef.current + 1;
+    latestFixRequestRef.current = requestId;
     const response = await applyFix({
       enhancer_state: resumeIdProp,
       suggestion_id: suggestionId,
       fix_type: "manual",
       value,
     });
-    syncApplyFixResponse(response, suggestionId);
+    syncApplyFixResponse(response, suggestionId, requestId);
   };
 
   const createResume = async () => {

@@ -11,6 +11,7 @@ export interface AtsSectionIssue {
   impact: number;
   severity: AtsIssueSeverity;
   fixType: "manual" | "auto";
+  source: "deduction" | "suggestion" | "missing";
 }
 
 export interface NormalizedAtsSection {
@@ -267,6 +268,7 @@ export function buildAtsSectionIssues(
         impact,
         severity: severityFromImpact(impact),
         fixType: "manual",
+        source: "deduction",
       } satisfies AtsSectionIssue;
       if (!isIssueResolvedByResumeData(issue, data)) {
         issues.set(id, issue);
@@ -286,6 +288,7 @@ export function buildAtsSectionIssues(
         impact: fallbackImpact,
         severity: severityFromImpact(fallbackImpact),
         fixType: suggestion.fix_type,
+        source: "suggestion",
       } satisfies AtsSectionIssue;
       if (!isIssueResolvedByResumeData(issue, data)) {
         issues.set(issue.id, issue);
@@ -306,6 +309,7 @@ export function buildAtsSectionIssues(
           impact,
           severity: severityFromImpact(impact),
           fixType: "manual",
+          source: "missing",
         });
       }
     }
@@ -315,6 +319,8 @@ export function buildAtsSectionIssues(
 }
 
 export function getEstimatedAtsScore(currentScore: number, issues: AtsSectionIssue[]): number {
-  const possibleLift = issues.reduce((sum, issue) => sum + issue.impact, 0);
+  const possibleLift = issues
+    .filter((issue) => issue.source === "deduction")
+    .reduce((sum, issue) => sum + issue.impact, 0);
   return Math.min(100, currentScore + possibleLift);
 }

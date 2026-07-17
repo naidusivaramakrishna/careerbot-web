@@ -24,21 +24,8 @@ const ResumePagePager: React.FC<ResumePagePagerProps> = ({
     if (!content) return;
 
     const updatePageCount = () => {
-      const root = content.firstElementChild as HTMLElement | null;
-      const blocks = root ? Array.from(root.children) as HTMLElement[] : [];
-      const starts = [0];
-      let pageStart = 0;
-
-      blocks.forEach((block) => {
-        const blockTop = block.offsetTop;
-        const blockBottom = blockTop + block.offsetHeight;
-        if (blockBottom > pageStart + PAGE_HEIGHT && blockTop > pageStart) {
-          pageStart = blockTop;
-          starts.push(pageStart);
-        }
-      });
-
-      const pageCount = Math.max(1, starts.length);
+      const pageCount = Math.max(1, Math.ceil(content.scrollHeight / PAGE_HEIGHT));
+      const starts = Array.from({ length: pageCount }, (_, index) => index * PAGE_HEIGHT);
       setPageOffsets(starts);
       onPageCountChange?.(pageCount);
     };

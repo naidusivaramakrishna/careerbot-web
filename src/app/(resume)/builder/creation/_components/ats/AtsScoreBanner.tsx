@@ -74,7 +74,7 @@ export default function AtsScoreBanner({ onOpenMissing }: AtsScoreBannerProps) {
         <div className="grid h-[86px] min-w-0 grid-cols-[1fr_30px_1fr] items-center rounded-lg border border-blue-100 bg-white/80 px-4 shadow-sm">
           <ScoreRing label="Current ATS Score" score={currentScore} color="#fb7185" trackColor="#ffe1e7" />
           <ChevronsRight className="mx-auto text-slate-400" size={22} />
-          <ScoreRing label="Estimated Score" score={estimatedScore} color="#34b97b" trackColor="#dcfce7" />
+          <ScoreRing label="Scored potential" score={estimatedScore} color="#34b97b" trackColor="#dcfce7" />
         </div>
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_164px] items-center gap-3">

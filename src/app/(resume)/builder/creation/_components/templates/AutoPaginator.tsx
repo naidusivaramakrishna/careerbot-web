@@ -53,8 +53,11 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
 
       {/* rendered preview pages */}
       <div className="resume-container">
-        {pages.slice(currentPage - 1, currentPage).map((page, idx) => (
-          <div key={currentPage + idx} className="a2-page">
+        {pages.map((page, index) => (
+          <div
+            key={index}
+            className={`resume-pagination-page a2-page ${index + 1 === currentPage ? "resume-pagination-page--active" : ""}`}
+          >
             <div className="a2-page-content">
               {page.map((node, i) => (
                 <React.Fragment key={i}>{node}</React.Fragment>

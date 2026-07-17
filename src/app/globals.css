@@ -161,6 +161,27 @@ body {
   min-height: 0 !important;
 }
 
+.resume-pagination-page {
+  display: none;
+}
+
+.resume-pagination-page--active {
+  display: block;
+}
+
+[data-export-all-pages="true"] .resume-pagination-page {
+  display: block !important;
+}
+
+[data-export-all-pages="true"] .resume-domain-page-viewport {
+  height: auto !important;
+  overflow: visible !important;
+}
+
+[data-export-all-pages="true"] .resume-domain-page-content {
+  transform: none !important;
+}
+
 .resume-measure-container {
   position: absolute;
   left: -100000px;

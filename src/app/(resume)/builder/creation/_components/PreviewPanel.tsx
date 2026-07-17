@@ -95,6 +95,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [userEmail, setUserEmail] = useState<string>('');
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedTemplate, previewCatalogueKey]);
+
   const handlePageCountChange = React.useCallback((count: number) => {
     const safeCount = Math.max(1, count);
     setTotalPages(safeCount);
@@ -235,6 +239,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
     const prevTransform = el.style.transform;
     el.style.transform = "none";
+    el.dataset.exportAllPages = "true";
 
     try {
       const dataUrl = await toPng(el, {
@@ -273,6 +278,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       pdf.save(filename);
     } finally {
       el.style.transform = prevTransform;
+      delete el.dataset.exportAllPages;
     }
   };
 
@@ -285,6 +291,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
     const prevTransform = el.style.transform;
     el.style.transform = "none";
+    el.dataset.exportAllPages = "true";
 
     try {
       // Send resume HTML to server-side API route (runs html-to-docx in Node.js)
@@ -317,6 +324,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       setDownloadError(`DOCX generation failed. ${msg}`);
     } finally {
       el.style.transform = prevTransform;
+      delete el.dataset.exportAllPages;
       setIsDownloading(false);
     }
   };
