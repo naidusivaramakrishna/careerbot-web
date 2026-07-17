@@ -24,8 +24,9 @@ import {
 } from "lucide-react";
 import ATSResumePreview from "@/app/(resume)/atslogin/_components/ATSResumePreview";
 import { toast } from "sonner";
-import { enhanceResume } from "@/api/enhancerApi";
+import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
+import type { EnhancedResumeHistoryItem } from "@/types/api.types";
 
 
 const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
@@ -60,6 +61,48 @@ interface IssueCard {
   section: string;
   description: string;
   suggestion: string;
+}
+
+function hasResumeContent(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const data = value as Record<string, unknown>;
+  return [
+    "contact",
+    "personal_info",
+    "personalInfo",
+    "llm_data",
+    "work_experience",
+    "experience",
+    "workExperience",
+    "education",
+    "technical_skills",
+    "categorizedSkills",
+  ].some((key) => data[key] != null);
+}
+
+function cacheBuilderResume(enhancedResumeId: string, sourceData: unknown) {
+  if (!hasResumeContent(sourceData)) return;
+
+  const mappedData = mapParserOutputToBuilderData(sourceData);
+  localStorage.setItem(
+    "cached_resume_data",
+    JSON.stringify({
+      resumeId: enhancedResumeId,
+      data: { ...mappedData, id: enhancedResumeId },
+    })
+  );
+}
+
+function rememberEnhancedResumeId(enhancedResumeId: string) {
+  localStorage.setItem("current_resume_id", enhancedResumeId);
+
+  const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
+  if (!existingIds.includes(enhancedResumeId)) {
+    localStorage.setItem(
+      "enhanced_resume_ids",
+      JSON.stringify([...existingIds, enhancedResumeId])
+    );
+  }
 }
 
 /* ─── HELPERS ─────────────────────────────────────────── */
@@ -765,12 +808,55 @@ function ATSLoginReport() {
       setIsFixing(true);
       toast.loading("Preparing your resume for enhancement…", { id: "fix-now" });
 
+      let existingEnhancedResume: EnhancedResumeHistoryItem | null = null;
+      let cachedEnhancedResumeId =
+        typeof d.enhanced_resume_id === "string" && d.enhanced_resume_id.trim()
+          ? d.enhanced_resume_id.trim()
+          : undefined;
+
+      if (!cachedEnhancedResumeId) {
+        const knownEnhancedIds: string[] = JSON.parse(
+          localStorage.getItem("enhanced_resume_ids") || "[]"
+        );
+
+        for (const enhancedId of knownEnhancedIds) {
+          try {
+            const enhancedResume = await getEnhancedResume(enhancedId);
+            if (enhancedResume.original_resume_id === resumeId) {
+              existingEnhancedResume = enhancedResume;
+              cachedEnhancedResumeId = enhancedResume.id;
+              break;
+            }
+          } catch {
+            // Ignore stale local IDs and continue searching.
+          }
+        }
+      }
+
+      if (cachedEnhancedResumeId) {
+        const sourceData =
+          (d.enhanced_resume as Record<string, unknown> | null | undefined) ||
+          ((d.enhancer_state as { resume?: Record<string, unknown> } | undefined)?.resume) ||
+          existingEnhancedResume?.enhanced_data ||
+          (d.resume_data as Record<string, unknown> | null | undefined) ||
+          {};
+        cacheBuilderResume(cachedEnhancedResumeId, sourceData);
+        rememberEnhancedResumeId(cachedEnhancedResumeId);
+
+        toast.dismiss("fix-now");
+        router.push(`/builder/creation/${cachedEnhancedResumeId}?source=enhanced&from_ats=true`);
+        return;
+      }
+
       const enhanceResult = await enhanceResume({
         resume_id: resumeId,
         ...(atsBreakdown ? { ats_breakdown: atsBreakdown } : {}),
       });
 
       const enhancedResumeId = enhanceResult.enhanced_resume_id;
+      if (!enhancedResumeId) {
+        throw new Error("Enhancement did not return an enhanced resume id.");
+      }
 
       // Cache the mapped data so ResumeContext loads it instantly on first render
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -778,23 +864,21 @@ function ATSLoginReport() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         || (enhanceResult as any).enhancer_state?.resume
         || {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mappedData = mapParserOutputToBuilderData(sourceData as any);
-      localStorage.setItem(
-        "cached_resume_data",
-        JSON.stringify({ resumeId: enhancedResumeId, data: { ...mappedData, id: enhancedResumeId } })
-      );
-      localStorage.setItem("current_resume_id", enhancedResumeId);
+      cacheBuilderResume(enhancedResumeId, sourceData);
+      rememberEnhancedResumeId(enhancedResumeId);
 
-      // Track enhanced ID so the resume list page can find it
-      const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
-      if (!existingIds.includes(enhancedResumeId)) {
-        localStorage.setItem("enhanced_resume_ids", JSON.stringify([...existingIds, enhancedResumeId]));
-      }
+      const updatedAnalysis = {
+        ...d,
+        enhanced_resume_id: enhancedResumeId,
+        enhanced_resume: sourceData,
+      };
+      localStorage.setItem("atsAnalysisData", JSON.stringify(updatedAnalysis));
+      localStorage.setItem(`atsAnalysis_${resumeId}`, JSON.stringify(updatedAnalysis));
 
       toast.dismiss("fix-now");
       router.push(`/builder/creation/${enhancedResumeId}?source=enhanced&from_ats=true`);
-    } catch {
+    } catch (error) {
+      console.error("[ATS report] Failed to open enhancer", error);
       toast.dismiss("fix-now");
       toast.error("Failed to open enhancer. Please try again.");
       setIsFixing(false);
@@ -917,7 +1001,7 @@ function ATSLoginReport() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
 
           {/* ── LEFT (4 cols sticky) ── */}
-          <div className="lg:col-span-4 lg:sticky lg:top-20 self-start space-y-5">
+          <div className="custom-scrollbar lg:col-span-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-2 self-start space-y-5">
 
             {/* Score card */}
             <div style={CARD}>
