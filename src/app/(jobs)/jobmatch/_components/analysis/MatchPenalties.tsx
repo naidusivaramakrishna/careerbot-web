@@ -17,8 +17,8 @@ interface Penalty {
 interface MatchPenaltiesProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   matchResult: any;
-  onAddSkill: (skill: string, suggestion_id?: string) => Promise<void> | void;
-  onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<void> | void;
+  onAddSkill: (skill: string, suggestion_id?: string, penalty?: number) => Promise<void> | void;
+  onRemoveSkill?: (skill: string, suggestion_id?: string, penalty?: number) => Promise<void> | void;
 }
 
 const CATEGORY_META: Record<string, { label: string; color: string; lightBg: string; border: string }> = {
@@ -40,8 +40,8 @@ function CategoryGroup({
 }: {
   category: string;
   items: Penalty[];
-  onAddSkill: (skill: string, suggestion_id?: string) => Promise<void> | void;
-  onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<void> | void;
+  onAddSkill: (skill: string, suggestion_id?: string, penalty?: number) => Promise<void> | void;
+  onRemoveSkill?: (skill: string, suggestion_id?: string, penalty?: number) => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(true);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
@@ -60,7 +60,7 @@ function CategoryGroup({
     if (!p.target || addedIds.has(p.suggestion_id) || loadingIds.has(p.suggestion_id)) return;
     setLoadingIds(prev => new Set(prev).add(p.suggestion_id));
     try {
-      await onAddSkill(p.target, p.suggestion_id);
+      await onAddSkill(p.target, p.suggestion_id, Math.abs(p.penalty));
       setAddedIds(prev => new Set(prev).add(p.suggestion_id));
     } finally {
       setLoadingIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
@@ -178,7 +178,7 @@ function CategoryGroup({
                       {onRemoveSkill && (
                         <button
                           onClick={async () => {
-                            await onRemoveSkill(p.target!, p.suggestion_id);
+                            await onRemoveSkill(p.target!, p.suggestion_id, Math.abs(p.penalty));
                             setAddedIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
                           }}
                           className={`flex items-center text-[11px] font-bold px-2.5 py-1.5 rounded-full border transition-colors ${

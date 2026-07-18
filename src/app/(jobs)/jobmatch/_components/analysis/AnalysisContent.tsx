@@ -14,7 +14,7 @@ import { FaCheckCircle } from "react-icons/fa";
 import { RiSparkling2Fill } from "react-icons/ri";
 import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
 import JDHighlighter from "../highlighter/JDHighlighter";
-import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, parserAddSkills, parserRemoveSkills, matcherUpdateSections } from "@/api/parserApi";
+import { downloadResumePdf, parserAddSkills, parserRemoveSkills, matcherUpdateSections } from "@/api/parserApi";
 import { toast } from "sonner";
 import ScoreBreakdown from "./ScoreBreakdown";
 import MatchPenalties from "./MatchPenalties";
@@ -186,60 +186,41 @@ export default function AnalysisContent({
   const initialScore = Math.min(100, Math.max(0, parseFloat(String(matchResults?.data?.ats_score || "0"))));
   const [liveScore, setLiveScore] = React.useState<number>(initialScore);
 
-  // Add a skill: call enhance/apply (updates match score) + parserAddSkills (persists to resume doc for download)
-  const directAddSkill = React.useCallback(async (skill: string, suggestion_id?: string) => {
+  // Add a skill: update score locally from penalty (no backend call = no credit charge)
+  // + parserAddSkills persists to resume doc for download
+  const directAddSkill = React.useCallback(async (skill: string, _suggestion_id?: string, penalty?: number) => {
     const s = skill.trim();
     if (!s) return;
-    // Optimistic local update
     setAddedSkillFields((prev) => prev.includes(s) ? prev : [...prev, s]);
     setResumeSections((prev: Record<string, unknown>) => {
       const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
       if (existing.includes(s)) return prev;
       return { ...prev, skills: [...existing, s] };
     });
-    // Update match score in backend and read new score from response
-    if (matchId && suggestion_id) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await matcherEnhanceApply(matchId, suggestion_id) as any;
-        const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
-        if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
-        else if (typeof newScore === "string") {
-          const n = parseFloat(newScore);
-          if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
-        }
-      } catch { /* local state already updated */ }
+    if (penalty && penalty > 0) {
+      setLiveScore((prev) => Math.min(100, prev + penalty));
     }
-    // Always persist skill directly to resume document so download includes it
     if (resumeId) {
       try { await parserAddSkills(resumeId, s); } catch { /* best effort */ }
     }
-  }, [matchId, resumeId]);
+  }, [resumeId]);
 
-  // Remove a skill: call enhance/remove + parserRemoveSkills
-  const directRemoveSkill = React.useCallback(async (skill: string, suggestion_id?: string) => {
+  // Remove a skill: update score locally from penalty (no backend call = no credit charge)
+  // + parserRemoveSkills persists the change to resume doc
+  const directRemoveSkill = React.useCallback(async (skill: string, _suggestion_id?: string, penalty?: number) => {
     const s = skill.trim();
     setAddedSkillFields((prev) => prev.filter((x) => x !== s));
     setResumeSections((prev: Record<string, unknown>) => {
       const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
       return { ...prev, skills: existing.filter((x) => x !== s) };
     });
-    if (matchId && suggestion_id) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await matcherEnhanceRemove(matchId, suggestion_id) as any;
-        const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
-        if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
-        else if (typeof newScore === "string") {
-          const n = parseFloat(newScore);
-          if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
-        }
-      } catch { /* local state already updated */ }
+    if (penalty && penalty > 0) {
+      setLiveScore((prev) => Math.max(0, prev - penalty));
     }
     if (resumeId) {
       try { await parserRemoveSkills(resumeId, s); } catch { /* best effort */ }
     }
-  }, [matchId, resumeId]);
+  }, [resumeId]);
 
   const handleDownload = React.useCallback(async () => {
     if (!resumeId) return;
