@@ -151,15 +151,21 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                 newErrors.login = res.data.error.message
                 setErrors(newErrors)
             }
-            // Handle generic error messages with safe, user-friendly mapping
+            // Handle generic error messages with safe, user-friendly mapping.
+            // Merge the HTTP status into the data so mapAuthError can identify 5xx
+            // errors (e.g. 502 when the backend is unreachable) and return the
+            // correct SERVER_ERROR message instead of the generic fallback.
             else {
                 const context = isLogin ? 'login' : 'signup'
-                const safeMessage = mapAuthError(res?.data || err, context)
+                const errorPayload = res?.data
+                    ? { ...res.data, status: res.status }
+                    : err
+                const safeMessage = mapAuthError(errorPayload, context)
                 newErrors.login = safeMessage
                 setErrors(newErrors)
             }
         } else {
-            setErrors((prev) => ({ ...prev, login: "Something went wrong" }))
+            setErrors((prev) => ({ ...prev, login: "Something went wrong. Please try again." }))
         }
     }
 
