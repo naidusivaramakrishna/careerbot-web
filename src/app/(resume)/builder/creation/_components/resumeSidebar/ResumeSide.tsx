@@ -61,6 +61,8 @@ interface ResumeSideProps {
   initialTab?: string;
   defaultOpen?: boolean;
   highlightAtsMissing?: boolean;
+  requestedSection?: string | null;
+  onRequestedSectionHandled?: () => void;
 }
 
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
@@ -77,6 +79,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   initialTab,
   defaultOpen = true,
   highlightAtsMissing = false,
+  requestedSection = null,
+  onRequestedSectionHandled,
 }) => {
   // ✅ Get context first
   const {
@@ -180,6 +184,12 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const [activeSection, setActiveSection] = useState<number | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [activeTab, setActiveTab] = useState(initialTab ?? "Editor");
+
+  useEffect(() => {
+    if (!requestedSection) return;
+    setActiveTab("Editor");
+    setIsOpen(true);
+  }, [requestedSection]);
 
   const setEditorSidebarOpen = (nextOpen: boolean) => {
     setIsOpen(nextOpen);
@@ -640,6 +650,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
               onSidebarToggle={handleSidebarToggle}
               clearErrors={clearErrors}
               atsIssuesBySection={atsIssuesBySection}
+              requestedSection={requestedSection}
+              onRequestedSectionHandled={onRequestedSectionHandled}
             />
           )}
           {activeTab === "ResumeGPT" && <ResumeGPTTab />}

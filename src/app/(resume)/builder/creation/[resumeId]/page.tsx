@@ -28,6 +28,7 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(isEnhancedResume);
 
   const [activeTab, setActiveTab] = useState(isEnhancedResume && !fromAts ? "Score" : "Templates");
+  const [requestedSection, setRequestedSection] = useState<string | null>(null);
 
   // Save sidebar state to localStorage whenever it changes (during session)
   useEffect(() => {
@@ -41,6 +42,10 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   const handleTabClickFromToolbar = (tab: string) => {
     setActiveTab(tab);
     setIsTemplateSidebarOpen(true);
+  };
+
+  const handleOpenEditorSection = (sectionName: string) => {
+    setRequestedSection(sectionName);
   };
 
   // ✅ Show loading state while resume data is being fetched from backend
@@ -78,6 +83,8 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
             initialTab={initialTab}
             defaultOpen={fromAts ? true : !isEnhancedResume}
             highlightAtsMissing={fromAts}
+            requestedSection={requestedSection}
+            onRequestedSectionHandled={() => setRequestedSection(null)}
           />
 
           <main className="min-w-0 flex-1 bg-gray-50">
@@ -85,6 +92,7 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
               isTemplateSidebarOpen={isTemplateSidebarOpen}
               onTabClick={handleTabClickFromToolbar}
               onOpenSidebar={handleTabClickFromToolbar}
+              onOpenEditorSection={handleOpenEditorSection}
               resumeId={resumeId}
               isEnhancedResume={isEnhancedResume}
               fromAts={fromAts}

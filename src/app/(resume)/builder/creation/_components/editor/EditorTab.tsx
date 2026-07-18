@@ -69,6 +69,8 @@ interface Props {
   onSidebarToggle?: (isOpen: boolean) => void;
   clearErrors: (fields?: string[]) => void;
   atsIssuesBySection?: Record<string, AtsSectionIssue>;
+  requestedSection?: string | null;
+  onRequestedSectionHandled?: () => void;
 }
 
 
@@ -88,6 +90,8 @@ const EditorTab: React.FC<Props> = ({
   onSidebarToggle,
   clearErrors,
   atsIssuesBySection = {},
+  requestedSection = null,
+  onRequestedSectionHandled,
 }) => {
   const nonDeletableSections = [
     "Personal Info",
@@ -563,6 +567,20 @@ const EditorTab: React.FC<Props> = ({
     
     return {};
   };
+
+  useEffect(() => {
+    if (!requestedSection) return;
+    const sectionIndex = sections.findIndex((section) => section.name === requestedSection);
+    if (sectionIndex < 0) {
+      const optionalSection = extraSections.find((section) => section.name === requestedSection);
+      if (optionalSection) handleAddSection(optionalSection);
+      return;
+    }
+
+    setActiveSection(null);
+    setOpenModalSection(requestedSection);
+    onRequestedSectionHandled?.();
+  }, [extraSections, handleAddSection, onRequestedSectionHandled, requestedSection, sections]);
 
   const getManualFixValue = (sectionName: string): string => {
     const lowerSection = sectionName.toLowerCase();

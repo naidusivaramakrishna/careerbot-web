@@ -40,6 +40,7 @@ interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
   onTabClick: (tab: string) => void;
   onOpenSidebar?: (tab: string) => void;
+  onOpenEditorSection?: (sectionName: string) => void;
   resumeId?: string;
   isEnhancedResume?: boolean;
   fromAts?: boolean;
@@ -56,6 +57,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   isTemplateSidebarOpen,
   onTabClick,
   onOpenSidebar,
+  onOpenEditorSection,
   resumeId: resumeIdProp,
   isEnhancedResume = false,
   fromAts = false,
@@ -80,6 +82,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const scoreLabel = "Score";
   const atsIssues = fromAts ? buildAtsSectionIssues(enhancedAtsScore, enhancedSuggestions, resumeData) : [];
   const topAtsIssue = atsIssues[0];
+
+  const openAtsIssue = (issue: typeof topAtsIssue) => {
+    if (!issue) return;
+    const sectionName = issue.label === "Contact Information" ? "Personal Info" : issue.label;
+    onOpenEditorSection?.(sectionName);
+  };
 
   useEffect(() => {
     console.warn("📋 PreviewPanel - sectionOrder:", sectionOrder, "selectedTemplate:", selectedTemplate);
@@ -663,7 +671,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => onOpenSidebar?.("Templates")}
+            onClick={() => openAtsIssue(topAtsIssue)}
             className="shrink-0 rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 transition hover:bg-rose-100"
           >
             Fix This Section
