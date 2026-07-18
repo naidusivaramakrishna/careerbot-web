@@ -123,7 +123,7 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
     setOutputTab("grade");
     setOutputOpen(true);
     try {
-      const r = await submitSolution({ problem_slug: problemSlug, language, code });
+      const r = await submitSolution({ problem_slug: problemSlug, problem_title: problem?.title, language, code });
       setGradingResult(r);
       hasSubmittedRef.current = true;
       onSubmitted(r);

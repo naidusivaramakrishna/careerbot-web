@@ -69,6 +69,7 @@ export interface SubmitSolutionRequest {
   problem_slug: string;
   language: CodingTestLanguage;
   code: string;
+  problem_title?: string;
 }
 
 export interface SubmitSolutionResponse {
@@ -84,8 +85,11 @@ export interface SubmitSolutionResponse {
 export interface HistoryEntry {
   submission_id: string;
   problem_slug: string;
+  problem_title: string | null;
   language: CodingTestLanguage;
   score: number | null;
+  grading_result: GradingResult | null;
+  error: string | null;
   submitted_at: string;
 }
 

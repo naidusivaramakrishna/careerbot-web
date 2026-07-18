@@ -153,7 +153,11 @@ export default function CodingProblemDetailPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [reloadKey,    setReloadKey]    = useState(0);
 
-  const [language, setLanguage] = useState<CodingTestLanguage>('python');
+  const _paramLang = searchParams.get('language') as CodingTestLanguage | null;
+  const _validLangs: CodingTestLanguage[] = ['python', 'java', 'cpp', 'c'];
+  const [language, setLanguage] = useState<CodingTestLanguage>(
+    _paramLang && _validLangs.includes(_paramLang) ? _paramLang : 'python'
+  );
   const [code, setCode]         = useState<Record<CodingTestLanguage, string>>({
     python: '', java: '', cpp: '', c: '',
   });

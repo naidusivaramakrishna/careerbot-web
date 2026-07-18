@@ -164,7 +164,7 @@ export default function CodingTestHistoryPage() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-800">
-                        {titleMap[e.problem_slug] ?? e.problem_slug}
+                        {e.problem_title ?? titleMap[e.problem_slug] ?? e.problem_slug}
                       </p>
                       <p className="text-xs text-slate-400">
                         {e.language} · {formatDate(e.submitted_at)}
