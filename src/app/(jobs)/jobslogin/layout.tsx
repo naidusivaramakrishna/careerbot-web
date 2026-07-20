@@ -7,7 +7,7 @@ export default function JobsLoginLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen overflow-hidden bg-white" style={{ "--header-h": "56px" } as React.CSSProperties}>
+    <div className="flex h-dvh min-h-0 overflow-hidden bg-white" style={{ "--header-h": "56px" } as React.CSSProperties}>
       {/* LEFT SIDEBAR */}
       <aside
         className="shrink-0 bg-white transition-[width] duration-300"

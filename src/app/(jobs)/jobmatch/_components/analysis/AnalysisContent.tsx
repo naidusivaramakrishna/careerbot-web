@@ -1,23 +1,43 @@
 "use client";
 
 import React from "react";
-import MultiColorCircularScore from "@/app/(resume)/builder/creation/_components/score/MultiColorCircularScore";
 import ResumePreview from "../resume/ResumePreview";
 import PDFPreviewError from "./PDFPreviewError";
 import { AnalysisContentProps } from "../_types";
 import {
-  FileText, Download, Pencil, User, Briefcase, GraduationCap,
+  FileText, User, Briefcase, GraduationCap,
   Star, Award, ArrowLeft, ChevronRight, BookOpen, Trophy,
-  Heart, Building2, Plus, Globe, AlignLeft, Users,
+  Heart, Building2, Plus, Globe, AlignLeft, Users, Download, Pencil, Sparkles,
 } from "lucide-react";
 import { FaCheckCircle } from "react-icons/fa";
 import { RiSparkling2Fill } from "react-icons/ri";
 import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
 import JDHighlighter from "../highlighter/JDHighlighter";
-import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, parserAddSkills, parserRemoveSkills, matcherUpdateSections } from "@/api/parserApi";
+import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, matcherUpdateSections, getResume } from "@/api/parserApi";
 import { toast } from "sonner";
 import ScoreBreakdown from "./ScoreBreakdown";
 import MatchPenalties from "./MatchPenalties";
+import { MatchScoreSummary } from "./TopAnalysisBar";
+
+function LegendSwatch({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`h-3 w-3 rounded-sm ring-1 ring-inset ring-black/5 ${color}`} aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+// Maps a penalty's category to the single {section, field} its fix touches
+// — only job_title and summary resolve to one unambiguous field the preview
+// can highlight the way it already highlights added skills. Bullet-level
+// rewrites (star_pattern / experience / capabilities / requirements) don't
+// carry an index in the penalty payload, so there's no reliable target to
+// highlight for those yet.
+const HIGHLIGHTABLE_FIX_FIELD: Record<string, { section: string; field: string }> = {
+  job_title: { section: "contact", field: "title" },
+  summary: { section: "summary", field: "text" },
+};
 
 // All possible predefined sections
 const ALL_SECTIONS = [
@@ -113,6 +133,70 @@ function detectActiveSections(parsed: any): string[] {
   return active.length ? active : ["contact", "summary"];
 }
 
+// selected_summary / summary_variants outrank the plain summary fields once a
+// summary-rewrite fix has run (see repository.set_resume_summary on the
+// backend) — check them first so a refreshed resume shows the rewritten text.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractSummaryText(val: any): string {
+  if (!val) return "";
+  if (Array.isArray(val)) {
+    for (const v of val) { const t = extractSummaryText(v); if (t) return t; }
+    return "";
+  }
+  if (typeof val === "object") return String(val.summary ?? val.value ?? "");
+  return typeof val === "string" ? val : "";
+}
+
+// There is no working "add this literal skill to the resume" endpoint —
+// /matcher/enhance/apply is the only call that actually persists a skill (it
+// writes into the resume document server-side), and it needs the
+// suggestion_id from the matching Match_Penalties entry. MatchPenalties rows
+// already carry their own suggestion_id; the JD highlighter only has the
+// skill's text, so resolve it here by matching on `target`.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findSkillSuggestionId(matchResults: any, skill: string): string | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const penalties: any[] = matchResults?.data?.match_result?.Match_Penalties?.penalties ?? [];
+  const norm = skill.trim().toLowerCase();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hit = penalties.find((p: any) =>
+    (p.category === "technical_skills" || p.category === "soft_skills") &&
+    !p.is_bulk_parent &&
+    typeof p.target === "string" &&
+    p.target.trim().toLowerCase() === norm
+  );
+  return hit?.suggestion_id;
+}
+
+// Build the editable-section map from a parsed-resume payload — shared by the
+// initial load and by the post-fix refresh (job title / summary / bullet
+// rewrites land in the resume document, not in matchResults, so re-reading
+// the resume is how the preview picks them up).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildSectionsFromParsedData(parsedResumeData: any): Record<string, any> {
+  const d = parsedResumeData?.parsed_data || parsedResumeData || {};
+  const llm = d?.llm_data || {};
+  return {
+    contact:        d.contact ?? d.personalInfo ?? llm.contact ?? llm.personal_info ?? {},
+    summary:        extractSummaryText(d.selected_summary) || extractSummaryText(d.summary_variants) ||
+                    d.professionalSummary || d.professional_summary || d.summary || d.career_objective ||
+                    llm.professionalSummary || llm.summary || "",
+    education:      d.education ?? d.educational_qualifications ?? llm.education ?? [],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    skills:         (d.skills ?? d.technical_skills ?? llm.skills ?? llm.technical_skills ?? []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? "")).filter(Boolean),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    softSkills:     (d.soft_skills ?? d.softSkills ?? llm.soft_skills ?? []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? "")).filter(Boolean),
+    experience:     d.workExperience ?? d.work_experience ?? d.experience ?? llm.workExperience ?? llm.work_experience ?? [],
+    internships:    d.internships ?? d.internship ?? llm.internships ?? llm.internship ?? [],
+    projects:       d.projects ?? d.project_details ?? llm.projects ?? [],
+    certifications: d.certifications ?? d.certification ?? d.certificates ?? llm.certifications ?? llm.certification ?? [],
+    achievements:   d.achievements ?? d.accomplishments ?? llm.achievements ?? [],
+    languages:      d.languages ?? llm.languages ?? [],
+    hobbies:        d.hobbies ?? d.interests ?? llm.hobbies ?? [],
+    references:     d.references ?? llm.references ?? [],
+  };
+}
+
 export default function AnalysisContent({
   jdText,
   matchResults,
@@ -133,6 +217,11 @@ export default function AnalysisContent({
   // Track which skills were added (for green highlight in resume template)
   const [addedSkillFields, setAddedSkillFields] = React.useState<string[]>([]);
 
+  // Green-highlight tracking for non-skill fixes (job title, summary) —
+  // mirrors addedSkillFields but keyed by section since these are single
+  // named fields, not array items. See HIGHLIGHTABLE_FIX_FIELD.
+  const [extraAddedFields, setExtraAddedFields] = React.useState<Record<string, string[]>>({});
+
   // Active section IDs (from parsed data + user-added)
   const [activeSectionIds, setActiveSectionIds] = React.useState<string[]>(
     () => detectActiveSections(parsedResumeData)
@@ -147,27 +236,16 @@ export default function AnalysisContent({
 
   // Resume section data
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [resumeSections, setResumeSections] = React.useState<Record<string, any>>(() => {
-    const d = parsedResumeData?.parsed_data || parsedResumeData || {};
-    const llm = d?.llm_data || {};
-    return {
-      contact:        d.contact ?? d.personalInfo ?? llm.contact ?? llm.personal_info ?? {},
-      summary:        d.professionalSummary ?? d.professional_summary ?? d.summary ?? d.career_objective ?? llm.professionalSummary ?? llm.summary ?? "",
-      education:      d.education ?? d.educational_qualifications ?? llm.education ?? [],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      skills:         (d.skills ?? d.technical_skills ?? llm.skills ?? llm.technical_skills ?? []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? "")).filter(Boolean),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      softSkills:     (d.soft_skills ?? d.softSkills ?? llm.soft_skills ?? []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? "")).filter(Boolean),
-      experience:     d.workExperience ?? d.work_experience ?? d.experience ?? llm.workExperience ?? llm.work_experience ?? [],
-      internships:    d.internships ?? d.internship ?? llm.internships ?? llm.internship ?? [],
-      projects:       d.projects ?? d.project_details ?? llm.projects ?? [],
-      certifications: d.certifications ?? d.certification ?? d.certificates ?? llm.certifications ?? llm.certification ?? [],
-      achievements:   d.achievements ?? d.accomplishments ?? llm.achievements ?? [],
-      languages:      d.languages ?? llm.languages ?? [],
-      hobbies:        d.hobbies ?? d.interests ?? llm.hobbies ?? [],
-      references:     d.references ?? llm.references ?? [],
-    };
-  });
+  const [resumeSections, setResumeSections] = React.useState<Record<string, any>>(
+    () => buildSectionsFromParsedData(parsedResumeData)
+  );
+
+  // Re-fetched resume document — replaces the (otherwise-stale) parsedResumeData
+  // prop after a job-title / summary / bullet fix so the preview's primary
+  // field-resolution chain (contact.jobTitle, selected_summary, etc.) reads
+  // the current text rather than the value the page loaded with.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [refreshedResumeData, setRefreshedResumeData] = React.useState<any | null>(null);
 
   const matchId: string | undefined =
     matchResults?.data?.id ??
@@ -186,10 +264,56 @@ export default function AnalysisContent({
   const initialScore = Math.min(100, Math.max(0, parseFloat(String(matchResults?.data?.ats_score || "0"))));
   const [liveScore, setLiveScore] = React.useState<number>(initialScore);
 
-  // Add a skill: call enhance/apply (updates match score) + parserAddSkills (persists to resume doc for download)
+  // Every enhance/apply (and enhance/remove) call — whether triggered by a
+  // single penalty-row click, a per-category "Fix All", or a JD-highlighter
+  // skill chip — hits the same backend endpoint, which enforces a
+  // requests-per-window rate limit (429 "Too many requests"). Running calls
+  // one at a time isn't enough on its own — back-to-back calls with no gap
+  // between them can still exceed a per-second cap — so this queue also (a)
+  // spaces consecutive calls out and (b) backs off and retries a couple of
+  // times if the backend still 429s, instead of surfacing an error for what
+  // is normal multi-fix usage.
+  const MIN_REQUEST_GAP_MS = 700;
+  const MAX_429_RETRIES = 3;
+  const requestQueueRef = React.useRef<Promise<unknown>>(Promise.resolve());
+  const lastRequestAtRef = React.useRef<number>(0);
+  const enqueueRequest = React.useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const run = async (): Promise<T> => {
+      const gap = MIN_REQUEST_GAP_MS - (Date.now() - lastRequestAtRef.current);
+      if (gap > 0) await new Promise((resolve) => setTimeout(resolve, gap));
+      for (let attempt = 0; ; attempt++) {
+        try {
+          lastRequestAtRef.current = Date.now();
+          return await task();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (err: any) {
+          if (err?.response?.status === 429 && attempt < MAX_429_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+            continue;
+          }
+          throw err;
+        }
+      }
+    };
+    const result = requestQueueRef.current.then(run, run);
+    requestQueueRef.current = result.then(() => undefined, () => undefined);
+    return result;
+  }, []);
+
+  // Add a skill: call enhance/apply — the backend persists it into the resume
+  // document itself (repository.update_resume_with_skill) as part of that
+  // call, so this is the ONLY real persistence path. It needs a suggestion_id;
+  // callers that already have one (MatchPenalties) pass it directly, but the
+  // JD highlighter only knows the skill's text, so we look its suggestion_id
+  // up from the same Match_Penalties list the score/penalties came from.
   const directAddSkill = React.useCallback(async (skill: string, suggestion_id?: string) => {
     const s = skill.trim();
     if (!s) return;
+    const resolvedId = suggestion_id ?? findSkillSuggestionId(matchResults, s);
+    if (!matchId || !resolvedId) {
+      toast.error(`Couldn't add "${s}" — no matching suggestion for this match.`);
+      return;
+    }
     // Optimistic local update
     setAddedSkillFields((prev) => prev.includes(s) ? prev : [...prev, s]);
     setResumeSections((prev: Record<string, unknown>) => {
@@ -197,49 +321,130 @@ export default function AnalysisContent({
       if (existing.includes(s)) return prev;
       return { ...prev, skills: [...existing, s] };
     });
-    // Update match score in backend and read new score from response
-    if (matchId && suggestion_id) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await matcherEnhanceApply(matchId, suggestion_id) as any;
-        const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
-        if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
-        else if (typeof newScore === "string") {
-          const n = parseFloat(newScore);
-          if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
-        }
-      } catch { /* local state already updated */ }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await enqueueRequest(() => matcherEnhanceApply(matchId, resolvedId)) as any;
+      const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+      if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+      else if (typeof newScore === "string") {
+        const n = parseFloat(newScore);
+        if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      // Nothing was actually persisted — undo the optimistic UI so the
+      // preview doesn't show a skill the resume doesn't have.
+      setAddedSkillFields((prev) => prev.filter((x) => x !== s));
+      setResumeSections((prev: Record<string, unknown>) => {
+        const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+        return { ...prev, skills: existing.filter((x) => x !== s) };
+      });
+      toast.error(`Failed to add "${s}" to your resume: ${err?.message || err}`);
     }
-    // Always persist skill directly to resume document so download includes it
-    if (resumeId) {
-      try { await parserAddSkills(resumeId, s); } catch { /* best effort */ }
-    }
-  }, [matchId, resumeId]);
+  }, [matchId, matchResults, enqueueRequest]);
 
-  // Remove a skill: call enhance/remove + parserRemoveSkills
+  // Remove a skill: inverse of directAddSkill, same suggestion_id resolution.
   const directRemoveSkill = React.useCallback(async (skill: string, suggestion_id?: string) => {
     const s = skill.trim();
+    const resolvedId = suggestion_id ?? findSkillSuggestionId(matchResults, s);
+    if (!matchId || !resolvedId) {
+      toast.error(`Couldn't remove "${s}" — no matching suggestion for this match.`);
+      return;
+    }
     setAddedSkillFields((prev) => prev.filter((x) => x !== s));
     setResumeSections((prev: Record<string, unknown>) => {
       const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
       return { ...prev, skills: existing.filter((x) => x !== s) };
     });
-    if (matchId && suggestion_id) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await matcherEnhanceRemove(matchId, suggestion_id) as any;
-        const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
-        if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
-        else if (typeof newScore === "string") {
-          const n = parseFloat(newScore);
-          if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
-        }
-      } catch { /* local state already updated */ }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await enqueueRequest(() => matcherEnhanceRemove(matchId, resolvedId)) as any;
+      const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+      if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+      else if (typeof newScore === "string") {
+        const n = parseFloat(newScore);
+        if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      toast.error(`Failed to remove "${s}": ${err?.message || err}`);
     }
-    if (resumeId) {
-      try { await parserRemoveSkills(resumeId, s); } catch { /* best effort */ }
+  }, [matchId, matchResults, enqueueRequest]);
+
+  // Re-read the resume document so job-title / summary / bullet fixes (which
+  // land directly on the resume, not on matchResults) show up in the preview
+  // — same source of truth the PDF download already reads.
+  const refreshResumeSections = React.useCallback(async () => {
+    if (!resumeId) return;
+    try {
+      const fresh = await getResume(resumeId);
+      setRefreshedResumeData(fresh);
+      // buildSectionsFromParsedData only rebuilds the fixed predefined
+      // sections — preserve any custom sections the user added locally
+      // (editOverrides keys outside that fixed set) so they don't vanish
+      // from the preview every time a penalty fix triggers a refresh.
+      setResumeSections((prev) => {
+        const rebuilt = buildSectionsFromParsedData(fresh);
+        const customEntries = Object.entries(prev).filter(([k]) => !(k in rebuilt));
+        return { ...rebuilt, ...Object.fromEntries(customEntries) };
+      });
+    } catch { /* keep existing local state on failure */ }
+  }, [resumeId]);
+
+  // Apply any non-skill fix (job title, summary rewrite, STAR/verb/experience
+  // bullet rewrite) — the backend resolves what to do from suggestion_id alone.
+  const applyPenaltyFix = React.useCallback(async (suggestion_id: string, category?: string) => {
+    if (!matchId) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await enqueueRequest(() => matcherEnhanceApply(matchId, suggestion_id)) as any;
+      const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+      if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+      else if (typeof newScore === "string") {
+        const n = parseFloat(newScore);
+        if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+      }
+      await refreshResumeSections();
+      const target = category ? HIGHLIGHTABLE_FIX_FIELD[category] : undefined;
+      if (target) {
+        setExtraAddedFields((prev) => {
+          const existing = prev[target.section] ?? [];
+          if (existing.includes(target.field)) return prev;
+          return { ...prev, [target.section]: [...existing, target.field] };
+        });
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      toast.error(`Failed to apply fix: ${err?.message || err}`);
     }
-  }, [matchId, resumeId]);
+  }, [matchId, refreshResumeSections, enqueueRequest]);
+
+  // Undo a previously-applied non-skill fix.
+  const undoPenaltyFix = React.useCallback(async (suggestion_id: string, category?: string) => {
+    if (!matchId) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await enqueueRequest(() => matcherEnhanceRemove(matchId, suggestion_id)) as any;
+      const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+      if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+      else if (typeof newScore === "string") {
+        const n = parseFloat(newScore);
+        if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+      }
+      await refreshResumeSections();
+      const target = category ? HIGHLIGHTABLE_FIX_FIELD[category] : undefined;
+      if (target) {
+        setExtraAddedFields((prev) => {
+          const existing = prev[target.section] ?? [];
+          if (!existing.includes(target.field)) return prev;
+          return { ...prev, [target.section]: existing.filter((f) => f !== target.field) };
+        });
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      toast.error(`Failed to undo fix: ${err?.message || err}`);
+    }
+  }, [matchId, refreshResumeSections, enqueueRequest]);
 
   const handleDownload = React.useCallback(async () => {
     if (!resumeId) return;
@@ -248,18 +453,21 @@ export default function AnalysisContent({
 
   const score = liveScore;
 
-  // Merge newly-added skills back into parsedData so the template renders them
+  // Merge newly-added skills back into parsedData so the template renders them.
+  // Sources from the re-fetched resume (after a job-title/summary/bullet fix)
+  // when available, falling back to the prop the page loaded with.
   const mergedParsedData = React.useMemo(() => {
-    if (!addedSkillFields.length) return parsedResumeData;
-    const base = parsedResumeData?.parsed_data ?? parsedResumeData ?? {};
+    const source = refreshedResumeData ?? parsedResumeData;
+    if (!addedSkillFields.length) return source;
+    const base = source?.parsed_data ?? source ?? {};
     const existing: string[] = Array.isArray(base.skills)
       ? base.skills
       : Array.isArray(base.technical_skills)
       ? base.technical_skills
       : [];
     const merged = Array.from(new Set([...existing, ...addedSkillFields]));
-    return { ...parsedResumeData, parsed_data: { ...base, skills: merged } };
-  }, [parsedResumeData, addedSkillFields]);
+    return { ...source, parsed_data: { ...base, skills: merged } };
+  }, [parsedResumeData, refreshedResumeData, addedSkillFields]);
 
   const matchResult = matchResults?.data?.match_result ?? {};
   const techSkills   = matchResult?.Technical_Skills ?? {};
@@ -321,6 +529,13 @@ export default function AnalysisContent({
     ALL_SECTIONS.find((s) => s.id === openSection)?.label ??
     customSections.find((s) => s.id === openSection)?.label ?? "";
 
+  // Custom-section display labels, keyed by id — the preview template can't
+  // derive a human label from a "custom_171..." id on its own.
+  const customSectionLabels = React.useMemo(
+    () => Object.fromEntries(customSections.map((c) => [c.id, c.label])),
+    [customSections]
+  );
+
   // All sections in the active list (predefined + custom)
   const allActiveSections = [
     ...activePredefined,
@@ -330,14 +545,27 @@ export default function AnalysisContent({
   ];
 
   return (
-    <div className="relative w-full h-screen bg-gray-50 overflow-hidden flex flex-col">
+    <div className="relative flex h-[calc(100vh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#f5f7fa]">
       <style>{`
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #f3f4f6; border-radius: 999px; }
-        ::-webkit-scrollbar-thumb:hover { background: #e5e7eb; }
+        .jobmatch-report-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        .jobmatch-report-scroll::-webkit-scrollbar-track { background: transparent; }
+        .jobmatch-report-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border: 2px solid transparent; background-clip: padding-box; border-radius: 999px; }
+        .jobmatch-report-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; background-clip: padding-box; }
       `}</style>
-      <div className="flex flex-1 overflow-hidden">
+      <div className="jobmatch-report-scroll grid min-h-0 flex-1 grid-cols-1 items-start gap-x-6 gap-y-6 overflow-y-auto bg-[#f7f8fa] px-4 pb-10 pt-4 sm:px-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(380px,.72fr)] xl:px-8 xl:pt-6" style={{ scrollbarWidth: "thin", scrollbarColor: "#94a3b8 transparent" }}>
+
+        <section className="flex min-h-12 flex-wrap items-center gap-3 xl:col-span-2 xl:gap-4" aria-labelledby="match-report-title">
+          <button type="button" onClick={onBackToUpload} className="inline-flex h-10 items-center gap-2 rounded-xl px-2 text-sm font-semibold text-slate-500 transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to scans</button>
+          <span className="h-5 w-px bg-slate-200" />
+          <div>
+            <h1 id="match-report-title" className="text-base font-extrabold tracking-[-0.02em] text-slate-950">Match report</h1>
+            <p className="text-xs text-slate-500">Resume evidence compared with the role</p>
+          </div>
+          <div className="hidden flex-1 sm:block" />
+          <button type="button" onClick={handleDownload} aria-label="Download resume" disabled={!resumeId || isSavingSection} className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"><Download className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" aria-pressed={isEditMode} onClick={() => setIsEditMode((value) => !value)} className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"><Pencil className="h-4 w-4" aria-hidden="true" /> {isEditMode ? "Close editor" : "Edit resume"}</button>
+          {totalMissingCount > 0 && <button type="button" onClick={() => document.getElementById("jobmatch-improvements")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#2557a7] px-4 text-sm font-bold text-white shadow-[0_8px_18px_-12px_rgba(37,87,167,.8)] hover:bg-[#1e4b94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"><Sparkles className="h-4 w-4" aria-hidden="true" /> Review top fixes</button>}
+        </section>
 
         {/* LEFT — Section list sidebar (edit mode only) — fixed overlay, does not disturb layout */}
         {isEditMode && (
@@ -459,38 +687,18 @@ export default function AnalysisContent({
         )}
 
         {/* CENTER — Resume Preview (always visible) */}
-        <div className="flex-1 overflow-y-auto bg-[#f1f5f9] border-r border-gray-200 px-8 py-6 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
-          <div className="bg-white rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] flex flex-col overflow-hidden">
+        <main className="min-w-0 space-y-5" aria-label="Resume and match overview">
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.04)]">
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb] bg-white shrink-0">
+            <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-100 bg-white px-6">
               <div className="flex items-center gap-3">
-                {onBackToUpload && (
-                  <button
-                    onClick={onBackToUpload}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-gray-500 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" /> Back
-                  </button>
-                )}
-                <div className="flex items-center gap-2.5">
-                  <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
-                  <h3 className="text-[13px] font-bold text-gray-700 tracking-wide uppercase">Resume Preview</h3>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><FileText className="h-4 w-4" /></span>
+                  <div><h2 className="text-sm font-extrabold text-slate-900">Resume preview</h2><p className="mt-0.5 text-[11px] text-slate-500">Current version used for this analysis</p></div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={handleDownload} disabled={!resumeId || isSavingSection} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-gray-600 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  <Download className="w-3.5 h-3.5" /> {isSavingSection ? "Saving..." : "Download"}
-                </button>
-                <button
-                  onClick={() => setIsEditMode((v) => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-lg border transition-all ${isEditMode ? "bg-[#2557a7] text-white border-[#2557a7] hover:bg-[#1e4a96]" : "text-gray-600 border-gray-200 hover:text-[#2557a7] hover:bg-blue-50"}`}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  {isEditMode ? "Close Editor" : "Edit"}
-                </button>
-              </div>
             </div>
-            <div className="overflow-auto p-5" style={{ zoom: 1.1, scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+            <div className="max-h-[760px] overflow-auto bg-[#f5f6f8] p-5 sm:p-6" style={{ scrollbarWidth: "thin", scrollbarColor: "#d1d5db transparent" }}>
               {pdfError ? (
                 <PDFPreviewError error={pdfError} />
               ) : (
@@ -503,76 +711,53 @@ export default function AnalysisContent({
                   docxBlob={docxBlob}
                   parsedData={mergedParsedData}
                   resumeId=""
-                  addedFields={{ skills: addedSkillFields }}
+                  addedFields={{ skills: addedSkillFields, ...extraAddedFields }}
                   editOverrides={resumeSections}
                   onEditSection={(key) => { setIsEditMode(true); setOpenSection(key); }}
                   onDeleteSection={(key) => { setDeletedSectionIds((prev) => [...prev, key]); setActiveSectionIds((prev) => prev.filter((id) => id !== key)); }}
                   deletedSections={deletedSectionIds}
+                  customSectionLabels={customSectionLabels}
                 />
               )}
             </div>
 
           </div>
 
-          {/* Score Breakdown — below resume preview */}
-          <ScoreBreakdown matchResult={matchResult} />
-
-          {/* Match Penalties — improvement suggestions */}
-          <MatchPenalties
-            matchResult={matchResult}
-            onAddSkill={directAddSkill}
-            onRemoveSkill={directRemoveSkill}
-          />
-        </div>
+        </main>
 
         {/* RIGHT — ATS Score + Job Description */}
-        <div className="w-[520px] shrink-0 overflow-y-auto bg-[#f6f8fc] border-l border-gray-200 p-5 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+        <aside className="min-w-0 space-y-5 xl:sticky xl:top-0 xl:row-span-2" aria-label="Job description evidence">
 
-          {/* ATS Score Card */}
-          <div className="rounded-lg border border-[#dce8fb] bg-white shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
-            <div className="p-5">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg, #5896d7, #2557a7)" }} />
-                <h3 className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">ATS Match Score</h3>
-              </div>
-              <div className="flex flex-col items-center mb-4">
-                <div className="w-32 h-32 drop-shadow-sm">
-                  <MultiColorCircularScore value={score} />
-                </div>
-                <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wide uppercase">Overall Score</p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#fff5f5,#fef2f2)", borderColor: "#fecaca" }}>
-                  <p className="text-[18px] font-extrabold text-red-500">{totalMissingCount}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#f87171" }}>Missing</p>
-                </div>
-                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#f0fdf4,#dcfce7)", borderColor: "#bbf7d0" }}>
-                  <p className="text-[18px] font-extrabold text-green-600">{totalMatchedCount}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#4ade80" }}>Matched</p>
-                </div>
-                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#eff6ff,#dbeafe)", borderColor: "#bfdbfe" }}>
-                  <p className="text-[18px] font-extrabold text-[#2557a7]">{activeSectionIds.length}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#60a5fa" }}>Sections</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <MatchScoreSummary matchScore={score} totalMissing={totalMissingCount} matchedSkills={totalMatchedCount} />
 
           {/* Job Description Card */}
-          <div className="rounded-lg border border-[#dce8fb] bg-white shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb]" style={{ background: "linear-gradient(135deg,#f0f5ff,#e8eef8)" }}>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.04)]">
+            <div className="flex h-16 items-center justify-between border-b border-slate-100 bg-white px-5">
               <div className="flex items-center gap-2.5">
-                <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
-                <p className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">Job Description</p>
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Briefcase className="h-4 w-4" /></span>
+                <div><h2 className="text-sm font-extrabold text-slate-900">Job description</h2><p className="mt-0.5 text-[11px] text-slate-500">Requirements used for matching</p></div>
               </div>
               <button
-                onClick={() => { try { navigator.clipboard.writeText(jdText); } catch {} }}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-[#2557a7] bg-white hover:bg-blue-50 rounded-lg border border-[#c7d9f5] transition-all shadow-sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(jdText);
+                    toast.success("Job description copied");
+                  } catch {
+                    toast.error("Could not copy the job description");
+                  }
+                }}
+                aria-label="Copy job description"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
                 <FileText className="w-3 h-3" /> Copy
               </button>
             </div>
-            <div className="p-5 max-h-[32rem] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-100 bg-slate-50/70 px-5 py-3 text-[11px] font-semibold text-slate-600" aria-label="Highlight legend">
+              <LegendSwatch color="bg-emerald-100" label="Matched" />
+              <LegendSwatch color="bg-red-100" label="Missing — select to add" />
+              <LegendSwatch color="bg-blue-100" label="Related capability" />
+            </div>
+            <div className="max-h-[760px] min-h-[520px] overflow-y-auto p-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#c5cbd3 transparent" }}>
               {jdText ? (
                 <JDHighlighter
                   text={jdText}
@@ -584,11 +769,18 @@ export default function AnalysisContent({
                   onMissingSkillClick={directAddSkill}
                 />
               ) : (
-                <p className="text-gray-400 text-sm">No job description available</p>
+                <p className="text-sm text-slate-500" role="status">No job description available</p>
               )}
             </div>
           </div>
-        </div>
+        </aside>
+
+        <section className="min-w-0 space-y-8 border-t border-slate-200 pt-7" aria-label="Detailed match analysis">
+          <ScoreBreakdown matchResult={matchResult} />
+          <div id="jobmatch-improvements" className="scroll-mt-6 border-t border-slate-200 pt-7">
+            <MatchPenalties matchResult={matchResult} onAddSkill={directAddSkill} onRemoveSkill={directRemoveSkill} onApplyFix={applyPenaltyFix} onUndoFix={undoPenaltyFix} />
+          </div>
+        </section>
       </div>
 
       {/* Section Editor Modal — popup with blur like Resume Builder */}
