@@ -16,6 +16,8 @@ interface JobMatchTemplateTHREEProps {
   onDeleteSection?: (key: string) => void;
   deletedSections?: string[];
   fontFamily?: string;
+  /** Display labels for locally-added custom sections, keyed by their editOverrides id (e.g. "custom_171...": "Patents"). */
+  customSectionLabels?: Record<string, string>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +45,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   onDeleteSection,
   deletedSections,
   fontFamily,
+  customSectionLabels,
 }) => {
   const data = deepSanitize(rawData);
   const deleted = deletedSections ?? [];
@@ -82,9 +85,22 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     llmData.personal_info?.name || parsedData.personalInfo?.fullName
   ) || "Your Name";
 
+  // Job-title fixes from the match report write to contact.jobTitle /
+  // job_title / currentRole / current_role / headline (and the top-level
+  // headline list) — mirrors the PDF renderer's read priority so a fix
+  // applied there shows up here too. `ov.contact` (editOverrides) reflects
+  // the resume as most recently re-fetched, so it wins over the `data` prop
+  // when both are populated; neither editor lets a user hand-type a "title"
+  // field, so there is no separate manual-override tier to prioritise above it.
+  const effectiveContact = (ov.contact && Object.keys(ov.contact).length > 0) ? ov.contact : contact;
+  const headlineList = Array.isArray(parsedData.headline)
+    ? parsedData.headline.filter(Boolean).join(" | ")
+    : toStr(parsedData.headline);
   const title = toStr(
-    ov.contact?.title || contact.title || contact.role || contact.designation ||
-    contact.job_title || parsedData.title || llmData.title
+    effectiveContact.jobTitle || effectiveContact.job_title || effectiveContact.currentRole || effectiveContact.current_role || effectiveContact.headline ||
+    headlineList ||
+    effectiveContact.title || effectiveContact.role || effectiveContact.designation ||
+    parsedData.title || llmData.title
   );
   const email = toStr(ov.contact?.email || data?.contact?.email || contact.email || parsedData.email || parsedData.personalInfo?.email);
   const phone = toStr(ov.contact?.phone || data?.contact?.phone || contact.phone || contact.phone_number || parsedData.personalInfo?.phone);
@@ -103,7 +119,22 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   const github = toStr(ov.contact?.github) || resolveLink(socialLinks.github) || resolveLink(socialLinks.GitHub) || toStr(socialLinks.githubUrl || contact.github);
   const portfolio = toStr(ov.contact?.portfolio) || resolveLink(socialLinks.portfolio) || toStr(socialLinks.website || socialLinks.portifolioUrl || contact.website);
 
+  // A summary rewrite fix writes selected_summary (and, less often, leaves a
+  // summary_variants list) — both outrank the plain summary fields below in
+  // the PDF renderer, so they must be checked first here too.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractSummaryText = (val: any): string => {
+    if (!val) return "";
+    if (Array.isArray(val)) {
+      for (const v of val) { const t = extractSummaryText(v); if (t) return t; }
+      return "";
+    }
+    if (typeof val === "object") return toStr(val.summary || val.value || "");
+    return typeof val === "string" ? val : "";
+  };
   let professionalSummary = ov.summary ?? (
+    extractSummaryText(parsedData.selected_summary) ||
+    extractSummaryText(parsedData.summary_variants) ||
     parsedData.professionalSummary || parsedData.professional_summary ||
     parsedData.career_objective || parsedData.objective || parsedData.summary ||
     llmData.professionalSummary || llmData.professional_summary || llmData.summary || ""
@@ -193,13 +224,132 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   let references = parsedData.references || llmData.references || [];
   if (!Array.isArray(references)) references = [];
 
-  let hobbies = parsedData.hobbies || llmData.hobbies || [];
+  let hobbies = parsedData.hobbies || parsedData.hobbies_and_interests || llmData.hobbies || llmData.hobbies_and_interests || [];
   if (!Array.isArray(hobbies)) hobbies = [];
 
   let interests = parsedData.interests || llmData.interests || [];
   if (!Array.isArray(interests)) interests = [];
 
-  const personalDetails = parsedData.personal_details || llmData.personal_details || {};
+  // personal_details (and other backend-invented sections) can arrive either
+  // as a free-form {key: value} dict OR — when the parser can't structure a
+  // heading it doesn't recognize — as a raw string[] of "Key: Value" lines
+  // (backend calls this the "verbatim" fallback). There is no fixed
+  // father_name/mother_name/dob shape on the backend at all, so read
+  // whatever keys/lines are actually present instead of a hardcoded set.
+  const pdValueToStr = (v: unknown): string => {
+    if (v === null || v === undefined) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) return v.map(pdValueToStr).filter(Boolean).join(", ");
+    return toStr(v);
+  };
+  const personalDetailsRaw = parsedData.personal_details ?? parsedData.personalDetails ?? llmData.personal_details ?? llmData.personalDetails;
+  const personalDetailsEntries: [string, string][] = Array.isArray(personalDetailsRaw)
+    ? personalDetailsRaw.map((line): [string, string] => {
+        const s = pdValueToStr(line);
+        const idx = s.indexOf(":");
+        return idx > -1 ? [s.slice(0, idx).trim(), s.slice(idx + 1).trim()] : ["", s];
+      }).filter(([, v]) => v)
+    : (personalDetailsRaw && typeof personalDetailsRaw === "object")
+    ? Object.entries(personalDetailsRaw as Record<string, unknown>)
+        .map(([k, v]): [string, string] => [k, pdValueToStr(v)])
+        .filter(([, v]) => v)
+    : [];
+
+  const hasContent = (v: unknown): boolean => {
+    if (v === null || v === undefined) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === "string") return v.trim().length > 0;
+    if (typeof v === "object") return Object.keys(v as object).length > 0;
+    return true;
+  };
+  const prettifyLabel = (key: string): string =>
+    key
+      .replace(/[_-]+/g, " ")
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .trim()
+      .replace(/\s+/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // ══ DYNAMIC / BACKEND-DEFINED SECTIONS ══
+  // parsed_data is an arbitrary flat dict on the backend — new top-level keys
+  // (e.g. "bar_admissions_and_licenses", "practice_areas") appear per-document
+  // beyond this template's fixed section list above. Surface anything left
+  // over generically instead of silently dropping it. `section_metadata`
+  // (when present) gives the section's original document heading.
+  const INTERNAL_KEYS = new Set([
+    "field_sources", "section_metadata", "parser_schema_version", "quality_score", "quality",
+    "career_progression", "overall_experience", "parsing_method", "cache_hit",
+    "message", "resume_id", "_id", "id", "file_name", "success", "llm_data",
+    "parsed_data", "enhanced_resume", "newly_added_skills", "newly_added_soft_skills",
+    "additional_sections", "custom_sections", "customSections", "ats_score",
+    // Parser telemetry / QA / diagnostic fields — never resume content, but
+    // land as ordinary top-level keys right alongside real sections, so they
+    // must be excluded by name rather than by shape.
+    "contact_signals", "embedding_texts", "field_confidence", "font_sections_raw",
+    "format_analysis", "parse_metadata", "parse_warnings", "parsing_summary",
+    "parser_diagnostics_summary", "developer_diagnostics", "parser_mode",
+    "strategy_used", "summary_analysis", "tokens_used", "metadata", "user_id",
+    "parser_version", "prompt_fingerprint", "parse_time_ms", "parsed_at", "section_order",
+  ]);
+  // Defensive fallback for diagnostic-shaped keys the explicit list above
+  // hasn't caught yet (the backend adds these fairly often) — matches
+  // "…_analysis", "…_diagnostics", "…_confidence", etc. anywhere in the key.
+  const META_KEY_PATTERN = /(^|_)(analysis|diagnostics?|confidence|warnings?|signals?|tokens?|embedding|schema|strategy|fingerprint|telemetry)(_|$)/i;
+  const KNOWN_SECTION_KEYS = new Set([
+    "contact", "personal_info", "personalInfo", "name", "full_name", "fullName",
+    "headline", "title", "role", "designation", "email", "phone", "phone_number",
+    "location", "social_links", "hobbies_and_interests",
+    "selected_summary", "summary_variants", "professionalSummary", "professional_summary",
+    "career_objective", "objective", "summary",
+    "education", "educational_qualifications",
+    "workExperience", "work_experience", "experience", "professional_experience",
+    "projects", "project_details",
+    "skills", "technical_skills", "soft_skills", "softSkills",
+    "internships", "internship", "internship_details",
+    "certifications", "certification", "certificates", "certification_details",
+    "professional_certifications", "courses", "training",
+    "achievements", "awards", "volunteering",
+    "languages", "languages_known",
+    "publications", "references", "hobbies", "interests",
+    "personal_details", "personalDetails",
+  ]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sectionMetaList: any[] = Array.isArray(parsedData.section_metadata) ? parsedData.section_metadata : [];
+  const labelFromMeta: Record<string, string> = {};
+  sectionMetaList.forEach((m) => {
+    const mappedTo = typeof m?.mapped_to === "string" ? m.mapped_to : "";
+    const originalName = typeof m?.original_name === "string" ? m.original_name : "";
+    if (mappedTo && originalName) labelFromMeta[mappedTo] = originalName;
+  });
+
+  const dynamicSections: { key: string; label: string; value: unknown }[] = [];
+  const seenDynamicKeys = new Set<string>();
+  [parsedData, llmData].forEach((source) => {
+    if (!source || typeof source !== "object") return;
+    Object.keys(source).forEach((key) => {
+      if (seenDynamicKeys.has(key) || INTERNAL_KEYS.has(key) || KNOWN_SECTION_KEYS.has(key) || META_KEY_PATTERN.test(key)) return;
+      const value = (source as Record<string, unknown>)[key];
+      if (!hasContent(value)) return;
+      seenDynamicKeys.add(key);
+      dynamicSections.push({ key, label: labelFromMeta[key] || prettifyLabel(key), value });
+    });
+  });
+
+  // Backend-normalized custom sections — the resume-builder's user-added
+  // sections and the AI parser's own "additional_sections" both converge
+  // into this {sectionName, items}[] shape server-side.
+  const backendCustomSectionsRaw: unknown =
+    parsedData.custom_sections ?? parsedData.customSections ?? data?.custom_sections ?? data?.customSections;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const backendCustomSections: any[] = Array.isArray(backendCustomSectionsRaw) ? backendCustomSectionsRaw : [];
+
+  // Locally-added custom sections (via "Add Custom Section" in the editor)
+  // live only in editOverrides until they round-trip through a save +
+  // refetch into custom_sections above. Render them too, with edit/delete
+  // controls since they're already wired into the section editor.
+  const localCustomKeys = Object.keys(ov).filter((k) => !KNOWN_SECTION_KEYS.has(k) && !seenDynamicKeys.has(k));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const parseDescription = (desc: any): string[] => {
@@ -289,6 +439,99 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
         ))}
       </ul>
     );
+  };
+
+  /* ── generic renderer for backend/custom sections whose shape we don't know ahead of time ── */
+  const GENERIC_ITEM_KNOWN_KEYS = new Set([
+    "title", "name", "sectionName", "subtitle", "organization", "company", "issuer",
+    "startDate", "start_date", "endDate", "end_date", "date", "description", "details",
+    "url", "link", "tags", "id", "icon", "displayOrder", "location",
+  ]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderGenericItems = (items: any[]): React.ReactNode => (
+    <>
+      {items.map((raw, idx) => {
+        if (typeof raw === "string") {
+          return raw ? (
+            <p key={idx} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, margin: "0 0 4px" }}>{raw}</p>
+          ) : null;
+        }
+        const item: Record<string, unknown> = (raw && typeof raw === "object") ? raw : {};
+        const itemTitle = toStr(item.title || item.name || item.sectionName || "");
+        const subtitle = toStr(item.subtitle || item.organization || item.company || item.issuer || "");
+        const startDate = toStr(item.startDate || item.start_date || "");
+        const endDate = toStr(item.endDate || item.end_date || item.date || "");
+        const dateStr = startDate || endDate ? `${formatDate(startDate)}${startDate && endDate ? " – " : ""}${formatDate(endDate)}` : "";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const description = (item.description || item.details || null) as any;
+        const url = toStr(item.url || item.link || "");
+        const tags: string[] = Array.isArray(item.tags) ? (item.tags as unknown[]).map((t) => toStr(t)).filter(Boolean) : [];
+        const extraEntries = Object.entries(item).filter(([k, v]) => !GENERIC_ITEM_KNOWN_KEYS.has(k) && hasContent(v));
+
+        if (!itemTitle && !subtitle && !description && !extraEntries.length) return null;
+
+        return (
+          <div key={idx} className="page-break-inside-avoid" style={{ marginBottom: "10px" }}>
+            {(itemTitle || dateStr) && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{itemTitle}</span>
+                {dateStr && <span style={{ fontSize: "13px", color: "#4b5563", whiteSpace: "nowrap", marginLeft: "8px" }}>{dateStr}</span>}
+              </div>
+            )}
+            {subtitle && <div style={{ fontSize: "13.5px", color: "#374151", fontStyle: "italic", marginTop: "1px" }}>{subtitle}</div>}
+            {description ? renderBullets(description) : null}
+            {tags.length > 0 && (
+              <p style={{ fontSize: "13px", color: "#4b5563", margin: "3px 0 0" }}>{tags.join(", ")}</p>
+            )}
+            {url && (
+              <a href={url.startsWith("http") ? url : `https://${url}`} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: "12.5px", color: "#1d4ed8", textDecoration: "none" }}>
+                [Link]
+              </a>
+            )}
+            {extraEntries.map(([k, v]) => (
+              <p key={k} style={{ fontSize: "13px", color: "#4b5563", margin: "2px 0 0" }}>
+                <strong>{prettifyLabel(k)}:</strong>{" "}
+                {typeof v === "string" ? v : Array.isArray(v) ? (v as unknown[]).map((x) => toStr(x)).filter(Boolean).join(", ") : toStr(v)}
+              </p>
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+
+  const renderDynamicValue = (value: unknown): React.ReactNode => {
+    if (Array.isArray(value)) {
+      const isPlainList = value.every((v) => typeof v === "string" || v === null || v === undefined);
+      if (isPlainList) {
+        const strings = value.map((v) => (typeof v === "string" ? v : "")).filter(Boolean);
+        return strings.length ? renderBullets(strings) : null;
+      }
+      return renderGenericItems(value);
+    }
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value as Record<string, unknown>)
+        .map(([k, v]): [string, string] => [k, pdValueToStr(v)])
+        .filter(([, v]) => v);
+      if (!entries.length) return null;
+      return (
+        <table style={{ fontSize: "13.5px", color: "#1f2937", borderCollapse: "collapse" }}>
+          <tbody>
+            {entries.map(([k, v], i) => (
+              <tr key={i}>
+                <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap", verticalAlign: "top" }}>{prettifyLabel(k)}</td>
+                <td style={{ paddingBottom: "3px" }}>: {v}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    }
+    const s = typeof value === "string" ? value : "";
+    if (!s) return null;
+    return <p style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.65, margin: 0 }}>{s}</p>;
   };
 
   /* ── contact items ── */
@@ -496,7 +739,7 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     const combined = [...resps, ...achvs];
                     return combined.length ? combined : null;
                   })();
-                  const rawTech = proj.technologies || proj.techStack || proj.tools;
+                  const rawTech = proj.tech_stack || proj.technologies || proj.techStack || proj.tools;
                   const tech: string[] = Array.isArray(rawTech) ? rawTech.map((t: unknown) => toStr(t)).filter(Boolean) : rawTech ? [toStr(rawTech)].filter(Boolean) : [];
                   const isModified = hlIdx("projects", idx);
                   return (
@@ -833,33 +1076,68 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             )}
 
             {/* ══ PERSONAL DETAILS ══ */}
-            {(personalDetails.father_name || personalDetails.mother_name || personalDetails.dob || personalDetails.date_of_birth) && (
-              <div style={{ marginBottom: "14px" }}>
+            {!deleted.includes("personalDetails") && personalDetailsEntries.length > 0 && (
+              <div id="resume-section-personalDetails" className={sc("personalDetails")} style={{ marginBottom: "14px" }}>
                 <SectionDivider label="Personal Details" />
                 <table style={{ fontSize: "13.5px", color: "#1f2937", borderCollapse: "collapse" }}>
                   <tbody>
-                    {personalDetails.father_name && (
-                      <tr>
-                        <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap" }}>Father&apos;s Name</td>
-                        <td style={{ paddingBottom: "3px" }}>: {toStr(personalDetails.father_name)}</td>
+                    {personalDetailsEntries.map(([label, value], idx) => (
+                      <tr key={idx}>
+                        {label && (
+                          <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap", verticalAlign: "top" }}>
+                            {prettifyLabel(label)}
+                          </td>
+                        )}
+                        <td style={{ paddingBottom: "3px" }} colSpan={label ? 1 : 2}>{label ? ": " : ""}{value}</td>
                       </tr>
-                    )}
-                    {personalDetails.mother_name && (
-                      <tr>
-                        <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap" }}>Mother&apos;s Name</td>
-                        <td style={{ paddingBottom: "3px" }}>: {toStr(personalDetails.mother_name)}</td>
-                      </tr>
-                    )}
-                    {(personalDetails.dob || personalDetails.date_of_birth) && (
-                      <tr>
-                        <td style={{ paddingRight: "16px", paddingBottom: "3px", color: "#4b5563", whiteSpace: "nowrap" }}>Date of Birth</td>
-                        <td style={{ paddingBottom: "3px" }}>: {toStr(personalDetails.dob || personalDetails.date_of_birth)}</td>
-                      </tr>
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
+
+            {/* ══ DYNAMIC BACKEND SECTIONS — anything parsed_data carries beyond the fixed list above ══ */}
+            {dynamicSections.map(({ key, label, value }) => {
+              if (deleted.includes(key)) return null;
+              const body = renderDynamicValue(value);
+              if (!body) return null;
+              return (
+                <div key={`dyn-${key}`} id={`resume-section-${key}`} style={{ marginBottom: "14px" }}>
+                  <SectionDivider label={label} />
+                  {body}
+                </div>
+              );
+            })}
+
+            {/* ══ CUSTOM SECTIONS — backend-normalized (resume builder + AI "additional_sections") ══ */}
+            {backendCustomSections.map((section, idx) => {
+              const label = toStr(section?.sectionName || section?.section_name) || `Custom Section ${idx + 1}`;
+              const items = Array.isArray(section?.items) ? section.items : [];
+              if (!items.length) return null;
+              return (
+                <div key={`bcs-${idx}`} style={{ marginBottom: "14px" }}>
+                  <SectionDivider label={label} />
+                  {renderGenericItems(items)}
+                </div>
+              );
+            })}
+
+            {/* ══ CUSTOM SECTIONS — added locally via "Add Custom Section" (editable) ══ */}
+            {localCustomKeys.map((key) => {
+              if (deleted.includes(key)) return null;
+              const value = ov[key];
+              if (!hasContent(value)) return null;
+              const label = customSectionLabels?.[key] || prettifyLabel(key.replace(/^custom_\d+$/, "Custom Section"));
+              const body = renderDynamicValue(value);
+              if (!body) return null;
+              return (
+                <div key={`local-${key}`} id={`resume-section-${key}`} className={sc(key)} style={{ marginBottom: "14px" }}>
+                  <SectionActions sectionKey={key} />
+                  <SectionDivider label={label} />
+                  {body}
+                </div>
+              );
+            })}
 
           </AutoPaginator>
         </div>

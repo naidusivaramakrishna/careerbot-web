@@ -41,21 +41,29 @@ type JobListProps = {
   jobs: JobItem[];
   onBotClick: (job: JobItem) => void;
   onApplyClick?: (job: JobItem) => void;
+  onRemove?: (job: JobItem) => void;
+  selectedJobId?: string | null;
+  onJobSelect?: (job: JobItem) => void;
 };
 
-export default function JobList({ jobs, onBotClick, onApplyClick }: JobListProps) {
+export default function JobList({ jobs, onBotClick, onApplyClick, onRemove, selectedJobId, onJobSelect }: JobListProps) {
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   const visibleJobs = jobs.filter((job) => !removedIds.has(job.id));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3" aria-label="Job search results">
       {visibleJobs.map((job) => (
         <JobCard
           key={job.id}
           {...job}
+          isSelected={selectedJobId === job.id}
+          onSelect={() => onJobSelect?.(job)}
           onBotClick={() => onBotClick(job)}
-          onRemove={() => setRemovedIds((prev) => new Set([...prev, job.id]))}
+          onRemove={() => {
+            setRemovedIds((prev) => new Set([...prev, job.id]));
+            onRemove?.(job);
+          }}
           onApplyClick={() => onApplyClick?.(job)}
         />
       ))}

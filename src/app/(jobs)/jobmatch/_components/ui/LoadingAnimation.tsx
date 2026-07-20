@@ -1,269 +1,94 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { Lock, Sparkles } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Check, FileSearch, LockKeyhole, Sparkles } from "lucide-react";
 
 type LoadingStage = "parsing" | "extracting" | "matching" | "scoring" | "generating";
 
-const stageInfo: Record<LoadingStage, { label: string; pct: number }> = {
-  parsing: { label: "Parsing resume structure", pct: 15 },
-  extracting: { label: "Extracting skills and experience", pct: 35 },
-  matching: { label: "Comparing against job criteria", pct: 58 },
-  scoring: { label: "Calculating match confidence", pct: 78 },
-  generating: { label: "Preparing recommendations", pct: 92 },
-};
+const stages: Array<{ id: LoadingStage; label: string; detail: string; pct: number }> = [
+  { id: "parsing", label: "Reading your resume", detail: "Mapping sections and content", pct: 15 },
+  { id: "extracting", label: "Finding career signals", detail: "Skills, impact, and experience", pct: 35 },
+  { id: "matching", label: "Comparing role requirements", detail: "Required and preferred criteria", pct: 58 },
+  { id: "scoring", label: "Calculating match quality", detail: "Weighted ATS compatibility", pct: 78 },
+  { id: "generating", label: "Prioritizing your fixes", detail: "Building an actionable report", pct: 92 },
+];
 
-const RADIUS = 44;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-const LoadingAnimation: React.FC<{ stage: LoadingStage }> = ({ stage }) => {
-  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
+export default function LoadingAnimation({ stage }: { stage: LoadingStage }) {
+  const activeIndex = Math.max(0, stages.findIndex((item) => item.id === stage));
+  const target = stages[activeIndex].pct;
   const [displayPct, setDisplayPct] = useState(0);
-  const current = stageInfo[stage];
-  const target = current.pct;
 
   useEffect(() => {
-    setPortalTarget(document.body);
-  }, []);
-
-  useEffect(() => {
-    const orig = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = orig;
-    };
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDisplayPct((pct) => {
-        if (pct >= target) {
-          clearInterval(interval);
+    const timer = window.setInterval(() => {
+      setDisplayPct((value) => {
+        if (value >= target) {
+          window.clearInterval(timer);
           return target;
         }
-        return Math.min(pct + 1, target);
+        return Math.min(value + 1, target);
       });
-    }, 35);
-
-    return () => clearInterval(interval);
+    }, 32);
+    return () => window.clearInterval(timer);
   }, [target]);
 
-  if (!portalTarget) return null;
+  const progressLabel = useMemo(() => `${displayPct}% complete`, [displayPct]);
 
-  const strokeDashoffset = CIRCUMFERENCE - (displayPct / 100) * CIRCUMFERENCE;
-
-  const content = (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        background: "rgba(238,244,255,0.88)",
-        backdropFilter: "blur(10px)",
-      }}
-    >
-      <style>{`
-        @keyframes jm-sweep {
-          0% { transform: translateX(-120%); opacity: 0; }
-          20% { opacity: 1; }
-          100% { transform: translateX(120%); opacity: 0; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .jm-sweep { animation: none !important; }
-          .jm-ring { transition: none !important; }
-        }
-      `}</style>
-
-      <section
-        aria-live="polite"
-        aria-label="Generating job match report"
-        style={{
-          width: "min(520px, 100%)",
-          borderRadius: 18,
-          background: "rgba(255,255,255,0.96)",
-          border: "1px solid rgba(203,213,225,0.9)",
-          boxShadow:
-            "0 1px 0 rgba(255,255,255,0.9) inset, 0 24px 70px rgba(15,23,42,0.18), 0 8px 24px rgba(15,23,42,0.08)",
-          overflow: "hidden",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            position: "relative",
-            overflow: "hidden",
-            padding: "24px 26px 22px",
-            background:
-              "linear-gradient(135deg, rgba(248,251,255,0.98) 0%, rgba(239,246,255,0.98) 100%)",
-            borderBottom: "1px solid rgba(226,232,240,0.9)",
-          }}
-        >
-          <div
-            className="jm-sweep"
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "65%",
-              background:
-                "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.75) 50%, transparent 100%)",
-              animation: "jm-sweep 2.8s ease-in-out infinite",
-              pointerEvents: "none",
-            }}
-          />
-
-          <div style={{ position: "relative" }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 12,
-                padding: "7px 10px",
-                borderRadius: 999,
-                background: "rgba(37,87,167,0.08)",
-                border: "1px solid rgba(37,87,167,0.13)",
-                color: "#1D4ED8",
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-              }}
-            >
-              <Sparkles size={14} strokeWidth={2.4} />
-              AI Match Engine
+  return (
+    <main className="relative flex min-h-[calc(100vh-56px)] items-center justify-center overflow-hidden bg-[#f5f7fb] px-5 py-10">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_50%_0%,rgba(52,120,246,0.13),transparent_68%)]" />
+      <section aria-live="polite" aria-label="Generating job match report" className="relative w-full max-w-[760px] overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_30px_90px_-34px_rgba(15,23,42,0.35)]">
+        <div className="grid gap-8 px-7 py-8 sm:px-10 sm:py-10 md:grid-cols-[1.05fr_.95fr]">
+          <div className="flex flex-col justify-between">
+            <div>
+              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-blue-700">
+                <Sparkles size={14} /> CareerBOT intelligence
+              </div>
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#2557a7] text-white shadow-[0_12px_28px_-10px_rgba(37,87,167,.65)]">
+                <FileSearch size={23} />
+              </div>
+              <h1 className="max-w-[390px] text-[30px] font-extrabold leading-[1.12] tracking-[-0.035em] text-slate-950 sm:text-[36px]">
+                Turning your resume into a clearer advantage.
+              </h1>
+              <p className="mt-4 max-w-[390px] text-[15px] leading-6 text-slate-500">
+                We’re reviewing the evidence recruiters and ATS systems care about, then ranking the changes with the highest payoff.
+              </p>
             </div>
-            <h2
-              style={{
-                margin: 0,
-                color: "#0F172A",
-                fontSize: 24,
-                lineHeight: 1.15,
-                fontWeight: 850,
-                letterSpacing: "-0.01em",
-              }}
-            >
-              Building your match report
-            </h2>
-            <p
-              style={{
-                margin: "8px 0 0",
-                color: "#64748B",
-                fontSize: 14,
-                lineHeight: 1.55,
-              }}
-            >
-              Comparing resume signals with the job requirements.
-            </p>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: "22px 26px 24px" }}>
-          <div
-            style={{
-              display: "grid",
-              justifyItems: "center",
-              gap: 20,
-              padding: "28px 18px 26px",
-              borderRadius: 16,
-              background:
-                "radial-gradient(circle at 50% 35%, rgba(79,142,247,0.10), transparent 50%), linear-gradient(180deg, rgba(248,251,255,0.92) 0%, rgba(255,255,255,0.88) 100%)",
-              border: "1px solid rgba(226,232,240,0.92)",
-            }}
-          >
-            {/* Circular progress ring with percentage inside */}
-            <div style={{ position: "relative", width: 108, height: 108 }}>
-              <svg
-                width="108"
-                height="108"
-                viewBox="0 0 108 108"
-                style={{ transform: "rotate(-90deg)" }}
-              >
-                {/* Track */}
-                <circle
-                  cx="54"
-                  cy="54"
-                  r={RADIUS}
-                  fill="none"
-                  stroke="rgba(203,213,225,0.6)"
-                  strokeWidth="7"
-                />
-                {/* Progress arc */}
-                <circle
-                  className="jm-ring"
-                  cx="54"
-                  cy="54"
-                  r={RADIUS}
-                  fill="none"
-                  stroke="#1D4ED8"
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                  strokeDasharray={CIRCUMFERENCE}
-                  strokeDashoffset={strokeDashoffset}
-                  style={{ transition: "stroke-dashoffset 0.35s ease" }}
-                />
-              </svg>
-
-              {/* Percentage label centered inside ring */}
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  lineHeight: 1,
-                }}
-              >
-                <span style={{ color: "#1D4ED8", fontSize: 22, fontWeight: 800 }}>
-                  {displayPct}%
-                </span>
-              </div>
-            </div>
-
-            <div style={{ textAlign: "center" }}>
-              <div style={{ color: "#0F172A", fontSize: 17, fontWeight: 750, lineHeight: 1.25 }}>
-                {current.label}
-              </div>
-              <div style={{ marginTop: 6, color: "#64748B", fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>
-                Please wait while CareerBOT analyzes your match.
-              </div>
+            <div className="mt-9 flex items-center gap-2 text-xs font-semibold text-slate-500">
+              <LockKeyhole size={14} className="text-blue-600" /> Private analysis · usually 15–30 seconds
             </div>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 16,
-              marginTop: 18,
-              paddingTop: 16,
-              borderTop: "1px solid rgba(226,232,240,0.9)",
-              color: "#64748B",
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-              <Lock size={14} strokeWidth={2.2} color="#059669" />
-              Private analysis
-            </span>
-            <span>Usually 15-30 seconds</span>
+          <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-5 sm:p-6">
+            <div className="mb-6 flex items-end justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.13em] text-slate-400">Analysis progress</p>
+                <p className="mt-1 text-base font-bold text-slate-900">{stages[activeIndex].label}</p>
+              </div>
+              <span className="text-2xl font-extrabold tracking-[-0.03em] text-blue-700">{displayPct}%</span>
+            </div>
+            <div className="mb-7 h-2 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label={progressLabel} aria-valuenow={displayPct} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-gradient-to-r from-blue-700 to-indigo-500 transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${displayPct}%` }} />
+            </div>
+            <ol className="space-y-1">
+              {stages.map((item, index) => {
+                const complete = index < activeIndex;
+                const active = index === activeIndex;
+                return (
+                  <li key={item.id} className={`flex gap-3 rounded-xl px-3 py-3 transition-colors ${active ? "bg-white shadow-sm ring-1 ring-slate-200/70" : ""}`}>
+                    <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold ${complete ? "bg-emerald-500 text-white" : active ? "bg-blue-700 text-white" : "bg-slate-200 text-slate-500"}`}>
+                      {complete ? <Check size={14} strokeWidth={3} /> : index + 1}
+                    </span>
+                    <div>
+                      <p className={`text-[13px] font-bold ${active ? "text-slate-950" : complete ? "text-slate-600" : "text-slate-400"}`}>{item.label}</p>
+                      {active && <p className="mt-0.5 text-[11px] leading-4 text-slate-500">{item.detail}</p>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
         </div>
       </section>
-    </div>
+    </main>
   );
-
-  return createPortal(content, portalTarget);
-};
-
-export default LoadingAnimation;
+}
