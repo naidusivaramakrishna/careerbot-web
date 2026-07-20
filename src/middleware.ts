@@ -164,11 +164,17 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // 2) No verified token. Non-protected pages: a refresh cookie is enough —
+    // 2) No verified token. Non-protected pages: either auth cookie is enough —
     //    let the request through; the client HTTP interceptor refreshes on the
-    //    first 401.
+    //    first 401 and the backend re-validates the token on every API call.
+    //
+    //    `token` must be accepted here, not just `refreshToken`. The refresh
+    //    cookie is scoped to Path=/api/v1/auth/refresh, so the browser never
+    //    sends it on a page navigation — gating on it alone bounced freshly
+    //    signed-in users straight back to login whenever the access token
+    //    could not be verified here (JWT_SECRET unset, or token simply expired).
     if (!isProtectedArea) {
-        return refreshToken ? NextResponse.next() : loginRedirect();
+        return (token || refreshToken) ? NextResponse.next() : loginRedirect();
     }
 
     // 3) Role-gated area with no verified token (access token missing OR

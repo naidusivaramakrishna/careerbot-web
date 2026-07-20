@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Trophy, Users, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getLeaderboard, getProgressAnalytics, Leaderboard, ProgressAnalytics } from '@/api/mockTestApi';
+import { getProfile, UserProfile } from '@/api/userApi';
 import LoadingScreen from '../_components/LoadingScreen';
 import HighlightBox from '../_components/HighlightBox';
 
@@ -12,15 +13,18 @@ export default function LeaderboardPage() {
   const router = useRouter();
   const [leaderboard, setLeaderboard] = useState<Leaderboard | null>(null);
   const [analytics, setAnalytics]     = useState<ProgressAnalytics | null>(null);
+  const [profile, setProfile]         = useState<UserProfile | null>(null);
   const [loading, setLoading]         = useState(true);
 
   useEffect(() => {
     Promise.all([
       getLeaderboard().catch(() => null),
       getProgressAnalytics().catch(() => null),
-    ]).then(([lb, pa]) => {
+      getProfile().catch(() => null),
+    ]).then(([lb, pa, me]) => {
       setLeaderboard(lb);
       setAnalytics(pa);
+      setProfile(me);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -93,8 +97,13 @@ export default function LeaderboardPage() {
               <ol className="space-y-3 mb-7">
                 {entries.map((entry, i) => {
                   const rank = entry.rank ?? i + 1;
-                  const isYou = entry.name === 'You' || rank === leaderboard?.your_rank;
+                  const isYou = entry.is_current_user ?? (rank === leaderboard?.your_rank);
                   const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
+                  // Prefer the name the backend sent. For the caller's own row an older
+                  // backend sends no name, so fall back to their profile username; the
+                  // "You" badge beside it already marks the row as theirs.
+                  const displayName =
+                    entry.name ?? (isYou ? profile?.username : undefined) ?? `User #${rank}`;
 
                   return (
                     <motion.li
@@ -121,7 +130,7 @@ export default function LeaderboardPage() {
                       <div className="flex-1 min-w-0 flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="font-bold truncate" style={{ color: isYou ? '#1e3a8a' : '#000' }}>
-                            {entry.name || '—'}
+                            {displayName}
                           </span>
                           {isYou && (
                             <span className="text-[10px] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded-full shrink-0"
