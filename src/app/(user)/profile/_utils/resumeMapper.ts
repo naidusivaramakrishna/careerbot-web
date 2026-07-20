@@ -276,7 +276,7 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
             parsed.soft_skills || llm.soft_skills || (parsed as AnyRecord).soft_skills
         );
         if (softSkillsData.length > 0) {
-            allSkills.push(...softSkillsData.map(item => typeof item === 'string' ? item : (item.name || '')));
+            allSkills.push(...softSkillsData.map(item => typeof item === 'string' ? item : (item.name || '')).filter(Boolean));
         }
 
         if (allSkills.length > 0) {
