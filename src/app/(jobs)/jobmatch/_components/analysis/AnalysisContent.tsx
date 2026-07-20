@@ -441,9 +441,9 @@ export default function AnalysisContent({
 
         {/* CENTER — Resume Preview (always visible) */}
         <div className="flex-1 overflow-y-auto bg-[#f1f5f9] border-r border-gray-200 px-8 py-6 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+          <div className="bg-white rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] flex flex-col overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb] bg-white shrink-0">
               <div className="flex items-center gap-3">
                 {onBackToUpload && (
                   <button
@@ -453,7 +453,7 @@ export default function AnalysisContent({
                     <ArrowLeft className="w-3.5 h-3.5" /> Back
                   </button>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
                   <h3 className="text-[13px] font-bold text-gray-700 tracking-wide uppercase">Resume Preview</h3>
                 </div>
@@ -507,12 +507,12 @@ export default function AnalysisContent({
         </div>
 
         {/* RIGHT — ATS Score + Job Description */}
-        <div className="w-[520px] shrink-0 overflow-y-auto bg-[#f6f8fc] border-l border-gray-200 p-5 space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+        <div className="w-[520px] shrink-0 overflow-y-auto bg-[#f6f8fc] border-l border-gray-200 p-5 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
 
           {/* ATS Score Card */}
-          <div className="rounded-2xl border border-[#dce8f8] bg-white shadow-sm overflow-hidden">
-            <div className="p-4">
-              <div className="flex items-center gap-2 mb-4">
+          <div className="rounded-lg border border-[#dce8fb] bg-white shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
+            <div className="p-5">
+              <div className="flex items-center gap-2.5 mb-4">
                 <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg, #5896d7, #2557a7)" }} />
                 <h3 className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">ATS Match Score</h3>
               </div>
@@ -540,9 +540,9 @@ export default function AnalysisContent({
           </div>
 
           {/* Job Description Card */}
-          <div className="rounded-2xl border border-[#dce8f8] bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e8eef8]" style={{ background: "linear-gradient(135deg,#f0f5ff,#e8eef8)" }}>
-              <div className="flex items-center gap-2">
+          <div className="rounded-lg border border-[#dce8fb] bg-white shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb]" style={{ background: "linear-gradient(135deg,#f0f5ff,#e8eef8)" }}>
+              <div className="flex items-center gap-2.5">
                 <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
                 <p className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">Job Description</p>
               </div>
@@ -553,7 +553,7 @@ export default function AnalysisContent({
                 <FileText className="w-3 h-3" /> Copy
               </button>
             </div>
-            <div className="p-4 max-h-[32rem] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+            <div className="p-5 max-h-[32rem] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
               {jdText ? (
                 <JDHighlighter
                   text={jdText}

@@ -19,6 +19,8 @@ interface MatchPenaltiesProps {
   matchResult: any;
   onAddSkill: (skill: string, suggestion_id?: string, penalty?: number) => Promise<void> | void;
   onRemoveSkill?: (skill: string, suggestion_id?: string, penalty?: number) => Promise<void> | void;
+  /** Hide the Add/Fix All/Improve action buttons and show suggestions as plain read-only text. */
+  readOnly?: boolean;
 }
 
 const CATEGORY_META: Record<string, { label: string; color: string; lightBg: string; border: string }> = {
@@ -27,7 +29,17 @@ const CATEGORY_META: Record<string, { label: string; color: string; lightBg: str
   star_pattern:     { label: "STAR Bullets",      color: "#7c3aed", lightBg: "#f5f3ff", border: "#ede9fe" },
   capabilities:     { label: "Capabilities",      color: "#d97706", lightBg: "#fffbeb", border: "#fde68a" },
   job_title:        { label: "Job Title",         color: "#dc2626", lightBg: "#fff1f2", border: "#fecdd3" },
+  requirements:     { label: "Requirements",      color: "#0d9488", lightBg: "#f0fdfa", border: "#99f6e4" },
+  experience:       { label: "Experience",        color: "#4f46e5", lightBg: "#eef2ff", border: "#c7d2fe" },
 };
+
+function prettifyCategory(category: string): string {
+  return category
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 const SEVERITY_META: Record<string, { label: string; color: string; bg: string }> = {
   critical:     { label: "critical",     color: "#dc2626", bg: "#fef2f2" },
@@ -36,19 +48,20 @@ const SEVERITY_META: Record<string, { label: string; color: string; bg: string }
 };
 
 function CategoryGroup({
-  category, items, onAddSkill, onRemoveSkill,
+  category, items, onAddSkill, onRemoveSkill, readOnly,
 }: {
   category: string;
   items: Penalty[];
   onAddSkill: (skill: string, suggestion_id?: string, penalty?: number) => Promise<void> | void;
   onRemoveSkill?: (skill: string, suggestion_id?: string, penalty?: number) => Promise<void> | void;
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
 
-  const meta = CATEGORY_META[category] ?? { label: category, color: "#374151", lightBg: "#f9fafb", border: "#e5e7eb" };
+  const meta = CATEGORY_META[category] ?? { label: prettifyCategory(category), color: "#475569", lightBg: "#f8fafc", border: "#e2e8f0" };
   const bulk = items.find(p => p.is_bulk_parent);
   const individuals = items.filter(p => !p.is_bulk_parent);
   const isSkillActionable = category === "technical_skills" || category === "soft_skills";
@@ -76,20 +89,25 @@ function CategoryGroup({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      {/* Group header */}
-      <button
+    <div className="bg-white rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
+      {/* Group header — a div, not a button, since it contains the nested "Fix All" button below */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+        onKeyDown={e => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(v => !v); }
+        }}
+        className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-3">
           <span className="text-[15px] font-bold" style={{ color: meta.color }}>{meta.label}</span>
-          {pending > 0 && (
+          {!readOnly && pending > 0 && (
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: meta.color }}>
               {pending}
             </span>
           )}
-          {addedIds.size > 0 && (
+          {!readOnly && addedIds.size > 0 && (
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-500 text-white">
               {addedIds.size} added
             </span>
@@ -99,7 +117,7 @@ function CategoryGroup({
           <span className="text-[12px] font-semibold text-green-600 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
             +{totalPts.toFixed(1)} pts
           </span>
-          {!!bulk && isSkillActionable && (
+          {!readOnly && !!bulk && isSkillActionable && (
             <button
               onClick={e => { e.stopPropagation(); handleBulkAdd(); }}
               disabled={bulkLoading || allAdded}
@@ -113,7 +131,7 @@ function CategoryGroup({
           )}
           {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
         </div>
-      </button>
+      </div>
 
       {/* Items */}
       {open && (
@@ -150,20 +168,22 @@ function CategoryGroup({
                 </div>
 
                 {/* Actions */}
-                <div className="shrink-0 flex flex-col items-end gap-2">
-                  {!isAdded && (
-                    <span
-                      className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full"
-                      style={{ color: sev.color, background: sev.bg }}
-                    >
-                      {sev.label}
+                <div className="shrink-0 flex flex-col items-end gap-2.5">
+                  <div className="flex items-center gap-2">
+                    {!isAdded && (
+                      <span
+                        className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap"
+                        style={{ color: sev.color, background: sev.bg }}
+                      >
+                        {sev.label}
+                      </span>
+                    )}
+                    <span className="text-[12px] font-bold text-green-600 whitespace-nowrap">
+                      +{Math.abs(p.penalty).toFixed(1)} pts
                     </span>
-                  )}
-                  <span className="text-[12px] font-bold text-green-600">
-                    +{Math.abs(p.penalty).toFixed(1)} pts
-                  </span>
+                  </div>
 
-                  {isSkillActionable && p.target && (
+                  {!readOnly && isSkillActionable && p.target && (
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => handleAdd(p)}
@@ -193,7 +213,7 @@ function CategoryGroup({
                     </div>
                   )}
 
-                  {category === "star_pattern" && p.target && !isAdded && (
+                  {!readOnly && category === "star_pattern" && p.target && !isAdded && (
                     <button
                       className="flex items-center gap-1 text-[11px] font-semibold px-3 py-1.5 rounded-full border transition-colors hover:opacity-80"
                       style={{ color: meta.color, borderColor: meta.border, background: meta.lightBg }}
@@ -211,7 +231,7 @@ function CategoryGroup({
   );
 }
 
-export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill }: MatchPenaltiesProps) {
+export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill, readOnly }: MatchPenaltiesProps) {
   const penalties: Penalty[] = matchResult?.Match_Penalties?.penalties ?? [];
   if (!penalties.length) return null;
 
@@ -230,7 +250,7 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill 
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
@@ -249,6 +269,7 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill 
           items={grouped[cat]}
           onAddSkill={onAddSkill}
           onRemoveSkill={onRemoveSkill}
+          readOnly={readOnly}
         />
       ))}
     </div>

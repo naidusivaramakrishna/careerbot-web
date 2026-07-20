@@ -16,9 +16,13 @@ interface Props {
     initialFormType?: FormType
     redirectTo?: string
     onSuccess?: () => void
+    /** Skip this modal's own backdrop/blur — use when it's already nested inside
+     * another modal that renders its own backdrop, to avoid stacking two
+     * expensive backdrop-blur layers (causes visible jank on open). */
+    hideOverlay?: boolean
 }
 
-const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup", redirectTo, onSuccess }) => {
+const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup", redirectTo, onSuccess, hideOverlay = false }) => {
     const router = useRouter()
     const authRedirectTo = sanitizeAuthRedirect(redirectTo)
 
@@ -426,7 +430,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
     if (!open) return null
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div className={`fixed inset-0 flex items-center justify-center z-50 p-4 ${hideOverlay ? "" : "bg-black/60 backdrop-blur-md"}`}>
             <div className="relative w-full max-w-124 h-145 p-8 rounded-[28px] shadow-2xl bg-white ring-1 ring-gray-200">
                 <button
                     onClick={onClose}

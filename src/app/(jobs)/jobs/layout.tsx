@@ -29,6 +29,9 @@
 
 
 
+"use client";
+
+import { usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 
@@ -37,6 +40,16 @@ export default function JobsLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+
+  // The Jobs marketing home page (/jobs) is public and renders its own
+  // header/footer — same pattern as /ats and /jobmatch. Every other route
+  // under /jobs (search, tracking, applications) is the authenticated
+  // app tool and keeps the Sidebar/Header chrome.
+  if (pathname === "/jobs") {
+    return <>{children}</>;
+  }
+
   return (
     <div className="flex min-h-screen bg-[#f5f6f7]" style={{ "--header-h": "56px" } as React.CSSProperties}>
       {/* LEFT SIDEBAR */}

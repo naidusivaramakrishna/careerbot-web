@@ -406,7 +406,7 @@ export default function ApplicationTrackingPage() {
           <h2 className="text-lg font-semibold mb-2">{error || "Application not found"}</h2>
           <p className="text-gray-600 mb-6">The application you&apos;re looking for doesn&apos;t exist.</p>
           <Link
-            href="/jobs"
+            href="/jobslogin"
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             <ArrowLeft size={16} />
@@ -428,7 +428,7 @@ export default function ApplicationTrackingPage() {
     <div className="min-h-screen bg-gray-50 p-8">
       {/* BACK TO JOBS */}
       <Link
-        href="/jobs"
+        href="/jobslogin"
         className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 mb-6"
       >
         <ArrowLeft size={16} />

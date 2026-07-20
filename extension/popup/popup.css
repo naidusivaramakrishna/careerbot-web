@@ -394,21 +394,15 @@ body {
   display: flex; align-items: center; justify-content: center; gap: 9px;
   width: 100%; height: 52px;
   border: none; border-radius: 14px;
-  background: linear-gradient(135deg, #1e50a2 0%, #2557a7 50%, #3b6ec9 100%);
+  background: var(--blue);
   color: #fff; font-size: 15px; font-weight: 700;
   cursor: pointer; font-family: inherit;
-  box-shadow: 0 4px 20px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
-  transition: all var(--t);
+  box-shadow: none;
+  transition: background var(--t), transform var(--t);
   letter-spacing: -0.1px;
-  position: relative; overflow: hidden;
+  position: relative;
 }
-.btn-analyze-big::after {
-  content: '';
-  position: absolute; inset: 0;
-  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.08));
-  pointer-events: none;
-}
-.btn-analyze-big:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 8px 28px rgba(37,87,167,0.42); }
+.btn-analyze-big:hover { background: var(--blue-dark); transform: translateY(-1px); }
 .btn-analyze-big:active { transform: translateY(0); }
 .btn-analyze-big:disabled { opacity: 0.38; cursor: not-allowed; transform: none; box-shadow: none; }
 
@@ -465,13 +459,13 @@ input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; po
   display: flex; align-items: center; justify-content: center; gap: 7px;
   width: 100%; height: 46px; padding: 0 16px;
   border: none; border-radius: var(--r-lg);
-  background: linear-gradient(135deg, #2557a7, #1a3a8f);
+  background: var(--blue);
   color: #fff; font-size: 14px; font-weight: 600;
   cursor: pointer; font-family: inherit;
-  box-shadow: var(--shadow-blue);
-  transition: all var(--t);
+  box-shadow: none;
+  transition: background var(--t), transform var(--t);
 }
-.btn-primary-full:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(37,87,167,0.36); }
+.btn-primary-full:hover { background: var(--blue-dark); transform: translateY(-1px); }
 .btn-primary-full:active { transform: translateY(0); }
 .btn-primary-full:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
@@ -2295,22 +2289,25 @@ input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; po
 }
 
 #state-login .login-headline {
-  margin-bottom: 22px;
-  color: #111827;
-  font-size: 66px;
-  font-weight: 850;
-  letter-spacing: -2.7px;
-  line-height: 1.06;
-  max-width: 620px;
+  margin-bottom: 14px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -1.4px;
+  line-height: 1.1;
+  max-width: 500px;
 }
 
 #state-login .login-subtitle {
-  max-width: 488px;
-  margin-bottom: 44px;
-  color: #6b7280;
-  font-size: 19px;
-  line-height: 1.48;
-  letter-spacing: -0.28px;
+  max-width: 420px;
+  margin-bottom: 28px;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: -0.15px;
 }
 
 #state-login .login-features {
@@ -2695,22 +2692,28 @@ input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; po
 }
 
 #state-login .lf-icon {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-200);
+  border-radius: var(--r-full, 999px);
+  color: var(--blue);
 }
 
 #state-login .lf-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-#state-login .lf-text {
-  gap: 0;
-  padding-left: 0;
+  width: 16px;
+  height: 16px;
 }
 
 #state-login .lf-title {
   font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text);
   letter-spacing: -0.12px;
 }
 
@@ -2946,4 +2949,220 @@ input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; po
 
 #app:has(#state-idle:not(.hidden)) .sr-avatar {
   background: linear-gradient(135deg, #2557a7, #4f46e5);
+}
+
+/* Simple signed-out screen */
+#app:has(#state-login:not(.hidden)) {
+  background: #f5f8ff;
+}
+
+#app:has(#state-login:not(.hidden)) .header,
+#app:has(#state-login:not(.hidden)) .side-rail,
+#app:has(#state-login:not(.hidden)) .rail-open-btn {
+  display: none !important;
+}
+
+#state-login,
+#state-login .login-body {
+  min-height: 100%;
+}
+
+#state-login .login-body {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 82% -6%, rgba(37, 87, 167, 0.16), transparent 42%),
+    radial-gradient(circle at -8% 108%, rgba(37, 87, 167, 0.12), transparent 40%),
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.9), transparent 32%),
+    linear-gradient(160deg, #f2f6fd 0%, #ffffff 46%, #eef4fd 100%);
+}
+
+#state-login .login-body::before,
+#state-login .login-body::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+#state-login .login-body::before {
+  background:
+    radial-gradient(circle, rgba(37, 87, 167, 0.10) 0.8px, transparent 1.2px),
+    radial-gradient(circle, rgba(37, 87, 167, 0.07) 0.8px, transparent 1.2px),
+    radial-gradient(120% 72% at -8% 106%, transparent 38%, rgba(37, 87, 167, 0.045) 38.5%, transparent 45%),
+    radial-gradient(128% 80% at -6% 111%, transparent 46%, rgba(37, 87, 167, 0.035) 46.5%, transparent 54%),
+    radial-gradient(132% 86% at -4% 116%, transparent 55%, rgba(6, 182, 212, 0.03) 55.5%, transparent 63%);
+  background-size:
+    16px 16px,
+    16px 16px,
+    100% 100%,
+    100% 100%,
+    100% 100%;
+  background-position:
+    left 28px bottom 26px,
+    right 26px bottom 28px,
+    0 0,
+    0 0,
+    0 0;
+  background-repeat:
+    repeat,
+    repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat;
+  mask-image:
+    radial-gradient(circle at 8% 88%, #000 0 22%, transparent 34%),
+    radial-gradient(circle at 92% 88%, #000 0 18%, transparent 30%);
+  -webkit-mask-image:
+    radial-gradient(circle at 8% 88%, #000 0 22%, transparent 34%),
+    radial-gradient(circle at 92% 88%, #000 0 18%, transparent 30%);
+  opacity: 0.34;
+}
+
+#state-login .login-body::after {
+  inset: auto;
+  top: 48px;
+  right: -42px;
+  width: 250px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(37, 87, 167, 0.14), transparent);
+  opacity: 0.72;
+  transform: rotate(-34deg);
+  transform-origin: center;
+}
+
+#state-login .login-bg-decor,
+#state-login .login-features,
+#state-login .login-btn-email,
+#state-login .login-footer-row {
+  display: none !important;
+}
+
+#state-login .login-body > .login-content {
+  display: flex !important;
+}
+
+#state-login .login-body > .login-brand-row {
+  display: flex !important;
+}
+
+#state-login .login-content {
+  width: 100%;
+  max-width: 310px;
+  min-height: 0;
+  padding: 0;
+  align-items: center;
+  text-align: center;
+  transform: translateY(-42px);
+}
+
+#state-login .login-content {
+  position: relative;
+  z-index: 1;
+}
+
+#state-login .login-content::before {
+  content: '';
+  position: absolute;
+  inset: -72px -64px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 68%);
+}
+
+#state-login .login-brand-row {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  margin: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+#state-login .login-logo-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--blue-100);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 22px rgba(37, 87, 167, 0.08);
+}
+
+#state-login .login-logo-mark img {
+  width: 32px;
+  height: 32px;
+}
+
+#state-login .login-brand-text {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.35px;
+}
+
+#state-login .login-brand-ai {
+  color: var(--blue);
+}
+
+#state-login .login-headline {
+  max-width: none;
+  margin: 0 0 7px;
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 760;
+  letter-spacing: -0.3px;
+  line-height: 1.25;
+}
+
+#state-login .login-subtitle {
+  max-width: 240px;
+  margin: 0 0 26px;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+#state-login .login-ctas {
+  width: 100%;
+  max-width: 240px;
+  margin: 0;
+  transform: none;
+}
+
+#state-login .login-btn-google {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--blue);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+#state-login .login-btn-google:hover {
+  transform: none;
+  background: var(--blue-dark);
+  box-shadow: none;
+  filter: none;
+}
+
+#state-login .lbg-icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+#state-login .lbg-icon-wrap svg {
+  width: 18px;
+  height: 18px;
 }

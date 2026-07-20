@@ -35,11 +35,15 @@ export default function ClientLayout({
   // new browser tab (target="_blank") is redirected to same-window navigation.
   // Modified clicks (Ctrl/Cmd/Shift/Alt or non-primary button) are left alone,
   // since those are an explicit user gesture to open a new tab.
+  // Opt-out: a link can add data-allow-new-tab to be exempt — used by flows
+  // (e.g. job applications) that need the current tab to stay put so the app
+  // can prompt the user when they come back to it.
   useEffect(() => {
     const forceSameTab = (e: MouseEvent) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const anchor = (e.target as HTMLElement)?.closest?.('a[target="_blank"]') as HTMLAnchorElement | null;
       if (!anchor || !anchor.getAttribute('href')) return;
+      if (anchor.hasAttribute('data-allow-new-tab')) return;
       e.preventDefault();
       window.location.href = anchor.href;
     };

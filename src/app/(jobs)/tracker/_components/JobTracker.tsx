@@ -13,6 +13,7 @@ import {
   JobApplication,
   SavedJob,
 } from "@/utils/jobTracking";
+import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 
 /* ══════════════════════════════════════════
    Status management (localStorage)
@@ -400,6 +401,7 @@ function SavedRow({ job, onRemove }: { job: SavedJob; onRemove: (id: string) => 
    Main Component
 ══════════════════════════════════════════ */
 export default function JobTracker() {
+  const { userId } = useCurrentUserId();
   const [tab,      setTab]      = useState<Tab>("applied");
   const [applied,  setApplied]  = useState<JobApplication[]>([]);
   const [saved,    setSaved]    = useState<SavedJob[]>([]);
@@ -407,10 +409,10 @@ export default function JobTracker() {
   const [search,   setSearch]   = useState("");
 
   const load = useCallback(() => {
-    setApplied(getApplicationHistory().slice().reverse());
-    setSaved(getSavedJobs().slice().reverse());
+    setApplied(getApplicationHistory(userId).slice().reverse());
+    setSaved(getSavedJobs(userId).slice().reverse());
     setStatuses(loadStatuses());
-  }, []);
+  }, [userId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -419,7 +421,7 @@ export default function JobTracker() {
   };
 
   const handleRemoveSaved = (id: string) => {
-    removeSavedJob(id);
+    removeSavedJob(id, userId);
     setSaved((prev) => prev.filter((j) => j.jobId !== id));
   };
 

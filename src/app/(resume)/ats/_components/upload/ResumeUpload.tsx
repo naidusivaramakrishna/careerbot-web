@@ -16,12 +16,18 @@ import { FaFileUpload } from "react-icons/fa";
 import { formatFileSize, clearAtsUploadStorage, validateResumeFile } from "../../utils/helpers";
 import { processResumeComplete } from "@/api/resumeatsapi";
 import { buildAtsReportRoute, normalizeResumeScanError } from "../../utils/scanFlow";
+import { useAuth } from "@/hooks/useAuth";
+import SignUpModal from "@/components/SignUpModal";
 
 const PRIMARY_COLOR = "#0275dd";
 
 const ResumeUpload: React.FC = () => {
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingReportRoute, setPendingReportRoute] = useState<string | null>(null);
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [step, setStep] = useState<number>(0);
@@ -31,6 +37,8 @@ const ResumeUpload: React.FC = () => {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isImageBased, setIsImageBased] = useState<boolean>(false);
+  const [scanErrorKind, setScanErrorKind] = useState<"auth" | "credits" | "generic" | null>(null);
+  const [scanErrorMessage, setScanErrorMessage] = useState<string | null>(null);
 
   const radius = 50;
   const strokeWidth = 8;
@@ -96,6 +104,8 @@ const ResumeUpload: React.FC = () => {
     const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
     setError(null);
     setIsImageBased(false);
+    setScanErrorKind(null);
+    setScanErrorMessage(null);
 
     const valid = await validateFileContent(f, ext);
     if (!valid) {
@@ -128,16 +138,24 @@ const ResumeUpload: React.FC = () => {
       setIsProcessing(false);
 
       if (!result.success) {
-        setIsImageBased(true);
+        const msg = result.error ?? "Something went wrong while analyzing your resume.";
+        const lower = msg.toLowerCase();
+        const kind: "auth" | "credits" | "generic" =
+          lower.includes("not authenticated") ? "auth" :
+          lower.includes("credit") || lower.includes("upgrade your plan") ? "credits" :
+          "generic";
+
+        setScanErrorKind(kind);
+        setScanErrorMessage(msg);
         setCurrentScore(0);
         setProgress(100);
         setStep(3);
-        localStorage.setItem("isImageBased", "true");
+        localStorage.setItem("isImageBased", "false");
         localStorage.setItem("currentScore", "0");
         return;
       }
 
-      if (result.parsed_data?.error || result.parsed_data?.ocr_needed) {
+      if (result.parsed_data?.ocr_needed) {
         setIsImageBased(true);
         setCurrentScore(0);
         setProgress(100);
@@ -182,15 +200,24 @@ const ResumeUpload: React.FC = () => {
     setCurrentScore(0);
     setIsProcessing(false);
     setIsImageBased(false);
+    setScanErrorKind(null);
+    setScanErrorMessage(null);
     clearAtsUploadStorage();
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const viewReport = () => {
-    if (step === 3) {
-      const cached = localStorage.getItem("atsAnalysisData");
-      const resumeId = cached ? JSON.parse(cached)?.resume_id : undefined;
-      router.push(buildAtsReportRoute(resumeId));
+    if (step !== 3) return;
+
+    const cached = localStorage.getItem("atsAnalysisData");
+    const resumeId = cached ? JSON.parse(cached)?.resume_id : undefined;
+    const reportRoute = buildAtsReportRoute(resumeId);
+
+    if (isAuthenticated) {
+      router.push(reportRoute);
+    } else {
+      setPendingReportRoute(reportRoute);
+      setShowAuthModal(true);
     }
   };
 
@@ -461,6 +488,71 @@ const ResumeUpload: React.FC = () => {
               </div>
             )}
 
+            {/* SCAN FAILED — auth / credits / generic error (distinct from image-based) */}
+            {step === 3 && uploadedFile && scanErrorKind && (
+              <div className="w-full animate-fade-in flex flex-col h-full justify-center">
+                <div className="flex items-center p-2.5 bg-gradient-to-r from-amber-50 to-white rounded-lg border border-amber-100 mb-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <X className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="ml-2 text-left overflow-hidden flex-1">
+                    <p className="font-semibold text-gray-900 truncate text-xs">
+                      {uploadedFile.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatFileSize(uploadedFile.size)} • {formatTime(elapsedTime)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={removeFile}
+                    className="ml-auto p-1.5 text-gray-400 hover:text-red-600 transition-all hover:scale-110 hover:bg-red-50 rounded-lg flex-shrink-0"
+                    title="Delete resume"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="flex flex-col items-center mb-3 px-2">
+                  <h3 className="text-base font-bold text-amber-700 mb-2 text-center">
+                    {scanErrorKind === "auth"
+                      ? "Sign in to finish scanning"
+                      : scanErrorKind === "credits"
+                      ? "Out of credits"
+                      : "Couldn't analyze this resume"}
+                  </h3>
+                  <p className="text-xs text-gray-500 text-center max-w-xs mb-3">
+                    {scanErrorKind === "auth"
+                      ? "Your file uploaded fine — sign in or create a free account to complete the ATS scan."
+                      : scanErrorMessage}
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-center gap-2 mt-auto">
+                  {scanErrorKind === "auth" ? (
+                    <button
+                      onClick={() => setShowAuthModal(true)}
+                      className="px-6 py-2.5 bg-[#0275dd] text-white font-semibold rounded-xl hover:bg-[#0261b8] transition-all shadow-lg hover:scale-105 text-sm"
+                    >
+                      Sign In / Sign Up
+                    </button>
+                  ) : (
+                    <button
+                      onClick={removeFile}
+                      className="px-6 py-2.5 bg-[#0275dd] text-white font-semibold rounded-xl hover:bg-[#0261b8] transition-all shadow-lg hover:scale-105 text-sm"
+                    >
+                      Try Again
+                    </button>
+                  )}
+                  <button
+                    onClick={removeFile}
+                    className="px-6 py-2.5 bg-white text-gray-700 font-semibold border-2 border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all hover:scale-105 text-sm"
+                  >
+                    Upload & Rescan
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* NOT ATS FRIENDLY - Document with Person and RED X */}
             {step === 3 && uploadedFile && isImageBased && (
               <div className="w-full animate-fade-in flex flex-col h-full justify-center">
@@ -678,6 +770,14 @@ const ResumeUpload: React.FC = () => {
           }
         `}</style>
       </div>
+
+      <SignUpModal
+        open={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialFormType="signup"
+        redirectTo={pendingReportRoute ?? undefined}
+        hideOverlay
+      />
     </div>
   );
 };

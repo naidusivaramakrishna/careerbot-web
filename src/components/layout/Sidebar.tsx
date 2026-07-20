@@ -476,7 +476,7 @@ const NAV_GROUPS: {
     label: "CAREER",
     items: [
       { id: "jd_match", label: "Job Match",          icon: IcoJobMatch, path: "/jobmatch/app" },
-      { id: "jobs",     label: "Jobs",               icon: IcoJobs,     path: "/jobs" },
+      { id: "jobs",     label: "Jobs",               icon: IcoJobs,     path: "/jobslogin" },
       { id: "tracker",  label: "Track Applications", icon: IcoTracker,  path: "/tracker" },
     ],
   },
