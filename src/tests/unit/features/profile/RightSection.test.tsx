@@ -40,6 +40,7 @@ vi.mock('@/api/userApi', () => ({
   getCertification: vi.fn().mockResolvedValue([]),
   deleteCertification: vi.fn(),
   addCertificationAutoFill: vi.fn(),
+  uploadResume: vi.fn(),
 }));
 
 vi.mock('@/api/resumeParsingApi', () => ({
@@ -58,7 +59,7 @@ vi.mock('@/contexts/DashboardContext', () => ({
   useDashboard: () => ({ refreshDashboard: vi.fn() }),
 }));
 
-const mockToast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() }));
+const mockToast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: mockToast }));
 
 vi.mock('@/lib/logger', () => {
@@ -80,11 +81,14 @@ vi.mock('@/app/(user)/profile/_components/LinkedinImportModal', () => ({
 
 // ─── Component under test ─────────────────────────────────────────────────────
 import RightSection from '@/app/(user)/profile/_components/RightSection';
+import { uploadResume } from '@/api/userApi';
+import { extractResume } from '@/api/resumeParsingApi';
+import { mapResumeToProfile } from '@/app/(user)/profile/_utils/resumeMapper';
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('RightSection — completeness display', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('displays the completeness percentage', () => {
     render(<RightSection completeness={65} missingFields={[]} />);
@@ -118,7 +122,7 @@ describe('RightSection — completeness display', () => {
 });
 
 describe('RightSection — missing fields', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('shows "All fields complete!" when no missing fields', () => {
     render(<RightSection completeness={100} missingFields={[]} />);
@@ -137,7 +141,7 @@ describe('RightSection — missing fields', () => {
     expect(screen.getByText('Summary')).toBeInTheDocument();
   });
 
-  it('shows only first 3 missing fields and "+N more" for the rest', () => {
+  it('shows only first 4 missing fields and "+N more" for the rest', () => {
     render(
       <RightSection
         completeness={30}
@@ -147,13 +151,14 @@ describe('RightSection — missing fields', () => {
     expect(screen.getByText('Phone')).toBeInTheDocument();
     expect(screen.getByText('LinkedIn')).toBeInTheDocument();
     expect(screen.getByText('Summary')).toBeInTheDocument();
-    expect(screen.queryByText('GitHub')).not.toBeInTheDocument();
-    expect(screen.getByText('+2 more')).toBeInTheDocument();
+    expect(screen.getByText('GitHub')).toBeInTheDocument();
+    expect(screen.queryByText('Headline')).not.toBeInTheDocument();
+    expect(screen.getByText('+1 more')).toBeInTheDocument();
   });
 });
 
 describe('RightSection — quick actions', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('renders the "Upload Resume" action area', () => {
     render(<RightSection completeness={50} missingFields={[]} />);
@@ -171,14 +176,14 @@ describe('RightSection — quick actions', () => {
     expect(mockPush).toHaveBeenCalledWith('/payments');
   });
 
-  it('renders the "Contact Support" button', () => {
+  it('renders the "Contact Support" link', () => {
     render(<RightSection completeness={50} missingFields={[]} />);
-    expect(screen.getByRole('button', { name: /contact support/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /contact support/i })).toBeInTheDocument();
   });
 });
 
 describe('RightSection — resume upload validation', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('shows error toast when an invalid file type is uploaded', async () => {
     render(<RightSection completeness={50} missingFields={[]} />);
@@ -208,5 +213,44 @@ describe('RightSection — resume upload validation', () => {
     fireEvent.change(fileInput);
 
     expect(mockToast.error).toHaveBeenCalledWith('File size should be less than 10MB');
+  });
+});
+
+describe('RightSection — uploadResume fire-and-forget', () => {
+  const mockUploadResume = vi.mocked(uploadResume);
+  const mockExtractResume = vi.mocked(extractResume);
+  const mockMapResumeToProfile = vi.mocked(mapResumeToProfile);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Return a minimal mapped object so the handler doesn't throw on !mapped
+    mockMapResumeToProfile.mockReturnValue({} as ReturnType<typeof mapResumeToProfile>);
+    mockExtractResume.mockResolvedValue({} as Awaited<ReturnType<typeof extractResume>>);
+  });
+
+  function triggerUpload(file = new File(['content'], 'resume.pdf', { type: 'application/pdf' })) {
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+    fireEvent.change(fileInput);
+    return file;
+  }
+
+  it('calls uploadResume immediately after extractResume succeeds', async () => {
+    mockUploadResume.mockResolvedValueOnce({ resume_url: 'https://example.com/resume.pdf', message: 'ok', filename: 'resume.pdf' });
+    render(<RightSection completeness={50} missingFields={[]} />);
+    const file = triggerUpload();
+    await waitFor(() => expect(mockUploadResume).toHaveBeenCalledWith(file));
+  });
+
+  it('shows toast.warning when uploadResume storage fails', async () => {
+    mockUploadResume.mockRejectedValueOnce(new Error('Storage failed'));
+    render(<RightSection completeness={50} missingFields={[]} />);
+    triggerUpload();
+    await waitFor(() =>
+      expect(mockToast.warning).toHaveBeenCalledWith(
+        expect.stringContaining('could not be saved'),
+        expect.any(Object),
+      )
+    );
   });
 });

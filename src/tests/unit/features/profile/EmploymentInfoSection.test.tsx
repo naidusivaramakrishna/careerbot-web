@@ -1,13 +1,16 @@
 /**
- * Unit tests for EmploymentInfoSection — employment preferences form.
+ * Unit tests for EmploymentInfoSection (employmentInfo/EmploymentInfoSection.tsx)
  *
  * Covers:
- *   - Fetches employment info on mount and populates form
- *   - Save Changes button is hidden when no changes have been made
- *   - Save Changes button appears after a field is changed
- *   - Calls updateEmploymentInfo with current form data on save
+ *   - Shows empty state when no employment info exists in tempProfile
+ *   - Shows employment card when tempProfile.employmentInfo is populated
+ *   - Fetches employment info from API on mount
+ *   - Opens modal when "Add Employment Info" is clicked
+ *   - Opens modal when "Edit" is clicked on the card
+ *   - Closes modal on Cancel
+ *   - Calls updateEmploymentInfo when Save is clicked in the modal
  *   - Shows "Saving..." while save is in flight
- *   - Hides Save Changes button after a successful save
+ *   - Closes modal after a successful save
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -57,28 +60,16 @@ vi.mock('@/components/common/MultiSelectAutocomplete', () => ({
     React.createElement('div', { 'data-testid': `multiselect-${label.toLowerCase().replace(/\s+/g, '-')}` }, label),
 }));
 
-vi.mock('@/components/common/InfoToggleGroup', () => ({
-  default: ({ label, name, options, value, onChange }: {
-    label: string;
-    name: string;
-    options: { label: string; value: unknown }[];
-    value: unknown;
-    onChange: (v: unknown) => void;
-  }) =>
-    React.createElement('div', { 'data-testid': `toggle-${name}` },
-      React.createElement('span', null, label),
-      options.map(opt =>
-        React.createElement('button', {
-          key: String(opt.value),
-          onClick: () => onChange(opt.value),
-          'aria-pressed': value === opt.value,
-        }, opt.label)
-      )
-    ),
+// Render children inline when open so modal content is accessible in tests
+vi.mock('@/components/common/Modal', () => ({
+  default: ({ open, children, title }: { open: boolean; children: React.ReactNode; title: string }) =>
+    open
+      ? React.createElement('div', { role: 'dialog', 'aria-label': title }, children)
+      : null,
 }));
 
 // ─── Component under test ─────────────────────────────────────────────────────
-import EmploymentInfoSection from '@/app/(user)/profile/_components/EmploymentInfoSection';
+import EmploymentInfoSection from '@/app/(user)/profile/_components/employmentInfo/EmploymentInfoSection';
 import type { ProfileData } from '@/app/(user)/profile/_types/ProfileData';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -87,117 +78,127 @@ const baseProfile: ProfileData = {
   skills: [],
 };
 
-const defaultProps = {
-  tempProfile: baseProfile,
-  setTempProfile: vi.fn(),
-};
-
 const mockEmploymentData = {
   authorized_to_work: true,
   disability_status: 'no',
   willing_to_relocate: false,
-  work_mode: 'remote',
-  gender: 'male',
-  preferred_job_type: 'full_time',
-  employment_status: 'employed',
-  notice_period_days: 'immediate',
+  work_mode: 'remote' as const,
+  gender: 'male' as const,
+  preferred_job_type: 'full_time' as const,
+  employment_status: 'employed' as const,
+  notice_period_days: '30',
   preferred_industries: [],
   preferred_roles: [],
   preferred_locations: [],
 };
 
+const filledProfile: ProfileData = {
+  ...baseProfile,
+  employmentInfo: mockEmploymentData,
+};
+
+const defaultProps = {
+  tempProfile: baseProfile,
+  setTempProfile: vi.fn(),
+};
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('EmploymentInfoSection — rendering', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('renders the gender select', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
-    render(<EmploymentInfoSection {...defaultProps} />);
-    await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('combobox', { name: /gender/i })).toBeInTheDocument();
+describe('EmploymentInfoSection — empty state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetEmploymentInfo.mockResolvedValue(null);
   });
 
-  it('renders the employment status select', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
+  it('shows empty state message when no employment info exists', () => {
     render(<EmploymentInfoSection {...defaultProps} />);
-    await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('combobox', { name: /employment status/i })).toBeInTheDocument();
+    expect(screen.getByText(/no employment info added yet/i)).toBeInTheDocument();
   });
 
-  it('renders the notice period select', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
+  it('renders the Add Employment Info button', () => {
+    render(<EmploymentInfoSection {...defaultProps} />);
+    expect(screen.getByTestId('add-employment-info-btn')).toBeInTheDocument();
+  });
+
+  it('calls getEmploymentInfo on mount', async () => {
     render(<EmploymentInfoSection {...defaultProps} />);
     await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('combobox', { name: /notice period/i })).toBeInTheDocument();
   });
 });
 
-describe('EmploymentInfoSection — save button visibility', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('does not show Save Changes button before any field is changed', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
-    render(<EmploymentInfoSection {...defaultProps} />);
-    await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
-    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+describe('EmploymentInfoSection — filled state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetEmploymentInfo.mockResolvedValue(mockEmploymentData);
   });
 
-  it('shows Save Changes button after gender is changed', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
-    render(<EmploymentInfoSection {...defaultProps} />);
-    await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
-
-    const genderSelect = screen.getByRole('combobox', { name: /gender/i });
-    fireEvent.change(genderSelect, { target: { value: 'female' } });
-
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
+  it('shows the employment card when tempProfile has employment info', () => {
+    render(<EmploymentInfoSection tempProfile={filledProfile} setTempProfile={vi.fn()} />);
+    expect(screen.getByText(/employment preferences/i)).toBeInTheDocument();
   });
 
-  it('shows Save Changes button after employment status is changed', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
+  it('renders the Edit button on the card', () => {
+    render(<EmploymentInfoSection tempProfile={filledProfile} setTempProfile={vi.fn()} />);
+    expect(screen.getByTestId('employment-info-edit-btn')).toBeInTheDocument();
+  });
+
+  it('does not show the empty state when data exists', () => {
+    render(<EmploymentInfoSection tempProfile={filledProfile} setTempProfile={vi.fn()} />);
+    expect(screen.queryByText(/no employment info added yet/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('EmploymentInfoSection — modal interactions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetEmploymentInfo.mockResolvedValue(null);
+  });
+
+  it('opens modal when "Add Employment Info" is clicked', () => {
     render(<EmploymentInfoSection {...defaultProps} />);
-    await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId('add-employment-info-btn'));
+    expect(screen.getByRole('dialog', { name: /employment information/i })).toBeInTheDocument();
+  });
 
-    const statusSelect = screen.getByRole('combobox', { name: /employment status/i });
-    fireEvent.change(statusSelect, { target: { value: 'unemployed' } });
+  it('opens modal when "Edit" is clicked on the card', () => {
+    render(<EmploymentInfoSection tempProfile={filledProfile} setTempProfile={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('employment-info-edit-btn'));
+    expect(screen.getByRole('dialog', { name: /employment information/i })).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
+  it('closes modal when Cancel is clicked', () => {
+    render(<EmploymentInfoSection {...defaultProps} />);
+    fireEvent.click(screen.getByTestId('add-employment-info-btn'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 
 describe('EmploymentInfoSection — save action', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('calls updateEmploymentInfo on Save Changes click', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
-    mockUpdateEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
-    render(<EmploymentInfoSection {...defaultProps} />);
-    await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
-
-    fireEvent.change(screen.getByRole('combobox', { name: /gender/i }), {
-      target: { value: 'female' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
-
-    await waitFor(() => {
-      expect(mockUpdateEmploymentInfo).toHaveBeenCalledTimes(1);
-    });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetEmploymentInfo.mockResolvedValue(null);
   });
 
-  it('shows "Saving..." while save is in flight', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
+  it('calls updateEmploymentInfo when Save is clicked', async () => {
+    mockUpdateEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
+    render(<EmploymentInfoSection {...defaultProps} />);
+
+    fireEvent.click(screen.getByTestId('add-employment-info-btn'));
+    fireEvent.click(screen.getByTestId('employment-info-save-btn'));
+
+    await waitFor(() => expect(mockUpdateEmploymentInfo).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows "Saving..." on the save button while the request is in flight', async () => {
     let resolveSave!: (v: unknown) => void;
     mockUpdateEmploymentInfo.mockReturnValueOnce(new Promise(r => { resolveSave = r; }));
 
     render(<EmploymentInfoSection {...defaultProps} />);
-    await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
-
-    fireEvent.change(screen.getByRole('combobox', { name: /gender/i }), {
-      target: { value: 'female' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    fireEvent.click(screen.getByTestId('add-employment-info-btn'));
+    fireEvent.click(screen.getByTestId('employment-info-save-btn'));
 
     expect(screen.getByRole('button', { name: /saving/i })).toBeInTheDocument();
 
@@ -207,20 +208,17 @@ describe('EmploymentInfoSection — save action', () => {
     });
   });
 
-  it('hides Save Changes button after a successful save', async () => {
-    mockGetEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
+  it('closes the modal after a successful save', async () => {
     mockUpdateEmploymentInfo.mockResolvedValueOnce(mockEmploymentData);
 
     render(<EmploymentInfoSection {...defaultProps} />);
-    await waitFor(() => expect(mockGetEmploymentInfo).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId('add-employment-info-btn'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole('combobox', { name: /gender/i }), {
-      target: { value: 'female' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    fireEvent.click(screen.getByTestId('employment-info-save-btn'));
 
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 });

@@ -1,6 +1,7 @@
+import { memo, useMemo } from "react";
 import { Calendar, FolderKanban, Link, Pencil, Trash2 } from "lucide-react";
 import { Projects } from "@/api/userApi";
-import { format } from "date-fns";
+import { formatDateRange } from "@/utils/formatDate";
 import DOMPurify from 'dompurify';
 
 interface Props {
@@ -10,48 +11,28 @@ interface Props {
     onDelete: (id?: string, index?: number) => void;
 }
 
-function formatDateRange(start?: string | Date, end?: string | Date): string {
-    if (!start) return "";
-
-    const parseDate = (value?: string | Date) => {
-        if (!value) return null;
-        if (typeof value === "string") {
-            const trimmed = value.trim();
-            if (trimmed.toLowerCase() === "present") return "Present";
-            const parsed = new Date(trimmed);
-            return isNaN(parsed.getTime()) ? null : parsed;
+const ProjectsCard = memo(function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
+    const sanitizedDescription = useMemo(() => {
+        if (!pro.description) return '';
+        try {
+            return DOMPurify.sanitize(pro.description.replace(/\n/g, '<br />'));
+        } catch {
+            return '';
         }
-        return value;
-    };
+    }, [pro.description]);
 
-    const parsedStart = parseDate(start);
-    const parsedEnd = parseDate(end);
+    const technologies = useMemo(
+        () => pro.technologies?.trim() ? pro.technologies.split(",").map((t) => t.trim()) : [],
+        [pro.technologies]
+    );
 
-    const formattedStart =
-        parsedStart instanceof Date ? format(parsedStart, "MMM yyyy") : start;
-
-    let formattedEnd;
-    if (!end) {
-        formattedEnd = "Present";
-    } else if (parsedEnd === "Present") {
-        formattedEnd = "Present";
-    } else if (parsedEnd instanceof Date) {
-        formattedEnd = format(parsedEnd, "MMM yyyy");
-    } else {
-        formattedEnd = String(end);
-    }
-
-    return `${formattedStart} – ${formattedEnd}`;
-}
-
-export default function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
-    const sanitizedDescription = pro.description
-        ? DOMPurify.sanitize(pro.description.replace(/\n/g, '<br />'))
-        : '';
+    const dateRange = useMemo(
+        () => formatDateRange(pro.start_date, pro.end_date),
+        [pro.start_date, pro.end_date]
+    );
 
     return (
         <div
-            key={pro.id || index}
             data-testid={`project-card-${index}`}
             className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-4 flex items-start justify-between gap-3"
         >
@@ -70,7 +51,7 @@ export default function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
                         {pro.start_date && (
                             <span className="flex items-center gap-1 text-xs text-gray-500">
                                 <Calendar className="w-3.5 h-3.5 shrink-0" />
-                                {formatDateRange(pro.start_date, pro.end_date)}
+                                {dateRange}
                             </span>
                         )}
                         {pro.project_link && pro.project_link.trim() !== '' && (
@@ -85,11 +66,11 @@ export default function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
                             </a>
                         )}
                     </div>
-                    {pro.technologies && pro.technologies.trim() !== '' && (
+                    {technologies.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
-                            {pro.technologies.split(",").map((tech, i) => (
-                                <span key={i} className="text-xs bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md">
-                                    {tech.trim()}
+                            {technologies.map((tech, i) => (
+                                <span key={tech || i} className="text-xs bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md">
+                                    {tech}
                                 </span>
                             ))}
                         </div>
@@ -125,4 +106,6 @@ export default function ProjectsCard({ pro, index, onEdit, onDelete }: Props) {
             </div>
         </div>
     );
-}
+});
+
+export default ProjectsCard;

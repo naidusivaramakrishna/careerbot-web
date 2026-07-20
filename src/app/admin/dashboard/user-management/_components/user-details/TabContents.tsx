@@ -2,6 +2,7 @@ import React, { memo, useCallback } from 'react'
 import { FileText, CreditCard, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import type { UserDetailsResponse, UserActivityLog, Resume, Payment } from '@/api/userManagementApi'
+import { formatDate as fmtDate } from '@/app/admin/_utils/formatDate'
 
 interface SubscriptionTabProps {
     user: UserDetailsResponse
@@ -30,7 +31,7 @@ export const SubscriptionTab = memo(({ user }: SubscriptionTabProps) => {
                 {sub?.started_at && (
                     <p className="flex justify-between items-center">
                         <span className="font-medium">Started:</span>
-                        <span>{new Date(sub.started_at).toLocaleDateString('en-GB')}</span>
+                        <span>{fmtDate(sub.started_at)}</span>
                     </p>
                 )}
             </div>

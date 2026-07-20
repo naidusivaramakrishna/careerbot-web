@@ -109,3 +109,34 @@ export const noticePeriod = [
     { label: "60", value: "60" },
     { label: "90", value: "90" },
 ];
+
+export const ynOptions = [
+    { label: "Yes", value: "true" },
+    { label: "No", value: "false" },
+];
+
+export const disabilityOptions = [
+    { label: "Yes", value: "yes" },
+    { label: "No", value: "no" },
+    { label: "Prefer not to say", value: "prefer_not_to_say" },
+];
+
+export const workModeOptions = [
+    { label: "On-site", value: "onsite" },
+    { label: "Remote", value: "remote" },
+    { label: "Hybrid", value: "hybrid" },
+];
+
+export const genderOptions = [
+    { label: "Male", value: "male" },
+    { label: "Female", value: "female" },
+    { label: "Non-binary", value: "non_binary" },
+    { label: "Prefer not to say", value: "prefer_not_to_say" },
+];
+
+export const employmentStatusOptions = [
+    { label: "Student", value: "student" },
+    { label: "Employed", value: "employed" },
+    { label: "Unemployed", value: "unemployed" },
+    { label: "Freelancer", value: "freelancer" },
+];

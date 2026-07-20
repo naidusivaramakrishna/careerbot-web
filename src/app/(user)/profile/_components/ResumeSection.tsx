@@ -9,21 +9,35 @@ import logger from '@/lib/logger';
 import { CheckCircle, FileText, Info, Trash2, Upload } from 'lucide-react';
 
 interface ResumeSectionProps {
-    tempProfile: ProfileData;
     setTempProfile: React.Dispatch<React.SetStateAction<ProfileData>>;
 }
 
 const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
-    const { setProfileData } = useProfileContext();
+    const { profileData, setProfileData } = useProfileContext();
     const { refreshDashboard } = useDashboard();
-    const [resumeUrl, setResumeUrl] = useState<string | null>(null);
+    const [resumeUrl, setResumeUrl] = useState<string | null>(profileData.resume_url ?? null);
     const [isLoading, setIsLoading] = useState(false);
-    const [isFetching, setIsFetching] = useState(true);
+    const [isFetching, setIsFetching] = useState(!profileData.resume_url);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isReplacing, setIsReplacing] = useState(false);
 
+    // One-way sync: propagates context resume_url into local state when it becomes truthy
+    // (e.g. sidebar upload). Does NOT clear local state when resume_url goes null —
+    // deletion is managed locally by this component's own delete handler.
     useEffect(() => {
+        if (profileData.resume_url && profileData.resume_url !== resumeUrl) {
+            setResumeUrl(profileData.resume_url);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [profileData.resume_url]);
+
+    useEffect(() => {
+        // Skip fetch if we already have a URL from context (sidebar upload)
+        if (profileData.resume_url) {
+            setIsFetching(false);
+            return;
+        }
         const fetchResume = async () => {
             try {
                 setIsFetching(true);
@@ -53,10 +67,12 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
         const validFileTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
         if (!validFileTypes.includes(file.type)) {
             toast.error('Please upload a PDF, DOCX, or DOC file');
+            e.target.value = '';
             return;
         }
         if (file.size > 10 * 1024 * 1024) {
             toast.error('File size must be less than 10MB');
+            e.target.value = '';
             return;
         }
 

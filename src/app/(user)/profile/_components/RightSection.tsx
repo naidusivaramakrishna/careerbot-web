@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { mapResumeToProfile } from "../_utils/resumeMapper";
@@ -22,7 +22,8 @@ import {
     addProjectAutoFill,
     getCertification,
     deleteCertification,
-    addCertificationAutoFill
+    addCertificationAutoFill,
+    uploadResume,
 } from "@/api/userApi";
 
 import { useProfileContext } from '../context/ProfileContext'
@@ -47,44 +48,35 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [linkedinModalOpen, setLinkedinModalOpen] = useState(false);
 
-    // Determine status based on completeness
-    const getStatus = () => {
-        if (completionPercentage === 100) {
-            return {
-                label: 'Complete!',
-                color: 'text-green-600',
-                ringColor: 'stroke-green-500',
-                bgColor: 'bg-green-50',
-                icon: <CheckCircle className="w-5 h-5 text-green-600" />,
-            };
-        }
-        if (completionPercentage >= 80) {
-            return {
-                label: 'Almost There!',
-                color: 'text-blue-600',
-                ringColor: 'stroke-blue-500',
-                bgColor: 'bg-blue-50',
-                icon: <User className="w-5 h-5 text-blue-600" />,
-            };
-        }
-        if (completionPercentage >= 60) {
-            return {
-                label: 'Good Progress',
-                color: 'text-yellow-600',
-                ringColor: 'stroke-yellow-500',
-                bgColor: 'bg-yellow-50',
-                icon: <User className="w-5 h-5 text-yellow-600" />,
-            };
-        }
-        if (completionPercentage >= 30) {
-            return {
-                label: 'Getting Started',
-                color: 'text-orange-600',
-                ringColor: 'stroke-orange-500',
-                bgColor: 'bg-orange-50',
-                icon: <User className="w-5 h-5 text-orange-600" />,
-            };
-        }
+    const status = useMemo(() => {
+        if (completionPercentage === 100) return {
+            label: 'Complete!',
+            color: 'text-green-600',
+            ringColor: 'stroke-green-500',
+            bgColor: 'bg-green-50',
+            icon: <CheckCircle className="w-5 h-5 text-green-600" />,
+        };
+        if (completionPercentage >= 80) return {
+            label: 'Almost There!',
+            color: 'text-blue-600',
+            ringColor: 'stroke-blue-500',
+            bgColor: 'bg-blue-50',
+            icon: <User className="w-5 h-5 text-blue-600" />,
+        };
+        if (completionPercentage >= 60) return {
+            label: 'Good Progress',
+            color: 'text-yellow-600',
+            ringColor: 'stroke-yellow-500',
+            bgColor: 'bg-yellow-50',
+            icon: <User className="w-5 h-5 text-yellow-600" />,
+        };
+        if (completionPercentage >= 30) return {
+            label: 'Getting Started',
+            color: 'text-orange-600',
+            ringColor: 'stroke-orange-500',
+            bgColor: 'bg-orange-50',
+            icon: <User className="w-5 h-5 text-orange-600" />,
+        };
         return {
             label: 'Just Started',
             color: 'text-gray-600',
@@ -92,9 +84,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             bgColor: 'bg-gray-50',
             icon: <User className="w-5 h-5 text-gray-600" />,
         };
-    };
-
-    const status = getStatus();
+    }, [completionPercentage]);
 
     const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -108,12 +98,14 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
         ]
         if (!allowedTypes.includes(file.type)) {
             toast.error("Please upload a PDF or DOCX file")
+            if (fileInputRef.current) fileInputRef.current.value = '';
             return
         }
 
         // Validate file size (10MB max)
         if (file.size > 10 * 1024 * 1024) {
             toast.error("File size should be less than 10MB")
+            if (fileInputRef.current) fileInputRef.current.value = '';
             return
         }
 
@@ -124,7 +116,15 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 1️⃣ Extract resume first — some backends auto-save parsed data to profile
             const result: ResumeExtractResponse = await extractResume(file);
 
-            // 2️⃣ Map to ProfileData format
+            // 2️⃣ Store the file immediately after parsing succeeds (independent of profile save steps)
+            uploadResume(file)
+                .then((res) => setProfileData((prev) => ({ ...prev, resume_url: res.resume_url })))
+                .catch((err) => {
+                    logger.warn("Resume file storage failed:", err);
+                    toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
+                });
+
+            // 3️⃣ Map to ProfileData format
             const mapped = mapResumeToProfile(result);
 
             // =====================================================

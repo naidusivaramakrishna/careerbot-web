@@ -1,11 +1,11 @@
-import { EducationItem, ExperienceItem, LinkedinImportResponse } from "@/api/linkedinParsingApi";
+import { LinkedinImportResponse } from "@/api/linkedinParsingApi";
 import { ProfileData } from "../_types/ProfileData";
 
 export const mapLinkedinToProfile = (data: LinkedinImportResponse): Partial<ProfileData> => {
 
     const profileData: Partial<ProfileData> = {};
 
-    const { personal_info, will_add, will_skip, summary } = data;
+    const { personal_info, will_skip, summary } = data;
 
     // -----------------------------------
     // PERSONAL INFORMATION
@@ -45,34 +45,6 @@ export const mapLinkedinToProfile = (data: LinkedinImportResponse): Partial<Prof
             headline: ""
         };
     }
-
-    // -----------------------------------
-    // EDUCATION (from will_skip.education)
-    // -----------------------------------
-    // profileData.education = will_skip?.education?.map((edu: EducationItem) => ({
-    //     institution: edu.school || "",
-    //     degree: edu.degree || "",
-    //     stream: "",
-    //     cgpa: "",
-    //     start_date: edu.startDate || "",
-    //     end_date: edu.endDate || "",
-    // })) || [];
-
-    // -----------------------------------
-    // EXPERIENCE (from will_add.experiece)
-    // -----------------------------------
-    // profileData.workExperience = will_add?.experience?.map((exp: ExperienceItem) => ({
-    //     job_title: exp.role || "",
-    //     company: exp.company || "",
-    //     job_type: exp.currentlyWorking ? "full_time" : "contract",
-    //     location: exp.location || "",
-    //     start_date: exp.startDate || "",
-    //     end_date: exp.endDate || "",
-    //     description: exp.description || "",
-    //     key_achievements: exp.description
-    //         ? exp.description.split("\n").filter(Boolean)
-    //         : []
-    // })) || [];
 
     // -----------------------------------
     // SKILLS (from will_skip.skills)

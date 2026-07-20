@@ -1,5 +1,6 @@
 import { ResumeExtractResponse, ContactField, SocialLinkField, TechnicalSkillItem, CertificationItem } from '@/api/resumeParsingApi';
 import { ProfileData } from '../_types/ProfileData';
+import { logger } from '@/lib/logger';
 import { normalizeDegree, normalizeStream } from './education-normalizer';
 
 type AnyRecord = Record<string, unknown>;
@@ -7,13 +8,18 @@ type AnyRecord = Record<string, unknown>;
 const asStr = (v: unknown): string => (v !== null && v !== undefined ? String(v) : '');
 const asArr = <T = AnyRecord>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
+type BulletItem = string | { text: string; tier?: string; tier_confidence?: number };
+
+const extractBulletText = (item: BulletItem): string =>
+    typeof item === 'string' ? item : (item.text || '');
+
 const buildDescription = (
-    achievements?: Array<{ text: string; tier?: string; tier_confidence?: number }>,
-    responsibilities?: Array<{ text: string; tier?: string; tier_confidence?: number }>
+    achievements?: BulletItem[],
+    responsibilities?: BulletItem[]
 ): string => {
     const items: string[] = [];
-    if (achievements?.length) items.push(...achievements.map(a => `• ${a.text}`));
-    if (responsibilities?.length) items.push(...responsibilities.map(r => `• ${r.text}`));
+    if (achievements?.length) items.push(...achievements.map(a => `• ${extractBulletText(a)}`));
+    if (responsibilities?.length) items.push(...responsibilities.map(r => `• ${extractBulletText(r)}`));
     return items.join('\n').trim();
 };
 
@@ -30,7 +36,7 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
         const profileData: Partial<ProfileData> = {};
 
         if (!resumeData || !resumeData.parsed_data) {
-            console.warn('Resume data is missing or invalid');
+            logger.warn('Resume data is missing or invalid');
             return profileData;
         }
 
@@ -266,11 +272,11 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
             ));
         }
 
-        const softSkillsData = asArr<string>(
+        const softSkillsData = asArr<string | { name: string }>(
             parsed.soft_skills || llm.soft_skills || (parsed as AnyRecord).soft_skills
         );
         if (softSkillsData.length > 0) {
-            allSkills.push(...softSkillsData.map(String));
+            allSkills.push(...softSkillsData.map(item => typeof item === 'string' ? item : (item.name || '')));
         }
 
         if (allSkills.length > 0) {
@@ -305,7 +311,7 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
         // -------------------------
         if (parsed.achievements && parsed.achievements.length > 0) {
             profileData.achievements = parsed.achievements.map((a) => ({
-                title: a || '',
+                title: typeof a === 'string' ? a : (a.text || ''),
                 description: '',
                 date: '',
             }));
@@ -359,7 +365,7 @@ export const mapResumeToProfile = (resumeData: ResumeExtractResponse): Partial<P
 
         return profileData;
     } catch (error) {
-        console.error('Error mapping resume to profile:', error);
+        logger.error('Error mapping resume to profile:', error);
         return {};
     }
 };
