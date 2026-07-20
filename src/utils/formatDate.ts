@@ -25,11 +25,12 @@ export function formatDateRange(start?: string | Date, end?: string | Date): str
   const parsedStart = parseDate(start);
   const parsedEnd = parseDate(end);
 
+  // "present" as a start is degenerate — no meaningful range to render
+  if (parsedStart === "Present") return "";
+
   const formattedStart = parsedStart instanceof Date
     ? format(parsedStart, "MMM yyyy")
-    : parsedStart === "Present"
-      ? "Present"
-      : typeof start === "string" ? start : "";
+    : typeof start === "string" ? start : "";
 
   // Invalid Date object start resolves to "" — no meaningful range to render
   if (!formattedStart) return "";

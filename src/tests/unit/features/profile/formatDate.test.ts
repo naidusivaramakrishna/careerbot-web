@@ -31,9 +31,10 @@ describe('formatDateRange', () => {
         expect(formatDateRange('2022-01-15', 'PRESENT')).toBe('Jan 2022 – Present');
     });
 
-    it('normalizes "present" (any case) to "Present" when used as start date', () => {
-        expect(formatDateRange('present', '2023-06-15')).toBe('Present – Jun 2023');
-        expect(formatDateRange('PRESENT', '2023-06-15')).toBe('Present – Jun 2023');
+    it('returns "" when "present" is used as start date (degenerate — no valid range start)', () => {
+        expect(formatDateRange('present', '2023-06-15')).toBe('');
+        expect(formatDateRange('PRESENT', '2023-06-15')).toBe('');
+        expect(formatDateRange('present')).toBe('');
     });
 
     it('echoes raw start string when start date is unparseable (no "Invalid Date")', () => {
