@@ -316,30 +316,18 @@ export default function AnalysisContent({
   // + parserRemoveSkills persists the change to resume doc
   const directRemoveSkill = React.useCallback(async (skill: string, _suggestion_id?: string, penalty?: number) => {
     const s = skill.trim();
-    const resolvedId = suggestion_id ?? findSkillSuggestionId(matchResults, s);
-    if (!matchId || !resolvedId) {
-      toast.error(`Couldn't remove "${s}" — no matching suggestion for this match.`);
-      return;
-    }
     setAddedSkillFields((prev) => prev.filter((x) => x !== s));
     setResumeSections((prev: Record<string, unknown>) => {
       const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
       return { ...prev, skills: existing.filter((x) => x !== s) };
     });
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await enqueueRequest(() => matcherEnhanceRemove(matchId, resolvedId)) as any;
-      const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
-      if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
-      else if (typeof newScore === "string") {
-        const n = parseFloat(newScore);
-        if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      toast.error(`Failed to remove "${s}": ${err?.message || err}`);
+    if (penalty && penalty > 0) {
+      setLiveScore((prev) => Math.max(0, prev - penalty));
     }
-  }, [matchId, matchResults, enqueueRequest]);
+    if (resumeId) {
+      try { await parserRemoveSkills(resumeId, s); } catch { /* best effort */ }
+    }
+  }, [resumeId]);
 
   // Re-read the resume document so job-title / summary / bullet fixes (which
   // land directly on the resume, not on matchResults) show up in the preview
