@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { mapResumeToProfile } from "../_utils/resumeMapper";
@@ -46,6 +46,8 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
     const completionPercentage = completeness;
     const [uploading, setUploading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const mountedRef = useRef(true);
+    useEffect(() => { return () => { mountedRef.current = false; }; }, []);
     const [linkedinModalOpen, setLinkedinModalOpen] = useState(false);
 
     const status = useMemo(() => {
@@ -118,7 +120,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
 
             // 2️⃣ Store the file immediately after parsing succeeds (independent of profile save steps)
             uploadResume(file)
-                .then((res) => setProfileData((prev) => ({ ...prev, resume_url: res.resume_url })))
+                .then((res) => { if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url })); })
                 .catch((err) => {
                     logger.warn("Resume file storage failed:", err);
                     toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });

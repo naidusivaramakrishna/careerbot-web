@@ -213,7 +213,7 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
                                 className="flex items-center gap-1.5 text-sm font-medium text-[#2257a7] border border-[#2257a7] bg-[#EEF3FB] hover:bg-[#dde8f7] px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <Upload className="w-4 h-4" />
-                                {isLoading ? 'Uploading...' : 'Choose File'}
+                                {isLoading ? 'Uploading...' : 'Choose Resume'}
                             </button>
                         </label>
                     </div>
@@ -244,7 +244,7 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
                         </div>
                         <h3 className="text-base font-semibold text-center text-gray-900 mb-1">Delete Resume?</h3>
                         <p className="text-center text-gray-500 text-xs mb-5">
-                            Are you sure? This action cannot be undone.
+                            Are you sure you want to delete your resume? This action cannot be undone.
                         </p>
                         <div className="flex gap-2">
                             <button

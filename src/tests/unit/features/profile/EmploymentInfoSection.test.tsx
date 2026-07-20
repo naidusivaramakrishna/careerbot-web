@@ -53,6 +53,17 @@ vi.mock('@/app/(user)/profile/_utils/employmentData', () => ({
     { value: 'immediate', label: 'Immediate' },
     { value: '30_days', label: '30 Days' },
   ],
+  ynOptions: [
+    { value: 'true', label: 'Yes' },
+    { value: 'false', label: 'No' },
+  ],
+  disabilityOptions: [
+    { value: 'yes', label: 'Yes' },
+    { value: 'no', label: 'No' },
+  ],
+  workModeOptions: [{ value: 'remote', label: 'Remote' }],
+  genderOptions: [{ value: 'male', label: 'Male' }],
+  employmentStatusOptions: [{ value: 'employed', label: 'Employed' }],
 }));
 
 vi.mock('@/components/common/MultiSelectAutocomplete', () => ({
@@ -80,7 +91,7 @@ const baseProfile: ProfileData = {
 
 const mockEmploymentData = {
   authorized_to_work: true,
-  disability_status: 'no',
+  disability_status: 'no' as const,
   willing_to_relocate: false,
   work_mode: 'remote' as const,
   gender: 'male' as const,
