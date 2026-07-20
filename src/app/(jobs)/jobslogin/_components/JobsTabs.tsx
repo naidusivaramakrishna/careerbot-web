@@ -61,23 +61,20 @@ export default function JobsTabs({
   }, [open]);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 overflow-visible pt-1">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 overflow-visible pt-2">
       {/* Tabs */}
-      <div className="flex min-w-0 flex-wrap gap-1 rounded-[14px] bg-slate-50/80 p-1" role="tablist" aria-label="Job result views">
+      <div className="flex min-w-0 flex-wrap gap-1.5">
         {TABS.map((tab) => {
           const isActive   = activeTab === tab.id;
           const isAI       = tab.id === "matched";
           return (
             <button
               key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
               onClick={() => onTabChange?.(tab.id)}
-              className={`relative flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-3.5 py-2 text-[13px] font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5] focus-visible:ring-offset-2 ${
+              className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-[13px] font-bold transition-all duration-150 ${
                 isActive
-                  ? "bg-white text-[#4F46E5] shadow-sm ring-1 ring-slate-200/70"
-                  : "text-slate-500 hover:bg-white/70 hover:text-slate-800"
+                  ? "bg-[#eef3ff] text-[#4F46E5]"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
               }`}
             >
               {isAI && (
@@ -113,15 +110,13 @@ export default function JobsTabs({
       {/* Filter sort dropdown — available on every tab; "Recommended"/"Top Matched"
           sort by real match score wherever the job has one (see enrichWithMatch
           in JobsContents.tsx), not just on the Smart Match tab. */}
-      <div className="relative flex shrink-0 items-center gap-2">
+      <div className="relative flex shrink-0 items-center gap-2 pb-2">
         {/* Dropdown trigger */}
         <button
           ref={btnRef}
           type="button"
-          aria-expanded={open}
-          aria-haspopup="menu"
           onClick={() => setOpen((v) => !v)}
-          className="flex min-h-10 items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-4 py-2.5 shadow-sm transition-all hover:border-[#4F46E5]/30 hover:bg-slate-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5] focus-visible:ring-offset-2"
+          className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm transition-all hover:border-[#4F46E5]/30 hover:shadow-md"
         >
           <span className="text-[13px] font-semibold leading-none text-gray-700">
             {selectedLabel}
@@ -136,15 +131,12 @@ export default function JobsTabs({
         {open && (
           <div
             ref={dropRef}
-            role="menu"
             className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-gray-100 shadow-[0_8px_24px_rgba(0,0,0,0.12)] py-1.5 z-50"
           >
             {FILTER_OPTIONS.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
-                role="menuitemradio"
-                aria-checked={filterSort === opt.id}
                 onClick={() => { onFilterSortChange?.(opt.id); setOpen(false); }}
                 className={`w-full text-left px-4 py-2.5 text-[13px] font-medium transition-colors ${
                   filterSort === opt.id

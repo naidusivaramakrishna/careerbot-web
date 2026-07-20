@@ -47,6 +47,25 @@ async function safeGet<T = unknown>(url: string, config?: AxiosRequestConfig): P
   }
 }
 
+async function safePatch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  try {
+    logApiRequest('PATCH', url, data);
+    const typedData = data as Record<string, unknown> | undefined;
+    const response = await httpClient.patch<T>(url, typedData, config);
+    logApiResponse('PATCH', url, response.status, response.headers['x-trace-id']);
+    return response.data;
+  } catch (err: unknown) {
+    logApiError('PATCH', url, err);
+    if (axios.isAxiosError(err)) {
+      const raw = err.response?.data ?? err.message;
+      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
+      apiError.__raw = raw;
+      throw apiError;
+    }
+    throw err;
+  }
+}
+
 async function safePut<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   try {
     logApiRequest('PUT', url, data);
@@ -144,6 +163,33 @@ export async function deleteResume(resume_id: string): Promise<void> {
 
 export async function enhanceKeywords(resume_id: string): Promise<unknown> {
   return await safePost<unknown>(`/parser/keyword_enhancement/${resume_id}`);
+}
+
+/* ========== ADD / REMOVE SKILLS — RESUME DIRECT UPDATE ========== */
+
+async function patchResumeSkills(resume_id: string, skills: string | string[], action: "add" | "remove") {
+  const skillArray = Array.isArray(skills) ? skills : [skills];
+  if (!resume_id?.trim()) throw new Error(`Invalid resume_id: ${resume_id}`);
+  if (!skillArray.length) throw new Error("No skills provided");
+
+  const endpoint = `/parser/${action}-skills/${resume_id}`;
+  logger.api.request('PATCH', endpoint, { skills: skillArray });
+  try {
+    const res = await safePatch(endpoint, { skills: skillArray });
+    logger.debug(`Skills ${action}ed successfully`, { count: skillArray.length });
+    return res;
+  } catch (err: unknown) {
+    logger.api.error('PATCH', endpoint, err);
+    throw err;
+  }
+}
+
+export async function parserAddSkills(resume_id: string, skills: string | string[]) {
+  return patchResumeSkills(resume_id, skills, "add");
+}
+
+export async function parserRemoveSkills(resume_id: string, skills: string | string[]) {
+  return patchResumeSkills(resume_id, skills, "remove");
 }
 
 /* ========== JD PARSING ========== */
@@ -443,6 +489,8 @@ export const parserApi = {
   downloadResumePdf,
   deleteResume,
   enhanceKeywords,
+  parserAddSkills,
+  parserRemoveSkills,
   parseJDFile,
   parseJDText,
   parseJDUrl,

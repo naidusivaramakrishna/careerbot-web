@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Brain, MessageCircle, PanelRightClose, X } from "lucide-react";
+import { Brain, MessageCircle, X } from "lucide-react";
 import TopPickCard from "./TopPickCard";
 import TrendingSkillsCard from "./TrendingSkillsCard";
 
@@ -20,20 +20,14 @@ export default function JobsRightSidebar({
   topPicks = [],
   topPicksLoading = false,
   topPicksEmptyMessage,
-  analyzedCount,
   onChatOpen,
   onViewAllRecommendations,
-  onSelectRecommendation,
-  onCollapse,
 }: {
   topPicks?: Job[];
   topPicksLoading?: boolean;
   topPicksEmptyMessage?: string;
-  analyzedCount?: number;
   onChatOpen?: () => void;
   onViewAllRecommendations?: () => void;
-  onSelectRecommendation?: (job: Job) => void;
-  onCollapse?: () => void;
 }) {
   const [bubbleDismissed, setBubbleDismissed] = useState(false);
 
@@ -42,48 +36,34 @@ export default function JobsRightSidebar({
       <div className="border-b border-slate-200/80 bg-white px-4 py-3.5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-indigo-100 bg-indigo-50 text-[#4F46E5] shadow-inner shadow-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-[#4F46E5] shadow-inner shadow-white">
               <Brain size={18} />
             </div>
             <div>
               <h2 className="text-[15px] font-extrabold leading-tight text-slate-950">Career intelligence</h2>
-              <p className="mt-0.5 text-[12px] font-medium text-slate-500">Recommendations from your job graph</p>
+              <p className="mt-0.5 text-[11px] font-medium text-slate-500">Live recommendations from your job graph</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700">
-              Live
-            </span>
-            {onCollapse && (
-              <button
-                type="button"
-                onClick={onCollapse}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5] focus-visible:ring-offset-2"
-                aria-label="Collapse Career intelligence"
-              >
-                <PanelRightClose size={17} />
-              </button>
-            )}
-          </div>
+          <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-700">
+            Live
+          </span>
         </div>
       </div>
 
-      <div id="jobs-right-scroll" className="relative min-h-0 flex-1 overflow-y-auto scroll-smooth bg-[#f6f8fc] px-3.5 py-3.5">
-        <div className="space-y-3.5 pb-3">
-          <div className="overflow-hidden rounded-[14px] border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="scrollbar-hide relative min-h-0 flex-1 overflow-y-auto scroll-smooth bg-[#f8fafc] px-3 py-3">
+        <div className="space-y-3 pb-3">
+          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
             <TopPickCard
               jobs={topPicks}
               loading={topPicksLoading}
               emptyMessage={topPicksEmptyMessage}
-              analyzedCount={analyzedCount}
               onViewAll={onViewAllRecommendations}
-              onSelectJob={onSelectRecommendation}
             />
           </div>
-          <div className="overflow-hidden rounded-[14px] border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-            <TrendingSkillsCard compact={topPicks.length === 0 && !topPicksLoading} />
+          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm" style={{ minHeight: 330 }}>
+            <TrendingSkillsCard />
           </div>
-          <div className="rounded-[14px] border border-[#4F46E5]/15 bg-[linear-gradient(145deg,#ffffff_0%,#f7f8ff_100%)] p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <div className="rounded-2xl border border-[#4F46E5]/15 bg-white p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <button
                 type="button"

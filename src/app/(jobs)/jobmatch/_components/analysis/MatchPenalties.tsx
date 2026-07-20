@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Zap, ChevronDown, ChevronUp, Plus, CheckCircle2, Loader2 } from "lucide-react";
+import { Zap, ChevronDown, ChevronUp, Plus, CheckCircle2, Loader2, ArrowRight } from "lucide-react";
 
 interface Penalty {
   suggestion_id: string;
@@ -11,8 +11,6 @@ interface Penalty {
   penalty: number;
   message: string;
   target?: string;
-  before_example?: string;
-  after_example?: string;
   is_bulk_parent?: boolean;
 }
 
@@ -21,10 +19,6 @@ interface MatchPenaltiesProps {
   matchResult: any;
   onAddSkill: (skill: string, suggestion_id?: string) => Promise<void> | void;
   onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<void> | void;
-  /** Apply a non-skill fix (job title, summary rewrite, STAR/verb/experience bullet rewrite) by suggestion_id. */
-  onApplyFix?: (suggestion_id: string, category?: string) => Promise<void> | void;
-  /** Undo a previously-applied non-skill fix by suggestion_id. */
-  onUndoFix?: (suggestion_id: string, category?: string) => Promise<void> | void;
   /** Hide the Add/Fix All/Improve action buttons and show suggestions as plain read-only text. */
   readOnly?: boolean;
 }
@@ -37,7 +31,6 @@ const CATEGORY_META: Record<string, { label: string; color: string; lightBg: str
   job_title:        { label: "Job Title",         color: "#dc2626", lightBg: "#fff1f2", border: "#fecdd3" },
   requirements:     { label: "Requirements",      color: "#0d9488", lightBg: "#f0fdfa", border: "#99f6e4" },
   experience:       { label: "Experience",        color: "#4f46e5", lightBg: "#eef2ff", border: "#c7d2fe" },
-  summary:          { label: "Professional Summary", color: "#be185d", lightBg: "#fdf2f8", border: "#fbcfe8" },
 };
 
 function prettifyCategory(category: string): string {
@@ -55,14 +48,12 @@ const SEVERITY_META: Record<string, { label: string; color: string; bg: string }
 };
 
 function CategoryGroup({
-  category, items, onAddSkill, onRemoveSkill, onApplyFix, onUndoFix, readOnly,
+  category, items, onAddSkill, onRemoveSkill, readOnly,
 }: {
   category: string;
   items: Penalty[];
   onAddSkill: (skill: string, suggestion_id?: string) => Promise<void> | void;
   onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<void> | void;
-  onApplyFix?: (suggestion_id: string, category?: string) => Promise<void> | void;
-  onUndoFix?: (suggestion_id: string, category?: string) => Promise<void> | void;
   readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(true);
@@ -74,60 +65,31 @@ function CategoryGroup({
   const bulk = items.find(p => p.is_bulk_parent);
   const individuals = items.filter(p => !p.is_bulk_parent);
   const isSkillActionable = category === "technical_skills" || category === "soft_skills";
-  // Every other category (job title, summary, STAR/verb/experience bullet
-  // rewrites, and anything else the backend resolves from suggestion_id) is
-  // fixable through the same generic apply endpoint as long as it carries a
-  // target or a before/after rewrite pair to show the user.
-  const isFixActionable = (p: Penalty) => Boolean(onApplyFix) && Boolean(p.target || p.after_example);
-  const canAct = (p: Penalty) => isSkillActionable ? Boolean(p.target) : isFixActionable(p);
   const allAdded = individuals.every(p => addedIds.has(p.suggestion_id));
   const totalPts = Math.abs(bulk?.penalty ?? individuals.reduce((a, p) => a + Math.abs(p.penalty), 0));
   const pending = individuals.length - addedIds.size;
 
   const handleAdd = async (p: Penalty) => {
-    if (!canAct(p) || addedIds.has(p.suggestion_id) || loadingIds.has(p.suggestion_id)) return;
+    if (!p.target || addedIds.has(p.suggestion_id) || loadingIds.has(p.suggestion_id)) return;
     setLoadingIds(prev => new Set(prev).add(p.suggestion_id));
     try {
-      if (isSkillActionable) await onAddSkill(p.target!, p.suggestion_id);
-      else await onApplyFix!(p.suggestion_id, p.category);
+      await onAddSkill(p.target, p.suggestion_id);
       setAddedIds(prev => new Set(prev).add(p.suggestion_id));
     } finally {
       setLoadingIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
     }
   };
 
-  const handleUndo = async (p: Penalty) => {
-    if (loadingIds.has(p.suggestion_id)) return;
-    setLoadingIds(prev => new Set(prev).add(p.suggestion_id));
-    try {
-      if (isSkillActionable) await onRemoveSkill?.(p.target!, p.suggestion_id);
-      else await onUndoFix?.(p.suggestion_id, p.category);
-      setAddedIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
-    } finally {
-      setLoadingIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
-    }
-  };
-
-  const canBulkAct = isSkillActionable || Boolean(onApplyFix);
-
   const handleBulkAdd = async () => {
-    if (!canBulkAct || bulkLoading || allAdded) return;
+    if (!isSkillActionable || bulkLoading || allAdded) return;
     setBulkLoading(true);
     try {
-      // Apply one at a time — firing every request in the category at once
-      // (Promise.all) trips the backend's rate limit on the enhance/apply
-      // endpoint, surfacing as "Too many requests" toasts for whichever
-      // items land past the burst limit. Sequential calls also avoid racing
-      // concurrent writes to the same resume document server-side.
-      const targets = individuals.filter(p => canAct(p) && !addedIds.has(p.suggestion_id));
-      for (const p of targets) {
-        await handleAdd(p);
-      }
+      await Promise.all(individuals.filter(p => p.target && !addedIds.has(p.suggestion_id)).map(p => handleAdd(p)));
     } finally { setBulkLoading(false); }
   };
 
   return (
-    <div className="overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_16px_45px_-32px_rgba(15,23,42,.4)]">
+    <div className="bg-white rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
       {/* Group header — a div, not a button, since it contains the nested "Fix All" button below */}
       <div
         role="button"
@@ -136,7 +98,7 @@ function CategoryGroup({
         onKeyDown={e => {
           if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(v => !v); }
         }}
-        className="w-full flex items-center justify-between px-6 py-5 hover:bg-slate-50/70 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-3">
           <span className="text-[15px] font-bold" style={{ color: meta.color }}>{meta.label}</span>
@@ -155,7 +117,7 @@ function CategoryGroup({
           <span className="text-[12px] font-semibold text-green-600 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
             +{totalPts.toFixed(1)} pts
           </span>
-          {!readOnly && !!bulk && canBulkAct && (
+          {!readOnly && !!bulk && isSkillActionable && (
             <button
               onClick={e => { e.stopPropagation(); handleBulkAdd(); }}
               disabled={bulkLoading || allAdded}
@@ -181,7 +143,7 @@ function CategoryGroup({
             return (
               <div
                 key={p.suggestion_id}
-                className="group flex items-start gap-4 px-6 py-5 transition-colors duration-300 hover:bg-slate-50/60"
+                className="flex items-start gap-4 px-6 py-4 transition-colors duration-300"
                 style={{ background: isAdded ? "#f0fdf4" : "#fff" }}
               >
                 {/* Dot */}
@@ -195,14 +157,8 @@ function CategoryGroup({
                   <p className={`text-[13.5px] leading-relaxed transition-all duration-300 ${isAdded ? "text-green-700 line-through opacity-60" : "text-gray-700"}`}>
                     {p.message}
                   </p>
-                  {!isSkillActionable && !isAdded && category === "job_title" && p.target && (
-                    <p className="text-[12px] text-emerald-600 mt-1 leading-snug">→ {p.target}</p>
-                  )}
-                  {!isSkillActionable && !isAdded && (p.before_example || p.after_example) && (
-                    <div className="mt-1.5 space-y-0.5">
-                      {p.before_example && <p className="text-[12px] text-red-400 line-through leading-snug">{p.before_example}</p>}
-                      {p.after_example && <p className="text-[12px] text-emerald-600 leading-snug">{p.after_example}</p>}
-                    </div>
+                  {category === "star_pattern" && p.target && !isAdded && (
+                    <p className="text-[12px] text-red-400 line-through mt-1 leading-snug">{p.target}</p>
                   )}
                   {isAdded && (
                     <p className="text-[12px] text-green-600 font-semibold mt-1 flex items-center gap-1">
@@ -227,7 +183,7 @@ function CategoryGroup({
                     </span>
                   </div>
 
-                  {!readOnly && canAct(p) && (
+                  {!readOnly && isSkillActionable && p.target && (
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => handleAdd(p)}
@@ -239,10 +195,12 @@ function CategoryGroup({
                          isAdded ? <><CheckCircle2 className="w-3 h-3" /> Added</> :
                          <><Plus className="w-3 h-3" /> Add</>}
                       </button>
-                      {(isSkillActionable ? onRemoveSkill : onUndoFix) && (
+                      {onRemoveSkill && (
                         <button
-                          onClick={() => handleUndo(p)}
-                          disabled={isLoading}
+                          onClick={async () => {
+                            await onRemoveSkill(p.target!, p.suggestion_id);
+                            setAddedIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
+                          }}
                           className={`flex items-center text-[11px] font-bold px-2.5 py-1.5 rounded-full border transition-colors ${
                             isAdded
                               ? "text-green-600 border-green-200 hover:bg-green-50"
@@ -254,6 +212,15 @@ function CategoryGroup({
                       )}
                     </div>
                   )}
+
+                  {!readOnly && category === "star_pattern" && p.target && !isAdded && (
+                    <button
+                      className="flex items-center gap-1 text-[11px] font-semibold px-3 py-1.5 rounded-full border transition-colors hover:opacity-80"
+                      style={{ color: meta.color, borderColor: meta.border, background: meta.lightBg }}
+                    >
+                      <ArrowRight className="w-3 h-3" /> Improve
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -264,7 +231,7 @@ function CategoryGroup({
   );
 }
 
-export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill, onApplyFix, onUndoFix, readOnly }: MatchPenaltiesProps) {
+export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill, readOnly }: MatchPenaltiesProps) {
   const penalties: Penalty[] = matchResult?.Match_Penalties?.penalties ?? [];
   if (!penalties.length) return null;
 
@@ -276,7 +243,7 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill,
     grouped[p.category].push(p);
   }
 
-  const ORDER = ["technical_skills", "soft_skills", "capabilities", "star_pattern", "job_title", "summary", "requirements", "experience"];
+  const ORDER = ["technical_skills", "soft_skills", "capabilities", "star_pattern", "job_title"];
   const sortedCategories = [
     ...ORDER.filter(c => grouped[c]),
     ...Object.keys(grouped).filter(c => !ORDER.includes(c)),
@@ -285,13 +252,10 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill,
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-end justify-between px-1">
+      <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
           <Zap className="w-4 h-4 text-amber-500" />
-          <div>
-            <h3 className="text-[18px] font-extrabold tracking-[-0.02em] text-slate-950">Priority improvements</h3>
-            <p className="mt-1 text-xs text-slate-500">Start with the highest-value changes to lift your match score.</p>
-          </div>
+          <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Improvement Suggestions</h3>
         </div>
         <span className="text-[12px] font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1 rounded-full">
           Recover up to +{totalPenalty.toFixed(1)} pts
@@ -305,8 +269,6 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill,
           items={grouped[cat]}
           onAddSkill={onAddSkill}
           onRemoveSkill={onRemoveSkill}
-          onApplyFix={onApplyFix}
-          onUndoFix={onUndoFix}
           readOnly={readOnly}
         />
       ))}

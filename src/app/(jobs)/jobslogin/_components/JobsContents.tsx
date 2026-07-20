@@ -7,80 +7,34 @@ import { searchJobs, getSmartMatchedJobs, getJobById } from "@/api/jobsApi";
 import type { MatchedJobItem } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/filterConstants";
 import { toast } from "sonner";
-import { getSavedJobs, getSavedJobsCount, removeSavedJob, getApplicationHistory, getApplicationCount, recordJobApplication, removeJobApplication } from "@/utils/jobTracking";
+import { getSavedJobIds, getSavedJobsCount, getApplicationHistory, getApplicationCount, recordJobApplication } from "@/utils/jobTracking";
 import { getJobId } from "@/utils/jobIdHelper";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
-import { Bookmark, Zap, Search, AlertTriangle, RotateCcw, FileX, MessageCircle, CheckCircle2, Briefcase, X, PanelRightOpen } from "lucide-react";
+import { Bookmark, Zap, Search, AlertTriangle, RotateCcw, FileX, MessageCircle, CheckCircle2, Briefcase, X } from "lucide-react";
 
 import JobsTabs, { TabType, SortType, FilterSort } from "./JobsTabs";
 import JobList from "./sidebar/JobList";
 import Pagination from "./Pagination";
 import JobsRightSidebar from "./sidebar/JobsRightSidebar";
-import JobPreviewPanel from "./sidebar/JobPreviewPanel";
-import MatchAnalysisModal from "./job-cards/MatchAnalysisModal";
 import NancyChat from "./chat/NancyChat";
 import JobSkeleton from "./JobSkeleton";
 import JobsFilterSidebar from "./JobsFilterSidebar";
 import { matchesJobFilters } from "./utils/jobFilterUtils";
-import { buildDailyShortlist, recordJobPreferenceSignal } from "@/utils/jobPreferenceLearning";
 
-// Common job title suggestions for autocomplete, spanning tech and non-tech domains
+// Common job title suggestions for autocomplete
 const JOB_SUGGESTIONS = [
-  // Software & IT
   "Software Engineer", "Frontend Developer", "Backend Developer", "Full Stack Developer",
-  "Data Scientist", "Data Analyst", "Data Engineer", "Machine Learning Engineer", "AI Engineer",
-  "DevOps Engineer", "Cloud Engineer", "Cloud Architect", "Site Reliability Engineer", "Solutions Architect",
-  "Product Manager", "Project Manager", "Scrum Master", "Program Manager",
-  "UI/UX Designer", "Product Designer", "Graphic Designer",
-  "Python Developer", "Java Developer", "React Developer", "Node.js Developer", ".NET Developer",
-  "Android Developer", "iOS Developer", "Mobile Developer", "Game Developer",
+  "Data Scientist", "Data Analyst", "Data Engineer", "Machine Learning Engineer",
+  "DevOps Engineer", "Cloud Engineer", "Site Reliability Engineer",
+  "Product Manager", "Project Manager", "Scrum Master",
+  "UI/UX Designer", "Graphic Designer",
+  "Python Developer", "Java Developer", "React Developer", "Node.js Developer",
+  "Android Developer", "iOS Developer", "Mobile Developer",
   "QA Engineer", "Test Engineer", "Automation Engineer",
-  "Business Analyst", "Systems Analyst", "BI Analyst", "ETL Developer",
-  "Cybersecurity Engineer", "Network Engineer", "Database Administrator", "IT Support Specialist",
-  "Technical Lead", "Engineering Manager", "Technical Writer", "Blockchain Developer", "Embedded Systems Engineer",
-
-  // Sales & Marketing
-  "Sales Executive", "Sales Representative", "Sales Manager", "Business Development Manager",
-  "Digital Marketing Specialist", "SEO Specialist", "Content Writer", "Content Creator",
-  "Social Media Manager", "Brand Manager", "Marketing Manager", "Marketing Analyst", "Account Manager",
-
-  // Finance & Accounting
-  "Accountant", "Chartered Accountant", "Financial Analyst", "Finance Manager", "Auditor",
-  "Investment Banker", "Tax Consultant", "Bookkeeper", "Actuary", "Credit Analyst", "Loan Officer",
-
-  // Human Resources & Administration
-  "HR Manager", "HR Generalist", "Recruiter", "Talent Acquisition Specialist",
-  "Office Administrator", "Executive Assistant", "Payroll Specialist",
-
-  // Legal
-  "Lawyer", "Legal Advisor", "Legal Counsel", "Paralegal", "Compliance Officer",
-
-  // Healthcare
-  "Registered Nurse", "Physician", "Pharmacist", "Medical Assistant", "Physical Therapist",
-  "Radiologic Technologist", "Dentist", "Veterinarian", "Healthcare Administrator",
-  "Clinical Research Associate", "Lab Technician", "Medical Coder",
-
-  // Education & Training
-  "Teacher", "Professor", "Academic Counselor", "Curriculum Developer", "Tutor", "Training Specialist",
-
-  // Engineering (non-software)
-  "Mechanical Engineer", "Civil Engineer", "Electrical Engineer", "Chemical Engineer",
-  "Industrial Engineer", "Structural Engineer", "Automotive Engineer", "Aerospace Engineer", "Site Engineer",
-
-  // Operations, Supply Chain & Manufacturing
-  "Operations Manager", "Supply Chain Analyst", "Logistics Coordinator", "Warehouse Manager",
-  "Procurement Manager", "Inventory Manager", "Production Supervisor", "Quality Control Inspector",
-  "Construction Manager", "Architect",
-
-  // Customer Service
-  "Customer Support Representative", "Customer Success Manager", "Call Center Agent", "Technical Support Engineer",
-
-  // Hospitality, Retail & Creative
-  "Hotel Manager", "Chef", "Restaurant Manager", "Store Manager", "Retail Associate", "Event Planner",
-  "Interior Designer", "Video Editor", "Animator", "Photographer",
-
-  // Science & Research
-  "Research Scientist", "Lab Assistant", "Biotechnologist", "Environmental Scientist",
+  "Business Analyst", "Systems Analyst",
+  "Sales Manager", "Marketing Manager", "HR Manager",
+  "Cybersecurity Engineer", "Network Engineer", "Database Administrator",
+  "Technical Lead", "Engineering Manager",
 ];
 
 // ── "Did you apply?" pending-confirmation record ──
@@ -89,11 +43,6 @@ interface PendingApplyJob {
   title: string;
   company: string;
   url: string;
-  // Full card data captured when Apply Now was clicked, so it can be
-  // persisted onto the application record if the user confirms — see
-  // handleConfirmApplied. Without this, aggregated jobs (client-generated
-  // "composite-" ids) can never be re-fetched from the backend afterward.
-  snapshot?: Record<string, unknown>;
 }
 
 const PENDING_APPLY_KEY = "pendingApplyJob";
@@ -314,11 +263,6 @@ export default function JobsContents() {
   // ── Nancy chat ──
   const [openChat, setOpenChat] = useState(false);
   const [selectedJob, setSelectedJob] = useState<NormalizedJob | null>(null);
-  const [selectedPreviewJobId, setSelectedPreviewJobId] = useState<string | null>(null);
-  const [chatPrompt, setChatPrompt] = useState("");
-  const [analysisJob, setAnalysisJob] = useState<NormalizedJob | null>(null);
-  const [preferenceVersion, setPreferenceVersion] = useState(0);
-  const [showIntelligence, setShowIntelligence] = useState(true);
 
   // ── Smart match ──
   const [matchedJobs, setMatchedJobs] = useState<NormalizedJob[]>([]);
@@ -327,7 +271,6 @@ export default function JobsContents() {
   const [matchedLoading, setMatchedLoading] = useState(false);
   const [matchedFetched, setMatchedFetched] = useState(false);
   const [matchedNoResume, setMatchedNoResume] = useState(false);
-  const [matchedError, setMatchedError] = useState<string | null>(null);
   const [matchBandFilter] = useState<"all" | "strong" | "good" | "partial" | "low">("all");
 
   // ── Sort helper ──
@@ -452,7 +395,6 @@ export default function JobsContents() {
     if (matchedFetched && page === matchedPage && !force) return;
     setMatchedLoading(true);
     setMatchedNoResume(false);
-    setMatchedError(null);
     try {
       const data = await getSmartMatchedJobs({
         limit: MATCHED_PER_PAGE,
@@ -476,7 +418,6 @@ export default function JobsContents() {
       } else {
         // Transient failure — leave matchedFetched false so the next tab
         // activation retries instead of caching the error.
-        setMatchedError("We couldn't load your Smart Match results. Your existing jobs are still available.");
         toast.error("Could not load Smart Match jobs. Please try again later.");
       }
     } finally {
@@ -488,59 +429,21 @@ export default function JobsContents() {
   //    tab/page a job was originally saved from, unlike filtering the
   //    currently-loaded "All Jobs"/"Smart Match" arrays. ──
   const fetchSavedJobsList = useCallback(async () => {
-    const saved = getSavedJobs(userId);
-    if (saved.length === 0) {
+    const savedIds = getSavedJobIds(userId);
+    if (savedIds.length === 0) {
       setSavedJobsList([]);
-      setSavedJobsCount(0);
       return;
     }
-
-    // Show what's recorded locally right away. The snapshot captured at
-    // save time (see JobCard's handleSaveJob) renders a complete card with
-    // no network dependency, and is required for aggregated jobs
-    // (client-generated "composite-" ids — see jobIdHelper.ts): the backend
-    // has no record under that id, so a lookup can never find it.
-    const placeholders = saved.map((s) =>
-      s.snapshot
-        ? ({ ...s.snapshot, id: s.jobId } as unknown as NormalizedJob)
-        : normalizeJob({ id: s.jobId, title: s.title, company: s.company, location: s.location, type: s.type })
-    );
-    setSavedJobsList(placeholders);
-    setSavedJobsCount(saved.length);
-
     setSavedJobsListLoading(true);
     try {
       const results = await Promise.all(
-        saved.map(async (s) => {
-          // Composite ids are client-generated and never known to the
-          // backend — skip the lookup entirely instead of misreading the
-          // guaranteed 404 as "this job was deleted" and erasing it below.
-          if (s.jobId.startsWith("composite-")) return { job: null, stale: false };
-          try {
-            const res = await getJobById(s.jobId);
-            return {
-              job: res.data ? normalizeJob(res.data as unknown as Record<string, unknown>) : null,
-              stale: !res.data,
-            };
-          } catch (err: unknown) {
-            return {
-              job: null,
-              // Delete only records the API confirms no longer exist. A
-              // timeout or server error must not erase a user's saved job.
-              stale: (err as { response?: { status?: number } })?.response?.status === 404,
-            };
-          }
-        })
+        savedIds.map((id) =>
+          getJobById(id)
+            .then((res) => (res.data ? normalizeJob(res.data as unknown as Record<string, unknown>) : null))
+            .catch(() => null)
+        )
       );
-      results.forEach((result, index) => {
-        if (result.stale) removeSavedJob(saved[index].jobId, userId);
-      });
-      setSavedJobsList((prev) =>
-        prev
-          .map((job, i) => (results[i].stale ? null : results[i].job ?? job))
-          .filter((job): job is NormalizedJob => job !== null)
-      );
-      setSavedJobsCount(getSavedJobsCount(userId));
+      setSavedJobsList(results.filter((j): j is NormalizedJob => j !== null));
     } finally {
       setSavedJobsListLoading(false);
     }
@@ -559,35 +462,24 @@ export default function JobsContents() {
 
     // Show what's recorded locally right away — no network dependency on the
     // critical path, so a backend lookup failure can never make the tab look
-    // empty. Applications recorded with a full snapshot (captured at apply
-    // time, from the card the user actually applied from) render complete
-    // immediately; older entries recorded before snapshots existed fall back
-    // to the bare id/title/company/url. normalizeJob() only reads plain
-    // fields, so this can't throw.
+    // empty. normalizeJob() only reads plain fields, so this can't throw.
     const placeholders = history.map((app) =>
-      app.snapshot
-        ? ({ ...app.snapshot, id: app.jobId, is_applied: true } as unknown as NormalizedJob)
-        : normalizeJob({
-            id: app.jobId,
-            title: app.title,
-            company: app.company,
-            url: app.url,
-            created_at: app.appliedAt,
-            is_applied: true,
-          })
+      normalizeJob({
+        id: app.jobId,
+        title: app.title,
+        company: app.company,
+        url: app.url,
+        created_at: app.appliedAt,
+        is_applied: true,
+      })
     );
     setAppliedJobsList(placeholders);
 
     // Best-effort enrichment with full job details in the background.
-    // Skipped for aggregated jobs (client-generated "composite-" ids — see
-    // getJobId/generateCompositeJobId in jobIdHelper.ts): the backend has no
-    // record under that id, so /jobs/all?id=... would just 404 every time.
-    // Those already show full data from the snapshot above.
     setAppliedJobsListLoading(true);
     try {
       const enriched = await Promise.all(
         history.map(async (app) => {
-          if (app.jobId.startsWith("composite-")) return null;
           try {
             const res = await getJobById(app.jobId);
             return res.data ? normalizeJob(res.data as unknown as Record<string, unknown>) : null;
@@ -648,8 +540,7 @@ export default function JobsContents() {
 
   const handleConfirmApplied = () => {
     if (!pendingApplyJob) return;
-    recordJobApplication(pendingApplyJob.id, pendingApplyJob.title, pendingApplyJob.company, pendingApplyJob.url, userId, pendingApplyJob.snapshot);
-    recordJobPreferenceSignal("applied", pendingApplyJob, userId);
+    recordJobApplication(pendingApplyJob.id, pendingApplyJob.title, pendingApplyJob.company, pendingApplyJob.url, userId);
     toast.success("Marked as applied!");
     clearPendingApply();
     fetchAppliedJobsList();
@@ -686,11 +577,8 @@ export default function JobsContents() {
 
   // ── Top Picks — real recommendations, sorted by match score ──
   const topPickJobs = useMemo(
-    () => {
-      void preferenceVersion;
-      return buildDailyShortlist(matchedJobs, userId, 3);
-    },
-    [matchedJobs, preferenceVersion, userId]
+    () => [...matchedJobs].sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0)).slice(0, 3),
+    [matchedJobs]
   );
 
   const handlePageChange = (page: number) => {
@@ -702,22 +590,6 @@ export default function JobsContents() {
     fetchSmartMatchedJobs(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  // ── Remove from list — for Saved/Applied, membership is backed by
-  //    localStorage, so removal must persist there too, not just hide the
-  //    card in JobList's local state (that alone doesn't survive a refetch,
-  //    e.g. switching tabs and back, or reloading the page). ──
-  const handleRemoveJob = useCallback((job: { id: string }) => {
-    if (activeTab === "applied") {
-      removeJobApplication(job.id, userId);
-      setAppliedJobsList((prev) => prev.filter((j) => j.id !== job.id));
-      setAppliedJobsCount(getApplicationCount(userId));
-    } else if (activeTab === "saved") {
-      removeSavedJob(job.id, userId);
-      setSavedJobsList((prev) => prev.filter((j) => j.id !== job.id));
-      setSavedJobsCount(getSavedJobsCount(userId));
-    }
-  }, [activeTab, userId]);
 
   // ── Client-side filter / tab logic ──
   useEffect(() => {
@@ -839,44 +711,21 @@ export default function JobsContents() {
     ? appliedJobsListLoading
     : loading;
   const matchedCount = matchedTotal;
-  const currentError = isMatchedTab ? matchedError : error;
-  const knownJobs = useMemo(
-    () => [...filteredJobs, ...matchedJobs, ...jobs, ...savedJobsList, ...appliedJobsList],
-    [appliedJobsList, filteredJobs, jobs, matchedJobs, savedJobsList]
-  );
-  const previewJob = selectedPreviewJobId
-    ? knownJobs.find((job) => job.id === selectedPreviewJobId) ?? null
-    : null;
-  const closeJobPreview = useCallback(() => {
-    const closingJobId = selectedPreviewJobId;
-    setSelectedPreviewJobId(null);
-    if (closingJobId) {
-      requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>(`[data-job-id="${CSS.escape(closingJobId)}"]`)?.focus();
-      });
-    }
-  }, [selectedPreviewJobId]);
-
-  useEffect(() => {
-    if (selectedPreviewJobId && !knownJobs.some((job) => job.id === selectedPreviewJobId)) {
-      setSelectedPreviewJobId(null);
-    }
-  }, [knownJobs, selectedPreviewJobId]);
 
   return (
-    <div data-jobs-surface className="flex h-full w-full max-w-full min-w-0 items-stretch gap-3 overflow-hidden bg-[var(--jobs-canvas)]">
+    <div className="flex h-full w-full max-w-full min-w-0 items-stretch gap-4 overflow-hidden bg-white">
       {/* CENTER PANEL — scrolls internally so the right sidebar never moves */}
-      <main id="jobs-main-scroll" aria-busy={displayLoading} className="h-full min-w-0 flex-1 overflow-y-auto border border-[var(--jobs-border)] bg-white shadow-[var(--jobs-shadow-2)]">
+      <main id="jobs-main-scroll" className="h-full min-w-0 flex-1 overflow-y-auto border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.06)]">
         {/* RESULTS VIEW */}
 
         
         <div>
             {/* TOP BAR */}
-            <div className="jobs-results-header relative z-40 flex flex-col gap-4 border-b border-slate-200/80 px-5 py-[18px] sm:px-6">
+            <div className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5">
-                    <h1 className="jobs-results-title truncate text-[25px] font-extrabold leading-tight tracking-[-0.025em] text-slate-950">
+                    <h1 className="truncate text-[26px] font-extrabold leading-tight text-slate-950">
                       {isMatchedTab
                         ? "Smart Match Jobs"
                         : searchQuery
@@ -890,12 +739,20 @@ export default function JobsContents() {
                       Live
                     </span>
                   </div>
+                  <p className="mt-1 text-[14px] font-semibold text-slate-500">
+                    {filteredJobs.length > 0
+                      ? `${filteredJobs.length.toLocaleString()} opportunities`
+                      : displayLoading
+                      ? "Loading…"
+                      : "No results"}
+                    {selectedLocation !== "All Locations" && ` · ${selectedLocation}`}
+                  </p>
                 </div>
               </div>
 
               {/* Search input with autocomplete + button */}
-              <div ref={searchRef} className="jobs-search-shell relative flex w-full min-w-0 shrink items-center gap-2">
-                <div className="relative min-w-0 flex-1">
+              <div ref={searchRef} className="relative flex w-full min-w-0 shrink items-center gap-2 lg:w-auto">
+                <div className="relative min-w-0 flex-1 lg:flex-none">
                   <svg
                     className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
                     fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -904,13 +761,12 @@ export default function JobsContents() {
                   </svg>
                   <input
                     type="text"
-                    aria-label="Search jobs by title or company"
                     value={inputValue}
                     onChange={(e) => handleSearchInput(e.target.value)}
                     onFocus={() => inputValue.trim() && setShowSuggestions(suggestions.length > 0)}
                     onKeyDown={(e) => { if (e.key === "Enter") commitSearch(inputValue); }}
                     placeholder="Search by title or company"
-                    className="jobs-search-input w-full rounded-[14px] border border-slate-200 bg-white py-3.5 pl-10 pr-4 text-[13px] font-medium text-slate-800 placeholder:font-normal placeholder:text-slate-400 transition-all focus:border-[#4F46E5]/45 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#4F46E5]/10"
+                    className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-10 pr-4 text-[13px] text-slate-700 shadow-sm placeholder:text-slate-400 transition-all focus:border-[#4F46E5]/45 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#4F46E5]/10 lg:w-[min(440px,36vw)]"
                   />
                   {/* Autocomplete dropdown */}
                   {showSuggestions && (
@@ -945,7 +801,7 @@ export default function JobsContents() {
                 <button
                   type="button"
                   onClick={() => commitSearch(inputValue)}
-                  className="flex shrink-0 items-center gap-1.5 rounded-[14px] bg-[#4F46E5] px-6 py-3.5 text-[13px] font-bold text-white shadow-[0_8px_20px_rgba(79,70,229,0.20)] transition-all hover:bg-[#4338CA] hover:shadow-[0_12px_28px_rgba(79,70,229,0.24)] active:scale-[0.98]"
+                  className="flex shrink-0 items-center gap-1.5 rounded-2xl bg-[#4F46E5] px-6 py-3.5 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(79,70,229,0.22)] transition-all hover:bg-[#4338CA] hover:shadow-[0_16px_36px_rgba(79,70,229,0.30)] active:scale-95"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
@@ -957,7 +813,7 @@ export default function JobsContents() {
 
               <div className="px-5 sm:px-6">
               {/* STICKY FILTER + TABS BAR */}
-              <div className="sticky top-0 z-30 -mx-5 border-b border-slate-200/80 bg-white/95 px-5 pb-2 backdrop-blur-xl sm:-mx-6 sm:px-6">
+              <div className="sticky top-0 z-30 -mx-5 border-b border-slate-200/80 bg-white px-5 pb-0 sm:-mx-6 sm:px-6">
                 <JobsFilterSidebar
                   selectedFilters={selectedFilters}
                   onFilterToggle={handleFilterToggle}
@@ -982,21 +838,21 @@ export default function JobsContents() {
               {/* JOB LIST */}
               <div className="mt-4 pb-10">
                 {displayLoading ? (
-                  <div className="space-y-3" role="status" aria-label="Loading job results">
+                  <div className="space-y-4">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <JobSkeleton key={i} />
                     ))}
                   </div>
-                ) : currentError ? (
-                  <div className="flex flex-col items-center justify-center py-14 px-8 text-center" role="alert">
+                ) : error && !isMatchedTab ? (
+                  <div className="flex flex-col items-center justify-center py-14 px-8 text-center">
                     <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mb-4 shadow-sm">
                       <AlertTriangle size={24} className="text-red-400" />
                     </div>
                     <h3 className="text-[15px] font-bold text-gray-800">Failed to Load Jobs</h3>
-                    <p className="text-gray-500 text-[12.5px] mt-1.5 max-w-xs leading-relaxed">{currentError}</p>
+                    <p className="text-gray-500 text-[12.5px] mt-1.5 max-w-xs leading-relaxed">{error}</p>
                     <button
                       type="button"
-                      onClick={() => isMatchedTab ? fetchSmartMatchedJobs(matchedPage, true) : fetchJobs(currentPage)}
+                      onClick={() => fetchJobs(currentPage)}
                       className="mt-5 inline-flex items-center gap-2 px-5 py-2 bg-[#4F46E5] text-white text-[13px] font-semibold rounded-full hover:bg-[#4338CA] transition-colors"
                     >
                       <RotateCcw size={13} />
@@ -1004,13 +860,18 @@ export default function JobsContents() {
                     </button>
                   </div>
                 ) : filteredJobs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 px-8 text-center" role="status">
+                  <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
                     {/* Tab-specific icon */}
-                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-indigo-100 bg-indigo-50 shadow-sm">
-                      {activeTab === "saved"   ? <Bookmark size={26} className="text-[#4F46E5]" /> :
-                       activeTab === "applied" ? <CheckCircle2 size={26} className="text-[#4F46E5]" /> :
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-sm ${
+                      activeTab === "saved"   ? "bg-amber-50 border border-amber-100" :
+                      activeTab === "applied" ? "bg-emerald-50 border border-emerald-100" :
+                      activeTab === "matched" ? "bg-blue-50 border border-blue-100" :
+                                               "bg-gray-100 border border-gray-200"
+                    }`}>
+                      {activeTab === "saved"   ? <Bookmark size={26} className="text-amber-400" /> :
+                       activeTab === "applied" ? <CheckCircle2 size={26} className="text-emerald-500" /> :
                        activeTab === "matched" ? <Zap size={26} className="text-[#4F46E5]" /> :
-                                                <Search size={26} className="text-[#4F46E5]" />}
+                                                <Search size={26} className="text-gray-400" />}
                     </div>
                     <h3 className="text-[16px] font-bold text-gray-800">
                       {activeTab === "saved"
@@ -1072,16 +933,8 @@ export default function JobsContents() {
                 ) : (
                   <JobList
                     jobs={filteredJobs}
-                    selectedJobId={selectedPreviewJobId}
-                    onJobSelect={(job) => {
-                      setSelectedPreviewJobId(job.id);
-                      setShowIntelligence(true);
-                      recordJobPreferenceSignal("previewed", job, userId);
-                      setPreferenceVersion((version) => version + 1);
-                    }}
                     onBotClick={(job) => {
                       setSelectedJob(job as unknown as NormalizedJob);
-                      setChatPrompt("Do I qualify for this role?");
                       setOpenChat(true);
                     }}
                     onApplyClick={(job) =>
@@ -1090,10 +943,8 @@ export default function JobsContents() {
                         title: job.title,
                         company: job.company,
                         url: job.url || job.application_url || "",
-                        snapshot: { ...job },
                       })
                     }
-                    onRemove={handleRemoveJob}
                   />
                 )}
 
@@ -1137,102 +988,30 @@ export default function JobsContents() {
           </div>
       </main>
 
-      {/* Career intelligence stays available without permanently taking over
-          the result list. Users can collapse it when they need comparison room. */}
-      {showIntelligence ? (
-        <aside className={`jobs-intelligence-rail h-full shrink-0 flex-col overflow-hidden border border-[var(--jobs-border)] bg-white shadow-[var(--jobs-shadow-2)] ${previewJob ? "jobs-intelligence-rail--preview" : ""}`}>
-          {previewJob ? (
-            <JobPreviewPanel
-              job={previewJob}
-              onClose={closeJobPreview}
-              onAskAI={(prompt) => {
-                setSelectedJob(previewJob);
-                setChatPrompt(prompt);
-                setOpenChat(true);
-                recordJobPreferenceSignal("ai_used", previewJob, userId);
-                setPreferenceVersion((version) => version + 1);
-              }}
-              onTailorResume={() => {
-                setAnalysisJob(previewJob);
-                recordJobPreferenceSignal("tailored", previewJob, userId);
-                setPreferenceVersion((version) => version + 1);
-              }}
-            />
-          ) : (
-            <JobsRightSidebar
-              topPicks={topPickJobs}
-              topPicksLoading={matchedLoading && !matchedFetched}
-              analyzedCount={matchedTotal}
-              topPicksEmptyMessage={
-                matchedNoResume
-                  ? "Upload your resume in Profile to get personalised picks."
-                  : "No strong matches yet — check back soon."
-              }
-              onCollapse={() => setShowIntelligence(false)}
-              onSelectRecommendation={(job) => {
-                setSelectedPreviewJobId(job.id);
-                recordJobPreferenceSignal("previewed", job, userId);
-                setPreferenceVersion((version) => version + 1);
-              }}
-              onChatOpen={() => { setSelectedJob(null); setChatPrompt(""); setOpenChat(true); }}
-              onViewAllRecommendations={() => {
-                setActiveTab("matched");
-                setFilterSort("recommended");
-                document.getElementById("jobs-main-scroll")?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-            />
-          )}
-        </aside>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setShowIntelligence(true)}
-          className="jobs-intelligence-trigger h-11 shrink-0 items-center gap-2 rounded-xl border border-[var(--jobs-border)] bg-white px-3 text-[12px] font-bold text-slate-700 shadow-[var(--jobs-shadow-1)] transition-colors hover:border-[var(--jobs-primary)] hover:text-[var(--jobs-primary)]"
-          aria-label="Open Career intelligence"
-        >
-          <PanelRightOpen size={16} />
-          Insights
-        </button>
-      )}
-
-      {previewJob && (
-        <div
-          className="jobs-mobile-preview fixed inset-0 z-40 items-end bg-slate-950/35 p-3 backdrop-blur-sm"
-          onClick={closeJobPreview}
-          role="presentation"
-        >
-          <div
-            className="h-[min(82vh,720px)] w-full overflow-hidden rounded-[22px] bg-white shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Job preview for ${previewJob.title}`}
-          >
-            <JobPreviewPanel
-              job={previewJob}
-              onClose={closeJobPreview}
-              isModal
-              onAskAI={(prompt) => {
-                setSelectedJob(previewJob);
-                setChatPrompt(prompt);
-                setOpenChat(true);
-                recordJobPreferenceSignal("ai_used", previewJob, userId);
-                setPreferenceVersion((version) => version + 1);
-              }}
-              onTailorResume={() => {
-                setAnalysisJob(previewJob);
-                recordJobPreferenceSignal("tailored", previewJob, userId);
-                setPreferenceVersion((version) => version + 1);
-              }}
-            />
-          </div>
-        </div>
-      )}
+      {/* RIGHT SIDEBAR — fixed in place; the page itself never scrolls, only
+          the job list (above) does, so this column just stays put. */}
+      <aside className="hidden h-full w-[360px] shrink-0 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.07)] xl:flex xl:flex-col 2xl:w-[400px]">
+        <JobsRightSidebar
+          topPicks={topPickJobs}
+          topPicksLoading={matchedLoading && !matchedFetched}
+          topPicksEmptyMessage={
+            matchedNoResume
+              ? "Upload your resume in Profile to get personalised picks."
+              : "No strong matches yet — check back soon."
+          }
+          onChatOpen={() => { setSelectedJob(null); setOpenChat(true); }}
+          onViewAllRecommendations={() => {
+            setActiveTab("matched");
+            setFilterSort("recommended");
+            document.getElementById("jobs-main-scroll")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+        />
+      </aside>
 
       {!openChat && (
         <button
           type="button"
-          onClick={() => { setSelectedJob(null); setChatPrompt(""); setOpenChat(true); }}
+          onClick={() => { setSelectedJob(null); setOpenChat(true); }}
           className="fixed bottom-5 right-5 z-30 flex h-[60px] w-[60px] items-center justify-center rounded-2xl border border-white bg-white p-1.5 shadow-[0_18px_42px_rgba(15,23,42,0.22)] transition-all hover:-translate-y-0.5 active:translate-y-0 xl:hidden"
           aria-label="Open Nancy assistant"
         >
@@ -1255,7 +1034,7 @@ export default function JobsContents() {
           {/* Click-outside to close */}
           <div
             className="fixed inset-0 z-40"
-            onClick={() => { setOpenChat(false); setSelectedJob(null); setChatPrompt(""); }}
+            onClick={() => { setOpenChat(false); setSelectedJob(null); }}
           />
           {/* Chat panel — same position/width as sidebar, slides in from right */}
           <div
@@ -1267,13 +1046,10 @@ export default function JobsContents() {
             }}
           >
             <NancyChat
-              key={`${selectedJob?.id ?? "general"}:${chatPrompt}`}
               job={selectedJob as unknown as Parameters<typeof NancyChat>[0]["job"]}
-              initialPrompt={chatPrompt}
               onClose={() => {
                 setOpenChat(false);
                 setSelectedJob(null);
-                setChatPrompt("");
               }}
             />
           </div>
@@ -1284,15 +1060,6 @@ export default function JobsContents() {
             }
           `}</style>
         </>
-      )}
-
-      {analysisJob && (
-        <MatchAnalysisModal
-          jobId={analysisJob.id}
-          jobTitle={analysisJob.title}
-          company={analysisJob.company}
-          onClose={() => setAnalysisJob(null)}
-        />
       )}
 
       {/* "DID YOU APPLY?" — shown when the user returns to this tab after
