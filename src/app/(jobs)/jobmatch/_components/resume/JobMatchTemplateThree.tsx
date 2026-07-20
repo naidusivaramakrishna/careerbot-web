@@ -20,6 +20,28 @@ interface JobMatchTemplateTHREEProps {
   customSectionLabels?: Record<string, string>;
 }
 
+const SKILL_CATEGORY_KEYWORDS: { label: string; keywords: string[] }[] = [
+  { label: "Languages", keywords: ["python", "javascript", "typescript", "java", "c++", "c#", "golang", "rust", "swift", "kotlin", "php", "ruby", "scala", "perl", "dart", "language"] },
+  { label: "Databases", keywords: ["mysql", "postgresql", "postgres", "mongodb", "oracle", "sql server", "sqlite", "dynamodb", "cassandra", "mariadb", "firebase", "elasticsearch"] },
+  { label: "Tools", keywords: ["git", "github", "gitlab", "bitbucket", "docker", "jira", "confluence", "postman", "jenkins", "webpack", "vite", "npm", "yarn", "figma"] },
+  { label: "Cloud Platforms", keywords: ["aws", "amazon web services", "azure", "google cloud", "gcp", "digitalocean", "heroku", "vercel", "netlify", "cloudflare"] },
+  { label: "Methodologies", keywords: ["ci/cd", "cicd", "agile", "scrum", "kanban", "tdd", "devops", "waterfall"] },
+  { label: "Testing", keywords: ["jest", "vitest", "playwright", "cypress", "selenium", "mocha", "chai", "junit", "pytest", "unit testing", "testing library", "cucumber"] },
+];
+const SKILL_CATEGORY_ORDER = ["Languages", "Databases", "Tools", "Cloud Platforms", "Methodologies", "Technologies", "Testing"];
+
+/** Buckets a flat skill list into labeled groups (Languages, Databases, Tools, …) via keyword match, falling back to "Technologies". */
+function categorizeTechnicalSkills(items: string[]): { label: string; skills: string[] }[] {
+  const buckets: Record<string, string[]> = {};
+  for (const skill of items) {
+    const lower = skill.toLowerCase();
+    const match = SKILL_CATEGORY_KEYWORDS.find(({ keywords }) => keywords.some((kw) => lower.includes(kw)));
+    const label = match ? match.label : "Technologies";
+    (buckets[label] ??= []).push(skill);
+  }
+  return SKILL_CATEGORY_ORDER.filter((label) => buckets[label]?.length).map((label) => ({ label, skills: buckets[label] }));
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deepSanitize(val: any): any {
   if (val === null || val === undefined) return val;
@@ -291,6 +313,10 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
     "parser_diagnostics_summary", "developer_diagnostics", "parser_mode",
     "strategy_used", "summary_analysis", "tokens_used", "metadata", "user_id",
     "parser_version", "prompt_fingerprint", "parse_time_ms", "parsed_at", "section_order",
+    "verb_inferred_skills", "achievements_metrics",
+    "kpi_metrics", "reliability_metrics", "domain_experience", "fallbacks_used",
+    "degraded_sections", "provenance", "soft_skills_covered_by_technical",
+    "detected_stacks", "routing_flags",
   ]);
   // Defensive fallback for diagnostic-shaped keys the explicit list above
   // hasn't caught yet (the backend adds these fairly often) — matches
@@ -773,23 +799,30 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
               </div>
             )}
 
-            {/* ══ TECHNICAL SKILLS ══ */}
+            {/* ══ SKILLS ══ */}
             {!deleted.includes("skills") && skills.length > 0 && (
               <div id="resume-section-skills" className={sc("skills")} style={{ marginBottom: "14px" }}>
                 <SectionActions sectionKey="skills" />
-                <SectionDivider label="Technical Skills" />
-                <ul style={{ margin: 0, paddingLeft: "16px", listStyleType: "disc", columns: 3, columnGap: "20px" }}>
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  {(skills as any[]).map((skill: string, idx: number) => {
+                <SectionDivider label="Skills" />
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {categorizeTechnicalSkills(skills as string[]).map(({ label, skills: groupSkills }) => {
                     const editorAdded = new Set((af.skills || []).map((s: string) => s.toLowerCase()));
-                    const isNew = newlyAddedSkillsSet.has(skill.toLowerCase()) || editorAdded.has(skill.toLowerCase());
                     return (
-                      <li key={idx} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, breakInside: "avoid" }}>
-                        {isNew ? <span style={hlStyle}>{skill}</span> : skill}
-                      </li>
+                      <p key={label} style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.6 }}>
+                        <strong>{label}:</strong>{" "}
+                        {groupSkills.map((skill, idx) => {
+                          const isNew = newlyAddedSkillsSet.has(skill.toLowerCase()) || editorAdded.has(skill.toLowerCase());
+                          return (
+                            <React.Fragment key={idx}>
+                              {isNew ? <span style={hlStyle}>{skill}</span> : skill}
+                              {idx < groupSkills.length - 1 ? ", " : ""}
+                            </React.Fragment>
+                          );
+                        })}
+                      </p>
                     );
                   })}
-                </ul>
+                </div>
               </div>
             )}
 
@@ -797,19 +830,21 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {!deleted.includes("softSkills") && softSkills.length > 0 && (
               <div id="resume-section-softSkills" className={sc("softSkills")} style={{ marginBottom: "14px" }}>
                 <SectionActions sectionKey="softSkills" />
-                <SectionDivider label="Soft Skills" />
-                <ul style={{ margin: 0, paddingLeft: "16px", listStyleType: "disc", columns: 3, columnGap: "20px" }}>
+                {skills.length === 0 && <SectionDivider label="Skills" />}
+                <p style={{ fontSize: "13.5px", color: "#1f2937", margin: 0, lineHeight: 1.6 }}>
+                  <strong>Soft Skills:</strong>{" "}
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {(softSkills as any[]).map((skill: string, idx: number) => {
                     const editorAdded = new Set((af.softSkills || []).map((s: string) => s.toLowerCase()));
                     const isNew = newlyAddedSoftSkillsSet.has(skill.toLowerCase()) || editorAdded.has(skill.toLowerCase());
                     return (
-                      <li key={idx} style={{ fontSize: "13.5px", color: "#1f2937", lineHeight: 1.7, breakInside: "avoid" }}>
+                      <React.Fragment key={idx}>
                         {isNew ? <span style={hlStyle}>{skill}</span> : skill}
-                      </li>
+                        {idx < softSkills.length - 1 ? ", " : ""}
+                      </React.Fragment>
                     );
                   })}
-                </ul>
+                </p>
               </div>
             )}
 
