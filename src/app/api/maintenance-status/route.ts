@@ -61,7 +61,12 @@ export async function GET() {
         if (fromBackend !== null) {
             cache = { enabled: fromBackend, updatedAt: Date.now() };
         } else {
+            // Backend unreachable — stamp a short-lived false cache so stale stays
+            // false for the next FAILED_PROBE_BACKOFF_MS window. Without this stamp,
+            // cache.updatedAt stays 0 (stale=true forever) and every GET after the
+            // backoff clears re-blocks for up to 1.5 s on a persistently-down backend.
             lastFailedProbeAt = Date.now();
+            cache = { enabled: false, updatedAt: Date.now() };
         }
     }
     return NextResponse.json({ maintenance: cache.enabled });

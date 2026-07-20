@@ -38,8 +38,9 @@ export function formatDateRange(start?: string | Date, end?: string | Date): str
     ? "Present"
     : parsedEnd instanceof Date
       ? format(parsedEnd, "MMM yyyy")
-      : typeof end === "string" ? end : "";
+      : typeof end === "string" ? end
+      // Invalid Date object — fall back to "Present" so the range reads as open/ongoing
+      : "Present";
 
-  // Omit the separator entirely when formattedEnd is "" (invalid Date object end)
-  return formattedEnd ? `${formattedStart} – ${formattedEnd}` : formattedStart;
+  return `${formattedStart} – ${formattedEnd}`;
 }

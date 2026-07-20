@@ -63,7 +63,7 @@ describe('formatDateRange', () => {
         const invalid = new Date('garbage');
         // invalid start → bail out early, return ""
         expect(formatDateRange(invalid, new Date('2023-01-15'))).toBe('');
-        // invalid end → omit separator, return start only
-        expect(formatDateRange(new Date('2022-01-15'), invalid)).toBe('Jan 2022');
+        // invalid end → fall back to "Present" so range reads as open/ongoing
+        expect(formatDateRange(new Date('2022-01-15'), invalid)).toBe('Jan 2022 – Present');
     });
 });

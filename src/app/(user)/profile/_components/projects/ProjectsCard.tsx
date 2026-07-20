@@ -69,7 +69,7 @@ const ProjectsCard = memo(function ProjectsCard({ pro, index, onEdit, onDelete }
                     {technologies.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
                             {technologies.map((tech, i) => (
-                                <span key={tech || i} className="text-xs bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md">
+                                <span key={`${tech}-${i}`} className="text-xs bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md">
                                     {tech}
                                 </span>
                             ))}
