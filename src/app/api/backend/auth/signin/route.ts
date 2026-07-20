@@ -24,7 +24,6 @@ function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
   if (parts.length === 0) return cookie;
 
   const [pair, ...attrs] = parts;
-  let hasPath = false;
   let hasSameSite = false;
   const kept: string[] = [];
 
@@ -39,7 +38,7 @@ function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
     // The browser would honour that restriction and not send the cookie to
     // /dashboard, making the middleware unable to detect a valid session.
     // Since all cookies are httpOnly, forcing Path=/ is safe.
-    if (name === 'path') { hasPath = true; continue; }
+    if (name === 'path') { continue; }
     if (name === 'samesite') hasSameSite = true;
     kept.push(attr);
   }

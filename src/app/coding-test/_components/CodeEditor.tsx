@@ -156,7 +156,6 @@ export default function CodeEditor({
           smoothScrolling: true,
           renderLineHighlight: 'line',
           // VS Code-like productivity features
-          formatOnPaste: true,
           formatOnType: true,
           suggestOnTriggerCharacters: true,
           quickSuggestions: { strings: true, comments: false, other: true },

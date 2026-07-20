@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+
+export const dynamic = 'force-dynamic';
 
 const WANDBOX_URL = 'https://wandbox.org/api/compile.json';
+const MAX_BODY_BYTES = 64 * 1024; // 64 KB
 const RUNTIMES_URL = 'https://wandbox.org/api/list.json';
 
 type Lang = 'python' | 'java' | 'cpp' | 'c';
@@ -232,6 +236,17 @@ function buildCTestHarness(userCode: string, examples: Example[]): string {
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get('access_token') ?? cookieStore.get('session');
+  if (!session?.value) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const contentLength = Number(req.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Request too large' }, { status: 413 });
+  }
+
   let body: { language: Lang; code: string; examples?: Example[] };
   try {
     body = await req.json();

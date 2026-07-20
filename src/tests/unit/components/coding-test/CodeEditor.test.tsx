@@ -12,8 +12,12 @@ vi.mock('@monaco-editor/react', () => ({
     // registration code inside CodeEditor does not throw.
     if (onMount) {
       onMount(
-        { addAction: mockAddAction },
-        { KeyMod: { CtrlCmd: 2048 }, KeyCode: { Enter: 3 } },
+        {
+          addAction: mockAddAction,
+          addCommand: vi.fn(),
+          getDomNode: () => document.createElement('div'),
+        },
+        { KeyMod: { CtrlCmd: 2048 }, KeyCode: { Enter: 3, KeyV: 52 } },
       );
     }
     return (
@@ -104,7 +108,7 @@ describe('CodeEditor', () => {
         <CodeEditor language="python" value="" onChange={onChange} onCtrlEnter={onCtrlEnter} />,
       );
       expect(mockAddAction).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'submit-code' }),
+        expect.objectContaining({ id: 'run-code' }),
       );
     });
   });
