@@ -15,8 +15,10 @@ interface TabsProps {
 export default function Tabs({ tabs, active, onChange }: TabsProps) {
     return (
         <div>
-            {/* Tab Buttons */}
-            <div role="tablist" className="flex overflow-x-auto whitespace-nowrap bg-white  shadow-[0_0_6px_rgba(0,0,0,0.30)] border border-neutral-200  rounded-lg gap-2 mb-4 scrollbar-thin scrollbar-thumb-gray-300">
+            <div
+                role="tablist"
+                className="flex overflow-x-auto whitespace-nowrap bg-white shadow-[0_0_6px_rgba(0,0,0,0.30)] border border-neutral-200 rounded-xl p-2 mb-4 gap-0.5 scrollbar-thin scrollbar-thumb-gray-200"
+            >
                 {tabs.map((tab) => (
                     <button
                         key={tab.label}
@@ -24,15 +26,15 @@ export default function Tabs({ tabs, active, onChange }: TabsProps) {
                         role="tab"
                         aria-selected={active === tab.label}
                         data-testid={`tab-${tab.label.toLowerCase().replace(/\s+/g, '-')}`}
-                        className={`flex items-center gap-2 px-3 py-4 cursor-pointer text-sm font-medium  transition ${active === tab.label
-                            ? "bg-[#a5c6eb] text-black font-semibold border-b-[2.6px] border-[#2257a7]"
-                                : "text-gray-600 hover:text-black"
-                            }`}
+                        className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer text-sm font-medium transition-all ${
+                            active === tab.label
+                                ? "bg-blue-100 text-[#2257a7] font-semibold shadow-sm"
+                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                        }`}
                         onClick={() => onChange(tab.label)}
                     >
-                        {/* Icon beside tab name */}
                         {tab.icon && (
-                            <span className="flex items-center w-4 h-4 shrink-0">
+                            <span className="flex items-center shrink-0">
                                 {tab.icon}
                             </span>
                         )}
@@ -40,8 +42,7 @@ export default function Tabs({ tabs, active, onChange }: TabsProps) {
                     </button>
                 ))}
             </div>
-            {/* Tab Content */}
-            <div className="mt-2">
+            <div className="mt-2 min-h-105">
                 {tabs.find((t) => t.label === active)?.content}
             </div>
         </div>

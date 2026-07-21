@@ -1,12 +1,8 @@
 "use client";
 
-import { ArrowRight, FileText, Sparkles } from "lucide-react";
+import { FileText, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-
-interface CTABandProps {
-  onScanClick?: () => void;
-}
 
 const stats = [
   { value: "50,000+", label: "Resumes scanned" },
@@ -17,7 +13,7 @@ const stats = [
   { value: "0–100",   label: "Score range" },
 ];
 
-export default function CTABand({ onScanClick }: CTABandProps) {
+export default function CTABand() {
   return (
     <section
       className="py-14 md:py-20 px-6 lg:px-8"
@@ -55,21 +51,9 @@ export default function CTABand({ onScanClick }: CTABandProps) {
               </p>
 
               <div className="flex flex-col sm:flex-row items-start gap-3">
-                <button
-                  onClick={onScanClick}
-                  className="inline-flex items-center gap-2 font-bold px-6 py-3 rounded-full text-sm text-white transition-all duration-300 hover:scale-105 active:scale-100"
-                  style={{
-                    background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-                    boxShadow: "0 4px 16px rgba(37,87,167,0.28)",
-                  }}
-                >
-                  Scan My Resume Now
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
                 <Link
                   href="/resume/builder"
-                  className="inline-flex items-center gap-2 text-slate-400 hover:text-[#2557a7] text-sm font-medium transition-colors duration-200 mt-2"
+                  className="inline-flex items-center gap-2 text-slate-400 hover:text-[#2557a7] text-sm font-medium transition-colors duration-200"
                 >
                   <FileText className="w-4 h-4" />
                   Build a resume from scratch

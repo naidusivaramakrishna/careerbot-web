@@ -220,6 +220,7 @@ export interface JobDescription {
 export interface ParseJDResponse {
   raw: Record<string, unknown>;
   jd_id: string | null;
+  jd_text?: string | null;
   duplicate: boolean;
 }
 
@@ -369,11 +370,35 @@ export interface EnhancementReport {
 }
 
 // ============ API RESPONSE TYPES ============
+export interface ParseResumeRoutingFlags {
+  verify_required?: boolean;
+  verify_recommended?: boolean;
+  verify_reason?: string;
+  [key: string]: unknown;
+}
+
 export interface ParseResumeResponse {
   resume_id: string;
   file_name: string;
   parsed_data?: ResumeData;
   success?: boolean;
+  message?: string;
+  parsing_method?: string;
+  cache_hit?: boolean;
+  ats_score?: ATSScore | null;
+  correlation_id?: string;
+  trace_id?: string;
+  timestamp?: string;
+  routing_flags?: ParseResumeRoutingFlags;
+  verify_required?: boolean;
+  verify_recommended?: boolean;
+  verify_reason?: string;
+}
+
+export interface ParseFromProfileResponse {
+  resume_id: string;
+  from_cache: boolean;
+  source: 'profile_cache' | 'content_hash_cache' | 'ai_parse';
 }
 
 export interface EnhanceResumeResponse {

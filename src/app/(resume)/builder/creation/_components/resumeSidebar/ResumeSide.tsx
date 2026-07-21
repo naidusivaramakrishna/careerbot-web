@@ -384,12 +384,53 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoadingResume]);
 
+  // Sync sections when sectionOrder changes (e.g. on career-level template switch).
+  // Guards with name-comparison so the 500ms polling in ResumeContext doesn't cause
+  // re-renders when the order hasn't actually changed.
+  useEffect(() => {
+    if (!sectionOrder || sectionOrder.length === 0) return;
+
+    const allKnownSections = [...initialSections, ...defaultExtraSections];
+    const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
+
+    setSections(prev => {
+      const prevMap = new Map(prev.map(s => [s.name, s]));
+      const newSections = sectionOrder
+        .map(name => sectionMap.get(name) || prevMap.get(name))
+        .filter((s): s is { name: string; ai: boolean } => !!s);
+
+      const prevNames = prev.map(s => s.name).join(',');
+      const newNames = newSections.map(s => s.name).join(',');
+      if (prevNames === newNames) return prev;
+      return newSections;
+    });
+
+    setExtraSections(prev => {
+      const mainNames = new Set(sectionOrder);
+      const filtered = defaultExtraSections.filter(s => !mainNames.has(s.name));
+      const prevNames = prev.map(s => s.name).join(',');
+      const newNames = filtered.map(s => s.name).join(',');
+      if (prevNames === newNames) return prev;
+      return filtered;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionOrder]);
+
+
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     const items = [...sections];
     const [moved] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, moved);
     setSections(items);
+    // Persist drag order so polling doesn't revert it
+    const newOrder = items.map(s => s.name);
+    setSectionOrder(newOrder);
+    try {
+      const email = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = email ? `sectionOrder_${email}` : 'sectionOrder';
+      localStorage.setItem(key, JSON.stringify(newOrder));
+    } catch { /* ignore */ }
   };
 
   const SECTION_DATA_KEY_MAP: Record<string, string> = {

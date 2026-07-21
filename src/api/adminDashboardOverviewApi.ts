@@ -50,11 +50,24 @@ export interface AutoRefreshSettings {
     interval_seconds: number;
 }
 
+export interface UserGrowthDataPoint {
+    month: string;
+    users: number;
+}
+
+export interface RevenueSubscriptionsDataPoint {
+    month: string;
+    revenue: number;
+    subscriptions: number;
+}
+
 export interface DashboardOverviewResponse {
     period: 'daily' | 'weekly' | 'monthly';
     metrics: DashboardMetrics;
     subscription_breakdown: SubscriptionBreakdownItem[];
     recent_activity: RecentActivityItem[];
+    user_growth: UserGrowthDataPoint[];
+    revenue_subscriptions: RevenueSubscriptionsDataPoint[];
     auto_refresh: AutoRefreshSettings;
     timestamp: string;
 }

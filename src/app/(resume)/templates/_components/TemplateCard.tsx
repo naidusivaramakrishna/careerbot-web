@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import Image from 'next/image';
 import { Eye } from 'lucide-react';
 import { type TemplateResponse } from '@/api/resumeApi';
 import { Badge } from '@/components/ui/Badge';
+import { resolveTemplateImageUrl, FALLBACK_IMAGE } from '@/lib/imageUtils';
 
 interface TemplateCardProps {
   template: TemplateResponse;
@@ -9,14 +11,7 @@ interface TemplateCardProps {
 }
 
 export default function TemplateCard({ template, onClick }: TemplateCardProps) {
-  // Get preview image URL - fallback to local assets if preview_url not available
-  const getPreviewImage = () => {
-    if (template.preview_url) {
-      return template.preview_url;
-    }
-    // Fallback to local assets based on template ID/name
-    return '/assets/templates/template-1.png';
-  };
+  const [imgSrc, setImgSrc] = useState(resolveTemplateImageUrl(template.preview_url));
 
   return (
     <div
@@ -26,13 +21,13 @@ export default function TemplateCard({ template, onClick }: TemplateCardProps) {
     >
       {/* Preview Image Container */}
       <div className="relative h-64 bg-gray-100 overflow-hidden">
-        <img
-          src={getPreviewImage()}
+        <Image
+          src={imgSrc}
           alt={template.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onError={(e) => {
-            e.currentTarget.src = '/assets/templates/template-1.png';
-          }}
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          onError={() => setImgSrc(FALLBACK_IMAGE)}
         />
 
         {/* ATS Badge */}

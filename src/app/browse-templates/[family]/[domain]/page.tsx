@@ -1,20 +1,47 @@
 "use client"
-import { useState, useCallback, use } from "react"
+import { useState, useCallback, use, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { ArrowLeft, Check, Sparkles, ShieldCheck, LayoutTemplate, Zap, Printer, Target } from "lucide-react"
 import AuthModal from "@/components/SignUpModal"
-import { getAllResumes, createResumeWithAuth } from "@/api/resumeApi"
+import { getAllResumes, createResumeWithAuth, getTemplatesByCategory } from "@/api/resumeApi"
 import { getProfile } from "@/api/userApi"
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder"
 import { logger } from "@/lib/logger"
+import { resolveTemplateImageUrl } from "@/lib/imageUtils"
 import {
   FAMILY_TEMPLATES,
   DOMAIN_NAMES,
   DOMAIN_DISPLAY_NAMES,
-  CAREER_LEVELS,
   FALLBACK_IMAGE,
+  CAREER_LEVELS,
 } from "../../_data/constants"
+
+// Derive a human-readable career level label from a template name.
+// Returns null if the name doesn't match any known level keyword.
+function getCareerLevelLabel(name: string): string | null {
+  const n = name.toLowerCase()
+  if (n.includes('early') && n.includes('career')) return 'Early Career'
+  if (n.includes('senior')) return 'Senior-Level'
+  if (n.includes('mid'))    return 'Mid-Level'
+  if (n.includes('manager')) return 'Manager'
+  if (n.includes('lead'))   return 'Lead'
+  if (n.includes('fresher')) return 'Fresher'
+  return null
+}
+
+// Canonical sort order so career levels always appear from entry-level to senior.
+const LEVEL_ORDER: Record<string, number> = {
+  'Fresher': 0, 'Early Career': 1, 'Mid-Level': 2,
+  'Senior-Level': 3, 'Lead': 3, 'Manager': 4,
+}
+
+interface AvailableLevel {
+  label: string       // "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Manager"
+  id: string          // real backend template ID
+  name: string        // original template name from API
+  previewUrl: string  // resolved image URL for this career level
+}
 
 interface PageProps {
   params: Promise<{ family: string; domain: string }>
@@ -32,8 +59,11 @@ export default function TemplateDetailPage({ params }: PageProps) {
   const { family, domain } = use(params)
   const router = useRouter()
 
-  const [selectedLevel, setSelectedLevel] = useState("Fresher")
-  const [imgSrc, setImgSrc] = useState(FAMILY_TEMPLATES[family]?.image || FALLBACK_IMAGE)
+  const [availableLevels, setAvailableLevels] = useState<AvailableLevel[]>([])
+  const [selectedLevel, setSelectedLevel] = useState("")
+  const [imgSrc, setImgSrc] = useState(
+    resolveTemplateImageUrl(FAMILY_TEMPLATES[family]?.previewUrl) || FAMILY_TEMPLATES[family]?.image || FALLBACK_IMAGE
+  )
   const [isApplying, setIsApplying] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
 
@@ -41,6 +71,54 @@ export default function TemplateDetailPage({ params }: PageProps) {
   const familyName = DOMAIN_NAMES[family] || family
   const familyTpl = FAMILY_TEMPLATES[family]
   const description = familyTpl?.description || "Professional resume template"
+
+  // Fetch real templates for this family on mount to build the career-level picker.
+  // The template API requires authentication — guard with getProfile first to avoid
+  // triggering the auth-redirect interceptor for unauthenticated visitors.
+  useEffect(() => {
+    getProfile({ skipAuthRedirect: true })
+      .then(() => getTemplatesByCategory())
+      .then(all => {
+        const familyTpls = all.filter(
+          t => ((t as unknown) as Record<string, unknown>).domain_family === family
+        )
+        const staticUrls = FAMILY_TEMPLATES[family]?.previewUrls ?? {}
+        const levels: AvailableLevel[] = familyTpls
+          .map(t => {
+            const label = getCareerLevelLabel(t.name || '')
+            if (!label) return null
+            const id = String(t.id || '') || t._id || ''
+            if (!id) return null
+            const previewUrl = resolveTemplateImageUrl(t.preview_url) || resolveTemplateImageUrl(staticUrls[label]) || FALLBACK_IMAGE
+            return { label, id, name: t.name, previewUrl }
+          })
+          .filter((x): x is AvailableLevel => x !== null)
+          .sort((a, b) => (LEVEL_ORDER[a.label] ?? 99) - (LEVEL_ORDER[b.label] ?? 99))
+        setAvailableLevels(levels)
+        if (levels.length > 0) {
+          setSelectedLevel(levels[0].label)
+          setImgSrc(levels[0].previewUrl)
+        }
+      })
+      .catch(() => {
+        // Not authenticated or API unavailable — use static per-level URLs from constants.
+        const staticUrls = FAMILY_TEMPLATES[family]?.previewUrls ?? {}
+        const familyFallback = resolveTemplateImageUrl(FAMILY_TEMPLATES[family]?.previewUrl) || FAMILY_TEMPLATES[family]?.image || FALLBACK_IMAGE
+        const levels: AvailableLevel[] = CAREER_LEVELS.map(label => ({
+          label, id: '', name: label,
+          previewUrl: resolveTemplateImageUrl(staticUrls[label]) || familyFallback,
+        }))
+        setAvailableLevels(levels)
+        setSelectedLevel(levels[0].label)
+        setImgSrc(levels[0].previewUrl)
+      })
+  }, [family])
+
+  // Sync large preview image when user switches career level
+  useEffect(() => {
+    const match = availableLevels.find(l => l.label === selectedLevel)
+    if (match) setImgSrc(match.previewUrl)
+  }, [selectedLevel, availableLevels])
 
   const applyTemplate = useCallback(async (careerLevel: string) => {
     setIsApplying(true)
@@ -61,14 +139,44 @@ export default function TemplateDetailPage({ params }: PageProps) {
       const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : "sectionOrder"
 
       if (familyTpl) {
-        const selectedIdx = CAREER_LEVELS.indexOf(careerLevel)
-        const templateId = `${familyTpl.id}-${selectedIdx + 1}`
+        // If availableLevels has no real IDs (user wasn't auth'd on mount),
+        // fetch them now — at this point getProfile above has already confirmed auth.
+        let levelsWithIds = availableLevels.filter(l => l.id)
+        if (levelsWithIds.length === 0) {
+          const all = await getTemplatesByCategory()
+          const familyTpls = all.filter(
+            t => ((t as unknown) as Record<string, unknown>).domain_family === family
+          )
+          const staticUrls2 = FAMILY_TEMPLATES[family]?.previewUrls ?? {}
+          levelsWithIds = familyTpls
+            .map(t => {
+              const label = getCareerLevelLabel(t.name || '')
+              if (!label) return null
+              const id = String(t.id || '') || t._id || ''
+              if (!id) return null
+              const previewUrl = resolveTemplateImageUrl(t.preview_url) || resolveTemplateImageUrl(staticUrls2[label]) || FALLBACK_IMAGE
+              return { label, id, name: t.name, previewUrl }
+            })
+            .filter((x): x is AvailableLevel => x !== null)
+            .sort((a, b) => (LEVEL_ORDER[a.label] ?? 99) - (LEVEL_ORDER[b.label] ?? 99))
+          setAvailableLevels(levelsWithIds)
+        }
+
+        const selectedLevelData = levelsWithIds.find(l => l.label === careerLevel)
+        const templateId = selectedLevelData?.id || ''
+
+        if (!templateId) {
+          logger.error("No template ID found for career level:", careerLevel)
+          setIsApplying(false)
+          return
+        }
+
         localStorage.setItem(selectedTemplateKey, templateId)
 
-        const careerLevelData = CAREER_LEVELS.map((level, idx) => ({
-          id: `${familyTpl.id}-${idx + 1}`,
-          name: `${domainName} - ${level}`,
-          preview_url: familyTpl.image,
+        const careerLevelData = levelsWithIds.map(l => ({
+          id: l.id,
+          name: l.name,
+          preview_url: l.previewUrl,
           description: familyTpl.description,
           ats_friendly: true,
           domain_family: family,
@@ -76,9 +184,16 @@ export default function TemplateDetailPage({ params }: PageProps) {
         }))
         localStorage.setItem(careerLevelKey, JSON.stringify(careerLevelData))
 
-        const sectionOrder = getSectionOrderByDomainAndCareer(family, careerLevel.toLowerCase())
+        const newDomainOrder = getSectionOrderByDomainAndCareer(family, careerLevel.toLowerCase())
+        // Preserve extra sections the user had added before navigating here
+        const addableExtras = new Set(['Achievements', 'Publications', 'Volunteering', 'Awards', 'Hobbies', 'Interests', 'Languages', 'References'])
+        const existingOrderStr = localStorage.getItem(sectionOrderKey)
+        const existingOrder: string[] = existingOrderStr ? (() => { try { return JSON.parse(existingOrderStr) } catch { return [] } })() : []
+        const newOrderSet = new Set(newDomainOrder)
+        const preservedExtras = existingOrder.filter(name => addableExtras.has(name) && !newOrderSet.has(name))
+        const sectionOrder = [...newDomainOrder, ...preservedExtras]
         localStorage.setItem(sectionOrderKey, JSON.stringify(sectionOrder))
-        logger.info("Stored template info:", { family, domain, careerLevel })
+        logger.info("Stored template info:", { family, domain, careerLevel, templateId })
       }
 
       let resumeId: string | undefined
@@ -106,7 +221,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
         throw error
       }
     }
-  }, [family, domain, domainName, familyTpl])
+  }, [family, domain, domainName, familyTpl, availableLevels])
 
   const handleApply = useCallback(async () => {
     let authenticated = false
@@ -383,54 +498,64 @@ export default function TemplateDetailPage({ params }: PageProps) {
                 </div>
 
                 <div className="grid grid-cols-3 gap-2.5 mb-1">
-                  {CAREER_LEVELS.map((level, idx) => {
-                    const isSelected = selectedLevel === level
-                    return (
-                      <div key={level} className={`flex flex-col items-center ${idx === 3 ? "col-start-1" : ""} ${idx === 4 ? "col-start-2" : ""}`}>
-                        <button
-                          data-testid={`career-level-btn-${level.toLowerCase().replace(/\s+/g, '-')}`}
-                          onClick={() => setSelectedLevel(level)}
-                          className={`level-card ${isSelected ? "selected" : ""} relative w-full rounded-xl overflow-hidden cursor-pointer`}
-                          style={{
-                            border: isSelected
-                              ? "2px solid #2257a7"
-                              : "2px solid #e2e8f0",
-                            boxShadow: isSelected
-                              ? "0 0 0 3px rgba(34,87,167,0.15), 0 4px 16px rgba(34,87,167,0.2)"
-                              : "0 1px 4px rgba(0,0,0,0.06)",
-                            background: isSelected
-                              ? "linear-gradient(135deg, #eff6ff, #f0f9ff)"
-                              : "#fafafa",
-                            padding: "6px",
-                          }}
-                        >
-                          <Image
-                            src={imgSrc}
-                            alt={level}
-                            width={120}
-                            height={150}
-                            className="w-full h-auto object-contain rounded-lg"
-                            style={{ opacity: isSelected ? 1 : 0.75, transition: "opacity 0.2s" }}
-                            onError={() => setImgSrc(FALLBACK_IMAGE)}
-                          />
-                          {isSelected && (
-                            <div
-                              className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center ring-2 ring-white shadow"
-                              style={{ background: "linear-gradient(135deg, #2257a7, #1e7cdf)" }}
-                            >
-                              <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                            </div>
-                          )}
-                        </button>
-                        <p
-                          className="text-[11px] font-semibold mt-1.5 text-center transition-colors leading-tight"
-                          style={{ color: isSelected ? "#2257a7" : "#64748b" }}
-                        >
-                          {level}
-                        </p>
-                      </div>
-                    )
-                  })}
+                  {availableLevels.length === 0 ? (
+                    <div className="col-span-3 flex items-center justify-center py-6 text-slate-400 text-sm">
+                      Loading career levels…
+                    </div>
+                  ) : (
+                    availableLevels.map(({ label }, idx) => {
+                      const isSelected = selectedLevel === label
+                      const total = availableLevels.length
+                      let colClass = ''
+                      if (total === 5 && idx === 3) colClass = 'col-start-1'
+                      else if (total === 5 && idx === 4) colClass = 'col-start-2'
+                      else if (total === 4 && idx === 3) colClass = 'col-start-2'
+                      return (
+                        <div key={label} className={`flex flex-col items-center ${colClass}`}>
+                          <button
+                            data-testid={`career-level-btn-${label.toLowerCase().replace(/\s+/g, '-')}`}
+                            onClick={() => setSelectedLevel(label)}
+                            className={`level-card ${isSelected ? "selected" : ""} relative w-full rounded-xl overflow-hidden cursor-pointer`}
+                            style={{
+                              border: isSelected ? "2px solid #2257a7" : "2px solid #e2e8f0",
+                              boxShadow: isSelected
+                                ? "0 0 0 3px rgba(34,87,167,0.15), 0 4px 16px rgba(34,87,167,0.2)"
+                                : "0 1px 4px rgba(0,0,0,0.06)",
+                              background: isSelected ? "linear-gradient(135deg, #eff6ff, #f0f9ff)" : "#fafafa",
+                              padding: "6px",
+                            }}
+                          >
+                            <Image
+                              src={availableLevels.find(l => l.label === label)?.previewUrl || imgSrc}
+                              alt={label}
+                              width={120}
+                              height={150}
+                              className="w-full h-auto object-contain rounded-lg"
+                              style={{ opacity: isSelected ? 1 : 0.75, transition: "opacity 0.2s" }}
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMAGE }}
+                            />
+                            <span className="absolute top-1.5 left-1.5 bg-[#2557a7] text-white text-[8px] font-semibold px-1.5 py-0.5 rounded-full shadow-sm pointer-events-none">
+                              100% ATS Friendly
+                            </span>
+                            {isSelected && (
+                              <div
+                                className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center ring-2 ring-white shadow"
+                                style={{ background: "linear-gradient(135deg, #2257a7, #1e7cdf)" }}
+                              >
+                                <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                              </div>
+                            )}
+                          </button>
+                          <p
+                            className="text-[11px] font-semibold mt-1.5 text-center transition-colors leading-tight"
+                            style={{ color: isSelected ? "#2257a7" : "#64748b" }}
+                          >
+                            {label}
+                          </p>
+                        </div>
+                      )
+                    })
+                  )}
                 </div>
               </div>
 

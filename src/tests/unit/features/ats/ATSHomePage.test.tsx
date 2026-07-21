@@ -54,7 +54,7 @@ vi.mock('@/app/(resume)/ats/_components/landing/FAQPage', () => ({
   default: () => <div data-testid="faq-section">FAQ</div>,
 }));
 
-vi.mock('@/app/(resume)/ats/_components/landing/Footer', () => ({
+vi.mock('@/app/(landing)/_components/LandingFooter', () => ({
   default: () => <footer data-testid="footer">Footer</footer>,
 }));
 
@@ -81,7 +81,7 @@ import BeforeAfterSection from '@/app/(resume)/ats/_components/landing/BeforeAft
 import TestimonialsSection from '@/app/(resume)/ats/_components/landing/TestimonialsSection';
 import CTABand from '@/app/(resume)/ats/_components/landing/CTABand';
 import FAQPage from '@/app/(resume)/ats/_components/landing/FAQPage';
-import Footer from '@/app/(resume)/ats/_components/landing/Footer';
+import Footer from '@/app/(landing)/_components/LandingFooter';
 import ResumeUploadModal from '@/app/(resume)/ats/_components/upload/ResumeUploadModal';
 import ResumeUpload from '@/app/(resume)/ats/_components/upload/ResumeUpload';
 

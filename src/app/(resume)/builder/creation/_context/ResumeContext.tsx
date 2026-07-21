@@ -253,6 +253,8 @@ interface ResumeContextType {
   enhancedSuggestions: EnhancedSuggestion[];
   sectionOrder: string[];
   setSectionOrder: React.Dispatch<React.SetStateAction<string[]>>;
+  previewCatalogueKey: string | null;
+  setPreviewCatalogueKey: React.Dispatch<React.SetStateAction<string | null>>;
   createResume: () => Promise<void>;
   completionStatus: Record<string, boolean>;
   setCompletionStatus: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
@@ -279,10 +281,12 @@ interface ResumeProviderProps {
 export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: ResumeProviderProps) => {
   const [selectedTemplate, setSelectedTemplateState] = useState<string | number | null>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem("selected_template");
-      return saved || "2"; // Default to template 2
+      const userEmail = localStorage.getItem('userEmail');
+      const key = userEmail ? `selected_template_${userEmail}` : 'selected_template';
+      const saved = localStorage.getItem(key);
+      return saved || "2";
     }
-    return "2"; // Default to template 2
+    return "2";
   });
 
   const [enhancedAtsScore, setEnhancedAtsScore] = useState<EnhancedAtsScore>(null);
@@ -360,7 +364,25 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     };
   }
 
-  const [resumeStyle, setResumeStyle] = useState<ResumeStyle>({
+  // Reads user-saved font prefs from localStorage and applies them on top of current style.
+  // Called after template/catalogue defaults so the user's choice always wins.
+  const _reapplySavedFontPrefs = (setter: React.Dispatch<React.SetStateAction<ResumeStyle>>) => {
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `resumeStyle_${userEmail}` : 'resumeStyle';
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      if (!stored) return;
+      const saved = JSON.parse(stored) as Partial<ResumeStyle>;
+      const overrides: Partial<ResumeStyle> = {};
+      if (saved.fontFamily) overrides.fontFamily = saved.fontFamily;
+      if (saved.lineSpacing) overrides.lineSpacing = saved.lineSpacing;
+      if (Object.keys(overrides).length > 0) {
+        setter(prev => ({ ...prev, ...overrides }));
+      }
+    } catch { /* ignore */ }
+  };
+
+  const DEFAULT_RESUME_STYLE: ResumeStyle = {
     fontFamily: "arial",
     nameFontSize: "20px",
     headingFontSize: "14px",
@@ -370,12 +392,22 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     lineSpacing: "1.0",
     headingColor: "#1A1A1A",
     bodyColor: "#4b5563",
+  };
+
+  const [resumeStyle, setResumeStyle] = useState<ResumeStyle>(() => {
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `resumeStyle_${userEmail}` : 'resumeStyle';
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      if (stored) return { ...DEFAULT_RESUME_STYLE, ...JSON.parse(stored) };
+    } catch { /* ignore */ }
+    return DEFAULT_RESUME_STYLE;
   });
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [resumeId, setResumeId] = useState<string | null>(null);
   const [isLoadingResume, setIsLoadingResume] = useState(true);
-  
+
   // ✅ NEW: Track if initial load is complete
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
 
@@ -401,7 +433,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   // ✅ Get career level from localStorage to set initial section order
   const getCareerLevelFromStorage = (): string | undefined => {
     try {
-      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      if (typeof window === 'undefined') return undefined;
+      const userEmail = localStorage.getItem('userEmail');
       const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
       const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
 
@@ -448,6 +481,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     return undefined;
   };
 
+  const [previewCatalogueKey, setPreviewCatalogueKey] = useState<string | null>(null);
+
   const [sectionOrder, setSectionOrder] = useState<string[]>(() => {
     try {
       // Try to load sectionOrder directly from localStorage first (set by DomainTemplatesModal)
@@ -467,9 +502,17 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     // Fallback: compute from career level
     const careerLevel = getCareerLevelFromStorage();
     const order = getSectionOrder(careerLevel);
-    console.warn("🎯 Initial sectionOrder from career level:", careerLevel, "Order:", order);
     return order;
   });
+
+  // Persist resumeStyle to localStorage so font/spacing survive page refresh
+  useEffect(() => {
+    try {
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `resumeStyle_${userEmail}` : 'resumeStyle';
+      localStorage.setItem(key, JSON.stringify(resumeStyle));
+    } catch { /* ignore */ }
+  }, [resumeStyle]);
 
   // ✅ Update section order when career level changes or template is switched
   useEffect(() => {
@@ -558,21 +601,20 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
   // Template persistence
   useEffect(() => {
     if (selectedTemplate !== null) {
-      localStorage.setItem("selected_template", String(selectedTemplate));
-      // // console.log("💾 Template saved to localStorage:", selectedTemplate);
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+      const key = userEmail ? `selected_template_${userEmail}` : 'selected_template';
+      localStorage.setItem(key, String(selectedTemplate));
     }
   }, [selectedTemplate]);
 
   const setSelectedTemplate = async (id: string | number | null) => {
     setSelectedTemplateState(id);
+    const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+    const key = userEmail ? `selected_template_${userEmail}` : 'selected_template';
     if (id !== null) {
-      localStorage.setItem("selected_template", String(id));
-      // // console.log("💾 Template saved to localStorage:", id);
-
-      // Note: set-default API requires MongoDB ID (like "6971cbe74c0df89e108ce5b0")
-      // This is handled separately in TemplatesTab when applying a template
+      localStorage.setItem(key, String(id));
     } else {
-      localStorage.removeItem("selected_template");
+      localStorage.removeItem(key);
     }
   };
 
@@ -698,16 +740,21 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             setResumeStyle(prev => ({ ...prev, ...STYLE_CATALOGUES[selectedCatalogue].style }));
           }
           // Apply user-picked custom colour (from browse-templates colour picker).
-          // Eclipse uses it as the section-header background; all other catalogues use it as headingColor.
+          // Eclipse → sectionHeaderBg; all others → accentColor (section names use accentColor ?? headingColor,
+          // so headingColor stays #000000 and role/degree titles remain black).
           if (typeof window !== 'undefined' && selectedCatalogue) {
             if (selectedCatalogue === 'eclipse') {
               const sectionBg = localStorage.getItem('selected_section_bg');
-              if (sectionBg) setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg }));
+              // Clear accentColor so Eclipse-specific sectionHeaderBg doesn't coexist with a stale accent
+              setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg ?? undefined, accentColor: undefined }));
             } else {
               const accent = localStorage.getItem(`selected_color_${selectedCatalogue}`);
-              if (accent) setResumeStyle(prev => ({ ...prev, headingColor: accent }));
+              // Clear sectionHeaderBg so a previous Eclipse session's value doesn't bleed into other catalogues
+              setResumeStyle(prev => ({ ...prev, accentColor: accent ?? undefined, sectionHeaderBg: undefined }));
             }
           }
+          // Re-apply user's saved font/spacing — must come last so template defaults don't overwrite them
+          _reapplySavedFontPrefs(setResumeStyle);
         } catch {
           await setSelectedTemplate("clean_simple");
           const defaults = TEMPLATE_DEFAULT_STYLES["clean_simple"];
@@ -721,12 +768,14 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           if (typeof window !== 'undefined' && selectedCatalogue) {
             if (selectedCatalogue === 'eclipse') {
               const sectionBg = localStorage.getItem('selected_section_bg');
-              if (sectionBg) setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg }));
+              setResumeStyle(prev => ({ ...prev, sectionHeaderBg: sectionBg ?? undefined, accentColor: undefined }));
             } else {
               const accent = localStorage.getItem(`selected_color_${selectedCatalogue}`);
-              if (accent) setResumeStyle(prev => ({ ...prev, headingColor: accent }));
+              setResumeStyle(prev => ({ ...prev, accentColor: accent ?? undefined, sectionHeaderBg: undefined }));
             }
           }
+          // Re-apply user's saved font/spacing — must come last so template defaults don't overwrite them
+          _reapplySavedFontPrefs(setResumeStyle);
         }
 
         // Continue with resume data processing...
@@ -759,7 +808,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
-            : (data.professionalSummary || { summary: "", targetRole: "" }),
+            : {
+              summary: data.professionalSummary?.summary || "",
+              targetRole: data.professionalSummary?.targetRole || (data.professionalSummary as Record<string, string>)?.target_role || "",
+            },
           education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
           workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
           projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
@@ -786,7 +838,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             id: cert.id || cert._id,
             name: cert.name || "",
             issuer: cert.issuer || cert.issuedBy || cert.issued_by || "",
+            issuedBy: cert.issuedBy || cert.issuer || cert.issued_by || "",
             issueDate: cert.issueDate || cert.year || "",
+            year: cert.year || cert.issueDate || "",
             expiryDate: cert.expiryDate || cert.expiry_date || "",
             credentialId: cert.credentialId || cert.credential_id || "",
             credentialUrl: cert.credentialUrl || "",
@@ -835,7 +889,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         }
 
         toast.success("Resume loaded successfully!");
-        
+
       } catch (error) {
         // // console.error("❌ Failed to load resume:", error);
         toast.error("Failed to load resume data");
@@ -1005,6 +1059,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         createResume,
         sectionOrder,
         setSectionOrder,
+        previewCatalogueKey,
+        setPreviewCatalogueKey,
         completionStatus,
         setCompletionStatus,
         getCompletionPercentage,

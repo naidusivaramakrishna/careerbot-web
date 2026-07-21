@@ -63,6 +63,76 @@ export const TEMPLATE_DEFAULT_STYLES: Record<string, {
     headingColor: "#000000", // colors.primary
     bodyColor: "#000000",    // colors.text
   },
+  // Eclipse catalogue (classic-formal layout — centered header with boxed section backgrounds)
+  classic_formal: {
+    fontFamily: "arial",
+    nameFontSize: "15px",
+    headingFontSize: "10px",
+    bodyFontSize: "9px",
+    lineSpacing: "1.4",
+    headingColor: "#000000",
+    bodyColor: "#374151",
+  },
+  // Forest catalogue (classic layout — stacked centered, earthy tones)
+  forest_classic: {
+    fontFamily: "helvetica",
+    nameFontSize: "15px",
+    headingFontSize: "10px",
+    bodyFontSize: "9px",
+    lineSpacing: "1.5",
+    headingColor: "#000000",
+    bodyColor: "#374151",
+  },
+  // Crimson catalogue (executive layout — compact header, bold accents)
+  crimson_executive: {
+    fontFamily: "arial",
+    nameFontSize: "16px",
+    headingFontSize: "11px",
+    bodyFontSize: "9px",
+    lineSpacing: "1.3",
+    headingColor: "#000000",
+    bodyColor: "#374151",
+  },
+  // Slate catalogue (slate layout — side-by-side header, understated tones)
+  slate_professional: {
+    fontFamily: "helvetica",
+    nameFontSize: "15px",
+    headingFontSize: "10px",
+    bodyFontSize: "9px",
+    lineSpacing: "1.4",
+    headingColor: "#000000",
+    bodyColor: "#374151",
+  },
+  // Aether catalogue (aether layout — ultra-minimal, ruled dividers)
+  aether_clean: {
+    fontFamily: "helvetica",
+    nameFontSize: "14px",
+    headingFontSize: "10px",
+    bodyFontSize: "9px",
+    lineSpacing: "1.4",
+    headingColor: "#000000",
+    bodyColor: "#374151",
+  },
+  // Pillar catalogue (pillar layout — left accent bar, strong section titles)
+  pillar_accent: {
+    fontFamily: "calibri",
+    nameFontSize: "16px",
+    headingFontSize: "11px",
+    bodyFontSize: "9px",
+    lineSpacing: "1.4",
+    headingColor: "#000000",
+    bodyColor: "#374151",
+  },
+  // Ember catalogue (ember layout — right-aligned name/contact block)
+  ember_right: {
+    fontFamily: "arial",
+    nameFontSize: "16px",
+    headingFontSize: "11px",
+    bodyFontSize: "9px",
+    lineSpacing: "1.4",
+    headingColor: "#000000",
+    bodyColor: "#374151",
+  },
 };
 
 export const STYLE_CATALOGUES: Record<string, {
@@ -71,6 +141,7 @@ export const STYLE_CATALOGUES: Record<string, {
   swatches: string[];
   preview_url: string;
   template_id: string;
+  atsLevel: "safe" | "friendly" | "creative";
   style: {
     headingColor: string;
     bodyColor: string;
@@ -87,10 +158,11 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#1d4ed8", "#6366f1"],
     preview_url: "/assets/templates/software_engineering.png",
     template_id: "clean_simple",
+    atsLevel: "safe",
     style: {
-      headingColor: "#1A1A1A",
+      headingColor: "#000000",
       accentColor: "#1d4ed8",
-      bodyColor: "#4b5563",
+      bodyColor: "#374151",
       fontFamily: "times new roman",
       headingFontSize: "12px",
       bodyFontSize: "10px",
@@ -103,9 +175,10 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#0369a1", "#0c4a6e"],
     preview_url: "/assets/templates/eclipse.png",
     template_id: "classic_formal",
+    atsLevel: "friendly",
     style: {
-      headingColor: "#1A1A1A",
-      bodyColor: "#4b5563",
+      headingColor: "#000000",
+      bodyColor: "#374151",
       fontFamily: "arial",
       headingFontSize: "12px",
       bodyFontSize: "10px",
@@ -118,11 +191,12 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#b45309", "#f97316"],
     preview_url: "/assets/templates/template-4.png",
     template_id: "classic_professional",
+    atsLevel: "friendly",
     style: {
-      headingColor: "#1A1A1A",
+      headingColor: "#000000",
       accentColor: "#b45309",
       bodyColor: "#374151",
-      fontFamily: "times new roman",
+      fontFamily: "cambria",
       headingFontSize: "12px",
       bodyFontSize: "10px",
       lineSpacing: "1.5",
@@ -134,8 +208,9 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#0369a1", "#0891b2"],
     preview_url: "/assets/templates/template-1.png",
     template_id: "compact_professional",
+    atsLevel: "friendly",
     style: {
-      headingColor: "#1A1A1A",
+      headingColor: "#000000",
       accentColor: "#0369a1",
       bodyColor: "#374151",
       fontFamily: "arial",
@@ -150,8 +225,10 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#16a34a", "#0d9488"],
     preview_url: "/assets/templates/forest.png",
     template_id: "forest_classic",
+    atsLevel: "safe",
     style: {
-      headingColor: "#16a34a",
+      headingColor: "#000000",
+      accentColor: "#16a34a",
       bodyColor: "#374151",
       fontFamily: "helvetica",
       headingFontSize: "12px",
@@ -165,8 +242,10 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#dc2626", "#f43f5e"],
     preview_url: "/assets/templates/crimson.png",
     template_id: "crimson_executive",
+    atsLevel: "friendly",
     style: {
-      headingColor: "#dc2626",
+      headingColor: "#000000",
+      accentColor: "#dc2626",
       bodyColor: "#374151",
       fontFamily: "arial",
       headingFontSize: "12px",
@@ -180,9 +259,11 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#475569", "#3b82f6"],
     preview_url: "/assets/templates/slate.png",
     template_id: "slate_professional",
+    atsLevel: "friendly",
     style: {
-      headingColor: "#475569",
-      bodyColor: "#64748b",
+      headingColor: "#000000",
+      accentColor: "#475569",
+      bodyColor: "#374151",
       fontFamily: "helvetica",
       headingFontSize: "12px",
       bodyFontSize: "10px",
@@ -195,9 +276,11 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#475569", "#6366f1"],
     preview_url: "/assets/templates/template-3.png",
     template_id: "aether_clean",
+    atsLevel: "safe",
     style: {
-      headingColor: "#475569",
-      bodyColor: "#64748b",
+      headingColor: "#000000",
+      accentColor: "#475569",
+      bodyColor: "#374151",
       fontFamily: "helvetica",
       headingFontSize: "11px",
       bodyFontSize: "10px",
@@ -210,8 +293,9 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#ea580c", "#f97316"],
     preview_url: "/assets/templates/ember.png",
     template_id: "ember_right",
+    atsLevel: "creative",
     style: {
-      headingColor: "#1A1A1A",
+      headingColor: "#000000",
       accentColor: "#ea580c",
       bodyColor: "#374151",
       fontFamily: "arial",
@@ -226,10 +310,12 @@ export const STYLE_CATALOGUES: Record<string, {
     swatches: ["#1d4ed8", "#7c3aed"],
     preview_url: "/assets/templates/pillar.png",
     template_id: "pillar_accent",
+    atsLevel: "creative",
     style: {
-      headingColor: "#1d4ed8",
+      headingColor: "#000000",
+      accentColor: "#1d4ed8",
       bodyColor: "#374151",
-      fontFamily: "arial",
+      fontFamily: "calibri",
       headingFontSize: "12px",
       bodyFontSize: "10px",
       lineSpacing: "1.4",

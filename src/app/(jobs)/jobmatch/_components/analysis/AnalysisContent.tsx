@@ -14,7 +14,8 @@ import { FaCheckCircle } from "react-icons/fa";
 import { RiSparkling2Fill } from "react-icons/ri";
 import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
 import JDHighlighter from "../highlighter/JDHighlighter";
-import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, parserAddSkills, parserRemoveSkills } from "@/api/parserApi";
+import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, parserAddSkills, parserRemoveSkills, matcherUpdateSections } from "@/api/parserApi";
+import { toast } from "sonner";
 import ScoreBreakdown from "./ScoreBreakdown";
 import MatchPenalties from "./MatchPenalties";
 
@@ -82,7 +83,7 @@ function detectActiveSections(parsed: any): string[] {
     active.push("experience");
 
   // internships
-  if (hasData(d.internships) || hasData(llm.internships))
+  if (hasData(d.internships) || hasData(d.internship) || hasData(llm.internships) || hasData(llm.internship))
     active.push("internships");
 
   // projects
@@ -90,7 +91,7 @@ function detectActiveSections(parsed: any): string[] {
     active.push("projects");
 
   // certifications
-  if (hasData(d.certifications) || hasData(d.certificates) || hasData(llm.certifications))
+  if (hasData(d.certifications) || hasData(d.certification) || hasData(d.certificates) || hasData(llm.certifications) || hasData(llm.certification))
     active.push("certifications");
 
   // achievements
@@ -127,6 +128,7 @@ export default function AnalysisContent({
 
   const [isEditMode, setIsEditMode] = React.useState(false);
   const [openSection, setOpenSection] = React.useState<string | null>(null);
+  const [isSavingSection, setIsSavingSection] = React.useState(false);
 
   // Track which skills were added (for green highlight in resume template)
   const [addedSkillFields, setAddedSkillFields] = React.useState<string[]>([]);
@@ -157,9 +159,9 @@ export default function AnalysisContent({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       softSkills:     (d.soft_skills ?? d.softSkills ?? llm.soft_skills ?? []).map((s: any) => typeof s === "string" ? s : (s?.skill ?? s?.name ?? "")).filter(Boolean),
       experience:     d.workExperience ?? d.work_experience ?? d.experience ?? llm.workExperience ?? llm.work_experience ?? [],
-      internships:    d.internships ?? llm.internships ?? [],
+      internships:    d.internships ?? d.internship ?? llm.internships ?? llm.internship ?? [],
       projects:       d.projects ?? d.project_details ?? llm.projects ?? [],
-      certifications: d.certifications ?? d.certificates ?? llm.certifications ?? [],
+      certifications: d.certifications ?? d.certification ?? d.certificates ?? llm.certifications ?? llm.certification ?? [],
       achievements:   d.achievements ?? d.accomplishments ?? llm.achievements ?? [],
       languages:      d.languages ?? llm.languages ?? [],
       hobbies:        d.hobbies ?? d.interests ?? llm.hobbies ?? [],
@@ -168,7 +170,10 @@ export default function AnalysisContent({
   });
 
   const matchId: string | undefined =
-    matchResults?.data?.id ?? matchResults?.data?._id ?? matchResults?.data?.match_id;
+    matchResults?.data?.id ??
+    matchResults?.data?._id ??
+    matchResults?.data?.match_id ??
+    matchResults?.match_id;
 
   const resumeId: string | undefined =
     matchResults?.data?.resume_id ??
@@ -455,9 +460,9 @@ export default function AnalysisContent({
 
         {/* CENTER — Resume Preview (always visible) */}
         <div className="flex-1 overflow-y-auto bg-[#f1f5f9] border-r border-gray-200 px-8 py-6 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
+          <div className="bg-white rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] flex flex-col overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb] bg-white shrink-0">
               <div className="flex items-center gap-3">
                 {onBackToUpload && (
                   <button
@@ -467,14 +472,14 @@ export default function AnalysisContent({
                     <ArrowLeft className="w-3.5 h-3.5" /> Back
                   </button>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
                   <h3 className="text-[13px] font-bold text-gray-700 tracking-wide uppercase">Resume Preview</h3>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownload} disabled={!resumeId} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-gray-600 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  <Download className="w-3.5 h-3.5" /> Download
+                <button onClick={handleDownload} disabled={!resumeId || isSavingSection} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-gray-600 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Download className="w-3.5 h-3.5" /> {isSavingSection ? "Saving..." : "Download"}
                 </button>
                 <button
                   onClick={() => setIsEditMode((v) => !v)}
@@ -521,12 +526,12 @@ export default function AnalysisContent({
         </div>
 
         {/* RIGHT — ATS Score + Job Description */}
-        <div className="w-[520px] shrink-0 overflow-y-auto bg-[#f6f8fc] border-l border-gray-200 p-5 space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+        <div className="w-[520px] shrink-0 overflow-y-auto bg-[#f6f8fc] border-l border-gray-200 p-5 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
 
           {/* ATS Score Card */}
-          <div className="rounded-2xl border border-[#dce8f8] bg-white shadow-sm overflow-hidden">
-            <div className="p-4">
-              <div className="flex items-center gap-2 mb-4">
+          <div className="rounded-lg border border-[#dce8fb] bg-white shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
+            <div className="p-5">
+              <div className="flex items-center gap-2.5 mb-4">
                 <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg, #5896d7, #2557a7)" }} />
                 <h3 className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">ATS Match Score</h3>
               </div>
@@ -554,9 +559,9 @@ export default function AnalysisContent({
           </div>
 
           {/* Job Description Card */}
-          <div className="rounded-2xl border border-[#dce8f8] bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e8eef8]" style={{ background: "linear-gradient(135deg,#f0f5ff,#e8eef8)" }}>
-              <div className="flex items-center gap-2">
+          <div className="rounded-lg border border-[#dce8fb] bg-white shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb]" style={{ background: "linear-gradient(135deg,#f0f5ff,#e8eef8)" }}>
+              <div className="flex items-center gap-2.5">
                 <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
                 <p className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">Job Description</p>
               </div>
@@ -567,7 +572,7 @@ export default function AnalysisContent({
                 <FileText className="w-3 h-3" /> Copy
               </button>
             </div>
-            <div className="p-4 max-h-[32rem] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+            <div className="p-5 max-h-[32rem] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
               {jdText ? (
                 <JDHighlighter
                   text={jdText}
@@ -596,6 +601,24 @@ export default function AnalysisContent({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             setResumeSections((prev: Record<string, any>) => ({ ...prev, [key]: data }));
             setOpenSection(null);
+            if (matchId) {
+              const sectionLabel = openSectionLabel || key;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const items = Array.isArray(data) ? data.map((item: any) => {
+                if (typeof item === "string") return item;
+                if (item && typeof item === "object") {
+                  return { title: item.title || item.name || "", description: item.description || item.text || "" };
+                }
+                return String(item);
+              }) : [];
+              setIsSavingSection(true);
+              console.warn("[JobMatch] matcherUpdateSections →", { matchId, sectionLabel, items });
+              matcherUpdateSections(matchId, [{ sectionName: sectionLabel, items }])
+                .then(() => toast.success(`${sectionLabel} saved — ready to download`))
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                .catch((err: any) => { console.error("[JobMatch] sections save failed", err); toast.error(`Failed to save ${sectionLabel}: ${err?.message || err}`); })
+                .finally(() => setIsSavingSection(false));
+            }
           }}
           onClose={() => setOpenSection(null)}
         />

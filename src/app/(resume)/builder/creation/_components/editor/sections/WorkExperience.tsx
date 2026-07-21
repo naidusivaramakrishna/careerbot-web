@@ -134,9 +134,14 @@ const WorkExperience: React.FC = () => {
   }, [savedEntries, editingEntries]);
 
   useEffect(() => {
-    if (editingEntries.length > 0) return;
     if (!resumeData.workExperience?.length) return;
     setSavedEntries(prev => {
+      // If savedEntries is empty but API data has arrived, populate from API
+      if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        setEditingEntries([]);
+        return resumeData.workExperience!.filter(hasValidData);
+      }
+      if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.workExperience!.length) return prev;
       let changed = false;
       const updated = prev.map((entry, idx) => {

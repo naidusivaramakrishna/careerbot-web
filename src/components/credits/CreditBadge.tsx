@@ -75,7 +75,7 @@ export const CreditBadge: React.FC<CreditBadgeProps> = ({
         <span className="w-5 h-5 rounded-full bg-[#2557a7] flex items-center justify-center shrink-0">
           <Zap className="w-2.5 h-2.5 text-white fill-white" />
         </span>
-        <span className={`text-xs font-semibold ${colors.text}`}>
+        <span className={`text-[13px] font-semibold ${colors.text}`}>
           {creditsRemaining}
           <span className="font-normal text-gray-400 mx-0.5">/</span>
           {creditsTotal}

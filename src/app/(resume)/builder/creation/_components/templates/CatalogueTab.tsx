@@ -7,6 +7,27 @@ import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } fro
 const NATURAL_W = 300;
 const NATURAL_H = 400;
 
+const DENSITY_OPTIONS = [
+  { label: "Compact", value: "1.2" },
+  { label: "Normal", value: "1.45" },
+  { label: "Spacious", value: "1.7" },
+];
+
+const FONT_OPTIONS = [
+  { label: "Arial", value: "arial" },
+  { label: "Helvetica", value: "helvetica" },
+  { label: "Calibri", value: "calibri" },
+  { label: "Times New Roman", value: "times new roman" },
+  { label: "Georgia", value: "georgia" },
+  { label: "Garamond", value: "garamond" },
+];
+
+const ATS_BADGE: Record<string, { label: string; classes: string }> = {
+  safe:     { label: "ATS Safe",     classes: "bg-green-100 text-green-700" },
+  friendly: { label: "ATS Friendly", classes: "bg-blue-100 text-blue-700" },
+  creative: { label: "Creative",     classes: "bg-amber-100 text-amber-700" },
+};
+
 function ScaledThumbnail({ catalogueKey, customColor }: { catalogueKey: string; customColor?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.43);
@@ -21,13 +42,13 @@ function ScaledThumbnail({ catalogueKey, customColor }: { catalogueKey: string; 
     <div ref={containerRef} className="relative w-full overflow-hidden" style={{ aspectRatio: `${NATURAL_W}/${NATURAL_H}` }}>
       <div
         style={{
-          position: 'absolute',
+          position: "absolute",
           top: 0,
           left: 0,
           width: `${NATURAL_W}px`,
           height: `${NATURAL_H}px`,
           transform: `scale(${scale})`,
-          transformOrigin: 'top left',
+          transformOrigin: "top left",
         }}
       >
         <CatalogueThumbnail catalogueKey={catalogueKey} customColor={customColor} />
@@ -37,7 +58,7 @@ function ScaledThumbnail({ catalogueKey, customColor }: { catalogueKey: string; 
 }
 
 export default function CatalogueTab() {
-  const { setResumeStyle } = useResume();
+  const { setResumeStyle, sectionOrder, setSectionOrder, setPreviewCatalogueKey } = useResume();
 
   const [selectedKey, setSelectedKey] = useState<string>(
     () => (typeof window !== "undefined" ? localStorage.getItem("selected_catalogue") || "galaxy" : "galaxy")
@@ -55,34 +76,73 @@ export default function CatalogueTab() {
     return result;
   });
 
-  const applyCatalogue = (key: string, color?: string) => {
+  const [selectedDensity, setSelectedDensity] = useState<string>(
+    () => (typeof window !== "undefined" ? localStorage.getItem("selected_density") || "" : "")
+  );
+  const [selectedFont, setSelectedFont] = useState<string>(
+    () => (typeof window !== "undefined" ? localStorage.getItem("selected_font") || "" : "")
+  );
+
+  const isSkillsFirst = (() => {
+    if (!sectionOrder || sectionOrder.length === 0) return false;
+    const si = sectionOrder.indexOf("Skills");
+    const wi = sectionOrder.indexOf("Work Experience");
+    return si !== -1 && wi !== -1 && si < wi;
+  })();
+
+  const handleSkillsFirstToggle = () => {
+    const order = sectionOrder && sectionOrder.length > 0 ? [...sectionOrder] : [];
+    if (order.length === 0) return;
+    const si = order.indexOf("Skills");
+    const wi = order.indexOf("Work Experience");
+    if (si === -1 || wi === -1) return;
+
+    if (si < wi) {
+      // Move Work Experience before Skills
+      order.splice(si, 0, order.splice(wi, 1)[0]);
+    } else {
+      // Move Skills before Work Experience
+      order.splice(wi, 0, order.splice(si, 1)[0]);
+    }
+    setSectionOrder(order);
+    const userEmail = typeof window !== "undefined" ? localStorage.getItem("userEmail") : null;
+    const key = userEmail ? `sectionOrder_${userEmail}` : "sectionOrder";
+    localStorage.setItem(key, JSON.stringify(order));
+  };
+
+  const _applyStyleForKey = (key: string, color?: string, persist = false) => {
     const cat = STYLE_CATALOGUES[key];
     if (!cat) return;
-    setSelectedKey(key);
-    localStorage.setItem("selected_catalogue", key);
+    if (persist) {
+      setSelectedKey(key);
+      localStorage.setItem("selected_catalogue", key);
+    }
     const styleOverride = { ...cat.style } as Record<string, string>;
+
+    // Re-apply user's manual density/font overrides on top of the catalogue defaults
+    const density = localStorage.getItem("selected_density");
+    if (density) styleOverride.lineSpacing = density;
+    const font = localStorage.getItem("selected_font");
+    if (font) styleOverride.fontFamily = font;
+
     if (key === "eclipse") {
       const bg = color ?? selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;
       if (bg) {
         setResumeStyle(prev => ({ ...prev, ...styleOverride, sectionHeaderBg: bg, accentColor: undefined }));
-        localStorage.setItem("selected_section_bg", bg);
+        if (persist) localStorage.setItem("selected_section_bg", bg);
       } else {
         setResumeStyle(prev => ({ ...prev, ...styleOverride, accentColor: undefined }));
       }
-    } else if (["galaxy", "amber", "ocean", "ember"].includes(key)) {
-      // These catalogues apply palette color ONLY to name + section headers.
-      // headingColor stays dark so job titles, education degrees, etc. remain neutral.
-      const accent = color ?? selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;
-      styleOverride.headingColor = "#1A1A1A";
-      if (accent) styleOverride.accentColor = accent;
-      setResumeStyle(prev => ({ ...prev, ...styleOverride }));
     } else {
-      // All other catalogues apply palette color to all heading-level elements.
       const accent = color ?? selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;
-      if (accent) styleOverride.headingColor = accent;
-      setResumeStyle(prev => ({ ...prev, ...styleOverride, accentColor: undefined }));
+      styleOverride.headingColor = "#000000";
+      if (accent) styleOverride.accentColor = accent;
+      setResumeStyle(prev => ({ ...prev, ...styleOverride, sectionHeaderBg: undefined }));
     }
   };
+
+  const applyCatalogue = (key: string, color?: string) => _applyStyleForKey(key, color, true);
+  const previewCatalogue = (key: string) => _applyStyleForKey(key, undefined, false);
 
   const handleColorPick = (key: string, color: string) => {
     setSelectedBg(prev => ({ ...prev, [key]: color }));
@@ -91,8 +151,88 @@ export default function CatalogueTab() {
     applyCatalogue(key, color);
   };
 
+  const handleDensityChange = (value: string) => {
+    setSelectedDensity(value);
+    localStorage.setItem("selected_density", value);
+    setResumeStyle(prev => ({ ...prev, lineSpacing: value }));
+  };
+
+  const handleFontChange = (value: string) => {
+    setSelectedFont(value);
+    localStorage.setItem("selected_font", value);
+    setResumeStyle(prev => ({ ...prev, fontFamily: value }));
+  };
+
   return (
     <div className="flex flex-col gap-4 px-1 py-2">
+
+      {/* ── Customize ── */}
+      <div className="flex flex-col gap-3">
+        <h3 className="text-sm font-bold text-gray-800">Customize</h3>
+
+        {/* Density */}
+        <div>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">Spacing</p>
+          <div className="flex gap-1.5">
+            {DENSITY_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => handleDensityChange(opt.value)}
+                className={`flex-1 text-xs py-1.5 rounded-lg border font-medium transition ${
+                  selectedDensity === opt.value
+                    ? "bg-[#2257a7] text-white border-[#2257a7]"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Font */}
+        <div>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">Font</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {FONT_OPTIONS.map(font => (
+              <button
+                key={font.value}
+                onClick={() => handleFontChange(font.value)}
+                style={{ fontFamily: font.value }}
+                className={`text-[11px] py-1.5 px-2 rounded-lg border font-medium transition truncate ${
+                  selectedFont === font.value
+                    ? "bg-[#EEF3FB] text-[#2257a7] border-[#2257a7]"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {font.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Section order */}
+        <div>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">Section Order</p>
+          <button
+            onClick={handleSkillsFirstToggle}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition ${
+              isSkillsFirst
+                ? "bg-[#EEF3FB] text-[#2257a7] border-[#2257a7]"
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <span>Skills before Experience</span>
+            <span className={`w-8 h-4 rounded-full transition-colors relative ${isSkillsFirst ? "bg-[#2257a7]" : "bg-gray-200"}`}>
+              <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${isSkillsFirst ? "left-4.5" : "left-0.5"}`} />
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100" />
+
+      {/* ── Style ── */}
       <div>
         <h3 className="text-sm font-bold text-gray-800">Choose a Style</h3>
         <p className="text-xs text-gray-500 mt-0.5">
@@ -107,6 +247,7 @@ export default function CatalogueTab() {
           const paletteInfo = CATALOGUE_PALETTES[key];
           const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor;
           const primarySwatch = catalogue.swatches[0];
+          const atsBadge = ATS_BADGE[catalogue.atsLevel];
 
           return (
             <div key={key} className="group flex flex-col">
@@ -120,8 +261,9 @@ export default function CatalogueTab() {
                   transform: isSelected ? "translateY(-2px)" : undefined,
                 }}
                 onClick={() => applyCatalogue(key)}
+                onMouseEnter={() => { setPreviewCatalogueKey(key); previewCatalogue(key); }}
+                onMouseLeave={() => { setPreviewCatalogueKey(null); applyCatalogue(selectedKey); }}
               >
-                {/* Thumbnail — scaled to show full resume content */}
                 <div className="relative">
                   <ScaledThumbnail catalogueKey={key} customColor={colorForThumbnail} />
 
@@ -173,10 +315,17 @@ export default function CatalogueTab() {
                 </div>
               </div>
 
-              {/* Label */}
-              <p className={`text-[11px] font-bold mt-1.5 px-0.5 transition-colors ${isSelected ? "text-[#2257a7]" : "text-slate-700"}`}>
-                {catalogue.label}
-              </p>
+              {/* Label + ATS badge */}
+              <div className="flex items-center justify-between mt-1.5 px-0.5 gap-1">
+                <p className={`text-[11px] font-bold transition-colors truncate ${isSelected ? "text-[#2257a7]" : "text-slate-700"}`}>
+                  {catalogue.label}
+                </p>
+                {atsBadge && (
+                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0 ${atsBadge.classes}`}>
+                    {atsBadge.label}
+                  </span>
+                )}
+              </div>
             </div>
           );
         })}

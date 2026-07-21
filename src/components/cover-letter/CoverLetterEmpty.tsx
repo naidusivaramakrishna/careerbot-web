@@ -1,79 +1,50 @@
-import { Fragment } from 'react';
-import Link from 'next/link';
-import { FileText, ArrowRight, Sparkles } from 'lucide-react';
+import Link from "next/link";
+import { FileText, Plus } from "lucide-react";
 
-const STEPS = [
-  { number: '1', label: 'Upload Resume' },
-  { number: '2', label: 'Paste Job Description' },
-  { number: '3', label: 'Get Letter' },
-] as const;
+export default function CoverLetterEmpty({ hasLetters = false }: { hasLetters?: boolean }) {
+  if (hasLetters) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center px-5 py-8 2xl:min-h-[520px] 2xl:px-6 2xl:py-10">
+        <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_62%,#eef6ff_100%)] p-7 text-center shadow-sm 2xl:p-10">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-white text-[#2557a7] shadow-sm ring-1 ring-blue-100 2xl:h-16 2xl:w-16">
+            <FileText className="h-6 w-6 2xl:h-7 2xl:w-7" />
+          </div>
+          <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7] 2xl:mt-6 2xl:text-xs">
+            Preview mode
+          </p>
+          <h2 className="mt-2 text-[24px] font-black tracking-tight text-slate-950 2xl:text-3xl">Select a cover letter</h2>
+          <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-600 2xl:text-base 2xl:leading-7">
+            Choose a saved letter from the library to preview the draft, export it, or continue review.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-const PILLS = [
-  { icon: '✨', label: 'AI-Powered' },
-  { icon: '🎯', label: 'Job-Targeted' },
-  { icon: '📥', label: 'Download PDF' },
-] as const;
-
-export default function CoverLetterEmpty() {
   return (
-    <div className="flex-1 flex items-center justify-center px-8 py-12 overflow-y-auto">
-      <div className="flex flex-col items-center text-center max-w-lg w-full">
-        {/* Icon */}
-        <div className="w-20 h-20 rounded-2xl bg-blue-50 flex items-center justify-center mb-6 flex-shrink-0">
-          <FileText className="w-9 h-9 text-[#2557a7]" />
+    <div className="flex min-h-[420px] items-center justify-center px-5 py-8 2xl:min-h-[520px] 2xl:px-6 2xl:py-10">
+      <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_62%,#eef6ff_100%)] px-6 py-8 text-center shadow-sm 2xl:px-8 2xl:py-10">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-white text-[#2557a7] shadow-sm ring-1 ring-blue-100 2xl:h-16 2xl:w-16">
+          <FileText className="h-6 w-6 2xl:h-7 2xl:w-7" />
         </div>
-
-        {/* Heading */}
-        <h2 className="text-2xl font-semibold text-slate-800 mb-3">
-          Create Your First Cover Letter
-        </h2>
-
-        {/* Subtext */}
-        <p className="text-slate-500 leading-relaxed mb-6 max-w-md">
-          Generate a personalized, job-targeted cover letter in seconds.
-          Tailored to your resume and job description.
-        </p>
-
-        {/* Feature pills */}
-        <div className="flex flex-wrap justify-center gap-2 mb-8">
-          {PILLS.map((pill) => (
-            <span
-              key={pill.label}
-              className="text-sm text-slate-600 bg-slate-100 rounded-full px-3 py-1"
-            >
-              {pill.icon} {pill.label}
-            </span>
-          ))}
+        <div className="mt-5 2xl:mt-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7] 2xl:text-xs">
+            No saved letters
+          </p>
+          <h2 className="mt-2 text-[24px] font-black tracking-tight text-slate-950 2xl:text-3xl">
+            Create your first cover letter
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+            Add a resume, paste the job description, select the tone, and generate a focused draft.
+          </p>
+          <Link
+            href="/cover-letter/new"
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-[#2557a7] px-4 text-sm font-bold text-white transition hover:bg-[#1e4a94] 2xl:h-11 2xl:px-5"
+          >
+            <Plus className="h-4 w-4" />
+            New letter
+          </Link>
         </div>
-
-        {/* How it works — 3 mini steps */}
-        <div className="flex items-center gap-2 mb-8 flex-wrap justify-center">
-          {STEPS.map((step, i) => (
-            <Fragment key={step.number}>
-              <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-center min-w-[100px]">
-                <p className="text-xs font-bold text-[#2557a7] mb-1">{step.number}</p>
-                <p className="text-xs font-medium text-slate-700">{step.label}</p>
-              </div>
-              {i < STEPS.length - 1 && (
-                <ArrowRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-              )}
-            </Fragment>
-          ))}
-        </div>
-
-        {/* Primary CTA */}
-        <Link
-          href="/cover-letter/new"
-          className="inline-flex items-center justify-center gap-2 bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-3.5 px-8 rounded-xl text-base transition-all shadow-md hover:shadow-lg max-w-sm w-full"
-        >
-          <Sparkles className="w-4 h-4" />
-          Generate Your First Cover Letter
-        </Link>
-
-        {/* Micro-copy */}
-        <p className="mt-3 text-xs text-slate-400">
-          Free · No credit card required · Takes 30 seconds
-        </p>
       </div>
     </div>
   );

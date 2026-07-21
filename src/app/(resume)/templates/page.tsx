@@ -2,15 +2,18 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, LayoutTemplate, Sparkles } from 'lucide-react';
+import { Search, LayoutTemplate, Sparkles, User } from 'lucide-react';
 import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';
 import logger from '@/lib/logger';
 import CategorySidebar from './_components/CategorySidebar';
 import DomainTemplatesModal from './_components/DomainTemplatesModal';
 import DomainCard from './_components/DomainCard';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { STYLE_CATALOGUES } from '@/app/(resume)/builder/creation/_utils/templateStyles';
+import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP } from '@/app/(resume)/builder/creation/_utils/templateStyles';
+import type { HeaderLayout } from '@/app/(resume)/builder/creation/_utils/templateStyles';
 import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from '@/app/browse-templates/_components/CatalogueThumbnail';
+import Template1 from '@/app/(resume)/templates/Template1';
+import { type ResumeData, type ResumeStyle } from '@/app/(resume)/builder/creation/_context/ResumeContext';
 
 const DOMAIN_NAMES: Record<string, string> = {
   core_engineering: 'Core Engineering',
@@ -30,25 +33,8 @@ const DOMAIN_NAMES: Record<string, string> = {
   general_professional: 'General Professional'
 };
 
-const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
-  core_engineering: '/assets/templates/core-engineering.png',
-  software_engineering: '/assets/templates/software_engineering.png',
-  healthcare: '/assets/templates/healthcare.png',
-  finance: '/assets/templates/finance.png',
-  education: '/assets/templates/education.png',
-  cybersecurity: '/assets/templates/cybersecurity.png',
-  electronics_and_vlsi: '/assets/templates/electronics_vlsi.png',
-  government_standard: '/assets/templates/government_standard.png',
-  legal: '/assets/templates/legal.png',
-  logistics_warehouse_operations: '/assets/templates/logistics.png',
-  marine_merchant_navy: '/assets/templates/marine_merchant.png',
-  modern_minimal_template: '/assets/templates/modern_minimal.png',
-  research_scholar: '/assets/templates/research_scholar.png',
-  sales_business_development: '/assets/templates/sales_business.png',
-  general_professional: '/assets/templates/software_engineering.png',
-};
-
-const DEFAULT_TEMPLATE_IMAGE = '/assets/templates/template-1.png';
+import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from './_constants/templateImages';
+import { resolveTemplateImageUrl } from '@/lib/imageUtils';
 
 const TRUST_BADGES = ['100% ATS Friendly', '14+ Industries', '100+ Templates'];
 
@@ -204,23 +190,69 @@ export default function TemplatesPage() {
   const [selectedDomainModal, setSelectedDomainModal] = useState<DomainModal | null>(null);
   const [loading, setLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
-  const [selectedCatalogue, setSelectedCatalogue] = useState<string>(
-    () => (typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') || 'galaxy' : 'galaxy')
-  );
+  const [selectedCatalogue, setSelectedCatalogue] = useState<string>('galaxy');
   // Per-catalogue section-header background / accent colour (only meaningful for code-thumbnail catalogues).
   const [hoverBg, setHoverBg] = useState<Record<string, string | undefined>>({});
-  const [selectedBg, setSelectedBg] = useState<Record<string, string | undefined>>(() => {
-    if (typeof window === 'undefined') return {};
+  const [selectedBg, setSelectedBg] = useState<Record<string, string | undefined>>({});
+
+  // Live preview state
+  const [showLivePreview, setShowLivePreview] = useState(false);
+  const [liveResumeData, setLiveResumeData] = useState<ResumeData | null>(null);
+  const liveSectionOrder = ['Personal Info', 'Professional Summary', 'Skills', 'Work Experience', 'Projects', 'Education', 'Certifications'];
+  const [cardScale, setCardScale] = useState(0.26);
+  const cardScaleRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    setCardScale(node.offsetWidth / 595);
+  }, []);
+
+  const hasUserData = !!(liveResumeData?.personalInfo?.fullname || liveResumeData?.workExperience?.length);
+
+  useEffect(() => {
+    // Load all localStorage-dependent state after hydration to avoid SSR mismatch
+    const savedCatalogue = localStorage.getItem('selected_catalogue');
+    if (savedCatalogue) setSelectedCatalogue(savedCatalogue);
+
     const result: Record<string, string | undefined> = {};
     for (const key of Object.keys(CATALOGUE_PALETTES)) {
       const saved = localStorage.getItem(`selected_color_${key}`);
       if (saved) result[key] = saved;
     }
-    // Backward compat with previous single-key persistence (was Eclipse-only).
     const legacy = localStorage.getItem('selected_section_bg');
     if (legacy && !result.eclipse) result.eclipse = legacy;
-    return result;
-  });
+    if (Object.keys(result).length > 0) setSelectedBg(result);
+
+    const savedResume = localStorage.getItem('resumeData');
+    if (savedResume) {
+      try { setLiveResumeData(JSON.parse(savedResume)); } catch {}
+    }
+  }, []);
+
+  const buildStyleForCatalogue = useCallback((key: string): ResumeStyle => {
+    const catalogue = STYLE_CATALOGUES[key];
+    const s = catalogue?.style || STYLE_CATALOGUES.galaxy.style;
+    const density = (typeof window !== 'undefined' ? localStorage.getItem('selected_density') : null) || s.lineSpacing || '1.45';
+    const font = (typeof window !== 'undefined' ? localStorage.getItem('selected_font') : null) || s.fontFamily || 'arial';
+    const savedColor = selectedBg[key] ?? CATALOGUE_PALETTES[key]?.defaultColor;
+    const accent = savedColor || (s as Record<string, string | undefined>).accentColor;
+    return {
+      fontFamily: font,
+      nameFontSize: '20px',
+      headingFontSize: '12px',
+      bodyFontSize: '9px',
+      bold: false,
+      italic: false,
+      lineSpacing: density,
+      headingColor: s.headingColor || '#1A1A1A',
+      bodyColor: s.bodyColor || '#4b5563',
+      accentColor: key !== 'eclipse' ? accent : undefined,
+      sectionHeaderBg: key === 'eclipse' ? (savedColor || '#dbeafe') : undefined,
+    };
+  }, [selectedBg]);
+
+  const getLayoutVariant = (key: string): HeaderLayout => {
+    const catalogue = STYLE_CATALOGUES[key];
+    return (CATALOGUE_LAYOUT_MAP[catalogue?.template_id || 'clean_simple'] as HeaderLayout) || 'centered';
+  };
 
   const persistColorForBuilder = (catalogueKey: string, color: string | undefined) => {
     // Eclipse's chosen colour drives `selected_section_bg` (the builder reads it for the
@@ -464,12 +496,25 @@ export default function TemplatesPage() {
                 Pick a colour theme — it will apply automatically when you open the builder.
               </p>
             </div>
-            {selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue] && (
-              <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
-                <span>{STYLE_CATALOGUES[selectedCatalogue].label}</span>
-                <span className="text-blue-300">selected</span>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {selectedCatalogue && STYLE_CATALOGUES[selectedCatalogue] && (
+                <div className="hidden md:flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-sm font-semibold text-[#2257a7] shadow-sm">
+                  <span>{STYLE_CATALOGUES[selectedCatalogue].label}</span>
+                  <span className="text-blue-300">selected</span>
+                </div>
+              )}
+              <button
+                onClick={() => setShowLivePreview(v => !v)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
+                  showLivePreview
+                    ? 'bg-[#2257a7] text-white border-[#2257a7] shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-800'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                {showLivePreview ? 'Your Data' : 'Preview with Your Data'}
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
@@ -480,6 +525,7 @@ export default function TemplatesPage() {
               const colorForThumbnail = hoverBg[key] ?? selectedBg[key] ?? paletteInfo?.defaultColor;
               const primarySwatch = catalogue.swatches[0];
 
+              const isFirst = Object.keys(STYLE_CATALOGUES).indexOf(key) === 0;
               return (
                 <div key={key} className="group flex flex-col">
                   <div
@@ -495,10 +541,40 @@ export default function TemplatesPage() {
                   >
                     <div className="relative w-full bg-slate-50 p-3 group-hover:bg-slate-100/80 transition-colors duration-200">
                       <div
+                        ref={isFirst ? cardScaleRef : undefined}
                         className="relative w-full bg-white rounded-xl shadow-sm overflow-hidden transition-transform duration-300 group-hover:scale-[1.01]"
                         style={{ aspectRatio: '3/4' }}
                       >
-                        <CatalogueThumbnail catalogueKey={key} fallbackImage={DEFAULT_TEMPLATE_IMAGE} customColor={colorForThumbnail} />
+                        {showLivePreview && liveResumeData ? (
+                          <>
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '595px',
+                                transform: `scale(${cardScale})`,
+                                transformOrigin: 'top left',
+                                pointerEvents: 'none',
+                              }}
+                            >
+                              <Template1
+                                data={liveResumeData}
+                                style={buildStyleForCatalogue(key)}
+                                layoutVariant={getLayoutVariant(key)}
+                                sectionOrder={liveSectionOrder}
+                              />
+                            </div>
+                            {!hasUserData && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
+                                <User className="w-6 h-6 text-slate-300 mb-1" />
+                                <p className="text-[10px] text-slate-400 font-medium text-center px-3">Build your resume to preview here</p>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <CatalogueThumbnail catalogueKey={key} fallbackImage={FALLBACK_TEMPLATE_IMAGE} customColor={colorForThumbnail} />
+                        )}
                       </div>
 
                       {isSelected && (
@@ -684,7 +760,12 @@ export default function TemplatesPage() {
                         key={domain}
                         domainName={DOMAIN_DISPLAY_NAMES[domain] || domain}
                         templateCount={domainTemplates.length}
-                        previewImage={DOMAIN_FAMILY_IMAGES[family] || domainTemplates[0]?.preview_url || DEFAULT_TEMPLATE_IMAGE}
+                        previewImage={resolveTemplateImageUrl(
+                          (domainTemplates.find(t =>
+                            t.name?.toLowerCase().includes('early') &&
+                            t.name?.toLowerCase().includes('career')
+                          ) || domainTemplates[0])?.preview_url
+                        ) || DOMAIN_FAMILY_IMAGES[family] || FALLBACK_TEMPLATE_IMAGE}
                         onClick={() => openDomainModal(family, domain)}
                       />
                     ))}

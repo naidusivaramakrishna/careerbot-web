@@ -18,7 +18,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, XCircle, Trash2, Plus } from "lucide-react";
+import { History, XCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCoverLetter } from "@/hooks/useCoverLetter";
 import { useDeleteCoverLetter } from "@/hooks/useDeleteCoverLetter";
@@ -67,19 +67,23 @@ export default function CoverLetterDetailPage() {
   }, [error, letterId]);
 
   return (
-    <div className="min-h-screen px-4 py-6">
-      <div className="max-w-3xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-2 mb-4">
+    <div className="min-h-full px-4 pb-10 pt-5 text-slate-900 lg:px-5 2xl:pt-6">
+      <div className="mx-auto max-w-[1180px] 2xl:max-w-[1320px]">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/cover-letter/new"
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-[#2557a7] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#1e4a94]"
+          >
+            Back
+          </Link>
           <Link
             href="/cover-letter/history"
-            aria-label="Back to cover letters"
-            className="p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-[#263363] transition hover:border-[#2557a7]/40 hover:bg-blue-50 hover:text-[#2557a7]"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <History className="h-4 w-4" aria-hidden="true" />
+            History
           </Link>
         </div>
-
         {/* Body — branch on state */}
         {isLoading ? (
           <DetailSkeleton />
@@ -95,9 +99,9 @@ export default function CoverLetterDetailPage() {
                 <button
                   type="button"
                   onClick={() => setConfirmOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
                 >
-                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
                   Delete
                 </button>
               </div>
@@ -107,19 +111,12 @@ export default function CoverLetterDetailPage() {
               letter={letter}
               actions={
                 <div className="flex items-center gap-2">
-                  <Link
-                    href="/cover-letter/new"
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-[#2557a7] hover:text-[#1e4a94] hover:bg-blue-50 rounded-md transition-colors"
-                  >
-                    <Plus className="w-4 h-4" aria-hidden="true" />
-                    Generate another
-                  </Link>
                   <button
                     type="button"
                     onClick={() => setConfirmOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gray-700 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
                   >
-                    <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                     Delete
                   </button>
                 </div>
@@ -168,14 +165,14 @@ function letterToListItem(letter: {
 
 function DetailSkeleton() {
   return (
-    <div aria-busy="true" className="space-y-4 animate-pulse">
-      <div className="h-7 bg-gray-200 rounded w-1/3" />
-      <div className="h-4 bg-gray-200 rounded w-1/4" />
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 space-y-2">
-        <div className="h-3 bg-gray-200 rounded w-1/2" />
-        <div className="h-3 bg-gray-200 rounded w-full" />
-        <div className="h-3 bg-gray-200 rounded w-full" />
-        <div className="h-3 bg-gray-200 rounded w-3/4" />
+    <div aria-busy="true" className="animate-pulse space-y-4">
+      <div className="h-7 w-1/3 rounded bg-slate-200" />
+      <div className="h-4 w-1/4 rounded bg-slate-200" />
+      <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-5 2xl:p-6">
+        <div className="h-3 w-1/2 rounded bg-slate-200" />
+        <div className="h-3 w-full rounded bg-slate-200" />
+        <div className="h-3 w-full rounded bg-slate-200" />
+        <div className="h-3 w-3/4 rounded bg-slate-200" />
       </div>
     </div>
   );
@@ -183,17 +180,17 @@ function DetailSkeleton() {
 
 function NotFoundCard() {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center">
-      <h2 className="text-xl font-bold text-gray-900 mb-2">
+    <div className="rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm 2xl:p-8">
+      <h2 className="mb-2 text-xl font-black text-slate-950">
         Letter not found
       </h2>
-      <p className="text-gray-600 mb-6">
+      <p className="mb-6 text-sm leading-6 text-slate-500">
         We couldn&rsquo;t find that cover letter. It may have been
         deleted, or the link is wrong.
       </p>
       <Link
         href="/cover-letter/history"
-        className="inline-block bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-2.5 px-5 rounded-lg transition-colors"
+        className="inline-flex h-10 items-center justify-center rounded-lg bg-[#2557a7] px-4 text-sm font-bold text-white transition hover:bg-[#1e4a94] 2xl:px-5"
       >
         Back to history
       </Link>
@@ -203,18 +200,18 @@ function NotFoundCard() {
 
 function ErrorCard({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="rounded-2xl border border-red-100 bg-white p-8 text-center">
-      <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-50 mb-3">
-        <XCircle className="w-8 h-8 text-red-600" aria-hidden="true" />
+    <div className="rounded-lg border border-red-100 bg-white p-6 text-center shadow-sm 2xl:p-8">
+      <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-red-50 2xl:h-14 2xl:w-14">
+        <XCircle className="h-7 w-7 text-red-600 2xl:h-8 2xl:w-8" aria-hidden="true" />
       </div>
-      <h2 className="text-xl font-bold text-gray-900 mb-2">Couldn&rsquo;t load letter</h2>
-      <p className="text-gray-600 mb-6">
+      <h2 className="mb-2 text-xl font-black text-slate-950">Couldn&rsquo;t load letter</h2>
+      <p className="mb-6 text-sm leading-6 text-slate-500">
         Please try again in a moment.
       </p>
       <button
         type="button"
         onClick={onRetry}
-        className="inline-block bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-2.5 px-5 rounded-lg transition-colors"
+        className="inline-flex h-10 items-center justify-center rounded-lg bg-[#2557a7] px-4 text-sm font-bold text-white transition hover:bg-[#1e4a94] 2xl:px-5"
       >
         Try again
       </button>

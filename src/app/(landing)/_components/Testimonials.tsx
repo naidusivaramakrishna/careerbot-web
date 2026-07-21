@@ -3,100 +3,77 @@
 import { motion } from 'framer-motion';
 import { Star } from 'lucide-react';
 
-interface Testimonial {
-  quote: string;
-  name: string;
-  city: string;
-  initial: string;
-  avatarBg: string;
-  avatarText: string;
-}
-
-const testimonials: Testimonial[] = [
+const testimonials = [
   {
-    quote:
-      'My ATS score improved from 45 to 89. I finally understood which keywords were missing and could add them instantly.',
+    quote: 'My ATS score improved from 45 to 89. CareerBot helped me fix keywords and format instantly.',
     name: 'Priya S.',
     city: 'Chennai',
     initial: 'P',
-    avatarBg: 'bg-violet-100',
-    avatarText: 'text-violet-700',
+    tone: 'bg-violet-100 text-violet-700',
   },
   {
-    quote:
-      'Spent 30 minutes building a new resume from scratch. The AI enhancement cut my effort in half and made the resume much clearer.',
+    quote: 'Spent 30 minutes building a new resume from scratch. The AI enhancement made it much clearer.',
     name: 'Rahul M.',
     city: 'Hyderabad',
     initial: 'R',
-    avatarBg: 'bg-emerald-100',
-    avatarText: 'text-emerald-700',
+    tone: 'bg-emerald-100 text-emerald-700',
   },
   {
-    quote:
-      'Before I was applying to jobs blindly. Now I can see my match score and focus on roles where I have a real chance.',
+    quote: 'Before I was applying blindly. Now I can match score and focus on roles where I have a real chance.',
     name: 'Sneha K.',
     city: 'Bangalore',
     initial: 'S',
-    avatarBg: 'bg-amber-100',
-    avatarText: 'text-amber-700',
+    tone: 'bg-amber-100 text-amber-700',
   },
 ];
 
 export default function Testimonials() {
   return (
-    <section id="testimonials" className="relative overflow-hidden bg-[linear-gradient(180deg,#ffffff_0%,#f6f9ff_100%)] py-24">
-      <div className="mx-auto max-w-6xl px-4">
+    <section id="testimonials" className="bg-white py-10">
+      <div className="mx-auto grid max-w-[1240px] gap-8 px-4 lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
         <motion.div
-          className="mb-10 text-center"
-          initial={{ opacity: 0, y: 24 }}
+          initial={false}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-80px' }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.42 }}
         >
-          <span className="rounded-full border border-blue-100 bg-white px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-[#2557a7] shadow-sm">
+          <span className="inline-flex rounded-full bg-[#eef5ff] px-3 py-1.5 text-[10px] font-black uppercase text-[#2557a7]">
             Testimonials
           </span>
-          <h2 className="mt-5 bg-gradient-to-r from-slate-950 via-[#2557a7] to-teal-600 bg-clip-text text-3xl font-bold text-transparent md:text-4xl">
+          <h2 className="mt-4 text-[28px] font-black leading-tight text-[#08143f] md:text-[34px]">
             Loved by Job Seekers Across India
           </h2>
-          <div className="mt-5 flex flex-col items-center gap-1">
-            <p className="text-lg font-bold text-[#111827]">12,400+ job seekers</p>
-            <p className="text-sm text-[#9CA3AF]">improving their resumes with CareerBot every month</p>
-          </div>
+          <p className="mt-3 text-sm font-bold text-[#08143f]">
+            12,400+ job seekers improving their resumes with CareerBot every month
+          </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {testimonials.map((testimonial, i) => (
-            <motion.div
+        <div className="grid gap-4 md:grid-cols-3">
+          {testimonials.map((testimonial, index) => (
+            <motion.article
               key={testimonial.name}
-              className="group flex flex-col gap-4 rounded-2xl border border-l-4 border-white border-l-[#2557a7]/50 bg-white p-6 shadow-lg shadow-slate-200/70 ring-1 ring-slate-200/80 transition-all duration-300 hover:-translate-y-1 hover:border-blue-100 hover:shadow-xl hover:shadow-blue-100/60"
-              initial={{ opacity: 0, y: 28 }}
+              className="rounded-lg border border-[#dce8fb] bg-white p-5 shadow-[0_10px_26px_rgba(37,87,167,0.06)]"
+              initial={false}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: 0.5, ease: 'easeOut', delay: i * 0.1 }}
+              transition={{ duration: 0.38, delay: index * 0.05 }}
             >
-              <span className="-mb-2 select-none font-serif text-5xl leading-none text-blue-100" aria-hidden="true">
-                &ldquo;
-              </span>
-
-              <div className="flex gap-0.5" aria-label="Positive user feedback">
+              <div className="flex gap-0.5">
                 {Array.from({ length: 5 }).map((_, idx) => (
-                  <Star key={idx} size={16} className="fill-amber-400 text-amber-400" aria-hidden="true" />
+                  <Star key={idx} size={15} className="fill-amber-400 text-amber-400" />
                 ))}
               </div>
-
-              <p className="flex-1 text-sm leading-relaxed text-[#374151]">{testimonial.quote}</p>
-
-              <div className="flex items-center gap-3 border-t border-slate-100 pt-2">
-                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full shadow-sm transition-transform duration-300 group-hover:scale-105 ${testimonial.avatarBg}`}>
-                  <span className={`text-sm font-semibold ${testimonial.avatarText}`}>{testimonial.initial}</span>
+              <p className="mt-4 min-h-[82px] text-xs font-semibold leading-6 text-[#33446c]">{testimonial.quote}</p>
+              <div className="mt-4 flex items-center gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-black ${testimonial.tone}`}>
+                  {testimonial.initial}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-[#111827]">{testimonial.name}</p>
-                  <p className="text-xs text-[#9CA3AF]">{testimonial.city}</p>
+                  <p className="text-sm font-black text-[#08143f]">{testimonial.name}</p>
+                  <p className="text-xs font-medium text-[#66779d]">{testimonial.city}</p>
                 </div>
               </div>
-            </motion.div>
+            </motion.article>
           ))}
         </div>
       </div>

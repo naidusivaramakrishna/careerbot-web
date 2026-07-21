@@ -1,4 +1,5 @@
 // background/service-worker.js
+importScripts('../config.js');
 
 // Open side panel on icon click (direct user gesture — always works).
 chrome.action.onClicked.addListener((tab) => {
@@ -7,26 +8,76 @@ chrome.action.onClicked.addListener((tab) => {
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
 
+// Hostnames our content scripts are declared against in manifest.json —
+// JD_DETECTED/JD_TAILOR_NOW are only trusted from these origins.
+const ALLOWED_JD_HOSTS = [
+  'www.linkedin.com', 'linkedin.com',
+  'www.naukri.com',
+  'www.indeed.co.in', 'in.indeed.com', 'www.indeed.com',
+  'www.glassdoor.com', 'glassdoor.com', 'www.glassdoor.co.in', 'glassdoor.co.in',
+  'www.shine.com', 'shine.com',
+  'www.timesjobs.com',
+  'internshala.com',
+  'www.foundit.in', 'www.foundit.sg', 'www.foundit.my', 'www.foundit.ph',
+  'www.ziprecruiter.com',
+  'wellfound.com', 'angel.co',
+  'boards.greenhouse.io', 'job-boards.greenhouse.io',
+  'jobs.lever.co',
+];
+
+function isFromAllowedHost(tab) {
+  if (!tab?.url) return false;
+  try {
+    return ALLOWED_JD_HOSTS.includes(new URL(tab.url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+const MAX_JD_LENGTH = 30000;
+const MAX_META_FIELD_LENGTH = 300;
+
+function sanitizeJDPayload(data) {
+  if (!data || typeof data.jd !== 'string' || !data.jd.trim()) return null;
+  const meta = data.meta && typeof data.meta === 'object' ? data.meta : {};
+  const str = (v) => (typeof v === 'string' ? v.slice(0, MAX_META_FIELD_LENGTH) : '');
+  return {
+    jd: data.jd.slice(0, MAX_JD_LENGTH),
+    meta: {
+      title:   str(meta.title),
+      company: str(meta.company),
+      url:     str(meta.url),
+      source:  str(meta.source),
+    },
+  };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Validate that the message comes from our own extension only.
   if (sender.id !== chrome.runtime.id) return false;
 
   if (message.type === 'JD_DETECTED') {
-    handleJDDetected(message.data, sender.tab);
-    sendResponse({ ok: true });
+    if (!isFromAllowedHost(sender.tab)) return false;
+    const payload = sanitizeJDPayload(message.data);
+    if (payload) handleJDDetected(payload, sender.tab);
+    sendResponse({ ok: Boolean(payload) });
+    return true;
   }
 
   // "Tailor Resume" clicked in banner — open panel immediately (user gesture
   // context is still active), then store the JD asynchronously.
   if (message.type === 'JD_TAILOR_NOW') {
-    if (sender.tab?.id) {
+    if (!isFromAllowedHost(sender.tab)) return false;
+    const payload = sanitizeJDPayload(message.data);
+    if (payload && sender.tab?.id) {
       chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {});
     }
-    handleJDDetected(message.data, sender.tab);
-    sendResponse({ ok: true });
+    if (payload) handleJDDetected(payload, sender.tab);
+    sendResponse({ ok: Boolean(payload) });
+    return true;
   }
 
-  return true;
+  return false;
 });
 
 async function handleJDDetected(data, tab) {
@@ -61,6 +112,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    chrome.tabs.create({ url: 'http://localhost:3000' });
+    chrome.tabs.create({ url: CAREERBOT_CONFIG.PORTAL_URL });
   }
 });

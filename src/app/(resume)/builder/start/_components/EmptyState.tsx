@@ -348,7 +348,7 @@
 
 "use client"
 import { CircleCheckBig, Plus, Upload } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useState } from "react";
 import { createResumeWithAuth, getAllResumesUnified } from "@/api/resumeApi";
@@ -361,8 +361,22 @@ const EmptyState = ({ selected, onSelect }: {
   onSelect: (id: string) => void;
 }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isCreating, setIsCreating] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+
+  const buildCreationUrl = (resumeId: string) => {
+    const returnTo = searchParams.get("return_to");
+    const params = new URLSearchParams();
+
+    if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
+      params.set("return_to", returnTo);
+    }
+
+    const query = params.toString();
+    return `/builder/creation/${encodeURIComponent(resumeId)}${query ? `?${query}` : ""}`;
+  };
+
 
   const handleBuilderClick = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -372,18 +386,21 @@ const EmptyState = ({ selected, onSelect }: {
 
     try {
       const { builder_resumes } = await getAllResumesUnified();
+      let resumeId: string;
 
       if (builder_resumes.length > 0) {
         const resume = builder_resumes[0] as { id: string };
         localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: resume.id, data: resume }));
         localStorage.setItem("current_resume_id", resume.id);
+        resumeId = resume.id;
       } else {
         const newResume = await createResumeWithAuth();
         localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: newResume.id, data: newResume }));
         localStorage.setItem("current_resume_id", newResume.id);
+        resumeId = newResume.id;
       }
 
-      router.push("/templates");
+      router.push(buildCreationUrl(resumeId));
     } catch (error: unknown) {
       logger.error("Error:", error);
       const axiosError = error as { response?: { status?: number } };

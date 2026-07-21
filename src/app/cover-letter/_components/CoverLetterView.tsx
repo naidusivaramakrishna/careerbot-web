@@ -1,37 +1,147 @@
 "use client";
 
-/**
- * Shared shell for Screens C / D / F (E uses FailureCard directly).
- *
- * Renders the letter body + matrix + grounding, switching on status:
- *   ready_to_review → JD matrix EXPANDED by default
- *   needs_review   → WarningBanner at top + matrix COLLAPSED
- *   failed         → see FailureCard (caller branches before this)
- *
- * Spec: wireframes §5 + §6.
- */
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Download, FileText } from "lucide-react";
+import type { ComponentType, ReactNode } from "react";
+import {
+  CheckCircle2,
+  Copy,
+  Download,
+  Loader2,
+  Pencil,
+  Save,
+  FileText,
+  Search,
+  ShieldCheck,
+  Target,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
-import type { CoverLetterResponse, CoverLetterTemplate } from "@/types/coverLetter";
+import type { CoverLetterResponse, CoverLetterTemplateId } from "@/types/coverLetter";
 import { useCoverLetterTemplates } from "@/hooks/useCoverLetterTemplates";
 import { useDownloadCoverLetter } from "@/hooks/useDownloadCoverLetter";
+import { useUpdateCoverLetter } from "@/hooks/useUpdateCoverLetter";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
 import CoverLetterStatusPill from "./CoverLetterStatusPill";
 import WarningBanner from "./WarningBanner";
-import JDMatchMatrix from "./JDMatchMatrix";
-import GroundingDetails from "./GroundingDetails";
-import CopyButton from "./CopyButton";
 
 export interface CoverLetterViewProps {
   letter: CoverLetterResponse;
-  /** Optional title-bar element (parent passes ⋯ menu / [Regenerate]
-   *  / [Delete] etc); kept generic so list-page and detail-page
-   *  reuse the same shell. */
-  actions?: React.ReactNode;
+  actions?: ReactNode;
 }
 
-/** Format the created_at ISO string for the header. */
+type DisplayTemplateId =
+  | "classic"
+  | "modern"
+  | "compact"
+  | "executive"
+  | "minimal"
+  | "signature";
+
+type IconComponent = ComponentType<{ className?: string }>;
+
+type ReviewSuggestion = {
+  title: string;
+  description: string;
+  icon: "growth" | "company";
+};
+
+const COVER_LETTER_TEMPLATE_PREF_KEY = "careerbot:cover-letter-template";
+
+const displayTemplates: Array<{
+  id: DisplayTemplateId;
+  name: string;
+  description: string;
+  backendTemplateId: CoverLetterTemplateId;
+  accent: string;
+  badge: string;
+  paper: string;
+  previewStyle: "classic" | "modern" | "compact" | "executive" | "minimal" | "signature";
+  bestFor: string;
+}> = [
+  {
+    id: "classic",
+    name: "Classic",
+    description: "Traditional letterhead with recruiter-safe spacing.",
+    backendTemplateId: "classic",
+    accent: "bg-slate-900",
+    badge: "Formal",
+    paper: "bg-[#f6f3ef]",
+    previewStyle: "classic",
+    bestFor: "Finance, legal, operations",
+  },
+  {
+    id: "modern",
+    name: "Modern",
+    description: "Bold masthead with a clean contact row.",
+    backendTemplateId: "modern",
+    accent: "bg-[#0f8b8d]",
+    badge: "Modern",
+    paper: "bg-[#e9f7f6]",
+    previewStyle: "modern",
+    bestFor: "Tech, product, growth",
+  },
+  {
+    id: "compact",
+    name: "Compact",
+    description: "Dense one-page rhythm for fast applications.",
+    backendTemplateId: "compact",
+    accent: "bg-[#2557a7]",
+    badge: "ATS-friendly",
+    paper: "bg-[#edf4ff]",
+    previewStyle: "compact",
+    bestFor: "High-volume applications",
+  },
+  {
+    id: "executive",
+    name: "Executive",
+    description: "Premium side rail for senior roles.",
+    backendTemplateId: "executive",
+    accent: "bg-[#26324a]",
+    badge: "Leadership",
+    paper: "bg-[#eef1f7]",
+    previewStyle: "executive",
+    bestFor: "Senior leadership",
+  },
+  {
+    id: "minimal",
+    name: "Minimal",
+    description: "Open editorial whitespace and quiet type.",
+    backendTemplateId: "minimal",
+    accent: "bg-[#64748b]",
+    badge: "Editorial",
+    paper: "bg-[#f8fafc]",
+    previewStyle: "minimal",
+    bestFor: "Consulting, research",
+  },
+  {
+    id: "signature",
+    name: "Signature",
+    description: "Monogram header with a signature finish.",
+    backendTemplateId: "signature",
+    accent: "bg-[#047857]",
+    badge: "Personal",
+    paper: "bg-[#ecfdf5]",
+    previewStyle: "signature",
+    bestFor: "Design, marketing, CS",
+  },
+];
+
+const displayTemplateIds = new Set<DisplayTemplateId>(
+  displayTemplates.map((template) => template.id),
+);
+
+function getStoredGeneratedLetterTemplate(letterId: string): DisplayTemplateId | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.sessionStorage.getItem(`${COVER_LETTER_TEMPLATE_PREF_KEY}:${letterId}`);
+    return stored && displayTemplateIds.has(stored as DisplayTemplateId)
+      ? (stored as DisplayTemplateId)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function formatGeneratedFull(iso: string): string {
   try {
     return new Date(iso).toLocaleString(undefined, {
@@ -56,136 +166,23 @@ function redirectToLoginForExport() {
   window.location.href = `/?${params.toString()}`;
 }
 
-function TemplatePreviewCard({
-  template,
-  selected,
-  disabled,
-  onSelect,
-}: {
-  template: CoverLetterTemplate;
-  selected: boolean;
-  disabled: boolean;
-  onSelect: () => void;
-}) {
-  const metaByTemplate: Record<string, {
-    accent: string;
-    badge: string;
-    previewBg: string;
-    titleAlign: string;
-    titleWidth: string;
-  }> = {
-    classic: {
-      accent: "bg-slate-900",
-      badge: "Executive",
-      previewBg: "bg-stone-50",
-      titleAlign: "",
-      titleWidth: "w-11",
-    },
-    modern: {
-      accent: "bg-teal-600",
-      badge: "Signature",
-      previewBg: "bg-cyan-50",
-      titleAlign: "mx-auto",
-      titleWidth: "w-9",
-    },
-    compact: {
-      accent: "bg-blue-700",
-      badge: "One-page",
-      previewBg: "bg-blue-50",
-      titleAlign: "",
-      titleWidth: "w-12",
-    },
-  };
-  const meta = metaByTemplate[template.template_id] ?? {
-    accent: "bg-[#2557a7]",
-    badge: "Template",
-    previewBg: "bg-slate-50",
-    titleAlign: "",
-    titleWidth: "w-10",
-  };
-  const isCompact = template.template_id === "compact";
-  const isModern = template.template_id === "modern";
-
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      aria-pressed={selected}
-      onClick={onSelect}
-      className={[
-        "group relative rounded-xl border bg-white p-3 text-left transition-all",
-        "focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2",
-        selected
-          ? "border-[#2557a7] shadow-md ring-1 ring-[#2557a7]"
-          : "border-slate-200 hover:border-blue-200 hover:shadow-sm",
-        disabled ? "cursor-not-allowed opacity-60" : "",
-      ].join(" ")}
-    >
-      {selected && (
-        <CheckCircle2
-          className="absolute right-2 top-2 h-4 w-4 text-[#2557a7]"
-          aria-hidden="true"
-        />
-      )}
-      <div className={["mb-3 flex h-32 items-center justify-center rounded-lg", meta.previewBg].join(" ")}>
-        <div className="h-28 w-20 rounded border border-slate-200 bg-white p-2.5 shadow-sm">
-          <div
-            className={[
-              "mb-2 h-1.5 rounded-full",
-              meta.titleAlign,
-              meta.titleWidth,
-              meta.accent,
-            ].join(" ")}
-          />
-          {isModern && (
-            <div className={["mb-2 h-0.5 rounded-full", meta.accent].join(" ")} />
-          )}
-          <div className={["space-y-1", isCompact ? "space-y-0.5" : ""].join(" ")}>
-            <div className="h-1 w-14 rounded bg-slate-300" />
-            <div className="h-1 w-12 rounded bg-slate-200" />
-            <div className="h-1 w-10 rounded bg-slate-200" />
-          </div>
-          <div className={["mt-2 space-y-1", isCompact ? "mt-1 space-y-0.5" : ""].join(" ")}>
-            {Array.from({ length: isCompact ? 9 : 6 }).map((_, index) => (
-              <div
-                key={index}
-                className={[
-                  "h-1 rounded bg-slate-200",
-                  index % 3 === 0 ? "w-14" : index % 3 === 1 ? "w-12" : "w-16",
-                ].join(" ")}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="pr-4">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-slate-900">{template.name}</p>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-            {meta.badge}
-          </span>
-        </div>
-        <p className="mt-1 text-xs leading-5 text-slate-500">
-          {template.description}
-        </p>
-      </div>
-    </button>
-  );
-}
-
-export default function CoverLetterView({
-  letter,
-  actions,
-}: CoverLetterViewProps) {
+export default function CoverLetterView({ letter, actions }: CoverLetterViewProps) {
   const { templates, isLoading: templatesLoading } = useCoverLetterTemplates();
-  const [selectedTemplateId, setSelectedTemplateId] = useState("classic");
-  const selectedTemplate = useMemo(
+  const [currentLetter, setCurrentLetter] = useState(letter);
+  const [selectedDisplayTemplateId, setSelectedDisplayTemplateId] =
+    useState<DisplayTemplateId>(() => getStoredGeneratedLetterTemplate(letter.letter_id) ?? "modern");
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftText, setDraftText] = useState(letter.plain_text ?? "");
+  const selectedDisplayTemplate =
+    displayTemplates.find((template) => template.id === selectedDisplayTemplateId)
+    ?? displayTemplates[1];
+  const selectedCatalogTemplate = useMemo(
     () =>
-      templates.find((template) => template.template_id === selectedTemplateId)
-      ?? templates.find((template) => template.is_default)
-      ?? templates[0],
-    [selectedTemplateId, templates],
+      templates.find((template) => template.template_id === selectedDisplayTemplate.backendTemplateId),
+    [selectedDisplayTemplate.backendTemplateId, templates],
   );
+
   const downloader = useDownloadCoverLetter({
     onSuccess: () => toast.success("Cover letter downloaded."),
     onError: (_letterId, _params, err) => {
@@ -197,154 +194,993 @@ export default function CoverLetterView({
       toast.error(ERROR_MESSAGES[err.reason] ?? ERROR_MESSAGES.unknown);
     },
   });
-  const titleLine =
-    letter.metadata?.word_count !== undefined
-      ? `${formatGeneratedFull(letter.created_at)} · ${letter.metadata.word_count} words`
-      : formatGeneratedFull(letter.created_at);
-
-  // Defensive: a `ready_to_review` / `needs_review` response with
-  // null cover_letter would be a backend contract violation. The
-  // response-model validator on the api side guards this, but the
-  // FE renders a graceful empty body rather than crashing.
-  const cl = letter.cover_letter;
-  const canDownload = letter.status !== "failed";
-  const supportsPdf = selectedTemplate?.supports.includes("pdf") ?? false;
-  const supportsDocx = selectedTemplate?.supports.includes("docx") ?? false;
+  const updater = useUpdateCoverLetter({
+    onSuccess: (_letterId, updatedLetter) => {
+      setCurrentLetter(updatedLetter);
+      setDraftText(updatedLetter.plain_text ?? "");
+      toast.success("Cover letter saved.");
+    },
+    onNotFound: () => toast.error("Cover letter was not found."),
+    onError: (_letterId, err) => {
+      toast.error(ERROR_MESSAGES[err.reason] ?? "Could not save cover letter.");
+    },
+  });
 
   useEffect(() => {
-    const defaultTemplate = templates.find((template) => template.is_default) ?? templates[0];
+    setCurrentLetter(letter);
+    setDraftText(letter.plain_text ?? "");
+    setIsEditing(false);
+  }, [letter]);
+
+  useEffect(() => {
     if (
-      defaultTemplate
-      && !templates.some((template) => template.template_id === selectedTemplateId)
+      !displayTemplates.some((template) => template.id === selectedDisplayTemplateId)
+      && templates.length > 0
     ) {
-      setSelectedTemplateId(defaultTemplate.template_id);
+      setSelectedDisplayTemplateId("classic");
     }
-  }, [selectedTemplateId, templates]);
+  }, [selectedDisplayTemplateId, templates.length]);
+
+  useEffect(() => {
+    const storedTemplateId = getStoredGeneratedLetterTemplate(currentLetter.letter_id);
+    if (storedTemplateId) {
+      setSelectedDisplayTemplateId(storedTemplateId);
+    }
+  }, [currentLetter.letter_id]);
+
+  const wordCount = currentLetter.metadata?.word_count ?? currentLetter.plain_text?.split(/\s+/).filter(Boolean).length ?? 0;
+  const titleLine = `${formatGeneratedFull(currentLetter.created_at)} - ${wordCount} words`;
+  const matched = currentLetter.jd_match_matrix.filter((entry) => entry.status === "met").length;
+  const partial = currentLetter.jd_match_matrix.filter((entry) => entry.status === "partial").length;
+  const totalRequirements = Math.max(currentLetter.jd_match_matrix.length, 1);
+  const matchScore = Math.round(((matched + partial * 0.5) / totalRequirements) * 100);
+  const evidenceScore = getEvidenceScore(currentLetter);
+  const readinessScore = Math.max(42, Math.round((matchScore + evidenceScore + (currentLetter.status === "ready_to_review" ? 88 : 66)) / 3));
+  const atsScore = clampScore(currentLetter.keyword_report?.keyword_coverage_pct ?? matchScore);
+  const relevanceScore = clampScore(currentLetter.jd_match_summary?.jd_match_pct ?? matchScore);
+  const readabilityScore = clampScore(currentLetter.keyword_report?.readability_score ?? readinessScore);
+  const overallScore = Math.round((atsScore + relevanceScore + readabilityScore) / 3);
+  const suggestions = getTopSuggestions(currentLetter);
+  const supportsPdf = selectedCatalogTemplate?.supports.includes("pdf") ?? true;
+  const supportsDocx = selectedCatalogTemplate?.supports.includes("docx") ?? true;
+  const canDownload = currentLetter.status !== "failed" && !isEditing;
 
   async function handleDownload(format: "pdf" | "docx") {
-    if (!selectedTemplate) return;
     try {
-      await downloader.mutate(letter.letter_id, {
+      await downloader.mutate(currentLetter.letter_id, {
         format,
-        template_id: selectedTemplate.template_id,
+        template_id: selectedDisplayTemplate.backendTemplateId,
       });
     } catch {
-      // The hook's onError callback already shows the user-facing toast.
+      // Hook callback already handles user-facing error copy.
+    }
+  }
+
+  function handleTemplateChange(templateId: DisplayTemplateId) {
+    setSelectedDisplayTemplateId(templateId);
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.setItem(`${COVER_LETTER_TEMPLATE_PREF_KEY}:${currentLetter.letter_id}`, templateId);
+    } catch {
+      // Template selection still works even if storage is unavailable.
+    }
+  }
+
+  function handleStartEdit() {
+    setDraftText(currentLetter.plain_text ?? "");
+    setIsEditing(true);
+  }
+
+  function handleCancelEdit() {
+    setDraftText(currentLetter.plain_text ?? "");
+    setIsEditing(false);
+  }
+
+  async function handleSaveEdit() {
+    const nextText = draftText.trim();
+    if (!nextText) {
+      toast.error("Cover letter text cannot be empty.");
+      return;
+    }
+    const updated = await updater.mutate(currentLetter.letter_id, {
+      plain_text: nextText,
+    });
+    if (updated) {
+      setIsEditing(false);
     }
   }
 
   return (
-    <article className="space-y-4">
-      {/* Header strip */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-bold text-gray-900">Cover Letter</h1>
-            <CoverLetterStatusPill status={letter.status} />
-          </div>
-          <p className="mt-1 text-sm text-gray-500">{titleLine}</p>
-        </div>
-        {actions && <div className="shrink-0">{actions}</div>}
-      </div>
+    <ReadyCoverLetterReview
+      letter={currentLetter}
+      actions={actions}
+      selectedTemplate={selectedDisplayTemplate}
+      selectedTemplateId={selectedDisplayTemplateId}
+      onTemplateChange={handleTemplateChange}
+      templatesOpen={templatesOpen}
+      onTemplatesOpenChange={setTemplatesOpen}
+      templatesLoading={templatesLoading}
+      canDownload={canDownload}
+      supportsPdf={supportsPdf}
+      supportsDocx={supportsDocx}
+      isDownloading={downloader.isLoading}
+      onDownload={handleDownload}
+      isEditing={isEditing}
+      draftText={draftText}
+      isSavingEdit={updater.isLoading}
+      onDraftTextChange={setDraftText}
+      onStartEdit={handleStartEdit}
+      onCancelEdit={handleCancelEdit}
+      onSaveEdit={handleSaveEdit}
+      wordCount={wordCount}
+      titleLine={titleLine}
+      atsScore={atsScore}
+      relevanceScore={relevanceScore}
+      readabilityScore={readabilityScore}
+      overallScore={overallScore}
+      suggestions={suggestions}
+    />
+  );
+}
 
-      {/* Needs-review banner (sits ABOVE the body so the user reads
-          warnings before the draft). */}
+function ReadyCoverLetterReview({
+  letter,
+  actions,
+  selectedTemplate,
+  selectedTemplateId,
+  onTemplateChange,
+  templatesOpen,
+  onTemplatesOpenChange,
+  templatesLoading,
+  canDownload,
+  supportsPdf,
+  supportsDocx,
+  isDownloading,
+  onDownload,
+  isEditing,
+  draftText,
+  isSavingEdit,
+  onDraftTextChange,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  wordCount,
+  titleLine,
+  atsScore,
+  relevanceScore,
+  readabilityScore,
+  overallScore,
+  suggestions,
+}: {
+  letter: CoverLetterResponse;
+  actions?: ReactNode;
+  selectedTemplate: (typeof displayTemplates)[number];
+  selectedTemplateId: DisplayTemplateId;
+  onTemplateChange: (id: DisplayTemplateId) => void;
+  templatesOpen: boolean;
+  onTemplatesOpenChange: (open: boolean) => void;
+  templatesLoading: boolean;
+  canDownload: boolean;
+  supportsPdf: boolean;
+  supportsDocx: boolean;
+  isDownloading: boolean;
+  onDownload: (format: "pdf" | "docx") => void;
+  isEditing: boolean;
+  draftText: string;
+  isSavingEdit: boolean;
+  onDraftTextChange: (value: string) => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  wordCount: number;
+  titleLine: string;
+  atsScore: number;
+  relevanceScore: number;
+  readabilityScore: number;
+  overallScore: number;
+  suggestions: ReviewSuggestion[];
+}) {
+  return (
+    <article className="relative space-y-4 2xl:space-y-5">
+      <header className="rounded-lg border border-white/80 bg-white/90 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] backdrop-blur-sm 2xl:p-5">
+        <StepReviewRail />
+        <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between 2xl:mt-6">
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-[24px] font-black tracking-tight text-[#070b33] 2xl:text-3xl">
+                Your cover letter is ready!
+              </h1>
+              <CoverLetterStatusPill status={letter.status} />
+            </div>
+            <p className="mt-2 text-sm font-medium text-[#344272]">
+              Review, refine and export your personalized cover letter.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-[#263363] 2xl:px-4 2xl:text-sm">
+                Template: <span className="text-[#2557a7]">{selectedTemplate.name}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onTemplatesOpenChange(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#cdd8ee] bg-white px-3 text-xs font-bold text-[#2557a7] transition hover:border-[#2557a7] hover:bg-blue-50 2xl:h-10 2xl:px-4 2xl:text-sm"
+              >
+                <FileText className="h-4 w-4" />
+                Browse Templates
+              </button>
+              <span className="text-xs font-semibold text-slate-500">{titleLine}</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#263363]">
+              <ShieldCheck className="h-5 w-5" />
+              Your data is secure
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" />
+              Auto-saved
+            </span>
+            {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+          </div>
+        </div>
+      </header>
+
       {letter.status === "needs_review" && letter.warnings.length > 0 && (
         <WarningBanner warnings={letter.warnings} />
       )}
 
-      {/* Letter body */}
-      <section
-        aria-label="Cover letter body"
-        className="rounded-2xl border border-slate-200 bg-white px-7 py-7 shadow-sm"
-      >
-        {cl ? (
-          <div className="prose prose-base max-w-none leading-7 text-slate-950">
-            <p className="whitespace-pre-line">{cl.greeting}</p>
-            <p className="whitespace-pre-line">{cl.opening}</p>
-            {cl.body.map((paragraph, i) => (
-              <p key={i} className="whitespace-pre-line">
-                {paragraph}
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_380px] 2xl:gap-5">
+        <section className="self-start overflow-hidden rounded-lg border border-[#dfe6f5] bg-white shadow-[0_14px_38px_rgba(15,23,42,0.07)]">
+          <div className="flex flex-col gap-3 border-b border-[#e8eef8] px-4 py-3 sm:flex-row sm:items-center sm:justify-between 2xl:px-5 2xl:py-4">
+            <div>
+              <h2 className="text-lg font-black leading-tight text-[#070b33] 2xl:text-xl">Document Preview</h2>
+              <p className="mt-1 text-sm font-medium text-[#344272]">
+                {isEditing
+                  ? `${draftText.split(/\s+/).filter(Boolean).length.toLocaleString()} words in draft`
+                  : `${wordCount.toLocaleString()} words`}
               </p>
-            ))}
-            <p className="whitespace-pre-line">{cl.closing}</p>
-            <p className="whitespace-pre-line">{cl.signature}</p>
+            </div>
+            {isEditing ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onCancelEdit}
+                  disabled={isSavingEdit}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#dfe6f5] bg-white px-3 text-xs font-black text-[#263363] transition hover:border-[#2557a7] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 2xl:h-10 2xl:px-4 2xl:text-sm"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onSaveEdit}
+                  disabled={isSavingEdit}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-3 text-xs font-black text-white shadow-sm shadow-blue-200 transition hover:bg-[#1e4a94] disabled:cursor-not-allowed disabled:opacity-50 2xl:h-10 2xl:px-4 2xl:text-sm"
+                >
+                  {isSavingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {isSavingEdit ? "Saving..." : "Save"}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onStartEdit}
+                disabled={letter.status === "failed"}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#cdd8ee] bg-white px-3 text-xs font-black text-[#2557a7] transition hover:border-[#2557a7] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 2xl:h-10 2xl:px-4 2xl:text-sm"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </button>
+            )}
           </div>
-        ) : (
-          <p className="text-sm text-gray-500 italic">
-            (No letter body was produced.)
-          </p>
-        )}
+          <div className="bg-[#f6f8fc] p-4 lg:p-5 2xl:p-7">
+            {isEditing ? (
+              <LetterEditor
+                value={draftText}
+                onChange={onDraftTextChange}
+                disabled={isSavingEdit}
+              />
+            ) : (
+              <LetterPreviewPaper
+                template={selectedTemplate}
+                plainText={letter.plain_text}
+                coverLetter={letter.cover_letter}
+              />
+            )}
+          </div>
+        </section>
+
+        <aside className="space-y-4 self-start 2xl:space-y-5">
+          <InsightsPanel
+            overallScore={overallScore}
+            atsScore={atsScore}
+            relevanceScore={relevanceScore}
+            readabilityScore={readabilityScore}
+            suggestions={suggestions}
+          />
+          <ExportActions
+            canDownload={canDownload}
+            supportsPdf={supportsPdf}
+            supportsDocx={supportsDocx}
+            isDownloading={isDownloading}
+            onDownload={onDownload}
+            plainText={letter.plain_text}
+          />
+          <button
+            type="button"
+            onClick={() => onDownload("pdf")}
+            disabled={!canDownload || !supportsPdf || isDownloading}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-4 text-sm font-black text-white shadow-lg shadow-blue-200 transition hover:bg-[#1e4a94] disabled:cursor-not-allowed disabled:opacity-50 2xl:h-12 2xl:gap-3 2xl:px-6 2xl:text-base"
+          >
+            <Download className="h-5 w-5" />
+            {isDownloading ? "Preparing PDF..." : "Download PDF"}
+          </button>
+        </aside>
       </section>
 
-      {/* Matrix + grounding */}
-      <JDMatchMatrix
-        entries={letter.jd_match_matrix}
-        defaultOpen={false}
+      <TemplateBrowseDrawer
+        open={templatesOpen}
+        onClose={() => onTemplatesOpenChange(false)}
+        selectedTemplateId={selectedTemplateId}
+        onTemplateChange={(id) => {
+          onTemplateChange(id);
+          onTemplatesOpenChange(false);
+        }}
+        templatesLoading={templatesLoading}
       />
-      <GroundingDetails grounding={letter.grounding} />
-
-      {/* Bottom actions */}
-      {letter.plain_text && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="space-y-4">
-            {canDownload && (
-              <div>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-900">Export cover letter</h2>
-                    <p className="text-sm text-slate-500">
-                      Choose a professional layout and download a ready-to-send file.
-                    </p>
-                  </div>
-                  {templatesLoading && (
-                    <span className="text-xs font-medium text-slate-500">
-                      Loading templates...
-                    </span>
-                  )}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {templates.map((template) => (
-                    <TemplatePreviewCard
-                      key={template.template_id}
-                      template={template}
-                      selected={selectedTemplate?.template_id === template.template_id}
-                      disabled={templatesLoading || downloader.isLoading}
-                      onSelect={() => setSelectedTemplateId(template.template_id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 flex-wrap border-t border-slate-100 pt-4">
-              {canDownload && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void handleDownload("pdf")}
-                    disabled={!supportsPdf || downloader.isLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2557a7] hover:bg-[#1e4a94] rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
-                  >
-                    <Download className="w-4 h-4" aria-hidden="true" />
-                    {downloader.isLoading ? "Downloading..." : "Download PDF"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDownload("docx")}
-                    disabled={!supportsDocx || downloader.isLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
-                  >
-                    <FileText className="w-4 h-4" aria-hidden="true" />
-                    DOCX
-                  </button>
-                </>
-              )}
-              <CopyButton text={letter.plain_text} />
-            </div>
-          </div>
-        </div>
-      )}
     </article>
   );
+}
+
+function StepReviewRail() {
+  const items = [
+    { label: "Resume & Job", state: "done" },
+    { label: "Review Letter", state: "active" },
+    { label: "Export", state: "next" },
+  ];
+  return (
+    <div className="mx-auto grid max-w-3xl grid-cols-3 items-start gap-2">
+      {items.map((item, index) => (
+        <div key={item.label} className="relative flex flex-col items-center text-center">
+          {index > 0 && <span className="absolute right-1/2 top-4 h-1 w-full bg-[#d8e1f0] 2xl:top-5" />}
+          <span
+            className={[
+              "relative z-10 flex h-9 w-9 items-center justify-center rounded-full border text-xs font-black 2xl:h-11 2xl:w-11 2xl:text-sm",
+              item.state === "active"
+                ? "border-[#2557a7] bg-[#2557a7] text-white shadow-lg shadow-blue-200"
+                : item.state === "done"
+                  ? "border-[#2557a7] bg-white text-[#2557a7]"
+                  : "border-[#cdd8ee] bg-white text-[#070b33]",
+            ].join(" ")}
+          >
+            {item.state === "done" ? <CheckCircle2 className="h-4 w-4 2xl:h-5 2xl:w-5" /> : index + 1}
+          </span>
+          <span className={["mt-2 text-xs font-black", item.state === "active" ? "text-[#2557a7]" : "text-[#070b33]"].join(" ")}>
+            {item.label}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InsightsPanel({
+  overallScore,
+  atsScore,
+  relevanceScore,
+  readabilityScore,
+  suggestions,
+}: {
+  overallScore: number;
+  atsScore: number;
+  relevanceScore: number;
+  readabilityScore: number;
+  suggestions: ReviewSuggestion[];
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="rounded-lg border border-[#dfe6f5] bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] 2xl:p-5">
+        <h2 className="text-lg font-black text-[#070b33]">Insights</h2>
+        <div className="mt-4 flex items-center gap-3 2xl:mt-5 2xl:gap-4">
+          <ScoreRing value={overallScore} tone="green" />
+          <div>
+            <p className="text-xl font-black text-[#070b33] 2xl:text-2xl">{overallScore}%</p>
+            <p className="text-sm font-bold text-emerald-700">{overallScore >= 85 ? "Excellent Match" : "Good Match"}</p>
+          </div>
+        </div>
+        <div className="mt-5 space-y-3">
+          <ScoreRow label="ATS" value={atsScore} />
+          <ScoreRow label="Relevance" value={relevanceScore} />
+          <ScoreRow label="Readability" value={readabilityScore} />
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[#dfe6f5] bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] 2xl:p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-black text-[#070b33]">Top AI Suggestions</h2>
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-[#2557a7]">{suggestions.length}</span>
+        </div>
+        <div className="mt-4 space-y-3">
+          {suggestions.map((suggestion) => (
+            <SuggestionCard key={suggestion.title} suggestion={suggestion} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreRing({ value, tone }: { value: number; tone: "green" | "blue" | "purple" }) {
+  const color = tone === "green" ? "#22c55e" : tone === "blue" ? "#2557a7" : "#7c3aed";
+  return (
+    <div
+      className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-lg font-black text-[#070b33] 2xl:h-20 2xl:w-20 2xl:text-xl"
+      style={{ background: `conic-gradient(${color} ${value * 3.6}deg, #e8eef8 0deg)` }}
+    >
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white 2xl:h-14 2xl:w-14">{value}</span>
+    </div>
+  );
+}
+
+function ScoreRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="font-bold text-[#344272]">{label}</span>
+      <span className="font-black text-[#070b33]">{value}</span>
+    </div>
+  );
+}
+
+function SuggestionCard({
+  suggestion,
+}: {
+  suggestion: ReviewSuggestion;
+}) {
+  const Icon = suggestion.icon === "growth" ? Target : FileText;
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-[#e8eef8] bg-white p-3">
+      <span className={["flex h-9 w-9 shrink-0 items-center justify-center rounded-lg 2xl:h-10 2xl:w-10", suggestion.icon === "growth" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-[#2557a7]"].join(" ")}>
+        <Icon className="h-4 w-4 2xl:h-5 2xl:w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-black text-[#070b33]">{suggestion.title}</p>
+        <p className="mt-1 text-xs font-medium text-[#344272]">{suggestion.description}</p>
+      </div>
+    </div>
+  );
+}
+
+function ExportActions({
+  canDownload,
+  supportsPdf,
+  supportsDocx,
+  isDownloading,
+  onDownload,
+  plainText,
+}: {
+  canDownload: boolean;
+  supportsPdf: boolean;
+  supportsDocx: boolean;
+  isDownloading: boolean;
+  onDownload: (format: "pdf" | "docx") => void;
+  plainText: string | null;
+}) {
+  return (
+    <div className="rounded-lg border border-[#dfe6f5] bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] 2xl:p-5">
+      <h2 className="text-lg font-black text-[#070b33]">Export</h2>
+      <div className="mt-4 grid grid-cols-3 gap-2 2xl:gap-3">
+        <ExportTile label="PDF" icon={Download} disabled={!canDownload || !supportsPdf || isDownloading} onClick={() => onDownload("pdf")} />
+        <ExportTile label="DOCX" icon={FileText} disabled={!canDownload || !supportsDocx || isDownloading} onClick={() => onDownload("docx")} />
+        <ExportTile
+          label="Copy"
+          icon={Copy}
+          disabled={!plainText}
+          onClick={() => {
+            if (!plainText) return;
+            navigator.clipboard?.writeText(plainText).then(
+              () => toast.success("Copied cover letter."),
+              () => toast.error("Could not copy cover letter."),
+            );
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ExportTile({
+  label,
+  icon: Icon,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  icon: IconComponent;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-lg border border-[#dfe6f5] bg-white text-xs font-black text-[#070b33] transition hover:border-[#2557a7] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 2xl:min-h-[86px] 2xl:text-sm"
+    >
+      <Icon className="h-5 w-5 text-[#2557a7] 2xl:h-6 2xl:w-6" />
+      {label}
+    </button>
+  );
+}
+
+function TemplateBrowseDrawer({
+  open,
+  onClose,
+  selectedTemplateId,
+  onTemplateChange,
+  templatesLoading,
+}: {
+  open: boolean;
+  onClose: () => void;
+  selectedTemplateId: DisplayTemplateId;
+  onTemplateChange: (id: DisplayTemplateId) => void;
+  templatesLoading: boolean;
+}) {
+  if (!open) return null;
+  const grouped = displayTemplates.reduce<Record<string, Array<(typeof displayTemplates)[number]>>>((acc, template) => {
+    const key = template.badge;
+    acc[key] = acc[key] ? [...acc[key], template] : [template];
+    return acc;
+  }, {});
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/20">
+      <button type="button" aria-label="Close templates" className="absolute inset-0 cursor-default" onClick={onClose} />
+      <aside className="relative h-full w-full max-w-[390px] overflow-y-auto border-l border-[#dfe6f5] bg-white p-5 shadow-2xl 2xl:max-w-[420px] 2xl:p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-black text-[#070b33]">Browse Templates</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-[#070b33]">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-5 flex items-center gap-2 rounded-lg border border-[#dfe6f5] px-3 py-2 text-sm text-[#344272]">
+          <Search className="h-4 w-4" />
+          <span>{templatesLoading ? "Loading templates..." : "Search templates..."}</span>
+        </div>
+        <div className="mt-6 space-y-7">
+          {Object.entries(grouped).map(([group, templates]) => (
+            <section key={group}>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-black text-[#070b33]">{group}</h3>
+                <span className="text-xs font-bold text-[#2557a7]">{templates.length}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 2xl:gap-4">
+                {templates.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => onTemplateChange(template.id)}
+                    className={[
+                      "relative rounded-lg border p-3 text-left transition hover:border-[#2557a7] hover:bg-blue-50",
+                      selectedTemplateId === template.id ? "border-[#2557a7] bg-blue-50 ring-1 ring-[#2557a7]" : "border-[#dfe6f5] bg-white",
+                    ].join(" ")}
+                  >
+                    <MiniDoc template={template} />
+                    <p className="mt-3 text-sm font-black text-[#070b33]">{template.name}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#2557a7]">{template.bestFor}</p>
+                    {selectedTemplateId === template.id && <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-[#2557a7]" />}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function LetterEditor({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="mx-auto max-w-2xl rounded-lg border border-blue-100 bg-white p-4 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)]">
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        spellCheck
+      className="min-h-[480px] w-full resize-y rounded-lg border border-[#dfe6f5] bg-[#fbfdff] px-4 py-4 text-[14px] font-medium leading-7 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-[#2557a7] focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 2xl:min-h-[620px] 2xl:px-5 2xl:py-5 2xl:text-[15px]"
+        placeholder="Write your cover letter here..."
+      />
+    </div>
+  );
+}
+
+function LetterPreviewPaper({
+  template,
+  plainText,
+  coverLetter,
+}: {
+  template: (typeof displayTemplates)[number];
+  plainText: string | null;
+  coverLetter: CoverLetterResponse["cover_letter"];
+}) {
+  const body = plainText ? (
+    <PlainTextLetterBody plainText={plainText} compact={template.previewStyle === "compact"} />
+  ) : coverLetter ? (
+    <LetterBody coverLetter={coverLetter} compact={template.previewStyle === "compact"} />
+  ) : (
+    <p className="text-sm italic text-slate-500">
+      No letter body was produced.
+    </p>
+  );
+
+  if (template.previewStyle === "executive") {
+    return (
+      <div className="mx-auto grid max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] lg:grid-cols-[150px_1fr] 2xl:grid-cols-[180px_1fr]">
+        <aside className={["p-5 text-white 2xl:p-6", template.accent].join(" ")}>
+          <div className="h-12 w-12 rounded-full border border-white/60" />
+          <div className="mt-8 space-y-2">
+            <div className="h-2 w-24 rounded-full bg-white/85" />
+            <div className="h-1.5 w-20 rounded-full bg-white/55" />
+            <div className="h-1.5 w-24 rounded-full bg-white/45" />
+          </div>
+          <div className="mt-10 space-y-2">
+            {["Leadership", "Evidence", "Impact"].map((item) => (
+              <div key={item} className="rounded-full border border-white/25 px-3 py-1 text-xs font-bold text-white/85">
+                {item}
+              </div>
+            ))}
+          </div>
+        </aside>
+        <div className="px-6 py-7 2xl:px-7 2xl:py-8">{body}</div>
+      </div>
+    );
+  }
+
+  if (template.previewStyle === "modern") {
+    return (
+      <div className="mx-auto max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)]">
+        <div className={["px-6 py-4 text-white 2xl:px-7 2xl:py-5", template.accent].join(" ")}>
+          <div className="h-3 w-44 rounded-full bg-white" />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="h-2 w-20 rounded-full bg-white/65" />
+            <span className="h-2 w-24 rounded-full bg-white/45" />
+            <span className="h-2 w-16 rounded-full bg-white/45" />
+          </div>
+        </div>
+        <div className="px-6 py-7 2xl:px-8 2xl:py-9">{body}</div>
+      </div>
+    );
+  }
+
+  if (template.previewStyle === "compact") {
+    return (
+      <div className="mx-auto max-w-2xl rounded-lg border border-blue-100 bg-white px-6 py-6 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] 2xl:px-7 2xl:py-7">
+        <div className="mb-5 flex items-start justify-between gap-6 border-b border-blue-100 pb-4">
+          <div>
+            <div className={["h-2.5 w-36 rounded-full", template.accent].join(" ")} />
+            <div className="mt-2 h-1.5 w-28 rounded-full bg-slate-300" />
+          </div>
+          <div className="space-y-1 text-right">
+            <div className="ml-auto h-1.5 w-20 rounded-full bg-slate-300" />
+            <div className="ml-auto h-1.5 w-16 rounded-full bg-slate-200" />
+          </div>
+        </div>
+        {body}
+      </div>
+    );
+  }
+
+  if (template.previewStyle === "minimal") {
+    return (
+      <div className="mx-auto max-w-2xl rounded-lg border border-slate-200 bg-white px-7 py-8 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] 2xl:px-10 2xl:py-10">
+        <div className="mb-10 ml-auto h-1 w-24 rounded-full bg-slate-300" />
+        <div className={["mb-8 h-0.5 w-20 rounded-full", template.accent].join(" ")} />
+        {body}
+      </div>
+    );
+  }
+
+  if (template.previewStyle === "signature") {
+    return (
+      <div className="mx-auto max-w-2xl rounded-lg border border-emerald-100 bg-white px-6 py-7 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] 2xl:px-8 2xl:py-9">
+        <div className="mb-7 flex items-start justify-between gap-4">
+          <div>
+            <div className={["h-2.5 w-40 rounded-full", template.accent].join(" ")} />
+            <div className="mt-2 h-1.5 w-28 rounded-full bg-slate-300" />
+          </div>
+          <div className={["flex h-14 w-14 items-center justify-center rounded-full text-sm font-black text-white", template.accent].join(" ")}>
+            CB
+          </div>
+        </div>
+        {body}
+        <div className="mt-8 flex items-center gap-3">
+          <div className={["h-1.5 w-32 rounded-full", template.accent].join(" ")} />
+          <div className="h-px flex-1 bg-emerald-100" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl rounded-lg border border-slate-200 bg-white px-6 py-7 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] 2xl:px-8 2xl:py-9">
+      <div className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <div className={["h-2.5 w-40 rounded-full", template.accent].join(" ")} />
+          <div className="mt-2 h-1.5 w-28 rounded-full bg-slate-300" />
+        </div>
+        <div className="h-10 w-10 rounded-full border border-slate-300" />
+      </div>
+      <div className={["mb-7 h-1 w-full rounded-full", template.accent].join(" ")} />
+      {body}
+    </div>
+  );
+}
+
+function PlainTextLetterBody({
+  plainText,
+  compact = false,
+}: {
+  plainText: string;
+  compact?: boolean;
+}) {
+  const paragraphs = plainText
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  return (
+    <div className={compact ? "space-y-3 text-[13.5px] font-medium leading-6 text-slate-950 2xl:text-[14px]" : "space-y-4 text-[14px] font-medium leading-7 text-slate-950 2xl:space-y-5 2xl:text-[15px] 2xl:leading-8"}>
+      {paragraphs.map((paragraph, index) => (
+        <p key={index} className="whitespace-pre-line">
+          {paragraph}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function LetterBody({
+  coverLetter,
+  compact = false,
+}: {
+  coverLetter: NonNullable<CoverLetterResponse["cover_letter"]>;
+  compact?: boolean;
+}) {
+  return (
+    <div className={compact ? "space-y-3 text-[13.5px] font-medium leading-6 text-slate-950 2xl:text-[14px]" : "space-y-4 text-[14px] font-medium leading-7 text-slate-950 2xl:space-y-5 2xl:text-[15px] 2xl:leading-8"}>
+      <p className="whitespace-pre-line">{coverLetter.greeting}</p>
+      <p className="whitespace-pre-line">{coverLetter.opening}</p>
+      {coverLetter.body.map((paragraph, i) => (
+        <p key={i} className="whitespace-pre-line">
+          {paragraph}
+        </p>
+      ))}
+      <p className="whitespace-pre-line">{coverLetter.closing}</p>
+      <p className="whitespace-pre-line">{coverLetter.signature}</p>
+    </div>
+  );
+}
+
+function MiniDoc({
+  template,
+  compact = false,
+}: {
+  template: (typeof displayTemplates)[number];
+  compact?: boolean;
+}) {
+  const shellSize = compact ? "h-20 w-14" : "h-24 w-16";
+  const lineCount = compact ? 3 : 5;
+
+  if (template.previewStyle === "executive") {
+    return (
+      <span className={["grid shrink-0 grid-cols-[0.34fr_1fr] overflow-hidden rounded border border-slate-200 shadow-sm", shellSize].join(" ")}>
+        <span className={["p-1", template.accent].join(" ")}>
+          <span className="block h-3 w-3 rounded-full border border-white/70" />
+          <span className="mt-3 block space-y-1">
+            <span className="block h-0.5 w-4 rounded bg-white/70" />
+            <span className="block h-0.5 w-3 rounded bg-white/50" />
+            <span className="block h-0.5 w-4 rounded bg-white/50" />
+          </span>
+        </span>
+        <span className="bg-white p-1.5">
+          <span className="mb-1 block h-1.5 w-6 rounded-full bg-slate-700" />
+          <span className="mb-1.5 block h-px w-full bg-slate-200" />
+          <MiniLines count={lineCount + 1} compact={compact} />
+        </span>
+      </span>
+    );
+  }
+
+  if (template.previewStyle === "modern") {
+    return (
+      <span className={["flex shrink-0 flex-col overflow-hidden rounded border border-slate-200 bg-white shadow-sm", shellSize].join(" ")}>
+        <span className={["block px-1.5 py-2", template.accent].join(" ")}>
+          <span className="block h-1.5 w-7 rounded-full bg-white" />
+          <span className="mt-1 block h-0.5 w-9 rounded-full bg-white/60" />
+        </span>
+        <span className="block p-1.5">
+          <MiniLines count={lineCount} compact={compact} />
+          <span className={["mt-2 block h-1 w-6 rounded-full", template.accent].join(" ")} />
+        </span>
+      </span>
+    );
+  }
+
+  if (template.previewStyle === "compact") {
+    return (
+      <span className={["flex shrink-0 flex-col rounded border border-blue-100 bg-white p-1.5 shadow-sm", shellSize].join(" ")}>
+        <span className="mb-1 grid grid-cols-[1fr_0.35fr] gap-1">
+          <span>
+            <span className={["mb-0.5 block h-1.5 w-6 rounded-full", template.accent].join(" ")} />
+            <span className="block h-0.5 w-4 rounded bg-slate-300" />
+          </span>
+          <span className="space-y-0.5">
+            <span className="block h-0.5 w-full rounded bg-slate-300" />
+            <span className="block h-0.5 w-4 rounded bg-slate-200" />
+          </span>
+        </span>
+        <span className="mb-1 block h-px w-full bg-blue-100" />
+        <MiniLines count={compact ? 8 : 10} tight compact={compact} />
+      </span>
+    );
+  }
+
+  if (template.previewStyle === "minimal") {
+    return (
+      <span className={["flex shrink-0 flex-col rounded border border-slate-200 bg-white p-2 shadow-sm", shellSize].join(" ")}>
+        <span className="ml-auto block h-0.5 w-5 rounded-full bg-slate-300" />
+        <span className="mt-4 block h-1.5 w-8 rounded-full bg-slate-700" />
+        <span className={["mt-1 block h-0.5 w-6 rounded-full", template.accent].join(" ")} />
+        <span className="mt-4 block">
+          <MiniLines count={compact ? 3 : 4} spacious compact={compact} />
+        </span>
+      </span>
+    );
+  }
+
+  if (template.previewStyle === "signature") {
+    return (
+      <span className={["flex shrink-0 flex-col rounded border border-emerald-100 bg-white p-1.5 shadow-sm", shellSize].join(" ")}>
+        <span className="mb-2 flex items-start justify-between">
+          <span className={["block h-1.5 w-6 rounded-full", template.accent].join(" ")} />
+          <span className={["flex h-4 w-4 items-center justify-center rounded-full text-[5px] font-black text-white", template.accent].join(" ")}>
+            CB
+          </span>
+        </span>
+        <MiniLines count={lineCount} compact={compact} />
+        <span className={["mt-2 block h-1 w-6 rounded-full", template.accent].join(" ")} />
+      </span>
+    );
+  }
+
+  return (
+    <span className={["flex shrink-0 flex-col rounded border border-slate-200 bg-white p-1.5 shadow-sm", shellSize].join(" ")}>
+      <span className="mb-1 flex items-end justify-between">
+        <span>
+          <span className={["mb-0.5 block h-1.5 w-7 rounded-full", template.accent].join(" ")} />
+          <span className="block h-0.5 w-5 rounded bg-slate-300" />
+        </span>
+        <span className="block h-3 w-3 rounded-full border border-slate-300" />
+      </span>
+      <span className={["mb-1.5 block h-1 w-full rounded-full", template.accent].join(" ")} />
+      <MiniLines count={lineCount + 1} compact={compact} />
+    </span>
+  );
+}
+
+function MiniLines({
+  count,
+  centered = false,
+  tight = false,
+  spacious = false,
+  compact = false,
+}: {
+  count: number;
+  centered?: boolean;
+  tight?: boolean;
+  spacious?: boolean;
+  compact?: boolean;
+}) {
+  const widths = centered
+    ? compact ? ["mx-auto w-6", "mx-auto w-5", "mx-auto w-7"] : ["mx-auto w-8", "mx-auto w-6", "mx-auto w-9"]
+    : compact ? ["w-7", "w-6", "w-8", "w-7"] : ["w-9", "w-7", "w-10", "w-8"];
+  return (
+    <span className={spacious ? "space-y-2" : tight ? "space-y-0.5" : "space-y-1"}>
+      {Array.from({ length: count }).map((_, index) => (
+        <span
+          key={index}
+          className={["block h-1 rounded bg-slate-300", widths[index % widths.length]].join(" ")}
+        />
+      ))}
+    </span>
+  );
+}
+
+function getEvidenceScore(letter: CoverLetterResponse): number {
+  const high = letter.grounding.high_confidence_claims ?? 0;
+  const low = letter.grounding.low_confidence_claims_used ?? 0;
+  const total = Math.max(high + low, 1);
+  const base = Math.round((high / total) * 100);
+  if (letter.grounding.coverage_status === "low_confidence") return Math.min(base, 55);
+  if (letter.grounding.coverage_status === "thin") return Math.min(base, 70);
+  return Math.max(base, 76);
+}
+
+function clampScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getTopSuggestions(letter: CoverLetterResponse): ReviewSuggestion[] {
+  const suggestions: ReviewSuggestion[] = [];
+  const seen = new Set<string>();
+
+  function addSuggestion(suggestion: ReviewSuggestion) {
+    const key = suggestion.title.trim().toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    suggestions.push(suggestion);
+  }
+
+  letter.keyword_report?.safe_suggestions?.forEach((suggestion) => {
+    const keyword = suggestion.keyword?.trim();
+    const message = suggestion.message?.trim();
+    if (!keyword && !message) return;
+    addSuggestion({
+      title: keyword ? `Add "${keyword}"` : "Improve keyword coverage",
+      description: message || "Use this keyword naturally where it is supported by your resume.",
+      icon: "growth",
+    });
+  });
+
+  const missingKeywords = [
+    ...(letter.keyword_report?.missing_required ?? []),
+    ...(letter.keyword_report?.missing_preferred ?? []),
+  ].filter(Boolean);
+
+  if (missingKeywords.length > 0) {
+    addSuggestion({
+      title: "Improve ATS keyword coverage",
+      description: `Consider adding ${missingKeywords.slice(0, 3).join(", ")} where your experience supports it.`,
+      icon: "growth",
+    });
+  }
+
+  const matchPct = letter.jd_match_summary?.jd_match_pct;
+  if (matchPct == null || matchPct < 90) {
+    addSuggestion({
+      title: "Improve company alignment",
+      description: "Tie your strongest resume evidence more directly to the role and company priorities.",
+      icon: "company",
+    });
+  }
+
+  if ((letter.grounding.high_confidence_claims ?? 0) < 3 || letter.grounding.coverage_status !== "sufficient") {
+    addSuggestion({
+      title: "Add measurable achievements",
+      description: "Include specific outcomes, metrics, scope, or tools only when they are supported by your resume.",
+      icon: "growth",
+    });
+  }
+
+  addSuggestion({
+    title: "Add measurable achievements",
+    description: "Include specific outcomes, metrics, scope, or tools only when they are supported by your resume.",
+    icon: "growth",
+  });
+  addSuggestion({
+    title: "Improve company alignment",
+    description: "Tie your strongest resume evidence more directly to the role and company priorities.",
+    icon: "company",
+  });
+
+  return suggestions.slice(0, 2);
 }

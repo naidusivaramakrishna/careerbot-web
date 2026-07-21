@@ -59,9 +59,13 @@ const Languages: React.FC = () => {
   }, [savedEntries, editingEntries]);
 
   useEffect(() => {
-    if (editingEntries.length > 0) return;
     if (!resumeData.languages?.length) return;
     setSavedEntries(prev => {
+      if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
+        setEditingEntries([]);
+        return resumeData.languages!.filter(hasValidData);
+      }
+      if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.languages!.length) return prev;
       let changed = false;
       const updated = prev.map((entry, idx) => {

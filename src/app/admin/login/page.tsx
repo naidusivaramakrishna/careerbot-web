@@ -304,7 +304,7 @@ const AdminLoginPage = () => {
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={handleSubmit} method="post" className="space-y-4">
                         {isSignUp && (
                             <div>
                                 <input

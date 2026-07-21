@@ -20,6 +20,13 @@
       <span class="header-brand">CareerBot <span class="ai-badge">AI</span></span>
     </div>
     <div class="header-right">
+      <button class="header-upgrade" id="btn-header-upgrade" type="button">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.5L19 10l-5.2 1.5L12 17l-1.8-5.5L5 10l5.2-1.5L12 3z"/></svg>
+        Upgrade to Pro
+      </button>
+      <button class="icon-btn header-icon" id="btn-header-notifications" type="button" aria-label="Notifications" title="Notifications">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      </button>
     </div>
   </header>
 
@@ -28,56 +35,30 @@
   <!-- LOGIN -->
   <div id="state-login" class="state hidden">
     <div class="login-body">
-
-      <!-- Hero -->
-      <div class="login-hero">
-        <div class="login-hero-icon">
-          <img src="../icons/icon48.png" alt="" style="width:32px;height:32px;object-fit:contain;border-radius:8px" onerror="cbIconFallback(this.parentElement,32)" />
+      <div class="login-brand-row">
+        <div class="login-logo-mark" aria-hidden="true">
+          <img src="../icons/icon48.png" alt="" onerror="cbIconFallback(this.parentElement,28)" />
         </div>
-        <h1 class="login-headline">Land your <span>dream job</span><br>faster with AI.</h1>
-        <p class="login-desc">Analyze any job posting instantly — ATS score, missing keywords, job match &amp; AI cover letter.</p>
+        <span class="login-brand-text">CareerBot <span class="login-brand-ai">AI</span></span>
       </div>
+      <div class="login-content">
+        <h1 class="login-headline">Sign in to continue</h1>
+        <p class="login-subtitle">Use CareerBot from job pages.</p>
 
-      <!-- CTA buttons side by side -->
-      <div class="login-actions">
-        <button id="btn-login" class="btn-login-primary">Sign In</button>
-        <button id="btn-signup" class="btn-login-outline">Create Account</button>
-      </div>
-
-      <p class="login-footer-note">Free to get started · No credit card needed</p>
-
-      <!-- Feature grid -->
-      <div class="login-feature-grid">
-        <div class="lfg-card">
-          <div class="lfg-icon lfg-icon-blue">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          </div>
-          <span class="lfg-label">ATS Score</span>
-          <span class="lfg-sub">Resume fit check</span>
-        </div>
-        <div class="lfg-card">
-          <div class="lfg-icon lfg-icon-green">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </div>
-          <span class="lfg-label">Keywords</span>
-          <span class="lfg-sub">What's missing</span>
-        </div>
-        <div class="lfg-card">
-          <div class="lfg-icon lfg-icon-amber">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          </div>
-          <span class="lfg-label">Job Match</span>
-          <span class="lfg-sub">Compatibility %</span>
-        </div>
-        <div class="lfg-card">
-          <div class="lfg-icon lfg-icon-purple">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
-          </div>
-          <span class="lfg-label">Cover Letter</span>
-          <span class="lfg-sub">AI-written fast</span>
+        <div class="login-ctas">
+          <button id="btn-login-simple" class="login-btn-google" type="button">
+            <span class="lbg-icon-wrap" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"/>
+                <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.33-1.58-5.04-3.7H.94v2.33A9 9 0 0 0 9 18Z"/>
+                <path fill="#FBBC05" d="M3.96 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.28-1.72V4.95H.94A9 9 0 0 0 0 9c0 1.45.34 2.82.94 4.05l3.02-2.33Z"/>
+                <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .94 4.95l3.02 2.33C4.67 5.16 6.66 3.58 9 3.58Z"/>
+              </svg>
+            </span>
+            Sign in to CareerBot
+          </button>
         </div>
       </div>
-
     </div>
   </div>
 
@@ -93,23 +74,22 @@
   <div id="state-idle" class="state hidden">
     <div class="idle-body">
 
-      <p class="idle-helper">Upload your resume and analyze any job instantly</p>
+      <p class="idle-helper">Upload your resume, paste a role, and get match insights instantly.</p>
 
-      <!-- Primary CTA -->
-      <button id="btn-manual-tailor" class="btn-analyze-big" disabled>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        Analyze Job
-      </button>
-
-      <!-- Resume card -->
+      <!-- Resume upload card -->
       <div class="resume-upload-card" id="resume-row-idle">
         <div class="ruc-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
         </div>
         <div class="ruc-info">
           <span class="ruc-name" id="idle-resume-name">No resume uploaded</span>
           <label for="resume-file-input" class="ruc-replace">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Upload Resume
           </label>
         </div>
@@ -118,21 +98,23 @@
 
       <!-- JD section toggle -->
       <div class="jd-toggle-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         <span class="jdt-label">Paste job description</span>
         <button class="jdt-toggle" id="jd-toggle-btn">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" id="jd-toggle-icon"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" id="jd-toggle-icon"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
       </div>
       <div id="jd-expand-area" class="jd-expand hidden">
         <textarea id="manual-jd-input" class="jd-compact" placeholder="Paste job description here…" rows="6"></textarea>
       </div>
 
-      <!-- Capabilities row -->
-      <div class="idle-caps">
-        <span class="idle-cap">✓ ATS Score</span>
-        <span class="idle-cap">✓ Job Match</span>
-        <span class="idle-cap">✓ Missing Keywords</span>
-      </div>
+      <!-- Primary CTA -->
+      <button id="btn-manual-tailor" class="btn-analyze-big" disabled>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l1.8 5.5L19 10l-5.2 1.5L12 17l-1.8-5.5L5 10l5.2-1.5L12 3z"/>
+        </svg>
+        Analyze Match
+      </button>
 
       <!-- hidden compat elements -->
       <select id="manual-resume-select" style="display:none"></select>
@@ -289,9 +271,9 @@
           </div>
           <p id="result-company" class="sj-company"></p>
           <p id="score-label" class="score-label">—</p>
-          <div class="score-trend" id="score-trend">
+          <div class="score-trend" id="score-trend" style="display:none">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-            <span>+12 after optimization</span>
+            <span id="score-trend-text"></span>
           </div>
         </div>
       </div>
@@ -354,19 +336,19 @@
       <button class="sr-btn sr-toggle" id="btn-toggle-rail" title="Toggle sidebar">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
       </button>
-      <button class="sr-btn active" id="sb-analyze" title="Analyze">
+      <button class="sr-btn sr-locked" id="sb-analyze" title="Sign in to unlock Analyze" aria-disabled="true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <span>Analyze</span>
       </button>
-      <button class="sr-btn" id="sb-dashboard" title="Dashboard">
+      <button class="sr-btn sr-locked" id="sb-dashboard" title="Sign in to unlock Tracker" aria-disabled="true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         <span>Tracker</span>
       </button>
     </div>
     <div class="sr-bottom">
-      <div class="sr-profile-wrap">
+      <div class="sr-profile-wrap rail-profile-hidden">
         <button class="sr-btn" id="sb-profile-rail" title="Profile">
-          <div class="sr-avatar" id="sr-avatar-initials">S</div>
+          <div class="sr-avatar" id="sr-avatar-initials"></div>
         </button>
         <div class="sr-profile-popover" id="sr-profile-popover">
           <p class="srp-name" id="srp-name">My Account</p>
@@ -382,6 +364,7 @@
           </button>
         </div>
       </div>
+      <p class="sr-unlock-caption">Analyze and tracker unlock after sign in.</p>
       <button class="sr-btn" id="sb-feedback" title="Feedback">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span>Feedback</span>

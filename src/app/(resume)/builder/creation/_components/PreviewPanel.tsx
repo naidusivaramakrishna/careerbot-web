@@ -53,7 +53,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   resumeId: resumeIdProp,
   isEnhancedResume = false,
 }) => {
-  const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, sectionOrder } = useResume();
+  const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, sectionOrder, previewCatalogueKey } = useResume();
   const { canonicalScore, setCanonicalScore } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
 
@@ -123,9 +123,29 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
       const format = type.toLowerCase() as "pdf" | "docx";
       const fileExtension = format;
+
+      // Read selected catalogue and resolve its backend template_id for the style overlay
+      const selectedCatalogue = typeof window !== 'undefined' ? localStorage.getItem('selected_catalogue') : null;
+      const catalogueTemplateId = selectedCatalogue ? STYLE_CATALOGUES[selectedCatalogue]?.template_id : undefined;
+
+      // Pass the domain template ID so the backend uses the correct section structure
+      // (e.g., education template → "TEACHING EXPERIENCE"). This overrides the initial
+      // default template_id set at parse time when the user hasn't explicitly re-applied.
+      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+      const domainTemplateId = typeof window !== 'undefined' ? localStorage.getItem(selectedTemplateKey) ?? undefined : undefined;
+
+      // Pass section background color only for Eclipse — other catalogues don't use it,
+      // and a stale value in resumeStyle from a previous Eclipse session would bleed through.
+      const sectionBgColor = selectedCatalogue === 'eclipse' ? resumeStyle.sectionHeaderBg : undefined;
+      // Pass the accent/heading color so name + section headings match the preview
+      const accentColor = resumeStyle.accentColor || resumeStyle.headingColor;
+      // Pass the user's selected font and line spacing so the PDF matches the preview
+      const fontFamily = resumeStyle.fontFamily || undefined;
+      const lineSpacing = resumeStyle.lineSpacing || undefined;
+
       const blob = isEnhancedResume
         ? await downloadEnhancedResume(resumeId, format)
-        : await downloadResume(resumeId, format);
+        : await downloadResume(resumeId, format, catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing);
 
       // ✅ Generate filename from person's name
       const fullname = resumeData.personalInfo?.fullname || "";
@@ -205,7 +225,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       el.style.transform = prevTransform;
     }
   };
-  
+
   const handleDownloadDOCX = async () => {
     const el = contentRef.current;
     if (!el) return;
@@ -265,7 +285,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
 
     // Extract career level from localStorage appliedTemplateId
-    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" => {
+    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Manager" => {
       try {
         const careerLevelStorage = localStorage.getItem(careerLevelKey);
         const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
@@ -275,11 +295,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
           const applied = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
 
           if (applied) {
-            const name = applied.name || '';
-            if (name.toLowerCase().includes('fresher')) return 'Fresher';
-            if (name.toLowerCase().includes('early')) return 'Early Career';
-            if (name.toLowerCase().includes('mid')) return 'Mid-Level';
-            if (name.toLowerCase().includes('senior')) return 'Senior-Level';
+            const name = applied.name.toLowerCase();
+            if (name.includes('fresher')) return 'Fresher';
+            if (name.includes('early')) return 'Early Career';
+            if (name.includes('manager')) return 'Manager';
+            if (name.includes('lead')) return 'Lead';
+            if (name.includes('mid')) return 'Mid-Level';
+            if (name.includes('senior')) return 'Senior-Level';
           }
         }
       } catch (err) {
@@ -290,9 +312,9 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
     const careerLevel = getCareerLevel();
 
-    // Compute layoutVariant from selected catalogue
-    const selectedCatalogue = localStorage.getItem('selected_catalogue');
-    const catalogueTemplateId = selectedCatalogue ? STYLE_CATALOGUES[selectedCatalogue]?.template_id : undefined;
+    // Compute layoutVariant — use hovered catalogue key during preview, else the persisted selection
+    const activeCatalogueKey = previewCatalogueKey ?? localStorage.getItem('selected_catalogue');
+    const catalogueTemplateId = activeCatalogueKey ? STYLE_CATALOGUES[activeCatalogueKey]?.template_id : undefined;
     const layoutVariant: HeaderLayout = (catalogueTemplateId && CATALOGUE_LAYOUT_MAP[catalogueTemplateId]) || "centered";
 
     // Function to get the correct template component based on domain_family
@@ -308,14 +330,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         case 'research_scholar':
         case 'software_engineering':
         case 'marine_merchant_navy':
+        case 'core_engineering':
+        case 'finance':
           return <Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
         case 'legal':
           return <Template4 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
         case 'government_standard':
           return <Template3 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
-        // All other domains use Template1 (core_engineering, finance, etc.)
-        case 'core_engineering':
-        case 'finance':
         default:
           return <Template1 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
       }
@@ -330,8 +351,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       'professional_classic': <TemplateFour data={resumeData} style={resumeStyle} />,
       'classic_professional': <TemplateFive data={resumeData} style={resumeStyle} />,
       // Numeric IDs for backward compatibility
-      '1': <TemplateOne  data={resumeData} style={resumeStyle} />,
-      '2': <TemplateTwo  data={resumeData} style={resumeStyle} />,
+      '1': <TemplateOne data={resumeData} style={resumeStyle} />,
+      '2': <TemplateTwo data={resumeData} style={resumeStyle} />,
       '3': <TemplateThree data={resumeData} style={resumeStyle} />,
       '4': <TemplateFour data={resumeData} style={resumeStyle} />,
       '5': <TemplateFive data={resumeData} style={resumeStyle} />,
@@ -437,13 +458,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             {showExportOptions && !isDownloading && (
               <div className="absolute right-0 mt-2 w-28 bg-white border rounded-md shadow-lg z-50">
                 <button
-                  onClick={()=>handleExport("PDF")}
+                  onClick={() => handleExport("PDF")}
                   className="w-full px-3 py-2 text-left text-[#2557a7] text-sm hover:bg-gray-100"
                 >
                   PDF
                 </button>
                 <button
-                  onClick={()=>handleExport("DOCX")}
+                  onClick={() => handleExport("DOCX")}
                   className="w-full px-3 py-2 text-left text-sm text-[#2557a7] hover:bg-gray-100"
                 >
                   DOCX
@@ -528,13 +549,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               {showExportOptions && !isDownloading && (
                 <div className="absolute right-0 mt-2 w-28 bg-white border rounded-md shadow-lg z-50">
                   <button
-                    onClick={()=>handleExport("PDF")}
+                    onClick={() => handleExport("PDF")}
                     className="w-full px-3 py-2 text-left text-[#2557a7] text-sm hover:bg-gray-100"
                   >
                     PDF
                   </button>
                   <button
-                    onClick={()=>handleExport("DOCX")}
+                    onClick={() => handleExport("DOCX")}
                     className="w-full px-3 py-2 text-left text-sm text-[#2557a7] hover:bg-gray-100"
                   >
                     DOCX

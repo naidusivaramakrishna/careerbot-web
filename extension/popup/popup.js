@@ -18,6 +18,30 @@ function cbIconFallback(parent, size) { // safe: static SVG, no user data
 const BASE_URL   = CAREERBOT_CONFIG.BASE_URL;
 const PORTAL_URL = CAREERBOT_CONFIG.PORTAL_URL;
 
+// ─── Upload / input constraints ───────────────────────────────────────────────
+const MAX_RESUME_FILE_BYTES = 10 * 1024 * 1024; // 10MB
+const ALLOWED_RESUME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+];
+const ALLOWED_RESUME_EXTENSIONS = ['.pdf', '.docx'];
+const MAX_JD_TEXT_LENGTH = 30000; // ~30k chars — generous for a real JD, caps abuse
+
+function validateResumeFile(file) {
+  if (!file) return 'No file selected.';
+  if (file.size === 0) return 'The selected file is empty.';
+  if (file.size > MAX_RESUME_FILE_BYTES) return 'Resume file is too large (max 10MB).';
+  const name = (file.name || '').toLowerCase();
+  const hasAllowedExt = ALLOWED_RESUME_EXTENSIONS.some(ext => name.endsWith(ext));
+  const hasAllowedType = !file.type || ALLOWED_RESUME_TYPES.includes(file.type);
+  if (!hasAllowedExt || !hasAllowedType) return 'Only PDF and DOCX resumes are supported.';
+  return null;
+}
+
+function clampJdText(text) {
+  return typeof text === 'string' ? text.slice(0, MAX_JD_TEXT_LENGTH) : '';
+}
+
 // ─── Sidebar rail toggle ───────────────────────────────────────────────────────
 const sideRail   = document.querySelector('.side-rail');
 const openBtn    = document.getElementById('btn-open-rail');
@@ -46,11 +70,48 @@ const states = {
 function showState(name) {
   Object.values(states).forEach(el => el.classList.add('hidden'));
   if (states[name]) states[name].classList.remove('hidden');
+  // Stop polling as soon as we leave the login state
+  if (name !== 'login') stopLoginPoll();
+}
+
+function unlockRail(unlock) {
+  ['sb-analyze', 'sb-dashboard'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    if (unlock) {
+      btn.classList.remove('sr-locked');
+      btn.removeAttribute('aria-disabled');
+      btn.title = id === 'sb-analyze' ? 'Analyze' : 'Tracker';
+    } else {
+      btn.classList.add('sr-locked');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.title = id === 'sb-analyze' ? 'Sign in to unlock Analyze' : 'Sign in to unlock Tracker';
+    }
+  });
+  const profileWrap = document.querySelector('.sr-profile-wrap');
+  if (profileWrap) profileWrap.classList.toggle('rail-profile-hidden', !unlock);
+  const caption = document.querySelector('.sr-unlock-caption');
+  if (caption) caption.style.display = unlock ? 'none' : '';
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
+const API_TIMEOUT_MS = 20000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timed out. Please try again.');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     ...options,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -59,15 +120,81 @@ async function apiFetch(path, options = {}) {
     let detail = '';
     try { const d = await res.json(); detail = JSON.stringify(d); } catch { /* ignore */ }
     console.error(`[apiFetch] ${res.status} ${path}`, detail);
-    throw new Error(`${res.status}: ${detail}`);
+    // Keep the detailed error server-side only; show a generic message to the user.
+    const err = new Error('Something went wrong. Please try again.');
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
   }
   return res.json();
 }
 
+
+// Clear auth cookies on both the portal and backend origins so the session
+// is truly gone regardless of which host set them.
+async function clearAuthCookies() {
+  if (!chrome.cookies?.remove) return true;
+  const origins = [
+    PORTAL_URL.replace(/\/$/, ''),
+    BASE_URL.replace(/\/api\/v1\/?$/, ''),
+  ];
+  const names = ['access_token', 'refresh_token', 'admin_access_token', 'admin_refresh_token'];
+  const results = await Promise.allSettled(
+    origins.flatMap(url =>
+      names.map(name => new Promise((resolve) => {
+        chrome.cookies.remove({ url, name }, (removed) => {
+          // removed is null if the cookie didn't exist or couldn't be removed
+          // (e.g. url didn't match the cookie's domain/path attributes).
+          resolve({ url, name, removed: Boolean(removed) || !chrome.runtime.lastError });
+        });
+      }))
+    )
+  );
+
+  // Re-check that no session cookie actually remains, since `remove` can
+  // silently no-op if the url doesn't match the cookie's domain/path.
+  let stillPresent = false;
+  for (const url of origins) {
+    for (const name of names) {
+      const cookie = await new Promise((resolve) => chrome.cookies.get({ url, name }, resolve));
+      if (cookie) { stillPresent = true; break; }
+    }
+    if (stillPresent) break;
+  }
+  if (stillPresent) console.warn('[clearAuthCookies] a session cookie may still be present after logout');
+  return !stillPresent;
+}
+
+// Requires the backend to confirm an authenticated flag, not just the
+// presence of fields that a non-auth error payload could also contain.
+function isSafeHttpUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isValidUser(data) {
+  if (!data || typeof data !== 'object') return false;
+  if (data.authenticated === false || data.success === false || data.error) return false;
+  const u = data.user || data;
+  return Boolean(u.email || u.id || u._id || u.full_name || u.name);
+}
+
+async function verifyExtensionUser() {
+  const result = await apiFetch('/extension/verify');
+  if (!isValidUser(result)) throw new Error('Not signed in');
+  return result;
+}
+
 async function uploadResume(file) {
+  const validationError = validateResumeFile(file);
+  if (validationError) throw new Error(validationError);
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(`${BASE_URL}/parser/parse_resume/`, {
+  const res = await fetchWithTimeout(`${BASE_URL}/parser/parse_resume/`, {
     method: 'POST',
     credentials: 'include',
     body: form,
@@ -79,11 +206,11 @@ async function uploadResume(file) {
 
 // ─── Parse JD in extension (handles duplicate JD gracefully) ──────────────────
 async function parseJDInExtension(jdText) {
-  const res = await fetch(`${BASE_URL}/jd/parse`, {
+  const res = await fetchWithTimeout(`${BASE_URL}/jd/parse`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jd_texts: [jdText], skip_duplicate_check: false }),
+    body: JSON.stringify({ jd_texts: [clampJdText(jdText)], skip_duplicate_check: false }),
   });
   const data = await res.json();
   if (!res.ok) {
@@ -91,7 +218,8 @@ async function parseJDInExtension(jdText) {
     if (data?.detail?.error === 'duplicate_jd' && data?.detail?.existing_id) {
       return { jd_id: data.detail.existing_id };
     }
-    throw new Error(data?.detail?.msg || data?.detail || data?.message || `JD parse error ${res.status}`);
+    console.error(`[parseJDInExtension] ${res.status}`, data);
+    throw new Error('Could not analyze job description. Please try again.');
   }
   let jdId = data.jd_id || data.id;
   if (!jdId && Array.isArray(data.results) && data.results.length) {
@@ -108,6 +236,7 @@ let cachedJobMeta   = null;
 
 // ─── Analyze match score and show results in popup ────────────────────────────
 async function analyzeScore(jdText, jobMeta, file, selectedId) {
+  jdText = clampJdText(jdText);
   showState('processing');
   const stepEl = document.getElementById('processing-step');
   const fillEl = document.getElementById('progress-fill');
@@ -133,7 +262,7 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
 
     // Step 3: Match
     setStep('Calculating match score…', 80);
-    const matchRes = await fetch(`${BASE_URL}/matcher/match`, {
+    const matchRes = await fetchWithTimeout(`${BASE_URL}/matcher/match`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -199,8 +328,8 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
   const pctEl = document.getElementById('score-pct');
   if (pctEl) pctEl.textContent = `${Math.round(score)}%`;
 
-  // Animate arc  (circumference for r=68 → 2*π*68 ≈ 427)
-  const circumference = 427;
+  // Animate arc  (circumference for r=46 → 2*π*46 ≈ 289)
+  const circumference = 289;
   const arc = document.getElementById('score-arc');
   if (arc) {
     const color = score >= 80 ? '#22c55e' : score >= 60 ? '#2557a7' : score >= 40 ? '#f59e0b' : '#ef4444';
@@ -335,15 +464,29 @@ function bindFileInput(inputId, displayId, fileVar) {
   if (!input || !display) return;
   input.addEventListener('change', () => {
     const file = input.files[0];
-    if (file) {
-      if (fileVar === 'idle') selectedFile = file;
-      else selectedFileJD = file;
-      display.textContent = file.name;
-      // Enable analyze button when file selected in idle state
+    if (!file) return;
+
+    const validationError = validateResumeFile(file);
+    if (validationError) {
+      alert(validationError);
+      input.value = '';
+      if (fileVar === 'idle') selectedFile = null; else selectedFileJD = null;
+      display.textContent = 'No file selected';
       if (fileVar === 'idle') {
         const btn = document.getElementById('btn-manual-tailor');
-        if (btn) btn.disabled = false;
+        if (btn) btn.disabled = true;
       }
+      return;
+    }
+
+    if (fileVar === 'idle') selectedFile = file;
+    else selectedFileJD = file;
+    display.textContent = file.name;
+    // Enable analyze button only when both file and JD text are present
+    if (fileVar === 'idle') {
+      const btn = document.getElementById('btn-manual-tailor');
+      const jdText = document.getElementById('manual-jd-input')?.value?.trim();
+      if (btn) btn.disabled = !jdText;
     }
   });
 }
@@ -366,11 +509,11 @@ function setupJDToggles() {
     toggleBtn.addEventListener('click', clickHandler);
     if (row) row.addEventListener('click', (e) => { if (e.target !== toggleBtn) clickHandler(); });
   }
-  // Enable analyze when JD typed
+  // Enable analyze only when both JD text and a resume file are present
   if (jdInput) {
     jdInput.addEventListener('input', () => {
       const btn = document.getElementById('btn-manual-tailor');
-      if (btn) btn.disabled = !jdInput.value.trim();
+      if (btn) btn.disabled = !(jdInput.value.trim() && selectedFile);
     });
   }
 
@@ -389,20 +532,67 @@ function setupJDToggles() {
   }
 }
 
+// ─── Poll for login while login state is visible ──────────────────────────────
+// Backs off from 2s up to 30s, and stops entirely after ~10 minutes so an
+// abandoned login-state popup doesn't hammer the backend forever.
+let _loginPollTimer  = null;
+let _loginPollDelay  = 2000;
+const LOGIN_POLL_MAX_DELAY = 30000;
+const LOGIN_POLL_MAX_TOTAL = 10 * 60 * 1000;
+let _loginPollStartedAt = 0;
+
+function startLoginPoll() {
+  if (_loginPollTimer) return;
+  _loginPollDelay = 2000;
+  _loginPollStartedAt = Date.now();
+  scheduleNextLoginPoll();
+}
+
+function scheduleNextLoginPoll() {
+  _loginPollTimer = setTimeout(async () => {
+    // Stop polling if login state is no longer visible
+    if (states.login?.classList.contains('hidden')) {
+      stopLoginPoll();
+      return;
+    }
+    if (Date.now() - _loginPollStartedAt > LOGIN_POLL_MAX_TOTAL) {
+      stopLoginPoll();
+      return;
+    }
+    try {
+      const user = await verifyExtensionUser();
+      stopLoginPoll();
+      updateProfileCard(user);
+      unlockRail(true);
+      setupIdleState();
+      await applyStoredJD(user);
+      return;
+    } catch { /* still not signed in */ }
+    _loginPollDelay = Math.min(_loginPollDelay * 1.5, LOGIN_POLL_MAX_DELAY);
+    scheduleNextLoginPoll();
+  }, _loginPollDelay);
+}
+
+function stopLoginPoll() {
+  if (_loginPollTimer) { clearTimeout(_loginPollTimer); _loginPollTimer = null; }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   showState('loading');
 
   let user;
   try {
-    user = await apiFetch('/extension/verify');
+    user = await verifyExtensionUser();
   } catch {
     updateProfileCard(null);
     showState('login');
+    startLoginPoll();
     return;
   }
 
   updateProfileCard(user);
+  unlockRail(true);
 
   // Set up idle state once (event listeners attached once here)
   setupIdleState();
@@ -421,15 +611,28 @@ async function init() {
     }
   });
 
-  // Re-check when popup regains focus (e.g. user clicks "Tailor Resume" on banner
-  // while popup window was already open and in idle state)
-  window.addEventListener('focus', () => applyStoredJD(user));
+  // Re-check when popup regains focus. If the user signed in on the web while
+  // the side panel stayed open, detect the new web auth cookie and unlock.
+  window.addEventListener('focus', async () => {
+    if (!states.login?.classList.contains('hidden')) {
+      try {
+        user = await verifyExtensionUser();
+        stopLoginPoll();
+        updateProfileCard(user);
+        unlockRail(true);
+        setupIdleState();
+      } catch {
+        return;
+      }
+    }
+    applyStoredJD(user);
+  });
 }
 
 // ─── Get the currently active browser tab (not popup/extension pages) ────────
 async function getActiveBrowserTab() {
   try {
-    const tabs = await chrome.tabs.query({ active: true });
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     return tabs.find(t =>
       t.url &&
       !t.url.startsWith('chrome-extension://') &&
@@ -480,21 +683,24 @@ function setCompanyLogo(meta) {
 
   const showInitials = () => {
     if (!initialsEl) return;
-    const words    = company.trim().split(/\s+/);
+    const words    = company.trim().split(/\s+/).filter(Boolean);
     const initials = words.length >= 2
-      ? words[0][0] + words[1][0]
-      : words[0].slice(0, 2);
-    initialsEl.textContent   = initials.toUpperCase();
+      ? (words[0][0] || '') + (words[1][0] || '')
+      : (words[0] || '?').slice(0, 2);
+    initialsEl.textContent   = (initials || '?').toUpperCase();
     initialsEl.style.display = 'flex';
     if (fallbackEl) fallbackEl.style.display = 'none';
   };
 
-  // Guess company domain from name
+  // Guess company domain from name — clamp length to keep the logo-provider
+  // request well-formed even if `company` is unexpectedly long.
   const domain = company
     .toLowerCase()
+    .slice(0, 100)
     .replace(/\b(ltd|limited|inc|corp|corporation|pvt|private|technologies|technology|solutions|services|group|global|india|infotech|infosystems|motors|healthcare)\b/g, '')
     .replace(/[^a-z0-9]/g, '')
-    .trim() + '.com';
+    .trim()
+    .slice(0, 63) + '.com';
 
   const sources = [
     `https://logo.clearbit.com/${domain}`,
@@ -613,6 +819,7 @@ async function loadResumesIntoSelect(selectEl) {
 
 // ─── Core tailor flow ─────────────────────────────────────────────────────────
 async function doTailor(jdText, jobMeta, resumeId) {
+  jdText = clampJdText(jdText);
   showState('processing');
   const stepEl = document.getElementById('processing-step');
   const fillEl = document.getElementById('progress-fill');
@@ -684,12 +891,14 @@ function setNavActive(id) {
 }
 
 document.getElementById('sb-analyze')?.addEventListener('click', async () => {
+  if (!states.login?.classList.contains('hidden')) return;
   setNavActive('sb-analyze');
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
   showState(detectedJD ? 'jdDetected' : 'idle');
 });
 
 document.getElementById('sb-dashboard')?.addEventListener('click', () => {
+  if (!states.login?.classList.contains('hidden')) return;
   setNavActive('sb-dashboard');
   chrome.tabs.create({ url: `${PORTAL_URL}/dashboard` });
 });
@@ -712,10 +921,10 @@ function updateProfileCard(user) {
     if (nameEl)   nameEl.textContent   = displayName;
     if (subEl)    subEl.textContent    = email;
 
-    // Populate sidebar profile popover
-    const srpName  = document.getElementById('srp-name');
-    const srpEmail = document.getElementById('srp-email');
-    const srAvatar = document.getElementById('sr-avatar-initials');
+    // Populate sidebar profile popover and header avatar
+    const srpName      = document.getElementById('srp-name');
+    const srpEmail     = document.getElementById('srp-email');
+    const srAvatar     = document.getElementById('sr-avatar-initials');
     if (srpName)  srpName.textContent  = displayName;
     if (srpEmail) srpEmail.textContent = email;
     if (srAvatar) srAvatar.textContent = (displayName[0] || 'U').toUpperCase();
@@ -723,13 +932,18 @@ function updateProfileCard(user) {
       btnEl.textContent = 'Sign Out';
       btnEl.className   = 'rpc-btn danger';
       btnEl.onclick = async () => {
-        await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+        try {
+          await fetchWithTimeout(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
+        } catch { /* silent */ }
+        await clearAuthCookies();
         updateProfileCard(null);
+        unlockRail(false);
         showState('login');
+        startLoginPoll();
       };
     }
-    // Avatar image if available
-    if (avatarEl && user.avatar) {
+    // Avatar image if available — only allow http(s) URLs from the API response.
+    if (avatarEl && user.avatar && isSafeHttpUrl(user.avatar)) {
       const img = document.createElement('img');
       img.src = user.avatar;
       img.alt = '';
@@ -745,6 +959,12 @@ function updateProfileCard(user) {
       btnEl.className   = 'rpc-btn';
       btnEl.onclick = () => chrome.tabs.create({ url: `${PORTAL_URL}/?showLogin=true` });
     }
+    const srpName  = document.getElementById('srp-name');
+    const srpEmail = document.getElementById('srp-email');
+    const srAvatar = document.getElementById('sr-avatar-initials');
+    if (srpName)  srpName.textContent  = 'My Account';
+    if (srpEmail) srpEmail.textContent = '';
+    if (srAvatar) srAvatar.textContent = '';
   }
 }
 
@@ -764,11 +984,15 @@ document.getElementById('srp-dashboard')?.addEventListener('click', () => {
 document.getElementById('srp-signout')?.addEventListener('click', async () => {
   profilePopover?.classList.remove('open');
   try {
-    await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetchWithTimeout(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch { /* silent */ }
+  await clearAuthCookies();
   await chrome.storage.local.remove('detectedJD');
   chrome.action.setBadgeText({ text: '' });
+  updateProfileCard(null);
+  unlockRail(false);
   showState('login');
+  startLoginPoll();
 });
 
 document.getElementById('sb-feedback')?.addEventListener('click', () => {
@@ -782,15 +1006,29 @@ document.getElementById('sb-settings')?.addEventListener('click', () => {
 
 
 // ─── Auth buttons ─────────────────────────────────────────────────────────────
-document.getElementById('btn-login')?.addEventListener('click', () => {
+function openLoginTab() {
   chrome.tabs.create({ url: `${PORTAL_URL}/?showLogin=true` });
-});
+}
+
+document.getElementById('btn-login')?.addEventListener('click', openLoginTab);
+document.getElementById('btn-login-simple')?.addEventListener('click', openLoginTab);
+document.getElementById('btn-login-new')?.addEventListener('click', openLoginTab);
+document.getElementById('btn-login-link')?.addEventListener('click', openLoginTab);
 document.getElementById('btn-signup')?.addEventListener('click', () => {
   chrome.tabs.create({ url: `${PORTAL_URL}/signup` });
 });
+document.getElementById('btn-signup-new')?.addEventListener('click', () => {
+  chrome.tabs.create({ url: `${PORTAL_URL}/signup` });
+});
 document.getElementById('footer-logout')?.addEventListener('click', async () => {
-  await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+  try {
+    await fetchWithTimeout(`${PORTAL_URL}/api/backend/auth/logout`, { method: 'POST', credentials: 'include' });
+  } catch { /* silent */ }
+  await clearAuthCookies();
+  updateProfileCard(null);
+  unlockRail(false);
   showState('login');
+  startLoginPoll();
 });
 document.getElementById('footer-settings')?.addEventListener('click', () => {
   chrome.tabs.create({ url: `${PORTAL_URL}/dashboard/profile` });
@@ -801,7 +1039,7 @@ let clLetterId = null;
 
 async function generateCoverLetter() {
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-  const jdText  = detectedJD?.jd  || document.getElementById('jd-textarea-main')?.value?.trim() || '';
+  const jdText  = clampJdText(detectedJD?.jd  || document.getElementById('jd-textarea-main')?.value?.trim() || '');
   const jobMeta = detectedJD?.meta || {};
 
   if (!jdText) {
@@ -909,6 +1147,8 @@ document.getElementById('btn-cl-copy')?.addEventListener('click', () => {
       copyBtn.classList.remove('copied');
       copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy`;
     }, 2000);
+  }).catch(() => {
+    alert('Could not copy to clipboard. Please select and copy the text manually.');
   });
 });
 

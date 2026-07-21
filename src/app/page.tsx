@@ -7,7 +7,7 @@ import { sanitizeAuthRedirect } from '@/lib/authRedirect';
 import LandingNavbar from './(landing)/_components/LandingNavbar';
 import HeroSection from './(landing)/_components/HeroSection';
 import ProblemStatement from './(landing)/_components/ProblemStatement';
-import FeaturesSection from './(landing)/_components/FeaturesSection';
+import FeaturesSection, { CareerPromoSection, MockTestSection } from './(landing)/_components/FeaturesSection';
 import HowItWorks from './(landing)/_components/HowItWorks';
 import UserSegments from './(landing)/_components/UserSegments';
 import Testimonials from './(landing)/_components/Testimonials';
@@ -73,6 +73,8 @@ export default function Home() {
         <ProblemStatement />
         <FeaturesSection />
         <HowItWorks />
+        <CareerPromoSection />
+        <MockTestSection />
         <UserSegments />
         <Testimonials />
         <PricingTeaser />

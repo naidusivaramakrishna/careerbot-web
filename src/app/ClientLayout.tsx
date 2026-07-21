@@ -35,17 +35,44 @@ export default function ClientLayout({
   // new browser tab (target="_blank") is redirected to same-window navigation.
   // Modified clicks (Ctrl/Cmd/Shift/Alt or non-primary button) are left alone,
   // since those are an explicit user gesture to open a new tab.
+  // Opt-out: a link can add data-allow-new-tab to be exempt — used by flows
+  // (e.g. job applications) that need the current tab to stay put so the app
+  // can prompt the user when they come back to it.
   useEffect(() => {
     const forceSameTab = (e: MouseEvent) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const anchor = (e.target as HTMLElement)?.closest?.('a[target="_blank"]') as HTMLAnchorElement | null;
       if (!anchor || !anchor.getAttribute('href')) return;
+      if (anchor.hasAttribute('data-allow-new-tab')) return;
       e.preventDefault();
       window.location.href = anchor.href;
     };
     document.addEventListener('click', forceSameTab, true);
     return () => document.removeEventListener('click', forceSameTab, true);
   }, []);
+
+  // Poll maintenance status every 15 s — redirect to /maintenance if enabled.
+  // Skipped on admin/recruiter routes so admins can always reach their
+  // dashboard to turn maintenance off.
+  useEffect(() => {
+    const isAdminOrRecruiter =
+      pathname?.startsWith('/admin') || pathname?.startsWith('/recruiter');
+    if (isAdminOrRecruiter || pathname?.startsWith('/maintenance')) return;
+
+    const check = async () => {
+      try {
+        const res = await fetch('/api/maintenance-status', { cache: 'no-store' });
+        if (res.ok) {
+          const data: { maintenance: boolean } = await res.json();
+          if (data.maintenance) router.replace('/maintenance');
+        }
+      } catch { /* non-critical */ }
+    };
+
+    check(); // immediate check on mount / route change
+    const id = setInterval(check, 15_000);
+    return () => clearInterval(id);
+  }, [pathname, router]);
 
   // Listen for logout events from HTTP interceptor
   // When token refresh fails, http.ts redirects to login

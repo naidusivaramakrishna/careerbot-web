@@ -28,8 +28,8 @@ export default function NoResumePrompt({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full text-center">
+    <div className="flex min-h-[calc(100vh-7rem)] items-center justify-center px-4 py-8">
+      <div className="w-full max-w-lg rounded-lg bg-white p-6 text-center shadow-xl 2xl:p-8">
         <div className="mb-4 text-left">
           <Link
             href="/cover-letter/history"
@@ -39,20 +39,20 @@ export default function NoResumePrompt({
             Back to cover letters
           </Link>
         </div>
-        <div className="flex justify-center mb-6">
-          <div className="bg-blue-50 rounded-full p-5">
-            <FileText className="w-10 h-10 text-[#2557a7]" aria-hidden="true" />
+        <div className="mb-5 flex justify-center 2xl:mb-6">
+          <div className="rounded-full bg-blue-50 p-4 2xl:p-5">
+            <FileText className="h-8 w-8 text-[#2557a7] 2xl:h-10 2xl:w-10" aria-hidden="true" />
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+        <h1 className="mb-2 text-xl font-bold text-gray-900 2xl:text-2xl">
           Add a resume to continue
         </h1>
-        <p className="text-gray-600 mb-2">
+        <p className="mb-2 text-sm leading-6 text-gray-600 2xl:text-base">
           Cover letters are generated from your parsed resume, so we
           need one resume on file before writing the letter.
         </p>
-        <p className="text-gray-600 mb-6">
+        <p className="mb-5 text-sm leading-6 text-gray-600 2xl:mb-6 2xl:text-base">
           Upload a PDF/DOCX resume here so we can parse it for cover-letter
           generation. If you do not have a resume yet, create one in the
           builder, export it, then upload it here.
@@ -69,7 +69,7 @@ export default function NoResumePrompt({
         <label
           htmlFor={inputId}
           className={[
-            "inline-flex items-center justify-center gap-2 w-full bg-[#2557a7] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-[#2557a7] focus-within:ring-offset-2",
+            "inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#2557a7] px-5 text-sm font-semibold text-white transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-[#2557a7] focus-within:ring-offset-2 2xl:h-11",
             isUploading
               ? "opacity-70 cursor-not-allowed"
               : "hover:bg-[#1e4a94] cursor-pointer",
@@ -81,7 +81,7 @@ export default function NoResumePrompt({
 
         <Link
           href="/builder/start?return_to=/cover-letter/new"
-          className="mt-3 inline-flex items-center justify-center gap-2 w-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
+          className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2 2xl:h-11"
         >
           Create resume in builder
         </Link>

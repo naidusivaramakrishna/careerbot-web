@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useState } from 'react';
-import { Plus, Search } from 'lucide-react';
-import type { CoverLetterListItem as ApiListItem } from '@/types/coverLetter';
-import CoverLetterListItem from './CoverLetterListItem';
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { FileText, Plus, Search, Sparkles } from "lucide-react";
+import type { CoverLetterListItem as ApiListItem } from "@/types/coverLetter";
+import CoverLetterListItem from "./CoverLetterListItem";
 
-function mapStatus(status: string): 'generated' | 'draft' {
-  return status === 'ready_to_review' ? 'generated' : 'draft';
+function mapStatus(status: string): "generated" | "draft" {
+  return status === "ready_to_review" ? "generated" : "draft";
 }
 
 interface CoverLetterSidebarProps {
@@ -15,6 +15,7 @@ interface CoverLetterSidebarProps {
   isLoading: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onRename: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
@@ -23,80 +24,102 @@ export default function CoverLetterSidebar({
   isLoading,
   selectedId,
   onSelect,
+  onRename,
   onDelete,
 }: CoverLetterSidebarProps) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
 
-  const filtered = query.trim()
-    ? items.filter((item) => {
-        const q = query.toLowerCase();
-        return (
-          item.role_title?.toLowerCase().includes(q) ||
-          item.company_name?.toLowerCase().includes(q)
-        );
-      })
-    : items;
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) =>
+      [item.role_title, item.company_name].some((value) =>
+        value?.toLowerCase().includes(q),
+      ),
+    );
+  }, [items, query]);
 
   const now = new Date();
   const thisMonthCount = items.filter((item) => {
-    const d = new Date(item.created_at);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    const created = new Date(item.created_at);
+    return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
   }).length;
+  const exportableCount = items.filter((item) => item.status !== "failed").length;
 
   return (
-    <aside className="hidden lg:flex w-[280px] flex-shrink-0 bg-white border-r border-slate-200 flex-col h-full">
-      {/* New Letter button */}
-      <div className="p-3 border-b border-slate-100">
-        <Link
-          href="/cover-letter/new"
-          className="flex items-center justify-center gap-2 w-full bg-[#2557a7] hover:bg-[#1e4a94] text-white text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Letter
-        </Link>
+    <aside className="flex rounded-lg border border-white/80 bg-white/95 p-4 shadow-sm backdrop-blur lg:sticky lg:top-3 lg:max-h-[calc(100vh-2rem)] lg:flex-col lg:overflow-hidden">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Letter library</p>
+          <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Cover letters</h2>
+        </div>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#2557a7]">
+          <FileText className="h-5 w-5" />
+        </div>
       </div>
 
-      {/* Search */}
-      <div className="px-3 py-2.5 border-b border-slate-100">
+      <Link
+        href="/cover-letter/new"
+        className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#2557a7] to-[#1e4a94] px-4 text-sm font-bold text-white shadow-lg shadow-blue-200/60 transition hover:from-[#1e4a94] hover:to-[#1a3f80] hover:shadow-blue-300/40"
+      >
+        <Plus className="h-4 w-4" />
+        New Cover Letter
+      </Link>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <MetricTile label="Total" value={items.length.toString()} />
+        <MetricTile label="Can export" value={exportableCount.toString()} />
+      </div>
+
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
-            placeholder="Search letters..."
+            placeholder="Search role or company"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2557a7]/30 focus:border-[#2557a7] transition-colors"
+            onChange={(event) => setQuery(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-[#2557a7] focus:ring-4 focus:ring-blue-100"
           />
         </div>
       </div>
 
-      {/* Section label */}
-      <div className="px-4 pt-3 pb-1">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-          Recent Letters
-        </span>
+      <div className="mt-3 flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Recent letters</span>
+        {thisMonthCount > 0 && (
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+            {thisMonthCount} this month
+          </span>
+        )}
       </div>
 
-      {/* Letter list */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="mt-2 min-h-0 overflow-y-auto overflow-x-visible pr-1 lg:flex-1">
         {isLoading && items.length === 0 ? (
           <SidebarSkeleton />
         ) : filtered.length === 0 ? (
-          <p className="text-xs text-slate-400 text-center px-4 py-8">
-            {query.trim() ? 'No letters match your search.' : 'No letters yet.'}
-          </p>
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+            <Sparkles className="mx-auto h-5 w-5 text-[#2557a7]" />
+            <p className="mt-2 text-sm font-bold text-slate-700">
+              {query.trim() ? "No matching letters" : "No letters yet"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              {query.trim() ? "Try another role or company name." : "Create your first tailored letter to see it here."}
+            </p>
+          </div>
         ) : (
-          <ul role="list" className="flex flex-col gap-0.5 pb-2">
+          <ul role="list" className="space-y-2 pb-4">
             {filtered.map((item) => (
               <li key={item.letter_id}>
                 <CoverLetterListItem
                   id={item.letter_id}
-                  jobTitle={item.role_title ?? 'Untitled'}
+                  jobTitle={item.role_title ?? "Untitled"}
                   company={item.company_name ?? undefined}
                   createdAt={new Date(item.created_at)}
                   status={mapStatus(item.status)}
+                  wordCount={item.word_count}
                   isActive={selectedId === item.letter_id}
                   onClick={() => onSelect(item.letter_id)}
+                  onRename={onRename}
                   onDelete={onDelete}
                 />
               </li>
@@ -104,29 +127,31 @@ export default function CoverLetterSidebar({
           </ul>
         )}
       </div>
-
-      {/* Stats pill */}
-      {thisMonthCount > 0 && (
-        <div className="p-3 border-t border-slate-100">
-          <span className="inline-flex items-center text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5">
-            {thisMonthCount} letter{thisMonthCount !== 1 ? 's' : ''} generated this month
-          </span>
-        </div>
-      )}
     </aside>
+  );
+}
+
+function MetricTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-3 py-2">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="mt-0.5 text-xl font-black text-[#2557a7]">{value}</p>
+    </div>
   );
 }
 
 function SidebarSkeleton() {
   return (
-    <div className="flex flex-col gap-1 px-2 py-1">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="flex gap-3 px-3 py-3 animate-pulse">
-          <div className="w-8 h-8 bg-slate-100 rounded-lg flex-shrink-0" />
-          <div className="flex-1">
-            <div className="h-3.5 bg-slate-100 rounded w-3/4 mb-2" />
-            <div className="h-3 bg-slate-100 rounded w-1/2 mb-2" />
-            <div className="h-5 bg-slate-100 rounded-full w-20" />
+    <div className="space-y-2">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="animate-pulse rounded-lg border border-slate-200 bg-white p-4">
+          <div className="flex gap-3">
+            <div className="h-10 w-10 rounded-xl bg-slate-100" />
+            <div className="flex-1">
+              <div className="h-3.5 w-3/4 rounded bg-slate-100" />
+              <div className="mt-2 h-3 w-1/2 rounded bg-slate-100" />
+              <div className="mt-3 h-5 w-20 rounded-full bg-slate-100" />
+            </div>
           </div>
         </div>
       ))}

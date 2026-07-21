@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Sparkles, Upload, Link2, X, ChevronRight,
-  Eye, AlertCircle, Zap, CheckCircle2,
-  ArrowRight,
-} from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
 import AnalysisContent from "./analysis/AnalysisContent";
 import LoadingAnimation from "./ui/LoadingAnimation";
 import ErrorPopupModal from "@/components/ErrorPopupModal";
+import JobMatchStartCard from "./wizard/JobMatchStartCard";
+import WizardModalShell from "./wizard/WizardModalShell";
+import WizardStepResume from "./wizard/WizardStepResume";
+import WizardStepJobDescription from "./wizard/WizardStepJobDescription";
+import WizardStepConfirm from "./wizard/WizardStepConfirm";
+import { WIZARD_OVERVIEW_STYLES } from "./wizard/wizardOverviewStyles";
 
 import {
   parseResume,
@@ -28,29 +28,15 @@ async function getMatchByIds(resume_id: string, jd_id: string) {
   return response.json();
 }
 
-const SKILL_VOCAB = [
-  "React","TypeScript","Vite","GraphQL","Apollo","Tailwind",
-  "CSS","Figma","WebGL","Yjs","Rust","WASM","REST","Web Vitals",
-];
-
-const WIZARD_STEPS = [
-  { title: "Upload Resume",    desc: "Upload your resume in PDF or DOCX format." },
-  { title: "Job Description",  desc: "Paste or upload the target job posting." },
-  { title: "Get Match Score",  desc: "AI analyzes fit and highlights skill gaps." },
-];
-
-const MODAL_TABS = [
-  { num: 1, label: "Upload Resume",    icon: Upload },
-  { num: 2, label: "Job Description",  icon: Link2 },
-  { num: 3, label: "Analyze",          icon: Sparkles },
-];
-
 // ── Main Component ─────────────────────────────────────────────────────────────
 const Overview = ({ sessionId }: { sessionId?: string }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [sessionResumeId, setSessionResumeId] = useState<string | null>(null);
   const [sessionResumeName, setSessionResumeName] = useState<string | null>(null);
   const [jdFile, setJdFile] = useState<File | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [jdFileParsed, setJdFileParsed] = useState<any>(null);
+  const [isExtractingJd, setIsExtractingJd] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorDetails, setErrorDetails] = useState<{
     error_code?: string;
@@ -92,8 +78,16 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   });
 
   const [activeTab, setActiveTab] = useState<"upload" | "analysis" | "chat">(() => {
-    // Always start with upload page, clear old session data
+    // Callers that already ran the match themselves (e.g. "Fix My Resume" from
+    // a job card, which pre-seeds jm_matchResults/jm_parsedResumeData) set this
+    // one-shot flag to skip straight to the results view instead of the normal
+    // "always start with upload page, clear old session data" behavior below.
     try {
+      const skipWizard = sessionStorage.getItem("jm_skipWizard") === "true";
+      sessionStorage.removeItem("jm_skipWizard");
+      if (skipWizard && sessionStorage.getItem("jm_matchResults")) {
+        return "analysis";
+      }
       sessionStorage.removeItem("jm_matchResults");
       sessionStorage.removeItem("jm_parsedResumeData");
       sessionStorage.removeItem("jm_parsedJDData");
@@ -106,34 +100,12 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   // 0 = landing overview, 1 = upload resume, 2 = job description, 3 = confirm & analyze
   const [wizardStep, setWizardStep] = useState<0 | 1 | 2 | 3>(0);
 
-  const resumeInputRef = useRef<HTMLInputElement>(null);
-  const jdUploadRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoAnalyzedRef = useRef(false);
-  const jdTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const jdOverlayRef = useRef<HTMLDivElement>(null);
+  const jdUploadTokenRef = useRef(0);
   const [sessionJdId, setSessionJdId] = useState<string | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
-
-  const jdSkills = useMemo(() => {
-    if (!jdText) return [];
-    return SKILL_VOCAB.filter(s =>
-      new RegExp(`\\b${s.replace(/\+/g, "\\+")}\\b`, "i").test(jdText)
-    );
-  }, [jdText]);
-
-  const jdHtml = useMemo(() => {
-    if (!jdText) return "";
-    let h = jdText.replace(/[<>&]/g, ch => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[ch] || ch));
-    jdSkills.forEach(s => {
-      h = h.replace(
-        new RegExp(`\\b(${s.replace(/\+/g, "\\+")})\\b`, "gi"),
-        '<mark style="background:rgba(37,87,167,0.12);color:#2557a7;border-radius:3px;padding:0 2px">$1</mark>'
-      );
-    });
-    return h;
-  }, [jdText, jdSkills]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -171,12 +143,57 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     setError(null);
   };
 
-  const handleJDFileUpload = (file: File) => {
+  const handleJDFileUpload = async (file: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => { setJdText(e.target?.result as string); setJdFile(file); setError(null); };
-    reader.onerror = () => { setError("Failed to read job description file"); };
-    reader.readAsText(file);
+    const token = ++jdUploadTokenRef.current;
+    setJdFile(file);
+    setJdFileParsed(null);
+    setJdText("");
+    setError(null);
+
+    const isPlainText = /\.txt$/i.test(file.name) || file.type === "text/plain";
+    if (isPlainText) {
+      const reader = new FileReader();
+      reader.onload = (e) => { if (jdUploadTokenRef.current === token) setJdText(e.target?.result as string); };
+      reader.onerror = () => { if (jdUploadTokenRef.current === token) setError("Failed to read job description file"); };
+      reader.readAsText(file);
+      return;
+    }
+
+    // PDF/DOC/DOCX are binary formats — reading them as text produces corrupted
+    // output, so extract the text server-side and preview the clean result.
+    setIsExtractingJd(true);
+    try {
+      const parsed = await parseJDFile(file);
+      if (jdUploadTokenRef.current !== token) return; // superseded by a newer upload
+      setJdFileParsed(parsed);
+      // No jd_text is expected when the JD was already parsed before (duplicate) or
+      // the backend response just doesn't carry a recognized text field — not an error,
+      // the file/jd_id is still valid and will be used as-is during analysis.
+      if (parsed?.jd_text) setJdText(parsed.jd_text);
+    } catch {
+      if (jdUploadTokenRef.current === token) {
+        setError("Failed to extract text from this file. You can still continue — it will be parsed during analysis.");
+      }
+    } finally {
+      if (jdUploadTokenRef.current === token) setIsExtractingJd(false);
+    }
+  };
+
+  const handleJdTextChange = (value: string) => {
+    setJdText(value);
+    setJdFile(null);
+    setJdFileParsed(null);
+    setIsExtractingJd(false);
+    jdUploadTokenRef.current++;
+  };
+
+  const handleJdClear = () => {
+    setJdText("");
+    setJdFile(null);
+    setJdFileParsed(null);
+    setIsExtractingJd(false);
+    jdUploadTokenRef.current++;
   };
 
   const analyzeMatch = async () => {
@@ -214,14 +231,18 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       let jd_id: string | null = sessionJdId ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let jdParsed: any = null;
+      let resolvedJdText = jdText;
 
       if (!jd_id) {
-        if (jdText.trim()) {
+        if (jdFile) {
+          // Reuse the extraction already triggered on file selection instead of
+          // re-parsing the same file a second time.
+          jdParsed = jdFileParsed?.jd_id ? jdFileParsed : await parseJDFile(jdFile);
+          if (jdParsed?.jd_text) { resolvedJdText = jdParsed.jd_text; setJdText(jdParsed.jd_text); }
+        } else if (jdText.trim()) {
           const trimmedText = jdText.trim();
           const isUrl = /^https?:\/\/.+/i.test(trimmedText);
           jdParsed = isUrl ? await parseJDUrl(trimmedText) : await parseJDText(trimmedText);
-        } else if (jdFile) {
-          jdParsed = await parseJDFile(jdFile);
         } else {
           throw new Error("No job description provided");
         }
@@ -289,7 +310,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
         sessionStorage.setItem("jm_matchResults", JSON.stringify(newMatchResults));
         sessionStorage.setItem("jm_parsedResumeData", JSON.stringify(fullResumeData));
         sessionStorage.setItem("jm_parsedJDData", JSON.stringify(jdParsed));
-        sessionStorage.setItem("jm_jdText", jdText);
+        sessionStorage.setItem("jm_jdText", resolvedJdText);
       } catch {}
 
       setTimeout(() => {
@@ -370,52 +391,14 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
   const stepContinueDisabled = () => {
     if (wizardStep === 1) return !uploadedFile && !sessionResumeId;
-    if (wizardStep === 2) return jdText.trim().length < 20 && !jdFile;
+    if (wizardStep === 2) return isExtractingJd || (jdText.trim().length < 20 && !jdFile);
     return false;
   };
 
   // ── Main UI ────────────────────────────────────────────────────────────────
   return (
     <>
-      <style>{`
-        .jm-container {
-          max-width: 1400px;
-          margin: 0 auto;
-          padding: 64px 44px 40px;
-        }
-        @media (max-width: 1280px) { .jm-container { padding: 48px 32px 28px; } }
-        @media (max-width: 1024px) { .jm-container { padding: 36px 24px 24px; } }
-        @media (max-width: 768px)  { .jm-container { padding: 28px 16px 16px; } }
-        .jm-steps-row {
-          display: flex;
-          align-items: flex-start;
-          justify-content: center;
-          margin-bottom: 36px;
-        }
-        @media (max-width: 640px) {
-          .jm-steps-row { flex-direction: column; align-items: center; gap: 16px; }
-          .jm-steps-arrow { display: none; }
-          .jm-landing-card { padding: 28px 20px 24px !important; }
-        }
-        @media (max-width: 1024px) {
-          .jm-landing-card { padding: 32px 40px 28px !important; }
-        }
-        .jm-action-btn:hover {
-          background: #EEF4FF !important;
-          border-color: rgba(37,87,167,0.25) !important;
-          color: #2557a7 !important;
-        }
-        .jm-sample-item:hover { background: #F0F5FF !important; }
-        .jm-start-btn:hover {
-          box-shadow: 0 10px 36px rgba(37,87,167,0.44) !important;
-          transform: translateY(-1px) !important;
-        }
-      `}</style>
-
-      <input ref={resumeInputRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden"
-        onChange={e => e.target.files?.[0] && handleResumeUpload(e.target.files[0])} />
-      <input ref={jdUploadRef} type="file" accept=".txt,.pdf,.doc,.docx" className="hidden"
-        onChange={e => e.target.files?.[0] && handleJDFileUpload(e.target.files[0])} />
+      <style>{WIZARD_OVERVIEW_STYLES}</style>
 
       {/* ── Outer wrapper: scopes overlay to the content area only ── */}
       <div style={{ position: "relative", minHeight: "100vh" }}>
@@ -435,635 +418,60 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
         <div className="absolute top-0 left-1/4 w-150 h-100 pointer-events-none" style={{
           background: "radial-gradient(ellipse, rgba(37,87,167,0.06) 0%, transparent 70%)",
         }} />
-
         <div className="jm-container">
-
-          {/* ── HERO ── */}
-          <motion.div
-            style={{ maxWidth: "min(760px, 100%)", marginBottom: 28 }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={mounted ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
-          >
-            <div style={{ marginBottom: 16 }}>
-              <span style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                background: "#fff", border: "1px solid rgba(37,87,167,0.16)",
-                borderRadius: 99, padding: "5px 14px 5px 6px",
-                fontSize: 11, fontWeight: 700, letterSpacing: "0.09em",
-                color: "#2557a7", textTransform: "uppercase",
-                boxShadow: "0 2px 8px rgba(37,87,167,0.09)",
-              }}>
-                <span style={{
-                  width: 22, height: 22, borderRadius: "50%", background: "#FFC85E",
-                  display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <Sparkles style={{ width: 11, height: 11, color: "#2557a7" }} />
-                </span>
-                AI Job Matching
-              </span>
-            </div>
-
-            <h1 style={{
-              fontSize: "clamp(32px, 4.8vw, 64px)",
-              fontWeight: 900, lineHeight: 1.04,
-              letterSpacing: "-0.038em", margin: "0 0 14px",
-            }}>
-              <span style={{ color: "#0f172a" }}>Job </span>
-              <span style={{ color: "#2557a7" }}>Match</span>
-            </h1>
-
-            <p style={{ fontSize: 16.5, color: "#4A5568", lineHeight: 1.65, maxWidth: 560, margin: "0 0 20px" }}>
-              Upload your resume and paste a job description to get an instant AI-powered match score with actionable gap insights.
-            </p>
-
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 22px", marginBottom: 18 }}>
-              {[
-                { label: "AI-powered matching", el: <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2557a7", display: "inline-block" }} /> },
-                { label: "Skills gap analysis",  el: <Zap style={{ width: 13, height: 13, color: "#2557a7" }} /> },
-                { label: "Results in ~30s",      el: <Eye style={{ width: 13, height: 13, color: "#2557a7" }} /> },
-              ].map(({ label, el }, i) => (
-                <React.Fragment key={label}>
-                  {i > 0 && <span style={{ width: 1, height: 14, background: "#C8D6E8", display: "inline-block" }} />}
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, color: "#4A5568", fontWeight: 500 }}>
-                    {el}{label}
-                  </span>
-                </React.Fragment>
-              ))}
-            </div>
-
-          </motion.div>
-
-          {/* ── LANDING CARD (always visible) ── */}
-          <motion.div
-            style={{ maxWidth: "100%" }}
-            initial={{ opacity: 0, y: 28 }}
-            animate={mounted ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.6, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-          >
-            <div className="jm-landing-card" style={{
-              background: "#fff",
-              borderRadius: 12,
-              boxShadow: "0 1px 4px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.08)",
-              border: "1px solid #EBEBEB",
-              padding: "40px 80px 36px",
-            }}>
-
-              {/* Steps row */}
-              <div className="jm-steps-row">
-                {WIZARD_STEPS.map((step, idx) => (
-                  <React.Fragment key={idx}>
-                    {idx > 0 && (
-                      <div className="jm-steps-arrow" style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 44, flexShrink: 0, width: 100 }}>
-                        <ArrowRight style={{ width: 18, height: 18, color: "#94A3B8" }} />
-                      </div>
-                    )}
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", flex: 1 }}>
-                      <span style={{ fontSize: "clamp(56px, 6vw, 90px)", fontWeight: 800, lineHeight: 1, color: "#EBEBEB", display: "block", marginBottom: 10, letterSpacing: "-0.04em", userSelect: "none" }}>
-                        {idx + 1}
-                      </span>
-                      <p style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px", lineHeight: 1.3 }}>{step.title}</p>
-                      <p style={{ fontSize: 13, color: "#94A3B8", margin: 0, lineHeight: 1.55, maxWidth: 200 }}>{step.desc}</p>
-                    </div>
-                  </React.Fragment>
-                ))}
-              </div>
-
-              {/* CTA button */}
-              <div style={{ textAlign: "center" }}>
-                <button
-                  onClick={() => setWizardStep(1)}
-                  style={{
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    height: 42, padding: "0 36px", borderRadius: 12,
-                    background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-                    color: "#fff", fontSize: 14, fontWeight: 700,
-                    border: "none", cursor: "pointer",
-                    boxShadow: "0 4px 18px rgba(37,87,167,0.35)",
-                    transition: "all 0.2s ease",
-                    letterSpacing: "0.01em",
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 28px rgba(37,87,167,0.48)";
-                    (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 18px rgba(37,87,167,0.35)";
-                    (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
-                  }}
-                >
-                  Check My Match Score
-                </button>
-              </div>
-
-            </div>
-          </motion.div>
-
+          <JobMatchStartCard mounted={mounted} onStart={() => setWizardStep(1)} />
         </div>
       </div>
 
       {/* ── WIZARD MODAL (absolute overlay — scoped to content area) ── */}
-      <AnimatePresence>
-        {wizardStep > 0 && (
-          <motion.div
-            key="wizard-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            style={{
-              position: "absolute", inset: 0,
-              background: "rgba(15,23,42,0.30)",
-              zIndex: 1000,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              padding: "16px",
-            }}
-            onClick={() => { setError(null); setWizardStep(0); }}
-          >
-            <motion.div
-              key="wizard-card"
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
-              style={{
-                background: "#F6F8FA",
-                borderRadius: 20,
-                boxShadow: "0 8px 16px rgba(0,0,0,0.10), 0 32px 80px rgba(15,23,42,0.28)",
-                width: "100%", maxWidth: 680,
-                overflow: "hidden",
-              }}
-              onClick={e => e.stopPropagation()}
-            >
-
-              {/* ── Modal header: pill tab breadcrumb ── */}
-              <div style={{
-                padding: "14px 20px",
-                background: "#fff",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.07)",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 28,
-                position: "relative", zIndex: 1,
-              }}>
-                {MODAL_TABS.map((tab, idx) => {
-                  const Icon = tab.icon;
-                  const isActive = wizardStep === tab.num;
-                  const isDone = wizardStep > tab.num;
-                  return (
-                    <React.Fragment key={tab.num}>
-                      {idx > 0 && (
-                        <span style={{ color: "#CBCBCB", fontSize: 13, fontWeight: 500, flexShrink: 0 }}>›</span>
-                      )}
-                      <div style={{
-                        display: "inline-flex", alignItems: "center", gap: 7,
-                        padding: "6px 16px", borderRadius: 99,
-                        border: isActive ? "1.5px solid #2557a7" : "1.5px solid transparent",
-                        background: "#fff",
-                        boxShadow: isActive
-                          ? "0 2px 8px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08)"
-                          : "0 1px 4px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)",
-                        transition: "all 0.2s",
-                        flexShrink: 0,
-                      }}>
-                        {isDone
-                          ? <CheckCircle2 style={{ width: 14, height: 14, color: "#2557a7" }} />
-                          : <Icon style={{ width: 14, height: 14, color: isActive ? "#2557a7" : "#BBBBBB" }} />
-                        }
-                        <span style={{
-                          fontSize: 13, fontWeight: isActive ? 700 : 500,
-                          color: isActive ? "#2557a7" : isDone ? "#94A3B8" : "#BBBBBB",
-                          whiteSpace: "nowrap",
-                        }}>
-                          {tab.label}
-                        </span>
-                      </div>
-                    </React.Fragment>
-                  );
-                })}
-
-              </div>
-
-              {/* ── Modal step content ── */}
-              <div style={{ padding: "28px 28px 20px" }}>
-
-                {/* Step 1: Upload Resume */}
-                {wizardStep === 1 && (
-                  <div>
-                    {/* Outer card: header + body */}
-                    <div style={{
-                      border: "1px solid #E8EDF5",
-                      borderRadius: "24px 24px 0 0",
-                      overflow: "hidden",
-                      background: "#fff",
-                    }}>
-                      {/* Card header */}
-                      <div style={{
-                        padding: "12px 16px",
-                        background: "#fff",
-                        borderBottom: "1px solid #E8EDF5",
-                        display: "flex", alignItems: "center", gap: 8,
-                      }}>
-                        <div style={{
-                          width: 28, height: 28, borderRadius: "50%",
-                          background: "linear-gradient(135deg, #2557a7, #1a3a8f)",
-                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                          boxShadow: "0 2px 6px rgba(37,87,167,0.25)",
-                        }}>
-                          <Upload style={{ width: 13, height: 13, color: "#fff" }} />
-                        </div>
-                        <p style={{ fontSize: 13.5, fontWeight: 700, color: "#0f172a", margin: 0 }}>
-                          Step 1 : Upload Resume
-                        </p>
-                      </div>
-
-                      {/* Card body */}
-                      <div style={{ padding: "16px" }}>
-                        {/* Dropzone — always visible */}
-                        <div
-                          role="button" tabIndex={0}
-                          style={{
-                            display: "flex", flexDirection: "column",
-                            alignItems: "center", justifyContent: "center", gap: 12,
-                            cursor: "pointer",
-                            border: "none",
-                            background: "#fff",
-                            padding: "28px 24px",
-                          }}
-                          onDragOver={e => e.preventDefault()}
-                          onDragLeave={() => {}}
-                          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleResumeUpload(f); }}
-                          onClick={() => resumeInputRef.current?.click()}
-                          onKeyDown={e => (e.key === "Enter" || e.key === " ") && resumeInputRef.current?.click()}
-                        >
-                          <div style={{
-                            width: 56, height: 56, borderRadius: 14,
-                            background: "#EEF4FF", border: "1.5px solid #C7D9F5",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                          }}>
-                            <Upload style={{ width: 24, height: 24, color: "#2557a7" }} />
-                          </div>
-
-                          <div style={{ textAlign: "center" }}>
-                            <p style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>
-                              Upload your resume here
-                            </p>
-                            <p style={{ fontSize: 12, color: "#94A3B8", margin: "0 0 4px" }}>
-                              (pdf upto 10MB)
-                            </p>
-                            <p style={{ fontSize: 12.5, color: "#94A3B8", margin: 0 }}>
-                              Upload your Resume in a PDF or DOCX Format
-                            </p>
-                          </div>
-
-                          <button
-                            onClick={e => { e.stopPropagation(); resumeInputRef.current?.click(); }}
-                            style={{
-                              height: 40, padding: "0 32px", borderRadius: 99,
-                              background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-                              color: "#fff", fontSize: 13.5, fontWeight: 700,
-                              border: "none", cursor: "pointer",
-                              boxShadow: "0 3px 12px rgba(37,87,167,0.28)",
-                              marginTop: 4,
-                            }}
-                          >
-                            Choose File
-                          </button>
-
-                          {/* Filename shown below button after selection */}
-                          {(uploadedFile || sessionResumeName) && (
-                            <p style={{ fontSize: 13, color: "#2557a7", fontWeight: 600, margin: 0 }}>
-                              {uploadedFile ? uploadedFile.name : sessionResumeName}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {error && (
-                      <div style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "10px 14px", marginTop: 12, borderRadius: 10,
-                        background: "#FEF2F2", border: "1px solid #FECACA",
-                      }}>
-                        <AlertCircle style={{ width: 13, height: 13, color: "#ef4444", flexShrink: 0 }} />
-                        <p style={{ fontSize: 12, color: "#dc2626", margin: 0 }}>{error}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Step 2: Job Description */}
-                {wizardStep === 2 && (
-                  <div>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
-                      <div>
-                        <h3 style={{ fontSize: 19, fontWeight: 800, color: "#0f172a", margin: "0 0 3px" }}>Job Description</h3>
-                        <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>Paste text, a job URL, or upload a file</p>
-                      </div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                        <button onClick={() => jdUploadRef.current?.click()} className="jm-action-btn" style={{
-                          display: "inline-flex", alignItems: "center", gap: 5, height: 30,
-                          fontSize: 11, fontWeight: 600, color: "#4A5568",
-                          background: "#F5F8FC", border: "1px solid #DDE5F0",
-                          padding: "0 11px", borderRadius: 8, cursor: "pointer",
-                          transition: "all 0.15s",
-                        }}>
-                          <Upload style={{ width: 11, height: 11 }} />File
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={{ position: "relative", display: "flex", flexDirection: "column" }}>
-                      {jdText && (
-                        <div
-                          ref={jdOverlayRef}
-                          style={{
-                            position: "absolute", inset: 0,
-                            padding: "12px 14px", fontFamily: "inherit",
-                            fontSize: 13.5, lineHeight: 1.7, color: "#0f172a",
-                            whiteSpace: "pre-wrap", wordBreak: "break-word",
-                            pointerEvents: "none", overflowY: "auto", borderRadius: 12,
-                            scrollbarWidth: "none",
-                          }}
-                          dangerouslySetInnerHTML={{ __html: jdHtml }}
-                        />
-                      )}
-                      <textarea
-                        ref={jdTextareaRef}
-                        value={jdText}
-                        onChange={e => { setJdText(e.target.value); setJdFile(null); }}
-                        onScroll={e => {
-                          if (jdOverlayRef.current) {
-                            jdOverlayRef.current.scrollTop = (e.target as HTMLTextAreaElement).scrollTop;
-                          }
-                        }}
-                        placeholder={`Paste the full job description here...
-
-Example:
-We are looking for a Software Engineer with 3+ years of experience in React, Node.js, and AWS. The ideal candidate should have strong problem-solving skills, experience with REST APIs, and familiarity with agile methodologies...`}
-                        spellCheck={false}
-                        style={{
-                          minHeight: 300, padding: "12px 14px",
-                          resize: "none", borderRadius: 12,
-                          border: "1.5px solid #DDE5F0", outline: "none",
-                          background: "#fff",
-                          fontFamily: "inherit", fontSize: 13.5, lineHeight: 1.7,
-                          color: jdText ? "transparent" : "#B0BAC8",
-                          caretColor: "#2557a7", width: "100%", boxSizing: "border-box",
-                          transition: "border-color 0.15s, box-shadow 0.15s",
-                          overflowY: "auto",
-                        }}
-                        onFocus={e => {
-                          e.target.style.borderColor = "#2557a7";
-                          e.target.style.boxShadow = "0 0 0 3px rgba(37,87,167,0.09)";
-                        }}
-                        onBlur={e => {
-                          e.target.style.borderColor = "#DDE5F0";
-                          e.target.style.boxShadow = "none";
-                        }}
-                      />
-                      {jdText && (
-                        <button
-                          onClick={() => { setJdText(""); setJdFile(null); }}
-                          style={{
-                            position: "absolute", top: 9, right: 9,
-                            width: 20, height: 20, borderRadius: "50%",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            background: "#E8EEF8", color: "#64748B",
-                            cursor: "pointer", border: "none",
-                          }}
-                        >
-                          <X style={{ width: 10, height: 10 }} />
-                        </button>
-                      )}
-                    </div>
-
-                    {error && (
-                      <div style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "10px 14px", marginTop: 10, borderRadius: 10,
-                        background: "#FEF2F2", border: "1px solid #FECACA",
-                      }}>
-                        <AlertCircle style={{ width: 13, height: 13, color: "#ef4444", flexShrink: 0 }} />
-                        <p style={{ fontSize: 12, color: "#dc2626", margin: 0 }}>{error}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Step 3: Confirm & Analyze */}
-                {wizardStep === 3 && (() => {
-                  const isUrl = /^https?:\/\/.+/i.test(jdText.trim());
-                  const jdLabel = jdFile
-                    ? jdFile.name
-                    : isUrl
-                      ? jdText.trim()
-                      : jdText.slice(0, 60) + (jdText.length > 60 ? "…" : "");
-                  const jdSubLabel = jdFile
-                    ? "File added successfully"
-                    : isUrl
-                      ? "URL added successfully"
-                      : "Text added successfully";
-
-                  return (
-                    <div>
-                      {/* Header */}
-                      <div style={{ textAlign: "center", marginBottom: 16 }}>
-                        <div style={{
-                          width: 44, height: 44, borderRadius: "50%",
-                          background: "#f0fdf4", border: "1.5px solid #86efac",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          margin: "0 auto 10px",
-                        }}>
-                          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M4 10l4 4 8-8"/>
-                          </svg>
-                        </div>
-                        <h3 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 6px" }}>Ready to Analyze</h3>
-                        <p style={{ fontSize: 13, color: "#64748B", margin: 0, lineHeight: 1.55 }}>
-                          We&apos;ve received your resume and job description.<br />
-                          Click the button below to get your AI match score.
-                        </p>
-                      </div>
-
-                      {/* Review card */}
-                      <div style={{
-                        background: "#fff",
-                        border: "1px solid #E8EDF5",
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        marginBottom: 14,
-                        boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-                      }}>
-                        {/* Row: Resume */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px" }}>
-                          <div style={{
-                            width: 40, height: 40, borderRadius: 10,
-                            background: "#F1F5F9",
-                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                          }}>
-                            <Upload style={{ width: 18, height: 18, color: "#2557a7" }} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 10.5, color: "#94A3B8", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Resume</p>
-                            <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {uploadedFile ? uploadedFile.name : sessionResumeName || "Resume ready"}
-                            </p>
-                            <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>Uploaded successfully</p>
-                          </div>
-                          <div style={{
-                            display: "inline-flex", alignItems: "center", gap: 6,
-                            background: "#f0fdf4", border: "1px solid #bbf7d0",
-                            padding: "6px 14px", borderRadius: 99, flexShrink: 0,
-                          }}>
-                            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M4 10l4 4 8-8"/>
-                            </svg>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#16a34a" }}>Ready</span>
-                          </div>
-                        </div>
-
-                        {/* Divider */}
-                        <div style={{ height: 1, background: "#F1F5F9" }} />
-
-                        {/* Row: Job Description */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px" }}>
-                          <div style={{
-                            width: 40, height: 40, borderRadius: 10,
-                            background: "#F1F5F9",
-                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                          }}>
-                            <Link2 style={{ width: 18, height: 18, color: "#2557a7" }} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 10.5, color: "#94A3B8", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 700 }}>Job Description</p>
-                            <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {jdLabel}
-                            </p>
-                            <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>{jdSubLabel}</p>
-                          </div>
-                          <div style={{
-                            display: "inline-flex", alignItems: "center", gap: 6,
-                            background: "#f0fdf4", border: "1px solid #bbf7d0",
-                            padding: "6px 14px", borderRadius: 99, flexShrink: 0,
-                          }}>
-                            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M4 10l4 4 8-8"/>
-                            </svg>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#16a34a" }}>Ready</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {error && (
-                        <div style={{
-                          display: "flex", alignItems: "center", gap: 8,
-                          padding: "10px 14px", marginBottom: 16, borderRadius: 10,
-                          background: "#FEF2F2", border: "1px solid #FECACA",
-                        }}>
-                          <AlertCircle style={{ width: 13, height: 13, color: "#ef4444", flexShrink: 0 }} />
-                          <p style={{ fontSize: 12, color: "#dc2626", margin: 0 }}>{error}</p>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={analyzeMatch}
-                        style={{
-                          width: "100%", height: 48, borderRadius: 14,
-                          display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                          fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em",
-                          cursor: "pointer",
-                          background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-                          color: "#fff", border: "none",
-                          boxShadow: "0 6px 24px rgba(37,87,167,0.34)",
-                          transition: "all 0.2s ease",
-                        }}
-                        onMouseEnter={e => {
-                          const b = e.currentTarget as HTMLButtonElement;
-                          b.style.boxShadow = "0 10px 36px rgba(37,87,167,0.44)";
-                          b.style.transform = "translateY(-1px)";
-                        }}
-                        onMouseLeave={e => {
-                          const b = e.currentTarget as HTMLButtonElement;
-                          b.style.boxShadow = "0 6px 24px rgba(37,87,167,0.34)";
-                          b.style.transform = "translateY(0)";
-                        }}
-                      >
-                        <Sparkles style={{ width: 18, height: 18 }} />
-                        Analyze Match Score
-                        <ChevronRight style={{ width: 17, height: 17 }} />
-                      </button>
-
-                      <p style={{
-                        textAlign: "center", fontSize: 11.5, color: "#94A3B8",
-                        marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                      }}>
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                        </svg>
-                        End-to-end encrypted · Never stored · 100% private
-                      </p>
-                    </div>
-                  );
-                })()}
-
-              </div>
-
-              {/* ── Modal footer: navigation ── */}
-              <div style={{
-                padding: "16px 24px",
-                display: "flex", alignItems: "center",
-                justifyContent: "space-between",
-                background: "#F6F8FA",
-              }}>
-                <button
-                  onClick={() => { setError(null); setWizardStep(prev => (prev - 1) as 0 | 1 | 2 | 3); }}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
-                    height: 40, padding: "0 20px", borderRadius: 10,
-                    fontSize: 13.5, fontWeight: 600, color: "#64748B",
-                    background: "#fff", border: "1.5px solid #E2E8F0",
-                    cursor: "pointer", boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-                  }}
-                >
-                  ← Go Back
-                </button>
-
-                {wizardStep < 3 && (
-                  <button
-                    onClick={() => {
-                      if (stepContinueDisabled()) {
-                        setError(wizardStep === 1
-                          ? "Please upload a resume first."
-                          : "Please add a job description (at least 20 characters)."
-                        );
-                        return;
-                      }
-                      setError(null);
-                      setWizardStep(prev => (prev + 1) as 1 | 2 | 3);
-                    }}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6,
-                      height: 40, padding: "0 24px", borderRadius: 10,
-                      fontSize: 13.5, fontWeight: 700,
-                      cursor: "pointer",
-                      background: stepContinueDisabled()
-                        ? "#F1F5F9"
-                        : "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-                      color: stepContinueDisabled() ? "#94A3B8" : "#fff",
-                      border: "none",
-                      boxShadow: stepContinueDisabled() ? "none" : "0 4px 16px rgba(37,87,167,0.28)",
-                      transition: "all 0.2s",
-                    }}
-                  >
-                    Continue →
-                  </button>
-                )}
-              </div>
-
-            </motion.div>
-          </motion.div>
+      <WizardModalShell
+        open={wizardStep > 0}
+        wizardStep={wizardStep}
+        onClose={() => { setError(null); setWizardStep(0); }}
+        onBack={() => { setError(null); setWizardStep(prev => (prev - 1) as 0 | 1 | 2 | 3); }}
+        onContinueClick={() => {
+          if (stepContinueDisabled()) {
+            setError(wizardStep === 1
+              ? "Please upload a resume first."
+              : "Please add a job description (at least 20 characters)."
+            );
+            return;
+          }
+          setError(null);
+          setWizardStep(prev => (prev + 1) as 1 | 2 | 3);
+        }}
+        continueDisabled={stepContinueDisabled()}
+      >
+        {wizardStep === 1 && (
+          <WizardStepResume
+            uploadedFile={uploadedFile}
+            sessionResumeName={sessionResumeName}
+            error={error}
+            onFileSelected={handleResumeUpload}
+          />
         )}
-      </AnimatePresence>
+        {wizardStep === 2 && (
+          <WizardStepJobDescription
+            jdText={jdText}
+            jdFile={jdFile}
+            isExtractingJd={isExtractingJd}
+            error={error}
+            onTextChange={handleJdTextChange}
+            onFileSelected={handleJDFileUpload}
+            onClear={handleJdClear}
+          />
+        )}
+        {wizardStep === 3 && (
+          <WizardStepConfirm
+            uploadedFile={uploadedFile}
+            sessionResumeName={sessionResumeName}
+            jdFile={jdFile}
+            jdText={jdText}
+            error={error}
+            onAnalyze={analyzeMatch}
+          />
+        )}
+      </WizardModalShell>
 
       </div>{/* ── end outer wrapper ── */}
 

@@ -36,6 +36,8 @@
     "test:integration:templates": "vitest src/tests/integration/features/templates-catalogues",
     "test:profile": "vitest src/tests/unit/features/profile",
     "test:integration:profile": "vitest src/tests/integration/features/profile",
+    "test:auth": "vitest src/tests/unit/features/auth",
+    "test:integration:auth": "vitest src/tests/integration/features/auth",
     "test:pre-commit": "npm run test:integration && npm test"
   },
   "dependencies": {
@@ -45,6 +47,7 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@hello-pangea/dnd": "^16.5.0",
+    "@monaco-editor/react": "^4.7.0",
     "@types/html-to-docx": "^1.8.1",
     "@types/js-cookie": "^3.0.6",
     "axios": "^1.13.2",
@@ -96,6 +99,7 @@
     "jsdom": "^23.0.1",
     "kill-port": "^2.0.1",
     "msw": "^2.0.0",
+    "puppeteer": "^25.2.0",
     "tailwindcss": "^4",
     "typescript": "5.9.3",
     "vitest": "^1.1.0"

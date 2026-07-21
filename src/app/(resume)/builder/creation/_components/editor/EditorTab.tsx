@@ -114,6 +114,9 @@ const EditorTab: React.FC<Props> = ({
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Always-current snapshot of resumeData for memoized callbacks (avoids stale closure)
+  const resumeDataRef = useRef(resumeData);
+  resumeDataRef.current = resumeData;
   // Tracks custom section names whose backend UUID is still pending (blocks modal open)
   const pendingCustomSections = useRef<Set<string>>(new Set());
   const searchParams = useSearchParams();
@@ -283,7 +286,54 @@ const EditorTab: React.FC<Props> = ({
         setIsAutoSaving(true);
         // // console.log("💾 Auto-saving:", sectionName);
         
-        const sectionData = transformFormDataToBackend(sectionName);
+        const live = resumeDataRef.current;
+        let sectionData: Record<string, unknown> | unknown[];
+        if (sectionName === "Professional Summary") {
+          const summary = live.professionalSummary?.summary || "";
+          const targetRole = live.professionalSummary?.targetRole || "";
+          if (!summary && !targetRole) {
+            setIsAutoSaving(false);
+            return;
+          }
+          sectionData = { summary, targetRole };
+        } else if (sectionName === "Personal Info") {
+          sectionData = {
+            fullname: live.personalInfo?.fullname || "",
+            email: live.personalInfo?.email || "",
+            phone: live.personalInfo?.phone
+              ? (live.personalInfo.phone.startsWith("+") ? live.personalInfo.phone : `${live.personalInfo.countryCode || "+91"}${live.personalInfo.phone}`)
+              : "",
+            location: live.personalInfo?.location || "",
+            linkedinUrl: live.personalInfo?.linkedinUrl || "",
+            githubUrl: live.personalInfo?.githubUrl || "",
+            portfolioUrl: live.personalInfo?.portfolioUrl || "",
+            dateOfBirth: live.personalInfo?.dateOfBirth || null,
+            nationality: live.personalInfo?.nationality || null,
+            category: live.personalInfo?.category || null,
+            languages: live.personalInfo?.languages || null,
+            titlePrefix: live.personalInfo?.titlePrefix || null,
+            qualifications: live.personalInfo?.qualifications || null,
+          };
+        } else {
+          const sectionMap: Record<string, keyof typeof live> = {
+            "Education": "education",
+            "Work Experience": "workExperience",
+            "Projects": "projects",
+            "Certifications": "certifications",
+            "Internships": "internships",
+            "Achievements": "achievements",
+            "Awards": "awards",
+            "Volunteering": "volunteering",
+            "Publications": "publications",
+            "References": "references",
+            "Hobbies": "hobbies",
+            "Interests": "interests",
+            "Languages": "languages",
+          };
+          const key = sectionMap[sectionName];
+          const data = key ? live[key] : undefined;
+          sectionData = Array.isArray(data) ? data : [];
+        }
         
         const backendKey = SECTION_KEY_MAP[sectionName] || sectionName.toLowerCase().replace(/\s+/g, "_");
 

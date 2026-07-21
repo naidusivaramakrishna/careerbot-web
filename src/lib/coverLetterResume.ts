@@ -1,4 +1,5 @@
 export type CoverLetterResumeCandidate = Record<string, unknown>;
+export type CoverLetterResumeSource = 'parser' | 'builder';
 
 function asNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0
@@ -19,7 +20,6 @@ export function getCoverLetterParsedResumeId(
   resume: CoverLetterResumeCandidate | null | undefined
 ): string | null {
   if (!resume) return null;
-
   const explicitParserId = [
     resume.parsed_resume_id,
     resume.resume_id,
@@ -31,14 +31,17 @@ export function getCoverLetterParsedResumeId(
 
   if (explicitParserId) return explicitParserId;
 
-  // A plain builder resume id is only safe for cover-letter generation
-  // when the row itself contains parser output. Builder-only rows do not
-  // satisfy the backend ParsedResumeResolver.
   if (!hasParsedData(resume)) return null;
 
   return [resume.id, resume._id]
     .map(asNonEmptyString)
     .find((value): value is string => Boolean(value)) ?? null;
+}
+
+export function getCoverLetterResumeSource(
+  resume: CoverLetterResumeCandidate | null | undefined
+): CoverLetterResumeSource {
+  return asNonEmptyString(resume?.source) === 'builder' ? 'builder' : 'parser';
 }
 
 export function hasCoverLetterUsableResume(

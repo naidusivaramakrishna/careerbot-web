@@ -1,36 +1,38 @@
 import React, { memo, useCallback } from 'react'
 import { FileText, CreditCard, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import type { UserDetailsResponse, UserActivityLog, Resume } from '@/api/userManagementApi'
-
-interface Payment {
-    id: string
-    amount: number
-    created_at: string
-    status: 'completed' | 'pending' | 'failed'
-}
+import type { UserDetailsResponse, UserActivityLog, Resume, Payment } from '@/api/userManagementApi'
 
 interface SubscriptionTabProps {
     user: UserDetailsResponse
 }
 
 export const SubscriptionTab = memo(({ user }: SubscriptionTabProps) => {
+    const sub = user.subscription
     return (
         <div className="border border-[#00000033]/40 p-4 rounded-lg text-sm">
             <h4 className="font-semibold mb-3">Subscription Details</h4>
             <div className="space-y-1">
                 <p className="flex justify-between items-center">
                     <span className="font-medium">Current Plan:</span>
-                    <span className="capitalize">{user.subscription || 'Free'}</span>
+                    <span className="capitalize">{sub?.plan || 'Free'}</span>
                 </p>
                 <p className="flex justify-between items-center">
                     <span className="font-medium">Billing Cycle:</span>
-                    Monthly
+                    <span className="capitalize">{sub?.billing_cycle || '—'}</span>
                 </p>
-                <p className="flex justify-between items-center">
-                    <span className="font-medium">Status:</span>
-                    <span className="capitalize">{user.status.replace('_', ' ')}</span>
-                </p>
+                {sub?.amount != null && (
+                    <p className="flex justify-between items-center">
+                        <span className="font-medium">Amount:</span>
+                        <span>{sub.currency === 'INR' ? '₹' : '$'}{sub.amount}</span>
+                    </p>
+                )}
+                {sub?.started_at && (
+                    <p className="flex justify-between items-center">
+                        <span className="font-medium">Started:</span>
+                        <span>{new Date(sub.started_at).toLocaleDateString('en-GB')}</span>
+                    </p>
+                )}
             </div>
         </div>
     )
@@ -98,6 +100,8 @@ export const ResumesTab = memo(({ resumes, formatDate }: ResumesTabProps) => {
 
 ResumesTab.displayName = 'ResumesTab'
 
+const POSITIVE_STATUSES = new Set(['captured', 'authorized'])
+
 interface PaymentsTabProps {
     payments: Payment[]
     formatDate: (date: string) => string
@@ -111,17 +115,22 @@ export const PaymentsTab = memo(({ payments, formatDate }: PaymentsTabProps) => 
             </h4>
             {payments && payments.length > 0 ? (
                 <div className="divide-y divide-gray-300">
-                    {payments.map((payment) => (
-                        <div key={payment.id} className="py-2 flex justify-between items-center">
+                    {payments.map((payment, index) => (
+                        <div key={index} className="py-2 flex justify-between items-center">
                             <div>
-                                <p className="font-semibold text-black">₹{payment.amount}</p>
-                                <p className="text-gray-500 text-xs">{formatDate(payment.created_at)}</p>
+                                <p className="font-semibold text-black">
+                                    {payment.currency === 'INR' ? '₹' : '$'}{payment.amount ?? '—'}
+                                </p>
+                                <p className="text-gray-500 text-xs capitalize">
+                                    {payment.feature?.replace(/_/g, ' ') || payment.plan || '—'}
+                                    {payment.payment_method && ` · ${payment.payment_method}`}
+                                </p>
+                                {payment.date && (
+                                    <p className="text-gray-400 text-xs">{formatDate(payment.date)}</p>
+                                )}
                             </div>
-                            <span
-                                className={`py-2 ${payment.status === 'completed' ? 'text-green-600' : 'text-red-600'
-                                    }`}
-                            >
-                                {payment.status}
+                            <span className={`capitalize ${POSITIVE_STATUSES.has(payment.status ?? '') ? 'text-green-600' : 'text-red-600'}`}>
+                                {payment.status ?? '—'}
                             </span>
                         </div>
                     ))}

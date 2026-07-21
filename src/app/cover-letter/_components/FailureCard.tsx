@@ -110,12 +110,12 @@ export default function FailureCard({ letter }: FailureCardProps) {
   const grounding = letter.grounding ?? {};
 
   return (
-    <div className="rounded-2xl border border-red-100 bg-white shadow-sm p-8">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-50 mb-3">
-          <XCircle className="w-8 h-8 text-red-600" aria-hidden="true" />
+    <div className="rounded-lg border border-red-100 bg-white p-6 shadow-sm 2xl:p-8">
+      <div className="mb-5 text-center 2xl:mb-6">
+        <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-50 2xl:h-14 2xl:w-14">
+          <XCircle className="h-7 w-7 text-red-600 2xl:h-8 2xl:w-8" aria-hidden="true" />
         </div>
-        <h2 className="text-xl font-bold text-gray-900">
+        <h2 className="text-lg font-bold text-gray-900 2xl:text-xl">
           No draft could be made
         </h2>
         {reason && (
@@ -142,7 +142,7 @@ export default function FailureCard({ letter }: FailureCardProps) {
 
       <Link
         href="/cover-letter/new"
-        className="block w-full text-center bg-[#2557a7] hover:bg-[#1e4a94] text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
+        className="block h-10 w-full rounded-lg bg-[#2557a7] px-5 text-center text-sm font-semibold leading-10 text-white transition-colors hover:bg-[#1e4a94] focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2 2xl:h-11 2xl:leading-[2.75rem]"
       >
         {recovery.cta}
       </Link>

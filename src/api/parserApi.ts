@@ -3,7 +3,7 @@ import axios from "axios";
 import type { AxiosRequestConfig } from 'axios';
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import logger from "@/lib/logger";
-import type { ParseResumeResponse, ParseJDResponse, ResumeData, ATSScore } from '@/types/api.types';
+import type { ParseResumeResponse, ParseFromProfileResponse, ParseJDResponse, ResumeData, ATSScore } from '@/types/api.types';
 
 /* ========== SAFE HELPERS ========== */
 interface ApiErrorWithRaw extends Error {
@@ -66,6 +66,25 @@ async function safePatch<T = unknown>(url: string, data?: unknown, config?: Axio
   }
 }
 
+async function safePut<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  try {
+    logApiRequest('PUT', url, data);
+    const typedData = data as Record<string, unknown> | undefined;
+    const response = await httpClient.put<T>(url, typedData, config);
+    logApiResponse('PUT', url, response.status, response.headers['x-trace-id']);
+    return response.data;
+  } catch (err: unknown) {
+    logApiError('PUT', url, err);
+    if (axios.isAxiosError(err)) {
+      const raw = err.response?.data ?? err.message;
+      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
+      apiError.__raw = raw;
+      throw apiError;
+    }
+    throw err;
+  }
+}
+
 async function safeDelete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
   try {
     logApiRequest('DELETE', url);
@@ -85,36 +104,62 @@ async function safeDelete<T = unknown>(url: string, config?: AxiosRequestConfig)
 }
 
 /* ========== PARSER FUNCTIONS ========== */
-export async function parseResume(file: File): Promise<ParseResumeResponse> {
+
+export interface PreviewOptions {
+  template_id?: string;
+  template_json?: string;
+  use_original?: boolean;
+  preserve_template?: boolean;
+  preserve_exact?: boolean;
+  use_run_level_formatting?: boolean;
+}
+
+export async function parseResume(file: File, options: { force_refresh?: boolean } = {}): Promise<ParseResumeResponse> {
   const form = new FormData();
   form.append("file", file);
-  return await safePost<ParseResumeResponse>(`/parser/parse_resume/`, form, {
+  const qs = options.force_refresh ? '?force_refresh=true' : '';
+  return await safePost<ParseResumeResponse>(`/parser/parse_resume/${qs}`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+}
+
+export async function parseResumeFromProfile(): Promise<ParseFromProfileResponse> {
+  return await safePost<ParseFromProfileResponse>(`/parser/parse-from-profile`);
 }
 
 export async function getResume(resume_id: string): Promise<ResumeData> {
   return await safeGet<ResumeData>(`/parser/get_resume/?resume_id=${resume_id}`);
 }
 
-export async function previewResume(resume_id: string): Promise<ResumeData> {
-  return await safeGet<ResumeData>(`/parser/preview/${resume_id}`);
+export async function previewResume(resume_id: string, options: PreviewOptions = {}): Promise<ResumeData> {
+  const params = new URLSearchParams();
+  if (options.template_id) params.set('template_id', options.template_id);
+  if (options.template_json) params.set('template_json', options.template_json);
+  if (options.use_original != null) params.set('use_original', String(options.use_original));
+  if (options.preserve_template != null) params.set('preserve_template', String(options.preserve_template));
+  if (options.preserve_exact != null) params.set('preserve_exact', String(options.preserve_exact));
+  if (options.use_run_level_formatting != null) params.set('use_run_level_formatting', String(options.use_run_level_formatting));
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return await safeGet<ResumeData>(`/parser/preview/${resume_id}${qs}`);
 }
 
-export async function downloadResumeJson(resume_id: string): Promise<ResumeData> {
-  return await safeGet<ResumeData>(`/parser/download/${resume_id}`);
+export async function downloadResumeJson(resume_id: string, options: PreviewOptions = {}): Promise<ResumeData> {
+  const params = new URLSearchParams();
+  if (options.template_id) params.set('template_id', options.template_id);
+  if (options.template_json) params.set('template_json', options.template_json);
+  if (options.use_original != null) params.set('use_original', String(options.use_original));
+  if (options.preserve_template != null) params.set('preserve_template', String(options.preserve_template));
+  if (options.preserve_exact != null) params.set('preserve_exact', String(options.preserve_exact));
+  if (options.use_run_level_formatting != null) params.set('use_run_level_formatting', String(options.use_run_level_formatting));
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return await safeGet<ResumeData>(`/parser/download/${resume_id}${qs}`);
 }
 
 export async function deleteResume(resume_id: string): Promise<void> {
   await safeDelete(`/parser/delete_resume/${resume_id}`);
 }
 
-export async function calculateATS(resume_id: string): Promise<ATSScore> {
-  return await safePost<ATSScore>(`/parser/calculate_ats_score/${resume_id}`, {
-    force_recalculate: true,
-    disable_cache: true,
-  });
-}
+// calculateATS removed — ATS scoring is now bundled with the enhance endpoint on the backend.
 
 export async function enhanceKeywords(resume_id: string): Promise<unknown> {
   return await safePost<unknown>(`/parser/keyword_enhancement/${resume_id}`);
@@ -185,6 +230,71 @@ function extractJdId(data: unknown): string | null {
   return null;
 }
 
+const JD_TEXT_FIELDS = ['text', 'content', 'jd_text', 'extracted_text', 'raw_text', 'full_text', 'description', 'job_description'];
+
+function firstTextField(obj: Record<string, unknown>): string | null {
+  for (const key of JD_TEXT_FIELDS) {
+    const val = obj[key];
+    if (typeof val === 'string' && val.trim()) return val;
+  }
+  return null;
+}
+
+// Job description bodies run to hundreds of characters — far longer than any id,
+// filename, or status field — so once known field names fail, the longest string
+// in the payload is almost certainly the extracted text.
+const JD_TEXT_MIN_LENGTH = 80;
+const JD_TEXT_SKIP_KEYS = new Set([
+  'id', 'jd_id', '_id', 'existing_id', 'match_id', 'resume_id', 'user_id',
+  'file_name', 'filename', 'url', 'trace_id', 'request_id', 'status', 'error', 'message',
+]);
+
+function findLongestString(data: unknown, depth = 0): string | null {
+  if (depth > 4) return null;
+  if (typeof data === 'string') {
+    return data.trim().length >= JD_TEXT_MIN_LENGTH ? data : null;
+  }
+  if (Array.isArray(data)) {
+    let best: string | null = null;
+    for (const item of data) {
+      const candidate = findLongestString(item, depth + 1);
+      if (candidate && (!best || candidate.length > best.length)) best = candidate;
+    }
+    return best;
+  }
+  if (isObject(data)) {
+    let best: string | null = null;
+    for (const [key, val] of Object.entries(data)) {
+      if (JD_TEXT_SKIP_KEYS.has(key.toLowerCase())) continue;
+      const candidate = findLongestString(val, depth + 1);
+      if (candidate && (!best || candidate.length > best.length)) best = candidate;
+    }
+    return best;
+  }
+  return null;
+}
+
+function extractJdText(data: unknown): string | null {
+  if (!isObject(data)) return null;
+
+  const results = data['results'];
+  if (Array.isArray(results) && results.length && isObject(results[0])) {
+    const fromResults = firstTextField(results[0] as Record<string, unknown>);
+    if (fromResults) return fromResults;
+  }
+
+  const direct = firstTextField(data);
+  if (direct) return direct;
+
+  const inner = data['data'];
+  if (isObject(inner)) {
+    const fromInner = firstTextField(inner);
+    if (fromInner) return fromInner;
+  }
+
+  return findLongestString(data);
+}
+
 export async function parseJDFile(file: File) {
   const form = new FormData();
   form.append("files", file);
@@ -192,7 +302,7 @@ export async function parseJDFile(file: File) {
     const res = await safePost<unknown>(`/jd/extract?skip_duplicate_check=false`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
+    return { raw: res, jd_id: extractJdId(res), jd_text: extractJdText(res), duplicate: false } as ParseJDResponse;
   } catch (err: unknown) {
     return handleDuplicateJd(err);
   }
@@ -204,7 +314,7 @@ export async function parseJDText(text: string, options: { skipAuthRedirect?: bo
       jd_texts: [text],
       skip_duplicate_check: false,
     }, options.skipAuthRedirect ? { headers: { "X-Skip-Auth-Redirect": "true" } } : undefined);
-    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
+    return { raw: res, jd_id: extractJdId(res), jd_text: extractJdText(res) ?? text, duplicate: false } as ParseJDResponse;
   } catch (err: unknown) {
     return handleDuplicateJd(err);
   }
@@ -216,7 +326,20 @@ export async function parseJDUrl(url: string) {
       url: url,
       skip_duplicate_check: false,
     });
-    return { raw: res, jd_id: extractJdId(res), duplicate: false } as ParseJDResponse;
+    return { raw: res, jd_id: extractJdId(res), jd_text: extractJdText(res), duplicate: false } as ParseJDResponse;
+  } catch (err: unknown) {
+    return handleDuplicateJd(err);
+  }
+}
+
+export async function parseJDByJob(jobId: string) {
+  try {
+    const res = await safePost<unknown>(`/jd/parse-by-job/${encodeURIComponent(jobId)}`);
+    return {
+      raw: res,
+      jd_id: extractJdId(res),
+      duplicate: Boolean(isObject(res) && res['from_cache']),
+    } as ParseJDResponse;
   } catch (err: unknown) {
     return handleDuplicateJd(err);
   }
@@ -294,6 +417,14 @@ export async function matcherRemoveSkill(match_id: string, skills: string | stri
 
 /* ========== ENHANCE APPLY / REMOVE ========== */
 
+export async function matcherUpdateSections(
+  match_id: string,
+  sections: { sectionName: string; items: ({ title?: string; description?: string } | string)[] }[],
+  replace = false
+) {
+  return await safePut(`/matcher/${match_id}/sections`, { sections, replace });
+}
+
 export async function matcherEnhanceApply(match_id: string, suggestion_id: string, fix_type = "auto", value?: string) {
   const resp = await httpClient.post<Record<string, unknown>>(
     `/matcher/enhance/apply/${match_id}`,
@@ -312,14 +443,32 @@ export async function matcherEnhanceRemove(match_id: string, suggestion_id: stri
 
 /* ========== RESUME DOWNLOAD ========== */
 
-export async function downloadResumePdf(resume_id: string, filename?: string): Promise<void> {
+export async function downloadResumePdf(
+  resume_id: string,
+  filename?: string,
+  match_id?: string,
+  options: PreviewOptions & { format?: 'pdf' | 'docx' } = {}
+): Promise<void> {
+  const { format = 'pdf', ...previewOpts } = options;
   const response = await httpClient.get(`/parser/download/${resume_id}`, {
-    params: { format: "pdf", use_original: false, preserve_template: false },
+    params: {
+      format,
+      use_original: previewOpts.use_original ?? false,
+      preserve_template: previewOpts.preserve_template ?? false,
+      ...(previewOpts.preserve_exact != null && { preserve_exact: previewOpts.preserve_exact }),
+      ...(previewOpts.use_run_level_formatting != null && { use_run_level_formatting: previewOpts.use_run_level_formatting }),
+      ...(previewOpts.template_json && { template_json: previewOpts.template_json }),
+      ...(previewOpts.template_id && { template_id: previewOpts.template_id }),
+      ...(match_id ? { match_id } : {}),
+    },
     responseType: "blob",
   });
   const contentDisposition = (response.headers as Record<string, string>)["content-disposition"] ?? "";
   const serverFilename = contentDisposition.match(/filename="?([^"]+)"?/)?.[1];
-  const blob = new Blob([response.data as BlobPart], { type: "application/pdf" });
+  const mimeType = format === 'docx'
+    ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    : 'application/pdf';
+  const blob = new Blob([response.data as BlobPart], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -333,19 +482,24 @@ export async function downloadResumePdf(resume_id: string, filename?: string): P
 /* ========== EXPORT ========== */
 export const parserApi = {
   parseResume,
+  parseResumeFromProfile,
   getResume,
+  previewResume,
+  downloadResumeJson,
+  downloadResumePdf,
   deleteResume,
-  calculateATS,
   enhanceKeywords,
   parserAddSkills,
   parserRemoveSkills,
   parseJDFile,
   parseJDText,
   parseJDUrl,
+  parseJDByJob,
   matchResumeAndJD,
   getMatchAnalytics,
   listAllMatches,
   matcherAddSkill,
   matcherRemoveSkill,
+  matcherUpdateSections,
 };
 export default parserApi;

@@ -542,156 +542,149 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
 
 
     return (
-        <div className='flex-1 min-w-0'>
-            <div className="flex flex-col justify-center">
-                <div className="bg-white p-4 rounded-xl my-4 shadow-sm">
-                    <h3 className='my-4 font-semibold text-lg'>Quick Actions</h3>
-                    <h3 className='my-4 text-sm'>Auto fill your profile within seconds.</h3>
+        <div className="w-72 shrink-0 flex flex-col gap-4 my-4">
 
-                    {/* Upload Resume */}
-                    <div className='flex flex-col gap-2 mt-2'>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".pdf,.docx,.doc"
-                            onChange={handleResumeUpload}
-                            className="hidden"
-                            disabled={uploading}
-                            id="quick-resume-upload"
-                            name="resume"
-                            data-testid="quick-resume-upload-input"
-                        />
-                        <div
-                            onClick={() => !uploading && fileInputRef.current?.click()}
-                            data-testid="upload-resume-area"
-                            className={`flex items-center gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg ${uploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                }`}
-                        >
-                            {uploading ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
-                                    <span className='text-sm'>Uploading...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Upload className='w-4 h-4' />
-                                    <span className='text-sm'>Upload Resume</span>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                    {/* <div className='flex flex-col gap-2 mt-2'>
-                        <div
-                            className='flex items-center cursor-pointer gap-2 border p-2 bg-[#F9F9FA] border-gray-400 hover:bg-[#e8eff9] hover:text-[#2557a7] rounded-lg'
-                            onClick={() => setLinkedinModalOpen(true)}
-                        >
-                            <Image src="/assets/icons/linkedin-icon.svg" alt='linkedin-icon' className='w-4 h-4' width={16} height={16} />
-                            <span className='text-sm'>Import from Linkedin</span>
-                        </div>
-                    </div> */}
-                </div>
-                {/* Profile Completion Card */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow my-3">
-                    {/* Header */}
-                    <div className="flex flex-col items-center justify-between mb-4">
-                        <p className="text-sm font-semibold">Profile Completeness</p>
-                        <span className={`text-xs font-semibold ${status.color} my-2 px-2 py-1 ${status.bgColor} rounded-full`}>
-                            {status.label}
-                        </span>
-                    </div>
+            {/* ── Quick Actions ── */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <p className="text-sm font-semibold text-gray-800 mb-0.5">Quick Actions</p>
+                <p className="text-xs text-gray-400 mb-4">Auto-fill your profile in seconds.</p>
 
-                    {/* Progress Circle and Missing Fields */}
-                    <div className="flex flex-col items-center gap-6">
-                        {/* Circular Progress */}
-                        <div className="relative shrink-0">
-                            <svg className="w-20 h-20 transform -rotate-90">
-                                {/* Background circle */}
-                                <circle
-                                    cx="40"
-                                    cy="40"
-                                    r="32"
-                                    stroke="currentColor"
-                                    strokeWidth="6"
-                                    fill="none"
-                                    className="text-gray-200"
-                                />
-                                {/* Progress circle */}
-                                <circle
-                                    cx="40"
-                                    cy="40"
-                                    r="32"
-                                    stroke="currentColor"
-                                    strokeWidth="6"
-                                    fill="none"
-                                    strokeLinecap="round"
-                                    className={status.ringColor}
-                                    style={{
-                                        strokeDasharray: `${2 * Math.PI * 32}`,
-                                        strokeDashoffset: `${2 * Math.PI * 32 * (1 - completionPercentage / 100)}`,
-                                        transition: 'stroke-dashoffset 0.5s ease-out',
-                                    }}
-                                />
-                            </svg>
-                            {/* Percentage */}
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-xl font-bold text-gray-900">{completionPercentage}%</span>
-                            </div>
-                        </div>
-
-                        {/* Missing Fields */}
-                        <div className="flex-1">
-                            {missingFields.length > 0 ? (
-                                <>
-                                    <p className="text-xs text-gray-500 mb-2">Still missing:</p>
-                                    <ul className="space-y-1">
-                                        {missingFields.slice(0, 3).map((field) => (
-                                            <li key={field} className="text-sm text-gray-700 flex items-center gap-1">
-                                                <span className="w-1 h-1 bg-gray-400 rounded-full"></span>
-                                                {field}
-                                            </li>
-                                        ))}
-                                        {missingFields.length > 3 && (
-                                            <li className="text-xs text-gray-500">
-                                                +{missingFields.length - 3} more
-                                            </li>
-                                        )}
-                                    </ul>
-                                </>
-                            ) : (
-                                <div className="flex items-center gap-2 text-green-600">
-                                    <CheckCircle className="w-5 h-5" />
-                                    <p className="text-sm font-medium">All fields complete!</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                <div className="flex flex-col items-center p-4 rounded-xl border border-[#2200FF33]/20 my-4 shadow bg-[#DAD5F9]">
-                    <div className='w-14 h-14 text-white rounded-full flex items-center justify-center bg-linear-to-r from-[#2200FF] to-[#1800B3]'>
-                        <Crown className='w-8 h-8' />
-                    </div>
-                    <h3 className='my-4 font-semibold text-lg'>Upgrade Your Plan</h3>
-                    <p className='text-center text-[#818798] text-sm'>Get unlimited ats scans, job applications, AI resume optimization, and priority support.</p>
-                    <button type="button" onClick={() => router.push('/payments')} data-testid="upgrade-now-btn" className='rounded-lg my-4 text-sm text-white border border-neutral-200 gap-2 cursor-pointer bg-linear-to-r from-[#2200FF] to-[#1800B3] w-full px-4 py-2.5'>
-                        <span>Upgrade Now</span>
-                    </button>
-
-                </div>
-                <div className="flex flex-col items-center p-4 rounded-xl my-4 shadow bg-white">
-                    <MessageSquare className='w-8 h-8 text-[#7B899D]' />
-                    <h3 className='my-4 font-semibold text-[#344256] text-lg'>Need Help?</h3>
-                    <p className='text-[#7B899D] text-sm'>Get expert advice on optimizing your profile.</p>
-                    <button type="button" data-testid="contact-support-btn" className='rounded-lg text-sm my-4 font-semibold text-black border border-[#DDE2E9] gap-2 cursor-pointer bg-[#F9F9FA] w-full px-4 py-2.5'>
-                        <span className='text-[#344256]'>Contact Support</span>
-                    </button>
-                </div>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.doc"
+                    onChange={handleResumeUpload}
+                    className="hidden"
+                    disabled={uploading}
+                    id="quick-resume-upload"
+                    name="resume"
+                    data-testid="quick-resume-upload-input"
+                />
+                <button
+                    type="button"
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    data-testid="upload-resume-area"
+                    disabled={uploading}
+                    className="w-full flex items-center justify-center cursor-pointer gap-2 border border-[#2257a7] text-[#2257a7] bg-[#EEF3FB] hover:bg-[#dde8f7] rounded-lg px-4 py-2.5 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {uploading ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-[#2257a7] border-t-transparent rounded-full animate-spin" />
+                            Uploading…
+                        </>
+                    ) : (
+                        <>
+                            <Upload className="w-4 h-4" />
+                            Upload Resume
+                        </>
+                    )}
+                </button>
             </div>
+
+            {/* ── Profile Completeness ── */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-semibold text-gray-800">Profile Completeness</p>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${status.color} ${status.bgColor}`}>
+                        {status.label}
+                    </span>
+                </div>
+
+                {/* Ring + bar */}
+                <div className="flex items-center gap-4 mb-4">
+                    <div className="relative shrink-0">
+                        <svg className="w-16 h-16 -rotate-90">
+                            <circle cx="32" cy="32" r="26" stroke="#E5E7EB" strokeWidth="5" fill="none" />
+                            <circle
+                                cx="32" cy="32" r="26"
+                                stroke="currentColor" strokeWidth="5" fill="none"
+                                strokeLinecap="round"
+                                className={status.ringColor}
+                                style={{
+                                    strokeDasharray: `${2 * Math.PI * 26}`,
+                                    strokeDashoffset: `${2 * Math.PI * 26 * (1 - completionPercentage / 100)}`,
+                                    transition: 'stroke-dashoffset 0.6s ease-out',
+                                }}
+                            />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-sm font-bold text-gray-800">{completionPercentage}%</span>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                        {missingFields.length > 0 ? (
+                            <>
+                                <p className="text-xs text-gray-400 mb-1.5">Still missing:</p>
+                                <ul className="space-y-1">
+                                    {missingFields.slice(0, 4).map((field) => (
+                                        <li key={field} className="flex items-center gap-1.5 text-xs text-gray-600">
+                                            <span className="w-1 h-1 bg-gray-400 rounded-full shrink-0" />
+                                            {field}
+                                        </li>
+                                    ))}
+                                    {missingFields.length > 4 && (
+                                        <li className="text-xs text-gray-400">+{missingFields.length - 4} more</li>
+                                    )}
+                                </ul>
+                            </>
+                        ) : (
+                            <div className="flex items-center gap-2 text-green-600">
+                                <CheckCircle className="w-4 h-4" />
+                                <p className="text-xs font-medium">All fields complete!</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+            </div>
+
+            {/* ── Upgrade Plan ── */}
+            <div className="bg-[#1E3A5F] rounded-xl p-5 text-white">
+                <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center shrink-0">
+                        <Crown className="w-5 h-5 text-yellow-300" />
+                    </div>
+                    <p className="font-semibold text-sm">Upgrade Your Plan</p>
+                </div>
+                <p className="text-xs text-blue-200 leading-relaxed mb-4">
+                    Unlock unlimited ATS scans, AI resume optimization, job applications, and priority support.
+                </p>
+                <button
+                    type="button"
+                    onClick={() => router.push('/payments')}
+                    data-testid="upgrade-now-btn"
+                    className="w-full cursor-pointer bg-white text-[#1E3A5F] text-sm font-semibold rounded-lg px-4 py-2.5 hover:bg-blue-50 transition"
+                >
+                    Upgrade Now
+                </button>
+            </div>
+
+            {/* ── Need Help ── */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
+                        <MessageSquare className="w-4 h-4 text-gray-500" />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800">Need Help?</p>
+                </div>
+                <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+                    Get expert advice on building and optimising your profile.
+                </p>
+                <a
+                    href="mailto:support@careerbot.ai"
+                    data-testid="contact-support-btn"
+                    className="w-full inline-block cursor-pointer text-center text-sm font-medium text-gray-700 border border-gray-200 bg-gray-50 hover:bg-gray-100 rounded-lg px-4 py-2.5 transition"
+                >
+                    Contact Support
+                </a>
+            </div>
+
             <LinkedinImportModal
                 open={linkedinModalOpen}
                 onClose={() => setLinkedinModalOpen(false)}
                 onSubmit={handleLinkedInImport}
             />
-
         </div>
     );
 };

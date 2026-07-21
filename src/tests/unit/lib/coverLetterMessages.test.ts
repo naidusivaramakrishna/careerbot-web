@@ -63,6 +63,18 @@ describe("warningMessage()", () => {
     );
   });
 
+  it("returns the correct message for W_COVER_LETTER_SHORT", () => {
+    expect(warningMessage("W_COVER_LETTER_SHORT")).toBe(
+      WARNING_MESSAGES.W_COVER_LETTER_SHORT
+    );
+  });
+
+  it("returns the correct message for W_COVER_LETTER_LONG", () => {
+    expect(warningMessage("W_COVER_LETTER_LONG")).toBe(
+      WARNING_MESSAGES.W_COVER_LETTER_LONG
+    );
+  });
+
   it("returns UNKNOWN_WARNING_MESSAGE for an unrecognized code", () => {
     expect(warningMessage("W_COVER_LETTER_FUTURE_CODE")).toBe(
       UNKNOWN_WARNING_MESSAGE
@@ -91,6 +103,8 @@ describe("WARNING_MESSAGES", () => {
     "W_COVER_LETTER_LOW_CONFIDENCE_FACT",
     "W_COVER_LETTER_INVALID_JD",
     "W_COVER_LETTER_FALLBACK_USED",
+    "W_COVER_LETTER_SHORT",
+    "W_COVER_LETTER_LONG",
   ];
 
   it.each(EXPECTED_KEYS)("has key %s", (key) => {

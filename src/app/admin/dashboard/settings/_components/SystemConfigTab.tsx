@@ -4,7 +4,7 @@ import Switch from '@/components/common/Switch';
 import { useSystemConfig } from '../hooks/useSystemConfig';
 import SectionHeader from './SectionHeader';
 import LoadingSpinner from './LoadingSpinner';
-import { FILE_SIZE_OPTIONS, FILE_TYPES, LOGIN_METHODS } from '../utils';
+import { LOGIN_METHODS } from '../utils';
 
 interface CheckboxGroupProps {
     label: string;
@@ -149,31 +149,11 @@ export const SystemConfigTab = memo<SystemConfigTabProps>(({ isActive }) => {
                                 onChange={(v) => updateConfigField('maximum_users', parseInt(v) || 0)}
                             />
 
-                            <div>
-                                <p className="text-sm font-semibold">Max File Size (MB)</p>
-                                <select
-                                    className="w-full border border-[#8A8A8A] rounded-sm p-2 mt-1"
-                                    value={systemConfig.max_file_size_mb}
-                                    onChange={(e) => updateConfigField('max_file_size_mb', parseInt(e.target.value))}
-                                >
-                                    {FILE_SIZE_OPTIONS.map((size) => (
-                                        <option key={size} value={size}>{size}MB</option>
-                                    ))}
-                                </select>
-                            </div>
-
                             <ConfigInput
                                 label="API Requests per hour"
                                 type="number"
                                 value={systemConfig.api_requests_per_hour}
                                 onChange={(v) => updateConfigField('api_requests_per_hour', parseInt(v) || 0)}
-                            />
-
-                            <ConfigInput
-                                label="File Uploads per hour"
-                                type="number"
-                                value={systemConfig.file_uploads_per_hour}
-                                onChange={(v) => updateConfigField('file_uploads_per_hour', parseInt(v) || 0)}
                             />
 
                             <CheckboxGroup
@@ -182,14 +162,7 @@ export const SystemConfigTab = memo<SystemConfigTabProps>(({ isActive }) => {
                                 selected={systemConfig.allowed_login_methods}
                                 onToggle={toggleLoginMethod}
                             />
-
-                            <CheckboxGroup
-                                label="Allowed File Types"
-                                options={FILE_TYPES}
-                                selected={systemConfig.allowed_file_types}
-                                onToggle={toggleFileType}
-                                format={(v) => v.toUpperCase()}
-                            />
+                            
                         </div>
 
                         {/* Buttons */}

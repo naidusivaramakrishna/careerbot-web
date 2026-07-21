@@ -1,4 +1,4 @@
-import { Calendar, Pencil, Trash2 } from "lucide-react";
+import { Award, Calendar, Pencil, Trash2 } from "lucide-react";
 import { formatDateRange } from "@/utils/formatDate";
 import { Certification } from "@/api/userApi";
 
@@ -14,43 +14,47 @@ export default function CertificationCard({ cert, index, onEdit, onDelete }: Pro
         <div
             key={cert.id || index}
             data-testid={`certification-card-${index}`}
-            className="mb-4 bg-white border border-gray-300 flex items-start justify-between rounded-xl py-6 shadow-sm px-4 gap-2"
+            className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-4 flex items-start justify-between gap-3"
         >
-            <div>
-                {cert.certification_name && (
-                    <h3 className="font-semibold text-black/80 text-lg">
-                        Certification: <span className="text-black">{cert.certification_name}</span>
-                    </h3>
-                )}
-                {cert.issuer && (
-                    <p className="text-base font-semibold text-black/80">
-                        Issuer: <span className="text-[#2200FF]">{cert.issuer}</span>
-                    </p>
-                )}
-                {formatDateRange(cert.start_date, cert.end_date) && (
-                    <div className="flex gap-1 items-center text-neutral-500 my-2">
-                        <Calendar className="w-5 h-5" />
-                        <span className="text-sm">{formatDateRange(cert.start_date, cert.end_date)}</span>
-                    </div>
-                )}
+            <div className="flex gap-3 min-w-0">
+                <div className="w-9 h-9 bg-[#EEF3FB] rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <Award className="w-5 h-5 text-[#2257a7]" />
+                </div>
+                <div className="min-w-0">
+                    {cert.certification_name && (
+                        <h3 className="font-semibold text-sm text-gray-900 leading-snug">
+                            {cert.certification_name}
+                        </h3>
+                    )}
+                    {cert.issuer && (
+                        <p className="text-sm text-[#2257a7] font-medium mt-0.5">{cert.issuer}</p>
+                    )}
+                    {formatDateRange(cert.start_date, cert.end_date) && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500 mt-2">
+                            <Calendar className="w-3.5 h-3.5 shrink-0" />
+                            {formatDateRange(cert.start_date, cert.end_date)}
+                        </span>
+                    )}
+                </div>
             </div>
-            <div className="flex gap-2 mt-2">
+
+            <div className="flex gap-1.5 shrink-0 mt-0.5">
                 <button
                     type="button"
                     data-testid={`certification-edit-btn-${index}`}
                     onClick={() => onEdit(cert, index)}
-                    className="text-sm cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
+                    className="flex items-center gap-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 hover:bg-gray-100 rounded-md px-2.5 py-1.5 transition"
                 >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-3.5 h-3.5" />
                     Edit
                 </button>
                 <button
                     type="button"
                     data-testid={`certification-delete-btn-${index}`}
                     onClick={() => onDelete(cert.id, index)}
-                    className="border border-red-300 text-sm  cursor-pointer shadow-xs px-3 py-1 hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-2"
+                    className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-md px-2.5 py-1.5 transition"
                 >
-                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <Trash2 className="w-3.5 h-3.5" />
                     Delete
                 </button>
             </div>

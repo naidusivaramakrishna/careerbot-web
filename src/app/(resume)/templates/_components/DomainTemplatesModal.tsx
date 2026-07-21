@@ -9,6 +9,8 @@ import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
 import { getSectionOrderByDomainAndCareer } from '../_utils/domainSectionOrder';
 import { Button } from '@/components/ui/Button';
+import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from '../_constants/templateImages';
+import { resolveTemplateImageUrl } from '@/lib/imageUtils';
 
 interface DomainTemplatesModalProps {
   domainName: string;
@@ -21,24 +23,6 @@ interface DomainTemplatesModalProps {
 
 const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Manager'];
 
-const FALLBACK_IMAGE = '/assets/templates/template-1.jpg';
-
-const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
-  core_engineering: '/assets/templates/core-engineering.png',
-  software_engineering: '/assets/templates/software_engineering.png',
-  healthcare: '/assets/templates/healthcare.png',
-  finance: '/assets/templates/finance.png',
-  education: '/assets/templates/education.png',
-  cybersecurity: '/assets/templates/cybersecurity.png',
-  electronics_and_vlsi: '/assets/templates/electronics_vlsi.png',
-  government_standard: '/assets/templates/government_standard.png',
-  legal: '/assets/templates/legal.png',
-  logistics_warehouse_operations: '/assets/templates/logistics.png',
-  marine_merchant_navy: '/assets/templates/marine_merchant.png',
-  modern_minimal_template: '/assets/templates/modern_minimal.png',
-  research_scholar: '/assets/templates/research_scholar.png',
-  sales_business_development: '/assets/templates/sales_business.png',
-};
 
 // Map domain names to domain_family codes (handles both lowercase and title case)
 const DOMAIN_NAME_MAP: Record<string, string> = {
@@ -81,9 +65,7 @@ export default function DomainTemplatesModal({
   source,
 }: DomainTemplatesModalProps) {
   const router = useRouter();
-  const [familyImage, setFamilyImage] = useState(
-    DOMAIN_FAMILY_IMAGES[domainFamily] || FALLBACK_IMAGE
-  );
+  const domainFallback = DOMAIN_FAMILY_IMAGES[domainFamily] || FALLBACK_TEMPLATE_IMAGE;
 
   // Sort templates by career level
   const sortedTemplates = useMemo(() => {
@@ -158,7 +140,7 @@ export default function DomainTemplatesModal({
         const careerLevelData = sortedTemplates.map(t => ({
           id: t.id?.toString() || t._id || '',
           name: t.name,
-          preview_url: t.preview_url || '/assets/templates/template-1.jpg',
+          preview_url: t.preview_url || FALLBACK_TEMPLATE_IMAGE,
           description: t.description || 'Professional resume template',
           ats_friendly: t.ats_friendly || true,
           subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
@@ -184,7 +166,14 @@ export default function DomainTemplatesModal({
         } else if (nameStr.includes('manager')) {
           careerLevel = 'manager';
         }
-        const sectionOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
+        const newDomainOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
+        // Preserve extra sections the user had added before opening this modal
+        const addableExtras = new Set(['Achievements', 'Publications', 'Volunteering', 'Awards', 'Hobbies', 'Interests', 'Languages', 'References']);
+        const existingOrderStr = localStorage.getItem(sectionOrderKey);
+        const existingOrder: string[] = existingOrderStr ? (() => { try { return JSON.parse(existingOrderStr) } catch { return [] } })() : [];
+        const newOrderSet = new Set(newDomainOrder);
+        const preservedExtras = existingOrder.filter(name => addableExtras.has(name) && !newOrderSet.has(name));
+        const sectionOrder = [...newDomainOrder, ...preservedExtras];
         localStorage.setItem(sectionOrderKey, JSON.stringify(sectionOrder));
         logger.info('Stored sectionOrder with domain:', correctDomainFamily, 'career level:', careerLevel, 'Order:', sectionOrder);
       }
@@ -243,12 +232,12 @@ export default function DomainTemplatesModal({
           <div className="flex-1">
             <div className="bg-linear-to-br from-slate-50 via-sky-50/40 to-teal-50/30 ring-1 ring-slate-200 rounded-xl overflow-hidden flex items-center justify-center p-4 h-full">
               <Image
-                src={familyImage}
+                src={resolveTemplateImageUrl(selectedTemplate.preview_url) || domainFallback}
                 alt={selectedTemplate.name}
                 width={400}
                 height={500}
                 className="w-full h-auto object-contain drop-shadow-md"
-                onError={() => setFamilyImage(FALLBACK_IMAGE)}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = domainFallback; }}
               />
             </div>
           </div>
@@ -286,13 +275,16 @@ export default function DomainTemplatesModal({
                       }`}
                     >
                       <Image
-                        src={familyImage}
+                        src={resolveTemplateImageUrl(template.preview_url) || domainFallback}
                         alt={careerLevel}
                         width={160}
                         height={200}
                         className="w-full h-auto object-contain group-hover:scale-105 transition-transform"
-                        onError={() => setFamilyImage(FALLBACK_IMAGE)}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = domainFallback; }}
                       />
+                      <span className="absolute top-2 left-2 bg-[#2557a7] text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full shadow-sm pointer-events-none">
+                        100% ATS Friendly
+                      </span>
                       {isSelected && (
                         <div className="absolute top-2 right-2 bg-linear-to-br from-teal-500 to-sky-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg ring-2 ring-white">
                           <span className="text-sm font-bold">✓</span>

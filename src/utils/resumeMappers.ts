@@ -361,15 +361,17 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
 
     return {
       name: certName,
-      issuer:
+      issuedBy:
         str(cert.issuing_organization) ||
         str(cert.issued_by) ||
         str(cert.organization) ||
         str(cert.issuer) ||
         str(cert.issuedBy) ||
-        str(pMatch?.issuer) ||
         str(pMatch?.issuedBy) ||
+        str(pMatch?.issuer) ||
         str(pMatch?.issuing_organization),
+      year:
+        str(cert.year) || str(pMatch?.year),
       issueDate:
         str(cert.issueDate) || str(cert.year) || str(cert.date) ||
         str(pMatch?.issueDate) || str(pMatch?.date) || str(pMatch?.year),

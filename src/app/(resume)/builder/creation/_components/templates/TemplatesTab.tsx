@@ -11,25 +11,8 @@ import CatalogueTab from "./CatalogueTab";
 import { getProfile } from "@/api/userApi";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder";
-
-const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
-  core_engineering: '/assets/templates/core-engineering.png',
-  software_engineering: '/assets/templates/software_engineering.png',
-  healthcare: '/assets/templates/healthcare.png',
-  finance: '/assets/templates/finance.png',
-  education: '/assets/templates/education.png',
-  cybersecurity: '/assets/templates/cybersecurity.png',
-  electronics_and_vlsi: '/assets/templates/electronics_vlsi.png',
-  government_standard: '/assets/templates/government_standard.png',
-  legal: '/assets/templates/legal.png',
-  logistics_warehouse_operations: '/assets/templates/logistics.png',
-  marine_merchant_navy: '/assets/templates/marine_merchant.png',
-  modern_minimal_template: '/assets/templates/modern_minimal.png',
-  research_scholar: '/assets/templates/research_scholar.png',
-  sales_business_development: '/assets/templates/sales_business.png',
-};
-
-const DEFAULT_CAREER_IMAGE = '/assets/templates/template-1.jpg';
+import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from "@/app/(resume)/templates/_constants/templateImages";
+import { resolveTemplateImageUrl } from "@/lib/imageUtils";
 
 // Interface updated with mongoId (_id)
 interface TransformedTemplate {
@@ -135,9 +118,11 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
     domain_display_name?: string;
   }> | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [careerImgErrors, setCareerImgErrors] = useState<Record<string, boolean>>({});
+  const [previewImgSrc, setPreviewImgSrc] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const { selectedTemplate, setSelectedTemplate, setResumeStyle, setSectionOrder } = useResume();
+  const { selectedTemplate, setSelectedTemplate, setResumeStyle, setSectionOrder, sectionOrder } = useResume();
 
   // Get user email for scoped localStorage keys
   useEffect(() => {
@@ -254,23 +239,25 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             .map((tpl: TemplateResponse) => {
               const templateId = tpl.template_id || tpl.id?.toString() || "0";
 
-              // ✅ Use mapped path (guaranteed to exist after filter)
-              const previewUrl = templateImageMap[templateId];
+              // Prefer backend preview_url; fall back to local mapped image
+              const previewUrl = tpl.preview_url
+                ? resolveTemplateImageUrl(tpl.preview_url)
+                : (templateImageMap[templateId] || FALLBACK_TEMPLATE_IMAGE);
 
               return {
                 id: tpl.id?.toString() || tpl.template_id || "0",
-                // ✅ mongoId should contain the 'id' from API response for backend calls
                 mongoId: tpl.id?.toString() || tpl._id || "0",
                 template_id: templateId,
                 name: tpl.name || "Template",
                 subtitle: tpl.category ? (tpl.category.charAt(0).toUpperCase() + tpl.category.slice(1)) : "Template",
-                preview_url: previewUrl, // ✅ Use correct mapped path, ignore API preview_url
+                preview_url: previewUrl,
                 atsFriendly: tpl.ats_friendly ?? true,
                 description: tpl.description || "Professional resume template",
                 category: tpl.category || "modern"
               };
             });
           logger.info("Templates transformed:", transformedTemplates.length, transformedTemplates);
+          setTemplates(transformedTemplates);
         } else {
           logger.warn("No templates returned from API for category:", selectedCategory);
           // Only use defaults if category is "All", otherwise show empty
@@ -330,6 +317,14 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   }, [dropdownOpen, templates]);
 
   useEffect(() => {
+    if (previewTemplate) {
+      const fallback = DOMAIN_FAMILY_IMAGES[previewTemplate.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE;
+      const resolved = resolveTemplateImageUrl(previewTemplate.preview_url);
+      setPreviewImgSrc(resolved !== FALLBACK_TEMPLATE_IMAGE ? resolved : fallback);
+    }
+  }, [previewTemplate]);
+
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
@@ -361,11 +356,45 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         }
 
         // ✅ Validate templateId (mongoId contains the 'id' from API response)
-        const templateId = previewTemplate.mongoId;
+        let templateId = previewTemplate.mongoId;
         if (!templateId || templateId === "0") {
           logger.error("Invalid template ID:", previewTemplate);
           toast.error("Template ID is not available. Please try refreshing the page.");
           return;
+        }
+
+        // Safety-net: if the stored ID is a synthetic "familyId-levelIdx" composite
+        // (e.g. "4-1") from the browse-templates flow, resolve the real backend ID
+        // just-in-time by fetching all templates and matching on domain_family + name.
+        if (/^\d+-\d+$/.test(templateId) && previewTemplate.category === 'career-level') {
+          try {
+            const domainFamily = previewTemplate.domain_family;
+            const allTemplates = await getTemplatesByCategory();
+            const familyTemplates = allTemplates.filter(
+              t => ((t as unknown) as Record<string, unknown>).domain_family === domainFamily
+            );
+            const previewName = (previewTemplate.name || '').toLowerCase();
+            const match = familyTemplates.find(t => {
+              const apiName = (t.name || '').toLowerCase();
+              if (previewName.includes('early') && previewName.includes('career'))
+                return apiName.includes('early') && apiName.includes('career');
+              if (previewName.includes('senior')) return apiName.includes('senior');
+              if (previewName.includes('lead'))   return apiName.includes('lead');
+              if (previewName.includes('mid'))    return apiName.includes('mid');
+              if (previewName.includes('manager')) return apiName.includes('manager');
+              if (previewName.includes('fresher')) return apiName.includes('fresher');
+              return false;
+            });
+            const resolvedId = match ? String(match.id || '') || match._id || '' : '';
+            if (resolvedId) {
+              templateId = resolvedId;
+              logger.info('Resolved synthetic template ID', previewTemplate.mongoId, '→', resolvedId);
+            } else {
+              logger.warn('Could not resolve template ID for', previewTemplate.name, '— proceeding with stored value');
+            }
+          } catch (resolveErr) {
+            logger.warn('Failed to resolve template ID, proceeding with stored value:', resolveErr);
+          }
         }
 
         // ✅ CORRECTED: Pass 'id' from templates list API response as template_id
@@ -497,9 +526,12 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                 {careerLevelData.map((careerTpl, index) => {
                   // Match by template name AND ID for safety
                   const isSelected = (appliedTemplateId === careerTpl.id || appliedTemplateId === String(careerTpl.id)) && careerTpl.name;
-                  const careerLevels = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level'];
+                  const careerLevels = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Manager'];
                   const careerLevel = careerLevels[index] || 'Custom';
-                  const familyImage = DOMAIN_FAMILY_IMAGES[careerTpl.domain_family || ''] || DEFAULT_CAREER_IMAGE;
+                  const familyImage = DOMAIN_FAMILY_IMAGES[careerTpl.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE;
+                  const cardImgSrc = !careerImgErrors[careerTpl.id] && careerTpl.preview_url
+                    ? resolveTemplateImageUrl(careerTpl.preview_url)
+                    : familyImage;
                   return (
                     <div
                       key={`career-${careerTpl.id}-${index}`}
@@ -509,28 +541,28 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
 
                         // ✅ Update sectionOrder in localStorage AND context when career level changes
                         try {
-                          const templateName = careerTpl.name.toLowerCase();
-                          let careerLevel: string | undefined;
-                          if (templateName.includes('early') && templateName.includes('career')) {
-                            careerLevel = 'early career';
-                          } else if (templateName.includes('senior')) {
-                            careerLevel = 'senior-level';
-                          } else if (templateName.includes('mid')) {
-                            careerLevel = 'mid-level';
-                          } else if (templateName.includes('fresher')) {
-                            careerLevel = 'fresher';
-                          } else if (templateName.includes('manager')) {
-                            careerLevel = 'manager';
-                          }
-
-                          // Get section order based on both career level AND domain family
+                          // Use index-based careerLevel (already correctly set above from the
+                          // careerLevels array) — avoids relying on backend template name keywords
+                          // which may not match expected strings like 'fresher'/'mid'/'senior'.
                           const newSectionOrder = getSectionOrderByDomainAndCareer(careerTpl.domain_family, careerLevel);
-                          const sectionOrderKey = userEmail ? `sectionOrder_${userEmail}` : 'sectionOrder';
-                          const domainFamilyKey = userEmail ? `domainFamily_${userEmail}` : 'domainFamily';
+                          // Use localStorage.getItem('userEmail') directly — same source as ResumeContext's polling
+                          // and ResumeSide.handleAddSection, so the key always matches.
+                          const _lsEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+                          const sectionOrderKey = _lsEmail ? `sectionOrder_${_lsEmail}` : 'sectionOrder';
+                          const domainFamilyKey = _lsEmail ? `domainFamily_${_lsEmail}` : 'domainFamily';
 
-                          localStorage.setItem(sectionOrderKey, JSON.stringify(newSectionOrder));
+                          // Preserve any extra sections the user had added before switching template.
+                          // Read from context (sectionOrder) — always up-to-date, avoids stale localStorage reads.
+                          const addableExtras = new Set(['Achievements', 'Publications', 'Volunteering', 'Awards', 'Hobbies', 'Interests', 'Languages', 'References']);
+                          const newOrderSet = new Set(newSectionOrder);
+                          const preservedExtras = sectionOrder.filter(name => addableExtras.has(name) && !newOrderSet.has(name));
+                          const finalOrder = [...newSectionOrder, ...preservedExtras];
+
+                          // Write to localStorage FIRST so that ResumeContext's useEffect([selectedTemplate])
+                          // reads the correct finalOrder when setSelectedTemplate(null) triggers it below.
+                          localStorage.setItem(sectionOrderKey, JSON.stringify(finalOrder));
                           localStorage.setItem(domainFamilyKey, careerTpl.domain_family || '');
-                          setSectionOrder(newSectionOrder);
+                          setSectionOrder(finalOrder);
 
                           logger.info('Updated sectionOrder for career level:', careerLevel, 'domain:', careerTpl.domain_family, 'Order:', newSectionOrder);
                         } catch (err) {
@@ -563,11 +595,12 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                         100% ATS Friendly
                       </span>
                       <Image
-                        src={familyImage}
+                        src={cardImgSrc}
                         alt={careerLevel}
                         width={160}
                         height={200}
                         className="w-full h-44 mt-6 object-contain bg-gray-100"
+                        onError={() => setCareerImgErrors(prev => ({ ...prev, [careerTpl.id]: true }))}
                       />
                       <div className="w-full px-2 py-2 flex flex-col items-center">
                         <p className="text-xs font-semibold text-gray-700 text-center">
@@ -578,14 +611,16 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                             let careerLevel = '';
                             if (nameStr.includes('early') && nameStr.includes('career')) {
                               careerLevel = 'Early Career';
-                            } else if (nameStr.includes('senior')) {
-                              careerLevel = 'Senior-Level';
-                            } else if (nameStr.includes('mid')) {
-                              careerLevel = 'Mid-Level';
                             } else if (nameStr.includes('fresher')) {
                               careerLevel = 'Fresher';
                             } else if (nameStr.includes('manager')) {
                               careerLevel = 'Manager';
+                            } else if (nameStr.includes('lead')) {
+                              careerLevel = 'Lead';
+                            } else if (nameStr.includes('senior')) {
+                              careerLevel = 'Senior-Level';
+                            } else if (nameStr.includes('mid')) {
+                              careerLevel = 'Mid-Level';
                             }
 
                             if (careerLevel && careerTpl.domain_display_name) {
@@ -690,11 +725,15 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
               <div className="flex-1 bg-gray-100 p-6 overflow-y-auto">
                 <div className="bg-white rounded-lg shadow-lg mx-auto" style={{ maxWidth: '600px' }}>
                   <Image
-                    src={previewTemplate.category === 'career-level' ? (DOMAIN_FAMILY_IMAGES[previewTemplate.domain_family || ''] || DEFAULT_CAREER_IMAGE) : previewTemplate.preview_url}
+                    src={previewImgSrc || FALLBACK_TEMPLATE_IMAGE}
                     alt={previewTemplate.name}
                     width={600}
                     height={800}
                     className="w-full h-auto object-contain"
+                    onError={() => {
+                      const fallback = DOMAIN_FAMILY_IMAGES[previewTemplate.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE;
+                      setPreviewImgSrc(fallback);
+                    }}
                   />
                 </div>
               </div>
@@ -714,14 +753,16 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                         let careerLevel = '';
                         if (nameStr.includes('early') && nameStr.includes('career')) {
                           careerLevel = 'Early Career';
-                        } else if (nameStr.includes('senior')) {
-                          careerLevel = 'Senior-Level';
-                        } else if (nameStr.includes('mid')) {
-                          careerLevel = 'Mid-Level';
                         } else if (nameStr.includes('fresher')) {
                           careerLevel = 'Fresher';
                         } else if (nameStr.includes('manager')) {
                           careerLevel = 'Manager';
+                        } else if (nameStr.includes('lead')) {
+                          careerLevel = 'Lead';
+                        } else if (nameStr.includes('senior')) {
+                          careerLevel = 'Senior-Level';
+                        } else if (nameStr.includes('mid')) {
+                          careerLevel = 'Mid-Level';
                         }
 
                         if (careerLevel && previewTemplate.domain_display_name) {

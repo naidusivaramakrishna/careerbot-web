@@ -17,19 +17,23 @@ import type { CoverLetterReason } from "@/types/coverLetter";
 // Order matches the AI side's degradation-to-warning map.
 export const WARNING_MESSAGES = {
   W_COVER_LETTER_LOW_JD_MATCH:
-    "JD match is moderate, not strong.",
+    "The job match is moderate. Review the letter against the job post before sending.",
   W_COVER_LETTER_THIN_RESUME:
-    "Limited evidence from your resume for this JD.",
+    "Your resume has limited evidence for this role. Add stronger resume details if the draft feels generic.",
   W_COVER_LETTER_UNBACKED_CLAIM:
-    "Removed a claim that couldn't be supported.",
+    "One unsupported claim was removed to keep the letter accurate.",
   W_COVER_LETTER_VERIFIER_UNCLEAR:
-    "Some claims couldn't be verified with high confidence.",
+    "Some claims could not be verified with high confidence. Check names, tools, and achievements.",
   W_COVER_LETTER_LOW_CONFIDENCE_FACT:
-    "Used resume facts that had low confidence.",
+    "Some resume details were parsed with lower confidence. Review facts before exporting.",
   W_COVER_LETTER_INVALID_JD:
-    "The job description couldn't be fully parsed.",
+    "The job description was not fully parsed. Recheck the role requirements in the draft.",
   W_COVER_LETTER_FALLBACK_USED:
-    "We used a backup generation path.",
+    "The draft used a fallback generation path. Review tone and role fit before exporting.",
+  W_COVER_LETTER_SHORT:
+    "The draft is shorter than usual. Add more detail if it feels thin.",
+  W_COVER_LETTER_LONG:
+    "The draft is longer than recommended. Trim before exporting.",
 } as const satisfies Record<string, string>;
 
 /**
@@ -38,13 +42,13 @@ export const WARNING_MESSAGES = {
  * Log the unknown code to Sentry/equivalent + render this string.
  */
 export const UNKNOWN_WARNING_MESSAGE =
-  "There's a generation note we haven't surfaced yet — check the draft carefully.";
+  "Review the draft for accuracy, tone, and role fit before exporting.";
 
 /** Resolve a backend warning code to human copy + unknown fallback. */
 export function warningMessage(code: string): string {
   return (
     (WARNING_MESSAGES as Record<string, string>)[code] ??
-    UNKNOWN_WARNING_MESSAGE
+    "Review the draft for accuracy, tone, and role fit before exporting."
   );
 }
 
@@ -72,6 +76,12 @@ export const FAILED_REASON_MESSAGES: Record<CoverLetterReason, string> = {
     "Every meaningful claim couldn't be supported and was removed.",
   low_confidence_fact_used:
     "No high-confidence facts were available to ground the letter.",
+  short_letter_warning:
+    "The draft is shorter than usual. Add more detail if it feels thin.",
+  long_letter_warning:
+    "The draft is longer than recommended. Trim before exporting.",
+  review_required:
+    "The draft requires review before use.",
 };
 
 // ── api / network error reasons (raised by coverLetterApi.ts) ──

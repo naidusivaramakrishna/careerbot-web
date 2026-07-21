@@ -3,6 +3,12 @@
 import React, { useState } from "react";
 import { CheckCircle2, XCircle, ChevronDown, ChevronUp } from "lucide-react";
 
+const IMPORTANCE_STYLES: Record<string, { bg: string; border: string; color: string }> = {
+  required: { bg: "#fff0f0", border: "#fecaca", color: "#dc2626" },
+  important: { bg: "#fffbeb", border: "#fde68a", color: "#d97706" },
+  "nice to have": { bg: "#f8fafc", border: "#e2e8f0", color: "#64748b" },
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseScore(raw: any): number {
   if (typeof raw === "number") return Math.min(100, Math.max(0, raw));
@@ -36,7 +42,7 @@ function SectionCard({ label, score, passText, children }: SectionCardProps) {
   const cardBg    = passed ? "linear-gradient(145deg,#f0fdf4,#fff)" : "linear-gradient(145deg,#fff,#fff)";
 
   return (
-    <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden" style={{ background: cardBg }}>
+    <div className="rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden" style={{ background: cardBg }}>
       <div className="flex">
         <div className="flex-1 px-5 py-4">
           {/* Title row */}
@@ -183,17 +189,20 @@ export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
         <SectionCard label="Hard Skills" score={techScore} passText="Your resume includes all of the Hard skills.">
           {missingTech.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {missingTech.map((s, i) => (
+              {missingTech.map((s, i) => {
+                const style = IMPORTANCE_STYLES[s.importance] ?? IMPORTANCE_STYLES.required;
+                return (
                 <span
                   key={i}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold"
-                  style={{ background: "#fff0f0", border: "1px solid #fecaca", color: "#dc2626" }}
+                  style={{ background: style.bg, border: `1px solid ${style.border}`, color: style.color }}
                 >
                   <XCircle className="w-3 h-3 shrink-0" />
                   {s.skill}
                   <span className="text-[10px] font-medium opacity-60">· {s.importance}</span>
                 </span>
-              ))}
+                );
+              })}
             </div>
           )}
         </SectionCard>

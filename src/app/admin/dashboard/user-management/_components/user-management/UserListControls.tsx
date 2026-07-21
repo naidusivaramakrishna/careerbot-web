@@ -15,10 +15,8 @@ interface UserListControlsProps {
 
 const SUBSCRIPTION_MAP: Record<string, string> = {
     'Free': 'free',
-    'Basic': 'basic',
-    'Premium': 'premium',
     'Pro': 'pro',
-    'Enterprise': 'enterprise'
+    'Max': 'max',
 }
 
 const ROLE_MAP: Record<string, string> = {
@@ -80,7 +78,7 @@ export const UserListControls = memo(({
 
             {/* Subscription Dropdown */}
             <Dropdown
-                options={['Subscription', 'Free', 'Basic', 'Premium', 'Pro', 'Enterprise']}
+                options={['Subscription', 'Free', 'Pro', 'Max']}
                 defaultValue="Subscription"
                 onChange={handleSubscriptionChange}
                 bgColor="bg-gray-100"

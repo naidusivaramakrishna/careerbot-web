@@ -9,10 +9,10 @@ export default function CoverLetterDashboardShell({ children }: { children: Reac
   return (
     <DashboardProvider>
       <Header />
-      <div className="flex min-h-screen pt-14" style={{ backgroundColor: '#eef2fb' }}>
+      <div className="flex h-screen overflow-hidden pt-14" style={{ backgroundColor: '#eef2fb' }}>
         <Sidebar />
         <div
-          className="flex-1 overflow-auto"
+          className="h-[calc(100vh-3.5rem)] flex-1 overflow-y-auto overflow-x-hidden"
           style={{ marginLeft: 'var(--sidebar-width, 64px)', transition: 'margin 300ms' }}
         >
           {children}

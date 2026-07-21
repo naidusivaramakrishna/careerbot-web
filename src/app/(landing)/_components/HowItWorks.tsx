@@ -1,90 +1,81 @@
 'use client';
 
-import { FileText, Search, MessageSquare } from 'lucide-react';
+import { FileText, Search, Send } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 
-interface Step {
-  number: string;
-  icon: LucideIcon;
-  title: string;
-  description: string;
-}
-
-const steps: Step[] = [
+const steps: { icon: LucideIcon; title: string; description: string }[] = [
   {
-    number: '1',
     icon: FileText,
     title: 'Upload or build your resume',
-    description: 'Start from scratch or upload your current resume. ~2 min to get started.',
+    description: 'Start from scratch or upload your current resume.',
   },
   {
-    number: '2',
     icon: Search,
-    title: 'Scan and tailor it for each job',
-    description: 'Paste a job description and see your match score. Update keywords in ~5 min.',
+    title: 'Scan and tailor for each job',
+    description: 'Paste a job description and see your match score.',
   },
   {
-    number: '3',
-    icon: MessageSquare,
+    icon: Send,
     title: 'Apply, track, and prepare',
-    description: 'Generate a cover letter, practice the interview, and apply with confidence.',
+    description: 'Generate a cover letter, practice the interview, and apply.',
   },
 ];
 
 export default function HowItWorks() {
   return (
-    <section id="how-it-works" className="relative overflow-hidden bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] py-24">
-      <div className="relative max-w-6xl mx-auto px-4">
-        <motion.div
-          className="text-center mb-14"
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-80px' }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-        >
-          <span className="rounded-full border border-blue-100 bg-white px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-[#2557a7] shadow-sm">
-            How It Works
+    <section id="how-it-works" className="relative overflow-hidden bg-[#062b66] py-12 text-white">
+      <div
+        aria-hidden="true"
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(circle at 78% 34%, rgba(25,108,224,0.35), transparent 24%), linear-gradient(90deg,#06285f 0%,#073372 58%,#05245b 100%)',
+        }}
+      />
+
+      <div className="relative mx-auto grid max-w-[1240px] items-center gap-10 px-4 lg:grid-cols-[1.08fr_0.92fr] lg:px-8">
+        <div>
+          <span className="inline-flex rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase text-blue-100 ring-1 ring-white/15">
+            How it works
           </span>
-          <h2 className="mt-5 bg-gradient-to-r from-slate-950 via-[#2557a7] to-teal-600 bg-clip-text text-3xl md:text-4xl font-bold text-transparent">
-            Get Hired in 3 Simple Steps
-          </h2>
-        </motion.div>
+          <h2 className="mt-4 text-[30px] font-black leading-tight md:text-[36px]">Get Hired in 3 Simple Steps</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative">
-          {/* Gradient connector - desktop only */}
-          <div
-            className="hidden md:block absolute left-[calc(16.67%+36px)] right-[calc(16.67%+36px)] h-0.5 bg-gradient-to-r from-blue-200 via-teal-400 to-blue-200 rounded-full"
-            style={{ top: '56px' }}
-            aria-hidden="true"
-          />
-
-          {steps.map((step, i) => {
-            const Icon = step.icon;
-            return (
-              <motion.div
-                key={step.number}
-                className="group flex flex-col items-center gap-4 rounded-2xl border border-white bg-white p-6 text-center shadow-lg shadow-slate-200/70 ring-1 ring-slate-200/80 transition-all duration-300 hover:-translate-y-1 hover:border-blue-100 hover:shadow-xl hover:shadow-blue-100/60"
-                initial={{ opacity: 0, y: 28 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-60px' }}
-                transition={{ duration: 0.5, ease: 'easeOut', delay: i * 0.12 }}
-              >
-                <div className="relative flex-shrink-0">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2557a7] to-teal-600 shadow-md transition-transform duration-300 group-hover:scale-105">
-                    <Icon size={28} color="white" />
+          <div className="relative mt-8 grid gap-8 md:grid-cols-3">
+            <div className="absolute left-[15%] right-[15%] top-8 hidden border-t border-dashed border-blue-200/45 md:block" />
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <motion.div
+                  key={step.title}
+                  className="relative text-center"
+                  initial={false}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-50px' }}
+                  transition={{ duration: 0.4, delay: index * 0.08 }}
+                >
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white text-[#2b78bc] shadow-[0_16px_28px_rgba(0,0,0,0.16)]">
+                    <Icon size={25} strokeWidth={2.7} />
                   </div>
-                  <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-white border-2 border-[#2557a7] text-[#2557a7] text-xs font-bold flex items-center justify-center shadow-sm">
-                    {step.number}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-[#111827]">{step.title}</h3>
-                  <p className="mt-1.5 text-sm text-[#6B7280] leading-relaxed">{step.description}</p>
-                </div>
-              </motion.div>
-            );
-          })}
+                  <h3 className="mt-5 text-sm font-black leading-snug">{step.title}</h3>
+                  <p className="mx-auto mt-2 max-w-[180px] text-xs font-medium leading-5 text-blue-100">{step.description}</p>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="relative hidden min-h-[250px] lg:block">
+          <Image
+            src="/images/landing/how-art-v2.png"
+            alt="CareerBot job preparation illustration"
+            width={1792}
+            height={1024}
+            loading="eager"
+            className="ml-auto h-auto w-[540px] object-contain drop-shadow-[0_24px_48px_rgba(0,0,0,0.18)]"
+            unoptimized
+          />
         </div>
       </div>
     </section>

@@ -53,12 +53,27 @@ export interface PendingActionResponse {
   status: 'pending' | 'refunded' | 'executed' | 'failed';
 }
 
+export interface ExecutedMatchResult {
+  match_id: string;
+  resume_id: string;
+  jd_id: string;
+  ats_score: string | number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  match_result: any;
+}
+
+export interface ExecuteActionResult {
+  kind: string;
+  match?: ExecutedMatchResult;
+  trace_id?: string;
+}
+
 export interface ExecuteActionResponse {
   action_id: string;
   status: string;
   credits_used: number;
   user_credits_remaining: number;
-  result: Record<string, unknown> | null;
+  result: ExecuteActionResult | null;
   error: string | null;
   completed_at: string;
 }

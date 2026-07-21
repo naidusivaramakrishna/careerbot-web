@@ -7,12 +7,15 @@ import {
   Menu,
   X,
   ChevronDown,
+  Brain,
+  Calculator,
+  Code2,
   FileText,
   ScanSearch,
   Briefcase,
   Target,
   Zap,
-  Languages,
+  MessageCircle,
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -84,11 +87,34 @@ const JOBS_ITEMS: DropdownItem[] = [
 
 const ASSESSMENT_ITEMS: DropdownItem[] = [
   {
-    icon: <Languages size={18} />,
-    label: 'English Assessment',
-    description: 'Test and improve your English',
-    href: '#coming-soon',
-    comingSoon: true,
+    icon: <Calculator size={18} />,
+    label: 'Arithmetic',
+    description: 'Percentages, ratios, time-work',
+    href: '/mock-test/custom?category=arithmetic',
+  },
+  {
+    icon: <Zap size={18} />,
+    label: 'Aptitude',
+    description: 'Quant, data, verbal ability',
+    href: '/mock-test/custom?category=aptitude',
+  },
+  {
+    icon: <Brain size={18} />,
+    label: 'Reasoning',
+    description: 'Logic, sequences, coding patterns',
+    href: '/mock-test/custom?category=reasoning',
+  },
+  {
+    icon: <Code2 size={18} />,
+    label: 'Technical',
+    description: 'DSA, SQL, OOP, programming',
+    href: '/mock-test/custom?category=technical',
+  },
+  {
+    icon: <MessageCircle size={18} />,
+    label: 'Communication Assessment',
+    description: 'Speaking and workplace communication',
+    href: '/communication',
   },
 ];
 
@@ -109,17 +135,16 @@ const DROPDOWN_GROUPS: DropdownGroup[] = [
   },
   {
     id: 'assessments',
-    label: 'Assessments',
-    sectionHeader: 'SKILL ASSESSMENTS',
+    label: 'Mock Test',
+    sectionHeader: 'MOCK TEST',
     items: ASSESSMENT_ITEMS,
-    footerNote: 'More assessments coming soon',
+    footerNote: 'Practice by skill area',
   },
 ];
 
 const DIRECT_LINKS = [
   { label: 'Cover Letter', href: '/cover-letter' },
   { label: 'Mock Interview', href: '/mock-interview' },
-  { label: 'Mock Test', href: '/mock-test' },
   { label: 'Blog', href: '/blog' },
   { label: 'Pricing', href: '/payments' },
 ];

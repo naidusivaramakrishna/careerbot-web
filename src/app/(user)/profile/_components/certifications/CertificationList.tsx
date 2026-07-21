@@ -1,6 +1,6 @@
 import { Certification } from "@/api/userApi";
 import CertificationCard from "./CertificationCard";
-import { FaAward } from "react-icons/fa";
+import { Plus } from "lucide-react";
 
 interface Props {
     certificationList: Partial<Certification>[];
@@ -11,21 +11,22 @@ interface Props {
 
 export default function CertificationList({ certificationList, onEdit, onDelete, onAdd }: Props) {
     return (
-        <>
+        <div className="flex flex-col gap-3">
             {certificationList.map((cert, index) => (
                 <CertificationCard key={cert.id || index} cert={cert} index={index} onEdit={onEdit} onDelete={onDelete} />
             ))}
-            <div className="flex justify-self-end">
+
+            <div className="flex justify-end pt-1">
                 <button
                     type="button"
                     onClick={onAdd}
                     data-testid="add-certification-btn"
-                    className="bg-[#2257a7] text-white text-sm cursor-pointer flex gap-2 items-center px-4 py-2 rounded-lg"
+                    className="flex items-center gap-1.5 text-sm font-medium text-[#2257a7] border border-[#2257a7] bg-[#EEF3FB] hover:bg-[#dde8f7] px-4 py-2 rounded-lg transition"
                 >
-                    <FaAward className="w-4 h-4" />
-                    <span>Add Certification</span>
+                    <Plus className="w-4 h-4" />
+                    Add Certification
                 </button>
             </div>
-        </>
+        </div>
     );
 }
