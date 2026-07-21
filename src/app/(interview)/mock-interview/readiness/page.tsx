@@ -8,7 +8,7 @@ import {
   ArrowRight,
   RotateCcw,
   ChevronLeft,
-  Lock,
+
   Loader2,
 } from "lucide-react";
 import { getReadiness, ReadinessResponse } from "@/api/mockInterviewApi";
@@ -77,7 +77,7 @@ export default function ReadinessPage() {
         setReadiness(data);
         if (data.ready) setReadinessPassed(true);
       })
-      .catch(() => setError("Could not load readiness status. Please try again."))
+      .catch(() => setError("Could not load practice recommendation. Please try again."))
       .finally(() => setLoading(false));
   }, [setReadinessPassed]);
 
@@ -85,7 +85,7 @@ export default function ReadinessPage() {
     return (
       <div className="max-w-sm mx-auto px-4 py-16 text-center">
         <Loader2 size={24} className="text-[#2557a7] animate-spin mx-auto mb-3" />
-        <p className="text-sm text-gray-500">Checking your readiness…</p>
+        <p className="text-sm text-gray-500">Checking your practice recommendation...</p>
       </div>
     );
   }
@@ -101,7 +101,7 @@ export default function ReadinessPage() {
         </button>
         <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
           <AlertCircle size={24} className="text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-600">{error ?? "Unable to load readiness."}</p>
+          <p className="text-sm text-gray-600">{error ?? "Unable to load practice recommendation."}</p>
           <button
             onClick={() => { setLoading(true); setError(null); getReadiness().then(setReadiness).catch(() => setError("Failed")).finally(() => setLoading(false)); }}
             className="mt-3 text-xs text-[#2557a7] hover:underline"
@@ -134,7 +134,7 @@ export default function ReadinessPage() {
             <div className="inline-block mb-3">
               <ScoreRing score={criteria.current_avg} />
             </div>
-            <h1 className="text-lg font-bold text-gray-900">You&apos;re Ready!</h1>
+            <h1 className="text-lg font-bold text-gray-900">Practice Looks Strong</h1>
             <p className="text-xs text-gray-500 mt-1">
               {criteria.rounds_completed} rounds · Avg {criteria.current_avg.toFixed(1)}/10
             </p>
@@ -149,14 +149,14 @@ export default function ReadinessPage() {
               onClick={() => router.push("/mock-interview/live")}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm shadow-[#2557a7]/20"
             >
-              Start Mock Interview <ArrowRight size={14} />
+              Start Live Interview <ArrowRight size={14} />
             </button>
             <button
-              onClick={() => router.push("/mock-interview/practice")}
+              onClick={() => router.push("/notes/practice")}
               className="w-full py-2 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
             >
               <RotateCcw size={12} className="text-gray-400" />
-              Practice More
+              Optional Practice
             </button>
           </div>
         </div>
@@ -181,11 +181,11 @@ export default function ReadinessPage() {
             <ScoreRing score={criteria.current_avg} />
           </div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 rounded-full text-[10px] font-semibold text-gray-500 mb-2">
-            <Lock size={10} /> Not ready yet
+            <AlertCircle size={10} /> Practice recommended
           </div>
-          <h1 className="text-lg font-bold text-gray-900">Almost There!</h1>
+          <h1 className="text-lg font-bold text-gray-900">Live Interview Is Available</h1>
           <p className="text-xs text-gray-400 mt-1">
-            {criteria.current_avg.toFixed(1)}/10 avg · Need {criteria.avg_score_threshold.toFixed(1)}+
+            {criteria.current_avg.toFixed(1)}/10 avg. Practice can help, but you can start the live mock now.
           </p>
         </div>
 
@@ -194,7 +194,7 @@ export default function ReadinessPage() {
           <div className="flex items-center justify-between text-[11px] mb-1.5">
             <span className="text-gray-500">Practice rounds</span>
             <span className="font-semibold text-gray-700 tabular-nums">
-              {criteria.rounds_completed}/{criteria.min_practice_rounds} required
+              {criteria.rounds_completed}/{criteria.min_practice_rounds} suggested
             </span>
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -206,18 +206,18 @@ export default function ReadinessPage() {
         </div>
 
         <div className="px-5 py-4">
-          {/* Requirements */}
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Requirements</p>
+          {/* Optional practice signals */}
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Optional Practice Signals</p>
           <div className="space-y-1.5 mb-4">
             <RequirementRow
               met={roundsMet}
-              label={`Complete ${criteria.min_practice_rounds} practice rounds`}
-              detail={!roundsMet ? `${criteria.min_practice_rounds - criteria.rounds_completed} more round(s) needed` : undefined}
+              label={`Try ${criteria.min_practice_rounds} practice rounds`}
+              detail={!roundsMet ? `${criteria.min_practice_rounds - criteria.rounds_completed} more round(s) suggested` : undefined}
             />
             <RequirementRow
               met={scoreMet}
-              label={`Average ≥ ${criteria.avg_score_threshold.toFixed(1)}/10`}
-              detail={!scoreMet ? `Need ${(criteria.avg_score_threshold - criteria.current_avg).toFixed(1)} more` : undefined}
+              label={`Aim for ${criteria.avg_score_threshold.toFixed(1)}/10 average`}
+              detail={!scoreMet ? `Practice can raise this by ${(criteria.avg_score_threshold - criteria.current_avg).toFixed(1)}` : undefined}
             />
           </div>
 
@@ -225,13 +225,21 @@ export default function ReadinessPage() {
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">{recommendation}</p>
           )}
 
-          <button
-            onClick={() => router.push("/mock-interview/practice")}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm shadow-[#2557a7]/20"
-          >
-            <RotateCcw size={13} />
-            Keep Practising
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => router.push("/mock-interview/live")}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm shadow-[#2557a7]/20"
+            >
+              Start Live Interview <ArrowRight size={14} />
+            </button>
+            <button
+              onClick={() => router.push("/notes/practice")}
+              className="w-full flex items-center justify-center gap-2 py-2 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-all"
+            >
+              <RotateCcw size={13} />
+              Practice First (Optional)
+            </button>
+          </div>
         </div>
       </div>
     </div>

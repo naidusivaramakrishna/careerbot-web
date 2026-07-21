@@ -531,7 +531,7 @@ function PriorityGroup({
   title: string; subtitle: string; accent: string; accentBg: string;
   issues: IssueCard[]; sectionIcons: Record<string, React.ElementType>;
   onDismiss: (id: string) => void;
-  onFix: () => void; tooltip: string;
+  onFix: (section: string) => void; tooltip: string;
 }) {
   const [open, setOpen] = useState(true);
   if (!issues.length) return null;
@@ -606,7 +606,7 @@ function PriorityGroup({
                         issue={issue}
                         Icon={SectionIcon}
                         onDismiss={() => onDismiss(issue.id)}
-                        onFix={onFix}
+                        onFix={() => onFix(issue.section)}
                       />
                     ))}
                   </div>
@@ -750,7 +750,7 @@ function ATSLoginReport() {
     }, 150);
   }, [grouped]);
 
-  const handleFixNow = async () => {
+  const handleFixNow = async (section?: string) => {
     if (isFixing) return;
     try {
       const raw = localStorage.getItem("atsAnalysisData");
@@ -793,7 +793,7 @@ function ATSLoginReport() {
       }
 
       toast.dismiss("fix-now");
-      router.push(`/builder/creation/${enhancedResumeId}?source=enhanced&from_ats=true`);
+      router.push(`/builder/creation/${enhancedResumeId}?source=enhanced&from_ats=true${section ? `&open_section=${encodeURIComponent(section)}` : ""}`);
     } catch {
       toast.dismiss("fix-now");
       toast.error("Failed to open enhancer. Please try again.");
@@ -1158,17 +1158,17 @@ function ATSLoginReport() {
                     {(filter === "all" || filter === "critical") && (
                       <PriorityGroup title="Fix First" subtitle="Blocking your ATS pass rate" accent="#dc2626" accentBg="#fef2f2"
                         issues={grouped.critical} sectionIcons={SECTION_ICONS} tooltip={WHY_TEXT.General}
-                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={handleFixNow} />
+                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
                     )}
                     {(filter === "all" || filter === "urgent") && (
                       <PriorityGroup title="High Impact" subtitle="Significant score improvements" accent="#F59E0B" accentBg="#FEF3C7"
                         issues={grouped.urgent} sectionIcons={SECTION_ICONS} tooltip="These issues cost meaningful ATS points. Fixing them moves your score into the competitive range."
-                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={handleFixNow} />
+                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
                     )}
                     {(filter === "all" || filter === "optional") && (
                       <PriorityGroup title="Nice to Improve" subtitle="Polish that separates good from great" accent="#3465BC" accentBg="#EFF6FF"
                         issues={grouped.optional} sectionIcons={SECTION_ICONS} tooltip="Low-severity polish items. Address after fixing critical and urgent issues for maximum ROI."
-                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={handleFixNow} />
+                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
                     )}
                     {((filter === "critical" && !grouped.critical.length) || (filter === "urgent" && !grouped.urgent.length) || (filter === "optional" && !grouped.optional.length)) && (
                       <div style={{ padding: "48px 0", textAlign: "center", borderRadius: 14, background: "#ECFDF5", border: "1px solid #6EE7A0" }}>

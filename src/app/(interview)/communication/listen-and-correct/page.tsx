@@ -13,10 +13,10 @@ import logger from '@/lib/logger';
 import { validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audioUtils';
 
 const AudioRecorder = dynamic(() => import('../components/AudioRecorder'), { loading: () => <div className="flex items-center justify-center p-8"><div className="animate-pulse">Loading...</div></div>, ssr: false });
-const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="w-64 bg-gray-100 animate-pulse" /> });
+const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="hidden h-full w-56 shrink-0 bg-gray-100 animate-pulse lg:block xl:w-60" /> });
 const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), { loading: () => null });
 const TextToSpeechPlayer = dynamic(() => import('../components/TextToSpeechPlayer'), { loading: () => <div className="animate-pulse p-4">Loading...</div>, ssr: false });
-const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200 h-20 animate-pulse" /> });
+const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="mb-3 h-12 shrink-0 rounded-xl border border-gray-200 bg-white animate-pulse" /> });
 
 export default function ListenAndCorrectPage() {
   const router = useRouter();
@@ -261,13 +261,13 @@ export default function ListenAndCorrectPage() {
               'You have 15 seconds for each recording',
             ]}
           />
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="flex h-full min-h-0 overflow-hidden bg-gray-50">
       <AssessmentSidebar currentSectionId={5} />
 
-      <main className="flex-1 px-8 py-7 min-w-0">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-3 lg:px-6 lg:py-4">
 
         {/* Section Header */}
-        <div className="mb-5">
+        <div className="mb-2 shrink-0">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 5 of 7</p>
           <h1 className="text-lg font-bold text-gray-900">
             {currentQuestion?.section_name || 'Listen & Correct'}
@@ -280,13 +280,13 @@ export default function ListenAndCorrectPage() {
         <QuestionProgressBar
           currentQuestion={sectionQuestionNumber}
           totalQuestions={SECTION_TOTAL_QUESTIONS}
-          className="mb-6"
+          className="mb-3 shrink-0"
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto pr-1 assessment-scroll lg:grid-cols-2">
 
           {/* Listen Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="min-h-0 overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Listen</p>
               <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
@@ -312,7 +312,7 @@ export default function ListenAndCorrectPage() {
           </div>
 
           {/* Recorder Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col items-center justify-center">
+          <div className="flex min-h-0 flex-col items-center justify-center overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
             {!audioCompleted && (
               <div className="mb-5 px-4 py-3 bg-[#2557a7]/5 border-l-4 border-[#2557a7] rounded-r-xl w-full">
                 <p className="text-sm font-medium text-[#2557a7]">
@@ -325,11 +325,12 @@ export default function ListenAndCorrectPage() {
               onRecordingComplete={handleRecordingComplete}
               maxDuration={15}
               disabled={!audioCompleted || !!hasRecording}
+              captured={!!hasRecording}
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-6">
+        <div className="mt-3 flex shrink-0 items-center justify-between">
           <p className="text-xs text-gray-400">
             Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
           </p>

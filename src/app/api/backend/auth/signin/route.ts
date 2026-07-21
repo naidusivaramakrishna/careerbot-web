@@ -24,23 +24,19 @@ function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
   if (parts.length === 0) return cookie;
 
   const [pair, ...attrs] = parts;
-  let hasPath = false;
   let hasSameSite = false;
   const kept: string[] = [];
 
   for (const attr of attrs) {
     const name = attr.split('=')[0].trim().toLowerCase();
-    if (name === 'domain') continue;          // strip — browser will scope to host
-    // Only ever drop Secure in non-production. In prod, keep Secure even if the
-    // proxy didn't advertise https — a downgraded auth cookie is worse than a
-    // dropped one.
-    if (name === 'secure' && !isSecureRequest && process.env.NODE_ENV !== 'production') continue;
-    if (name === 'path') hasPath = true;
+    if (name === 'domain') continue;   // strip — browser will scope to host
+    if (name === 'path') continue;     // always normalize to Path=/ so middleware sees cookie on every route
+    if (name === 'secure' && !isSecureRequest) continue;  // strip Secure on plain HTTP (pod/test environments)
     if (name === 'samesite') hasSameSite = true;
     kept.push(attr);
   }
 
-  if (!hasPath) kept.push('Path=/');
+  kept.push('Path=/');
   if (!hasSameSite) kept.push('SameSite=Lax');
 
   return [pair, ...kept].join('; ');

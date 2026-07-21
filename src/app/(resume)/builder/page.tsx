@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getAllResumesUnified, createResumeWithAuth } from "@/api/resumeApi";
+import { toast } from "sonner";
 import Image from "next/image";
 import {
   ArrowRight,
@@ -36,6 +39,7 @@ const paths = [
     description: "Upload your resume, fix weak wording, improve ATS readability, and get a cleaner version faster.",
     cta: "Enhance My Resume",
     href: "/builder/start?action=enhance",
+    action: "enhance" as const,
     accent: "from-[#2557a7] to-[#0f766e]",
     checks: ["Upload PDF or DOCX", "AI rewrites weak bullets", "Keyword and formatting guidance"],
   },
@@ -45,6 +49,7 @@ const paths = [
     description: "Start from an ATS-friendly template and follow guided sections with AI suggestions as you write.",
     cta: "Build New Resume",
     href: "/builder/start",
+    action: "build" as const,
     accent: "from-[#2557a7] to-[#1e4a94]",
     checks: ["Guided resume sections", "Template-first workflow", "Ready-to-export document"],
   },
@@ -184,8 +189,61 @@ function HeroMock() {
 }
 
 export default function ResumeLandingPage() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState("overview");
   const [showSignin, setShowSignin] = useState(false);
+  const [startingFree, setStartingFree] = useState(false);
+  const [buildingResume, setBuildingResume] = useState(false);
+
+  const handleStartFree = useCallback(async () => {
+    setStartingFree(true);
+    try {
+      const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
+      const hasResumes = builder_resumes.length > 0 || enhanced_resumes.length > 0;
+      router.push(hasResumes ? "/builder/start/list" : "/builder/start");
+    } catch {
+      router.push("/builder/start");
+    } finally {
+      setStartingFree(false);
+    }
+  }, [router]);
+
+  const handleBuildNewResume = useCallback(async () => {
+    setBuildingResume(true);
+    try {
+      const newResume = await createResumeWithAuth();
+      localStorage.setItem("cached_resume_data", JSON.stringify({ resumeId: newResume.id, data: newResume }));
+      localStorage.setItem("current_resume_id", newResume.id);
+      router.push("/templates");
+    } catch (err) {
+      const error = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+      const status = error.response?.status;
+      const detail = (error.response?.data?.detail || error.message || "").toLowerCase();
+
+      if (status === 401 || (status === 403 && (detail.includes("auth") || detail.includes("sign")))) {
+        // Not authenticated — prompt sign in
+        setShowSignin(true);
+      } else if (
+        status === 409 ||
+        detail.includes("already") ||
+        detail.includes("limit") ||
+        detail.includes("maximum") ||
+        detail.includes("one resume") ||
+        detail.includes("exists")
+      ) {
+        // Free plan: only one resume allowed
+        toast.error("You have already created a resume. Free access allows only one resume — your existing resume is in the list.", { duration: 6000 });
+        router.push("/builder/start/list");
+      } else if (status === 403) {
+        toast.error("You don't have permission to create a resume. Please sign in and try again.");
+        setShowSignin(true);
+      } else {
+        toast.error(error.response?.data?.detail || "Failed to create resume. Please try again.");
+      }
+    } finally {
+      setBuildingResume(false);
+    }
+  }, [router]);
 
   useEffect(() => {
     const sections = navItems
@@ -262,13 +320,14 @@ export default function ResumeLandingPage() {
             >
               Sign In
             </button>
-            <Link
-              href="/builder/start"
-              className="inline-flex items-center gap-2 rounded-full bg-[#2557a7] px-4 py-2 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] active:scale-95"
+            <button
+              onClick={handleStartFree}
+              disabled={startingFree}
+              className="inline-flex items-center gap-2 rounded-full bg-[#2557a7] px-4 py-2 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] active:scale-95 disabled:opacity-70"
             >
+              {startingFree ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={14} />}
               Start Free
-              <ArrowRight size={14} />
-            </Link>
+            </button>
           </div>
         </nav>
       </header>
@@ -313,13 +372,14 @@ export default function ResumeLandingPage() {
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/builder/start"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:bg-[#1e4a94]"
+                <button
+                  onClick={handleStartFree}
+                  disabled={startingFree}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:bg-[#1e4a94] disabled:opacity-70"
                 >
+                  {startingFree ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={16} />}
                   Start Free
-                  <ArrowRight size={16} />
-                </Link>
+                </button>
                 <Link
                   href="#choose-path"
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-7 py-3.5 text-sm font-semibold text-slate-700 transition-all hover:border-[#2557a7] hover:bg-blue-50 hover:text-[#2557a7]"
@@ -389,13 +449,26 @@ export default function ResumeLandingPage() {
                         </div>
                       ))}
                     </div>
-                    <Link
-                      href={path.href}
-                      className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#2557a7]"
-                    >
-                      {path.cta}
-                      <ArrowRight size={15} />
-                    </Link>
+                    {path.action === "build" ? (
+                      <button
+                        onClick={handleBuildNewResume}
+                        disabled={buildingResume}
+                        className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#2557a7] disabled:opacity-70"
+                      >
+                        {buildingResume
+                          ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Creating…</>
+                          : <>{path.cta}<ArrowRight size={15} /></>
+                        }
+                      </button>
+                    ) : (
+                      <Link
+                        href={path.href}
+                        className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#2557a7]"
+                      >
+                        {path.cta}
+                        <ArrowRight size={15} />
+                      </Link>
+                    )}
                   </div>
                 </div>
               );
@@ -493,13 +566,14 @@ export default function ResumeLandingPage() {
             <p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-blue-100">
               Start free, choose your path, and move into the builder when you are ready.
             </p>
-            <Link
-              href="/builder/start"
-              className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-white px-10 py-4 text-base font-bold text-[#2557a7] shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
+            <button
+              onClick={handleStartFree}
+              disabled={startingFree}
+              className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-white px-10 py-4 text-base font-bold text-[#2557a7] shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-70"
             >
+              {startingFree ? <span className="w-4 h-4 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={17} />}
               Start Free
-              <ArrowRight size={17} />
-            </Link>
+            </button>
             <p className="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-blue-100">
               <Clock size={14} />
               Free plan available. No credit card required.

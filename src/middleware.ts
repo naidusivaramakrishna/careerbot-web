@@ -16,9 +16,8 @@ const publicRoutes = [
     "/blog",
     "/terms-of-service",
     "/privacy-policy",
-    // Builder and cover-letter creation flow remain public. Cover-letter
+    // Cover-letter creation flow remain public. Cover-letter
     // export/download handles auth at the action level.
-    "/builder",
     "/cover-letter",
 ];
 
@@ -66,8 +65,9 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Landing pages accessible without auth (exact path only — sub-paths remain protected)
-    const publicLandingPages = ['/jobmatch', '/ats', '/payments'];
+    // Landing pages accessible without auth (exact path only — sub-paths remain protected).
+    // Add a path here to make ONLY that exact URL public; /path/anything stays protected.
+    const publicLandingPages = ['/jobmatch', '/ats', '/payments', '/mock-interview', '/builder', '/communication'];
     if (publicLandingPages.includes(pathname)) {
         return NextResponse.next();
     }
@@ -82,23 +82,6 @@ export async function middleware(request: NextRequest) {
         return redirectToLogin(request);
     }
 
-    // Role-gated areas (admin / recruiter) REQUIRE a working verifier. If
-    // JWT_SECRET is absent the server is misconfigured — deny rather than fail
-    // open and let an unverifiable token through.
-    const isProtectedArea =
-        pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
-
-    const loginRedirect = () => {
-        const loginUrl = pathname.startsWith(ADMIN_PREFIX)
-            ? '/admin/login'
-            : pathname.startsWith(RECRUITER_PREFIX)
-            ? '/recruiter/auth'
-            : buildUserLoginUrl(request);
-        return NextResponse.redirect(
-            typeof loginUrl === 'string' ? new URL(loginUrl, request.url) : loginUrl
-        );
-    }
- 
     // JWT role enforcement — decode access_token to check role claim
     if (token && process.env.JWT_SECRET) {
         try {
@@ -115,19 +98,10 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // 2) No verified token. Non-protected pages: a refresh cookie is enough —
-    //    let the request through; the client HTTP interceptor refreshes on the
-    //    first 401.
-    if (!isProtectedArea) {
-        return refreshToken ? NextResponse.next() : loginRedirect();
-    }
-
-    // 3) Role-gated area with no verified token (access token missing OR
-    //    invalid). Attempt a server-side refresh, re-verify the NEW token's
-    //    role, then bounce through a redirect so the page renders with a valid
-    //    cookie. Every failure path falls through to the login redirect
-    //    (fail-safe) — a forged/expired refresh cookie can never reach a
-    //    role-gated page.
+    // 2) No verified access token. Attempt a server-side refresh for ALL
+    //    routes — not just admin/recruiter. This prevents unauthenticated users
+    //    from ever seeing a protected page (even briefly) when they have a
+    //    stale refresh_token cookie from a previous session.
     if (refreshToken && process.env.JWT_SECRET) {
         try {
             // Keep the refresh on a SAME-ORIGIN relative path. It forwards the

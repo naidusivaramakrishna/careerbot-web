@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { searchJobs, getSmartMatchedJobs } from "@/api/jobsApi";
 import type { MatchedJobItem } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/filterConstants";
@@ -114,6 +115,8 @@ function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: 
 const JOBS_PER_PAGE = 10;
 
 export default function JobsContents() {
+  const searchParams = useSearchParams();
+
   // ── Fetch / pagination ──
   const [jobs, setJobs] = useState<NormalizedJob[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<NormalizedJob[]>([]);
@@ -128,7 +131,10 @@ export default function JobsContents() {
   const [roleFilter, setRoleFilter] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [activeFilters, setActiveFilters] = useState<FilterParams>({});
-  const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const tab = searchParams.get("tab");
+    return tab === "matched" || tab === "saved" || tab === "applied" ? (tab as TabType) : "all";
+  });
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
   const [cityFilter, setCityFilter] = useState("");
   const [experienceFilter, setExperienceFilter] = useState("");

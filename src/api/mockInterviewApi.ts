@@ -554,6 +554,7 @@ export const downloadReportPdf = async (sessionId: string): Promise<void> => {
 export interface LiveCreateRequest {
   session_type: 'hr' | 'technical' | 'mixed';
   resume_id?: string;
+  enable_streaming_stt?: boolean;
 }
 
 export interface LiveCreateResponse {
@@ -580,6 +581,8 @@ export interface LiveSession {
   created_at: string;
   score?: number;
   duration_s?: number;
+  question_count?: number;
+  pressure_tag?: 'pressure_affected' | null;
 }
 
 // ── WS Message types (client → server) ──

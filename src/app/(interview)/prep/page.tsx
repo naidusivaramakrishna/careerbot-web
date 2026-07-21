@@ -16,7 +16,7 @@ const BRAND_BORDER = 'rgba(37,87,167,0.14)';
 const cards = [
   {
     id: 'communication',
-    href: '/communication',
+    href: '/communication/start',
     eyebrow: 'English Proficiency',
     badge: 'Recommended',
     title: 'Communication Assessment',
@@ -62,25 +62,25 @@ const cards = [
   },
   {
     id: 'mock-interview',
-    href: '/mock-interview',
+    href: '/mock-interview/live',
     eyebrow: 'AI Interview Simulation',
     badge: 'Advanced',
     title: 'Mock Interview',
-    tagline: 'A 5-stage guided journey — from prep notes to a live AI voice interview.',
+    tagline: 'A full AI-powered voice interview — speak your answers, get instant scoring and a detailed report.',
     stats: [
-      { value: '5',   label: 'Stages'   },
-      { value: '10',  label: 'Practice' },
-      { value: '60m', label: 'Duration' },
+      { value: '8–10', label: 'Questions' },
+      { value: 'AI',   label: 'Voice'     },
+      { value: '20m',  label: 'Duration'  },
     ],
     features: [
-      { icon: FileText, label: 'Interview Notes'    },
-      { icon: BookOpen, label: 'English Essentials' },
-      { icon: Mic,      label: 'Practice Rounds'    },
-      { icon: Video,    label: 'Live AI Interview'  },
-      { icon: BarChart2,label: 'Score Report'       },
-      { icon: Zap,      label: 'AI Feedback'        },
+      { icon: Video,    label: 'Live AI Interviewer' },
+      { icon: Mic,      label: 'Voice Detection'     },
+      { icon: Zap,      label: 'Real-time Scoring'   },
+      { icon: BarChart2,label: 'Score Breakdown'     },
+      { icon: FileText, label: 'Full Report'         },
+      { icon: Brain,    label: 'AI Feedback'         },
     ],
-    cta: 'Begin Preparation',
+    cta: 'Start Live Interview',
     Icon: Video,
   },
 ];
@@ -97,16 +97,16 @@ const steps = {
     'Review instant score breakdown and explanations',
   ],
   'mock-interview': [
-    'Generate personalised notes from your resume',
-    'Practice answers across 3 progressive rounds',
-    'Pass the readiness gate → live AI voice interview',
+    'Start a live AI voice interview directly',
+    'Use notes and practice separately if you want to warm up',
+    'Get real-time transcription, scoring, and a full report',
   ],
 };
 
 const tableRows: [string, string, string, string][] = [
   ['Best for',      'English fluency',      'Aptitude & reasoning',  'Full interview sim'  ],
-  ['Format',        '7 structured sections','4 timed MCQ sections',  '5-stage journey'     ],
-  ['Duration',      '~20 min',              '~30 min',               '~45–60 min'          ],
+  ['Format',        '7 structured sections','4 timed MCQ sections',  'Live voice mock'    ],
+  ['Duration',      '~20 min',              '~30 min',               '~20 min'             ],
   ['AI Evaluation', '✓',                    '—',                     '✓'                   ],
   ['Score Report',  '✓',                    '✓',                     '✓'                   ],
   ['Difficulty',    'Beginner → Advanced',  'Beginner → Advanced',   'Advanced'            ],

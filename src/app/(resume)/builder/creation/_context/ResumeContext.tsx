@@ -264,6 +264,7 @@ interface ResumeContextType {
   updateCustomFieldValue: (sectionId: string, fieldId: string, value: string | string[]) => void;
   deleteCustomField: (sectionId: string, fieldId: string) => void;
   applyAutoFix: (suggestionId: string) => Promise<void>;
+  applyManualFix: (suggestionId: string, value: string) => Promise<void>;
 }
 
 const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
@@ -648,13 +649,21 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               fullname: mapped.personalInfo?.fullname || resumeData.display_name || "",
             },
           };
-          // Store ATS score from enhanced resume response
-          if (resumeData.ats_score) {
-            setEnhancedAtsScore(resumeData.ats_score);
+          // Store ATS score — prefer API response; if missing, read from atsAnalysisData
+          // which is already written by the ATS analysis flow (no new storage needed)
+          const resolvedAtsScore = resumeData.ats_score ?? (() => {
+            try {
+              const cached = localStorage.getItem("atsAnalysisData");
+              if (cached) return JSON.parse(cached)?.ats_score ?? null;
+            } catch { /* ignore */ }
+            return null;
+          })();
+          if (resolvedAtsScore) {
+            setEnhancedAtsScore(resolvedAtsScore);
           }
           // Convert section_breakdown deductions into EnhancedSuggestion[] (after_example is the suggestion text)
           const derivedSuggestions: EnhancedSuggestion[] = [];
-          const sectionBreakdown = (resumeData.ats_score?.section_breakdown ?? {}) as Record<string, {
+          const sectionBreakdown = (resolvedAtsScore?.section_breakdown ?? {}) as Record<string, {
             deductions?: { id: string; penalty: number; after_example?: string; message?: string }[];
           }>;
           for (const [sectionName, sec] of Object.entries(sectionBreakdown)) {
@@ -955,6 +964,24 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     }
   };
 
+  const applyManualFix = async (suggestionId: string, value: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const response = await applyFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+      fix_type: "manual",
+      value,
+    });
+    if (response.success && response.enhancer_state) {
+      if (response.enhancer_state.ats_breakdown) {
+        setEnhancedAtsScore(response.enhancer_state.ats_breakdown as unknown as ATSScore);
+      }
+      setTimeout(() => {
+        setEnhancedSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+      }, 1200);
+    }
+  };
+
   const createResume = async () => {
     try {
       const result = await httpClient.post<{ id: string }>('/resumes/', resumeData);
@@ -991,6 +1018,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         updateCustomFieldValue,
         deleteCustomField,
         applyAutoFix,
+        applyManualFix,
       }}
     >
       {children}

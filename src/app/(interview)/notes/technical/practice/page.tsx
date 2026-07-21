@@ -12,15 +12,15 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import AudioRecorder from "@/app/(interview)/communication/components/AudioRecorder";
-import FeedbackCard from "../../_components/FeedbackCard";
-import TranscriptDisplay from "../../_components/TranscriptDisplay";
+import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackCard";
+import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
 import {
   startPractice,
   submitPracticeAnswer,
   generateTechnicalQuestions,
   SubmitAnswerResponse,
 } from "@/api/mockInterviewApi";
-import { useMockInterview } from "../../_context/MockInterviewContext";
+import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
 
 
 type AnswerState = {
@@ -30,8 +30,6 @@ type AnswerState = {
   dimensions: { label: string; score: number; weight: string }[];
   answerId?: string;
 } | null;
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 function TechnicalPracticeContent() {
   const router = useRouter();
@@ -49,7 +47,6 @@ function TechnicalPracticeContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(true);
 
-  // Map UI category IDs to backend-accepted values
   const categoryMap: Record<string, string> = {
     dsa: "technical", web: "technical", backend: "technical",
     database: "technical", core: "technical",
@@ -57,7 +54,6 @@ function TechnicalPracticeContent() {
   const backendCategory = categoryMap[category] ?? "technical";
 
   useEffect(() => {
-    // Start practice session + fetch AI-generated technical questions in parallel
     Promise.allSettled([
       startPractice({ round_number: 1, category: backendCategory }),
       generateTechnicalQuestions({ skills: [category], num_questions: 5, experience_level: (localStorage.getItem("mock_experience_level") === "experienced" ? "mid" : "fresher") }),
@@ -85,9 +81,7 @@ function TechnicalPracticeContent() {
   const answeredCount = Object.keys(answeredMap).length;
 
   const handleRecordingComplete = useCallback(async (blob: Blob) => {
-    if (!sessionId || !question) {
-      return;
-    }
+    if (!sessionId || !question) return;
     setIsSubmitting(true);
     setCurrentAnswer(null);
 
@@ -123,7 +117,7 @@ function TechnicalPracticeContent() {
     const newCount = Object.keys(answeredMap).length;
     setPracticeAnswered(newCount);
     if (isLastQuestion) {
-      router.push("/mock-interview/readiness");
+      router.push("/mock-interview/live");
     } else {
       setCurrentIndex((i) => i + 1);
     }
@@ -151,7 +145,7 @@ function TechnicalPracticeContent() {
           <p className="text-sm text-gray-500 mb-4">{sessionError ?? "No questions were returned for this category."}</p>
           <div className="flex gap-3 justify-center">
             <button
-              onClick={() => router.push("/mock-interview/technical")}
+              onClick={() => router.push("/notes/technical")}
               className="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50"
             >
               Back
@@ -170,10 +164,9 @@ function TechnicalPracticeContent() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <button
-          onClick={() => router.push("/mock-interview/technical")}
+          onClick={() => router.push("/notes/technical")}
           className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
         >
           <ChevronLeft size={14} /> Back
@@ -188,7 +181,6 @@ function TechnicalPracticeContent() {
         </div>
       </div>
 
-      {/* Progress bar */}
       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-5">
         <div
           className="h-full bg-[#2557a7] rounded-full transition-all duration-500"
@@ -196,7 +188,6 @@ function TechnicalPracticeContent() {
         />
       </div>
 
-      {/* Question card */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] overflow-hidden mb-4">
         <div className="flex items-center gap-2 px-4 py-3 bg-[#2557a7]/5 border-b border-[#2557a7]/10">
           <Code2 size={13} className="text-[#2557a7]" />
@@ -215,7 +206,6 @@ function TechnicalPracticeContent() {
         </div>
       </div>
 
-      {/* Answer section */}
       {!currentAnswer && !isSubmitting && (
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
           <div className="flex items-center gap-2 mb-3">
@@ -226,7 +216,6 @@ function TechnicalPracticeContent() {
         </div>
       )}
 
-      {/* Submitting state */}
       {isSubmitting && (
         <div className="bg-white border border-gray-200 rounded-xl p-10 flex flex-col items-center gap-3 shadow-sm">
           <Loader2 size={28} className="text-[#2557a7] animate-spin" />
@@ -234,7 +223,6 @@ function TechnicalPracticeContent() {
         </div>
       )}
 
-      {/* Feedback */}
       {currentAnswer && (
         <div className="space-y-3">
           <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
@@ -267,7 +255,7 @@ function TechnicalPracticeContent() {
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-bold hover:bg-[#1e4a8f] transition-all shadow-md"
             >
               {isLastQuestion ? (
-                <>Check Readiness <ChevronRight size={14} /></>
+                <>Start Live Interview <ChevronRight size={14} /></>
               ) : (
                 <>Next Question <ChevronRight size={14} /></>
               )}
@@ -276,7 +264,6 @@ function TechnicalPracticeContent() {
         </div>
       )}
 
-      {/* Answered count footer */}
       {answeredCount > 0 && !currentAnswer && (
         <p className="text-center text-xs text-gray-400 mt-4">
           {answeredCount} of {questions.length} answered

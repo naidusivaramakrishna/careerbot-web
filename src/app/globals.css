@@ -47,6 +47,40 @@ body {
   .scrollbar-hover:hover::-webkit-scrollbar-thumb {
     background: #525252;
   }
+
+  .assessment-scroll {
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .assessment-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .assessment-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .assessment-scroll::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .assessment-scroll::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+    background-clip: content-box;
+  }
+
+  .assessment-sidebar-note {
+    display: none;
+  }
+
+  @media (min-height: 720px) {
+    .assessment-sidebar-note {
+      display: block;
+    }
+  }
 }
 
 /* A4 Resume Page Layout */

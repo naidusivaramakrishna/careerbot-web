@@ -13,7 +13,7 @@ export default function FeedbackPage() {
   const searchParams = useSearchParams();
   const isTimeout = searchParams.get('reason') === 'timeout';
 
-  // Exit fullscreen when feedback page loads — assessment is over regardless of how we got here
+  // Exit fullscreen when feedback page loads - assessment is over regardless of how we got here
   useEffect(() => {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
@@ -75,7 +75,7 @@ export default function FeedbackPage() {
       throw new Error('Missing required information (email or test_id)');
     }
 
-    logger.info('📋 Final report request data:', {
+    logger.info('ðŸ“‹ Final report request data:', {
       email_id: emailId,
       test_id: testId,
       video_evaluation_id: videoEvaluationId || '(none)',
@@ -93,44 +93,44 @@ export default function FeedbackPage() {
       sample_report: false,
     });
 
-    logger.info('✅ Final report submitted successfully:', response);
+    logger.info(' Final report submitted successfully:', response);
     return response;
   };
 
   const displayRating = hoveredRating || rating;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       {/* <Sidebar /> */}
       {/* <Header /> */}
 
       <main>
-        <div className="max-w-xl mx-auto px-5 py-12">
+        <div className="mx-auto max-w-xl px-5 py-10">
 
           {/* Page Header */}
           <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-[#2557a7] rounded-2xl mb-5">
+            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#2557a7] shadow-lg shadow-[#2557a7]/20">
               <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Share Your Feedback</h1>
-            <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+            <h1 className="text-2xl font-black tracking-tight text-slate-950">Share Your Feedback</h1>
+            <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
               Help us improve the assessment experience. Your feedback is appreciated.
             </p>
           </div>
 
           {/* Feedback Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
 
             {/* Blue top bar */}
-            <div className="h-0.75 bg-[#2557a7]" />
+            <div className="h-1 bg-[#2557a7]" />
 
             <div className="p-7 space-y-7">
 
               {/* Rating */}
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
                   How would you rate this assessment? <span className="text-red-500 normal-case font-normal">*</span>
                 </label>
 
@@ -158,27 +158,27 @@ export default function FeedbackPage() {
                 </div>
 
                 {displayRating > 0 && (
-                  <p className="text-center text-sm text-gray-600">
-                    <span className="font-semibold text-[#2557a7]">{ratingLabels[displayRating]}</span>
-                    {' '}— {displayRating} star{displayRating !== 1 ? 's' : ''}
+                  <p className="text-center text-sm text-slate-600">
+                    <span className="font-bold text-[#2557a7]">{ratingLabels[displayRating]}</span>
+                    {' '}- {displayRating} star{displayRating !== 1 ? 's' : ''}
                   </p>
                 )}
               </div>
 
-              <div className="h-px bg-gray-100" />
+              <div className="h-px bg-slate-100" />
 
               {/* Comment */}
               <div>
-                <label htmlFor="feedback" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Additional Comments <span className="normal-case font-normal text-gray-400">(optional)</span>
+                <label htmlFor="feedback" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Additional Comments <span className="normal-case font-normal text-slate-400">(optional)</span>
                 </label>
                 <textarea
                   id="feedback"
                   value={feedbackText}
                   onChange={(e) => setFeedbackText(e.target.value)}
                   rows={5}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#2557a7] focus:ring-2 focus:ring-[#2557a7]/10 focus:outline-none transition-all resize-none text-sm text-gray-700 bg-gray-50 placeholder-gray-400"
-                  placeholder="Tell us what you liked or how we can improve the assessment…"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-[#2557a7] focus:ring-2 focus:ring-[#2557a7]/10 focus:outline-none transition-all resize-none text-sm text-slate-700 bg-slate-50 placeholder-gray-400"
+                  placeholder="Tell us what you liked or how we can improve the assessment..."
                 />
               </div>
 
@@ -190,12 +190,12 @@ export default function FeedbackPage() {
             <button
               onClick={handleSubmitFeedback}
               disabled={isSubmitting}
-              className="flex-1 py-3.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Submitting…
+                  Submitting...
                 </>
               ) : (
                 'Submit Feedback'
@@ -205,13 +205,13 @@ export default function FeedbackPage() {
             <button
               onClick={handleSkip}
               disabled={isSubmitting}
-              className="sm:w-auto px-7 py-3.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 rounded-xl font-semibold text-sm transition-colors"
+              className="sm:w-auto px-7 py-3.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 rounded-xl font-bold text-sm transition-colors"
             >
               Skip
             </button>
           </div>
 
-          <p className="text-center text-xs text-gray-400 mt-4">
+          <p className="text-center text-xs text-slate-400 mt-4">
             {isTimeout
               ? 'Submitting or skipping will take you to your dashboard.'
               : 'Submitting or skipping will take you to your assessment report.'}

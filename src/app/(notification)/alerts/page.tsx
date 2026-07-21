@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import {
-  Bell, ScanSearch, Wand2, Briefcase, User, AlertCircle,
+  Bell, Wand2, Briefcase, User, AlertCircle,
   CheckCheck, X, Inbox, Loader2,
 } from "lucide-react";
 import { useNotificationsList } from "@/hooks/useNotificationsList";
@@ -10,9 +10,6 @@ import { markNotificationAsRead, deleteNotification, markAllNotificationsAsRead,
 import { resolveNotificationRoute } from "@/lib/notificationRoute";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-
-/* ── Notification type ────────────────────────────── */
-type NType = "job" | "credit" | "system" | "interview" | "resume" | string;
 
 /* ── Type mapping ─────────────────────────────────── */
 const NOTIF_META: Record<string, { icon: React.ReactNode; bg: string; iconColor: string; label: string; accentColor: string }> = {
@@ -24,20 +21,58 @@ const NOTIF_META: Record<string, { icon: React.ReactNode; bg: string; iconColor:
 };
 
 const getNotifMeta = (type: string) => {
-  return NOTIF_META[type.toLowerCase()] || NOTIF_META.system;
+  return NOTIF_META[resolveFilterCategory(type)] ?? NOTIF_META.system;
 };
 
 const DATE_GROUPS = ["Today", "Yesterday", "Earlier"] as const;
-type FilterTab = "all" | "unread" | NType;
+type FilterTab = "all" | "unread" | "job" | "resume" | "credit" | "interview" | "system";
 
 const FILTER_TABS: { id: FilterTab; label: string }[] = [
-  { id: "all",     label: "All"     },
-  { id: "unread",  label: "Unread"  },
-  { id: "job",     label: "Jobs"    },
-  { id: "resume",  label: "Resume"  },
-  { id: "credit",  label: "Credits" },
-  { id: "system",  label: "System"  },
+  { id: "all",       label: "All"       },
+  { id: "unread",    label: "Unread"    },
+  { id: "job",       label: "Jobs"      },
+  { id: "resume",    label: "Resume"    },
+  { id: "credit",    label: "Credits"   },
+  { id: "interview", label: "Interview" },
+  { id: "system",    label: "System"    },
 ];
+
+// Maps every backend notification type → the filter tab it belongs to.
+// Add new backend types here as they are introduced.
+const TYPE_TO_FILTER: Record<string, FilterTab> = {
+  // Jobs
+  job:              "job",
+  jobmatch:         "job",
+  // Resume — all resume-related backend types
+  resume:           "resume",
+  parser:           "resume",
+  parse:            "resume",
+  enhance:          "resume",
+  enhancer:         "resume",
+  resume_parse:     "resume",
+  resume_enhance:   "resume",
+  resume_created:   "resume",
+  resume_updated:   "resume",
+  resume_builder:   "resume",
+  builder:          "resume",
+  // Credits
+  credit:           "credit",
+  pricing:          "credit",
+  payment:          "credit",
+  // Interview
+  interview:        "interview",
+  communication:    "interview",
+  "mock-test":      "interview",
+  prep:             "interview",
+  // System
+  ats:              "system",
+  atslogin:         "system",
+  scheduler:        "system",
+  system:           "system",
+};
+
+const resolveFilterCategory = (type: string | undefined): FilterTab =>
+  TYPE_TO_FILTER[(type ?? "").toLowerCase()] ?? "system";
 
 const formatTimeAgo = (timestamp: string): string => {
   const now = new Date();
@@ -126,7 +161,7 @@ export default function AlertsPage() {
     return notifications.filter((n) => {
       if (activeTab === "all")    return true;
       if (activeTab === "unread") return !n.read;
-      return n.type.toLowerCase() === activeTab.toLowerCase();
+      return resolveFilterCategory(n.type) === activeTab;
     });
   }, [notifications, activeTab]);
 
@@ -237,7 +272,7 @@ export default function AlertsPage() {
           const tabUnread =
             tab.id === "all"    ? 0 :
             tab.id === "unread" ? unreadCount :
-            notifications.filter((n) => n.type.toLowerCase() === tab.id.toLowerCase() && !n.read).length;
+            notifications.filter((n) => resolveFilterCategory(n.type) === tab.id && !n.read).length;
 
           return (
             <button

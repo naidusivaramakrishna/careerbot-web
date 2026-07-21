@@ -68,6 +68,7 @@ interface Props {
   completionStatus: Record<string, boolean>;
   onSidebarToggle?: (isOpen: boolean) => void;
   clearErrors: (fields?: string[]) => void;
+  setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
 
@@ -86,6 +87,7 @@ const EditorTab: React.FC<Props> = ({
   completionStatus = {},
   onSidebarToggle,
   clearErrors,
+  setErrors,
 }) => {
   const nonDeletableSections = [
     "Personal Info",
@@ -98,7 +100,6 @@ const EditorTab: React.FC<Props> = ({
     setSectionOrder,
     selectedTemplate,
     setSelectedTemplate,
-    getCompletionPercentage,
     setCompletionStatus,
     resumeData,
     setResumeData,
@@ -473,13 +474,14 @@ const EditorTab: React.FC<Props> = ({
       const cats = resumeData.categorizedSkills;
       if (cats) {
         const toNameObjs = (arr: string[]) => (arr || []).map(s => ({ name: s }));
+        const anyCats = cats as Record<string, string[]>;
         return {
-          programming_languages: toNameObjs(cats.programming_languages),
-          frameworks: toNameObjs(cats.frameworks),
-          databases: toNameObjs(cats.databases),
-          tools: toNameObjs(cats.tools),
-          cloud_platforms: toNameObjs(cats.cloud_platforms),
-          soft_skills: toNameObjs(cats.soft_skills),
+          programming_languages: toNameObjs(anyCats.programming_languages),
+          frameworks: toNameObjs(anyCats.frameworks),
+          databases: toNameObjs(anyCats.databases),
+          tools: toNameObjs(anyCats.tools),
+          cloud_platforms: toNameObjs(anyCats.cloud_platforms),
+          soft_skills: toNameObjs(anyCats.soft_skills),
         };
       }
       return {};
@@ -661,8 +663,22 @@ const EditorTab: React.FC<Props> = ({
     toast.success(`${openModalSection} saved successfully!`);
     closeModal();
   } catch (error) {
-    // // console.error("❌ Save failed:", error);
-    if (error instanceof Error) {
+    const axiosError = error as { response?: { data?: { error?: { message?: string; details?: { validation_errors?: Array<{ field: string; message: string }> } } } } };
+    const validationErrors = axiosError?.response?.data?.error?.details?.validation_errors;
+
+    if (validationErrors && validationErrors.length > 0) {
+      // Set inline field errors and show exact messages from the API
+      const fieldErrors: Record<string, string> = {};
+      validationErrors.forEach(ve => {
+        // field format: "personalInfo → phone" → extract key after "→ "
+        const fieldKey = ve.field.includes("→") ? ve.field.split("→").pop()?.trim() ?? ve.field : ve.field;
+        fieldErrors[fieldKey] = ve.message;
+        toast.error(ve.message, { duration: 6000 });
+      });
+      setErrors(prev => ({ ...prev, ...fieldErrors }));
+    } else if (axiosError?.response?.data?.error?.message) {
+      toast.error(axiosError.response.data.error.message);
+    } else if (error instanceof Error) {
       toast.error(error.message || "Failed to save section.");
     } else {
       toast.error("Unexpected error occurred while saving.");
@@ -675,6 +691,13 @@ const EditorTab: React.FC<Props> = ({
 
 
   const handleCreateCustomSection = (name: string) => {
+    const alreadyExists = sections.some(
+      (s) => s.name.toLowerCase() === name.toLowerCase()
+    );
+    if (alreadyExists) {
+      toast.error(`"${name}" section already exists`);
+      return;
+    }
     const newSection: CustomSection = {
       id: `custom_${Date.now()}`,
       sectionName: name,
@@ -711,8 +734,10 @@ const EditorTab: React.FC<Props> = ({
     setIsAddingCustomSection(false);
   };
 
-  const completionPercentage = getCompletionPercentage();
-  const totalSections = Object.keys(completionStatus).length;
+  // sections[] is the live main list — count grows when user adds a section, shrinks when they delete one
+  const totalSections = sections.length;
+  const completedCount = sections.filter((s) => completionStatus[s.name]).length;
+  const completionPercentage = totalSections > 0 ? Math.round((completedCount / totalSections) * 100) : 0;
 
 
   return (
@@ -727,7 +752,7 @@ const EditorTab: React.FC<Props> = ({
           </p>
         </div>
         <div className="relative">
-          <CircularProgress percentage={completionPercentage} totalSections={totalSections} size={54} strokeWidth={4} />
+          <CircularProgress percentage={completionPercentage} totalSections={totalSections} completedCount={completedCount} size={54} strokeWidth={4} />
         </div>
       </div>
 

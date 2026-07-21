@@ -20,29 +20,33 @@ export default function SectionStartModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
-
-        {/* Header */}
-        <div className="bg-[#2557a7] px-6 py-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-white leading-snug">{title}</h2>
-              <p className="text-sm text-white/70 mt-1">{subtitle}</p>
-            </div>
-            <span className="shrink-0 bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="section-start-title">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl">
+        <div className="border-b border-[#2557a7]/10 bg-[#f5f8ff] px-6 py-5">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <span className="rounded-full border border-[#2557a7]/15 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#2557a7]">
+              Candidate checkpoint
+            </span>
+            <span className="rounded-full bg-[#2557a7] px-3 py-1 text-xs font-black text-white">
               {questions}Q
             </span>
           </div>
+          <h2 id="section-start-title" className="text-lg font-black leading-snug text-slate-950">
+            {title}
+          </h2>
+          <p className="mt-2 text-sm font-medium leading-6 text-slate-600">{subtitle}</p>
         </div>
 
-        {/* Instructions */}
         <div className="px-6 py-5">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Instructions</p>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Instructions</p>
+            <p className="text-xs font-bold text-slate-500">Read before starting</p>
+          </div>
+
           <ul className="space-y-2.5">
             {instructions.map((item, index) => (
-              <li key={index} className="flex items-start gap-3 text-sm text-gray-700">
-                <span className="shrink-0 w-5 h-5 rounded-full bg-[#2557a7]/10 text-[#2557a7] text-xs font-bold flex items-center justify-center mt-0.5">
+              <li key={index} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#2557a7] text-xs font-black text-white">
                   {index + 1}
                 </span>
                 <span className="leading-relaxed">{item}</span>
@@ -51,19 +55,16 @@ export default function SectionStartModal({
           </ul>
         </div>
 
-        {/* Divider */}
-        <div className="h-px bg-gray-100 mx-6" />
-
-        {/* Action */}
-        <div className="px-6 py-5">
+        <div className="border-t border-slate-100 bg-white px-6 py-5">
           <button
+            type="button"
             onClick={onStart}
-            className="w-full bg-[#2557a7] hover:bg-[#1e4a94] text-white py-3 rounded-xl font-semibold text-sm transition-colors"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-[#2557a7]/15 transition-colors hover:bg-[#1e4a94] focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
           >
-            Start Section →
+            Start Section
+            <span aria-hidden="true">-&gt;</span>
           </button>
         </div>
-
       </div>
     </div>
   );

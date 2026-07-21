@@ -1,412 +1,476 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import React from 'react';
+import React from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@testing-library/jest-dom";
 
-// Mock router
-const mockPush = vi.fn();
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
+const mocks = vi.hoisted(() => ({
+  push: vi.fn(),
+  pathname: "/mock-interview/live",
+  params: { sessionId: "live-session-123" } as Record<string, string>,
+  consentGiven: true,
+  setConsentGiven: vi.fn(),
+  stageState: {
+    notes_generated: false,
+    english_read: false,
+    practice_answered: 0,
+    practice_total: 0,
+    readiness_passed: false,
+    history_count: 0,
+  },
+  createLiveSession: vi.fn(),
+  getReport: vi.fn(),
+  shareReport: vi.fn(),
+  downloadReportPdf: vi.fn(),
+  getLiveSessionState: vi.fn(),
+  buildWsUrl: vi.fn((url: string) => `ws://test.local${url}`),
 }));
 
-// Mock ConsentModal component
-const MockConsentModal = ({ onAccept, onDecline }: any) => (
-  <div data-testid="consent-modal">
-    <p>Do you consent to continue?</p>
-    <button onClick={onAccept} data-testid="consent-accept">Accept</button>
-    <button onClick={onDecline} data-testid="consent-decline">Decline</button>
-  </div>
-);
-
-vi.mock('./_components/ConsentModal', () => ({
-  default: MockConsentModal,
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mocks.push, replace: vi.fn(), prefetch: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
+  usePathname: () => mocks.pathname,
+  useParams: () => mocks.params,
+  useSearchParams: () => new URLSearchParams(),
 }));
 
-// Mock context
-vi.mock('./_context/MockInterviewContext', () => ({
+vi.mock("@/app/(interview)/mock-interview/_context/MockInterviewContext", () => ({
   useMockInterview: () => ({
+    stageState: mocks.stageState,
+    consentGiven: mocks.consentGiven,
+    setConsentGiven: mocks.setConsentGiven,
     activeSession: null,
-    userProgress: { avg_score: 0, practice_rounds: 0 },
-    stageState: { notes_generated: false, readiness_passed: false },
-    consentGiven: false,
-    setConsentGiven: vi.fn(),
     dismissActiveSession: vi.fn(),
+    userProgress: null,
+    progressLoading: false,
+    userId: "user-123",
+    setNotesGenerated: vi.fn(),
+    setEnglishRead: vi.fn(),
+    setPracticeAnswered: vi.fn(),
+    setPracticeTotal: vi.fn(),
+    setReadinessPassed: vi.fn(),
   }),
 }));
 
-// Test component
-const MockInterviewPage = () => {
-  const {
-    activeSession,
-    userProgress,
-    stageState,
-    consentGiven,
-    setConsentGiven,
-  } = require('./_context/MockInterviewContext').useMockInterview();
-  const router = require('next/navigation').useRouter();
+vi.mock("@/api/mockInterviewApi", () => ({
+  createLiveSession: mocks.createLiveSession,
+  getReport: mocks.getReport,
+  shareReport: mocks.shareReport,
+  downloadReportPdf: mocks.downloadReportPdf,
+  getLiveSessionState: mocks.getLiveSessionState,
+  buildWsUrl: mocks.buildWsUrl,
+}));
 
-  const [showConsent, setShowConsent] = React.useState(false);
-  const [pendingHref, setPendingHref] = React.useState<string | null>(null);
+vi.mock("framer-motion", () => ({
+  motion: new Proxy({}, { get: (_target, tag: string) => ({ children, ...props }: any) => React.createElement(tag, props, children) }),
+}));
 
-  const hasNotes = stageState.notes_generated;
-  const isReady = stageState.readiness_passed;
-  const avgScore = userProgress?.avg_score ?? 0;
-  const practiceRoundsCompleted = userProgress?.practice_rounds ?? 0;
+vi.mock("next/image", () => ({
+  default: ({ priority, fill, sizes, ...props }: any) => React.createElement("img", props),
+}));
 
-  const steps = [
-    {
-      id: 1,
-      label: 'Your Interview Notes',
-      sublabel: 'Generate personalised scripts from your resume',
-      href: '/mock-interview/notes',
-      badge: 'Stage 1',
-      cta: 'Generate Notes',
-      completedLabel: 'Notes Ready',
-      time: '~15 min',
-    },
-    {
-      id: 2,
-      label: 'English Essentials',
-      sublabel: '30 essential phrases, filler word replacements',
-      href: '/mock-interview/english',
-      badge: 'Stage 2',
-      cta: 'Read Guide',
-      completedLabel: 'Reviewed',
-      time: '5–10 min',
-    },
-    {
-      id: 3,
-      label: 'Practice Your Answers',
-      sublabel: 'Practice HR questions across 2 rounds',
-      href: '/mock-interview/practice',
-      badge: 'Stage 3–4',
-      cta: 'Start Practice',
-      completedLabel: 'Practice Done',
-      time: '~30 min',
-    },
-    {
-      id: 4,
-      label: 'Live Mock Interview',
-      sublabel: 'Full AI-powered voice interview',
-      href: '/mock-interview/live',
-      badge: 'Stage 5',
-      cta: 'Start Interview',
-      completedLabel: 'Completed',
-      time: '~20 min',
-    },
-  ];
+class MockAudio {
+  static instances: MockAudio[] = [];
+  volume = 1;
+  onended: null | (() => void) = null;
+  onerror: null | (() => void) = null;
+  play = vi.fn(() => Promise.resolve());
+  pause = vi.fn();
+  constructor(public src = "") { MockAudio.instances.push(this); }
+}
 
-  const handleStepClick = (href: string) => {
-    if (!consentGiven) {
-      setPendingHref(href);
-      setShowConsent(true);
-    } else {
-      router.push(href);
-    }
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  static OPEN = 1;
+  readyState = 0;
+  onopen: null | (() => void) = null;
+  onmessage: null | ((event: MessageEvent) => void) = null;
+  onclose: null | ((event: CloseEvent) => void) = null;
+  onerror: null | (() => void) = null;
+  send = vi.fn();
+  close = vi.fn(() => { this.readyState = 3; this.onclose?.({ code: 1000 } as CloseEvent); });
+  constructor(public url: string) { MockWebSocket.instances.push(this); }
+  open() { this.readyState = MockWebSocket.OPEN; this.onopen?.(); }
+  emit(data: unknown) { this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent); }
+}
+
+function mediaStream() {
+  return { getTracks: () => [{ stop: vi.fn() }] } as unknown as MediaStream;
+}
+
+function report(overrides = {}) {
+  return {
+    report_id: "report-123",
+    session_id: "live-session-123",
+    user_id: "user-123",
+    type: "HR",
+    overall_score: 8.1,
+    scores: { overall: 8.1, communication: 8, confidence: 7.5 },
+    answers: [{ question_text: "Tell me about teamwork.", score: 8, feedback: "Clear structure.", key_points_hit: 3, key_points_total: 4, transcript: "I aligned the team.", duration_s: 64, filler_count: 1 }],
+    recommendations: ["Use more metrics."],
+    pressure_tag: null,
+    grade: "A",
+    performance_summary: "Strong interview performance.",
+    strengths: ["Structured answer"],
+    improvement_areas: ["Add quantified impact"],
+    created_at: "2026-07-17T09:00:00Z",
+    duration_min: 18,
+    question_count: 1,
+    action_plan: ["Practice concise openings."],
+    ...overrides,
   };
+}
 
-  const handleConsentAccept = () => {
-    setConsentGiven(true);
-    setShowConsent(false);
-    if (pendingHref) {
-      router.push(pendingHref);
-      setPendingHref(null);
-    }
-  };
+const importMockSidebar = async () => (await import("@/app/(interview)/mock-interview/_components/MockSidebar")).default;
+const importReadinessGate = async () => (await import("@/app/(interview)/mock-interview/_components/ReadinessGate")).default;
+const importLiveSetupPage = async () => (await import("@/app/(interview)/mock-interview/live/page")).default;
+const importLiveSessionPage = async () => (await import("@/app/(interview)/mock-interview/live/[sessionId]/page")).default;
+const importReportPage = async () => (await import("@/app/(interview)/mock-interview/report/[sessionId]/page")).default;
 
-  const getStepStatus = (step: any): 'completed' | 'active' | 'locked' => {
-    if (step.id === 1) return hasNotes ? 'completed' : 'active';
-    if (step.id === 2) return 'active';
-    if (step.id === 3) return hasNotes ? 'active' : 'locked';
-    if (step.id === 4) return isReady ? 'active' : 'locked';
-    return 'locked';
-  };
+beforeEach(() => {
+  vi.useRealTimers();
+  vi.clearAllMocks();
+  mocks.pathname = "/mock-interview/live";
+  mocks.params = { sessionId: "live-session-123" };
+  mocks.consentGiven = true;
+  mocks.stageState = { notes_generated: false, english_read: false, practice_answered: 0, practice_total: 0, readiness_passed: false, history_count: 0 };
+  mocks.buildWsUrl.mockImplementation((url: string) => `ws://test.local${url}`);
+  MockAudio.instances = [];
+  MockWebSocket.instances = [];
+  vi.stubGlobal("Audio", MockAudio);
+  vi.stubGlobal("WebSocket", MockWebSocket);
+  vi.stubGlobal("ResizeObserver", class { observe = vi.fn(); unobserve = vi.fn(); disconnect = vi.fn(); });
+  vi.stubGlobal("AudioContext", class { state = "running"; destination = {}; createOscillator() { return { type: "sine", frequency: { value: 0 }, connect: vi.fn(), start: vi.fn(), stop: vi.fn() }; } createGain() { return { gain: { value: 0 }, connect: vi.fn() }; } createAnalyser() { return { fftSize: 0, smoothingTimeConstant: 0, frequencyBinCount: 32, connect: vi.fn(), getByteFrequencyData: vi.fn((data: Uint8Array) => data.fill(20)) }; } createMediaStreamSource() { return { connect: vi.fn() }; } createMediaElementSource() { return { connect: vi.fn() }; } resume() { return Promise.resolve(); } close() { return Promise.resolve(); } });
+  Object.defineProperty(window, "sessionStorage", { configurable: true, value: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() } });
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { enumerateDevices: vi.fn().mockResolvedValue([{ kind: "audioinput", deviceId: "mic-1", label: "Studio Mic" }, { kind: "videoinput", deviceId: "cam-1", label: "Webcam" }]), getUserMedia: vi.fn().mockResolvedValue(mediaStream()) } });
+  Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
+  Object.defineProperty(document.documentElement, "requestFullscreen", { configurable: true, value: vi.fn(() => Promise.resolve()) });
+  Object.defineProperty(HTMLMediaElement.prototype, "srcObject", { configurable: true, get() { return (this as any).__srcObject ?? null; }, set(value) { (this as any).__srcObject = value; } });
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:mock-audio") });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+});
 
-  const completedSteps = steps.filter((s) => getStepStatus(s) === 'completed').length;
-  const overallProgress = Math.round((completedSteps / steps.length) * 100);
-  const hasActivity = avgScore > 0 || practiceRoundsCompleted > 0;
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
-  return (
-    <>
-      {showConsent && (
-        <MockConsentModal
-          onAccept={handleConsentAccept}
-          onDecline={() => setShowConsent(false)}
-        />
-      )}
-
-      <div className="bg-white border-b border-gray-100">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-7">
-          <h1 data-testid="page-title" className="text-3xl font-bold text-gray-900">
-            Mock Interview
-          </h1>
-          <p className="text-gray-500 text-sm mt-2">
-            5-stage system to prepare and walk into your next interview with confidence.
-          </p>
-          <div className="flex items-center gap-2 mt-3">
-            <button
-              onClick={() => handleStepClick('/mock-interview/notes')}
-              data-testid="get-started-btn"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#2557a7] text-white rounded-lg text-xs font-bold"
-            >
-              Get Started
-            </button>
-            <button
-              onClick={() => router.push('/mock-interview/history')}
-              data-testid="history-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg text-xs"
-            >
-              History
-            </button>
-          </div>
-
-          <div className="mt-4">
-            <div data-testid="progress-ring" className="relative w-24 h-24">
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-bold text-gray-900">{overallProgress}%</span>
-                <span className="text-[9px] text-gray-400">{completedSteps}/{steps.length}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5">
-        {activeSession && (
-          <div data-testid="session-recovery-banner" className="mb-4 flex items-center justify-between gap-3 bg-white border border-[#2557a7]/15 rounded-xl px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">
-                {activeSession.type === 'live' ? 'Interview in progress' : 'Unfinished practice session'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {hasActivity && (
-          <div data-testid="stats-section" className="grid grid-cols-3 gap-2.5 mb-4">
-            <div className="flex items-center gap-2.5 bg-white border border-gray-100 rounded-lg px-3 py-2.5">
-              <p className="text-[10px] text-gray-400 uppercase">Avg Score</p>
-              <p className="text-sm font-bold text-gray-900">{avgScore ? `${avgScore}/10` : '—'}</p>
-            </div>
-            <div className="flex items-center gap-2.5 bg-white border border-gray-100 rounded-lg px-3 py-2.5">
-              <p className="text-[10px] text-gray-400 uppercase">Rounds</p>
-              <p className="text-sm font-bold text-gray-900">{practiceRoundsCompleted}/3</p>
-            </div>
-            <div className="flex items-center gap-2.5 bg-white border border-gray-100 rounded-lg px-3 py-2.5">
-              <p className="text-[10px] text-gray-400 uppercase">Readiness</p>
-              <p className="text-sm font-bold text-gray-900">{isReady ? 'Ready' : 'Not Yet'}</p>
-            </div>
-          </div>
-        )}
-
-        {!isReady && practiceRoundsCompleted > 0 && (
-          <div data-testid="readiness-alert" className="mb-4 flex items-center gap-2.5 bg-[#2557a7]/5 border border-[#2557a7]/12 rounded-lg px-3.5 py-2.5">
-            <p className="text-xs text-gray-600">Complete at least 1 practice round to unlock Live Interview.</p>
-          </div>
-        )}
-
-        <div data-testid="steps-grid" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {steps.map((step) => {
-            const status = getStepStatus(step);
-            const isLocked = status === 'locked';
-            const isCompleted = status === 'completed';
-
-            return (
-              <button
-                key={step.id}
-                onClick={() => !isLocked && handleStepClick(step.href)}
-                disabled={isLocked}
-                data-testid={`step-${step.id}`}
-                className={`group relative text-left w-full rounded-xl overflow-hidden transition-all duration-200 ${
-                  isLocked
-                    ? 'bg-gray-50 border border-gray-100 cursor-not-allowed opacity-45'
-                    : isCompleted
-                    ? 'bg-white border border-[#2557a7]/15'
-                    : 'bg-white border border-gray-200'
-                }`}
-              >
-                <div className="p-4 relative z-10">
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-sm font-semibold tracking-tight text-gray-900">
-                          {step.label}
-                        </h3>
-                        <span data-testid={`step-badge-${step.id}`} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-                          {step.badge}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500">{step.sublabel}</p>
-                      {!isLocked && (
-                        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-100">
-                          <span className="text-[10px] text-gray-400 font-medium">{step.time}</span>
-                          <span className="text-xs font-semibold text-[#2557a7]">{step.cta}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </>
-  );
-};
-
-describe('MockInterviewPage', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe("MockSidebar", () => {
+  it("hides on the public landing route", async () => {
+    mocks.pathname = "/mock-interview";
+    const MockSidebar = await importMockSidebar();
+    const { container } = render(<MockSidebar />);
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders mock interview page title', () => {
-    render(<MockInterviewPage />);
+  it("renders compact rail actions and optional prep without practice gating", async () => {
+    mocks.stageState = { ...mocks.stageState, history_count: 2 };
+    const MockSidebar = await importMockSidebar();
+    render(<MockSidebar />);
+    expect(screen.getByRole("navigation", { name: /mock interview navigation/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /01 mock interview/i })).toHaveAttribute("title", "Mock Interview");
+    expect(screen.getByRole("button", { name: /02 history & reports/i })).toHaveAttribute("title", "History & Reports");
+    expect(screen.getByLabelText("Session progress 0 of 2")).toHaveTextContent("0/2");
+    fireEvent.click(screen.getByRole("button", { name: /01 mock interview/i }));
+    fireEvent.click(screen.getByRole("button", { name: /02 history & reports/i }));
+    fireEvent.click(screen.getByRole("button", { name: /optional prep notes and practice/i }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live");
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/history");
+    expect(mocks.push).toHaveBeenCalledWith("/notes/generate");
+  });
+});
 
-    expect(screen.getByTestId('page-title')).toBeInTheDocument();
-    expect(screen.getByText('Mock Interview')).toBeInTheDocument();
+describe("ReadinessGate", () => {
+  it("keeps live interview available when practice score is weak", async () => {
+    const ReadinessGate = await importReadinessGate();
+    const onPracticeMore = vi.fn();
+    render(<ReadinessGate isReady={false} avgScore={3.2} reasons={["Needs stronger examples"]} weakQuestions={[{ question_id: "q1", question_text: "Describe a conflict.", score: 3.5 }]} onPracticeMore={onPracticeMore} />);
+    expect(screen.getByText("Live Interview Is Available")).toBeInTheDocument();
+    expect(screen.getByText(/practice is optional/i)).toBeInTheDocument();
+    expect(screen.getByText("Describe a conflict.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /start live interview/i }));
+    fireEvent.click(screen.getByRole("button", { name: /practice weak questions/i }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live");
+    expect(onPracticeMore).toHaveBeenCalledTimes(1);
   });
 
-  it('displays get started and history buttons', () => {
-    render(<MockInterviewPage />);
+  it("shows strong-practice state while more practice remains optional", async () => {
+    const ReadinessGate = await importReadinessGate();
+    const onPracticeMore = vi.fn();
+    render(<ReadinessGate isReady avgScore={8.8} reasons={[]} weakQuestions={[]} onPracticeMore={onPracticeMore} />);
+    expect(screen.getByText("Practice Looks Strong")).toBeInTheDocument();
+    expect(screen.getByText("Average score: 8.8/10")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /practice more \(optional\)/i }));
+    expect(onPracticeMore).toHaveBeenCalledTimes(1);
+  });
+});
 
-    expect(screen.getByTestId('get-started-btn')).toBeInTheDocument();
-    expect(screen.getByTestId('history-btn')).toBeInTheDocument();
+describe("LiveSetupPage", () => {
+  it("requires consent before preflight and returns to landing on decline", async () => {
+    mocks.consentGiven = false;
+    const LiveSetupPage = await importLiveSetupPage();
+    render(<LiveSetupPage />);
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview");
   });
 
-  it('displays progress ring with 0% completion initially', () => {
-    render(<MockInterviewPage />);
-
-    expect(screen.getByTestId('progress-ring')).toBeInTheDocument();
-    expect(screen.getByText('0%')).toBeInTheDocument();
+  it("runs device checks before setup", async () => {
+    const LiveSetupPage = await importLiveSetupPage();
+    render(<LiveSetupPage />);
+    fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
+    await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
+    await waitFor(() => expect(screen.getByText(/camera preview is working/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /test speaker/i }));
+    await waitFor(() => expect(screen.getByText(/speaker test completed/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText(/quiet environment confirmed/i));
+    fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
+    expect(screen.getByRole("button", { name: /start interview now/i })).toBeInTheDocument();
   });
 
-  it('renders all 4 interview steps', () => {
-    render(<MockInterviewPage />);
-
-    expect(screen.getByTestId('step-1')).toBeInTheDocument();
-    expect(screen.getByTestId('step-2')).toBeInTheDocument();
-    expect(screen.getByTestId('step-3')).toBeInTheDocument();
-    expect(screen.getByTestId('step-4')).toBeInTheDocument();
+  it("starts direct live interview and stores session data", async () => {
+    mocks.createLiveSession.mockResolvedValue({ session_id: "created-session", ticket_id: "ticket-1", ticket_expires_at: "2026-07-17T10:00:00Z", ws_url: "/ws" });
+    const LiveSetupPage = await importLiveSetupPage();
+    render(<LiveSetupPage />);
+    fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
+    await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
+    await waitFor(() => expect(screen.getByText(/camera preview is working/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /test speaker/i }));
+    await waitFor(() => expect(screen.getByText(/speaker test completed/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText(/quiet environment confirmed/i));
+    fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Technical" }));
+    fireEvent.click(screen.getByRole("button", { name: /start interview now/i }));
+    await waitFor(() => expect(mocks.createLiveSession).toHaveBeenCalledWith({ session_type: "technical", enable_streaming_stt: true }));
+    expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_type", "Technical");
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live/created-session");
   });
 
-  it('displays step titles correctly', () => {
-    render(<MockInterviewPage />);
+  it("surfaces create-session failure", async () => {
+    mocks.createLiveSession.mockRejectedValue(new Error("network"));
+    const LiveSetupPage = await importLiveSetupPage();
+    render(<LiveSetupPage />);
+    fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
+    await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
+    await waitFor(() => expect(screen.getByText(/camera preview is working/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /test speaker/i }));
+    await waitFor(() => expect(screen.getByText(/speaker test completed/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText(/quiet environment confirmed/i));
+    fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
+    fireEvent.click(screen.getByRole("button", { name: /start interview now/i }));
+    expect(await screen.findByText(/we could not create the live interview/i)).toBeInTheDocument();
+  });
+});
 
-    expect(screen.getByText('Your Interview Notes')).toBeInTheDocument();
-    expect(screen.getByText('English Essentials')).toBeInTheDocument();
-    expect(screen.getByText('Practice Your Answers')).toBeInTheDocument();
-    expect(screen.getByText('Live Mock Interview')).toBeInTheDocument();
+describe("LiveInterviewSessionPage", () => {
+  it("opens websocket from stored setup data", async () => {
+    vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_data" ? JSON.stringify({ session_id: "live-session-123", ticket_id: "ticket-1", ws_url: "/live/ws-ticket" }) : key === "live_session_type" ? "HR" : null);
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    expect(MockWebSocket.instances[0].url).toBe("ws://test.local/live/ws-ticket?ticket=ticket-1");
+    act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
+    expect(screen.getByText(/connected/i)).toBeInTheDocument();
+    expect(screen.getByText("1/6")).toBeInTheDocument();
   });
 
-  it('displays step badges', () => {
-    render(<MockInterviewPage />);
-
-    expect(screen.getByTestId('step-badge-1')).toHaveTextContent('Stage 1');
-    expect(screen.getByTestId('step-badge-2')).toHaveTextContent('Stage 2');
-    expect(screen.getByTestId('step-badge-3')).toHaveTextContent('Stage 3–4');
-    expect(screen.getByTestId('step-badge-4')).toHaveTextContent('Stage 5');
+  it("reveals question word by word, then enters listening mode", async () => {
+    vi.useFakeTimers();
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); MockWebSocket.instances[0].emit({ type: "question_audio", question_number: 1, text: "Tell me about a difficult project you handled.", audio: null, time_limit_s: 60 }); });
+    expect(screen.getByText(/interviewer speaking/i)).toBeInTheDocument();
+    expect(screen.queryByText("Tell me about a difficult project you handled.")).not.toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(115); });
+    expect(screen.getByText(/^Tell\s*$/)).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(2_000); });
+    expect(screen.getByText("Tell me about a difficult project you handled.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /done speaking/i })).toBeInTheDocument();
   });
 
-  it('shows consent modal when step clicked without consent', () => {
-    render(<MockInterviewPage />);
+  it("shows transcript updates and sends end_answer", async () => {
+    vi.useFakeTimers();
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); ws.emit({ type: "question_audio", question_number: 1, text: "Tell me about teamwork.", audio: null, time_limit_s: 60 }); vi.advanceTimersByTime(1_600); ws.emit({ type: "partial_transcript", text: "I worked with a cross functional team" }); });
+    expect(screen.getByText("I worked with a cross functional team")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /done speaking/i }));
+    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: "end_answer" }));
+  });
 
-    const getStartedBtn = screen.getByTestId('get-started-btn');
-    fireEvent.click(getStartedBtn);
-
-    waitFor(() => {
-      expect(screen.getByTestId('consent-modal')).toBeInTheDocument();
+  it("handles mic and camera failures with visible recovery", async () => {
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementation((constraints) => {
+      if ((constraints as MediaStreamConstraints).video) return Promise.reject(new Error("camera denied"));
+      if ((constraints as MediaStreamConstraints).audio) return Promise.reject(new Error("mic denied"));
+      return Promise.resolve(mediaStream());
     });
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); ws.emit({ type: "question_audio", question_number: 1, text: "Answer this.", audio: null, time_limit_s: 60 }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1600)); });
+    expect(await screen.findByText(/camera unavailable/i)).toBeInTheDocument();
+    expect(await screen.findByText(/microphone permission needs attention/i)).toBeInTheDocument();
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockResolvedValue(mediaStream());
+    fireEvent.click(screen.getByRole("button", { name: /retry mic/i }));
+    await waitFor(() => expect(screen.queryByText(/microphone access is unavailable/i)).not.toBeInTheDocument());
   });
 
-  it('accepts consent and navigates to step', () => {
-    render(<MockInterviewPage />);
+  it("confirms end interview before sending end_interview", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => { ws.open(); ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); });
+    fireEvent.click(screen.getByRole("button", { name: /^end$/i }));
+    expect(screen.getByRole("dialog", { name: /end interview early/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /end & get report/i }));
+    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: "end_interview" }));
+  });
 
-    const getStartedBtn = screen.getByTestId('get-started-btn');
-    fireEvent.click(getStartedBtn);
+  it("uses backend report_id when interview completes", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    act(() => { MockWebSocket.instances[0].open(); MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 }); MockWebSocket.instances[0].emit({ type: "interview_complete", report_id: "report-from-backend", overall_score: 8.4 }); });
+    fireEvent.click(screen.getByRole("button", { name: /view my report/i }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/report/report-from-backend");
+  });
 
-    waitFor(() => {
-      const acceptBtn = screen.getByTestId('consent-accept');
-      fireEvent.click(acceptBtn);
-
-      expect(mockPush).toHaveBeenCalledWith('/mock-interview/notes');
+  it("recovers the room when the backend resumes a paused session", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "session_paused", reason: "network", reconnect_token: "retry-token" });
     });
-  });
 
-  it('declines consent and closes modal', () => {
-    render(<MockInterviewPage />);
+    expect(screen.getByRole("dialog", { name: /connection lost/i })).toBeInTheDocument();
 
-    const getStartedBtn = screen.getByTestId('get-started-btn');
-    fireEvent.click(getStartedBtn);
-
-    waitFor(() => {
-      const declineBtn = screen.getByTestId('consent-decline');
-      fireEvent.click(declineBtn);
-
-      expect(screen.queryByTestId('consent-modal')).not.toBeInTheDocument();
+    act(() => {
+      ws.emit({ type: "session_resumed", session_id: "live-session-123", questions_asked: 2, total_questions: 6, current_question: "Next question" });
     });
+
+    expect(screen.queryByRole("dialog", { name: /connection lost/i })).not.toBeInTheDocument();
+    expect(screen.getByText("3/6")).toBeInTheDocument();
   });
 
-  it('navigates to history page', () => {
-    render(<MockInterviewPage />);
+  it("reconnects with a recovery ticket when the connection is interrupted", async () => {
+    mocks.getLiveSessionState.mockResolvedValue({
+      session_id: "live-session-123",
+      status: "active",
+      current_question: 2,
+      questions_asked: 1,
+      time_elapsed_s: 90,
+      can_reconnect: true,
+      reconnect_token: "reconnect-token",
+    });
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.onclose?.({ code: 1006 } as CloseEvent);
+    });
 
-    const historyBtn = screen.getByTestId('history-btn');
-    fireEvent.click(historyBtn);
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
 
-    expect(mockPush).toHaveBeenCalledWith('/mock-interview/history');
+    await waitFor(() => expect(mocks.getLiveSessionState).toHaveBeenCalledWith("live-session-123"));
+    expect(MockWebSocket.instances[1].url).toBe("ws://test.local/api/v1/mock-interview/live/live-session-123?ticket=reconnect-token");
   });
 
-  it('does not display stats section when no activity', () => {
-    render(<MockInterviewPage />);
+  it("shows and dismisses backend error messages without ending the room", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    act(() => {
+      MockWebSocket.instances[0].open();
+      MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      MockWebSocket.instances[0].emit({ type: "error", code: "STT_TIMEOUT", message: "Speech service timed out. Please continue." });
+    });
 
-    expect(screen.queryByTestId('stats-section')).not.toBeInTheDocument();
+    expect(screen.getByText("Speech service timed out. Please continue.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Speech service timed out. Please continue.").closest("div")!.querySelector("button")!);
+    expect(screen.queryByText("Speech service timed out. Please continue.")).not.toBeInTheDocument();
   });
 
-  it('does not display readiness alert when readiness passed', () => {
-    render(<MockInterviewPage />);
+  it("auto-submits the answer when the question timer reaches zero", async () => {
+    vi.useFakeTimers();
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.open();
+      ws.emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      ws.emit({ type: "question_audio", question_number: 1, text: "Keep it concise.", audio: null, time_limit_s: 2 });
+      vi.advanceTimersByTime(1_600);
+    });
 
-    expect(screen.queryByTestId('readiness-alert')).not.toBeInTheDocument();
+    expect(screen.getByRole("timer", { name: /time remaining: 2 seconds/i })).toBeInTheDocument();
+
+    act(() => { vi.advanceTimersByTime(2_000); });
+
+    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: "end_answer" }));
+    expect(screen.getByText(/reviewing answer/i)).toBeInTheDocument();
   });
 
-  it('does not display session recovery banner when no active session', () => {
-    render(<MockInterviewPage />);
+  it("pauses and resumes interviewer audio from the speaker control", async () => {
+    const LiveSessionPage = await importLiveSessionPage();
+    render(<LiveSessionPage />);
+    act(() => {
+      MockWebSocket.instances[0].open();
+      MockWebSocket.instances[0].emit({ type: "session_ready", session_id: "live-session-123", total_questions: 6, estimated_duration_m: 20 });
+      MockWebSocket.instances[0].emit({ type: "question_audio", question_number: 1, text: "Can you introduce yourself?", audio: "AA==", time_limit_s: 60 });
+    });
 
-    expect(screen.queryByTestId('session-recovery-banner')).not.toBeInTheDocument();
+    const audio = MockAudio.instances.at(-1)!;
+    fireEvent.click(screen.getByRole("button", { name: /mute interviewer audio/i }));
+    expect(audio.pause).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /unmute interviewer audio/i }));
+    expect(audio.play).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("ReportPage", () => {
+  it("loads completed report with summary, transcript and actions", async () => {
+    mocks.params = { sessionId: "report-123" };
+    mocks.getReport.mockResolvedValue(report());
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    expect(await screen.findByText("Mock Interview Report")).toBeInTheDocument();
+    expect(screen.getByText("Strong interview performance.")).toBeInTheDocument();
+    expect(screen.getByText("Tell me about teamwork.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /share report/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /download pdf/i })).toBeInTheDocument();
   });
 
-  it('renders steps grid', () => {
-    render(<MockInterviewPage />);
-
-    expect(screen.getByTestId('steps-grid')).toBeInTheDocument();
+  it("retries delayed report and then shows final not-found state", async () => {
+    vi.useFakeTimers();
+    mocks.params = { sessionId: "missing-report" };
+    mocks.getReport.mockRejectedValue(new Error("404"));
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    expect(screen.getByText(/preparing report/i)).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(7_500); });
+    expect(screen.getByText("Report Not Found")).toBeInTheDocument();
+    expect(mocks.getReport).toHaveBeenCalledTimes(6);
+    fireEvent.click(screen.getByRole("button", { name: /view history/i }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/history");
   });
 
-  it('displays step descriptions', () => {
-    render(<MockInterviewPage />);
-
-    expect(screen.getByText(/Generate personalised scripts from your resume/)).toBeInTheDocument();
-    expect(screen.getByText(/30 essential phrases/)).toBeInTheDocument();
-    expect(screen.getByText(/Practice HR questions across 2 rounds/)).toBeInTheDocument();
-    expect(screen.getByText(/Full AI-powered voice interview/)).toBeInTheDocument();
-  });
-
-  it('displays step time estimates', () => {
-    render(<MockInterviewPage />);
-
-    expect(screen.getByText('~15 min')).toBeInTheDocument();
-    expect(screen.getByText('5–10 min')).toBeInTheDocument();
-    expect(screen.getByText('~30 min')).toBeInTheDocument();
-    expect(screen.getByText('~20 min')).toBeInTheDocument();
-  });
-
-  it('displays step CTAs', () => {
-    render(<MockInterviewPage />);
-
-    expect(screen.getByText('Generate Notes')).toBeInTheDocument();
-    expect(screen.getByText('Read Guide')).toBeInTheDocument();
-    expect(screen.getByText('Start Practice')).toBeInTheDocument();
-    expect(screen.getByText('Start Interview')).toBeInTheDocument();
+  it("recovers when delayed report succeeds and supports PDF/share actions", async () => {
+    mocks.params = { sessionId: "eventual-report" };
+    mocks.getReport.mockRejectedValueOnce(new Error("404")).mockResolvedValueOnce(report({ report_id: "eventual-report" }));
+    mocks.downloadReportPdf.mockResolvedValue(undefined);
+    mocks.shareReport.mockResolvedValue({ share_url: "https://careerbot.test/shared/report-token", token: "report-token", expires_at: "2026-07-24T00:00:00Z" });
+    const ReportPage = await importReportPage();
+    render(<ReportPage />);
+    expect(await screen.findByText("Mock Interview Report", {}, { timeout: 2500 })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+    await waitFor(() => expect(mocks.downloadReportPdf).toHaveBeenCalledWith("eventual-report"));
+    fireEvent.click(screen.getByRole("button", { name: /share report/i }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /generate link/i }));
+    await waitFor(() => expect(mocks.shareReport).toHaveBeenCalledWith("eventual-report"));
   });
 });

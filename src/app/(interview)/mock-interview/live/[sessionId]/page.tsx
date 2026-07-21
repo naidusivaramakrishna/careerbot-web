@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import Image from "next/image";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   buildWsUrl,
@@ -11,7 +12,6 @@ import {
 } from "@/api/mockInterviewApi";
 import {
   Mic,
-
   Video,
   VideoOff,
   Clock,
@@ -27,7 +27,6 @@ import {
   MessageSquare,
   RefreshCw,
   Maximize2,
-  Minimize2,
   X,
 } from "lucide-react";
 
@@ -52,19 +51,55 @@ interface ScoreToast {
   score: number;
 }
 
+const INTERVIEWERS = [
+  {
+    name: "Arjun",
+    role: "Senior HR Interviewer",
+    src: "/images/ai-interviewer-room-male-01.png",
+  },
+  {
+    name: "Rahul",
+    role: "Technical Interview Panelist",
+    src: "/images/ai-interviewer-room-male-02.png",
+  },
+  {
+    name: "Meera",
+    role: "Senior HR Interviewer",
+    src: "/images/ai-interviewer-room-female-01.png",
+  },
+  {
+    name: "Nisha",
+    role: "Product Engineering Interviewer",
+    src: "/images/ai-interviewer-room-female-02.png",
+  },
+] as const;
+
+function pickInterviewerIndex(sessionId: string) {
+  if (!sessionId) return 0;
+
+  let hash = 0;
+  for (let i = 0; i < sessionId.length; i += 1) {
+    hash = (hash + sessionId.charCodeAt(i) * (i + 1)) % INTERVIEWERS.length;
+  }
+
+  return hash;
+}
+
 // ─── Animated waveform for AI talking ────────────────────────────────────────
 
-function AIWaveform() {
+const AI_WAVE_BARS = [18, 30, 24, 38, 22, 34, 28, 20, 36, 26, 32, 22];
+
+function AIWaveform({ barClassName = "bg-[#2557a7]" }: { barClassName?: string } = {}) {
   return (
-    <div className="flex items-center justify-center gap-1 h-12">
-      {Array.from({ length: 12 }).map((_, i) => (
+    <div className="flex h-12 items-center justify-center gap-1" aria-hidden="true">
+      {AI_WAVE_BARS.map((height, i) => (
         <div
           key={i}
-          className="waveBar-bar w-1.5 bg-[#2557a7] rounded-full"
+          className={`waveBar-bar w-1.5 ${barClassName} rounded-full`}
           style={{
-            height: `${Math.random() * 28 + 10}px`,
+            height: `${height}px`,
             animationName: "waveBar",
-            animationDuration: `${0.5 + Math.random() * 0.7}s`,
+            animationDuration: `${0.55 + (i % 4) * 0.12}s`,
             animationIterationCount: "infinite",
             animationTimingFunction: "ease-in-out",
             animationDelay: `${i * 0.08}s`,
@@ -85,16 +120,56 @@ function AIWaveform() {
   );
 }
 
-// ─── Recording pulse ──────────────────────────────────────────────────────────
+function getInterviewerStatus(phase: InterviewPhase) {
+  if (phase === "connecting") return "Joining the room";
+  if (phase === "ai-talking") return "Asking the next question";
+  if (phase === "follow-up") return "Asking a follow-up";
+  if (phase === "listening") return "Listening to your answer";
+  if (phase === "processing") return "Reviewing your response";
+  return "Session complete";
+}
 
-function RecordingPulse() {
+function InterviewTimeline({ phase }: { phase: InterviewPhase }) {
+  const steps = [
+    { key: "ai-talking", label: "Question" },
+    { key: "listening", label: "Answer" },
+    { key: "processing", label: "Review" },
+  ] as const;
+  const activeIndex = phase === "follow-up" ? 0 : steps.findIndex((step) => step.key === phase);
+
   return (
-    <div className="relative flex items-center justify-center w-20 h-20">
-      <div className="absolute w-20 h-20 rounded-full bg-[#2557a7] opacity-20 animate-ping motion-reduce:animate-none" />
-      <div className="absolute w-14 h-14 rounded-full bg-[#2557a7] opacity-30 animate-ping motion-reduce:animate-none" style={{ animationDelay: "0.2s" }} />
-      <div className="w-10 h-10 rounded-full bg-[#2557a7] flex items-center justify-center">
-        <Mic size={18} className="text-white" />
-      </div>
+    <div className="mt-4 grid grid-cols-3 gap-2" aria-label="Interview question flow">
+      {steps.map((step, index) => {
+        const isActive = activeIndex === index;
+        const isDone = activeIndex > index;
+        return (
+          <div key={step.key} className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2">
+            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+              isActive || isDone ? "bg-[#2557a7] text-white" : "bg-gray-200 text-gray-500"
+            }`}>
+              {isDone ? <CheckCircle2 size={11} aria-hidden="true" /> : index + 1}
+            </span>
+            <span className={`truncate text-[11px] font-semibold ${isActive ? "text-[#2557a7]" : "text-gray-500"}`}>
+              {step.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MicLevelMeter({ level }: { level: number }) {
+  const bars = [12, 24, 36, 48, 60, 72, 84, 96];
+  return (
+    <div className="flex items-end gap-1" aria-hidden="true">
+      {bars.map((threshold, index) => (
+        <span
+          key={threshold}
+          className={`w-1.5 rounded-full transition-colors ${level >= threshold ? "bg-[#2557a7]" : "bg-gray-200"}`}
+          style={{ height: `${8 + index * 2}px` }}
+        />
+      ))}
     </div>
   );
 }
@@ -105,12 +180,12 @@ function QuestionTimer({ secondsLeft, total }: { secondsLeft: number; total: num
   const pct = (secondsLeft / total) * 100;
   const ring = secondsLeft < 20 ? "#9ca3af" : "#2557a7";
   const color = secondsLeft < 20 ? "text-gray-400" : "text-[#2557a7]";
-  const r = 22;
+  const r = 19;
   const circ = 2 * Math.PI * r;
 
   return (
-    <div className="relative w-14 h-14 flex items-center justify-center">
-      <svg viewBox="0 0 56 56" className="absolute inset-0 -rotate-90" width="56" height="56">
+    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center" role="timer" aria-label={`Time remaining: ${secondsLeft} seconds`}>
+      <svg viewBox="0 0 56 56" className="absolute inset-0 -rotate-90" width="48" height="48">
         <circle cx="28" cy="28" r={r} fill="none" stroke="#e5e7eb" strokeWidth="4" />
         <circle
           cx="28" cy="28" r={r} fill="none"
@@ -250,19 +325,29 @@ function ReconnectModal({
 
 // ─── Completed screen ─────────────────────────────────────────────────────────
 
-function CompletedScreen({ sessionId }: { sessionId: string }) {
+function CompletedScreen({ sessionId, reportId }: { sessionId: string; reportId?: string | null }) {
   const router = useRouter();
+  const steps = ["Answers saved", "Transcript reviewed", reportId ? "Report ready" : "Report being prepared"];
+  const reportTargetId = reportId || sessionId;
   return (
     <div className="max-w-md mx-auto px-4 py-16 text-center">
       <div className="w-20 h-20 bg-[#2557a7]/10 rounded-full flex items-center justify-center mx-auto mb-4">
         <CheckCircle2 size={40} className="text-[#2557a7]" />
       </div>
       <h2 className="text-2xl font-bold text-gray-900 mb-2">Interview Complete!</h2>
-      <p className="text-gray-500 text-sm mb-6">
-        Great effort! Your report is being generated. It will be ready in a few seconds.
+      <p className="text-gray-500 text-sm mb-5">
+        Great effort. Your completed answers are saved and the report is being prepared.
       </p>
+      <div className="mb-6 space-y-2 rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm">
+        {steps.map((step, index) => (
+          <div key={step} className="flex items-center gap-2 text-xs text-gray-600">
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full ${index < 2 ? "bg-[#2557a7]/10 text-[#2557a7]" : "bg-gray-100 text-gray-500"}`}>{index < 2 ? <CheckCircle2 size={12} /> : <Loader2 size={12} className="animate-spin" />}</span>
+            {step}
+          </div>
+        ))}
+      </div>
       <button
-        onClick={() => router.push(`/mock-interview/report/${sessionId}`)}
+        onClick={() => router.push(`/mock-interview/report/${reportTargetId}`)}
         className="flex items-center gap-2 px-6 py-3 bg-[#2557a7] text-white rounded-xl font-bold mx-auto hover:bg-[#1e4a8f] transition-all shadow-md"
       >
         View My Report <ChevronRight size={16} />
@@ -292,12 +377,20 @@ function playTtsAudio(
   base64Audio: string | null,
   mutedRef: React.RefObject<boolean>,
   audioRef: React.RefObject<HTMLAudioElement | null>,
+  visualizerCleanupRef: React.MutableRefObject<(() => void) | null>,
+  onMouthLevel: (level: number) => void,
   onEnd: () => void,
 ) {
+  if (visualizerCleanupRef.current) {
+    visualizerCleanupRef.current();
+    visualizerCleanupRef.current = null;
+  }
+
   if (audioRef.current) {
     audioRef.current.pause();
     audioRef.current = null;
   }
+  onMouthLevel(0);
 
   if (!base64Audio || mutedRef.current) {
     setTimeout(onEnd, 1500);
@@ -316,47 +409,89 @@ function playTtsAudio(
 
   const tryNext = () => {
     if (mimeIndex >= TTS_MIME_TYPES.length) {
-      // All formats failed — pause briefly so the question text stays readable.
       setTimeout(onEnd, 2000);
       return;
     }
+
     const mime = TTS_MIME_TYPES[mimeIndex++];
     const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     audioRef.current = audio;
 
-    audio.onended = () => {
+    let audioContext: AudioContext | null = null;
+    let rafId: number | null = null;
+    const stopVisualizer = () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      rafId = null;
+      onMouthLevel(0);
+      if (audioContext?.state !== "closed") {
+        audioContext?.close().catch(() => {});
+      }
+    };
+
+    try {
+      const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextCtor) {
+        audioContext = new AudioContextCtor();
+        const source = audioContext.createMediaElementSource(audio);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.68;
+        source.connect(analyser);
+        analyser.connect(audioContext.destination);
+        const samples = new Uint8Array(analyser.frequencyBinCount);
+
+        const tick = () => {
+          analyser.getByteFrequencyData(samples);
+          const speechEnergy = samples.slice(2, 32).reduce((sum, value) => sum + value, 0) / 30;
+          onMouthLevel(Math.min(1, speechEnergy / 105));
+          rafId = window.requestAnimationFrame(tick);
+        };
+
+        visualizerCleanupRef.current = stopVisualizer;
+        if (audioContext.state === "suspended") {
+          audioContext.resume().catch(() => {});
+        }
+        tick();
+      }
+    } catch {
+      visualizerCleanupRef.current = null;
+    }
+
+    const cleanupAudio = () => {
+      stopVisualizer();
+      visualizerCleanupRef.current = null;
       URL.revokeObjectURL(url);
       audioRef.current = null;
+    };
+
+    audio.onended = () => {
+      cleanupAudio();
       onEnd();
     };
     audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      audioRef.current = null;
-      tryNext(); // wrong format — try the next MIME type
+      cleanupAudio();
+      tryNext();
     };
     audio.play().catch(() => {
-      // Autoplay blocked even after unlock — wait for the user to read the question.
-      URL.revokeObjectURL(url);
-      audioRef.current = null;
+      cleanupAudio();
       setTimeout(onEnd, 3000);
     });
   };
 
   tryNext();
 }
-
-// ─── Main Live Interview Page ─────────────────────────────────────────────────
-
 export default function LiveInterviewSessionPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
+  const interviewer = useMemo(() => INTERVIEWERS[pickInterviewerIndex(sessionId)], [sessionId]);
 
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
-  const [sessionType] = useState("HR");
+  const [sessionType, setSessionType] = useState("Live");
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+  const [visibleQuestionText, setVisibleQuestionText] = useState("");
   const [questionNumber, setQuestionNumber] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [timeLeft, setTimeLeft] = useState(120);
@@ -364,13 +499,70 @@ export default function LiveInterviewSessionPage() {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const isAudioMutedRef = useRef(false); // ref so WS handler sees latest value without stale closure
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null); // current TTS audio element
+  const ttsVisualizerCleanupRef = useRef<(() => void) | null>(null);
   const [transcript, setTranscript] = useState("");
   const [partialTranscript, setPartialTranscript] = useState("");
   const [wsConnected, setWsConnected] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const [micLevel, setMicLevel] = useState(0);
+  const [micRetryKey, setMicRetryKey] = useState(0);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [completedReportId, setCompletedReportId] = useState<string | null>(null);
+  const [interviewerMouthLevel, setInterviewerMouthLevel] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
 
   // Keep ref in sync with state so toggles mid-playback take effect
   useEffect(() => { isAudioMutedRef.current = isAudioMuted; }, [isAudioMuted]);
+
+  useEffect(() => {
+    const storedType = sessionStorage.getItem("live_session_type");
+    if (storedType) setSessionType(storedType);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (ttsVisualizerCleanupRef.current) {
+        ttsVisualizerCleanupRef.current();
+        ttsVisualizerCleanupRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "ai-talking" && phase !== "follow-up") {
+      setInterviewerMouthLevel(0);
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    const questionText = currentQuestion?.text ?? "";
+    const shouldRevealQuestion = phase === "ai-talking" || phase === "follow-up";
+
+    if (!questionText) {
+      setVisibleQuestionText("");
+      return;
+    }
+
+    if (!shouldRevealQuestion) {
+      setVisibleQuestionText(questionText);
+      return;
+    }
+
+    const words = questionText.match(/\S+\s*/g) ?? [questionText];
+    let wordIndex = 0;
+    setVisibleQuestionText("");
+
+    const revealTimer = window.setInterval(() => {
+      wordIndex += 1;
+      setVisibleQuestionText(words.slice(0, wordIndex).join(""));
+
+      if (wordIndex >= words.length) {
+        window.clearInterval(revealTimer);
+      }
+    }, 115);
+
+    return () => window.clearInterval(revealTimer);
+  }, [currentQuestion?.text, phase]);
 
   // ─── Camera self-view + fullscreen ─────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -412,13 +604,12 @@ export default function LiveInterviewSessionPage() {
   const phaseRef = useRef<InterviewPhase>("connecting");
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
-  // Track fullscreen; re-enter and warn if user exits mid-interview
+  // Track fullscreen and guide recovery if the user exits mid-interview
   useEffect(() => {
     const sync = () => {
       const inFullscreen = !!document.fullscreenElement;
       setIsFullscreen(inFullscreen);
       if (!inFullscreen && phaseRef.current !== "completed") {
-        document.documentElement.requestFullscreen().catch(() => {});
         if (fullscreenWarningTimerRef.current) clearTimeout(fullscreenWarningTimerRef.current);
         setShowFullscreenWarning(true);
         fullscreenWarningTimerRef.current = setTimeout(() => setShowFullscreenWarning(false), 3000);
@@ -427,7 +618,7 @@ export default function LiveInterviewSessionPage() {
     document.addEventListener("fullscreenchange", sync);
     sync();
     return () => document.removeEventListener("fullscreenchange", sync);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -491,67 +682,87 @@ export default function LiveInterviewSessionPage() {
 
   useEffect(() => () => stopTimer(), [stopTimer]);
 
-  // ─── Microphone recording → send audio_chunk over WebSocket ───────────────
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  // ─── Microphone → raw PCM16 @ 16 kHz → WebSocket audio_chunk ────────────
+  // MediaRecorder produces WebM/Opus which the backend faster-whisper STT rejects.
+  // ScriptProcessorNode gives raw Int16 PCM that the backend framing layer expects.
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const micLevelFrameRef = useRef<number | null>(null);
   const audioSeqRef = useRef(0);
 
   useEffect(() => {
     if (phase !== "listening") {
-      // Stop and discard the recorder when not in listening phase
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
-      }
-      mediaRecorderRef.current = null;
+      setMicLevel(0);
       return;
     }
 
-    let recorder: MediaRecorder | null = null;
     let localStream: MediaStream | null = null;
-    audioSeqRef.current = 0; // reset sequence counter for each new question
+    let processor: ScriptProcessorNode | null = null;
+    setMicError(null);
+    audioSeqRef.current = 0;
 
     navigator.mediaDevices
-      .getUserMedia({ audio: true, video: false })
+      .getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false })
       .then((stream) => {
         localStream = stream;
 
-        // Pick the best supported codec for streaming
-        const mimeType =
-          ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find(
-            (m) => MediaRecorder.isTypeSupported(m)
-          ) ?? "";
+        const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextCtor) return;
 
-        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-        mediaRecorderRef.current = recorder;
+        // Request 16 kHz — browser resamples internally from hardware rate
+        const ctx = new AudioContextCtor({ sampleRate: 16000 });
+        audioContextRef.current = ctx;
+        ctx.resume().catch(() => {}); // unblock if browser auto-suspended
 
-        recorder.ondataavailable = (evt) => {
-          if (evt.data.size === 0) return;
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            // readAsDataURL gives "data:<mime>;base64,<data>" — extract the base64 part
-            const b64 = (reader.result as string).split(",")[1];
-            if (b64 && wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(
-                JSON.stringify({ type: "audio_chunk", data: b64, sequence: audioSeqRef.current++ })
-              );
-            }
-          };
-          reader.readAsDataURL(evt.data);
+        const source = ctx.createMediaStreamSource(stream);
+
+        // Analyser for the mic level bar
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        const freqData = new Uint8Array(analyser.frequencyBinCount);
+        source.connect(analyser);
+        const tick = () => {
+          analyser.getByteFrequencyData(freqData);
+          const avg = freqData.reduce((s, v) => s + v, 0) / Math.max(freqData.length, 1);
+          setMicLevel(Math.min(100, Math.round(avg * 2.2)));
+          micLevelFrameRef.current = requestAnimationFrame(tick);
+        };
+        tick();
+
+        // 4096 samples × 2 bytes = 8192 bytes per chunk (always even — required by backend PCM framing)
+        processor = ctx.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = (event) => {
+          const float32 = event.inputBuffer.getChannelData(0);
+          const int16 = new Int16Array(float32.length);
+          for (let i = 0; i < float32.length; i++) {
+            int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32767)));
+          }
+          // Encode to base64 without spread (safe for large buffers)
+          const bytes = new Uint8Array(int16.buffer);
+          let binary = "";
+          for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(
+              JSON.stringify({ type: "audio_chunk", data: btoa(binary), sequence: audioSeqRef.current++ })
+            );
+          }
         };
 
-        recorder.start(250); // emit a chunk every 250 ms for real-time STT
+        source.connect(processor);
+        processor.connect(ctx.destination); // required for onaudioprocess to fire
       })
       .catch(() => {
-        // Mic permission denied or unavailable — live transcript will be empty
+        setMicError("Microphone access is unavailable. Allow microphone permission in your browser, then retry.");
       });
 
     return () => {
-      if (recorder && recorder.state !== "inactive") {
-        try { recorder.stop(); } catch { /* ignore */ }
-      }
+      if (processor) { processor.disconnect(); processor.onaudioprocess = null; }
       localStream?.getTracks().forEach((t) => t.stop());
-      mediaRecorderRef.current = null;
+      if (micLevelFrameRef.current) cancelAnimationFrame(micLevelFrameRef.current);
+      audioContextRef.current?.close().catch(() => {});
+      audioContextRef.current = null;
+      setMicLevel(0);
     };
-  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, micRetryKey]);
 
   const wsSend = useCallback((msg: WsClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -593,16 +804,19 @@ export default function LiveInterviewSessionPage() {
     switch (msg.type) {
       case "session_ready":
         setTotalQuestions(msg.total_questions);
+        setServerError(null);
         setWsConnected(true);
         break;
       case "session_resumed":
         setTotalQuestions(msg.total_questions);
         setQuestionNumber(msg.questions_asked + 1);
+        setServerError(null);
         setWsConnected(true);
         setShowReconnectModal(false);
         break;
       case "question_audio": {
         setCurrentQuestion({ number: msg.question_number, text: msg.text });
+        setServerError(null);
         setQuestionNumber(msg.question_number);
         setTranscript("");
         setPartialTranscript("");
@@ -610,20 +824,22 @@ export default function LiveInterviewSessionPage() {
         // Use server's time_limit_s; fall back to 120 only when server sends 0 or omits it
         const limit = msg.time_limit_s || 120;
         const afterAudio = () => { setPhase("listening"); setTimeLimitTotal(limit); startTimer(limit); };
-        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, afterAudio);
+        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, setInterviewerMouthLevel, afterAudio);
         break;
       }
       case "follow_up": {
         setCurrentQuestion((q) => q ? { ...q, text: msg.text, isFollowUp: true } : null);
         setPhase("follow-up");
         const afterFollowUp = () => { setPhase("listening"); startTimer(120); };
-        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, afterFollowUp);
+        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, setInterviewerMouthLevel, afterFollowUp);
         break;
       }
       case "partial_transcript":
+        setServerError(null);
         setPartialTranscript(msg.text);
         break;
       case "transcript_final":
+        setServerError(null);
         setTranscript(msg.text);
         setPartialTranscript("");
         break;
@@ -637,6 +853,7 @@ export default function LiveInterviewSessionPage() {
         break;
       case "interview_complete":
         stopTimer();
+        setCompletedReportId(msg.report_id);
         setPhase("completed");
         break;
       case "session_paused":
@@ -644,7 +861,7 @@ export default function LiveInterviewSessionPage() {
         setShowReconnectModal(true);
         break;
       case "error":
-        setShowInactivityBanner(true);
+        setServerError(msg.message || "The interview service reported an issue. You can retry or end for a partial report.");
         break;
       default:
         break;
@@ -752,8 +969,15 @@ export default function LiveInterviewSessionPage() {
     } catch { /* leave modal open */ }
   }, [reconnectAttempt, sessionId, openWebSocket]);
 
+  const isQuestionBeingSpoken = phase === "ai-talking" || phase === "follow-up";
+  const questionTextForDisplay = currentQuestion
+    ? isQuestionBeingSpoken
+      ? visibleQuestionText
+      : currentQuestion.text
+    : "Your interviewer is preparing the first question.";
+
   if (phase === "completed") {
-    return <CompletedScreen sessionId={sessionId} />;
+    return <CompletedScreen sessionId={sessionId} reportId={completedReportId} />;
   }
 
   return (
@@ -776,12 +1000,17 @@ export default function LiveInterviewSessionPage() {
         />
       )}
 
-      <div className="min-h-[calc(100vh-56px)] bg-gray-50 flex flex-col">
+      <div className="flex h-[calc(100vh-56px)] min-h-0 flex-col overflow-hidden bg-gray-50">
         {/* Score toast */}
         {showFullscreenWarning && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-gray-900 text-white rounded-xl px-4 py-2.5 shadow-[0_4px_24px_rgba(0,0,0,0.30)]">
-            <AlertCircle size={14} className="text-yellow-400 shrink-0" />
-            <p className="text-xs font-semibold">Fullscreen is required during the interview</p>
+          <div className="fixed top-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 items-center justify-between gap-3 rounded-xl bg-gray-900 px-4 py-2.5 text-white shadow-[0_4px_24px_rgba(0,0,0,0.30)]">
+            <p className="flex items-center gap-2 text-xs font-semibold">
+              <AlertCircle size={14} className="shrink-0 text-yellow-400" />
+              Fullscreen helps simulate the interview environment.
+            </p>
+            <button onClick={toggleFullscreen} className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-white/20">
+              Enter fullscreen
+            </button>
           </div>
         )}
 
@@ -794,33 +1023,11 @@ export default function LiveInterviewSessionPage() {
                 {scoreToast.score}/10
               </span>
             </p>
-            <button onClick={() => setScoreToast(null)} className="text-gray-400 hover:text-gray-600 ml-1">
+            <button onClick={() => setScoreToast(null)} className="ml-1 text-gray-400 hover:text-gray-600" aria-label="Dismiss score notification">
               <X size={12} />
             </button>
           </div>
         )}
-
-        {/* Camera self-view */}
-        <div className="fixed bottom-4 right-4 z-30 w-44 h-32 rounded-xl overflow-hidden border-2 border-white bg-gray-900 shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className={`h-full w-full scale-x-[-1] object-cover transition-opacity ${
-              !cameraError ? "opacity-100" : "opacity-0"
-            }`}
-          />
-          {cameraError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-400">
-              <VideoOff size={20} />
-              <span className="text-[10px] font-medium">Camera unavailable</span>
-            </div>
-          )}
-          <span className="absolute bottom-1 left-2 text-[10px] font-medium text-white/90 drop-shadow">
-            You
-          </span>
-        </div>
 
         {/* Status bar */}
         <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between shadow-sm">
@@ -859,6 +1066,47 @@ export default function LiveInterviewSessionPage() {
           </div>
         </div>
 
+        {serverError && (
+          <div className="bg-gray-900 border-b border-gray-800 px-4 py-2.5 flex items-center justify-between gap-3">
+            <p className="text-xs text-white flex items-center gap-2">
+              <AlertCircle size={13} className="text-yellow-300 shrink-0" />
+              {serverError}
+            </p>
+            <button onClick={() => setServerError(null)} className="text-white/70 hover:text-white">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {micError && (
+          <div className="border-b border-gray-200 bg-white px-4 py-3">
+            <div className="mx-auto flex max-w-3xl flex-col gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2.5">
+                <Mic size={15} className="mt-0.5 shrink-0 text-gray-500" />
+                <div>
+                  <p className="text-xs font-semibold text-gray-800">Microphone permission needs attention</p>
+                  <p className="mt-0.5 text-xs text-gray-500">Allow microphone access from the browser address bar, then retry. Your completed answers remain saved.</p>
+                </div>
+              </div>
+              <button onClick={() => setMicRetryKey((key) => key + 1)} className="shrink-0 rounded-lg bg-[#2557a7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1e4a8f]">
+                Retry mic
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cameraError && (
+          <div className="border-b border-gray-200 bg-white px-4 py-2.5">
+            <div className="mx-auto flex max-w-3xl items-start gap-2.5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+              <VideoOff size={15} className="mt-0.5 shrink-0 text-gray-500" />
+              <div>
+                <p className="text-xs font-semibold text-gray-800">Camera preview is unavailable</p>
+                <p className="mt-0.5 text-xs text-gray-500">You can continue if microphone works, but enabling camera creates a closer real interview simulation.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Inactivity banner */}
         {showInactivityBanner && (
           <div className="bg-[#2557a7]/20 border-b border-[#2557a7]/40 px-4 py-2.5 flex items-center justify-between">
@@ -873,11 +1121,11 @@ export default function LiveInterviewSessionPage() {
         )}
 
         {/* Main content */}
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
-          <div className="w-full max-w-2xl space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:overflow-hidden">
+          <div className="mx-auto flex h-full w-full max-w-[1560px] flex-col gap-3">
             {/* Question progress */}
-            <div className="flex items-center gap-3">
-              <div className="flex gap-1.5 flex-1">
+            <div className="flex shrink-0 items-center gap-3">
+              <div className="flex flex-1 gap-1.5">
                 {Array.from({ length: totalQuestions }).map((_, i) => (
                   <div
                     key={i}
@@ -891,151 +1139,252 @@ export default function LiveInterviewSessionPage() {
                   />
                 ))}
               </div>
-              <span className="text-xs text-gray-500 font-medium shrink-0">
+              <span className="shrink-0 text-xs font-medium text-gray-500">
                 {questionNumber}/{totalQuestions}
               </span>
             </div>
 
-            {/* AI avatar + phase indicator */}
-            <div className="bg-white border border-gray-200 rounded-xl p-6 text-center shadow-sm">
-              <div className="flex justify-center mb-4">
-                <div className={`w-20 h-20 rounded-full flex items-center justify-center border-4 transition-all ${
-                  phase === "ai-talking" || phase === "follow-up"
-                    ? "border-[#2557a7] bg-[#2557a7]/10 shadow-lg shadow-[#2557a7]/20"
-                    : phase === "processing"
-                    ? "border-[#2557a7]/50 bg-[#2557a7]/10"
-                    : "border-gray-200 bg-gray-50"
-                }`}>
-                  <Video size={32} className={phase === "ai-talking" || phase === "follow-up" ? "text-[#2557a7]" : "text-gray-500"} />
+            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.14fr)_minmax(320px,0.78fr)_300px] gap-3 overflow-hidden">
+              {/* Interviewer */}
+              <section className="relative min-h-[360px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)]">
+                <Image
+                  src={interviewer.src}
+                  alt={`${interviewer.name}, AI interviewer seated in a professional interview room`}
+                  fill
+                  className="scale-[1.24] object-cover object-[center_44%]"
+                  priority
+                  sizes="48vw"
+                />
+                <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/5 to-black/25" aria-hidden="true" />
+
+                {isQuestionBeingSpoken && (
+                  <div
+                    className="pointer-events-none absolute left-1/2 top-[43.5%] z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center mix-blend-multiply"
+                    style={{
+                      opacity: 0.14 + interviewerMouthLevel * 0.28,
+                      transform: `translate(-50%, -50%) scaleX(${0.82 + interviewerMouthLevel * 0.34})`,
+                    }}
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="block rounded-full bg-black/70 shadow-[0_0_10px_rgba(0,0,0,0.22)]"
+                      style={{
+                        width: `${18 + interviewerMouthLevel * 18}px`,
+                        height: `${2 + interviewerMouthLevel * 9}px`,
+                        filter: `blur(${0.15 + interviewerMouthLevel * 0.35}px)`,
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
+                  <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-400" : "bg-white/50"}`} />
+                  {wsConnected ? "Live interview room" : "Connecting room"}
                 </div>
-              </div>
+                <div className="absolute right-4 top-4 rounded-full border border-white/20 bg-white/90 px-3 py-1.5 text-[11px] font-bold text-[#2557a7] shadow-sm" role="status" aria-live="polite">
+                  {getInterviewerStatus(phase)}
+                </div>
 
-              <div className="mb-3">
-                {phase === "connecting" && (
-                  <p className="text-gray-400 text-sm flex items-center justify-center gap-2">
-                    <Loader2 size={14} className="animate-spin text-[#2557a7]" />
-                    Connecting to AI interviewer…
-                  </p>
+                {(phase === "ai-talking" || phase === "follow-up") && (
+                  <div className="absolute left-1/2 top-4 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-md sm:flex">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 motion-reduce:animate-none" />
+                    Interviewer speaking
+                  </div>
                 )}
-                {phase === "ai-talking" && (
-                  <>
-                    <p className="text-[#2557a7] text-xs font-semibold mb-2 uppercase tracking-wide">AI is speaking</p>
-                    <AIWaveform />
-                  </>
-                )}
-                {phase === "follow-up" && (
-                  <>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#2557a7]/20 border border-[#2557a7]/40 rounded-full mb-2">
-                      <MessageSquare size={11} className="text-[#2557a7]" />
-                      <span className="text-xs text-[#2557a7] font-semibold">Follow-up Question</span>
+
+                <div className="absolute bottom-4 left-4 max-w-[min(380px,calc(100%-2rem))] rounded-2xl border border-white/15 bg-black/50 px-4 py-3 text-white shadow-xl backdrop-blur-md">
+                  <p className="text-lg font-bold">{interviewer.name}, AI Interviewer</p>
+                  <p className="mt-0.5 text-xs font-medium text-white/75">{interviewer.role} - {sessionType} interview</p>
+                </div>
+              </section>
+
+              {/* Question and transcript */}
+              <section className="flex min-h-0 flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="shrink-0 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Current question</p>
+                      <p className="mt-1 text-sm font-bold text-gray-900">Question {questionNumber}/{totalQuestions || "-"}</p>
                     </div>
-                    <AIWaveform />
-                  </>
-                )}
-                {phase === "listening" && (
-                  <p className="text-[#2557a7] text-xs font-semibold uppercase tracking-wide">Your turn to speak</p>
-                )}
-                {phase === "processing" && (
-                  <p className="text-[#2557a7] text-sm flex items-center justify-center gap-2">
-                    <Loader2 size={14} className="animate-spin" />
-                    Processing your answer…
-                  </p>
-                )}
-              </div>
-
-              {currentQuestion && (phase === "ai-talking" || phase === "follow-up" || phase === "listening" || phase === "processing") && (
-                <div className="bg-[#2557a7]/5 border border-[#2557a7]/15 rounded-xl px-4 py-3 text-left mt-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="text-xs text-gray-500">Question {currentQuestion.number}</p>
-                    {currentQuestion.isFollowUp && (
-                      <span className="text-xs px-1.5 py-0.5 bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-full">Follow-up</span>
+                    {currentQuestion?.isFollowUp && (
+                      <span className="rounded-full border border-[#2557a7]/20 bg-[#2557a7]/10 px-2 py-1 text-xs font-semibold text-[#2557a7]">Follow-up</span>
                     )}
                   </div>
-                  <p className="text-gray-900 text-sm font-semibold leading-relaxed">
-                    {currentQuestion.text}
-                  </p>
+                  <div className="max-h-36 overflow-y-auto pr-1">
+                    <p className="text-base font-semibold leading-relaxed text-gray-950">
+                      {questionTextForDisplay}
+                      {isQuestionBeingSpoken && visibleQuestionText !== currentQuestion?.text && (
+                        <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-[#2557a7] align-[-2px]" aria-hidden="true" />
+                      )}
+                    </p>
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* Live transcript */}
-            {phase === "listening" && (
-              <div
-                className="bg-white border border-gray-200 rounded-xl px-4 py-3 min-h-20 shadow-sm"
-                role="log"
-                aria-live="polite"
-                aria-label="Live transcript"
-              >
-                <p className="text-xs text-gray-500 mb-2">Live Transcript</p>
-                {partialTranscript ? (
-                  <p className="text-gray-700 text-sm leading-relaxed">
-                    {partialTranscript}
-                    <span className="inline-block w-0.5 h-4 bg-[#2557a7] ml-0.5 animate-pulse" />
-                  </p>
-                ) : (
-                  <p className="text-gray-400 text-sm italic">Start speaking… transcript will appear here.</p>
-                )}
-              </div>
-            )}
+                <div className="shrink-0 rounded-xl border border-[#2557a7]/15 bg-[#2557a7]/5 px-3 py-2 text-center">
+                  {phase === "connecting" && (
+                    <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#2557a7]">
+                      <Loader2 size={13} className="animate-spin" />
+                      Connecting to {interviewer.name}
+                    </p>
+                  )}
+                  {phase === "ai-talking" && (
+                    <div className="flex items-center justify-center gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#2557a7]">{interviewer.name} is asking</p>
+                      <AIWaveform />
+                    </div>
+                  )}
+                  {phase === "follow-up" && (
+                    <div className="flex items-center justify-center gap-2">
+                      <MessageSquare size={12} className="text-[#2557a7]" />
+                      <span className="text-xs font-semibold uppercase tracking-wide text-[#2557a7]">Follow-up question</span>
+                    </div>
+                  )}
+                  {phase === "listening" && (
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#2557a7]">{interviewer.name} is listening</p>
+                  )}
+                  {phase === "processing" && (
+                    <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#2557a7]">
+                      <Loader2 size={13} className="animate-spin" />
+                      Reviewing answer
+                    </p>
+                  )}
+                </div>
 
-            {/* After processing — show what was said */}
-            {phase === "processing" && transcript && (
-              <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
-                <p className="text-xs text-gray-500 mb-2">Your Answer</p>
-                <p className="text-gray-700 text-sm leading-relaxed">{transcript}</p>
-              </div>
-            )}
+                <div className="flex min-h-[220px] flex-1 flex-col rounded-xl border border-gray-200 bg-white p-3">
+                  {phase === "listening" ? (
+                    <div className="flex h-full min-h-0 flex-col" role="log" aria-live="polite" aria-label="Live transcript">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Live transcript</p>
+                        {!micError && (
+                          <div className="flex items-center gap-2 rounded-full bg-gray-50 px-2 py-1" role="status" aria-label={`Microphone input level ${micLevel} percent`}>
+                            <MicLevelMeter level={micLevel} />
+                            <span className="text-[10px] font-semibold text-gray-500">{micLevel > 8 ? "Hearing you" : "Waiting"}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-gray-50 px-3 py-3">
+                        {micError ? (
+                          <p className="text-sm text-gray-500">Microphone is unavailable. Use Retry mic above after allowing permission.</p>
+                        ) : partialTranscript || transcript ? (
+                          <p className="text-sm leading-relaxed text-gray-700">
+                            {partialTranscript || transcript}
+                            <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#2557a7]" />
+                          </p>
+                        ) : (
+                          <p className="text-sm italic text-gray-400">Start speaking... transcript will appear here.</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : phase === "processing" && transcript ? (
+                    <div className="flex h-full min-h-0 flex-col">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Your answer</p>
+                      <p className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-gray-50 px-3 py-3 text-sm leading-relaxed text-gray-700">{transcript}</p>
+                    </div>
+                  ) : (
+                    <div className="flex h-full min-h-[160px] items-center justify-center rounded-lg bg-gray-50 px-4 text-center text-sm text-gray-500">
+                      Transcript appears here when it is your turn to answer.
+                    </div>
+                  )}
+                </div>
+              </section>
 
-            {/* Controls */}
-            <div className="flex items-center justify-center gap-4">
-              {/* Mic and camera status indicators — not toggleable during session */}
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center border bg-white border-[#2557a7]/30 text-[#2557a7] shadow-sm"
-                title="Microphone is active"
-              >
-                <Mic size={18} />
-              </div>
+              {/* Interviewee */}
+              <aside className="flex min-h-0 flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="rounded-xl border border-gray-200 bg-gray-950 p-2">
+                  <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-gray-900">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`h-full w-full scale-x-[-1] object-cover transition-opacity ${
+                        !cameraError ? "opacity-100" : "opacity-0"
+                      }`}
+                    />
+                    {cameraError && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-300">
+                        <VideoOff size={24} />
+                        <span className="text-xs font-medium">Camera unavailable</span>
+                      </div>
+                    )}
+                    <span className="absolute bottom-2 left-2 rounded-full bg-black/35 px-2 py-1 text-[10px] font-semibold text-white/90 backdrop-blur-sm">
+                      You
+                    </span>
+                  </div>
+                </div>
 
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center border bg-white border-[#2557a7]/30 text-[#2557a7] shadow-sm"
-                title="Camera is active"
-              >
-                <Video size={18} />
-              </div>
-
-              {phase === "listening" && (
-                <div className="flex flex-col items-center gap-2">
-                  <RecordingPulse />
+                <div className="grid gap-2">
+                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${micError ? "border-gray-200 bg-gray-100 text-gray-400" : "border-[#2557a7]/30 bg-white text-[#2557a7]"}`}>
+                      <Mic size={15} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-700">Mic locked</p>
+                      <p className="text-[10px] text-gray-400">Recording integrity</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${cameraError ? "border-gray-200 bg-gray-100 text-gray-400" : "border-[#2557a7]/30 bg-white text-[#2557a7]"}`}>
+                      <Video size={15} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-700">Cam locked</p>
+                      <p className="text-[10px] text-gray-400">Interview mode</p>
+                    </div>
+                  </div>
                   <button
-                    onClick={handleEndAnswer}
-                    className="px-6 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-bold hover:bg-[#1e4a8f] transition-all flex items-center gap-1.5"
+                    onClick={() => {
+                      setIsAudioMuted((m) => {
+                        const next = !m;
+                        if (ttsAudioRef.current) {
+                          if (next) {
+                            ttsAudioRef.current.pause();
+                          } else {
+                            ttsAudioRef.current.play().catch(() => {});
+                          }
+                        }
+                        return next;
+                      });
+                    }}
+                    className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-colors hover:bg-gray-100"
+                    aria-label={isAudioMuted ? "Unmute interviewer audio" : "Mute interviewer audio"}
                   >
-                    Done Speaking <ChevronRight size={14} />
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
+                      isAudioMuted ? "border-gray-200 bg-gray-100 text-gray-400" : "border-gray-200 bg-white text-gray-600"
+                    }`}>
+                      {isAudioMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-700">Speaker</p>
+                      <p className="text-[10px] text-gray-400">Interviewer audio</p>
+                    </div>
                   </button>
                 </div>
-              )}
+              </aside>
+            </div>
 
-              {phase === "listening" && (
-                <QuestionTimer secondsLeft={timeLeft} total={timeLimitTotal} />
-              )}
+            <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_300px] gap-3">
+              <div className="rounded-2xl border border-gray-200 bg-white px-4 pb-3 shadow-sm">
+                <InterviewTimeline phase={phase} />
+              </div>
 
-              <button
-                onClick={() => {
-                  setIsAudioMuted((m) => {
-                    const next = !m;
-                    if (ttsAudioRef.current) {
-                      next ? ttsAudioRef.current.pause() : ttsAudioRef.current.play().catch(() => {});
-                    }
-                    return next;
-                  });
-                }}
-                className={`w-12 h-12 rounded-full flex items-center justify-center border transition-all ${
-                  isAudioMuted ? "bg-gray-100 border-gray-200 text-gray-400" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50 shadow-sm"
-                }`}
-                aria-label={isAudioMuted ? "Unmute audio" : "Mute audio"}
-              >
-                {isAudioMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-              </button>
+              <div className="rounded-2xl border border-[#2557a7]/20 bg-white p-3 shadow-sm">
+                {phase === "listening" ? (
+                  <div className="flex items-center gap-3 rounded-xl bg-[#2557a7]/5 p-2">
+                    <QuestionTimer secondsLeft={timeLeft} total={timeLimitTotal} />
+                    <button
+                      onClick={handleEndAnswer}
+                      className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#2557a7] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#1e4a8f]"
+                    >
+                      Done Speaking <ChevronRight size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex min-h-14 items-center justify-center rounded-xl bg-gray-50 px-4 text-center text-sm font-semibold text-gray-500">
+                    {getInterviewerStatus(phase)}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

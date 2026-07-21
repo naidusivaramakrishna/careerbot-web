@@ -253,124 +253,82 @@ const ResumeListContent = () => {
     }
   };
 
-  const builderCount  = resumes.filter(r => r.source !== 'enhanced').length;
-  const enhancedCount = resumes.filter(r => r.source === 'enhanced').length;
-  const scoredResumes = resumes.filter(r => r.score > 0);
-  const avgScore = scoredResumes.length
-    ? Math.round(scoredResumes.reduce((s, r) => s + r.score, 0) / scoredResumes.length)
-    : null;
-
   const PageShell = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen bg-[#f4f6f9]">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-        <div className="px-8 py-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)" }}>
-                <svg className="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" width={18} height={18}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    <div className="min-h-screen bg-[#f5f7fa]">
+      {/* Page header */}
+      <div className="px-8 pt-8 pb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">My Resumes</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Manage, analyze and optimize your resumes with AI</p>
+          </div>
+
+          {/* Add Resume button + dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setAddMenuOpen((v) => !v)}
+              disabled={isCreating}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 shadow-md"
+              style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)", boxShadow: "0 4px 14px rgba(37,87,167,0.35)" }}
+            >
+              {isCreating ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight leading-tight">My Resumes</h1>
-                <p className="text-xs text-gray-400 mt-0.5">Manage, analyze and optimize your resumes with AI</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              {/* Stats pills */}
-              {!loading && resumes.length > 0 && (
-                <div className="hidden md:flex items-center gap-2">
-                  {builderCount > 0 && (
-                    <span className="text-xs font-medium px-3 py-1.5 rounded-full text-gray-600"
-                      style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.07)" }}>
-                      {builderCount} Builder
-                    </span>
-                  )}
-                  {enhancedCount > 0 && (
-                    <span className="text-xs font-semibold px-3 py-1.5 rounded-full"
-                      style={{ background: "rgba(37,87,167,0.07)", color: "#1f4e98", border: "1px solid rgba(37,87,167,0.15)" }}>
-                      ✦ {enhancedCount} Enhanced
-                    </span>
-                  )}
-                  {avgScore !== null && (
-                    <span className="text-xs font-semibold px-3 py-1.5 rounded-full"
-                      style={{
-                        background: avgScore >= 70 ? "#f0fdf4" : avgScore >= 40 ? "#eff6ff" : "#fef2f2",
-                        color: avgScore >= 70 ? "#16a34a" : avgScore >= 40 ? "#2557a7" : "#dc2626",
-                        border: `1px solid ${avgScore >= 70 ? "#bbf7d0" : avgScore >= 40 ? "#bfdbfe" : "#fecaca"}`,
-                      }}>
-                      Avg. {avgScore}% ATS
-                    </span>
-                  )}
-                </div>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
               )}
+              Add Resume
+            </button>
 
-              {/* Add Resume */}
-              <div className="relative">
-                <button
-                  onClick={() => setAddMenuOpen((v) => !v)}
-                  disabled={isCreating}
-                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
-                  style={{ background: "linear-gradient(135deg,#5896d7,#1f4e98)", boxShadow: "0 3px 10px rgba(37,87,167,0.3)" }}
-                >
-                  {isCreating ? (
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                    </svg>
-                  )}
-                  Add Resume
-                </button>
-                <AddResumeModal
-                  isOpen={addMenuOpen}
-                  onClose={() => setAddMenuOpen(false)}
-                  onCreateWithAI={handleCreateWithAI}
-                  onUploadExisting={() => setShowUploadModal(true)}
-                />
-              </div>
-            </div>
+            <AddResumeModal
+              isOpen={addMenuOpen}
+              onClose={() => setAddMenuOpen(false)}
+              onCreateWithAI={handleCreateWithAI}
+              onUploadExisting={() => setShowUploadModal(true)}
+            />
           </div>
         </div>
       </div>
 
-      <UploadResumeModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
+      <UploadResumeModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+      />
 
-      <div className="px-8 py-6">{children}</div>
+      {children}
     </div>
   );
 
   if (loading) {
     return (
       <PageShell>
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
-          style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.03)" }}>
-          <div className="px-6 py-3.5 border-b border-gray-50 flex gap-8 bg-gray-50/60">
-            {[160, 130, 70, 110, 110].map((w, i) => (
-              <div key={i} className="h-2 rounded-full bg-gray-200 animate-pulse" style={{ width: w }} />
+        <div className="px-8 pb-8">
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
+            style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}>
+            <div className="px-6 py-4 border-b border-gray-50 flex gap-8">
+              {[180, 140, 80, 120, 120, 60].map((w, i) => (
+                <div key={i} className="h-2.5 rounded-full bg-gray-100 animate-pulse" style={{ width: w }} />
+              ))}
+            </div>
+            {[1, 2, 3].map((row) => (
+              <div key={row} className="flex items-center gap-6 px-6 py-4 border-b border-gray-50 last:border-0">
+                <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-36 rounded-full bg-gray-100 animate-pulse" />
+                  <div className="h-2 w-24 rounded-full bg-gray-100 animate-pulse" />
+                </div>
+                <div className="w-28 h-2.5 rounded-full bg-gray-100 animate-pulse" />
+                <div className="w-12 h-12 rounded-full bg-gray-100 animate-pulse" />
+                <div className="w-24 h-2.5 rounded-full bg-gray-100 animate-pulse" />
+                <div className="w-24 h-2.5 rounded-full bg-gray-100 animate-pulse" />
+                <div className="w-8 h-8 rounded-lg bg-gray-100 animate-pulse" />
+              </div>
             ))}
           </div>
-          {[1, 2, 3].map((row) => (
-            <div key={row} className="flex items-center gap-5 px-6 py-4 border-b border-gray-50 last:border-0">
-              <div className="w-9 h-9 rounded-xl bg-gray-100 animate-pulse shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-2.5 w-32 rounded-full bg-gray-100 animate-pulse" />
-                <div className="h-2 w-16 rounded-full bg-gray-100 animate-pulse" />
-              </div>
-              <div className="w-24 h-6 rounded-lg bg-gray-100 animate-pulse" />
-              <div className="w-10 h-10 rounded-full bg-gray-100 animate-pulse" />
-              <div className="w-20 h-2 rounded-full bg-gray-100 animate-pulse" />
-              <div className="w-20 h-2 rounded-full bg-gray-100 animate-pulse" />
-              <div className="w-6 h-6 rounded-lg bg-gray-100 animate-pulse ml-auto" />
-            </div>
-          ))}
         </div>
       </PageShell>
     );
@@ -378,53 +336,55 @@ const ResumeListContent = () => {
 
   return (
     <PageShell>
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
-        style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.03)" }}>
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/60">
-              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-6 py-3">Resume</th>
-              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-6 py-3">Target Role</th>
-              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-6 py-3">ATS Score</th>
-              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-6 py-3">Modified</th>
-              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-6 py-3">Created</th>
-              <th className="px-4 py-3 w-16" />
-            </tr>
-          </thead>
-          <tbody>
-            {resumes.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="py-20 text-center">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                      style={{ background: "linear-gradient(135deg,#e8f0fb,#c7d9f5)" }}>
-                      <svg className="w-5.5 h-5.5 text-[#2557a7]" fill="none" stroke="currentColor" viewBox="0 0 24 24" width={22} height={22}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                    <p className="text-sm font-semibold text-gray-700">No resumes yet</p>
-                    <p className="text-xs text-gray-400">Click <strong className="text-[#2557a7] font-semibold">Add Resume</strong> to get started</p>
-                  </div>
-                </td>
+      <div className="px-8 pb-8">
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
+          style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Resume</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Target Role</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Score</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Last Modified</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-6 py-3.5 bg-gray-50/50">Created</th>
+                <th className="px-6 py-3.5 bg-gray-50/50" />
               </tr>
-            ) : (
-              resumes.map((resume, i) => (
-                <ResumeTableRow
-                  key={resume.id}
-                  resume={resume}
-                  index={i}
-                  onDelete={() => setDeleteConfirmId(resume.id)}
-                  onDownload={() => {
-                    setSelectedResumeId(resume.id);
-                    setDownloadModalOpen(true);
-                  }}
-                  downloading={downloading}
-                />
-              ))
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {resumes.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                        style={{ background: "linear-gradient(135deg,#e8f0fb,#c7d9f5)" }}>
+                        <svg className="w-6 h-6 text-[#2557a7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-gray-500">No resumes yet</p>
+                      <p className="text-xs text-gray-400">Click <strong className="text-[#2557a7]">Add Resume</strong> to get started</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                resumes.map((resume, i) => (
+                  <ResumeTableRow
+                    key={resume.id}
+                    resume={resume}
+                    index={i}
+                    onDelete={() => setDeleteConfirmId(resume.id)}
+                    onDownload={() => {
+                      setSelectedResumeId(resume.id);
+                      setDownloadModalOpen(true);
+                    }}
+                    downloading={downloading}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <DeleteConfirmModal
@@ -436,7 +396,10 @@ const ResumeListContent = () => {
 
       <DownloadModal
         isOpen={downloadModalOpen && !!selectedResumeId}
-        onClose={() => { setDownloadModalOpen(false); setSelectedResumeId(null); }}
+        onClose={() => {
+          setDownloadModalOpen(false);
+          setSelectedResumeId(null);
+        }}
         onDownload={(format) => selectedResumeId && handleDownloadResume(selectedResumeId, format)}
         downloading={downloading}
       />
@@ -444,14 +407,16 @@ const ResumeListContent = () => {
   );
 };
 
-const ResumeListPage = () => (
-  <Suspense fallback={
-    <div className="min-h-screen flex items-center justify-center bg-[#f4f6f9]">
-      <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
-    </div>
-  }>
-    <ResumeListContent />
-  </Suspense>
-);
+const ResumeListPage = () => {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-[#2557a7]"></div>
+      </div>
+    }>
+      <ResumeListContent />
+    </Suspense>
+  );
+};
 
 export default ResumeListPage;

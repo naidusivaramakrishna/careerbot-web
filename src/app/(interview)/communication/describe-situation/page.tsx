@@ -18,10 +18,10 @@ import logger from '@/lib/logger';
 import { validateAudioBlob, formatDuration, formatFileSize } from '@/utils/audioUtils';
 
 const AudioRecorder = dynamic(() => import('../components/AudioRecorder'), { loading: () => <div className="flex items-center justify-center p-8"><div className="animate-pulse">Loading...</div></div>, ssr: false });
-const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="w-64 bg-gray-100 animate-pulse" /> });
+const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="hidden h-full w-56 shrink-0 bg-gray-100 animate-pulse lg:block xl:w-60" /> });
 const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), { loading: () => null });
 const AssessmentSummaryPanel = dynamic(() => import('../components/AssessmentSummaryPanel'), { loading: () => null, ssr: false });
-const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200 h-20 animate-pulse" /> });
+const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="mb-3 h-12 shrink-0 rounded-xl border border-gray-200 bg-white animate-pulse" /> });
 
 export default function SituationExplainingPage() {
   const router = useRouter();
@@ -29,7 +29,7 @@ export default function SituationExplainingPage() {
   const [currentQuestion, setCurrentQuestion] = useState<CurrentQuestionResponse | null>(null);
   const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [, setValidationWarning] = useState('');
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -44,6 +44,8 @@ export default function SituationExplainingPage() {
   const fetchCurrentQuestion = async () => {
     setLoading(true);
     setError('');
+    setCurrentQuestion(null);
+    setRecordedAudio(null);
 
     try {
       const sessionId = localStorage.getItem('session_id');
@@ -423,13 +425,13 @@ export default function SituationExplainingPage() {
         ]}
       />
 
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="flex h-full min-h-0 overflow-hidden bg-gray-50">
         <AssessmentSidebar currentSectionId={7} />
 
-        <main className="flex-1 px-8 py-7 min-w-0">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-3 lg:px-6 lg:py-4">
 
           {/* Section Header */}
-          <div className="mb-5">
+          <div className="mb-2 shrink-0">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 7 of 7</p>
             <h1 className="text-lg font-bold text-gray-900">
               {currentQuestion?.section_name || 'Describe Situation'}
@@ -442,18 +444,35 @@ export default function SituationExplainingPage() {
           <QuestionProgressBar
             currentQuestion={sectionQuestionNumber}
             totalQuestions={SECTION_TOTAL_QUESTIONS}
-            className="mb-6"
+            className="mb-3 shrink-0"
           />
 
           {error ? (
             <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
               {error}
             </div>
+          ) : loading || !currentQuestion ? (
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden lg:grid-cols-2">
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="h-3 w-24 animate-pulse rounded bg-gray-100" />
+                  <div className="h-6 w-14 animate-pulse rounded-full bg-gray-100" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 w-full animate-pulse rounded bg-gray-100" />
+                  <div className="h-4 w-5/6 animate-pulse rounded bg-gray-100" />
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-gray-100" />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="h-full min-h-48 animate-pulse rounded-xl bg-gray-100" />
+              </div>
+            </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto pr-1 assessment-scroll lg:grid-cols-2">
                 {/* Situation Card */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                <div className="min-h-0 overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Situation</p>
                     <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
@@ -461,16 +480,15 @@ export default function SituationExplainingPage() {
                     </span>
                   </div>
 
-                  <p className="text-base font-medium text-gray-900 leading-relaxed mb-5">
-                    {currentQuestion?.question_text ||
-                      'Imagine you are at a job interview and the interviewer asks you to describe a challenging situation you faced at work or school and how you handled it.'}
+                  <p className="mb-3 text-base font-medium leading-relaxed text-gray-900">
+                    {currentQuestion.question_text}
                   </p>
 
-                  <div className="bg-[#2557a7]/4 border border-[#2557a7]/15 rounded-xl p-4">
+                  <div className="rounded-xl border border-[#2557a7]/15 bg-[#2557a7]/4 p-3">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2.5">Response Guidelines</p>
-                    <ul className="space-y-2">
+                    <ul className="space-y-1.5">
                       {guidelines.map((point, index) => (
-                        <li key={index} className="flex items-start gap-2.5 text-sm text-gray-700">
+                        <li key={index} className="flex items-start gap-2 text-xs font-medium text-gray-700">
                           <span className="w-4 h-4 bg-[#2557a7] text-white rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
                             {index + 1}
                           </span>
@@ -482,16 +500,17 @@ export default function SituationExplainingPage() {
                 </div>
 
                 {/* Recorder Card */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-center">
+                <div className="flex min-h-0 items-center justify-center overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
                   <AudioRecorder
+                    key={currentQuestion.question_id}
                     onRecordingComplete={handleRecordingComplete}
-                    maxDuration={currentQuestion?.time_limit || 60}
+                    maxDuration={currentQuestion.time_limit || 60}
                     disabled={!!recordedAudio}
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="mt-3 flex shrink-0 justify-end">
                 <button
                   onClick={handleUploadCurrentAudio}
                   disabled={!recordedAudio || isSubmitting}
@@ -522,7 +541,6 @@ export default function SituationExplainingPage() {
       {/* Assessment Summary Panel */}
       <AssessmentSummaryPanel
         isOpen={isPanelOpen}
-        onClose={() => setIsPanelOpen(false)}
         onFinish={handleFinalSubmit}
         isSubmitting={isSubmitting}
       />

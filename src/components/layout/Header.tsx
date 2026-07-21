@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  Bell, Settings, LogOut, ScanSearch, Wand2, Briefcase,
-  User, AlertCircle, CheckCheck, X, ChevronRight,
+  Bell, Settings, LogOut, Wand2, Briefcase,
+  User, AlertCircle, CheckCheck, X, ChevronRight, Crown,
 } from 'lucide-react';
-import { CreditBadge, CreditBadgeSkeleton } from '@/components/credits/CreditBadge';
 import { useCreditsBalance } from '@/hooks/useCreditsBalance';
 import { useNotificationStream } from '@/hooks/useNotificationStream';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
@@ -143,6 +142,11 @@ export default function Header() {
   const displayName    = userProfile?.full_name || userProfile?.username || 'User';
   const displayEmail   = userProfile?.email || '';
   const displayInitial = (userProfile?.full_name || userProfile?.username || 'U')[0].toUpperCase();
+  const creditPct = balance?.credits_total
+    ? Math.min(100, Math.max(0, (balance.credits_remaining / balance.credits_total) * 100))
+    : 0;
+  const creditStroke = 2 * Math.PI * 8;
+  const isLowCredits = creditPct > 0 && creditPct < 20;
 
   return (
     <header className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 z-40">
@@ -167,12 +171,71 @@ export default function Header() {
         {/* Right actions */}
         <div className="flex items-center gap-3">
 
-          {/* Credit Badge */}
+          {/* Plan + credits */}
           {loading ? (
-            <CreditBadgeSkeleton variant="header" />
-          ) : balance ? (
-            <CreditBadge creditsRemaining={balance.credits_remaining} creditsTotal={balance.credits_total} variant="header" />
-          ) : null}
+            <div className="hidden sm:flex h-11 w-44 rounded-xl border border-blue-100 bg-blue-50/70 animate-pulse" />
+          ) : (
+            <Link
+              href="/payments"
+              className="group flex h-11 w-44 items-center gap-2 rounded-xl border border-blue-100 bg-white px-2.5 pr-2.5 shadow-sm transition-all hover:-translate-y-px hover:border-blue-200 hover:shadow-md active:translate-y-0"
+              style={{ boxShadow: "0 5px 18px rgba(37,87,167,0.08)" }}
+              aria-label={balance ? `Manage ${balance.plan_name} plan` : "Upgrade plan"}
+            >
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
+                style={{
+                  background: balance?.plan_id === "FREE"
+                    ? "linear-gradient(145deg, #6b7280, #4b5563)"
+                    : balance?.plan_id === "BASIC"
+                    ? "linear-gradient(145deg, #0891b2, #0e7490)"
+                    : balance?.plan_id === "ENTERPRISE" || balance?.plan_id === "MAX"
+                    ? "linear-gradient(145deg, #7c3aed, #6d28d9)"
+                    : "linear-gradient(145deg, #3063cc, #2557a7)",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22), 0 4px 10px rgba(37,87,167,0.24)",
+                }}
+              >
+                <Crown size={14} strokeWidth={2.1} />
+              </span>
+
+              <span className="hidden sm:flex min-w-0 flex-1 flex-col leading-none">
+                <span className="text-[10px] font-black uppercase tracking-[0.12em]"
+                  style={{ color: balance?.plan_id === "FREE" ? "#6b7280" : balance?.plan_id === "ENTERPRISE" || balance?.plan_id === "MAX" ? "#7c3aed" : "#2557a7" }}
+                >
+                  {balance ? (balance.plan_name || balance.plan_id) : "Upgrade"}
+                </span>
+                <span className="mt-1 whitespace-nowrap text-[11px] font-bold text-gray-800">
+                  {balance ? (
+                    <>
+                      <span className={isLowCredits ? "text-red-600" : "text-gray-900"}>{balance.credits_remaining}</span>
+                      <span className="font-semibold text-gray-400">/{balance.credits_total}</span>
+                      <span className="ml-1 font-semibold text-gray-500">credits</span>
+                    </>
+                  ) : (
+                    "View plans"
+                  )}
+                </span>
+              </span>
+
+              {balance && (
+                <span className="relative hidden h-7 w-7 shrink-0 items-center justify-center sm:flex">
+                  <svg width="26" height="26" viewBox="0 0 24 24" className="-rotate-90">
+                    <circle cx="12" cy="12" r="8" fill="none" stroke="#e8eef8" strokeWidth="2.5" />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="8"
+                      fill="none"
+                      stroke={isLowCredits ? "#ef4444" : "#2557a7"}
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeDasharray={creditStroke}
+                      strokeDashoffset={creditStroke * (1 - creditPct / 100)}
+                    />
+                  </svg>
+                </span>
+              )}
+            </Link>
+          )}
 
           {/* ── Notification Bell ── */}
           <div className="relative" ref={notifRef}>
@@ -237,7 +300,7 @@ export default function Header() {
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-50">
-                      {notifications.map((n: Notification, i: number) => {
+                      {notifications.map((n: Notification) => {
                         const meta = getNotifMeta(n.type);
                         const route = resolveNotificationRoute(n);
                         const isClickable = route !== null;

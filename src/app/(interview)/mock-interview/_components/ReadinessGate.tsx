@@ -40,7 +40,7 @@ export default function ReadinessGate({
             <div className="w-12 h-12 bg-[#2557a7]/10 rounded-full flex items-center justify-center mx-auto mb-3">
               <CheckCircle2 size={24} className="text-[#2557a7]" />
             </div>
-            <h2 className="text-lg font-bold text-gray-900">You Are Ready!</h2>
+            <h2 className="text-lg font-bold text-gray-900">Practice Looks Strong</h2>
             <p className="text-xs text-gray-500 mt-1">Average score: {avgScore.toFixed(1)}/10</p>
           </div>
 
@@ -55,7 +55,7 @@ export default function ReadinessGate({
               onClick={onPracticeMore}
               className="w-full py-2 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-all flex items-center justify-center gap-1.5"
             >
-              <RotateCcw size={12} /> Practice More
+              <RotateCcw size={12} /> Practice More (Optional)
             </button>
           </div>
         </div>
@@ -70,8 +70,8 @@ export default function ReadinessGate({
           <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
             <AlertCircle size={24} className="text-gray-400" />
           </div>
-          <h2 className="text-lg font-bold text-gray-900">Not Ready Yet</h2>
-          <p className="text-xs text-gray-500 mt-1">Score: {avgScore.toFixed(1)}/10 (need 6.0)</p>
+          <h2 className="text-lg font-bold text-gray-900">Live Interview Is Available</h2>
+          <p className="text-xs text-gray-500 mt-1">Score: {avgScore.toFixed(1)}/10. Practice is optional, and live interview remains available.</p>
         </div>
 
         <div className="px-5 py-4">
@@ -89,7 +89,7 @@ export default function ReadinessGate({
           {weakQuestions.length > 0 && (
             <div className="mb-4">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                <TrendingUp size={10} /> Improve
+                <TrendingUp size={10} /> Optional Focus Areas
               </p>
               {weakQuestions.map((q) => (
                 <div key={q.question_id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
@@ -104,12 +104,20 @@ export default function ReadinessGate({
             </div>
           )}
 
-          <button
-            onClick={onPracticeMore}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm"
-          >
-            <RotateCcw size={13} /> Practice Weak Questions
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => router.push("/mock-interview/live")}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-lg font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-sm"
+            >
+              Start Live Interview <ArrowRight size={14} />
+            </button>
+            <button
+              onClick={onPracticeMore}
+              className="w-full flex items-center justify-center gap-2 py-2 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-all"
+            >
+              <RotateCcw size={13} /> Practice Weak Questions
+            </button>
+          </div>
         </div>
       </div>
     </div>

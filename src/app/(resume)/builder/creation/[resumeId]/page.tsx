@@ -18,6 +18,7 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   const fromAts = searchParams.get("from_ats") === "true";
   const initialTab = fromAts ? "Editor" : undefined;
   const isEnhancedResume = searchParams.get("source") === "enhanced";
+  const openSection = searchParams.get("open_section") ?? undefined;
 
   // ✅ Get loading state from context to prevent rendering before data loads
   const { isLoadingResume } = useResume();
@@ -68,6 +69,7 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
           resumeId={resumeId}
           initialTab={initialTab}
           defaultOpen={!isEnhancedResume}
+          openSection={openSection}
         />
 
         <main className="flex-1 bg-gray-50 ">

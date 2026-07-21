@@ -17,10 +17,10 @@ import {
   RotateCcw,
 } from "lucide-react";
 import AudioRecorder from "@/app/(interview)/communication/components/AudioRecorder";
-import FeedbackCard from "../_components/FeedbackCard";
-import TranscriptDisplay from "../_components/TranscriptDisplay";
+import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackCard";
+import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
 import { startPractice, submitPracticeAnswer, getPracticeProgress, getNotes, SubmitAnswerResponse } from "@/api/mockInterviewApi";
-import { useMockInterview } from "../_context/MockInterviewContext";
+import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
 
 // ─── Note-matching helpers ────────────────────────────────────────────────────
 
@@ -69,7 +69,6 @@ type AnswerState = {
   feedback: string;
   improvedAnswer: string;
   answerId?: string;
-  // 8-section feedback fields
   whatWasGood?: string[];
   whatToImprove?: string[];
   fillerWords?: { word: string; count: number }[];
@@ -107,7 +106,6 @@ function PracticeContent() {
   const [notesMap, setNotesMap] = useState<Record<string, string>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Initialize session on mount (re-runs when round changes) ──
   useEffect(() => {
     setSessionLoading(true);
     setCurrentIndex(0);
@@ -129,7 +127,6 @@ function PracticeContent() {
         setQuestions(mappedQuestions);
         setPracticeTotal(mappedQuestions.length);
 
-        // Load user's notes to populate answer scripts in the Notes panel
         if (userId) {
           getNotes(userId)
             .then((record) => {
@@ -144,7 +141,6 @@ function PracticeContent() {
             .catch(() => {});
         }
 
-        // Resume: jump to the first unanswered question based on remaining count
         if (questionsRemaining > 0) {
           const resumeIndex = Math.max(0, mappedQuestions.length - questionsRemaining);
           setCurrentIndex(resumeIndex);
@@ -162,7 +158,6 @@ function PracticeContent() {
       .finally(() => setSessionLoading(false));
   }, [roundNumber, setPracticeTotal, questionsRemaining]);
 
-  // Timer runs while recorder is visible (tracks answer length for P8 warning)
   useEffect(() => {
     if (!currentAnswer && !isSubmitting) {
       setElapsedSeconds(0);
@@ -182,8 +177,7 @@ function PracticeContent() {
       return;
     }
 
-    // Reject recordings that are too short — Whisper hallucinates text on silent audio
-    const MIN_DURATION_MS = 2000; // 2 seconds minimum
+    const MIN_DURATION_MS = 2000;
     if (durationMs !== undefined && durationMs < MIN_DURATION_MS) {
       setSubmitError("No speech detected. Please speak clearly for at least 2 seconds when recording.");
       return;
@@ -193,7 +187,6 @@ function PracticeContent() {
     setCurrentAnswer(null);
 
     try {
-      // Build form data for multipart submission
       const formData = new FormData();
       formData.append("audio", audioBlob, "answer.webm");
       formData.append("session_id", sessionId);
@@ -226,7 +219,6 @@ function PracticeContent() {
 
       setCurrentAnswer(answer);
       setAnsweredMap((m) => ({ ...m, [question.question_id]: answer }));
-      // Sync server-side progress (fire-and-forget)
       getPracticeProgress(sessionId).catch(() => {});
     } catch {
       setSubmitError("Could not score your answer. Please check your connection and try again.");
@@ -241,9 +233,9 @@ function PracticeContent() {
     setPracticeAnswered(newCount);
     if (isLastQuestion) {
       if (roundNumber < 2) {
-        router.push(`/mock-interview/practice?round=${roundNumber + 1}`);
+        router.push(`/notes/practice?round=${roundNumber + 1}`);
       } else {
-        router.push("/mock-interview/readiness");
+        router.push("/mock-interview/live");
       }
     } else {
       setCurrentIndex((i) => i + 1);
@@ -302,16 +294,14 @@ function PracticeContent() {
   return (
     <>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        {/* Back button — P10 */}
         <button
-          onClick={() => router.push("/mock-interview")}
+          onClick={() => router.push("/mock-interview/live")}
           className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
         >
           <ChevronLeft size={14} />
-          Back to Mock Interview
+          Back to Dashboard
         </button>
 
-        {/* Submit error banner */}
         {submitError && (
           <div role="alert" className="mb-4 flex items-start justify-between gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
             <div className="flex items-start gap-2.5">
@@ -322,7 +312,6 @@ function PracticeContent() {
           </div>
         )}
 
-        {/* Long-answer warning banner — P8, A4 */}
         {showLongAnswerWarning && (
           <div role="alert" className="mb-4 flex items-start gap-2.5 bg-[#2557a7]/5 border border-[#2557a7]/20 rounded-xl px-4 py-3">
             <Clock size={14} className="text-[#2557a7] mt-0.5 shrink-0" />
@@ -332,7 +321,6 @@ function PracticeContent() {
           </div>
         )}
 
-        {/* Top bar */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -349,7 +337,6 @@ function PracticeContent() {
             <h1 className="text-xl font-bold text-gray-900">Practice Mode</h1>
           </div>
 
-          {/* Question progress */}
           <div className="flex items-center gap-2">
             {questions.map((q, i) => (
               <button
@@ -369,7 +356,6 @@ function PracticeContent() {
           </div>
         </div>
 
-        {/* Progress bar */}
         <div className="mb-6">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
             <span>Question {currentIndex + 1} of {questions.length}</span>
@@ -389,11 +375,8 @@ function PracticeContent() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-          {/* LEFT: Question + Recorder */}
           <div className="space-y-4">
-            {/* Question card */}
             <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] overflow-hidden">
-              {/* Top accent bar */}
               <div className="h-[3px] bg-linear-to-r from-[#2557a7] to-[#5b8fd6]" />
               <div className="px-5 pt-3.5 pb-3 border-b border-gray-100">
                 <div className="flex items-center justify-between">
@@ -424,7 +407,6 @@ function PracticeContent() {
               </div>
             </div>
 
-            {/* Notes panel — Round 1: full notes, Round 2: keywords only, Round 3+: hidden — P3 */}
             {roundNumber <= 2 && (
               <div className={`rounded-xl border overflow-hidden transition-all ${
                 showNotes
@@ -458,7 +440,6 @@ function PracticeContent() {
                         </p>
                       )
                     ) : (
-                      /* Round 2 keyword flow */
                       <div className="flex flex-wrap items-center gap-2">
                         {question.keywords.map((kw, i) => (
                           <span key={kw} className="flex items-center gap-1.5">
@@ -477,7 +458,6 @@ function PracticeContent() {
               </div>
             )}
 
-            {/* Recorder section */}
             {!currentAnswer && !isSubmitting && (
               <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-6">
                 <div className="flex items-center gap-2 mb-4">
@@ -491,7 +471,6 @@ function PracticeContent() {
               </div>
             )}
 
-            {/* Submitting loader */}
             {isSubmitting && (
               <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-10 flex flex-col items-center gap-3">
                 <Loader2 size={32} className="text-[#2557a7] animate-spin" />
@@ -500,7 +479,6 @@ function PracticeContent() {
               </div>
             )}
 
-            {/* Transcript */}
             {currentAnswer && (
               <TranscriptDisplay
                 transcript={currentAnswer.transcript}
@@ -510,7 +488,6 @@ function PracticeContent() {
               />
             )}
 
-            {/* Navigation */}
             {currentAnswer && (
               <div className="flex gap-3">
                 {currentIndex > 0 && (
@@ -531,14 +508,13 @@ function PracticeContent() {
                   onClick={handleNext}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-bold hover:bg-[#1e4a8f] transition-all shadow-md"
                 >
-                  {isLastQuestion ? "Check Readiness" : "Next Question"}
+                  {isLastQuestion ? "Start Live Interview" : "Next Question"}
                   <ChevronRight size={15} />
                 </button>
               </div>
             )}
           </div>
 
-          {/* RIGHT: Feedback */}
           <div>
             {currentAnswer ? (
               <FeedbackCard
@@ -575,10 +551,9 @@ function PracticeContent() {
           </div>
         </div>
 
-        {/* Bottom hint */}
         <div className="mt-6 text-center">
           <button
-            onClick={() => router.push("/mock-interview/english")}
+            onClick={() => router.push("/notes/english")}
             className="text-xs text-[#2557a7] hover:text-[#1e4a8f] underline-offset-2 hover:underline"
           >
             Need help? Review English phrases →

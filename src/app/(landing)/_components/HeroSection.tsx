@@ -94,7 +94,7 @@ export default function HeroSection() {
               className="mt-8 flex flex-col gap-3 sm:flex-row"
             >
               <Link
-                href="/builder/start"
+                href="/builder"
                 className="inline-flex items-center justify-center rounded-xl bg-[#2557a7] px-8 py-3.5 text-sm font-bold text-white shadow-md shadow-blue-200 transition-all hover:bg-[#1e4a94] active:scale-95"
               >
                 Build My Resume Free

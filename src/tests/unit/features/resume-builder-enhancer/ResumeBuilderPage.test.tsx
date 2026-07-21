@@ -1,176 +1,221 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import React, { Suspense } from 'react';
+import BuilderPage from '@/app/(resume)/builder/creation/[resumeId]/page';
+import { useResume } from '@/app/(resume)/builder/creation/_context/ResumeContext';
+import { useSearchParams } from 'next/navigation';
 
-// Mock components
-const MockHeader = () => <header data-testid="builder-header">Header</header>;
-const MockResumeSide = ({ resumeId }: any) => (
-  <div data-testid="resume-side">Resume Sidebar - {resumeId}</div>
-);
-const MockPreviewPanel = ({ isEnhancedResume }: any) => (
-  <div data-testid="preview-panel">
-    Preview Panel {isEnhancedResume ? '(Enhanced)' : ''}
-  </div>
-);
-const MockTemplatesSidebar = () => <div data-testid="templates-sidebar">Templates Sidebar</div>;
+vi.mock('react', async () => {
+  const actual = await vi.importActual<typeof import('react')>('react');
+  return {
+    ...actual,
+    use: (value: unknown) => value,
+  };
+});
 
-// Mock context
-vi.mock('@/app/(resume)/builder/creation/_context/ResumeContext', () => ({
-  useResume: vi.fn(() => ({
-    isLoadingResume: false,
-  })),
-}));
-
-// Mock next/navigation
-const mockUseSearchParams = vi.fn(() => new URLSearchParams());
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => mockUseSearchParams(),
-  usePathname: () => '/builder/creation/resume-123',
+  useSearchParams: vi.fn(),
 }));
 
-// Test component
-const BuilderPageInner = ({ resumeId }: { resumeId: string }) => {
-  const searchParams = mockUseSearchParams();
-  const fromAts = searchParams.get('from_ats') === 'true';
-  const isEnhancedResume = searchParams.get('source') === 'enhanced';
-  const { isLoadingResume } = require('@/app/(resume)/builder/creation/_context/ResumeContext').useResume();
+vi.mock('@/app/(resume)/builder/creation/_context/ResumeContext', () => ({
+  useResume: vi.fn(),
+}));
 
-  if (isLoadingResume) {
-    return (
-      <>
-        <MockHeader />
-        <div className="flex h-screen items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-[#2200ff] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600 text-lg font-medium">Loading resume data...</p>
-            <p className="text-gray-500 text-sm mt-2">Please wait while we fetch your resume</p>
-          </div>
-        </div>
-      </>
-    );
-  }
+vi.mock('@/app/(resume)/builder/creation/_components/Header', () => ({
+  default: () => <header data-testid="builder-header">Header</header>,
+}));
 
-  return (
-    <>
-      <MockHeader />
-      <div className="flex h-screen">
-        <MockResumeSide resumeId={resumeId} />
-        <main className="flex-1 bg-gray-50">
-          <MockPreviewPanel isEnhancedResume={isEnhancedResume} />
-        </main>
-        <MockTemplatesSidebar />
-      </div>
-    </>
-  );
-};
+vi.mock('@/app/(resume)/builder/creation/_components/resumeSidebar/ResumeSide', () => ({
+  default: ({
+    resumeId,
+    initialTab,
+    defaultOpen,
+    isTemplateSidebarOpen,
+    onToggleTemplateSidebar,
+  }: {
+    resumeId: string;
+    initialTab?: string;
+    defaultOpen: boolean;
+    isTemplateSidebarOpen: boolean;
+    onToggleTemplateSidebar: (isOpen: boolean) => void;
+  }) => (
+    <aside data-testid="resume-side">
+      <p>Resume ID: {resumeId}</p>
+      <p>Initial tab: {initialTab ?? 'none'}</p>
+      <p>Default open: {String(defaultOpen)}</p>
+      <p>Template open in side: {String(isTemplateSidebarOpen)}</p>
+      <button onClick={() => onToggleTemplateSidebar(false)}>Close templates from side</button>
+      <button onClick={() => onToggleTemplateSidebar(true)}>Open templates from side</button>
+    </aside>
+  ),
+}));
+
+vi.mock('@/app/(resume)/builder/creation/_components/PreviewPanel', () => ({
+  default: ({
+    resumeId,
+    isEnhancedResume,
+    isTemplateSidebarOpen,
+    onTabClick,
+  }: {
+    resumeId: string;
+    isEnhancedResume: boolean;
+    isTemplateSidebarOpen: boolean;
+    onTabClick: (tab: string) => void;
+  }) => (
+    <section data-testid="preview-panel">
+      <p>Preview resume ID: {resumeId}</p>
+      <p>Enhanced: {String(isEnhancedResume)}</p>
+      <p>Template open in preview: {String(isTemplateSidebarOpen)}</p>
+      <button onClick={() => onTabClick('Score')}>Open score tab</button>
+      <button onClick={() => onTabClick('Templates')}>Open templates tab</button>
+    </section>
+  ),
+}));
+
+vi.mock('@/app/(resume)/builder/creation/_components/templateSidebar/TemplatesSidebar', () => ({
+  default: ({
+    resumeId,
+    isOpen,
+    activeTab,
+    onToggle,
+    setActiveTab,
+  }: {
+    resumeId: string;
+    isOpen: boolean;
+    activeTab: string;
+    onToggle: (isOpen: boolean) => void;
+    setActiveTab: (tab: string) => void;
+  }) => (
+    <aside data-testid="templates-sidebar">
+      <p>Sidebar resume ID: {resumeId}</p>
+      <p>Sidebar open: {String(isOpen)}</p>
+      <p>Active tab: {activeTab}</p>
+      <button onClick={() => onToggle(false)}>Close templates</button>
+      <button onClick={() => onToggle(true)}>Open templates</button>
+      <button onClick={() => setActiveTab('Editor')}>Set editor tab</button>
+    </aside>
+  ),
+}));
+
+const mockUseResume = vi.mocked(useResume);
+const mockUseSearchParams = vi.mocked(useSearchParams);
+
+const renderBuilderPage = (resumeId = 'resume-123') =>
+  render(<BuilderPage params={{ resumeId } as never} />);
 
 describe('ResumeBuilderPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseSearchParams.mockReturnValue(new URLSearchParams());
+    mockUseResume.mockReturnValue({ isLoadingResume: false } as never);
+    mockUseSearchParams.mockReturnValue(new URLSearchParams() as never);
   });
 
-  it('renders builder components when resume loads', async () => {
-    render(<BuilderPageInner resumeId="resume-123" />);
+  it('renders loading state with header while resume data is loading', () => {
+    mockUseResume.mockReturnValue({ isLoadingResume: true } as never);
+
+    renderBuilderPage();
 
     expect(screen.getByTestId('builder-header')).toBeInTheDocument();
-    expect(screen.getByTestId('resume-side')).toBeInTheDocument();
-    expect(screen.getByTestId('preview-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('templates-sidebar')).toBeInTheDocument();
-  });
-
-  it('shows loading state while resume data is being fetched', async () => {
-    const { useResume } = require('@/app/(resume)/builder/creation/_context/ResumeContext');
-    useResume.mockReturnValue({ isLoadingResume: true });
-
-    render(<BuilderPageInner resumeId="resume-123" />);
-
     expect(screen.getByText('Loading resume data...')).toBeInTheDocument();
     expect(screen.getByText('Please wait while we fetch your resume')).toBeInTheDocument();
+    expect(screen.queryByTestId('resume-side')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('preview-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('templates-sidebar')).not.toBeInTheDocument();
   });
 
-  it('passes correct resumeId to child components', async () => {
-    const testResumeId = 'resume-456';
-    render(<BuilderPageInner resumeId={testResumeId} />);
-
-    expect(screen.getByText(`Resume Sidebar - ${testResumeId}`)).toBeInTheDocument();
-  });
-
-  it('detects enhanced resume mode from search params', () => {
-    mockUseSearchParams.mockReturnValue(new URLSearchParams('source=enhanced'));
-
-    render(<BuilderPageInner resumeId="resume-123" />);
-
-    expect(screen.getByText('Preview Panel (Enhanced)')).toBeInTheDocument();
-  });
-
-  it('detects ATS mode from search params', () => {
-    mockUseSearchParams.mockReturnValue(new URLSearchParams('from_ats=true'));
-
-    render(<BuilderPageInner resumeId="resume-123" />);
-
-    expect(screen.getByTestId('preview-panel')).toBeInTheDocument();
-  });
-
-  it('maintains sidebar state across renders', async () => {
-    const localStorageMock = {
-      getItem: vi.fn((key) => {
-        if (key === 'template_sidebar_open') return 'true';
-        return null;
-      }),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    };
-
-    Object.defineProperty(window, 'localStorage', {
-      value: localStorageMock,
-      writable: true,
-    });
-
-    render(<BuilderPageInner resumeId="resume-123" />);
-
-    expect(screen.getByTestId('templates-sidebar')).toBeInTheDocument();
-  });
-
-  it('renders layout with proper flex structure', () => {
-    const { container } = render(<BuilderPageInner resumeId="resume-123" />);
-
-    const flexContainer = container.querySelector('.flex');
-    expect(flexContainer).toHaveClass('flex', 'h-screen');
-  });
-
-  it('renders main element with flex-1 class', () => {
-    const { container } = render(<BuilderPageInner resumeId="resume-123" />);
-
-    const mainElement = container.querySelector('main');
-    expect(mainElement).toHaveClass('flex-1', 'bg-gray-50');
-  });
-
-  it('handles multiple search parameters together', () => {
-    mockUseSearchParams.mockReturnValue(
-      new URLSearchParams('source=enhanced&from_ats=true')
-    );
-
-    render(<BuilderPageInner resumeId="resume-123" />);
-
-    expect(screen.getByText('Preview Panel (Enhanced)')).toBeInTheDocument();
-  });
-
-  it('displays header for loading state', async () => {
-    const { useResume } = require('@/app/(resume)/builder/creation/_context/ResumeContext');
-    useResume.mockReturnValue({ isLoadingResume: true });
-
-    render(<BuilderPageInner resumeId="resume-123" />);
+  it('renders production child contracts for a normal builder resume', async () => {
+    renderBuilderPage('builder-resume-1');
 
     expect(screen.getByTestId('builder-header')).toBeInTheDocument();
+    expect(screen.getByText('Resume ID: builder-resume-1')).toBeInTheDocument();
+    expect(screen.getByText('Preview resume ID: builder-resume-1')).toBeInTheDocument();
+    expect(screen.getByText('Sidebar resume ID: builder-resume-1')).toBeInTheDocument();
+    expect(screen.getByText('Initial tab: none')).toBeInTheDocument();
+    expect(screen.getByText('Default open: true')).toBeInTheDocument();
+    expect(screen.getByText('Enhanced: false')).toBeInTheDocument();
+    expect(screen.getByText('Sidebar open: false')).toBeInTheDocument();
+    expect(screen.getByText('Active tab: Templates')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(window.localStorage.setItem).toHaveBeenCalledWith('template_sidebar_open', 'false');
+    });
   });
 
-  it('renders correct resume sidebar with ID', () => {
-    const resumeId = 'special-resume-789';
-    render(<BuilderPageInner resumeId={resumeId} />);
+  it('opens template sidebar and starts on Score tab for enhanced resumes', async () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('source=enhanced') as never);
 
-    expect(screen.getByText(`Resume Sidebar - ${resumeId}`)).toBeInTheDocument();
+    renderBuilderPage('enhanced-resume-1');
+
+    expect(screen.getByText('Enhanced: true')).toBeInTheDocument();
+    expect(screen.getByText('Default open: false')).toBeInTheDocument();
+    expect(screen.getByText('Sidebar open: true')).toBeInTheDocument();
+    expect(screen.getByText('Active tab: Score')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(window.localStorage.setItem).toHaveBeenCalledWith('template_sidebar_open', 'true');
+    });
+  });
+
+  it('passes Editor initial tab when opened from ATS', () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('from_ats=true') as never);
+
+    renderBuilderPage();
+
+    expect(screen.getByText('Initial tab: Editor')).toBeInTheDocument();
+  });
+
+  it('supports enhanced and ATS params together', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('source=enhanced&from_ats=true') as never
+    );
+
+    renderBuilderPage();
+
+    expect(screen.getByText('Enhanced: true')).toBeInTheDocument();
+    expect(screen.getByText('Initial tab: Editor')).toBeInTheDocument();
+    expect(screen.getByText('Active tab: Score')).toBeInTheDocument();
+  });
+
+  it('persists template sidebar state when toggled from sidebar controls', async () => {
+    renderBuilderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open templates from side' }));
+
+    expect(screen.getByText('Sidebar open: true')).toBeInTheDocument();
+    expect(screen.getByText('Template open in preview: true')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.localStorage.setItem).toHaveBeenLastCalledWith('template_sidebar_open', 'true');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close templates from side' }));
+
+    expect(screen.getByText('Sidebar open: false')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.localStorage.setItem).toHaveBeenLastCalledWith('template_sidebar_open', 'false');
+    });
+  });
+
+  it('opens the template sidebar and changes active tab from preview toolbar clicks', async () => {
+    renderBuilderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open score tab' }));
+
+    expect(screen.getByText('Sidebar open: true')).toBeInTheDocument();
+    expect(screen.getByText('Active tab: Score')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.localStorage.setItem).toHaveBeenLastCalledWith('template_sidebar_open', 'true');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open templates tab' }));
+
+    expect(screen.getByText('Active tab: Templates')).toBeInTheDocument();
+  });
+
+  it('allows TemplatesSidebar to set active tab directly', () => {
+    renderBuilderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set editor tab' }));
+
+    expect(screen.getByText('Active tab: Editor')).toBeInTheDocument();
   });
 });

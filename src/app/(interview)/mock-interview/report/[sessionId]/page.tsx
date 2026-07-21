@@ -15,7 +15,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
 } from "recharts";
 import {
   ChevronLeft,
@@ -23,7 +22,6 @@ import {
   Share2,
   Trophy,
   TrendingUp,
-  TrendingDown,
   Clock,
   Mic,
   ChevronDown,
@@ -45,7 +43,6 @@ import {
 interface UiQuestion {
   num: number;
   text: string;
-  practice_score: number;
   mock_score: number;
   duration_s: number;
   filler_count: number;
@@ -111,7 +108,6 @@ function mapReport(api: ReportResponse): UiReport {
     questions: answers.map((a, i) => ({
       num: i + 1,
       text: a.question_text,
-      practice_score: a.score, // API doesn't split practice/mock per Q; use same
       mock_score: a.score,
       duration_s: a.duration_s ?? 0,
       filler_count: a.filler_count ?? 0,
@@ -172,15 +168,8 @@ function ScoreRing({ score, max = 100, size = 120 }: { score: number; max?: numb
 
 // ─── Question row ─────────────────────────────────────────────────────────────
 
-function pressureTag(mockScore: number, practiceScore: number) {
-  if (mockScore < practiceScore - 3) return { label: "Pressure affected", cls: "bg-gray-100 text-gray-600" };
-  return { label: "Handled well", cls: "bg-[#2557a7]/10 text-[#2557a7]" };
-}
-
 function QuestionRow({ q }: { q: UiQuestion }) {
   const [open, setOpen] = useState(false);
-  const delta = q.mock_score - q.practice_score;
-  const pressure = pressureTag(q.mock_score, q.practice_score);
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -193,15 +182,8 @@ function QuestionRow({ q }: { q: UiQuestion }) {
         </span>
         <p className="flex-1 text-sm font-medium text-gray-800 truncate">{q.text}</p>
         <div className="flex items-center gap-2 shrink-0">
-          <span className={`hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${pressure.cls}`}>
-            {pressure.label}
-          </span>
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${scoreBg(q.mock_score)}`}>
             {q.mock_score.toFixed(1)}/10
-          </span>
-          <span className={`text-xs font-semibold flex items-center gap-0.5 ${delta >= 0 ? "text-[#2557a7]" : "text-gray-500"}`}>
-            {delta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-            {delta >= 0 ? "+" : ""}{delta.toFixed(1)}
           </span>
           {open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
         </div>
@@ -209,22 +191,18 @@ function QuestionRow({ q }: { q: UiQuestion }) {
 
       {open && (
         <div className="border-t border-gray-100 px-4 py-4 bg-gray-50">
-          <div className="grid grid-cols-4 gap-3 mb-3">
+          <div className="grid grid-cols-3 gap-3 mb-3">
             <div className="text-center p-2 bg-white rounded-lg border border-gray-200">
-              <p className="text-[10px] text-gray-500 mb-0.5">Practice</p>
-              <p className={`text-sm font-bold ${scoreColor(q.practice_score)}`}>{q.practice_score.toFixed(1)}</p>
-            </div>
-            <div className="text-center p-2 bg-white rounded-lg border border-gray-200">
-              <p className="text-[10px] text-gray-500 mb-0.5">Mock</p>
+              <p className="text-[10px] text-gray-500 mb-0.5">Score</p>
               <p className={`text-sm font-bold ${scoreColor(q.mock_score)}`}>{q.mock_score.toFixed(1)}</p>
             </div>
             <div className="text-center p-2 bg-white rounded-lg border border-gray-200">
               <p className="text-[10px] text-gray-500 mb-0.5">Duration</p>
               <p className="text-sm font-bold text-gray-800">{q.duration_s}s</p>
             </div>
-            <div className={`text-center p-2 rounded-lg border ${pressure.cls}`}>
-              <p className="text-[10px] mb-0.5 opacity-70">Pressure</p>
-              <p className="text-[10px] font-bold leading-tight">{pressure.label}</p>
+            <div className="text-center p-2 bg-white rounded-lg border border-gray-200">
+              <p className="text-[10px] text-gray-500 mb-0.5">Fillers</p>
+              <p className="text-sm font-bold text-gray-800">{q.filler_count}</p>
             </div>
           </div>
           {q.filler_count > 0 && (
@@ -239,8 +217,6 @@ function QuestionRow({ q }: { q: UiQuestion }) {
     </div>
   );
 }
-
-// ─── Share modal ──────────────────────────────────────────────────────────────
 
 function ShareModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const [generating, setGenerating] = useState(false);
@@ -343,10 +319,37 @@ export default function ReportPage() {
 
   useEffect(() => {
     if (!sessionId) return;
-    getReport(sessionId)
-      .then((data) => setReport(mapReport(data)))
-      .catch(() => setReportError("Could not load this report. It may have been deleted or is unavailable."))
-      .finally(() => setReportLoading(false));
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const maxAttempts = 6;
+
+    const loadReport = async (attempt = 1) => {
+      setReportLoading(true);
+      setReportError(null);
+
+      try {
+        const data = await getReport(sessionId);
+        if (cancelled) return;
+        setReport(mapReport(data));
+        setReportLoading(false);
+      } catch {
+        if (cancelled) return;
+        if (attempt < maxAttempts) {
+          retryTimer = setTimeout(() => loadReport(attempt + 1), 1500);
+          return;
+        }
+        setReportError("Could not load this report. It may still be preparing or is unavailable.");
+        setReportLoading(false);
+      }
+    };
+
+    loadReport();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [sessionId]);
 
   const handleDownloadPdf = async () => {
@@ -361,8 +364,7 @@ export default function ReportPage() {
 
   const barData = (report?.questions ?? []).map((q) => ({
     name: `Q${q.num}`,
-    Practice: q.practice_score,
-    Mock: q.mock_score,
+    Score: q.mock_score,
   }));
 
   if (reportLoading) {
@@ -370,7 +372,7 @@ export default function ReportPage() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <Loader2 size={28} className="text-[#2557a7] animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Loading report…</p>
+          <p className="text-sm text-gray-500">Preparing report...</p>
         </div>
       </div>
     );
@@ -457,20 +459,22 @@ export default function ReportPage() {
       {/* Score comparison bar */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-bold text-gray-800">Score Comparison</p>
-          <div
-            className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${
-              report.improvement_pct >= 0
-                ? "bg-[#2557a7]/10 text-[#2557a7]"
-                : "bg-gray-100 text-gray-600"
-            }`}
-          >
-            <TrendingUp size={11} />
-            +{report.improvement_pct}% vs practice
-          </div>
+          <p className="text-sm font-bold text-gray-800">Live Score by Question</p>
+          {report.practice_avg > 0 && (
+            <div
+              className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${
+                report.improvement_pct >= 0
+                  ? "bg-[#2557a7]/10 text-[#2557a7]"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              <TrendingUp size={11} />
+              {report.improvement_pct >= 0 ? "+" : ""}{report.improvement_pct}% vs practice
+            </div>
+          )}
         </div>
         <p className="text-xs text-gray-500 mb-4">
-          Your practice average was {report.practice_avg}. Your mock score is {report.mock_avg}. You improved by {report.improvement_pct}%.
+          Each bar reflects the score produced from the live interview answer transcript.
         </p>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={barData} barCategoryGap="30%">
@@ -481,9 +485,7 @@ export default function ReportPage() {
               contentStyle={{ borderRadius: "12px", border: "1px solid #e5e7eb", fontSize: "12px" }}
               formatter={(value: number) => [value.toFixed(1), ""]}
             />
-            <Legend wrapperStyle={{ fontSize: "12px" }} />
-            <Bar dataKey="Practice" fill="#c5d4ec" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Mock" fill="#2557a7" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Score" fill="#2557a7" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -567,7 +569,7 @@ export default function ReportPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">{q.score.toFixed(1)}/10</span>
                   <button
-                    onClick={() => router.push("/mock-interview/practice")}
+                    onClick={() => router.push("/notes/practice")}
                     className="text-[10px] font-bold px-2.5 py-1.5 bg-[#2557a7] text-white rounded-lg hover:bg-[#1e4a8f] transition-all whitespace-nowrap"
                   >
                     Practice This
@@ -667,7 +669,7 @@ export default function ReportPage() {
           Take Another Mock Interview
         </button>
         <button
-          onClick={() => router.push("/mock-interview/practice")}
+          onClick={() => router.push("/notes/practice")}
           className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm transition-all"
         >
           Practice Weak Questions

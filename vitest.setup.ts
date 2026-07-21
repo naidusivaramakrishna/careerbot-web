@@ -1,9 +1,9 @@
 import '@testing-library/jest-dom';
-import { expect, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { afterEach, beforeAll, afterAll, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 // ==================== MSW Integration Testing Setup ====================
-let server: any;
+let server: any = null;
 
 try {
   // Only load MSW if integration tests are running
@@ -13,27 +13,34 @@ try {
 
   server = setupServer(...handlers);
 
-  beforeAll(() => {
-    server.listen({ onUnhandledRequest: 'error' });
-  });
+  if (server) {
+    beforeAll(() => {
+      server.listen({ onUnhandledRequest: 'error' });
+    });
 
-  afterEach(() => {
-    server.resetHandlers();
-  });
+    afterEach(() => {
+      server.resetHandlers();
+    });
 
-  afterAll(() => {
-    server.close();
-  });
+    afterAll(() => {
+      server.close();
+    });
+  }
 } catch (e) {
   // MSW not available - this is OK for unit tests only
+  server = null;
 }
 
 // ==================== Common Test Setup ====================
 
 // Cleanup after each test
 afterEach(() => {
-  cleanup();
   vi.clearAllMocks();
+  try {
+    cleanup();
+  } catch (e) {
+    // Cleanup may fail if component not mounted - that's OK
+  }
 });
 
 // Mock navigator.clipboard for copy-to-clipboard tests

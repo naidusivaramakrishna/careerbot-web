@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import JobsContents from "./_components/JobsContents";
 
 export default function JobsPage() {
-  return <JobsContents />;
+  return (
+    <Suspense>
+      <JobsContents />
+    </Suspense>
+  );
 }
