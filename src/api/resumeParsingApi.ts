@@ -320,7 +320,7 @@ export interface ResumeExtractResponse {
         // ---- Contact & identity ----
         contact: ContactInfo;
         social_links: SocialLinks;
-        headline?: string[];
+        headline?: string[] | null;
 
         // ---- Content (v2: top-level; v1: inside llm_data) ----
         summary: string | string[];
@@ -345,7 +345,7 @@ export interface ResumeExtractResponse {
         llm_data?: LLMData;
 
         // ---- Skills ----
-        soft_skills?: string[];
+        soft_skills?: Array<string | { name: string; evidence_count?: number; evidence_sections?: string[] }>;
 
         // ---- Warnings & analysis ----
         parse_warnings?: ParseWarning[];
@@ -385,7 +385,7 @@ export interface ResumeExtractResponse {
         structure_score?: StructureScore;
 
         // ---- Misc legacy fields ----
-        achievements?: string[];
+        achievements?: Array<string | { text: string; tone?: string; claim_type?: string; star_pattern?: string }>;
         awards?: string[];
         languages?: string[];
         declaration?: string[];

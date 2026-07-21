@@ -1,3 +1,5 @@
+import { EmploymentInfo } from "@/api/userApi";
+
 export interface ProfileData {
     personalInformation?: {
         fullName?: string;
@@ -53,20 +55,7 @@ export interface ProfileData {
         credential_id?: string;
     }[];
 
-    employmentInfo?: {
-        id?: string;
-        authorized_to_work?: boolean;
-        disability_status?: string;
-        gender?: string;
-        willing_to_relocate?: boolean;
-        employment_status?: string;
-        work_mode?: string;
-        preferred_job_type?: string;
-        notice_period_days?: number | string;
-        preferred_industries?: string[];
-        preferred_roles?: string[];
-        preferred_locations?: string[];
-    };
+    employmentInfo?: Partial<EmploymentInfo>;
 
     skills?: string[];
 

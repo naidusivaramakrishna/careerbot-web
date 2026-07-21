@@ -1,6 +1,6 @@
 "use client"
 import { Plus, X } from 'lucide-react';
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { getSkills, deleteSkill, Skill } from '@/api/userApi';
 import { addSkillItem } from '../_utils/autoFillHelper';
 import { toast } from "sonner";
@@ -44,12 +44,46 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const handleAddSkill = async () => {
+    const currentSkillNames = useMemo(() => skills.map(s => s.name), [skills]);
+
+    const filteredSuggestions = useMemo(() =>
+        isFocused && newSkill.trim() === ""
+            ? suggestedSkills.filter((skill) => !currentSkillNames.includes(skill))
+            : newSkill.trim() === ""
+                ? []
+                : suggestedSkills.filter(
+                    (skill) =>
+                        skill.toLowerCase().includes(newSkill.toLowerCase()) &&
+                        !currentSkillNames.includes(skill)
+                ),
+    [isFocused, newSkill, currentSkillNames]);
+
+    const handleSelectSkill = useCallback(async (skill: string) => {
+        setIsLoading(true);
+        try {
+            const addedSkill = await addSkillItem({ name: skill }, isAutoFill);
+            const updatedSkills = [...skills, addedSkill];
+            const updatedSkillNames = updatedSkills.map(s => s.name);
+            setSkills(updatedSkills);
+            setTempProfile((prev) => ({ ...prev, skills: updatedSkillNames }));
+            setProfileData((prev) => ({ ...prev, skills: updatedSkillNames }));
+            setTimeout(() => { refreshDashboard(); }, 300);
+            setNewSkill("");
+            setIsFocused(false);
+        } catch (error) {
+            logger.error('Failed to add skill:', error);
+            toast.error('Failed to add skill');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [skills, isAutoFill, setTempProfile, setProfileData, refreshDashboard]);
+
+    const handleAddSkill = useCallback(async () => {
         if (newSkill.trim() === "") return;
         await handleSelectSkill(newSkill.trim());
-    };
+    }, [newSkill, handleSelectSkill]);
 
-    const handleDeleteSkill = async (index: number) => {
+    const handleDeleteSkill = useCallback(async (index: number) => {
         const skillToDelete = skills[index];
         if (!skillToDelete?.id) return;
         try {
@@ -65,38 +99,7 @@ const SkillsSection = ({ tempProfile, setTempProfile, isAutoFill = false }: Skil
             logger.error('Failed to delete skill:', error);
             toast.error('Failed to delete skill');
         }
-    };
-
-    const currentSkillNames = skills.map(s => s.name);
-    const filteredSuggestions =
-        isFocused && newSkill.trim() === ""
-            ? suggestedSkills.filter((skill) => !currentSkillNames.includes(skill))
-            : newSkill.trim() === ""
-                ? []
-                : suggestedSkills.filter(
-                    (skill) =>
-                        skill.toLowerCase().includes(newSkill.toLowerCase()) &&
-                        !currentSkillNames.includes(skill)
-                );
-
-    const handleSelectSkill = async (skill: string) => {
-        setIsLoading(true);
-        try {
-            const addedSkill = await addSkillItem({ name: skill }, isAutoFill);
-            const updatedSkills = [...skills, addedSkill];
-            const updatedSkillNames = updatedSkills.map(s => s.name);
-            setSkills(updatedSkills);
-            setTempProfile((prev) => ({ ...prev, skills: updatedSkillNames }));
-            setProfileData((prev) => ({ ...prev, skills: updatedSkillNames }));
-            setTimeout(() => { refreshDashboard(); }, 300);
-            setNewSkill("");
-            setIsFocused(false);
-        } catch (error) {
-            logger.error('Failed to add skill:', error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    }, [skills, setTempProfile, setProfileData, refreshDashboard]);
 
     return (
         <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-5">

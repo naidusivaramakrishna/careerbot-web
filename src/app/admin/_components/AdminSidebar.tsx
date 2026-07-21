@@ -27,12 +27,10 @@ const AdminSidebar = () => {
             await adminLogout();
             // The adminLogout function already handles redirect to /admin/login
         } catch {
-            // Even if the API call fails, still clear local data and redirect
+            // Even if the API call fails, clear session cache and redirect
             if (typeof window !== 'undefined') {
-                localStorage.removeItem('admin_access_token');
-                localStorage.removeItem('admin_refresh_token');
-                localStorage.removeItem('admin_id');
-                localStorage.removeItem('admin_role');
+                sessionStorage.removeItem('admin_role');
+                sessionStorage.removeItem('admin_role_at');
                 router.push('/admin/login');
             }
         } finally {

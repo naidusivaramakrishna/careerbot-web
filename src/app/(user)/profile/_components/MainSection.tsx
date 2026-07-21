@@ -1,6 +1,6 @@
 "use client";
 import { Camera, Github, Mail, MapPin, Phone, X } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useProfileContext } from '../context/ProfileContext';
 import ProfileTabs from './ProfileTabs';
 import Image from 'next/image';
@@ -71,6 +71,21 @@ const ProfileAvatar = ({
   </div>
 );
 
+function mapBackendToFrontend(backendProfile: UserProfile): ProfileData {
+  return {
+    personalInformation: {
+      fullName: backendProfile.full_name || backendProfile.username || '',
+      headline: backendProfile.headline || '',
+      location: backendProfile.location || '',
+      email: backendProfile.email || '',
+      phone: backendProfile.phone_number || '',
+      linkedin: backendProfile.linkedin_url || '',
+      github: backendProfile.github_url || '',
+      summary: backendProfile.summary || '',
+    }
+  };
+}
+
 const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const { profileData, setProfileData, setActiveTab, setProfilePicUrl } = useProfileContext();
   const personalInfoRef = useRef<PersonalInfoRef | null>(null);
@@ -82,27 +97,21 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    // Show preview instantly
     const reader = new FileReader();
-    reader.onload = () => {
-      setSelectedImage(reader.result as string);
-    };
+    reader.onload = () => { setSelectedImage(reader.result as string); };
     reader.readAsDataURL(file);
 
     try {
       const res = await uploadProfilePicture(file);
-
       if (res.picture_url) {
         const fullUrl = res.picture_url.startsWith("http")
           ? res.picture_url
           : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${res.picture_url}`;
         setSelectedImage(fullUrl);
-        // Sync image with sidebar via ProfileContext
         setProfilePicUrl(fullUrl);
-        // Dispatch event to sync with Sidebar
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('profilePictureUpdated', { detail: { profilePicUrl: fullUrl } }));
         }
@@ -115,19 +124,15 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
     } finally {
       toast.dismiss();
     }
-  };
+  }, [setProfilePicUrl]);
 
-  const handleDeleteImage = async (e: React.MouseEvent) => {
+  const handleDeleteImage = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
-
     if (!selectedImage) return;
-
     try {
       const result = await deleteProfilePicture();
       setSelectedImage(null);
-      // Sync deletion with sidebar via ProfileContext
       setProfilePicUrl(null);
-      // Dispatch event to sync with Sidebar
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('profilePictureUpdated', { detail: { profilePicUrl: null } }));
       }
@@ -136,32 +141,19 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
       logger.error("Error deleting profile picture:", error);
       toast.error("Failed to delete profile picture");
     }
-  };
-
-  // Map backend UserProfile to frontend ProfileData
-  const mapBackendToFrontend = (backendProfile: UserProfile): ProfileData => {
-    return {
-      personalInformation: {
-        fullName: backendProfile.full_name || backendProfile.username || '',
-        headline: backendProfile.headline || '',
-        location: backendProfile.location || '',
-        email: backendProfile.email || '',
-        phone: backendProfile.phone_number || '',
-        linkedin: backendProfile.linkedin_url || '',
-        github: backendProfile.github_url || '',
-        summary: backendProfile.summary || '',
-      }
-    };
-  };
+  }, [selectedImage, setProfilePicUrl]);
 
   // Fetch profile data on component mount
   useEffect(() => {
+    let ignore = false;
+
     const fetchProfileData = async () => {
       try {
         setLoading(true);
-        // ✅ httpOnly cookies are sent automatically - no need to check localStorage
         const backendProfile = await getProfile();
-        setUsername(backendProfile.username ?? null)
+        if (ignore) return;
+
+        setUsername(backendProfile.username ?? null);
         setUserEmail(backendProfile.email ?? null);
         setIsEmailVerified(backendProfile.is_verified ?? false);
         const mappedProfile = mapBackendToFrontend(backendProfile);
@@ -174,7 +166,8 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           getEmploymentInfo().catch(() => ({}))
         ]);
 
-        // Set complete profile data with all sections
+        if (ignore) return;
+
         setProfileData((prev) => ({
           ...prev,
           personalInformation: mappedProfile.personalInformation,
@@ -184,42 +177,37 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
           employmentInfo: employmentInfo,
         }));
 
-        // ✅ Fetch profile picture from backend
         try {
           const pictureRes = await getProfilePicture();
-
-          if (pictureRes?.picture_url) {
+          if (!ignore && pictureRes?.picture_url) {
             const fullImageUrl = pictureRes.picture_url.startsWith("http")
               ? pictureRes.picture_url
               : `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'}${pictureRes.picture_url}`;
-
-            setSelectedImage(fullImageUrl); // <-- Image now persists after reload
-            setProfilePicUrl(fullImageUrl); // Sync with sidebar
+            setSelectedImage(fullImageUrl);
+            setProfilePicUrl(fullImageUrl);
           }
-        } catch (err) {
-          logger.warn("No profile picture found");
+        } catch {
+          // no profile picture yet — not an error
         }
-
-        toast.success('Profile loaded successfully');
       } catch (err: unknown) {
+        if (ignore) return;
         logger.error('Error fetching profile:', err);
-
         const error = err as { response?: { status?: number; data?: { detail?: string } } };
         if (error.response?.status === 401) {
           toast.error('Session expired. Please log in again');
-        } else if (error.response?.status === 404) {
-          // Profile doesn't exist yet - this is fine for new users
-          logger.info('No profile found. User can create one.');
-        } else {
+        } else if (error.response?.status !== 404) {
           toast.error(error.response?.data?.detail || 'Failed to load profile');
         }
       } finally {
-        setLoading(false);
+        if (!ignore) setLoading(false);
+        // Intentional: no success toast on profile load — it fired on every page visit
+        // and added noise without user value.
       }
     };
 
     fetchProfileData();
-  }, [setProfileData]);
+    return () => { ignore = true; };
+  }, [setProfileData, setProfilePicUrl]);
 
   // Prefill profile when imported (optional)
   useEffect(() => {

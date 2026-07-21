@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Award, Calendar, Pencil, Trash2 } from "lucide-react";
 import { formatDateRange } from "@/utils/formatDate";
 import { Certification } from "@/api/userApi";
@@ -9,10 +10,14 @@ interface Props {
     onDelete: (id?: string, index?: number) => void;
 }
 
-export default function CertificationCard({ cert, index, onEdit, onDelete }: Props) {
+const CertificationCard = memo(function CertificationCard({ cert, index, onEdit, onDelete }: Props) {
+    const dateRange = useMemo(
+        () => formatDateRange(cert.start_date, cert.end_date),
+        [cert.start_date, cert.end_date]
+    );
+
     return (
         <div
-            key={cert.id || index}
             data-testid={`certification-card-${index}`}
             className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-4 flex items-start justify-between gap-3"
         >
@@ -29,10 +34,10 @@ export default function CertificationCard({ cert, index, onEdit, onDelete }: Pro
                     {cert.issuer && (
                         <p className="text-sm text-[#2257a7] font-medium mt-0.5">{cert.issuer}</p>
                     )}
-                    {formatDateRange(cert.start_date, cert.end_date) && (
+                    {dateRange && (
                         <span className="flex items-center gap-1 text-xs text-gray-500 mt-2">
                             <Calendar className="w-3.5 h-3.5 shrink-0" />
-                            {formatDateRange(cert.start_date, cert.end_date)}
+                            {dateRange}
                         </span>
                     )}
                 </div>
@@ -60,4 +65,6 @@ export default function CertificationCard({ cert, index, onEdit, onDelete }: Pro
             </div>
         </div>
     );
-}
+});
+
+export default CertificationCard;

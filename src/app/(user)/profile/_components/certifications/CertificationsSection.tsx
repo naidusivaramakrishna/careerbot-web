@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { deleteCertification, Certification, getCertification, updateCertification } from "@/api/userApi";
 import { addCertificationItem } from "../../_utils/autoFillHelper";
@@ -44,9 +44,8 @@ export default function CertificationsSection({
             try {
                 setLoading(true);
                 const data = await getCertification();
-                const updatedProfile = { ...tempProfile, certifications: data };
-                setTempProfile(updatedProfile);
-                setProfileData(updatedProfile); // ✅ Update context too
+                setTempProfile((prev) => ({ ...prev, certifications: data }));
+                setProfileData((prev) => ({ ...prev, certifications: data }));
                 if (data.length > 0) setEditingIndex(null);
             } catch {
                 toast.error("Failed to load certification details.");
@@ -55,7 +54,8 @@ export default function CertificationsSection({
             }
         };
         fetchCertifications();
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // intentional: fetch once on mount, bail out if data already exists
 
     const handleSave = async () => {
         try {
@@ -132,11 +132,7 @@ export default function CertificationsSection({
             updated.splice(index!, 1);
             // ✅ Update both local and context state using functional updates
             setTempProfile((prev) => ({ ...prev, certifications: updated }));
-            setProfileData((prev) => {
-                const newProfile = { ...prev, certifications: updated };
-                // // console.log('✅ Updated profile data after delete:', newProfile);
-                return newProfile;
-            });
+            setProfileData((prev) => ({ ...prev, certifications: updated }));
 
             // Refresh dashboard with delay to prevent multiple toast notifications
             setTimeout(() => {
@@ -152,17 +148,21 @@ export default function CertificationsSection({
         }
     };
 
-    const openAddModal = () => {
+    const openAddModal = useCallback(() => {
         setCertificationForm({});
         setEditingIndex(null);
         setIsModalOpen(true);
-    };
+    }, []);
 
-    const openEditModal = (exp: Partial<Certification>, index: number) => {
+    const openEditModal = useCallback((exp: Partial<Certification>, index: number) => {
         setCertificationForm(exp);
         setEditingIndex(index);
         setIsModalOpen(true);
-    };
+    }, []);
+
+    const openDeleteModal = useCallback((id?: string, index?: number) => {
+        setDeleteTarget({ id, index });
+    }, []);
 
     const modalTitle =
         editingIndex === null ? "Add Certification" : "Edit Certification";
@@ -177,7 +177,7 @@ export default function CertificationsSection({
                     <CertificationList
                         certificationList={tempProfile.certifications}
                         onEdit={openEditModal}
-                        onDelete={(id, index) => setDeleteTarget({ id, index })}
+                        onDelete={openDeleteModal}
                         onAdd={openAddModal}
                     />
                 </>
