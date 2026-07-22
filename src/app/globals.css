@@ -99,14 +99,16 @@ body {
 
 /* Mobile responsive for A4 page */
 @media (max-width: 640px) {
-  .a4-page {
+  .a4-page,
+  .a2-page {
     width: 100%;
     max-width: 100%;
     padding: 16px;
     min-height: auto;
   }
 
-  .a4-page-content {
+  .a4-page-content,
+  .a2-page-content {
     min-height: auto;
   }
 }
@@ -119,6 +121,57 @@ body {
 .a4-page-content {
   width: 100%;
   min-height: calc(1122px - 64px);
+}
+
+.a2-page {
+  width: 100%;
+  max-width: 478px;
+  min-height: 760px;
+  background: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 18px;
+  margin: 0 auto;
+  position: relative;
+  box-sizing: border-box;
+  page-break-after: always;
+  break-after: page;
+}
+
+.a2-page:last-child {
+  page-break-after: auto;
+  break-after: auto;
+}
+
+.a2-page-content {
+  width: 100%;
+  min-height: calc(760px - 36px);
+}
+
+.resume-domain-page-viewport {
+  width: 100%;
+  overflow: hidden;
+}
+
+.resume-domain-page-content {
+  width: 100%;
+  will-change: transform;
+}
+
+.resume-domain-page-content > div {
+  min-height: 0 !important;
+}
+
+.resume-measure-container {
+  position: absolute;
+  left: -100000px;
+  top: 0;
+  width: 100%;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.resume-measure-block {
+  width: 100%;
 }
 
 .page-number {
@@ -146,7 +199,8 @@ body {
     display: none !important;
   }
 
-  .a4-page {
+  .a4-page,
+  .a2-page {
     box-shadow: none;
     margin: 0;
     page-break-after: always;

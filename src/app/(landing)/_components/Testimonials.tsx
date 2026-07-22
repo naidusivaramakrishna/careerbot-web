@@ -30,7 +30,7 @@ const testimonials = [
 export default function Testimonials() {
   return (
     <section id="testimonials" className="bg-white py-10">
-      <div className="mx-auto grid max-w-[1240px] gap-8 px-4 lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
+      <div className="mx-auto grid max-w-[1728px] gap-8 px-5 lg:grid-cols-[0.92fr_1.08fr] lg:px-[60px]">
         <motion.div
           initial={false}
           whileInView={{ opacity: 1, y: 0 }}

@@ -6,6 +6,19 @@ import { getResume } from "./parserApi";
 
 const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function hasScoreProjectionContract(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  const candidates = [value, value.ats_score, value.ats_breakdown, value.ats_display, value.enhancer_state];
+  return candidates.some((candidate) => isObject(candidate) && (
+    Object.prototype.hasOwnProperty.call(candidate, "score_status") ||
+    Object.prototype.hasOwnProperty.call(candidate, "estimated_score_after_fixes")
+  ));
+}
+
 /* ------------------------------------------------------
    STEP 1 — Upload + Parse Resume
 ------------------------------------------------------ */
@@ -108,8 +121,12 @@ export const processResumeComplete = async (file: File) => {
       if (cached) {
         try {
           const cachedPayload = JSON.parse(cached);
-          localStorage.setItem("atsAnalysisData", cached);
-          return { success: true as const, ...cachedPayload };
+          // Old local payloads do not contain the backend projection contract.
+          // Force one fresh enhancement after the backend rollout.
+          if (hasScoreProjectionContract(cachedPayload)) {
+            localStorage.setItem("atsAnalysisData", cached);
+            return { success: true as const, ...cachedPayload };
+          }
         } catch { /* corrupted — fall through */ }
       }
 
@@ -119,7 +136,7 @@ export const processResumeComplete = async (file: File) => {
       if (legacy) {
         try {
           const legacyPayload = JSON.parse(legacy);
-          if (legacyPayload.resume_id === resumeId) {
+          if (legacyPayload.resume_id === resumeId && hasScoreProjectionContract(legacyPayload)) {
             localStorage.setItem(localKey, legacy); // migrate for future hits
             return { success: true as const, ...legacyPayload };
           }
@@ -131,6 +148,11 @@ export const processResumeComplete = async (file: File) => {
     const enhanceResult = await enhanceResume({ resume_id: resumeId });
     const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown ?? {};
     const atsDisplay = enhanceResult.ats_display;
+    const enhancedResumeId = enhanceResult.enhanced_resume_id ?? null;
+    const enhancedResume =
+      enhanceResult.enhanced_resume ||
+      enhanceResult.enhancer_state?.resume ||
+      null;
 
     // Step 3: Fetch full resume from MongoDB (has all sections after LLM enhancement)
     let resumeData: Record<string, unknown> | null = null;
@@ -140,6 +162,21 @@ export const processResumeComplete = async (file: File) => {
 
     // Prefer ats_display.score (new format), fall back to ats_breakdown fields (legacy)
     const atsBreakdownRec = atsBreakdown as Record<string, unknown>;
+    const atsDisplayRec = (atsDisplay ?? {}) as Record<string, unknown>;
+    const enhanceResultRec = enhanceResult as unknown as Record<string, unknown>;
+    const scoreProjection = Object.fromEntries(
+      [
+        "current_score",
+        "estimated_score_after_fixes",
+        "points_possible",
+        "issues_count",
+        "sections_with_issues",
+        "score_status",
+        "score_source",
+      ]
+        .filter((key) => Object.prototype.hasOwnProperty.call(enhanceResultRec, key))
+        .map((key) => [key, enhanceResultRec[key]])
+    );
     const finalScore: number = Number(
       atsDisplay?.score ??
       atsBreakdownRec.FinalScore ??
@@ -151,16 +188,32 @@ export const processResumeComplete = async (file: File) => {
       atsBreakdownRec.TotalScore ??
       0
     );
+    const estimatedScore = [
+      enhanceResultRec.estimated_score_after_fixes,
+      enhanceResultRec.estimated_after_fixes,
+      enhanceResultRec.projected_score,
+      enhanceResultRec.potential_score,
+      enhanceResultRec.score_after_fixes,
+      enhanceResultRec.post_fix_score,
+      atsDisplayRec.estimated_score_after_fixes,
+      atsDisplayRec.estimated_after_fixes,
+      atsDisplayRec.projected_score,
+      atsBreakdownRec.estimated_score_after_fixes,
+    ]
+      .map(value => Number(value))
+      .find(value => Number.isFinite(value) && value >= finalScore && value <= 100);
 
     const payload = {
       resume_id: resumeId,
+      enhanced_resume_id: enhancedResumeId,
       ats_breakdown_id: null,
       parsed_data: parsedData,
       resume_data: resumeData,        // full MongoDB doc — most complete source
-      enhanced_resume: enhanceResult.enhanced_resume || null,
-      ats_score: atsBreakdown,
+      enhanced_resume: enhancedResume,
+      ats_score: { ...atsBreakdown, ...scoreProjection },
       ats_display: atsDisplay || null,
       finalWeightedScore: finalScore,
+      estimated_score_after_fixes: estimatedScore ?? null,
       missingFields: [],
       scanned_pdf: false,
     };

@@ -9,9 +9,10 @@ interface Props {
   data: ResumeData;
   style: ResumeStyle;
   onPageCountChange?: (count: number) => void;
+  currentPage?: number;
 }
 
-const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
+const TemplateOne: React.FC<Props> = ({ data, onPageCountChange, currentPage }) => {
   const { resumeStyle, sectionOrder } = useResume();
   const {
     personalInfo,
@@ -172,7 +173,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
             <section className="mb-0">
               <h2 style={headingStyle}>SUMMARY</h2>
               {/* ✅ Changed to support HTML formatting */}
-              <SafeHTML content={professionalSummary.summary} className="text-justify resume-description" />
+              <SafeHTML content={professionalSummary.summary} className="text-justify resume-description" style={baseTextStyle} />
               <hr className="border-t border-gray-800 mt-4" />
             </section>
           )
@@ -329,7 +330,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     {exp.location && <span className="text-sm"> • {exp.location}</span>}
                   </div>
                   {exp.description && (
-                    <SafeHTML content={exp.description} className="resume-description" />
+                    <SafeHTML content={exp.description} className="resume-description" style={baseTextStyle} />
                   )}
                 </div>
               ))}
@@ -358,7 +359,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     {intern.location && <span className="text-sm"> • {intern.location}</span>}
                   </div>
                   {intern.description && (
-                    <SafeHTML content={intern.description} className="resume-description" />
+                    <SafeHTML content={intern.description} className="resume-description" style={baseTextStyle} />
                   )}
                 </div>
               ))}
@@ -429,7 +430,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                     )}
                   </div>
                   {proj.description && (
-                    <SafeHTML content={proj.description} className="mb-2 resume-description" />
+                    <SafeHTML content={proj.description} className="mb-2 resume-description" style={baseTextStyle} />
                   )}
                   {proj.technologies.length > 0 && (
                     <p className="text-sm" style={baseTextStyle}>
@@ -520,7 +521,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {achievement.description && (
-                    <SafeHTML content={achievement.description} className="resume-description" />
+                    <SafeHTML content={achievement.description} className="resume-description" style={baseTextStyle} />
                   )}
                 </div>
               ))}
@@ -596,7 +597,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <h3 className="font-medium inline" style={titleStyle}>{hobby.name}</h3>
                   {/* ✅ Changed to support HTML formatting */}
                   {hobby.description && (
-                    <SafeHTML as="span" content={` - ${hobby.description}`} className="resume-description" />
+                    <SafeHTML as="span" content={` - ${hobby.description}`} className="resume-description" style={baseTextStyle} />
                   )}
                   {hobby.proficiencyLevel && <span className="text-sm" style={baseTextStyle}> ({hobby.proficiencyLevel})</span>}
                 </div>
@@ -620,7 +621,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                       {interest.category && <span className="text-sm" style={baseTextStyle}> ({interest.category})</span>}
                       {/* ✅ Changed to support HTML formatting */}
                       {interest.description && (
-                        <SafeHTML content={interest.description} className="text-sm resume-description" />
+                        <SafeHTML content={interest.description} className="text-sm resume-description" style={baseTextStyle} />
                       )}
                     </div>
                   </div>
@@ -716,7 +717,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                           {field.value as string}
                         </a>
                       ) : field.fieldType === "textarea" ? (
-                        <SafeHTML content={field.value as string} className="resume-description" />
+                        <SafeHTML content={field.value as string} className="resume-description" style={baseTextStyle} />
                       ) : (
                         <div style={baseTextStyle}>{field.value as string}</div>
                       )}
@@ -768,7 +769,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
         }
       `}</style>
       
-      <AutoPaginator onPageCountChange={onPageCountChange}>
+      <AutoPaginator onPageCountChange={onPageCountChange} currentPage={currentPage}>
         {sectionOrder.map((section, idx) => (
           <React.Fragment key={idx}>{renderSection(section)}</React.Fragment>
         ))}

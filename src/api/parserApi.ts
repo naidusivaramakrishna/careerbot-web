@@ -3,7 +3,7 @@ import axios from "axios";
 import type { AxiosRequestConfig } from 'axios';
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
 import logger from "@/lib/logger";
-import type { ParseResumeResponse, ParseFromProfileResponse, ParseJDResponse, ResumeData, ATSScore } from '@/types/api.types';
+import type { ParseResumeResponse, ParseFromProfileResponse, ParseJDResponse, ResumeData } from '@/types/api.types';
 
 /* ========== SAFE HELPERS ========== */
 interface ApiErrorWithRaw extends Error {
@@ -131,7 +131,7 @@ export async function getResume(resume_id: string): Promise<ResumeData> {
   return await safeGet<ResumeData>(`/parser/get_resume/?resume_id=${resume_id}`);
 }
 
-export async function previewResume(resume_id: string, options: PreviewOptions = {}): Promise<ResumeData> {
+function buildPreviewParams(options: PreviewOptions): URLSearchParams {
   const params = new URLSearchParams();
   if (options.template_id) params.set('template_id', options.template_id);
   if (options.template_json) params.set('template_json', options.template_json);
@@ -139,18 +139,17 @@ export async function previewResume(resume_id: string, options: PreviewOptions =
   if (options.preserve_template != null) params.set('preserve_template', String(options.preserve_template));
   if (options.preserve_exact != null) params.set('preserve_exact', String(options.preserve_exact));
   if (options.use_run_level_formatting != null) params.set('use_run_level_formatting', String(options.use_run_level_formatting));
+  return params;
+}
+
+export async function previewResume(resume_id: string, options: PreviewOptions = {}): Promise<ResumeData> {
+  const params = buildPreviewParams(options);
   const qs = params.toString() ? `?${params.toString()}` : '';
   return await safeGet<ResumeData>(`/parser/preview/${resume_id}${qs}`);
 }
 
 export async function downloadResumeJson(resume_id: string, options: PreviewOptions = {}): Promise<ResumeData> {
-  const params = new URLSearchParams();
-  if (options.template_id) params.set('template_id', options.template_id);
-  if (options.template_json) params.set('template_json', options.template_json);
-  if (options.use_original != null) params.set('use_original', String(options.use_original));
-  if (options.preserve_template != null) params.set('preserve_template', String(options.preserve_template));
-  if (options.preserve_exact != null) params.set('preserve_exact', String(options.preserve_exact));
-  if (options.use_run_level_formatting != null) params.set('use_run_level_formatting', String(options.use_run_level_formatting));
+  const params = buildPreviewParams(options);
   const qs = params.toString() ? `?${params.toString()}` : '';
   return await safeGet<ResumeData>(`/parser/download/${resume_id}${qs}`);
 }
@@ -472,7 +471,7 @@ export async function downloadResumePdf(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = serverFilename ?? filename ?? `resume_${resume_id}.pdf`;
+  a.download = serverFilename ?? filename ?? `resume_${resume_id}.${format}`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

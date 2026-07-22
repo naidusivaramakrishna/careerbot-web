@@ -13,9 +13,10 @@ interface Props {
   data: ResumeData;
   style: ResumeStyle;
   onPageCountChange?: (count: number) => void;
+  currentPage?: number;
 }
 
-const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
+const TemplateFive: React.FC<Props> = ({ data, onPageCountChange, currentPage }) => {
   const { resumeStyle, sectionOrder } = useResume();
 
   const {
@@ -544,7 +545,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
         .resume-description li { margin-bottom: 0.25rem; }
       `}</style>
 
-      <AutoPaginator onPageCountChange={onPageCountChange}>
+      <AutoPaginator onPageCountChange={onPageCountChange} currentPage={currentPage}>
         {sectionOrder.map((section, idx) => (
           <React.Fragment key={idx}>{renderSection(section)}</React.Fragment>
         ))}

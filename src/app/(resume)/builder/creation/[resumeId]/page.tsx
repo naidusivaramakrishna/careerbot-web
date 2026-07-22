@@ -6,6 +6,7 @@ import ResumeSide from "../_components/resumeSidebar/ResumeSide";
 import TemplatesSidebar from "../_components/templateSidebar/TemplatesSidebar";
 import PreviewPanel from "../_components/PreviewPanel";
 import { useResume } from "../_context/ResumeContext";
+import AtsScoreBanner from "../_components/ats/AtsScoreBanner";
 
 interface BuilderPageProps {
   params: Promise<{
@@ -22,10 +23,12 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   // ✅ Get loading state from context to prevent rendering before data loads
   const { isLoadingResume } = useResume();
 
-  // When source=enhanced, open the template sidebar and collapse the editor sidebar by default
+  // For ATS handoff, land directly in the editor with the default preview visible.
+  // Users can still open Templates after reviewing the enhanced resume.
   const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(isEnhancedResume);
 
-  const [activeTab, setActiveTab] = useState(isEnhancedResume ? "Score" : "Templates");
+  const [activeTab, setActiveTab] = useState(isEnhancedResume && !fromAts ? "Score" : "Templates");
+  const [requestedSection, setRequestedSection] = useState<string | null>(null);
 
   // Save sidebar state to localStorage whenever it changes (during session)
   useEffect(() => {
@@ -39,6 +42,10 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   const handleTabClickFromToolbar = (tab: string) => {
     setActiveTab(tab);
     setIsTemplateSidebarOpen(true);
+  };
+
+  const handleOpenEditorSection = (sectionName: string) => {
+    setRequestedSection(sectionName);
   };
 
   // ✅ Show loading state while resume data is being fetched from backend
@@ -61,31 +68,41 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   return (
     <>
       <Header />
-      <div className="flex h-screen">
-        <ResumeSide
-          isTemplateSidebarOpen={isTemplateSidebarOpen}
-          onToggleTemplateSidebar={handleToggleTemplateSidebar}
-          resumeId={resumeId}
-          initialTab={initialTab}
-          defaultOpen={!isEnhancedResume}
-        />
+      <div className="flex min-h-screen flex-col bg-gray-50">
+        {fromAts && <AtsScoreBanner />}
 
-        <main className="flex-1 bg-gray-50 ">
-          <PreviewPanel
+        <div className="flex flex-1 items-start">
+          <ResumeSide
             isTemplateSidebarOpen={isTemplateSidebarOpen}
-            onTabClick={handleTabClickFromToolbar}
+            onToggleTemplateSidebar={handleToggleTemplateSidebar}
             resumeId={resumeId}
-            isEnhancedResume={isEnhancedResume}
+            initialTab={initialTab}
+            defaultOpen={fromAts ? true : !isEnhancedResume}
+            highlightAtsMissing={fromAts}
+            requestedSection={requestedSection}
+            onRequestedSectionHandled={() => setRequestedSection(null)}
           />
-        </main>
 
-        <TemplatesSidebar
-          isOpen={isTemplateSidebarOpen}
-          onToggle={handleToggleTemplateSidebar}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          resumeId={resumeId}
-        />
+          <main className="min-w-0 flex-1 bg-gray-50">
+            <PreviewPanel
+              isTemplateSidebarOpen={isTemplateSidebarOpen}
+              onTabClick={handleTabClickFromToolbar}
+              onOpenSidebar={handleTabClickFromToolbar}
+              onOpenEditorSection={handleOpenEditorSection}
+              resumeId={resumeId}
+              isEnhancedResume={isEnhancedResume}
+              fromAts={fromAts}
+            />
+          </main>
+
+          <TemplatesSidebar
+            isOpen={isTemplateSidebarOpen}
+            onToggle={handleToggleTemplateSidebar}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            resumeId={resumeId}
+          />
+        </div>
       </div>
     </>
   );

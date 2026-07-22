@@ -147,7 +147,11 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {renderSectionHeading(getSectionTitle("Professional Summary"))}
             <div style={sectionBorderStyle("8px")} />
             <div style={{ textAlign: "justify", fontSize: '12px' }}>
-              <SafeHTML content={professionalSummary.summary} className="resume-description" />
+              <SafeHTML
+                content={professionalSummary.summary}
+                className="resume-description"
+                style={{ ...baseTextStyle, textAlign: "justify", fontSize: "12px" }}
+              />
             </div>
           </div>
         ) : null;

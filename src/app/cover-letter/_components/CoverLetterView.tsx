@@ -21,6 +21,7 @@ import { useCoverLetterTemplates } from "@/hooks/useCoverLetterTemplates";
 import { useDownloadCoverLetter } from "@/hooks/useDownloadCoverLetter";
 import { useUpdateCoverLetter } from "@/hooks/useUpdateCoverLetter";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
+import { CoverLetterTemplatePreview } from "./CoverLetterTemplatePreview";
 import CoverLetterStatusPill from "./CoverLetterStatusPill";
 import WarningBanner from "./WarningBanner";
 
@@ -734,7 +735,7 @@ function TemplateBrowseDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/20">
       <button type="button" aria-label="Close templates" className="absolute inset-0 cursor-default" onClick={onClose} />
-      <aside className="relative h-full w-full max-w-[390px] overflow-y-auto border-l border-[#dfe6f5] bg-white p-5 shadow-2xl 2xl:max-w-[420px] 2xl:p-6">
+      <aside className="relative h-full w-full max-w-[560px] overflow-y-auto border-l border-[#dfe6f5] bg-white p-5 shadow-2xl 2xl:max-w-[620px] 2xl:p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black text-[#070b33]">Browse Templates</h2>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-[#070b33]">
@@ -752,20 +753,28 @@ function TemplateBrowseDrawer({
                 <h3 className="text-sm font-black text-[#070b33]">{group}</h3>
                 <span className="text-xs font-bold text-[#2557a7]">{templates.length}</span>
               </div>
-              <div className="grid grid-cols-2 gap-3 2xl:gap-4">
+              <div className="grid gap-3 2xl:gap-4">
                 {templates.map((template) => (
                   <button
                     key={template.id}
                     type="button"
                     onClick={() => onTemplateChange(template.id)}
                     className={[
-                      "relative rounded-lg border p-3 text-left transition hover:border-[#2557a7] hover:bg-blue-50",
+                      "relative grid grid-cols-[112px_minmax(0,1fr)] gap-4 rounded-lg border p-3 text-left transition hover:border-[#2557a7] hover:bg-blue-50 2xl:grid-cols-[128px_minmax(0,1fr)]",
                       selectedTemplateId === template.id ? "border-[#2557a7] bg-blue-50 ring-1 ring-[#2557a7]" : "border-[#dfe6f5] bg-white",
                     ].join(" ")}
                   >
                     <MiniDoc template={template} />
-                    <p className="mt-3 text-sm font-black text-[#070b33]">{template.name}</p>
-                    <p className="mt-1 text-xs font-semibold text-[#2557a7]">{template.bestFor}</p>
+                    <span className="min-w-0 pr-6">
+                      <span className="block text-sm font-black text-[#070b33]">{template.name}</span>
+                      <span className="mt-1 block text-xs font-black uppercase tracking-[0.14em] text-[#2557a7]">
+                        {template.badge}
+                      </span>
+                      <span className="mt-2 block text-xs font-semibold leading-5 text-[#344272]">
+                        {template.description}
+                      </span>
+                      <span className="mt-2 block text-xs font-semibold text-slate-500">Best for {template.bestFor}</span>
+                    </span>
                     {selectedTemplateId === template.id && <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-[#2557a7]" />}
                   </button>
                 ))}
@@ -819,16 +828,19 @@ function LetterPreviewPaper({
       No letter body was produced.
     </p>
   );
+  const header = getLetterPreviewHeader(plainText, coverLetter);
 
   if (template.previewStyle === "executive") {
     return (
       <div className="mx-auto grid max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] lg:grid-cols-[150px_1fr] 2xl:grid-cols-[180px_1fr]">
         <aside className={["p-5 text-white 2xl:p-6", template.accent].join(" ")}>
-          <div className="h-12 w-12 rounded-full border border-white/60" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/60 text-sm font-black">
+            {header.initials}
+          </div>
           <div className="mt-8 space-y-2">
-            <div className="h-2 w-24 rounded-full bg-white/85" />
-            <div className="h-1.5 w-20 rounded-full bg-white/55" />
-            <div className="h-1.5 w-24 rounded-full bg-white/45" />
+            <p className="text-sm font-black leading-5 text-white">{header.name}</p>
+            <p className="text-xs font-semibold leading-5 text-white/75">{header.contact}</p>
+            <p className="text-xs font-semibold leading-5 text-white/65">Cover letter</p>
           </div>
           <div className="mt-10 space-y-2">
             {["Leadership", "Evidence", "Impact"].map((item) => (
@@ -847,12 +859,8 @@ function LetterPreviewPaper({
     return (
       <div className="mx-auto max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)]">
         <div className={["px-6 py-4 text-white 2xl:px-7 2xl:py-5", template.accent].join(" ")}>
-          <div className="h-3 w-44 rounded-full bg-white" />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="h-2 w-20 rounded-full bg-white/65" />
-            <span className="h-2 w-24 rounded-full bg-white/45" />
-            <span className="h-2 w-16 rounded-full bg-white/45" />
-          </div>
+          <p className="text-lg font-black leading-tight">{header.name}</p>
+          <p className="mt-2 max-w-xl text-sm font-semibold leading-6 text-white/75">{header.contact}</p>
         </div>
         <div className="px-6 py-7 2xl:px-8 2xl:py-9">{body}</div>
       </div>
@@ -864,13 +872,10 @@ function LetterPreviewPaper({
       <div className="mx-auto max-w-2xl rounded-lg border border-blue-100 bg-white px-6 py-6 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] 2xl:px-7 2xl:py-7">
         <div className="mb-5 flex items-start justify-between gap-6 border-b border-blue-100 pb-4">
           <div>
-            <div className={["h-2.5 w-36 rounded-full", template.accent].join(" ")} />
-            <div className="mt-2 h-1.5 w-28 rounded-full bg-slate-300" />
+            <p className="text-base font-black leading-tight text-slate-950">{header.name}</p>
+            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{header.contact}</p>
           </div>
-          <div className="space-y-1 text-right">
-            <div className="ml-auto h-1.5 w-20 rounded-full bg-slate-300" />
-            <div className="ml-auto h-1.5 w-16 rounded-full bg-slate-200" />
-          </div>
+          <p className="text-right text-xs font-bold uppercase tracking-wide text-slate-400">Cover letter</p>
         </div>
         {body}
       </div>
@@ -880,7 +885,7 @@ function LetterPreviewPaper({
   if (template.previewStyle === "minimal") {
     return (
       <div className="mx-auto max-w-2xl rounded-lg border border-slate-200 bg-white px-7 py-8 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] 2xl:px-10 2xl:py-10">
-        <div className="mb-10 ml-auto h-1 w-24 rounded-full bg-slate-300" />
+        <p className="mb-10 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">Cover letter</p>
         <div className={["mb-8 h-0.5 w-20 rounded-full", template.accent].join(" ")} />
         {body}
       </div>
@@ -892,16 +897,16 @@ function LetterPreviewPaper({
       <div className="mx-auto max-w-2xl rounded-lg border border-emerald-100 bg-white px-6 py-7 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] 2xl:px-8 2xl:py-9">
         <div className="mb-7 flex items-start justify-between gap-4">
           <div>
-            <div className={["h-2.5 w-40 rounded-full", template.accent].join(" ")} />
-            <div className="mt-2 h-1.5 w-28 rounded-full bg-slate-300" />
+            <p className="text-lg font-black leading-tight text-slate-950">{header.name}</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>
           </div>
           <div className={["flex h-14 w-14 items-center justify-center rounded-full text-sm font-black text-white", template.accent].join(" ")}>
-            CB
+            {header.initials}
           </div>
         </div>
         {body}
         <div className="mt-8 flex items-center gap-3">
-          <div className={["h-1.5 w-32 rounded-full", template.accent].join(" ")} />
+          <p className="text-sm font-semibold text-slate-950">{header.name}</p>
           <div className="h-px flex-1 bg-emerald-100" />
         </div>
       </div>
@@ -912,15 +917,40 @@ function LetterPreviewPaper({
     <div className="mx-auto max-w-2xl rounded-lg border border-slate-200 bg-white px-6 py-7 shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)] 2xl:px-8 2xl:py-9">
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
-          <div className={["h-2.5 w-40 rounded-full", template.accent].join(" ")} />
-          <div className="mt-2 h-1.5 w-28 rounded-full bg-slate-300" />
+          <p className="text-lg font-black leading-tight text-slate-950">{header.name}</p>
+          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>
         </div>
-        <div className="h-10 w-10 rounded-full border border-slate-300" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 text-xs font-black text-slate-700">
+          {header.initials}
+        </div>
       </div>
       <div className={["mb-7 h-1 w-full rounded-full", template.accent].join(" ")} />
       {body}
     </div>
   );
+}
+
+function getLetterPreviewHeader(
+  plainText: string | null,
+  coverLetter: CoverLetterResponse["cover_letter"],
+): { name: string; contact: string; initials: string } {
+  const lines = (plainText ?? "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const signature = coverLetter?.signature?.replace(/^(sincerely|regards|best regards),?\s*/i, "").trim();
+  const firstPlainName = lines.find((line) => !/^dear\s+/i.test(line) && !line.includes("@") && line.length <= 80);
+  const contact = lines.find((line) => line.includes("@") || /\d{6,}/.test(line)) ?? "Cover letter ready for review";
+  const name = signature || firstPlainName || "Candidate";
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "CL";
+
+  return { name, contact, initials };
 }
 
 function PlainTextLetterBody({
@@ -976,132 +1006,7 @@ function MiniDoc({
   template: (typeof displayTemplates)[number];
   compact?: boolean;
 }) {
-  const shellSize = compact ? "h-20 w-14" : "h-24 w-16";
-  const lineCount = compact ? 3 : 5;
-
-  if (template.previewStyle === "executive") {
-    return (
-      <span className={["grid shrink-0 grid-cols-[0.34fr_1fr] overflow-hidden rounded border border-slate-200 shadow-sm", shellSize].join(" ")}>
-        <span className={["p-1", template.accent].join(" ")}>
-          <span className="block h-3 w-3 rounded-full border border-white/70" />
-          <span className="mt-3 block space-y-1">
-            <span className="block h-0.5 w-4 rounded bg-white/70" />
-            <span className="block h-0.5 w-3 rounded bg-white/50" />
-            <span className="block h-0.5 w-4 rounded bg-white/50" />
-          </span>
-        </span>
-        <span className="bg-white p-1.5">
-          <span className="mb-1 block h-1.5 w-6 rounded-full bg-slate-700" />
-          <span className="mb-1.5 block h-px w-full bg-slate-200" />
-          <MiniLines count={lineCount + 1} compact={compact} />
-        </span>
-      </span>
-    );
-  }
-
-  if (template.previewStyle === "modern") {
-    return (
-      <span className={["flex shrink-0 flex-col overflow-hidden rounded border border-slate-200 bg-white shadow-sm", shellSize].join(" ")}>
-        <span className={["block px-1.5 py-2", template.accent].join(" ")}>
-          <span className="block h-1.5 w-7 rounded-full bg-white" />
-          <span className="mt-1 block h-0.5 w-9 rounded-full bg-white/60" />
-        </span>
-        <span className="block p-1.5">
-          <MiniLines count={lineCount} compact={compact} />
-          <span className={["mt-2 block h-1 w-6 rounded-full", template.accent].join(" ")} />
-        </span>
-      </span>
-    );
-  }
-
-  if (template.previewStyle === "compact") {
-    return (
-      <span className={["flex shrink-0 flex-col rounded border border-blue-100 bg-white p-1.5 shadow-sm", shellSize].join(" ")}>
-        <span className="mb-1 grid grid-cols-[1fr_0.35fr] gap-1">
-          <span>
-            <span className={["mb-0.5 block h-1.5 w-6 rounded-full", template.accent].join(" ")} />
-            <span className="block h-0.5 w-4 rounded bg-slate-300" />
-          </span>
-          <span className="space-y-0.5">
-            <span className="block h-0.5 w-full rounded bg-slate-300" />
-            <span className="block h-0.5 w-4 rounded bg-slate-200" />
-          </span>
-        </span>
-        <span className="mb-1 block h-px w-full bg-blue-100" />
-        <MiniLines count={compact ? 8 : 10} tight compact={compact} />
-      </span>
-    );
-  }
-
-  if (template.previewStyle === "minimal") {
-    return (
-      <span className={["flex shrink-0 flex-col rounded border border-slate-200 bg-white p-2 shadow-sm", shellSize].join(" ")}>
-        <span className="ml-auto block h-0.5 w-5 rounded-full bg-slate-300" />
-        <span className="mt-4 block h-1.5 w-8 rounded-full bg-slate-700" />
-        <span className={["mt-1 block h-0.5 w-6 rounded-full", template.accent].join(" ")} />
-        <span className="mt-4 block">
-          <MiniLines count={compact ? 3 : 4} spacious compact={compact} />
-        </span>
-      </span>
-    );
-  }
-
-  if (template.previewStyle === "signature") {
-    return (
-      <span className={["flex shrink-0 flex-col rounded border border-emerald-100 bg-white p-1.5 shadow-sm", shellSize].join(" ")}>
-        <span className="mb-2 flex items-start justify-between">
-          <span className={["block h-1.5 w-6 rounded-full", template.accent].join(" ")} />
-          <span className={["flex h-4 w-4 items-center justify-center rounded-full text-[5px] font-black text-white", template.accent].join(" ")}>
-            CB
-          </span>
-        </span>
-        <MiniLines count={lineCount} compact={compact} />
-        <span className={["mt-2 block h-1 w-6 rounded-full", template.accent].join(" ")} />
-      </span>
-    );
-  }
-
-  return (
-    <span className={["flex shrink-0 flex-col rounded border border-slate-200 bg-white p-1.5 shadow-sm", shellSize].join(" ")}>
-      <span className="mb-1 flex items-end justify-between">
-        <span>
-          <span className={["mb-0.5 block h-1.5 w-7 rounded-full", template.accent].join(" ")} />
-          <span className="block h-0.5 w-5 rounded bg-slate-300" />
-        </span>
-        <span className="block h-3 w-3 rounded-full border border-slate-300" />
-      </span>
-      <span className={["mb-1.5 block h-1 w-full rounded-full", template.accent].join(" ")} />
-      <MiniLines count={lineCount + 1} compact={compact} />
-    </span>
-  );
-}
-
-function MiniLines({
-  count,
-  centered = false,
-  tight = false,
-  spacious = false,
-  compact = false,
-}: {
-  count: number;
-  centered?: boolean;
-  tight?: boolean;
-  spacious?: boolean;
-  compact?: boolean;
-}) {
-  const widths = centered
-    ? compact ? ["mx-auto w-6", "mx-auto w-5", "mx-auto w-7"] : ["mx-auto w-8", "mx-auto w-6", "mx-auto w-9"]
-    : compact ? ["w-7", "w-6", "w-8", "w-7"] : ["w-9", "w-7", "w-10", "w-8"];
-  return (
-    <span className={spacious ? "space-y-2" : tight ? "space-y-0.5" : "space-y-1"}>
-      {Array.from({ length: count }).map((_, index) => (
-        <span
-          key={index}
-          className={["block h-1 rounded bg-slate-300", widths[index % widths.length]].join(" ")}
-        />
-      ))}
-    </span>
-  );
+  return <CoverLetterTemplatePreview template={template} size={compact ? "compact" : "picker"} />;
 }
 
 function getEvidenceScore(letter: CoverLetterResponse): number {
