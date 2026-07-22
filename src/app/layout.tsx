@@ -26,7 +26,15 @@ export const metadata: Metadata = {
   title: "Careerbot",
   description: "AI-powered resume analysis, ATS score checking, and intelligent job matching.",
   // viewport: "width=device-width, initial-scale=1, maximum-scale=1",
-  icons: { icon: "/favicon.ico" },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/assets/icons/favicon.svg", type: "image/svg+xml" },
+      { url: "/assets/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/assets/icons/favicon-16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: "/assets/icons/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

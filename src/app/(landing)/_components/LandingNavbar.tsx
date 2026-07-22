@@ -26,8 +26,9 @@ import {
 } from 'lucide-react';
 
 interface LandingNavbarProps {
-  onOpenSignup: () => void;
+  onOpenSignup?: () => void;
   onOpenSignin?: () => void;
+  authMode?: 'guest' | 'authenticated';
 }
 
 interface DropdownItem {
@@ -323,7 +324,11 @@ const mobileLinkIcons: Record<string, React.ReactNode> = {
 
 /* ─── Root component ─────────────────────────────────────────────────── */
 
-export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNavbarProps) {
+export default function LandingNavbar({
+  onOpenSignup,
+  onOpenSignin,
+  authMode = 'guest',
+}: LandingNavbarProps) {
   const pathname = usePathname();
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -370,7 +375,7 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
   const handleSignin = () => {
     closeMobile();
     if (onOpenSignin) onOpenSignin();
-    else onOpenSignup();
+    else onOpenSignup?.();
   };
 
   return (
@@ -433,22 +438,35 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
 
           {/* Auth buttons */}
           <div className="flex shrink-0 items-center gap-2">
-            <div className="hidden items-center gap-1.5 lg:flex xl:gap-2">
-              <button
-                onClick={handleSignin}
-                className="cursor-pointer whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-700 shadow-[0_6px_16px_rgba(15,35,75,0.08)] transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] xl:px-4 xl:text-sm"
-              >
-                Sign In
-              </button>
-              <Link
-                href="/builder/start"
-                onClick={() => setActiveDropdown(null)}
-                className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
-              >
-                <ShieldCheck size={13} className="xl:h-3.5 xl:w-3.5" />
-                Get Started Free
-              </Link>
-            </div>
+            {authMode === 'authenticated' ? (
+              <div className="hidden items-center gap-1.5 lg:flex xl:gap-2">
+                <Link
+                  href="/dashboard"
+                  onClick={() => setActiveDropdown(null)}
+                  className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
+                >
+                  <ShieldCheck size={13} className="xl:h-3.5 xl:w-3.5" />
+                  Dashboard
+                </Link>
+              </div>
+            ) : (
+              <div className="hidden items-center gap-1.5 lg:flex xl:gap-2">
+                <button
+                  onClick={handleSignin}
+                  className="cursor-pointer whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-700 shadow-[0_6px_16px_rgba(15,35,75,0.08)] transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] xl:px-4 xl:text-sm"
+                >
+                  Sign In
+                </button>
+                <Link
+                  href="/builder/start"
+                  onClick={() => setActiveDropdown(null)}
+                  className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
+                >
+                  <ShieldCheck size={13} className="xl:h-3.5 xl:w-3.5" />
+                  Get Started Free
+                </Link>
+              </div>
+            )}
 
             <button
               onClick={() => setMobileOpen(true)}
@@ -526,20 +544,33 @@ export default function LandingNavbar({ onOpenSignup, onOpenSignin }: LandingNav
             </div>
 
             <div className="shrink-0 space-y-2 border-t border-gray-200 px-4 py-4">
-              <button
-                onClick={handleSignin}
-                className="flex w-full cursor-pointer items-center justify-center rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7]"
-              >
-                Sign In
-              </button>
-              <Link
-                href="/builder/start"
-                onClick={closeMobile}
-                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#2557a7] py-2.5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_8px_22px_rgba(37,87,167,0.28)] active:scale-95"
-              >
-                <ShieldCheck size={15} />
-                Get Started Free
-              </Link>
+              {authMode === 'authenticated' ? (
+                <Link
+                  href="/dashboard"
+                  onClick={closeMobile}
+                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#2557a7] py-2.5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_8px_22px_rgba(37,87,167,0.28)] active:scale-95"
+                >
+                  <ShieldCheck size={15} />
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <button
+                    onClick={handleSignin}
+                    className="flex w-full cursor-pointer items-center justify-center rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7]"
+                  >
+                    Sign In
+                  </button>
+                  <Link
+                    href="/builder/start"
+                    onClick={closeMobile}
+                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#2557a7] py-2.5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_8px_22px_rgba(37,87,167,0.28)] active:scale-95"
+                  >
+                    <ShieldCheck size={15} />
+                    Get Started Free
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

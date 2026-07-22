@@ -78,6 +78,7 @@ const EditorTab: React.FC<Props> = ({
   sections,
   extraSections,
   activeSection,
+  setActiveSection,
   formData,
   errors,
   sectionComponents,

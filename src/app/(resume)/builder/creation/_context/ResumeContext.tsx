@@ -644,7 +644,12 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             const cached = JSON.parse(cachedRaw);
             // Only use cache if it belongs to this exact resumeId
             if (cached?.resumeId === resumeId) {
-              data = cached.data;
+              // Enhanced caches created before the backend score projection
+              // rollout contain only the current score. Fetch the persisted
+              // backend response instead of rendering that stale value twice.
+              data = source === "enhanced" && !hasAtsScoreProjection(cached.data)
+                ? undefined
+                : cached.data;
               localStorage.removeItem("cached_resume_data");
             } else {
               // Stale cache for a different resume — discard and fetch fresh
@@ -676,6 +681,62 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           })(),
         ]);
 
+        // ATS handoffs may load from the local builder cache. Preserve the
+        // report's backend score metadata instead of recalculating from fields.
+        const resumeRecord = resumeData as Record<string, unknown> | null | undefined;
+        const scoreProjectionKeys = [
+          "current_score",
+          "estimated_score_after_fixes",
+          "points_possible",
+          "issues_count",
+          "sections_with_issues",
+          "score_status",
+          "score_source",
+        ];
+        const backendScoreSources = [
+          resumeRecord,
+          resumeRecord?.enhancer_state,
+          (resumeRecord?.enhancer_state as Record<string, unknown> | undefined)?.ats_breakdown,
+          (resumeRecord?.enhancer_state as Record<string, unknown> | undefined)?.ats_display,
+        ];
+        const topLevelProjection = Object.fromEntries(
+          scoreProjectionKeys
+            .filter((key) => backendScoreSources.some(
+              (source) => source && typeof source === "object" && Object.prototype.hasOwnProperty.call(source, key)
+            ))
+            .map((key) => {
+              const source = backendScoreSources.find(
+                (candidate) => candidate && typeof candidate === "object" && Object.prototype.hasOwnProperty.call(candidate, key)
+              ) as Record<string, unknown> | undefined;
+              return [key, source?.[key]];
+            })
+        );
+        const storedScore = resumeRecord?.ats_score;
+        let persistedAtsScore = storedScore && typeof storedScore === "object"
+          ? { ...(storedScore as Record<string, unknown>), ...topLevelProjection }
+          : Object.keys(topLevelProjection).length > 0
+            ? topLevelProjection
+            : undefined;
+        if (typeof window !== "undefined") {
+          try {
+            const analysis = JSON.parse(localStorage.getItem("atsAnalysisData") || "null") as Record<string, unknown> | null;
+            if (analysis?.enhanced_resume_id === resumeId && analysis.ats_score) {
+              persistedAtsScore = {
+                ...((persistedAtsScore as Record<string, unknown> | null | undefined) ?? {}),
+                ...(analysis.ats_score as Record<string, unknown>),
+                ...(typeof analysis.estimated_score_after_fixes === "number"
+                  ? { estimated_score_after_fixes: analysis.estimated_score_after_fixes }
+                  : {}),
+              };
+            }
+          } catch {
+            // Ignore malformed legacy analysis cache and continue with API data.
+          }
+        }
+        if (persistedAtsScore && typeof persistedAtsScore === "object") {
+          setEnhancedAtsScore(persistedAtsScore as EnhancedAtsScore);
+        }
+
         // Process resume data
         let processedData;
         if (source === "enhanced" && resumeData?.enhanced_data) {
@@ -694,7 +755,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             },
           };
           // Store ATS score from enhanced resume response
-          if (resumeData.ats_score) {
+          if (resumeData.ats_score && !persistedAtsScore) {
             setEnhancedAtsScore(resumeData.ats_score);
           }
           // Convert section_breakdown deductions into EnhancedSuggestion[] (after_example is the suggestion text)
