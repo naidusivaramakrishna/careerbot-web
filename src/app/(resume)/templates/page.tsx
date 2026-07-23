@@ -36,9 +36,6 @@ const DOMAIN_NAMES: Record<string, string> = {
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from './_constants/templateImages';
 import { resolveTemplateImageUrl } from '@/lib/imageUtils';
 
-// Reads useSearchParams/localStorage at runtime — opt out of static prerender
-export const dynamic = "force-dynamic";
-
 const TRUST_BADGES = ['100% ATS Friendly', '14+ Industries', '100+ Templates'];
 
 const DOMAIN_DISPLAY_NAMES: Record<string, string> = {

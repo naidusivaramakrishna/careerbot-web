@@ -1,17 +1,16 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { submitFinalReport } from '@/api/communicationApi';
 import { getProfile } from '@/api/userApi';
 // import Sidebar from '@/components/layout/Sidebar';
 // import Header from '@/components/layout/Header';
 import logger from '@/lib/logger';
 
-// Reads useSearchParams/localStorage at runtime — opt out of static prerender
-export const dynamic = "force-dynamic";
-
-export default function FeedbackPage() {
+// useSearchParams must be inside a Suspense boundary for static export (Next.js).
+// The default export below wraps the content component in <Suspense>.
+function FeedbackPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isTimeout = searchParams.get('reason') === 'timeout';
@@ -223,5 +222,13 @@ export default function FeedbackPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function FeedbackPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <FeedbackPageContent />
+    </Suspense>
   );
 }

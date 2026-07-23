@@ -41,9 +41,6 @@ import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
 import { getCoverLetterParsedResumeId, getCoverLetterResumeSource } from "@/lib/coverLetterResume";
 import type { CoverLetterFormSubmit, CoverLetterResumeOption, CoverLetterTemplateId } from "@/types/coverLetter";
 
-// Reads useSearchParams/localStorage at runtime — opt out of static prerender
-export const dynamic = "force-dynamic";
-
 const MAX_RESUME_UPLOAD_MB = 10;
 const MIN_JD_CHARS = 50;
 const MAX_NOTE_CHARS = 300;
