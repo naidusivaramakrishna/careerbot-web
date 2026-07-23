@@ -118,48 +118,6 @@ function rememberEnhancedResumeId(enhancedResumeId: string) {
   }
 }
 
-function hasResumeContent(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object") return false;
-  const data = value as Record<string, unknown>;
-  return [
-    "contact",
-    "personal_info",
-    "personalInfo",
-    "llm_data",
-    "work_experience",
-    "experience",
-    "workExperience",
-    "education",
-    "technical_skills",
-    "categorizedSkills",
-  ].some((key) => data[key] != null);
-}
-
-function cacheBuilderResume(enhancedResumeId: string, sourceData: unknown) {
-  if (!hasResumeContent(sourceData)) return;
-
-  const mappedData = mapParserOutputToBuilderData(sourceData);
-  localStorage.setItem(
-    "cached_resume_data",
-    JSON.stringify({
-      resumeId: enhancedResumeId,
-      data: { ...mappedData, id: enhancedResumeId },
-    })
-  );
-}
-
-function rememberEnhancedResumeId(enhancedResumeId: string) {
-  localStorage.setItem("current_resume_id", enhancedResumeId);
-
-  const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
-  if (!existingIds.includes(enhancedResumeId)) {
-    localStorage.setItem(
-      "enhanced_resume_ids",
-      JSON.stringify([...existingIds, enhancedResumeId])
-    );
-  }
-}
-
 /* ─── HELPERS ─────────────────────────────────────────── */
 function transformData(raw: Record<string, unknown>): ResumeScoreData {
   const atsScore = raw?.ats_score as Record<string, unknown> | undefined;
