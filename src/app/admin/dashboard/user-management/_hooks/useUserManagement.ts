@@ -82,8 +82,8 @@ export const useUserManagement = () => {
     }, [filters.search])
 
     // Handle filter change
-    const handleFilterChange = useCallback((key: keyof UserFilters, value: string) => {
-        setFilters(prev => ({ ...prev, [key]: value }))
+    const handleFilterChange = useCallback((key: string, value: string) => {
+        setFilters(prev => ({ ...prev, [key as keyof UserFilters]: value }))
         setCurrentPage(1)
     }, [])
 

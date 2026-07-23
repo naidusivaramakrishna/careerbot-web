@@ -96,6 +96,18 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     logger.info(`[${request.method}] ${pathname}`);
 
+    // Maintenance mode — checked before public-route bail-outs so it applies to
+    // ALL routes including /, /browse-templates, /blog, etc.
+    // Admin/recruiter bypass so they can reach the dashboard to turn it off.
+    // /maintenance itself is always let through to avoid an infinite redirect loop.
+    const isAdminOrRecruiter =
+        pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
+    if (!isAdminOrRecruiter && pathname !== '/maintenance' && !pathname.startsWith('/maintenance/')) {
+        if (await isMaintenanceMode(request.url)) {
+            return NextResponse.redirect(new URL('/maintenance', request.url));
+        }
+    }
+
     // Allow public routes without authentication
     const isPublicRoute =
         publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'));
@@ -107,14 +119,6 @@ export async function middleware(request: NextRequest) {
     const publicLandingPages = ['/ats', '/jobmatch', '/jobs', '/payments'];
     if (publicLandingPages.includes(pathname)) {
         return NextResponse.next();
-    }
-
-    // Maintenance mode — only for regular user routes (admin/recruiter bypass so
-    // admins can always reach the dashboard to turn maintenance off)
-    const isAdminOrRecruiter =
-        pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
-    if (!isAdminOrRecruiter && await isMaintenanceMode(request.url)) {
-        return NextResponse.redirect(new URL('/maintenance', request.url));
     }
 
     // For admin paths, prefer admin_access_token to avoid stale user session

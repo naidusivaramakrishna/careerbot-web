@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { getExperience, updateExperience, deleteExperience, Experience } from "@/api/userApi";
 import { addExperienceItem } from "../../_utils/autoFillHelper";
@@ -33,14 +33,14 @@ export default function WorkExperienceSection({
         index?: number;
     } | null>(null);
 
-    useEffect(() => {
+    const hasExistingData = useRef((tempProfile.workExperience?.length ?? 0) > 0);
 
+    useEffect(() => {
+        if (hasExistingData.current) {
+            setEditingIndex(null);
+            return;
+        }
         const fetchExperience = async () => {
-            //  Only fetch if experience data doesn't exist yet
-            if (tempProfile.workExperience && tempProfile.workExperience.length > 0) {
-                if (tempProfile.workExperience.length > 0) setEditingIndex(null);
-                return;
-            }
             try {
                 setLoading(true);
                 const data = await getExperience();
@@ -54,7 +54,7 @@ export default function WorkExperienceSection({
             }
         };
         fetchExperience();
-    }, []);
+    }, []); // safe: hasExistingData is a ref, setters are stable
 
     const handleSave = async () => {
         try {

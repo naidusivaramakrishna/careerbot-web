@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Node.js process-level cache — persists across requests within the same server instance.
-// updatedAt === 0 means cache was never explicitly set (cold start / server restart).
-// When enabled:true the cache is sticky until a POST arrives (expected path for turning maintenance OFF).
-// When enabled:false the cache re-probes after CACHE_TTL_MS so backend-side toggles are eventually picked up.
+// Re-probes the Python backend every 15 s so client-side checks (ClientLayout poll)
+// always reflect the real maintenance state within one TTL window.
 let cache: { enabled: boolean; updatedAt: number } = { enabled: false, updatedAt: 0 };
-// Re-probe every 5 minutes when maintenance is off — catches backend-side toggles that bypass the POST.
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 15_000;
 // Back off on repeated failures to avoid a probe storm when the backend is unreachable.
 let lastFailedProbeAt = 0;
 const FAILED_PROBE_BACKOFF_MS = 10_000;
-// In-flight deduplication: concurrent cold-start requests share one probe promise.
+// In-flight deduplication: concurrent requests share one probe promise.
 let probeInFlight: Promise<boolean | null> | null = null;
 
 // On cold start, probe the Python backend directly to read the real maintenance state.
@@ -23,14 +21,14 @@ async function fetchMaintenanceFromBackend(): Promise<boolean | null> {
             signal: AbortSignal.timeout(1500),
         });
         if (res.status === 503) {
-            // Confirm it's a maintenance 503 (not a generic server error)
             const data = await res.json().catch(() => null);
-            const isMaintenance =
-                data?.type === 'maintenance' ||
-                data?.error?.type === 'maintenance' ||
-                String(data?.error_code ?? '').toLowerCase().includes('maintenance') ||
-                String(data?.detail ?? '').toLowerCase().includes('maintenance');
-            return isMaintenance ? true : null;
+            // error_code is nested under data.error, not at the top level.
+            // Return null for an unparseable body (data===null) so the caller
+            // treats it as ambiguous and preserves the prior cache state instead
+            // of caching false and potentially flipping the gate open while
+            // maintenance is genuinely active.
+            if (String(data?.error?.error_code ?? '').toUpperCase() === 'MAINTENANCE_MODE') return true;
+            return data ? false : null;
         }
         // 200, 404, 401 etc. → backend is up, maintenance is off
         return false;
@@ -43,10 +41,8 @@ async function fetchMaintenanceFromBackend(): Promise<boolean | null> {
 }
 
 export async function GET() {
-    // Probe when: (a) cold start or stale cache, AND (b) backoff window has cleared.
-    // We only TTL-refresh the false state — enabled:true stays sticky until a POST arrives.
-    // Folding the backoff gate into shouldProbe keeps the guard in one place.
-    const stale = cache.updatedAt === 0 || (!cache.enabled && Date.now() - cache.updatedAt > CACHE_TTL_MS);
+    // Probe when: (a) cold start or stale cache (15 s TTL, both states), AND (b) backoff window has cleared.
+    const stale = cache.updatedAt === 0 || Date.now() - cache.updatedAt > CACHE_TTL_MS;
     const backoffClear = Date.now() - lastFailedProbeAt >= FAILED_PROBE_BACKOFF_MS;
     const shouldProbe = stale && backoffClear;
 
@@ -61,12 +57,14 @@ export async function GET() {
         if (fromBackend !== null) {
             cache = { enabled: fromBackend, updatedAt: Date.now() };
         } else {
-            // Backend unreachable — stamp a short-lived false cache so stale stays
-            // false for the next FAILED_PROBE_BACKOFF_MS window. Without this stamp,
-            // cache.updatedAt stays 0 (stale=true forever) and every GET after the
-            // backoff clears re-blocks for up to 1.5 s on a persistently-down backend.
+            // Backend unreachable — keep the current enabled state so a POST-set
+            // enabled:true isn't silently erased when the probe can't reach the backend.
+            // On cold start (updatedAt===0) leave updatedAt at 0 so the next request
+            // re-probes after just the 10 s backoff rather than the full 15 s TTL —
+            // this shrinks the window where a cold-start failure keeps maintenance
+            // mode undetected. On a warm cache, stamp updatedAt normally.
             lastFailedProbeAt = Date.now();
-            cache = { enabled: false, updatedAt: Date.now() };
+            cache = { enabled: cache.enabled, updatedAt: cache.updatedAt === 0 ? 0 : Date.now() };
         }
     }
     return NextResponse.json({ maintenance: cache.enabled });
