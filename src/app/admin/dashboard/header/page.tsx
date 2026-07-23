@@ -2,6 +2,7 @@
 import { getCurrentAdmin } from '@/api/adminAuthApi';
 import React, { useEffect, useState, useCallback } from 'react'
 import { logger } from '@/lib/logger'
+import { formatRoleName } from '@/app/admin/_utils/permissions'
 
 interface AdminInfo {
   id: string;
@@ -21,21 +22,6 @@ const AdminHeader = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Format role for display
-  const formatRole = (role: string) => {
-    switch (role) {
-      case 'super_admin':
-        return 'Super Administrator';
-      case 'admin':
-        return 'Administrator';
-      case 'moderator':
-        return 'Moderator';
-      case 'support':
-        return 'Support';
-      default:
-        return role;
-    }
-  };
   // Fetch current admin details from API
   const fetchAdminDetails = useCallback(async () => {
     try {
@@ -46,7 +32,7 @@ const AdminHeader = () => {
       setAdminInfo({
         id: details.id,
         name: details.full_name || details.username || 'Admin',
-        role: formatRole(details.role),
+        role: formatRoleName(details.role),
         email: details.email,
         status: details.status
       });

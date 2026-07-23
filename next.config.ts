@@ -76,7 +76,7 @@ const nextConfig: NextConfig = {
       {
         // Forward /api/* to backend EXCEPT routes handled locally by Next.js.
         // Negative lookahead skips: ats-score, auth, backend, generate-description, generate-docx, rasa.
-        source: '/api/:path((?!ats-score|auth|backend|generate-description|generate-docx|rasa).+)',
+        source: '/api/:path((?!ats-score|auth|backend|generate-description|generate-docx|rasa|run-code).+)',
         destination: `${backendUrl}/api/:path`,
       },
     ];

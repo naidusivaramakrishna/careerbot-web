@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   RefreshCw,
@@ -21,11 +21,22 @@ import {
   Lightbulb,
   Trophy,
   TrendingUp,
+  Sparkles,
+  Download,
+  Share2,
+  ArrowRight,
+  ChevronDown,
+  Clock3,
+  ShieldCheck,
+  BarChart3,
+  Target,
+  AlertTriangle,
 } from "lucide-react";
 import ATSResumePreview from "@/app/(resume)/atslogin/_components/ATSResumePreview";
 import { toast } from "sonner";
-import { enhanceResume } from "@/api/enhancerApi";
+import { enhanceResume, getEnhancedResume } from "@/api/enhancerApi";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
+import type { EnhancedResumeHistoryItem } from "@/types/api.types";
 
 
 const API_BASE = process.env.NEXT_PUBLIC_SERVER_URL || '';
@@ -52,6 +63,7 @@ interface ResumeScoreData {
   Fresher: boolean;
   Domain: string;
   Profile: string;
+  EstimatedScore?: number;
 }
 
 interface IssueCard {
@@ -60,6 +72,50 @@ interface IssueCard {
   section: string;
   description: string;
   suggestion: string;
+  impactPoints?: number;
+  estimatedSeconds?: number;
+}
+
+function hasResumeContent(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const data = value as Record<string, unknown>;
+  return [
+    "contact",
+    "personal_info",
+    "personalInfo",
+    "llm_data",
+    "work_experience",
+    "experience",
+    "workExperience",
+    "education",
+    "technical_skills",
+    "categorizedSkills",
+  ].some((key) => data[key] != null);
+}
+
+function cacheBuilderResume(enhancedResumeId: string, sourceData: unknown, atsScore?: unknown) {
+  if (!hasResumeContent(sourceData)) return;
+
+  const mappedData = mapParserOutputToBuilderData(sourceData);
+  localStorage.setItem(
+    "cached_resume_data",
+    JSON.stringify({
+      resumeId: enhancedResumeId,
+      data: { ...mappedData, id: enhancedResumeId, ...(atsScore ? { ats_score: atsScore } : {}) },
+    })
+  );
+}
+
+function rememberEnhancedResumeId(enhancedResumeId: string) {
+  localStorage.setItem("current_resume_id", enhancedResumeId);
+
+  const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
+  if (!existingIds.includes(enhancedResumeId)) {
+    localStorage.setItem(
+      "enhanced_resume_ids",
+      JSON.stringify([...existingIds, enhancedResumeId])
+    );
+  }
 }
 
 /* ─── HELPERS ─────────────────────────────────────────── */
@@ -142,6 +198,25 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
     0
   );
   const score = scoreFromAtsDisplay || scoreFromStorage || scoreFromAts;
+  const scoreSources = [
+    raw,
+    atsScore,
+    raw?.ats_display as Record<string, unknown> | undefined,
+    raw?.enhancer_state as Record<string, unknown> | undefined,
+    (raw?.enhancer_state as Record<string, unknown> | undefined)?.ats_display as Record<string, unknown> | undefined,
+    (raw?.enhancer_state as Record<string, unknown> | undefined)?.ats_breakdown as Record<string, unknown> | undefined,
+  ];
+  const estimatedScore = scoreSources
+    .flatMap(source => source ? [
+      source.estimated_score_after_fixes,
+      source.estimated_after_fixes,
+      source.projected_score,
+      source.potential_score,
+      source.score_after_fixes,
+      source.post_fix_score,
+    ] : [])
+    .map(value => Number(value))
+    .find(value => Number.isFinite(value) && value >= score && value <= 100);
 
   return {
     TotalScore: score,
@@ -181,6 +256,7 @@ function transformData(raw: Record<string, unknown>): ResumeScoreData {
         Profile: isFresher
           ? "Fresher"
           : (atsProfile && atsProfile !== "Fresher" ? atsProfile : "General"),
+        EstimatedScore: estimatedScore,
       };
     })(),
   };
@@ -296,6 +372,27 @@ const SUGGESTION_SECTION_MAP: Record<string, string> = {
   career_progression: "CareerProgression", "career progression": "CareerProgression",
 };
 
+function readIssueNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return undefined;
+  const match = value.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
+  const parsed = match ? Number(match[0]) : NaN;
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function readIssueMetadata(raw: unknown): Pick<IssueCard, "priority" | "impactPoints" | "estimatedSeconds"> & { priorityProvided: boolean } {
+  const item = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const priorityValue = String(item.priority ?? item.severity ?? item.impact_level ?? "").toLowerCase();
+  const priority: IssueCard["priority"] = priorityValue.includes("critical") || priorityValue.includes("high")
+    ? "critical"
+    : priorityValue.includes("urgent") || priorityValue.includes("medium")
+      ? "urgent"
+      : "optional";
+  const impactPoints = readIssueNumber(item.impact_points ?? item.ats_points ?? item.score_impact ?? item.points ?? item.impact);
+  const estimatedSeconds = readIssueNumber(item.estimated_seconds ?? item.fix_time_seconds ?? item.time_seconds ?? item.estimated_time_seconds ?? item.fix_time);
+  return { priority, impactPoints, estimatedSeconds, priorityProvided: Boolean(priorityValue) };
+}
+
 function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
   const cards: IssueCard[] = [];
   let id = 0;
@@ -332,12 +429,15 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
       if (seen.has(key) || seenIds.has(dId)) return;
       seen.add(key);
       seenIds.add(dId);
+      const metadata = readIssueMetadata(parsed);
       cards.push({
         id:          `i-${id++}`,
-        priority:    pct === 0 || section === "Experience" ? "critical" : pct < 80 ? "urgent" : "optional",
+        priority:    metadata.priorityProvided ? metadata.priority : pct === 0 || section === "Experience" ? "critical" : pct < 80 ? "urgent" : "optional",
         section:     display,
         description: dStr,
         suggestion:  getSuggestion(display, dStr),
+        impactPoints: metadata.impactPoints,
+        estimatedSeconds: metadata.estimatedSeconds,
       });
     });
 
@@ -448,28 +548,54 @@ function IssueCard({
   const fixBtnColor = "#3465BC";
 
   const rawPts    = SECTION_IMPACT[issue.section] ?? 5;
-  const impactPts = isCritical ? rawPts : isUrgent ? Math.floor(rawPts * 0.65) : Math.floor(rawPts * 0.35);
+  const fallbackImpactPts = isCritical ? rawPts : isUrgent ? Math.floor(rawPts * 0.65) : Math.floor(rawPts * 0.35);
+  const impactPts = issue.impactPoints ?? fallbackImpactPts;
 
   const raw   = issue.description;
   const cut   = raw.search(/[.!?]\s/);
-  const title = cut > 0 && cut < 90 ? raw.slice(0, cut + 1) : raw.slice(0, 88) + (raw.length > 88 ? "…" : "");
+  const title = cut > 0 && cut < 140 ? raw.slice(0, cut + 1) : raw;
+  const sectionLabel = issue.section.replace(/([A-Z])/g, " $1").trim();
+  const tags = issue.section === "Keywords"
+    ? ["Missing Keywords", "ATS Match"]
+    : issue.section === "Experience"
+      ? ["Weak Bullet"]
+      : [sectionLabel];
+  const fixTimeSeconds = issue.estimatedSeconds ?? (isCritical ? 30 : isUrgent ? 25 : 20);
+  const fixTime = fixTimeSeconds >= 60 ? `${Math.ceil(fixTimeSeconds / 60)} min` : `${fixTimeSeconds} sec`;
 
   const [hovered, setHovered] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div
-      className="group relative rounded-2xl transition-all duration-150 cursor-default"
+      className="group relative transition-all duration-150 cursor-default"
       style={{
         background: "#ffffff",
-        border: "1px solid #e8ecf0",
-        boxShadow: hovered ? "0 4px 16px rgba(0,0,0,0.10)" : "0 1px 4px rgba(0,0,0,0.05)",
-        transform: hovered ? "translateY(-1px)" : "none",
+        borderBottom: "1px solid #e8ecf0",
+        boxShadow: hovered ? "inset 0 0 0 1px rgba(52,101,188,0.12)" : "none",
+        transform: "none",
         transition: "all 0.15s ease",
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="px-5 pt-5 pb-5">
+      <div style={{ display: "grid", gridTemplateColumns: "32px minmax(0,1fr) auto auto auto", alignItems: expanded ? "start" : "center", gap: 10, padding: "12px 14px" }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: isCritical ? "#fff0f0" : isUrgent ? "#fff7ed" : "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon style={{ width: 15, height: 15, color: isCritical ? "#dc2626" : isUrgent ? "#ea580c" : "#3465BC" }} /></div>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, lineHeight: 1.35, color: "#172554", overflowWrap: "anywhere", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: expanded ? 6 : 1, overflow: "hidden" }}>{title}</p>
+            <p style={{ marginTop: 3, fontSize: 10, lineHeight: 1.4, color: "#64748b", overflowWrap: "anywhere", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: expanded ? 5 : 1, overflow: "hidden" }}>{issue.suggestion}</p>
+            <div style={{ display: expanded ? "flex" : "none", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+              {tags.map(tag => <span key={tag} style={{ padding: "3px 7px", borderRadius: 5, background: isCritical ? "#fff0f0" : isUrgent ? "#fff7ed" : "#eff6ff", color: isCritical ? "#dc2626" : isUrgent ? "#b45309" : "#3465BC", fontSize: 8, fontWeight: 700 }}>{tag}</span>)}
+            </div>
+          </div>
+          <div style={{ minWidth: 74, textAlign: "right" }}>
+            <p style={{ fontSize: 9, fontWeight: 800, color: "#16a34a", whiteSpace: "nowrap" }}>+{impactPts} ATS Point{impactPts === 1 ? "" : "s"}</p>
+            <p style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 3, marginTop: 5, fontSize: 9, color: "#64748b", whiteSpace: "nowrap" }}><Clock3 style={{ width: 11, height: 11 }} />{fixTime}</p>
+          </div>
+          <button onClick={onFix} style={{ display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", border: "1px solid #c7d7f7", borderRadius: 6, background: "#fff", color: "#2563eb", padding: "7px 9px", fontSize: 9, fontWeight: 800 }}>View &amp; Fix <ArrowRight style={{ width: 12, height: 12 }} /></button>
+          <button aria-label={expanded ? "Collapse issue details" : "Expand issue details"} aria-expanded={expanded} onClick={() => setExpanded(value => !value)} style={{ width: 28, height: 30, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #c7d7f7", borderRadius: 6, background: "#fff", color: "#2563eb", cursor: "pointer" }}><ChevronDown style={{ width: 13, height: 13, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} /></button>
+        </div>
+        <div className="hidden">
         {/* Row 1: icon + title + pts */}
         <div className="flex items-center gap-3 mb-3.5">
           <div className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center" style={{
@@ -512,7 +638,7 @@ function IssueCard({
       {/* Dismiss on hover */}
       <button
         onClick={onDismiss}
-        className="absolute top-3 right-3 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all"
+        className="absolute top-2 right-2 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all"
         title="Dismiss"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -615,6 +741,7 @@ function PriorityGroup({
             });
           })()}
         </div>
+
       </div>
     </div>
   );
@@ -659,20 +786,27 @@ function BackToTop() {
 /* ─── MAIN REPORT ─────────────────────────────────────── */
 function ATSLoginReport() {
   const router   = useRouter();
+  const searchParams = useSearchParams();
+  const requestedResumeId = searchParams.get("resume_id");
   const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [isFixing,  setIsFixing]  = useState(false);
-  const [filter,       setFilter]       = useState<"all" | "critical" | "urgent" | "optional">("all");
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [filter,       setFilter       ] = useState<"all" | "critical" | "urgent" | "optional">("all");
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [parsedData,   setParsedData]   = useState<any>(null);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("atsAnalysisData");
+      const storageKey = requestedResumeId ? `atsAnalysis_${requestedResumeId}` : "atsAnalysisData";
+      const raw = localStorage.getItem(storageKey);
       if (raw) {
         const data = JSON.parse(raw);
+        if (requestedResumeId && data?.resume_id !== requestedResumeId) {
+          setScoreData(null);
+          return;
+        }
         setScoreData(transformData(data));
         if (data?.parsed_data) {
           setParsedData(data);
@@ -684,15 +818,38 @@ function ATSLoginReport() {
       }
     } catch { /* ignore */ }
     finally   { setLoading(false); }
-  }, []);
+  }, [requestedResumeId]);
 
   const issues = useMemo(() => scoreData ? extractIssues(scoreData.Breakdown) : [], [scoreData]);
 
   const grouped = useMemo(() => ({
-    critical: issues.filter(i => i.priority === "critical" && !dismissedIds.has(i.id)),
-    urgent:   issues.filter(i => i.priority === "urgent"   && !dismissedIds.has(i.id)),
-    optional: issues.filter(i => i.priority === "optional" && !dismissedIds.has(i.id)),
+      critical: issues.filter(i => i.priority === "critical" && !dismissedIds.has(i.id)),
+      urgent:   issues.filter(i => i.priority === "urgent"   && !dismissedIds.has(i.id)),
+      optional: issues.filter(i => i.priority === "optional" && !dismissedIds.has(i.id)),
   }), [issues, dismissedIds]);
+
+  const roadmapItems = useMemo(() => {
+    const sectionInfo = new Map<string, { count: number; priority: IssueCard["priority"] }>();
+    for (const issue of issues) {
+      const current = sectionInfo.get(issue.section);
+      if (!current) sectionInfo.set(issue.section, { count: 1, priority: issue.priority });
+      else {
+        current.count += 1;
+        if (issue.priority === "critical" || (issue.priority === "urgent" && current.priority === "optional")) current.priority = issue.priority;
+      }
+    }
+    const actionMap: Record<string, [string, string]> = {
+      Keywords: ["Optimize Keywords", "Add missing keywords and align with the job description"],
+      Experience: ["Improve Experience", "Strengthen experience with metrics and achievements"],
+      Projects: ["Enhance Projects", "Add impact and detail to project descriptions"],
+      Skills: ["Strengthen Skills", "Organize and expand the skills section"],
+      Formatting: ["Polish Formatting", "Improve formatting and overall readability"],
+    };
+    return Array.from(sectionInfo.entries()).sort((a, b) => b[1].count - a[1].count).slice(0, 5).map(([section, info]) => {
+      const [title, description] = actionMap[section] ?? [`Improve ${section}`, `Address ${info.count} ${section.toLowerCase()} issue${info.count === 1 ? "" : "s"}`];
+      return { title, description, level: info.priority === "critical" ? "High" : info.priority === "urgent" ? "Medium" : "Low", color: info.priority === "critical" ? "#ef4444" : info.priority === "urgent" ? "#f59e0b" : "#16a34a" };
+    });
+  }, [issues]);
 
   const allScoreItems = useMemo(() => {
     if (!scoreData) return [];
@@ -727,6 +884,13 @@ function ATSLoginReport() {
   }, [scoreData]);
 
   const pct = scoreData ? Math.min(100, Math.round(scoreData.FinalWeightedScore)) : 0;
+  // The backend owns the projection. Never infer an estimated score from the
+  // number of issues because issue cards may not contain complete or unique
+  // impact metadata.
+  const estimatedPct = scoreData?.EstimatedScore ?? pct;
+  const estimatedGain = Math.max(0, estimatedPct - pct);
+  const estimatedFixMinutes = Math.max(1, Math.ceil(issues.reduce((sum, issue) => sum + (issue.estimatedSeconds ?? 25), 0) / 60));
+  const estimatedGrade = estimatedPct >= 85 ? "Excellent" : estimatedPct >= 70 ? "Good" : estimatedPct >= 50 ? "Average" : "Needs Work";
 
   const sectionIssueCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -765,12 +929,55 @@ function ATSLoginReport() {
       setIsFixing(true);
       toast.loading("Preparing your resume for enhancement…", { id: "fix-now" });
 
+      let existingEnhancedResume: EnhancedResumeHistoryItem | null = null;
+      let cachedEnhancedResumeId =
+        typeof d.enhanced_resume_id === "string" && d.enhanced_resume_id.trim()
+          ? d.enhanced_resume_id.trim()
+          : undefined;
+
+      if (!cachedEnhancedResumeId) {
+        const knownEnhancedIds: string[] = JSON.parse(
+          localStorage.getItem("enhanced_resume_ids") || "[]"
+        );
+
+        for (const enhancedId of knownEnhancedIds) {
+          try {
+            const enhancedResume = await getEnhancedResume(enhancedId);
+            if (enhancedResume.original_resume_id === resumeId) {
+              existingEnhancedResume = enhancedResume;
+              cachedEnhancedResumeId = enhancedResume.id;
+              break;
+            }
+          } catch {
+            // Ignore stale local IDs and continue searching.
+          }
+        }
+      }
+
+      if (cachedEnhancedResumeId) {
+        const sourceData =
+          (d.enhanced_resume as Record<string, unknown> | null | undefined) ||
+          ((d.enhancer_state as { resume?: Record<string, unknown> } | undefined)?.resume) ||
+          existingEnhancedResume?.enhanced_data ||
+          (d.resume_data as Record<string, unknown> | null | undefined) ||
+          {};
+        cacheBuilderResume(cachedEnhancedResumeId, sourceData);
+        rememberEnhancedResumeId(cachedEnhancedResumeId);
+
+        toast.dismiss("fix-now");
+        router.push(`/builder/creation/${cachedEnhancedResumeId}?source=enhanced&from_ats=true`);
+        return;
+      }
+
       const enhanceResult = await enhanceResume({
         resume_id: resumeId,
         ...(atsBreakdown ? { ats_breakdown: atsBreakdown } : {}),
       });
 
       const enhancedResumeId = enhanceResult.enhanced_resume_id;
+      if (!enhancedResumeId) {
+        throw new Error("Enhancement did not return an enhanced resume id.");
+      }
 
       // Cache the mapped data so ResumeContext loads it instantly on first render
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -778,23 +985,21 @@ function ATSLoginReport() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         || (enhanceResult as any).enhancer_state?.resume
         || {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mappedData = mapParserOutputToBuilderData(sourceData as any);
-      localStorage.setItem(
-        "cached_resume_data",
-        JSON.stringify({ resumeId: enhancedResumeId, data: { ...mappedData, id: enhancedResumeId } })
-      );
-      localStorage.setItem("current_resume_id", enhancedResumeId);
+      cacheBuilderResume(enhancedResumeId, sourceData);
+      rememberEnhancedResumeId(enhancedResumeId);
 
-      // Track enhanced ID so the resume list page can find it
-      const existingIds: string[] = JSON.parse(localStorage.getItem("enhanced_resume_ids") || "[]");
-      if (!existingIds.includes(enhancedResumeId)) {
-        localStorage.setItem("enhanced_resume_ids", JSON.stringify([...existingIds, enhancedResumeId]));
-      }
+      const updatedAnalysis = {
+        ...d,
+        enhanced_resume_id: enhancedResumeId,
+        enhanced_resume: sourceData,
+      };
+      localStorage.setItem("atsAnalysisData", JSON.stringify(updatedAnalysis));
+      localStorage.setItem(`atsAnalysis_${resumeId}`, JSON.stringify(updatedAnalysis));
 
       toast.dismiss("fix-now");
       router.push(`/builder/creation/${enhancedResumeId}?source=enhanced&from_ats=true${section ? `&open_section=${encodeURIComponent(section)}` : ""}`);
-    } catch {
+    } catch (error) {
+      console.error("[ATS report] Failed to open enhancer", error);
       toast.dismiss("fix-now");
       toast.error("Failed to open enhancer. Please try again.");
       setIsFixing(false);
@@ -883,6 +1088,9 @@ function ATSLoginReport() {
       <div className="px-4 md:px-10 py-5 md:py-6 border-b border-[#dce8fb]" style={{ background: "#EFF6FF" }}>
         <div style={{ maxWidth: 1520, margin: "0 auto" }} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
+            <button onClick={() => router.push("/dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: "#5b75ad", fontSize: 11, padding: 0, marginBottom: 14, cursor: "pointer" }}>
+              <span>‹</span> Back to Dashboard
+            </button>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <div style={{ width: 4, height: 18, borderRadius: 99, background: "linear-gradient(180deg,#3465BC,#4f8ef7)" }} />
               <p style={{ fontSize: 10, fontWeight: 800, color: "#3465BC", letterSpacing: "0.2em", textTransform: "uppercase" as const, fontFamily: "monospace", margin: 0 }}>
@@ -890,22 +1098,37 @@ function ATSLoginReport() {
               </p>
             </div>
             <h1 style={{ fontSize: 30, fontWeight: 700, color: "#0f172a", margin: 0, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
-              {pct >= 70 ? "Great score! Let’s make it perfect." : "Let’s fine-tune your resume."}
+              ATS Report <Sparkles style={{ width: 22, height: 22, color: "#2563eb", display: "inline", verticalAlign: "middle", marginLeft: 5 }} />
             </h1>
             <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 8, fontWeight: 400 }}>
-              We found <span style={{ fontWeight: 700, color: "#0f172a" }}>{issues.length} issues</span> affecting your ATS compatibility score.
+              Here’s your detailed analysis and AI recommendations.
             </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 12, fontSize: 10, color: "#64748b" }}>
+              <span>Scanned resume</span><span>•</span><span>ATS analysis complete</span>
+            </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-            <div style={{ textAlign: "right" }}>
+            <button onClick={() => window.print()} style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 9, background: "#fff", border: "1px solid #dbe5f5", color: "#172554", fontSize: 12, fontWeight: 700, cursor: "pointer" }}><Download style={{ width: 14, height: 14 }} /> Print / Save Report</button>
+            <button onClick={async () => {
+              const shareData = { title: "ATS Resume Report", text: "My ATS resume report", url: window.location.href };
+              try {
+                if (navigator.share) await navigator.share(shareData);
+                else if (navigator.clipboard) {
+                  await navigator.clipboard.writeText(window.location.href);
+                  toast.success("Report link copied");
+                } else toast.error("Sharing is not available in this browser");
+              } catch { /* cancelled share dialogs should not surface as errors */ }
+            }} style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 9, background: "#fff", border: "1px solid #dbe5f5", color: "#172554", fontSize: 12, fontWeight: 700, cursor: "pointer" }}><Share2 style={{ width: 14, height: 14 }} /> Share Report</button>
+            <button onClick={handleFixNow} disabled={isFixing} style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 18px", borderRadius: 9, background: "#2453e6", border: "none", color: "#fff", fontSize: 12, fontWeight: 800, cursor: isFixing ? "not-allowed" : "pointer", opacity: isFixing ? 0.7 : 1 }}>Continue to Enhancer <ArrowRight style={{ width: 14, height: 14 }} /></button>
+            <div style={{ display: "none", textAlign: "right" }}>
               <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 4 }}>Your Score</p>
               <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
                 <span style={{ fontSize: 40, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{pct}</span>
                 <span style={{ fontSize: 14, color: "#94a3b8", fontWeight: 500 }}>/100</span>
               </div>
             </div>
-            <div style={{ width: 1, height: 48, background: "#dce8fb" }} />
-            <span style={{ padding: "8px 20px", borderRadius: 99, background: scoreLight, color: scoreColor, border: `1.5px solid ${scoreBorder}`, fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>
+            <div style={{ display: "none", width: 1, height: 48, background: "#dce8fb" }} />
+            <span style={{ display: "none", padding: "8px 20px", borderRadius: 99, background: scoreLight, color: scoreColor, border: `1.5px solid ${scoreBorder}`, fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>
               {gradeUpper}
             </span>
           </div>
@@ -914,10 +1137,10 @@ function ATSLoginReport() {
 
       {/* ── MAIN GRID ── */}
       <div style={{ maxWidth: 1520, margin: "0 auto" }} className="px-4 md:px-10 py-6 md:py-8 pb-16">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
+        <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
           {/* ── LEFT (4 cols sticky) ── */}
-          <div className="lg:col-span-4 lg:sticky lg:top-20 self-start space-y-5">
+          <div className="custom-scrollbar lg:col-span-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-2 self-start space-y-5">
 
             {/* Score card */}
             <div style={CARD}>
@@ -993,14 +1216,19 @@ function ATSLoginReport() {
                   </div>
                 </div>
 
-                {/* Primary CTA */}
-                <button onClick={handleFixNow} disabled={isFixing}
+                <div style={{ textAlign: "center", marginTop: 8, paddingTop: 14, borderTop: "1px solid #f1f5f9" }}>
+                  <p style={{ fontSize: 11, color: "#5b6f9e", marginBottom: 4 }}>Estimated score after AI fixes</p>
+                  <p style={{ fontSize: 17, fontWeight: 800, color: "#16a34a" }}>{estimatedPct}/100 <span style={{ fontSize: 12 }}>↗</span></p>
+                </div>
+
+                {/* Legacy actions retained for flow compatibility but replaced by the reference CTA */}
+                <button className="hidden" onClick={handleFixNow} disabled={isFixing}
                   style={{ width: "100%", padding: "14px 20px", borderRadius: 12, background: "linear-gradient(135deg,#2557a7,#1a3a8f)", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: isFixing ? "not-allowed" : "pointer", marginBottom: 10, transition: "opacity 0.15s", boxShadow: "0 4px 16px rgba(37,87,167,0.3)", opacity: isFixing ? 0.7 : 1 }}
                   onMouseEnter={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"; }}
                   onMouseLeave={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}>
                   {isFixing ? "Preparing…" : "Fix My Resume →"}
                 </button>
-                <button onClick={() => router.push("/atslogin")}
+                <button className="hidden" onClick={() => router.push("/atslogin")}
                   style={{ width: "100%", padding: "11px 20px", borderRadius: 12, background: "transparent", color: "#3465BC", fontWeight: 700, fontSize: 13, border: "1.5px solid #dbeafe", cursor: "pointer", marginBottom: 0 }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#EFF6FF"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
@@ -1016,7 +1244,7 @@ function ATSLoginReport() {
                 <p style={{ fontSize: 19, fontWeight: 700, color: "#0f172a" }}>Score Breakdown</p>
                 <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 3 }}>Click a section to jump to its issues</p>
               </div>
-              <div className="custom-scrollbar" style={{ padding: "12px 14px", maxHeight: 440, overflowY: "auto" }}>
+              <div style={{ padding: "12px 14px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {allScoreItems.map(item => {
                     const count    = sectionIssueCounts[item.name] ?? 0;
@@ -1061,10 +1289,41 @@ function ATSLoginReport() {
           </div>
 
           {/* ── RIGHT (8 cols) ── */}
-          <div className="lg:col-span-8 space-y-5">
+          <div className="lg:col-span-6 lg:contents space-y-5 lg:space-y-0">
+
+            {/* AI Summary */}
+            <div className="lg:col-start-4 lg:row-start-1 lg:col-span-9" style={{ ...CARD, background: "linear-gradient(135deg,#f7faff 0%,#ffffff 65%)" }}>
+              <div style={{ padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 7, background: "#eef4ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Sparkles style={{ width: 13, height: 13, color: "#2563eb" }} />
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>AI Summary</p>
+                  </div>
+                  <span style={{ padding: "4px 8px", borderRadius: 99, background: "#f0eaff", color: "#6d28d9", fontSize: 8, fontWeight: 800 }}>Beta</span>
+                </div>
+                <p style={{ fontSize: 10, color: "#334155", lineHeight: 1.35, marginBottom: 2 }}>Your resume has <strong>{issues.length} issues</strong> affecting your ATS score.</p>
+                <p style={{ fontSize: 9, color: "#64748b", lineHeight: 1.35 }}>Fix high-impact issues to improve your ranking and stand out to recruiters.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-5" style={{ gap: 7, marginTop: 10 }}>
+                  {[
+                    { Icon: BarChart3, value: issues.length, label: "Issues Found", color: "#f59e0b", bg: "#fff7ed" },
+                    { Icon: AlertTriangle, value: grouped.critical.length, label: "High Impact", color: "#ef4444", bg: "#fef2f2" },
+                    { Icon: Target, value: grouped.urgent.length, label: "Nice to Improve", color: "#2563eb", bg: "#eff6ff" },
+                    { Icon: Clock3, value: `~${estimatedFixMinutes} Min`, label: "Fix Time", color: "#2563eb", bg: "#eff6ff" },
+                    { Icon: ShieldCheck, value: `+${estimatedGain}`, label: "Points Possible", color: "#16a34a", bg: "#f0fdf4" },
+                  ].map(({ Icon, value, label, color, bg }) => (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon style={{ width: 13, height: 13, color }} /></div>
+                      <div style={{ minWidth: 0 }}><p style={{ fontSize: 14, fontWeight: 800, color: "#172554", lineHeight: 1.1 }}>{value}</p><p style={{ fontSize: 8, color: "#475569", whiteSpace: "nowrap" }}>{label}</p></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {/* Resume Preview */}
-            {(parsedData || previewUrl) && (
+            {false && (parsedData || previewUrl) && (
               <div style={CARD}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", borderBottom: "1px solid #f1f5f9" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1089,7 +1348,7 @@ function ATSLoginReport() {
             )}
 
             {/* Issues Card */}
-            <div style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #e5eaf2", boxShadow: "0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)" }}>
+            <div className="lg:col-start-4 lg:row-start-2 lg:col-span-6 lg:mt-0" style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #e5eaf2", boxShadow: "0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)" }}>
               {/* Header */}
               <div style={{ background: "linear-gradient(135deg, #3465BC 0%, #4a7fd4 55%, #5e94e8 100%)", padding: "28px 28px 0", position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: -40, right: -40, width: 220, height: 220, borderRadius: "50%", background: "rgba(88,150,215,0.12)", filter: "blur(40px)", pointerEvents: "none" }} />
@@ -1115,15 +1374,15 @@ function ATSLoginReport() {
                 </div>
                 {/* Tabs */}
                 {issues.length > 0 && (
-                  <div style={{ display: "flex", gap: 3, overflowX: "auto", scrollbarWidth: "none" as const }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 3, width: "100%", overflow: "visible", boxSizing: "border-box" }}>
                     {TAB_CONFIG.map(tab => {
                       const isActive = filter === tab.key;
                       const dotColor = "color" in tab ? tab.color : undefined;
                       return (
                         <button key={tab.key} onClick={() => setFilter(tab.key)}
                           style={{
-                            display: "flex", alignItems: "center", gap: 7,
-                            padding: "11px 20px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" as const,
+                            display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                            width: "100%", minWidth: 0, boxSizing: "border-box", padding: "10px 6px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" as const,
                             background: isActive ? "#fff" : "transparent",
                             color: isActive ? "#0f172a" : "rgba(255,255,255,0.6)",
                             borderRadius: isActive ? "10px 10px 0 0" : "8px 8px 0 0",
@@ -1132,7 +1391,7 @@ function ATSLoginReport() {
                           {dotColor && <span style={{ width: 8, height: 8, borderRadius: "50%", background: isActive ? dotColor : "rgba(255,255,255,0.3)", flexShrink: 0 }} />}
                           {tab.label}
                           {tab.count > 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: isActive ? "#0f172a" : "rgba(255,255,255,0.15)", color: isActive ? "#fff" : "rgba(255,255,255,0.7)" }}>
+                            <span style={{ width: 22, height: 22, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, lineHeight: 1, fontWeight: 800, padding: 0, borderRadius: "50%", background: isActive ? "#0f172a" : "rgba(255,255,255,0.15)", color: isActive ? "#fff" : "rgba(255,255,255,0.7)" }}>
                               {tab.count}
                             </span>
                           )}
@@ -1182,6 +1441,46 @@ function ATSLoginReport() {
             </div>
 
           </div>
+
+          {/* RIGHT: roadmap and estimated score */}
+          <div className="lg:col-start-10 lg:row-start-2 lg:col-span-3 space-y-5">
+            <div style={CARD}>
+              <div style={{ padding: "20px 18px" }}>
+                <p style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 18 }}>Fix Roadmap</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {roadmapItems.map(({ title, description, level, color }, index) => (
+                    <div key={title} style={{ display: "flex", gap: 10, position: "relative" }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${color}18`, color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{index + 1}</div>
+                      <div style={{ minWidth: 0, flex: 1 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 5 }}><p style={{ fontSize: 11, fontWeight: 800, color: "#172554" }}>{title}</p><span style={{ fontSize: 8, fontWeight: 800, color, background: `${color}12`, padding: "3px 5px", borderRadius: 99 }}>{level}</span></div><p style={{ fontSize: 9, lineHeight: 1.4, color: "#64748b", marginTop: 3 }}>{description}</p></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={CARD}>
+              <div style={{ padding: "22px 18px" }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: "#1e3a8a", textAlign: "center", marginBottom: 14 }}>Estimated ATS Score After Fixes</p>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+                  <div style={{ position: "relative", width: 112, height: 112 }}>
+                    <svg viewBox="0 0 120 120" width="112" height="112"><circle cx="60" cy="60" r="49" fill="none" stroke="#e6edf0" strokeWidth="9" /><circle cx="60" cy="60" r="49" fill="none" stroke="#42b883" strokeWidth="9" strokeLinecap="round" strokeDasharray={`${2 * Math.PI * 49 * estimatedPct / 100} ${2 * Math.PI * 49}`} transform="rotate(-90 60 60)" /></svg>
+                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}><strong style={{ fontSize: 29, color: "#172554" }}>{estimatedPct}</strong><span style={{ fontSize: 10, color: "#64748b" }}>/100</span></div>
+                  </div>
+                  <div><p style={{ fontSize: 15, fontWeight: 800, color: "#16a34a" }}>{estimatedGrade}</p><p style={{ fontSize: 16, fontWeight: 800, color: "#172554", marginTop: 7 }}>+{estimatedGain} Points</p><p style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Improvement</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1520, margin: "0 auto", padding: "0 16px 24px" }}>
+        <div style={{ borderRadius: 14, border: "1px solid #dbe7fb", background: "linear-gradient(90deg,#f7fbff,#ffffff)", padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: "#eef4ff", display: "flex", alignItems: "center", justifyContent: "center" }}><Sparkles style={{ width: 18, height: 18, color: "#2563eb" }} /></div>
+            <div><p style={{ fontSize: 14, fontWeight: 800, color: "#172554" }}>Let AI optimize your resume</p><p style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>Enhance your content and improve your chances of getting hired.</p></div>
+          </div>
+          <button onClick={handleFixNow} disabled={isFixing} style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 18px", borderRadius: 9, border: "none", background: "#2453e6", color: "#fff", fontSize: 12, fontWeight: 800, cursor: isFixing ? "not-allowed" : "pointer", opacity: isFixing ? 0.7 : 1 }}>Continue to Resume Enhancer <ArrowRight style={{ width: 14, height: 14 }} /></button>
         </div>
       </div>
 

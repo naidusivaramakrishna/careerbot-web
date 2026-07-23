@@ -11,7 +11,6 @@ const VALID_EXACT_PATHS = new Set([
   '/builder/start/list',
   '/ats',
   '/ats/report',
-  '/atslogin',
   '/templates',
   '/parser',
   '/mock-interview',

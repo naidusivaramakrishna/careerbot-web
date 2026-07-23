@@ -29,9 +29,16 @@ function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
 
   for (const attr of attrs) {
     const name = attr.split('=')[0].trim().toLowerCase();
-    if (name === 'domain') continue;   // strip — browser will scope to host
-    if (name === 'path') continue;     // always normalize to Path=/ so middleware sees cookie on every route
-    if (name === 'secure' && !isSecureRequest) continue;  // strip Secure on plain HTTP (pod/test environments)
+    if (name === 'domain') continue;          // strip — browser will scope to host
+    // Only ever drop Secure in non-production. In prod, keep Secure even if the
+    // proxy didn't advertise https — a downgraded auth cookie is worse than a
+    // dropped one.
+    if (name === 'secure' && !isSecureRequest && process.env.NODE_ENV !== 'production') continue;
+    // Discard whatever path the backend set (e.g. /api/v1/auth/refresh).
+    // The browser would honour that restriction and not send the cookie to
+    // /dashboard, making the middleware unable to detect a valid session.
+    // Since all cookies are httpOnly, forcing Path=/ is safe.
+    if (name === 'path') { continue; }
     if (name === 'samesite') hasSameSite = true;
     kept.push(attr);
   }

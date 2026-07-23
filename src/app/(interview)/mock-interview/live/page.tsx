@@ -25,7 +25,7 @@ type SetupPhase = "preflight" | "pre-interview" | "connecting";
 type CheckState = "idle" | "checking" | "ok" | "denied" | "error";
 type AudioCheckState = "idle" | "playing" | "ok" | "error";
 type NetworkState = "checking" | "ok" | "warning" | "offline";
-type SessionType = "HR" | "Technical" | "Mixed";
+type SessionType = "HR" | "Technical" | "Mixed" | "Technical + Coding";
 
 interface DeviceOption {
   deviceId: string;
@@ -56,6 +56,14 @@ const QUESTION_PREVIEWS: Record<SessionType, string[]> = {
     "Describe a conflict, blocker, or failure and how you handled it.",
     "How do you keep quality high under interview pressure?",
     "What questions would you ask before joining this team?",
+  ],
+  "Technical + Coding": [
+    "Walk me through a recent technical project.",
+    "How would you debug a production issue?",
+    "Explain a technical decision you made and its tradeoffs.",
+    "How do you design for performance and reliability?",
+    "Tell me about a difficult bug you fixed.",
+    "What would you improve in one of your past systems?",
   ],
 };
 
@@ -354,12 +362,14 @@ function PreInterviewScreen({
   onStart,
   onTypeChange,
   starting,
+  codingRoundEnabled,
 }: {
   sessionType: SessionType;
   isMobile: boolean;
   onStart: () => void;
   onTypeChange: (t: SessionType) => void;
   starting: boolean;
+  codingRoundEnabled: boolean;
 }) {
   const preview = useMemo(() => QUESTION_PREVIEWS[sessionType], [sessionType]);
 
@@ -384,10 +394,18 @@ function PreInterviewScreen({
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] p-5 mb-5">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Interview type</p>
-        <div className="grid grid-cols-3 gap-2">
-          {(["HR", "Technical", "Mixed"] as const).map((type) => (
-            <button key={type} onClick={() => onTypeChange(type)} className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${sessionType === type ? "bg-[#2557a7] text-white shadow-md" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-              {type}
+        <div className={`grid gap-2 ${codingRoundEnabled ? "grid-cols-4" : "grid-cols-3"}`}>
+          {(["HR", "Technical", "Mixed", ...(codingRoundEnabled ? ["Technical + Coding"] : [])] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => onTypeChange(t as SessionType)}
+              className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                sessionType === t
+                  ? "bg-[#2557a7] text-white shadow-md"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {t}
             </button>
           ))}
         </div>
@@ -434,6 +452,7 @@ export default function LiveSetupPage() {
   const [sessionType, setSessionType] = useState<SessionType>("HR");
   const [isMobile, setIsMobile] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const codingRoundEnabled = process.env.NEXT_PUBLIC_MOCK_INTERVIEW_CODING_ROUND_ENABLED === "true";
 
   useEffect(() => {
     setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
@@ -454,8 +473,14 @@ export default function LiveSetupPage() {
 
     setPhase("connecting");
     try {
-      const typeMap: Record<SessionType, "hr" | "technical" | "mixed"> = { HR: "hr", Technical: "technical", Mixed: "mixed" };
-      const data: LiveCreateResponse = await createLiveSession({ session_type: typeMap[sessionType], enable_streaming_stt: true });
+      const typeMap: Record<SessionType, "hr" | "technical" | "mixed" | "technical_coding"> = {
+        HR: "hr", Technical: "technical", Mixed: "mixed", "Technical + Coding": "technical_coding",
+      };
+      const data: LiveCreateResponse = await createLiveSession({
+        session_type: typeMap[sessionType],
+        enable_streaming_stt: true,
+      });
+      // Store session data for the interview page to pick up
       sessionStorage.setItem("live_session_data", JSON.stringify(data));
       sessionStorage.setItem("live_session_type", sessionType);
       router.push(`/mock-interview/live/${data.session_id}`);
@@ -485,7 +510,14 @@ export default function LiveSetupPage() {
               <AlertCircle size={13} className="mr-2 inline text-gray-400" /> {startError}
             </div>
           )}
-          <PreInterviewScreen sessionType={sessionType} isMobile={isMobile} onStart={handleStart} onTypeChange={setSessionType} starting={phase === "connecting"} />
+          <PreInterviewScreen
+            sessionType={sessionType}
+            isMobile={isMobile}
+            onStart={handleStart}
+            onTypeChange={setSessionType}
+            starting={phase === "connecting"}
+            codingRoundEnabled={codingRoundEnabled}
+          />
         </>
       )}
     </>

@@ -1,5 +1,6 @@
 import httpClient from "@/lib/http";
 import logger from "@/lib/logger";
+import type { ATSScore } from "@/types/api.types";
 
 // ========== CONTACT FIELD (can be string or nested object) ==========
 export type ContactField = string | { value?: string; source?: string };
@@ -277,7 +278,7 @@ export interface RoutingFlags {
 export interface QualityInfo {
     overall_quality_score: number;
     status: string;
-    components: {
+    components?: {
         confidence: number;
         warnings_score: number;
         completeness: number;
@@ -294,9 +295,10 @@ export interface ResumeExtractResponse {
     file_name: string;
     parsing_method: string;
     cache_hit: boolean;
+    user_id?: string | null;
     correlation_id?: string | null;
     trace_id?: string;
-    ats_score?: number | null;
+    ats_score?: ATSScore | null;
     routing_flags?: RoutingFlags;
     verify_required?: boolean;
     verify_recommended?: boolean;
@@ -308,6 +310,9 @@ export interface ResumeExtractResponse {
         image_message?: string | null;
         parser_schema_version?: string;
         parser_mode?: string;
+        parsing_summary?: Record<string, unknown>;
+        parser_diagnostics_summary?: Record<string, unknown>;
+        developer_diagnostics?: Record<string, unknown>;
         sectionizer_bleed_detected?: boolean;
         metadata?: {
             parser_version: string;
@@ -353,6 +358,7 @@ export interface ResumeExtractResponse {
         quality?: QualityInfo;
         field_confidence?: Record<string, number>;
         field_sources?: Record<string, string>;
+        additional_sections?: Record<string, unknown>[] | Record<string, unknown>;
         section_metadata?: Array<{
             original_name: string;
             mapped_to: string;

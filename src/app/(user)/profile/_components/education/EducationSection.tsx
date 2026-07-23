@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { getEducation, updateEducation, deleteEducation, Education } from "@/api/userApi";
 import { addEducationItem } from "../../_utils/autoFillHelper";
@@ -33,14 +33,14 @@ export default function EducationSection({
         index?: number;
     } | null>(null);
 
-    useEffect(() => {
-        const fetchEducation = async () => {
-            //  Only fetch if education data doesn't exist yet
-            if (tempProfile.education && tempProfile.education.length > 0) {
-                if (tempProfile.education.length > 0) setEditingIndex(null);
-                return;
-            }
+    const hasExistingData = useRef((tempProfile.education?.length ?? 0) > 0);
 
+    useEffect(() => {
+        if (hasExistingData.current) {
+            setEditingIndex(null);
+            return;
+        }
+        const fetchEducation = async () => {
             try {
                 setLoading(true);
                 const data = await getEducation();
@@ -54,7 +54,7 @@ export default function EducationSection({
             }
         };
         fetchEducation();
-    }, []); //  Run only once on mount
+    }, []); // safe: hasExistingData is a ref, setters are stable
 
     const handleSave = async () => {
         try {

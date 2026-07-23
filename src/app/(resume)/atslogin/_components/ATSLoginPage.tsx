@@ -2,7 +2,8 @@
 
 import { useState, useEffect, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Check, ArrowRight, Shield, Clock, X, UploadCloud, UserRound, Briefcase, GraduationCap, BadgeCheck, Tags, FileCheck2, BookOpenCheck } from "lucide-react";
+import { Sparkles, Check, ArrowRight, Clock, X, UploadCloud, UserRound, Briefcase, GraduationCap, BadgeCheck, Tags, FileCheck2, BookOpenCheck, ShieldCheck, BarChart3, Target, FileWarning, Scissors, TrendingUp, Users, Star } from "lucide-react";
+import { FaFilePdf, FaFileWord } from "react-icons/fa";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { processResumeComplete } from "@/api/resumeatsapi";
 import ErrorModal from "./ErrorModal";
@@ -27,14 +28,8 @@ const SLIDES = [
 
 const STEPS = [
   { n: "01", label: "Upload"  },
-  { n: "02", label: "Analyze" },
+  { n: "02", label: "AI Analysis" },
   { n: "03", label: "Report"  },
-] as const;
-
-const FEATURE_PILLS = [
-  { label: "ATS-compatible",         Icon: Shield   },
-  { label: "AI-powered scanning",    Icon: Sparkles },
-  { label: "Results in ~30 seconds", Icon: Clock    },
 ] as const;
 
 const DROPZONE_INDICATORS = [
@@ -105,6 +100,9 @@ interface UploadZoneProps {
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent) => void;
+  onAnalyze: () => void;
+  canScan: boolean;
+  buttonLabel: string;
 }
 
 interface LoadingOverlayProps {
@@ -120,14 +118,14 @@ interface LoadingOverlayProps {
 
 
 
-function UploadZone({ isDragging, onDragOver, onDragLeave, onDrop }: UploadZoneProps) {
+function UploadZone({ isDragging, onDragOver, onDragLeave, onDrop, onAnalyze, canScan, buttonLabel }: UploadZoneProps) {
   return (
     <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       <label
         htmlFor="ats-file-upload"
         className={[
-          "relative flex flex-col items-center justify-center gap-4 rounded-2xl cursor-pointer transition-all duration-200 overflow-hidden",
-          "min-h-70 border-[1.5px] border-dashed",
+          "relative flex flex-col items-center justify-center gap-2.5 rounded-2xl cursor-pointer transition-all duration-200 overflow-hidden",
+          "min-h-[300px] border-[1.5px] border-dashed",
           isDragging
             ? "border-blue-500 bg-blue-50/70"
             : "border-slate-200 bg-slate-50/60 hover:border-blue-400/70 hover:bg-blue-50/30",
@@ -146,43 +144,68 @@ function UploadZone({ isDragging, onDragOver, onDragLeave, onDrop }: UploadZoneP
           transition={{ duration: 0.2, ease: EASE }}
           className="relative z-10"
         >
-          <div className="w-14 h-14 rounded-2xl bg-white grid place-items-center"
+          <div className="relative grid h-[82px] w-[82px] place-items-center rounded-full bg-blue-50"
             style={{
               boxShadow: "0 0 0 1px rgba(37,87,167,0.12), 0 4px 12px rgba(37,87,167,0.12), 0 12px 32px rgba(37,87,167,0.08)",
             }}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2557a7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 19V5M5 12l7-7 7 7"/>
-            </svg>
+            <Sparkles className="absolute -left-5 top-2 h-4 w-4 text-blue-300" />
+            <Sparkles className="absolute -right-5 top-5 h-4 w-4 text-blue-300" />
+            <UploadCloud className="h-10 w-10 text-[#2557a7]" strokeWidth={1.8} />
           </div>
         </motion.div>
 
         <div className="relative z-10 text-center space-y-1">
-          <p className="text-[15px] font-semibold text-slate-800">
+          <p className="text-[17px] font-black text-slate-900">
             {isDragging ? "Release to upload" : "Drop your resume here"}
           </p>
-          <p className="text-[13px] text-slate-400">
+          <p className="text-[13px] text-slate-500">
             or{" "}
             <span className="text-blue-600 font-semibold">browse files</span>
           </p>
         </div>
 
-        <div className="relative z-10 flex items-center gap-1.5 text-[12px] text-slate-400">
-          <span className="font-semibold text-slate-500">PDF</span>
+        <div className="relative z-10 flex items-center gap-2 text-[12px] text-slate-400">
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-bold text-slate-700"><FaFilePdf className="h-4 w-4 text-red-500" />PDF</div>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-bold text-slate-700"><FaFileWord className="h-4 w-4 text-[#2563d8]" />DOCX</div>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-bold text-slate-700"><FaFileWord className="h-4 w-4 text-[#2563d8]" />DOC</div>
+        </div>
+        <span className="relative z-10 text-[11px] text-slate-500">Max file size: 10MB</span>
+        <div className="hidden relative z-10 flex items-center gap-2 text-[12px] text-slate-400">
+          <span className="rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-600">PDF</span>
           <span>·</span>
-          <span className="font-semibold text-slate-500">DOCX</span>
+          <span className="rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-600">DOCX</span>
           <span>·</span>
-          <span className="font-semibold text-slate-500">DOC</span>
+          <span className="rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-600">DOC</span>
           <span>· Max 10MB</span>
         </div>
 
-        <div className="relative z-10 flex items-center gap-5">
+        <div className="hidden">
           {DROPZONE_INDICATORS.map(({ label, icon }) => (
             <div key={label} className="flex items-center gap-1.5 text-[11.5px] text-slate-500 font-medium">
               <span className="text-slate-400">{icon}</span>
               {label}
             </div>
           ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAnalyze(); }}
+          disabled={!canScan}
+          className={`relative z-10 flex h-11 w-[82%] items-center justify-center gap-2 rounded-xl text-sm font-bold transition-colors ${canScan ? "bg-[#2563eb] text-white shadow-md shadow-blue-200" : "bg-blue-100 text-blue-300"}`}
+        >
+          <UploadCloud className="h-4 w-4" />
+          {buttonLabel}
+        </button>
+
+        <div className="relative z-10 flex items-center gap-2 text-[10px] font-medium text-slate-400">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          <span>End-to-end encrypted</span>
+          <span>•</span>
+          <span>Never stored</span>
+          <span>•</span>
+          <span>100% private</span>
         </div>
       </label>
     </div>
@@ -816,7 +839,7 @@ export default function ATSLoginPage() {
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-[clamp(24px,4vw,72px)] items-start py-4">
+        <div className="grid grid-cols-1 items-start gap-8 py-4 lg:grid-cols-[0.9fr_1.1fr] lg:gap-8">
 
           {/* ── LEFT: Hero content ── */}
           <motion.div
@@ -827,69 +850,82 @@ export default function ATSLoginPage() {
           >
             {/* Heading */}
             <div>
-              <h1 className="font-black leading-none tracking-[-0.05em] mb-4"
-                style={{ fontSize: "clamp(40px,4.5vw,68px)" }}
+              <h1 className="font-black leading-[1.05] tracking-[-0.04em] mb-4"
+                style={{ fontSize: "clamp(36px,3.8vw,52px)" }}
               >
-                <span className="text-slate-950">ATS </span>
+                <span className="text-slate-950">AI </span>
                 <span style={{
                   background: "linear-gradient(135deg,#2557a7 0%,#2557a7 50%,#1a3a8f 100%)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   backgroundClip: "text",
                 }}>
-                  Scanner
+                  Resume
                 </span>
+                <span className="text-slate-950"> Analysis</span>
               </h1>
               <p className="text-slate-500 leading-relaxed"
                 style={{ fontSize: "clamp(14px,1.1vw,16px)", maxWidth: 440 }}
               >
-                Upload your resume and get an instant ATS compatibility report with actionable fixes.
+                <span className="block font-semibold text-slate-600">Improve your ATS score before applying.</span>
+                <span className="mt-2 block">Upload your resume and get an instant AI-powered analysis with actionable insights.</span>
               </p>
             </div>
 
-            {/* Feature pills */}
-            <div className="flex flex-wrap items-center gap-y-3">
-              {FEATURE_PILLS.map(({ label, Icon }, i) => (
-                <Fragment key={label}>
-                  <div className="flex items-center gap-1.5 text-[13px] text-slate-500">
-                    <Icon className="w-3.5 h-3.5 text-slate-400"/>
-                    <span className="font-medium">{label}</span>
-                  </div>
-                  {i < FEATURE_PILLS.length - 1 && (
-                    <div className="h-3 w-px bg-slate-200 mx-4"/>
-                  )}
-                </Fragment>
-              ))}
+            {/* Trusted-user proof */}
+            <div className="flex items-center gap-2 text-[10px] text-slate-500">
+              <div className="flex -space-x-2" aria-hidden="true">
+                {["A", "M", "R"].map((initial, index) => (
+                  <span key={initial} className={`grid h-7 w-7 place-items-center rounded-full border-2 border-white text-[9px] font-bold text-white ${["bg-rose-400", "bg-slate-700", "bg-amber-500"][index]}`}>{initial}</span>
+                ))}
+              </div>
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <span className="font-semibold">Trusted by 1M+ Job Seekers</span>
+              <span className="text-blue-400">•</span>
+              <span className="font-semibold text-[#2557a7]">2.5M+ Resumes Analyzed</span>
             </div>
 
-            {/* How it works */}
+            {/* What the analysis includes */}
             <div>
-              <p className="text-[11px] font-bold tracking-widest uppercase text-slate-400 mb-4">How it works</p>
-              <div className="flex flex-col gap-[clamp(14px,1.5vw,20px)]">
+              <div className="mb-4 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-[#2563eb]" />
+                <p className="text-sm font-bold text-slate-800">What you’ll receive</p>
+              </div>
+              <div className="grid gap-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.06)]">
+                {[
+                  [BarChart3, "bg-blue-600", "ATS Compatibility Score", "Know how ATS-friendly your resume is"],
+                  [Target, "bg-emerald-500", "Keyword Match Analysis", "See how well you match the job description"],
+                  [FileWarning, "bg-amber-500", "Missing Sections", "Identify important gaps in your resume"],
+                  [Scissors, "bg-violet-500", "Formatting Review", "Check structure, style & readability"],
+                  [Sparkles, "bg-rose-500", "AI Recommendations", "Get AI-powered improvement suggestions"],
+                  [TrendingUp, "bg-teal-500", "Resume Improvement Plan", "Actionable steps to boost your score"],
+                ].map(([Icon, color, title, detail]) => (
+                  <div key={title as string} className="flex items-center gap-3">
+                    <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${color} text-white`}><Icon className="h-4 w-4" /></div>
+                    <div className="min-w-0 flex-1"><p className="text-[12px] font-bold leading-4 text-slate-800">{title}</p><p className="text-[10px] leading-4 text-slate-500">{detail}</p></div>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  </div>
+                ))}
+                <div className="hidden">
                 {([
                   { n: "01", title: "Upload Your Resume",  desc: "PDF, DOCX or DOC · up to 10 MB"               },
                   { n: "02", title: "AI Scans Instantly",  desc: "Keywords, format & ATS compatibility checked"  },
                   { n: "03", title: "Get Your Report",     desc: "Score breakdown + prioritised action fixes"     },
                 ] as const).map((step) => (
-                  <div key={step.n} className="flex items-start gap-3.5">
-                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-black mt-0.5"
-                      style={{ background: "linear-gradient(135deg,#2557a7,#1a3a8f)", color: "white", boxShadow: "0 2px 8px rgba(37,87,167,0.28)" }}
-                    >
-                      {step.n}
-                    </div>
-                    <div>
-                      <p className="text-[13.5px] font-semibold text-slate-800">{step.title}</p>
-                      <p className="text-[12px] text-slate-400 mt-0.5">{step.desc}</p>
-                    </div>
+                  <div key={step.n} className="flex items-center gap-3">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white"><BarChart3 className="h-4 w-4" /></div>
+                    <div className="min-w-0 flex-1"><p className="text-[12px] font-bold leading-4 text-slate-800">{step.title}</p><p className="text-[10px] leading-4 text-slate-500">{step.desc}</p></div>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                   </div>
                 ))}
+              </div>
               </div>
             </div>
 
           </motion.div>
 
           {/* ── RIGHT: Upload card ── */}
-          <div className="relative pt-2">
+          <div className="relative w-full max-w-[640px] justify-self-end self-start">
             <div className="absolute -inset-x-6 -inset-y-4 pointer-events-none rounded-[2.5rem]"
               style={{
                 background: "radial-gradient(ellipse at 50% 60%,rgba(37,87,167,0.13) 0%,transparent 65%)",
@@ -912,7 +948,7 @@ export default function ATSLoginPage() {
                 style={{ background: "linear-gradient(90deg,transparent,rgba(37,87,167,0.3) 30%,rgba(37,87,167,0.4) 60%,transparent)" }}
               />
 
-              <div className="p-5 flex flex-col gap-4">
+              <div className="p-4 flex flex-col gap-3">
 
                 {/* Stepper */}
                 <div className="flex items-center">
@@ -941,10 +977,6 @@ export default function ATSLoginPage() {
                       )}
                     </Fragment>
                   ))}
-                  <div className="flex items-center gap-1.5 ml-4 shrink-0 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200/60">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/>
-                    <span className="text-[11px] font-bold text-emerald-700">Live</span>
-                  </div>
                 </div>
 
                 {/* Hidden file input */}
@@ -965,6 +997,9 @@ export default function ATSLoginPage() {
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
+                        onAnalyze={handleScanResume}
+                        canScan={canScan}
+                        buttonLabel={!file ? "Analyze My Resume" : !agreed ? "Accept terms to continue" : "Analyze My Resume"}
                       />
                     </motion.div>
                   ) : (
@@ -979,37 +1014,22 @@ export default function ATSLoginPage() {
                   )}
                 </AnimatePresence>
 
-                {/* CTA */}
-                <motion.button
-                  onClick={handleScanResume}
-                  disabled={!canScan}
-                  whileHover={canScan ? { y: -2 } : {}}
-                  whileTap={canScan ? { scale: 0.988 } : {}}
-                  transition={{ duration: 0.12 }}
-                  className={[
-                    "w-full flex items-center justify-center gap-2.5 rounded-2xl font-semibold text-[15px] tracking-[0.01em] transition-all",
-                    canScan ? "text-white cursor-pointer" : "text-slate-400 cursor-not-allowed",
-                  ].join(" ")}
-                  style={
-                    canScan
-                      ? {
-                          height: 52,
-                          background: "linear-gradient(135deg,#1a3a5c 0%,#2557a7 45%,#2557a7 100%)",
-                          boxShadow: "0 0 0 1px rgba(37,87,167,0.3), 0 4px 20px rgba(37,87,167,0.40), 0 1px 0 rgba(255,255,255,0.10) inset",
-                        }
-                      : {
-                          height: 52,
-                          background: "#F1F5F9",
-                        }
-                  }
-                >
-                  <Sparkles className="w-4 h-4"/>
-                  {!file ? "Drop your resume to begin" : !agreed ? "Accept terms to continue" : "Upload & Scan Resume"}
-                  {canScan && <ArrowRight className="w-4 h-4"/>}
-                </motion.button>
+                {file && (
+                  <motion.button
+                    type="button"
+                    onClick={handleScanResume}
+                    disabled={!canScan}
+                    whileHover={canScan ? { y: -1 } : {}}
+                    whileTap={canScan ? { scale: 0.99 } : {}}
+                    className={`flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold transition-colors ${canScan ? "bg-[#2563eb] text-white shadow-md shadow-blue-200" : "bg-blue-100 text-blue-300 cursor-not-allowed"}`}
+                  >
+                    <UploadCloud className="h-4 w-4" />
+                    {!agreed ? "Accept terms to continue" : "Analyze My Resume"}
+                  </motion.button>
+                )}
 
                 {/* Security note */}
-                <div className="flex items-center justify-center gap-2 -mt-1">
+                <div className="hidden">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round">
                     <path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/>
                   </svg>
@@ -1017,9 +1037,54 @@ export default function ATSLoginPage() {
                 </div>
 
               </div>
+
+              <div className="grid grid-cols-2 gap-4 border-t border-slate-100 bg-slate-50/60 p-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-bold text-slate-600">Supported formats</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {[
+                      { label: "PDF", badge: "Preferred", Icon: FaFilePdf, color: "text-red-500" },
+                      { label: "DOCX", badge: "Recommended", Icon: FaFileWord, color: "text-[#2563d8]" },
+                      { label: "DOC", badge: "Supported", Icon: FaFileWord, color: "text-[#2563d8]" },
+                    ].map(({ label, badge, Icon, color }) => (
+                      <div key={label} className="flex flex-col items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-2 shadow-sm">
+                        <Icon className={`h-7 w-7 ${color}`} aria-hidden="true" />
+                        <span className="text-[10px] font-bold text-slate-700">{label}</span>
+                        <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[8px] font-semibold text-blue-600">{badge}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                  <ShieldCheck className="mt-0.5 h-9 w-9 shrink-0 text-emerald-600" strokeWidth={1.8} />
+                  <div>
+                    <p className="text-xs font-bold text-emerald-700">Your data is 100% secure</p>
+                    <div className="mt-1 grid gap-1 text-[10px] leading-4 text-slate-500">
+                      {["Bank-level encryption (AES-256)", "Files auto-deleted after analysis", "Never shared with anyone", "Private AI processing"].map((item) => (
+                        <span key={item} className="flex items-center gap-1.5"><Check className="h-3 w-3 shrink-0 text-emerald-600" strokeWidth={3} />{item}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </motion.div>
           </div>
 
+        </div>
+
+        <div className="mt-8 grid grid-cols-2 gap-4 rounded-2xl border border-slate-100 bg-white px-6 py-5 shadow-[0_8px_28px_rgba(15,23,42,0.06)] sm:grid-cols-4">
+          {[
+            { Icon: Users, value: "2.5M+", label: "Resumes Analyzed", tone: "bg-blue-50 text-[#2563eb]" },
+            { Icon: ShieldCheck, value: "98%", label: "ATS Accuracy", tone: "bg-emerald-50 text-emerald-600" },
+            { Icon: Clock, value: "~30 Sec", label: "Average Analysis Time", tone: "bg-violet-50 text-violet-500" },
+            { Icon: Star, value: "4.9/5", label: "User Rating", tone: "bg-amber-50 text-amber-500" },
+          ].map(({ Icon, value, label, tone }) => (
+            <div key={label} className="flex items-center gap-3 border-slate-100 sm:border-r sm:pr-4">
+              <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${tone}`}><Icon className="h-4 w-4" /></div>
+              <div><p className="text-base font-black text-slate-800">{value}</p><p className="text-[10px] text-slate-500">{label}</p></div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

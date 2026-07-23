@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Projects, deleteProject, getProjects, updateProjects } from "@/api/userApi";
 import { addProjectItem } from "../../_utils/autoFillHelper";
@@ -33,14 +33,14 @@ export default function ProjectsSection({
         index?: number;
     } | null>(null);
 
-    useEffect(() => {
+    const hasExistingData = useRef((tempProfile.projects?.length ?? 0) > 0);
 
+    useEffect(() => {
+        if (hasExistingData.current) {
+            setEditingIndex(null);
+            return;
+        }
         const fetchProjects = async () => {
-            //  Only fetch if projects data doesn't exist yet
-            if (tempProfile.projects && tempProfile.projects.length > 0) {
-                if (tempProfile.projects.length > 0) setEditingIndex(null);
-                return;
-            }
             try {
                 setLoading(true);
                 const data = await getProjects();
@@ -54,7 +54,7 @@ export default function ProjectsSection({
             }
         };
         fetchProjects();
-    }, []);
+    }, []); // safe: hasExistingData is a ref, setters are stable
 
     const handleSave = async () => {
         try {

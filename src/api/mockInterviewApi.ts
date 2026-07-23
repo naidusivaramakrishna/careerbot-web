@@ -552,7 +552,7 @@ export const downloadReportPdf = async (sessionId: string): Promise<void> => {
 // ==================== PHASE 3 — LIVE INTERVIEW INTERFACES ====================
 
 export interface LiveCreateRequest {
-  session_type: 'hr' | 'technical' | 'mixed';
+  session_type: 'hr' | 'technical' | 'mixed' | 'technical_coding';
   resume_id?: string;
   enable_streaming_stt?: boolean;
 }
@@ -592,6 +592,7 @@ export type WsClientMessage =
   | { type: 'end_answer'; text?: string }
   | { type: 'skip_question' }
   | { type: 'end_interview' }
+  | { type: 'coding_answer'; submission_id: string | null; score: number | null; problem_slug: string }
   | { type: 'ping' };
 
 // ── WS Message types (server → client) ──
@@ -606,6 +607,7 @@ export type WsServerMessage =
   | { type: 'question_skipped'; skipped_question_number: number }
   | { type: 'interview_complete'; report_id: string; overall_score: number }
   | { type: 'session_paused'; reason: string; reconnect_token: string | null }
+  | { type: 'coding_round_start'; problem_slug: string; problem_title: string; time_limit_s: number }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' };
 

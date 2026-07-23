@@ -45,8 +45,8 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
             });
             if (!res.ok) {
                 // fetch() resolves on 4xx/5xx — log so a silent 401 doesn't go unnoticed.
-                // Non-critical for OFF state (GET re-probes within 5 min when enabled:false);
-                // important for ON→OFF since enabled:true is sticky until a POST succeeds.
+                // Non-critical: GET re-probes the backend every 15 s for both states,
+                // so the cache self-corrects within one TTL window even if this POST fails.
                 logger.warn(`Maintenance cache notify failed: HTTP ${res.status}`);
             }
         } catch {

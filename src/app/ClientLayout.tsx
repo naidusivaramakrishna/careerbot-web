@@ -20,6 +20,7 @@ export default function ClientLayout({
   const isAuthenticatedRoute = pathname?.startsWith('/dashboard') ||
     pathname?.startsWith('/profile') ||
     (pathname?.startsWith('/builder') && !isPublicBuilderRoute) ||
+    pathname?.startsWith('/ats/') ||
     pathname?.startsWith('/atslogin') ||
     pathname?.startsWith('/enhancer') ||
     pathname?.startsWith('/jobmatch') ||

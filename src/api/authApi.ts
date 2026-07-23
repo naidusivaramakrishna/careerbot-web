@@ -81,6 +81,16 @@ export const signOut = async () => {
   // Backend clears httpOnly cookies automatically - we don't need to clear tenant_id
   // clearTenantId() removed - allows re-login to same tenant
 
+  // Clear coding-test drafts so the next user starts with a clean slate.
+  // Keys are scoped per user (code:{userId}:{slug}:{lang}) so this only
+  // affects entries from this session, but we clear all to avoid bloat.
+  const codingKeys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k?.startsWith('code:')) codingKeys.push(k);
+  }
+  codingKeys.forEach((k) => localStorage.removeItem(k));
+
   ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText'].forEach(
     (key) => sessionStorage.removeItem(key)
   );

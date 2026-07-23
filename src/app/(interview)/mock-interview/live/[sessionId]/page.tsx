@@ -10,6 +10,9 @@ import {
   WsClientMessage,
   LiveCreateResponse,
 } from "@/api/mockInterviewApi";
+import { CodingTransition } from "@/components/interview/CodingTransition";
+import { CodingStep } from "@/components/interview/CodingStep";
+import type { SubmitSolutionResponse } from "@/app/coding-test/_lib/types";
 import {
   Mic,
   Video,
@@ -38,7 +41,14 @@ type InterviewPhase =
   | "follow-up"     // AI is asking a follow-up
   | "listening"     // Microphone recording
   | "processing"    // AI processing answer
+  | "coding"        // Live coding round active
   | "completed";    // All questions done
+
+interface CodingRoundState {
+  problemSlug: string;
+  problemTitle: string;
+  timeLimitS: number;
+}
 
 interface Question {
   number: number;
@@ -643,6 +653,10 @@ export default function LiveInterviewSessionPage() {
   const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
   const fullscreenWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ─── Coding round state ────────────────────────────────────────────────────
+  const [codingRound, setCodingRound] = useState<CodingRoundState | null>(null);
+  const [showCodingTransition, setShowCodingTransition] = useState(false);
+
   const [showEndModal, setShowEndModal] = useState(false);
   const [showReconnectModal, setShowReconnectModal] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -802,6 +816,15 @@ export default function LiveInterviewSessionPage() {
 
   const handleWsMessage = useCallback((msg: WsServerMessage) => {
     switch (msg.type) {
+      case "coding_round_start":
+        stopTimer();
+        setCodingRound({
+          problemSlug: msg.problem_slug,
+          problemTitle: msg.problem_title,
+          timeLimitS: msg.time_limit_s,
+        });
+        setShowCodingTransition(true);
+        return;
       case "session_ready":
         setTotalQuestions(msg.total_questions);
         setServerError(null);
@@ -976,6 +999,28 @@ export default function LiveInterviewSessionPage() {
       : currentQuestion.text
     : "Your interviewer is preparing the first question.";
 
+  const handleCodingSubmitted = useCallback((result: SubmitSolutionResponse) => {
+    wsSend({
+      type: "coding_answer",
+      submission_id: result.submission_id,
+      score: result.score,
+      problem_slug: result.problem_slug,
+    });
+    setPhase("processing");
+    setCodingRound(null);
+  }, [wsSend]);
+
+  const handleCodingTimeExpired = useCallback(() => {
+    wsSend({
+      type: "coding_answer",
+      submission_id: null,
+      score: null,
+      problem_slug: codingRound?.problemSlug ?? "",
+    });
+    setPhase("processing");
+    setCodingRound(null);
+  }, [wsSend, codingRound]);
+
   if (phase === "completed") {
     return <CompletedScreen sessionId={sessionId} reportId={completedReportId} />;
   }
@@ -1000,7 +1045,19 @@ export default function LiveInterviewSessionPage() {
         />
       )}
 
+      {showCodingTransition && codingRound && (
+        <CodingTransition
+          problemTitle={codingRound.problemTitle}
+          timeLimitMin={Math.ceil(codingRound.timeLimitS / 60)}
+          onDone={() => {
+            setShowCodingTransition(false);
+            setPhase("coding");
+          }}
+        />
+      )}
+
       <div className="flex h-[calc(100vh-56px)] min-h-0 flex-col overflow-hidden bg-gray-50">
+
         {/* Score toast */}
         {showFullscreenWarning && (
           <div className="fixed top-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 items-center justify-between gap-3 rounded-xl bg-gray-900 px-4 py-2.5 text-white shadow-[0_4px_24px_rgba(0,0,0,0.30)]">
@@ -1120,7 +1177,20 @@ export default function LiveInterviewSessionPage() {
           </div>
         )}
 
-        {/* Main content */}
+        {/* Coding phase — full-height editor */}
+        {phase === "coding" && codingRound && (
+          <div className="flex-1 overflow-hidden">
+            <CodingStep
+              problemSlug={codingRound.problemSlug}
+              timeLimitS={codingRound.timeLimitS}
+              onSubmitted={handleCodingSubmitted}
+              onTimeExpired={handleCodingTimeExpired}
+            />
+          </div>
+        )}
+
+        {/* Main content — verbal interview phases */}
+        {phase !== "coding" && (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:overflow-hidden">
           <div className="mx-auto flex h-full w-full max-w-[1560px] flex-col gap-3">
             {/* Question progress */}
@@ -1388,6 +1458,7 @@ export default function LiveInterviewSessionPage() {
             </div>
           </div>
         </div>
+        )}
       </div>
     </>
   );
