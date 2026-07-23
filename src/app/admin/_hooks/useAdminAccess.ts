@@ -27,14 +27,14 @@ export const useAdminAccess = (pageKey: AdminPageKey): UseAdminAccessReturn => {
         setLoading(true);
         setError(null);
 
-        // Check cache with 60s TTL — ensures revoked/demoted roles take effect promptly
-        const ROLE_CACHE_TTL_MS = 60 * 1000;
+        // Check cache with 30s TTL — ensures revoked/demoted roles take effect promptly
+        const ROLE_CACHE_TTL_MS = 30 * 1000;
         const cached = sessionStorage.getItem('admin_role');
         const cachedAt = Number(sessionStorage.getItem('admin_role_at') ?? 0);
         const isCacheValid = cached && (Date.now() - cachedAt) < ROLE_CACHE_TTL_MS;
 
         if (isCacheValid) {
-          const normalizedRole = cached as AdminRole;
+          const normalizedRole = (cached as string).toUpperCase() as AdminRole;
           setUserRole(normalizedRole);
           logger.debug(`Admin role from cache: ${normalizedRole}`);
           setLoading(false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { getEducation, updateEducation, deleteEducation, Education } from "@/api/userApi";
 import { addEducationItem } from "../../_utils/autoFillHelper";
@@ -12,7 +12,6 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 import Modal from "@/components/common/Modal";
 import EducationEmptyState from "./EducationEmptyState";
-import { logger } from "@/lib/logger"
 interface EducationSectionPropsWithAutoFill extends EducationSectionProps {
     isAutoFill?: boolean; // Flag to indicate if data is from resume/LinkedIn import
 }
@@ -45,9 +44,8 @@ export default function EducationSection({
             try {
                 setLoading(true);
                 const data = await getEducation();
-                const updatedProfile = { ...tempProfile, education: data };
-                setTempProfile(updatedProfile);
-                setProfileData(updatedProfile); // ✅ Update context too
+                setTempProfile((prev) => ({ ...prev, education: data }));
+                setProfileData((prev) => ({ ...prev, education: data }));
                 if (data.length > 0) setEditingIndex(null);
             } catch {
                 toast.error("Failed to load education details.");
@@ -138,11 +136,7 @@ export default function EducationSection({
 
             // ✅ Update both local and context state using functional updates
             setTempProfile((prev) => ({ ...prev, education: updated }));
-            setProfileData((prev) => {
-                const newProfile = { ...prev, education: updated };
-                logger.info('✅ Updated profile data after delete:', newProfile);
-                return newProfile;
-            });
+            setProfileData((prev) => ({ ...prev, education: updated }));
 
             // Refresh dashboard with delay to prevent multiple toast notifications
             setTimeout(() => {
@@ -158,17 +152,21 @@ export default function EducationSection({
         }
     };
 
-    const openAddModal = () => {
+    const openAddModal = useCallback(() => {
         setEducationForm({});
         setEditingIndex(null);
         setIsModalOpen(true);
-    };
+    }, []);
 
-    const openEditModal = (exp: Partial<Education>, index: number) => {
+    const openEditModal = useCallback((exp: Partial<Education>, index: number) => {
         setEducationForm(exp);
         setEditingIndex(index);
         setIsModalOpen(true);
-    };
+    }, []);
+
+    const openDeleteModal = useCallback((id?: string, index?: number) => {
+        setDeleteTarget({ id, index });
+    }, []);
 
     const modalTitle =
         editingIndex === null ? "Add Education" : "Edit Education";
@@ -182,7 +180,7 @@ export default function EducationSection({
                     <EducationList
                         educationList={tempProfile.education}
                         onEdit={openEditModal}
-                        onDelete={(id, index) => setDeleteTarget({ id, index })}
+                        onDelete={openDeleteModal}
                         onAdd={openAddModal}
                     />
                 </>

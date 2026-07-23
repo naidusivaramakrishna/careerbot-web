@@ -2,22 +2,11 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 import { ProfileData } from "../_types/ProfileData";
 
-interface Section {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-}
-
 interface ProfileContextType {
   profileData: ProfileData;
   setProfileData: React.Dispatch<React.SetStateAction<ProfileData>>;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  sidebarActiveTab: string;
-  setSidebarActiveTab: (tab: string) => void;
-  clearSidebarActive: () => void;
-  dynamicSections: Section[];
-  addSection: (section: Section) => void;
   profilePicUrl: string | null;
   setProfilePicUrl: React.Dispatch<React.SetStateAction<string | null>>;
 }
@@ -25,20 +14,9 @@ interface ProfileContextType {
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
 export function ProfileContextProvider({ children }: { children: ReactNode }) {
-  const [profileData, setProfileData] = useState<ProfileData>({}); // Initialize with empty ProfileData
-  const [activeTab, setActiveTab] = useState("Personal Information"); // default tab
-  const [sidebarActiveTab, setSidebarActiveTab] = useState("Personal Information");
-  const [dynamicSections, setDynamicSections] = useState<Section[]>([]);
+  const [profileData, setProfileData] = useState<ProfileData>({});
+  const [activeTab, setActiveTab] = useState("Personal Information");
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
-
-  const clearSidebarActive = () => setSidebarActiveTab("");
-
-  const addSection = (section: Section) => {
-    if (dynamicSections.find((s) => s.id === section.id)) return; // prevent duplicate
-    setDynamicSections((prev) => [...prev, section]);
-    setSidebarActiveTab(section.id);
-    setActiveTab(section.id);
-  };
 
   return (
     <ProfileContext.Provider
@@ -47,11 +25,6 @@ export function ProfileContextProvider({ children }: { children: ReactNode }) {
         setProfileData,
         activeTab,
         setActiveTab,
-        sidebarActiveTab,
-        setSidebarActiveTab,
-        clearSidebarActive,
-        dynamicSections,
-        addSection,
         profilePicUrl,
         setProfilePicUrl,
       }}

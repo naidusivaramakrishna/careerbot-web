@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { getSystemConfig, updateSystemConfig, resetSystemConfig } from '@/api/adminSystemConfigApi';
 import { SystemConfig } from '../types';
 import { logger } from '@/lib/logger';
+import { extractApiError } from '@/app/admin/_utils/apiError';
 
 interface UseSystemConfigReturn {
     systemConfig: SystemConfig | null;
@@ -37,13 +38,20 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
 
     const notifyMaintenanceCache = useCallback(async (enabled: boolean) => {
         try {
-            await fetch('/api/maintenance-status', {
+            const res = await fetch('/api/maintenance-status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled }),
             });
+            if (!res.ok) {
+                // fetch() resolves on 4xx/5xx — log so a silent 401 doesn't go unnoticed.
+                // Non-critical for OFF state (GET re-probes within 5 min when enabled:false);
+                // important for ON→OFF since enabled:true is sticky until a POST succeeds.
+                logger.warn(`Maintenance cache notify failed: HTTP ${res.status}`);
+            }
         } catch {
-            // non-critical — middleware cache will self-refresh within 30 s
+            // Network error — same note as above applies.
+            logger.warn('Maintenance cache notify failed: network error');
         }
     }, []);
 
@@ -69,7 +77,7 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
             toast.success('System configuration updated successfully');
         } catch (error: unknown) {
             logger.error('Error updating system config:', error);
-            toast.error('Failed to update system configuration');
+            toast.error(extractApiError(error, 'Failed to update system configuration'));
         } finally {
             setLoading(false);
         }
@@ -88,7 +96,7 @@ export const useSystemConfig = (): UseSystemConfigReturn => {
             toast.success('System configuration reset to defaults');
         } catch (error: unknown) {
             logger.error('Error resetting system config:', error);
-            toast.error('Failed to reset system configuration');
+            toast.error(extractApiError(error, 'Failed to reset system configuration'));
         } finally {
             setLoading(false);
         }

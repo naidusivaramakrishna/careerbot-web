@@ -73,11 +73,7 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
         try {
             await updateProfile(mapFrontendToBackend(tempProfile));
             setProfile(tempProfile);
-            setProfileData((prev) => {
-                const newProfile = { ...prev, personalInformation: tempProfile.personalInformation };
-                logger.info('✅ Updated profile data after saving personal info:', newProfile);
-                return newProfile;
-            });
+            setProfileData((prev) => ({ ...prev, personalInformation: tempProfile.personalInformation }));
             toast.success('Profile updated successfully!');
             setTimeout(() => { refreshDashboard(); }, 300);
         } catch (err: unknown) {
@@ -225,13 +221,20 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                                 : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                             }`}
                     />
-                    <Sparkles
-                        className={`absolute right-3 top-3 w-4 h-4 cursor-pointer transition-colors ${isGenerating
-                            ? 'text-gray-300 cursor-not-allowed animate-pulse'
-                            : 'text-[#2257a7] hover:text-[#1a4590]'
-                            }`}
+                    <span
+                        role="button"
+                        title={isGenerating ? 'Generating summary…' : 'Generate AI summary'}
+                        aria-label={isGenerating ? 'Generating summary…' : 'Generate AI summary'}
+                        className={`absolute right-3 top-3 ${isGenerating ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         onClick={isGenerating ? undefined : handleGenerateSummary}
-                    />
+                    >
+                        <Sparkles
+                            className={`w-4 h-4 transition-colors ${isGenerating
+                                ? 'text-gray-300 animate-pulse'
+                                : 'text-[#2257a7] hover:text-[#1a4590]'
+                            }`}
+                        />
+                    </span>
                     {fieldErrors['summary'] && (
                         <p role="alert" className="text-red-500 text-xs mt-1">{fieldErrors['summary']}</p>
                     )}

@@ -147,10 +147,25 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // 2) No verified access token. Attempt a server-side refresh for ALL
-    //    routes — not just admin/recruiter. This prevents unauthenticated users
-    //    from ever seeing a protected page (even briefly) when they have a
-    //    stale refresh_token cookie from a previous session.
+    // 2) No verified token. Non-protected pages: either auth cookie is enough —
+    //    let the request through; the client HTTP interceptor refreshes on the
+    //    first 401 and the backend re-validates the token on every API call.
+    //
+    //    `token` must be accepted here, not just `refreshToken`. The refresh
+    //    cookie is scoped to Path=/api/v1/auth/refresh, so the browser never
+    //    sends it on a page navigation — gating on it alone bounced freshly
+    //    signed-in users straight back to login whenever the access token
+    //    could not be verified here (JWT_SECRET unset, or token simply expired).
+    if (!isProtectedArea) {
+        return (token || refreshToken) ? NextResponse.next() : loginRedirect();
+    }
+
+    // 3) Role-gated area with no verified token (access token missing OR
+    //    invalid). Attempt a server-side refresh, re-verify the NEW token's
+    //    role, then bounce through a redirect so the page renders with a valid
+    //    cookie. Every failure path falls through to the login redirect
+    //    (fail-safe) — a forged/expired refresh cookie can never reach a
+    //    role-gated page.
     if (refreshToken && process.env.JWT_SECRET) {
         try {
             // Keep the refresh on a SAME-ORIGIN relative path. It forwards the

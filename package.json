@@ -99,7 +99,6 @@
     "jsdom": "^23.0.1",
     "kill-port": "^2.0.1",
     "msw": "^2.0.0",
-    "puppeteer": "^25.2.0",
     "tailwindcss": "^4",
     "typescript": "5.9.3",
     "vitest": "^1.1.0"

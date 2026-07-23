@@ -1,44 +1,40 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Play, AlertCircle, Wand2 } from 'lucide-react';
-import HighlightBox from '../_components/HighlightBox';
 
-type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Mixed';
+// Only the levels the backend accepts (mock_test schemas.py: VALID_DIFFICULTIES).
+// "Mixed" was offered here but the backend rejects it, so it could never start a test.
+type Difficulty = 'Easy' | 'Medium' | 'Hard';
 
 const categoryOptions = ['Aptitude', 'Arithmetic', 'Reasoning', 'Technical'] as const;
 type Category = typeof categoryOptions[number];
 
-const difficultyOptions: Difficulty[] = ['Easy', 'Medium', 'Hard', 'Mixed'];
+const difficultyOptions: Difficulty[] = ['Easy', 'Medium', 'Hard'];
 
 const timePerQuestion: Record<Difficulty, number> = {
-  Easy: 1.5, Medium: 2, Hard: 2.5, Mixed: 2,
+  Easy: 1.5, Medium: 2, Hard: 2.5,
 };
 
 
-const diffMeta: Record<Difficulty, { emoji: string; color: string; bg: string; border: string }> = {
-  Easy:   { emoji: '😊', color: '#065f46', bg: '#d1fae5', border: '#6ee7b7' },
-  Medium: { emoji: '😐', color: '#92400e', bg: '#fef3c7', border: '#fcd34d' },
-  Hard:   { emoji: '😤', color: '#991b1b', bg: '#fee2e2', border: '#fca5a5' },
-  Mixed:  { emoji: '🎲', color: '#4c1d95', bg: '#dbeafe', border: '#c4b5fd' },
+const diffMeta: Record<Difficulty, { color: string; bg: string; border: string }> = {
+  Easy:   { color: '#065f46', bg: '#d1fae5', border: '#6ee7b7' },
+  Medium: { color: '#92400e', bg: '#fef3c7', border: '#fcd34d' },
+  Hard:   { color: '#991b1b', bg: '#fee2e2', border: '#fca5a5' },
 };
 
 export default function CustomTestPage() {
   const router = useRouter();
 
   const [categories, setCategories] = useState<Category[]>(['Aptitude']);
-  const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
+  // No default: the user must pick explicitly. Pre-selecting 'Medium' let tests
+  // start with a level the user never actually chose.
+  const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [questionCount] = useState(30);
-  const [negativeMarking, setNegativeMarking] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-
-  const estimatedTime = useMemo(
-    () => Math.round(questionCount * timePerQuestion[difficulty]),
-    [questionCount, difficulty],
-  );
 
   const toggleCategory = (cat: Category) => {
     setCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
@@ -48,6 +44,10 @@ export default function CustomTestPage() {
   const handleStartTest = () => {
     if (categories.length === 0) {
       setValidationError('Please select at least one category to continue.');
+      return;
+    }
+    if (!difficulty) {
+      setValidationError('Please select a difficulty level to continue.');
       return;
     }
     setStarting(true);
@@ -67,7 +67,6 @@ export default function CustomTestPage() {
     router.push(`/mock-test/custom-test?${params.toString()}`);
   };
 
-  const dm = diffMeta[difficulty];
 
   return (
     <div className="min-h-screen" style={{ background: '#F8F9FB' }}>
@@ -179,7 +178,7 @@ export default function CustomTestPage() {
                         }
                       >
                         <input type="radio" name="difficulty" value={level} checked={isSelected}
-                          onChange={() => setDifficulty(level)} className="sr-only" />
+                          onChange={() => { setDifficulty(level); setValidationError(''); }} className="sr-only" />
                         <span className="text-sm font-bold"
                           style={{ color: isSelected ? meta.color : '#0F172A' }}>
                           {level}
@@ -194,61 +193,8 @@ export default function CustomTestPage() {
               </div>
             </li>
 
-            {/* 3. Negative Marking */}
-            <li className="flex gap-3">
-              <span className="font-semibold tabular-nums shrink-0 w-5 pt-1.5" style={{ color: '#475569' }}>3.</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] mb-3">
-                  <span className="font-bold" style={{ color: '#000' }}>Negative marking:</span>{' '}
-                  <span style={{ color: '#2d2d2d' }}>simulate real exam pressure</span>
-                </p>
-                <div className="flex gap-3">
-                  <label className="flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border-2 cursor-pointer transition"
-                    style={negativeMarking
-                      ? { borderColor: '#fca5a5', background: '#fef2f2' }
-                      : { borderColor: '#E5E7EB', background: '#ffffff' }
-                    }>
-                    <input type="radio" name="negMarking" checked={negativeMarking}
-                      onChange={() => setNegativeMarking(true)} className="w-4 h-4" style={{ accentColor: '#dc2626' }} />
-                    <span className="font-semibold text-sm" style={{ color: negativeMarking ? '#991b1b' : '#475569' }}>
-                      Yes · −1/3
-                    </span>
-                  </label>
-                  <label className="flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border-2 cursor-pointer transition"
-                    style={!negativeMarking
-                      ? { borderColor: '#6ee7b7', background: '#d1fae5' }
-                      : { borderColor: '#E5E7EB', background: '#ffffff' }
-                    }>
-                    <input type="radio" name="negMarking" checked={!negativeMarking}
-                      onChange={() => setNegativeMarking(false)} className="w-4 h-4" style={{ accentColor: '#059669' }} />
-                    <span className="font-semibold text-sm" style={{ color: !negativeMarking ? '#065f46' : '#475569' }}>
-                      No penalty
-                    </span>
-                  </label>
-                </div>
-              </div>
-            </li>
           </ol>
 
-          <HighlightBox>
-            <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
-              {categories.length > 0 ? categories.join(', ') : <span style={{ color: '#ef4444' }}>No categories</span>} ·{' '}
-              <span className="font-bold" style={{ color: dm.color }}>{difficulty}</span> ·{' '}
-              Pass mark <span className="font-bold" style={{ color: '#1e3a8a' }}>50%</span>
-            </p>
-            <div className="flex items-center gap-4 shrink-0">
-              <div className="text-right">
-                <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Questions</p>
-                <p className="text-2xl font-bold tabular-nums" style={{ color: '#0F172A' }}>{questionCount}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#94A3B8' }}>Est. time</p>
-                <p className="text-2xl font-bold tabular-nums" style={{ color: '#1e3a8a' }}>
-                  {estimatedTime}<span className="text-base font-bold" style={{ color: '#60a5fa' }}>m</span>
-                </p>
-              </div>
-            </div>
-          </HighlightBox>
         </div>
 
         {/* Tip pill — section intro style */}
@@ -257,7 +203,7 @@ export default function CustomTestPage() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
             style={{ background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}
           >
-            <span>→</span> Mixed difficulty pulls from all levels — best simulates real exam pressure
+            <span>→</span> Harder levels mean fewer gimmes — Hard best simulates real exam pressure
           </div>
         </div>
 

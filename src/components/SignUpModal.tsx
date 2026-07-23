@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation"
 import { signUp, signIn } from "@/api/authApi"
 import { SignUpForm as ISignUpForm, LoginForm, ErrorState, LoadingState, FormType } from "@/types/authTypes"
 import SocialLoginButtons from "./SocialLoginButtons"
-import { mapAuthError } from "@/lib/authMessages"
+import { mapAuthError, AUTH_ERROR_MESSAGES } from "@/lib/authMessages"
 import { sanitizeAuthRedirect } from "@/lib/authRedirect"
 
 interface Props {
@@ -112,8 +112,24 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
     const handleApiError = (err: unknown, isLogin = false) => {
         if (axios.isAxiosError(err)) {
             const res = err.response
-            console.error(`[auth:${isLogin ? 'signin' : 'signup'}] status=${res?.status}`, res?.data)
             const newErrors: ErrorState = { email: "", username: "", password: "", login: "" }
+
+            // No response at all — the request never completed (timeout, offline, server
+            // unreachable). There is no status or body to branch on, so report the
+            // connection failure instead of falling through to the field-error parsing.
+            if (!res) {
+                const timedOut = err.code === "ECONNABORTED" || err.code === "ETIMEDOUT"
+                console.warn(
+                    `[auth:${isLogin ? 'signin' : 'signup'}] no response (${err.code ?? 'unknown'}): ${err.message}`
+                )
+                newErrors.login = timedOut
+                    ? "The server took too long to respond. Please try again."
+                    : AUTH_ERROR_MESSAGES.NETWORK_ERROR
+                setErrors(newErrors)
+                return
+            }
+
+            console.error(`[auth:${isLogin ? 'signin' : 'signup'}] status=${res.status}`, res.data)
 
             // Backend uses OAuth2 form-data convention on /signin, so the email field
             // is reported as "username". Re-map to "email" for the login UI.
