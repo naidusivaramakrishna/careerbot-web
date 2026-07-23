@@ -4,9 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { fetchProblems } from './_lib/api';
-import { fetchHistory } from './_lib/gradingApi';
+import { fetchProgress } from './_lib/gradingApi';
 import type { CodingTestLanguage } from './_lib/types';
-import QuotaBanner from '@/components/coding-test/QuotaBanner';
 import OnboardingModal from '@/components/coding-test/OnboardingModal';
 import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 
@@ -48,16 +47,12 @@ export default function CodingPracticeHub() {
   useEffect(() => {
     Promise.all([
       fetchProblems().then((r) => r.total),
-      fetchHistory(1, 100).catch(() => null),
-    ]).then(([total, history]) => {
+      fetchProgress().catch(() => null),
+    ]).then(([total, prog]) => {
       setTotalProblems(total);
-      if (history) {
-        const uniqueSlugs = new Set(history.entries.map((e) => e.problem_slug));
-        const solvedSlugs = new Set(
-          history.entries.filter((e) => (e.score ?? 0) >= 70).map((e) => e.problem_slug),
-        );
-        const attempted = uniqueSlugs.size;
-        const solved = solvedSlugs.size;
+      if (prog) {
+        const attempted = prog.summary.problems_attempted;
+        const solved = prog.summary.problems_accepted;
         setProgress({
           solved,
           attempted,
@@ -184,9 +179,6 @@ export default function CodingPracticeHub() {
                 </div>
               </div>
             </div>
-
-            {/* GRADING CREDITS */}
-            <QuotaBanner />
 
           </div>
         </div>

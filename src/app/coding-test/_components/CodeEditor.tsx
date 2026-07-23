@@ -126,15 +126,6 @@ export default function CodeEditor({
             run: () => onCtrlEnterRef.current?.(),
           });
 
-          // Block Ctrl/Cmd+V
-          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {});
-
-          // Block context-menu paste and drag-and-drop at the DOM level
-          const domNode = editor.getDomNode();
-          if (domNode) {
-            domNode.addEventListener('paste', (e) => e.preventDefault(), true);
-            domNode.addEventListener('drop', (e) => e.preventDefault(), true);
-          }
         }}
         loading={
           <div className="flex h-full items-center justify-center text-slate-400">

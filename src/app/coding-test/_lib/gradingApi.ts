@@ -12,10 +12,9 @@ import { isAxiosError } from 'axios';
 
 import { httpClient } from '@/lib/http';
 import type {
-  HistoryResponse,
-  QuotaResponse,
   SubmitSolutionRequest,
   SubmitSolutionResponse,
+  UserProgressResponse,
 } from './types';
 
 const BASE = '/coding-test';
@@ -77,29 +76,14 @@ export async function submitSolution(
   }
 }
 
-export async function fetchHistory(
-  page = 1,
-  pageSize = 20,
-): Promise<HistoryResponse> {
+export async function fetchProgress(): Promise<UserProgressResponse> {
   try {
-    const { data } = await httpClient.get<HistoryResponse>(
-      `${BASE}/history?page=${page}&page_size=${pageSize}`,
+    const { data } = await httpClient.get<UserProgressResponse>(
+      `${BASE}/progress`,
       INLINE_AUTH_CONFIG,
     );
     return data;
   } catch (err) {
-    throw toGradingError(err, 'Failed to load your submission history.');
-  }
-}
-
-export async function fetchQuota(): Promise<QuotaResponse> {
-  try {
-    const { data } = await httpClient.get<QuotaResponse>(
-      `${BASE}/quota`,
-      INLINE_AUTH_CONFIG,
-    );
-    return data;
-  } catch (err) {
-    throw toGradingError(err, 'Failed to load your quota.');
+    throw toGradingError(err, 'Failed to load your progress.');
   }
 }

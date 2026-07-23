@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Circle, Code2, RotateCw, SearchX } from 'lucide-react';
 import { fetchProblems } from '../_lib/api';
-import { fetchHistory, GradingApiError } from '../_lib/gradingApi';
+import { fetchProgress, GradingApiError } from '../_lib/gradingApi';
 import type {
   CodingProblemSummary,
   CodingTestDifficulty,
@@ -47,21 +47,17 @@ function CodingProblemsListContent() {
   const [page, setPage] = useState(1);
   const [statusMap, setStatusMap] = useState<Record<string, ProblemStatus>>({});
 
-  // Silently fetch submission history to mark solved/attempted problems.
+  // Silently fetch progress to mark solved/attempted problems.
   useEffect(() => {
-    fetchHistory(1, 200)
+    fetchProgress()
       .then((res) => {
         const map: Record<string, ProblemStatus> = {};
         for (const e of res.entries) {
-          const cur = map[e.problem_slug];
-          const isSolved = (e.score ?? 0) >= 70;
-          if (!cur || (isSolved && cur !== 'solved')) {
-            map[e.problem_slug] = isSolved ? 'solved' : 'attempted';
-          }
+          map[e.problem_slug] = e.status === 'accepted' ? 'solved' : 'attempted';
         }
         setStatusMap(map);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         // 401 = not signed in; silently ignore so unauthenticated users still
         // see the list. Any other error is also non-critical here.
         if (err instanceof GradingApiError) return;

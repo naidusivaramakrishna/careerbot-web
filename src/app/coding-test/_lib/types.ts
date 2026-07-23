@@ -117,7 +117,63 @@ export interface QuotaResponse {
   plan: string;
 }
 
-// ---- Code execution (run without grading) ----------------------------------
+// ---- Per-user progress (GET /coding-test/progress) -------------------------
+
+export type UserProblemStatus = 'attempted' | 'accepted';
+
+export interface UserProgressEntry {
+  problem_slug: string;
+  status: UserProblemStatus;
+  attempts: number;
+  accepted_at: string | null;
+  last_run_at: string;
+}
+
+export interface UserProgressSummary {
+  problems_attempted: number;
+  problems_accepted: number;
+}
+
+export interface UserProgressResponse {
+  summary: UserProgressSummary;
+  entries: UserProgressEntry[];
+}
+
+// ---- Judge results (backend /run and /submit) --------------------------------
+
+export type JudgeStatus =
+  | 'passed'
+  | 'wrong_answer'
+  | 'runtime_error'
+  | 'time_limit_exceeded'
+  | 'memory_limit_exceeded';
+
+export type JudgeVerdict =
+  | 'accepted'
+  | 'wrong_answer'
+  | 'runtime_error'
+  | 'time_limit_exceeded'
+  | 'memory_limit_exceeded'
+  | 'no_test_cases';
+
+export interface JudgeTestCaseResult {
+  index: number;
+  passed: boolean;
+  status: JudgeStatus;
+  stdout: string;
+  expected_output: string;
+  stderr: string;
+  wall_time_ms: number;
+}
+
+export interface JudgeResponse {
+  verdict: JudgeVerdict;
+  passed: number;
+  total: number;
+  results: JudgeTestCaseResult[];
+}
+
+// ---- Code execution (legacy — kept for reference) ---------------------------
 
 export interface RunResult {
   stdout: string;

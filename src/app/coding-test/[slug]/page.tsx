@@ -9,21 +9,20 @@ import {
   Pause, Play, RotateCw, ShieldAlert, X,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 import { CodingTestApiError, fetchProblem, fetchProblems } from '../_lib/api';
-import { RunApiError, runCode } from '../_lib/runApi';
-import OutputPanel from '../_components/OutputPanel';
-import TestCasePanel from '../_components/TestCasePanel';
+import { RunApiError, runCode, submitCode } from '../_lib/runApi';
+import JudgePanel from '../_components/JudgePanel';
 import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
-  CodingProblemDetail, CodingProblemSummary, CodingTestLanguage, RunResult,
-  ParsedTestResults, TestCaseResult,
+  CodingProblemDetail, CodingProblemSummary, CodingTestLanguage, JudgeResponse,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
 /* ─────────────────────────────────────────────────────────────
    Constants
 ───────────────────────────────────────────────────────────── */
-type RunState  = 'idle' | 'running' | 'done';
+type ActionState = 'idle' | 'running' | 'submitting' | 'done';
 type LoadState = 'loading' | 'error' | 'notfound' | 'ready';
 
 const TIMER_DEFAULT    = 45 * 60;
@@ -50,51 +49,6 @@ const CodeEditor = dynamic<CodeEditorProps>(
   },
 );
 
-/* ─────────────────────────────────────────────────────────────
-   Parse Python harness output into per-test-case results
-   Harness emits: "Test N: ✓ PASS  output=…" / "✗ FAIL  got=… expected=…" / "✗ ERROR …"
-───────────────────────────────────────────────────────────── */
-function parseTestResults(
-  stdout: string,
-  examples: { input: string; output: string }[],
-): ParsedTestResults {
-  const total = examples.length;
-  let passed = 0;
-  let failed = 0;
-
-  const results: TestCaseResult[] = examples.map((ex, i) => {
-    const n = i + 1;
-    const line = stdout.split('\n').find((l) => l.startsWith(`Test ${n}:`)) ?? '';
-
-    if (line.includes('✓ PASS')) {
-      passed++;
-      const m = line.match(/output=(.+)$/);
-      return {
-        index: n, input: ex.input, expected: ex.output,
-        actual: m?.[1]?.trim() ?? ex.output,
-        status: 'pass' as const,
-      };
-    }
-    if (line.includes('✗ FAIL')) {
-      failed++;
-      const m = line.match(/got=(.+?)\s+expected=/);
-      return {
-        index: n, input: ex.input, expected: ex.output,
-        actual: m?.[1]?.trim() ?? '',
-        status: 'fail' as const,
-      };
-    }
-    failed++;
-    const m = line.match(/✗ ERROR\s+(.+)$/);
-    return {
-      index: n, input: ex.input, expected: ex.output,
-      actual: m?.[1]?.trim() ?? 'Error during execution',
-      status: 'error' as const,
-    };
-  });
-
-  return { results, passed, failed, total };
-}
 
 /* ─────────────────────────────────────────────────────────────
    Shortcuts modal (extracted to keep render clean)
@@ -147,6 +101,8 @@ export default function CodingProblemDetailPage() {
     ? `/coding-test/problems?language=${searchParams.get('language')}`
     : '/coding-test/problems';
 
+  const { userId } = useCurrentUserId();
+
   /* ── problem data ── */
   const [problem,      setProblem]      = useState<CodingProblemDetail | null>(null);
   const [loadState,    setLoadState]    = useState<LoadState>('loading');
@@ -169,11 +125,13 @@ export default function CodingProblemDetailPage() {
     fetchProblem(slug, ctrl.signal)
       .then((res) => {
         setProblem(res);
+        // Initialize with starter code; user-specific localStorage is applied
+        // in the effect below once userId is available.
         setCode({
-          python: localStorage.getItem(`code:${slug}:python`) ?? res.starter_code.python ?? '',
-          java:   localStorage.getItem(`code:${slug}:java`)   ?? res.starter_code.java   ?? '',
-          cpp:    localStorage.getItem(`code:${slug}:cpp`)    ?? res.starter_code.cpp    ?? '',
-          c:      localStorage.getItem(`code:${slug}:c`)      ?? res.starter_code.c      ?? '',
+          python: res.starter_code.python ?? '',
+          java:   res.starter_code.java   ?? '',
+          cpp:    res.starter_code.cpp    ?? '',
+          c:      res.starter_code.c      ?? '',
         });
         setLoadState('ready');
       })
@@ -187,6 +145,20 @@ export default function CodingProblemDetailPage() {
       });
     return () => ctrl.abort();
   }, [slug, reloadKey]);
+
+  // Once both userId and problem are known, apply this user's saved drafts from
+  // localStorage. Runs when userId resolves (async on first load) and whenever
+  // the problem changes (slug navigation or reload). Keeping this separate from
+  // the fetch effect avoids re-triggering the API call when userId resolves.
+  useEffect(() => {
+    if (!userId || !problem) return;
+    setCode((prev) => ({
+      python: localStorage.getItem(`code:${userId}:${problem.slug}:python`) ?? prev.python,
+      java:   localStorage.getItem(`code:${userId}:${problem.slug}:java`)   ?? prev.java,
+      cpp:    localStorage.getItem(`code:${userId}:${problem.slug}:cpp`)    ?? prev.cpp,
+      c:      localStorage.getItem(`code:${userId}:${problem.slug}:c`)      ?? prev.c,
+    }));
+  }, [userId, problem]);
 
   /* ── problem list (for prev/next navigation) ── */
   const [problemList, setProblemList] = useState<CodingProblemSummary[]>([]);
@@ -202,10 +174,11 @@ export default function CodingProblemDetailPage() {
     router.push(`/coding-test/${target.slug}`);
   };
 
-  /* ── run ── */
-  const [runState,  setRunState]  = useState<RunState>('idle');
-  const [runResult, setRunResult] = useState<RunResult | null>(null);
-  const [runError,  setRunError]  = useState('');
+  /* ── run / submit ── */
+  const [actionState,  setActionState]  = useState<ActionState>('idle');
+  const [judgeResult,  setJudgeResult]  = useState<JudgeResponse | null>(null);
+  const [judgeMode,    setJudgeMode]    = useState<'run' | 'submit'>('run');
+  const [actionError,  setActionError]  = useState('');
 
   /* ── timer ── */
   const [timerSeconds, setTimerSeconds] = useState(TIMER_DEFAULT);
@@ -316,9 +289,6 @@ export default function CodingProblemDetailPage() {
   const [consoleCollapsed, setConsoleCollapsed] = useState(false);
   const [consoleTab,       setConsoleTab]       = useState<'output' | 'tests'>('output');
 
-  /* ── test case results (from last Run) ── */
-  const [testRunData, setTestRunData] = useState<ParsedTestResults | null>(null);
-
   const startConsoleResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
@@ -342,12 +312,12 @@ export default function CodingProblemDetailPage() {
 
   /* ── helpers ── */
   const clearRunOutput = useCallback(() => {
-    setRunResult(null); setRunError(''); setRunState('idle'); setTestRunData(null);
+    setJudgeResult(null); setActionError(''); setActionState('idle');
   }, []);
 
   const resetToStarter = () => {
     if (!problem) return;
-    localStorage.removeItem(`code:${slug}:${language}`);
+    if (userId) localStorage.removeItem(`code:${userId}:${slug}:${language}`);
     setCode((prev) => ({ ...prev, [language]: problem.starter_code[language] ?? '' }));
     clearRunOutput();
   };
@@ -361,30 +331,43 @@ export default function CodingProblemDetailPage() {
     });
   };
 
+  const isBusy = actionState === 'running' || actionState === 'submitting';
+
   const handleRun = useCallback(async () => {
-    if (runState === 'running') return;
+    if (isBusy) return;
     const src = code[language]?.trim();
-    if (!src) { setRunError('Write some code before running.'); setRunResult(null); return; }
-    setRunState('running'); setRunError(''); setRunResult(null); setTestRunData(null);
+    if (!src) { setActionError('Write some code before running.'); return; }
+    setActionState('running'); setActionError(''); setJudgeResult(null);
+    setJudgeMode('run');
     setConsoleCollapsed(false);
-    setConsoleTab('output');
+    setConsoleTab('tests');
     try {
-      const res = await runCode(
-        language, code[language],
-        problem?.examples?.map((e) => ({ input: e.input, output: e.output })),
-      );
-      setRunResult(res); setRunState('done');
-      if (language === 'python' && problem?.examples && problem.examples.length > 0) {
-        const parsed = parseTestResults(res.stdout, problem.examples);
-        setTestRunData(parsed);
-        setConsoleTab('tests');
-      }
+      const res = await runCode(slug, language, code[language]);
+      setJudgeResult(res);
+      setActionState('done');
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
-      setRunState('idle');
-      setRunError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to run your code.');
+      setActionState('idle');
+      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to run your code.');
     }
-  }, [runState, code, language, problem]);
+  }, [isBusy, code, language, slug]);
+
+  const handleSubmit = useCallback(async () => {
+    if (isBusy) return;
+    const src = code[language]?.trim();
+    if (!src) { setActionError('Write some code before submitting.'); return; }
+    setActionState('submitting'); setActionError(''); setJudgeResult(null);
+    setJudgeMode('submit');
+    setConsoleCollapsed(false);
+    setConsoleTab('tests');
+    try {
+      const res = await submitCode(slug, language, code[language]);
+      setJudgeResult(res);
+      setActionState('done');
+    } catch (err) {
+      setActionState('idle');
+      setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to submit your solution.');
+    }
+  }, [isBusy, code, language, slug]);
 
   /* ── derived ── */
   const isReady = loadState === 'ready' && !!problem;
@@ -421,9 +404,9 @@ export default function CodingProblemDetailPage() {
 
   /* ── shared editor node ── */
   const saveCode = useCallback((lang: CodingTestLanguage, val: string, currentSlug: string) => {
-    localStorage.setItem(`code:${currentSlug}:${lang}`, val);
+    if (userId) localStorage.setItem(`code:${userId}:${currentSlug}:${lang}`, val);
     triggerSave();
-  }, [triggerSave]);
+  }, [userId, triggerSave]);
 
   const editorNode = plainEditor ? (
     <textarea
@@ -517,11 +500,17 @@ export default function CodingProblemDetailPage() {
               <button type="button" onClick={togglePlainEditor} className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-indigo-400 transition">
                 <FileText className="h-3.5 w-3.5" aria-hidden />{plainEditor ? 'Code editor' : 'Plain text'}
               </button>
-              <button type="button" onClick={handleRun} disabled={runState === 'running'}
+              <button type="button" onClick={handleRun} disabled={isBusy}
                 className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:bg-emerald-800 transition">
-                {runState === 'running'
+                {actionState === 'running'
                   ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Running…</>
                   : <><Play className="h-3.5 w-3.5" aria-hidden />Run</>}
+              </button>
+              <button type="button" onClick={handleSubmit} disabled={isBusy}
+                className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:bg-indigo-900 transition">
+                {actionState === 'submitting'
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Submitting…</>
+                  : 'Submit'}
               </button>
               <button type="button" onClick={() => setIsMaximized(false)}
                 className="inline-flex items-center gap-1 rounded-md border border-slate-600 px-2 py-1.5 text-xs font-medium text-slate-300 hover:border-indigo-500 hover:text-indigo-400 transition">
@@ -531,15 +520,17 @@ export default function CodingProblemDetailPage() {
             </div>
           </div>
           <div className="flex-1 overflow-hidden p-2">{editorNode}</div>
-          {(runError || (runState === 'done' && runResult)) && (
-            <div className="shrink-0 border-t border-slate-700">
-              {runError && (
+          {(actionError || (actionState === 'done' && judgeResult)) && (
+            <div className="shrink-0 border-t border-slate-700 max-h-48 overflow-y-auto">
+              {actionError && (
                 <div className="flex items-start gap-2 bg-[#252526] p-3">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" aria-hidden />
-                  <p className="text-sm text-rose-400">{runError}</p>
+                  <p className="text-sm text-rose-400">{actionError}</p>
                 </div>
               )}
-              {runState === 'done' && runResult && <OutputPanel result={runResult} />}
+              {actionState === 'done' && judgeResult && (
+                <JudgePanel result={judgeResult} mode={judgeMode} />
+              )}
             </div>
           )}
           <div className="shrink-0 border-t border-slate-800 px-4 py-1 text-center">
@@ -834,13 +825,13 @@ export default function CodingProblemDetailPage() {
                         }`}
                       >
                         {LABELS[tab]}
-                        {tab === 'tests' && testRunData && (
+                        {tab === 'tests' && judgeResult && (
                           <span className={`rounded-full px-1.5 py-px text-[9px] font-bold leading-none ${
-                            testRunData.passed === testRunData.total
+                            judgeResult.verdict === 'accepted'
                               ? 'bg-emerald-600 text-white'
                               : 'bg-rose-600 text-white'
                           }`}>
-                            {testRunData.passed}/{testRunData.total}
+                            {judgeResult.passed}/{judgeResult.total}
                           </span>
                         )}
                       </button>
@@ -850,19 +841,10 @@ export default function CodingProblemDetailPage() {
 
                 {/* Right-side status + actions */}
                 <div className="flex flex-1 items-center justify-end gap-1 pr-2">
-                  {consoleTab === 'output' && runState === 'running' && (
+                  {isBusy && (
                     <Loader2 className="h-3 w-3 animate-spin text-slate-400" aria-hidden />
                   )}
-                  {consoleTab === 'output' && runState === 'done' && runResult && (
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                      runResult.exit_code === 0
-                        ? 'bg-emerald-900/40 text-emerald-400'
-                        : 'bg-rose-900/40 text-rose-400'
-                    }`}>
-                      {runResult.exit_code === 0 ? '✓ Exit 0' : `✗ Exit ${runResult.exit_code}`}
-                    </span>
-                  )}
-                  {consoleTab === 'output' && (runState === 'done' || (runState === 'idle' && !!runError)) && (
+                  {(actionState === 'done' || (actionState === 'idle' && !!actionError)) && (
                     <button
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
@@ -889,56 +871,43 @@ export default function CodingProblemDetailPage() {
               {/* Console body — tab content */}
               {!consoleCollapsed && (
                 <div className="overflow-y-auto" style={{ height: consoleHeight - 34 }}>
-                  {/* Output tab */}
+                  {/* Output tab — raw error / status summary */}
                   {consoleTab === 'output' && (
                     <div className="p-3">
-                      {runState === 'idle' && !runError && (
+                      {actionState === 'idle' && !actionError && (
                         <p className="font-mono text-[13px] italic text-slate-500">
                           No output yet — press{' '}
                           <span className="font-semibold text-emerald-400">Run Code</span>{' '}
                           to execute.
                         </p>
                       )}
-                      {runState === 'running' && (
-                        <p className="font-mono text-[13px] italic text-slate-400">Running your code…</p>
+                      {isBusy && (
+                        <p className="font-mono text-[13px] italic text-slate-400">
+                          {actionState === 'submitting' ? 'Submitting your code…' : 'Running your code…'}
+                        </p>
                       )}
-                      {runError && (
-                        <pre className="whitespace-pre-wrap font-mono text-[13px] leading-5 text-rose-400">{runError}</pre>
+                      {actionError && (
+                        <pre className="whitespace-pre-wrap font-mono text-[13px] leading-5 text-rose-400">{actionError}</pre>
                       )}
-                      {runState === 'done' && runResult && (
-                        <>
-                          {runResult.stdout && (
-                            <pre className="whitespace-pre-wrap font-mono text-[13px] leading-5 text-slate-200">
-                              {runResult.stdout}
-                            </pre>
-                          )}
-                          {runResult.stderr && (
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-5 text-rose-400">
-                              {runResult.stderr}
-                            </pre>
-                          )}
-                          {!runResult.stdout && !runResult.stderr && (
-                            <p className="font-mono text-[13px] italic text-slate-500">
-                              Program exited with no output.
-                            </p>
-                          )}
-                        </>
-                      )}
+                      {actionState === 'done' && judgeResult && (() => {
+                        const firstErr = judgeResult.results.find((r) => r.stderr);
+                        return firstErr?.stderr ? (
+                          <pre className="whitespace-pre-wrap font-mono text-[13px] leading-5 text-amber-400">{firstErr.stderr}</pre>
+                        ) : (
+                          <p className="font-mono text-[13px] text-slate-400">
+                            {judgeResult.verdict === 'accepted'
+                              ? `✓ All ${judgeResult.total} test${judgeResult.total !== 1 ? 's' : ''} passed.`
+                              : `${judgeResult.passed} / ${judgeResult.total} tests passed.`}
+                          </p>
+                        );
+                      })()}
                     </div>
                   )}
 
-                  {/* Test Cases tab */}
+                  {/* Test Cases tab — judge results */}
                   {consoleTab === 'tests' && (
-                    testRunData ? (
-                      <TestCasePanel
-                        results={testRunData.results}
-                        passed={testRunData.passed}
-                        failed={testRunData.failed}
-                        total={testRunData.total}
-                        language={language}
-                        exitCode={runResult?.exit_code}
-                        showVerdict
-                      />
+                    judgeResult ? (
+                      <JudgePanel result={judgeResult} mode={judgeMode} />
                     ) : (
                       <div className="flex h-full items-center justify-center p-3">
                         <p className="font-mono text-[13px] italic text-slate-500">
@@ -966,16 +935,28 @@ export default function CodingProblemDetailPage() {
                 Saved
               </div>
 
-              <button
-                type="button"
-                onClick={handleRun}
-                disabled={runState === 'running'}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {runState === 'running'
-                  ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden />Running…</>
-                  : <><Play className="h-4 w-4" aria-hidden />Run Code</>}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRun}
+                  disabled={isBusy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionState === 'running'
+                    ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden />Running…</>
+                    : <><Play className="h-4 w-4" aria-hidden />Run Code</>}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={isBusy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionState === 'submitting'
+                    ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden />Submitting…</>
+                    : 'Submit'}
+                </button>
+              </div>
             </div>
           </section>
 

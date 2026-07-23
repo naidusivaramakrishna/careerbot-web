@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,32 +23,39 @@ const LANG_CONFIG: Record<Lang, WandboxConfig> = {
 
 const compilerCache: Partial<Record<Lang, string>> = {};
 
-async function resolveCompiler(lang: Lang): Promise<string> {
+const FALLBACKS: Record<Lang, string> = {
+  python: 'cpython-3.12.7',
+  java:   'openjdk-jdk-21+35',
+  cpp:    'gcc-13.2.0',
+  c:      'gcc-13.2.0-c',
+};
+
+async function fetchRuntimes(): Promise<{ name: string; language: string }[]> {
+  try {
+    const res = await fetch(RUNTIMES_URL, { cache: 'no-store' });
+    if (res.ok) return res.json();
+  } catch {
+    // fall through
+  }
+  return [];
+}
+
+async function resolveCompiler(lang: Lang, exclude?: string): Promise<string> {
   const cached = compilerCache[lang];
-  if (cached) return cached;
+  if (cached && cached !== exclude) return cached;
 
   const cfg = LANG_CONFIG[lang];
-  let runtimes: { name: string; language: string }[] = [];
-
-  try {
-    const res = await fetch(RUNTIMES_URL, { next: { revalidate: 3600 } });
-    if (res.ok) runtimes = await res.json();
-  } catch {
-    // fall through to hardcoded fallback
-  }
+  const runtimes = await fetchRuntimes();
 
   const match = runtimes.find(
-    (r) => r.language === cfg.language && r.name.startsWith(cfg.compilerPrefix),
+    (r) => r.language === cfg.language && r.name.startsWith(cfg.compilerPrefix) && r.name !== exclude,
   );
 
-  const FALLBACKS: Record<Lang, string> = {
-    python: 'cpython-3.12.0',
-    java:   'openjdk-jdk-21+35',
-    cpp:    'gcc-13.2.0',
-    c:      'gcc-13.2.0',
-  };
+  const fallback = FALLBACKS[lang];
+  const compiler = match?.name ?? (fallback !== exclude ? fallback : (runtimes.find(
+    (r) => r.language === cfg.language && r.name.startsWith(cfg.compilerPrefix),
+  )?.name ?? fallback));
 
-  const compiler = match?.name ?? FALLBACKS[lang];
   compilerCache[lang] = compiler;
   return compiler;
 }
@@ -164,32 +170,58 @@ function buildPythonTestHarness(userCode: string, examples: Example[]): string {
 }
 
 function buildJavaTestHarness(userCode: string, examples: Example[]): string {
-  // Rename Solution→Main so Wandbox (which uses Main.java) can compile.
-  // We can't easily inject calls without knowing the method signature,
-  // so just ensure compilation works and note the examples.
-  const renamed = userCode.replace(/\bSolution\b/g, 'Main');
+  const hasClass = /\bclass\s+\w+/.test(userCode);
+  const codeBody = hasClass ? userCode.replace(/\bSolution\b/g, 'Main') : userCode;
 
-  if (examples.length === 0) return renamed;
+  // Extract first non-constructor, non-main method name so we can call it
+  const methodMatch = codeBody.match(
+    /(?:public|private|protected)\s+(?:static\s+)?(?!void\b)(\w[\w<>\[\]]*)\s+(?!main\b)(\w+)\s*\(/,
+  );
+  const methodName = methodMatch?.[2];
 
-  // Insert a main method that prints example expectations (read-only reminder).
-  const exampleComment = examples
-    .map((e, i) => `    // Test ${i + 1}: ${e.input} -> ${e.output}`)
-    .join('\n');
+  // Strip "param = value" key prefixes so we get bare argument list for the call
+  function extractArgs(input: string): string {
+    return input
+      .split(/,\s*(?=\w+\s*=)/)
+      .map(part => { const eq = part.indexOf('='); return eq !== -1 ? part.slice(eq + 1).trim() : part.trim(); })
+      .join(', ');
+  }
 
-  // Try to insert main() before the last closing brace of the class
-  const lastBrace = renamed.lastIndexOf('}');
-  if (lastBrace === -1) return renamed;
+  const testLines: string[] = [];
+  if (methodName && examples.length > 0) {
+    testLines.push('        Main _sol = new Main();');
+    examples.forEach((ex, i) => {
+      const args = extractArgs(ex.input);
+      const expected = ex.output.trim();
+      const n = i + 1;
+      testLines.push(
+        `        try { var _r${i} = _sol.${methodName}(${args}); String _e${i} = String.valueOf(${expected});`,
+        `            if (String.valueOf(_r${i}).equals(_e${i})) System.out.println("Test ${n}: \\u2713 PASS  output=" + _r${i});`,
+        `            else System.out.println("Test ${n}: \\u2717 FAIL  got=" + _r${i} + "  expected=" + _e${i});`,
+        `        } catch (Exception _ex${i}) { System.out.println("Test ${n}: \\u2717 ERROR  " + _ex${i}); }`,
+      );
+    });
+  } else {
+    examples.forEach((e, i) => testLines.push(`        // Test ${i + 1}: ${e.input} -> ${e.output}`));
+    testLines.push('        System.out.println("Add test calls here to verify your solution.");');
+  }
 
   const mainMethod = [
     '',
     '    public static void main(String[] args) {',
-    '        // Run these examples to test your solution:',
-    exampleComment,
-    '        System.out.println("Add print() calls here to test your solution.");',
+    ...testLines,
     '    }',
   ].join('\n');
 
-  return renamed.slice(0, lastBrace) + mainMethod + '\n}';
+  if (hasClass) {
+    const lastBrace = codeBody.lastIndexOf('}');
+    if (lastBrace === -1) return codeBody;
+    return codeBody.slice(0, lastBrace) + mainMethod + '\n}';
+  }
+
+  // Bare method(s) — wrap in a class so Wandbox can compile
+  const indented = codeBody.trim().split('\n').map(l => '    ' + l).join('\n');
+  return ['public class Main {', indented, mainMethod, '}'].join('\n');
 }
 
 function buildCppTestHarness(userCode: string, examples: Example[]): string {
@@ -236,12 +268,6 @@ function buildCTestHarness(userCode: string, examples: Example[]): string {
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  const cookieStore = await cookies();
-  const session = cookieStore.get('access_token') ?? cookieStore.get('session');
-  if (!session?.value) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const contentLength = Number(req.headers.get('content-length') ?? 0);
   if (contentLength > MAX_BODY_BYTES) {
     return NextResponse.json({ error: 'Request too large' }, { status: 413 });
@@ -270,27 +296,43 @@ export async function POST(req: NextRequest) {
     default:       mainCode = code;
   }
 
-  const compiler = await resolveCompiler(language);
-
-  const wandboxBody: Record<string, unknown> = {
-    compiler,
-    code: mainCode,
-    save: false,
-  };
-  if (cfg.options) wandboxBody.options = cfg.options;
-
-  let wandboxRes: Response;
-  try {
-    wandboxRes = await fetch(WANDBOX_URL, {
+  async function callWandbox(compiler: string): Promise<Response> {
+    const body: Record<string, unknown> = { compiler, code: mainCode, save: false };
+    if (cfg.options) body.options = cfg.options;
+    return fetch(WANDBOX_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(wandboxBody),
+      body: JSON.stringify(body),
     });
+  }
+
+  let compiler = await resolveCompiler(language);
+  let wandboxRes: Response;
+
+  try {
+    wandboxRes = await callWandbox(compiler);
   } catch {
     return NextResponse.json(
       { error: 'Could not reach the code execution service.' },
       { status: 503 },
     );
+  }
+
+  // Auto-retry once with a freshly resolved compiler if we hit a 500
+  if (!wandboxRes.ok && wandboxRes.status === 500) {
+    delete compilerCache[language];
+    const retryCompiler = await resolveCompiler(language, compiler);
+    if (retryCompiler !== compiler) {
+      try {
+        const retryRes = await callWandbox(retryCompiler);
+        if (retryRes.ok) {
+          compiler = retryCompiler;
+          wandboxRes = retryRes;
+        }
+      } catch {
+        // fall through to error below
+      }
+    }
   }
 
   if (!wandboxRes.ok) {
