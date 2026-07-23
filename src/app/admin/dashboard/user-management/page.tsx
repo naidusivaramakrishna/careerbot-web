@@ -129,7 +129,11 @@ const UserManagement = () => {
 
         {/* Results Summary */}
         <div className="mt-4 text-sm text-gray-600">
-          Showing {users.length} of {totalUsers} users
+          {totalUsers > 0 ? (
+            <>Showing {(currentPage - 1) * pageSize + 1}–{(currentPage - 1) * pageSize + users.length} of {totalUsers} users</>
+          ) : (
+            <>No users found</>
+          )}
         </div>
 
         {/* Table */}

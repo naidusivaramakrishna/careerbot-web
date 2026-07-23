@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getUserList, exportUsers, downloadExportedFile, type UserListItem } from '@/api/userManagementApi'
 import { logger } from '@/lib/logger'
+import { extractApiError } from '@/app/admin/_utils/apiError'
 
 export interface UserFilters {
     search: string
@@ -60,8 +61,7 @@ export const useUserManagement = () => {
             setTotalUsers(response.total)
         } catch (error: unknown) {
             logger.error('Error fetching users:', error)
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to fetch users'
-            toast.error(errorMessage)
+            toast.error(extractApiError(error, 'Failed to fetch users'))
         } finally {
             setLoading(false)
         }

@@ -54,11 +54,9 @@ const FREE_ACTIONS = [
 export default function NancyChat({
   job,
   onClose,
-  initialPrompt,
 }: {
   job: JobType;
   onClose: () => void;
-  initialPrompt?: string;
 }) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -67,7 +65,7 @@ export default function NancyChat({
       timestamp: Date.now(),
     },
   ]);
-  const [input, setInput] = useState(initialPrompt ?? "");
+  const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [isGuideOpen, setIsGuideOpen] = useState(false);

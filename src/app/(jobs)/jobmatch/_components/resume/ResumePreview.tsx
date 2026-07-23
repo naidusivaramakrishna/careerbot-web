@@ -20,7 +20,6 @@ interface ResumePreviewProps {
   onDeleteSection?: (key: string) => void;
   deletedSections?: string[];
   fontFamily?: string;
-  customSectionLabels?: Record<string, string>;
 }
 
 // Add a reload counter to force iframe refresh
@@ -43,7 +42,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   onDeleteSection,
   deletedSections,
   fontFamily,
-  customSectionLabels,
 }) => {
   const [docxPreview, setDocxPreview] = useState<string | null>(null);
   const [docxError, setDocxError] = useState<string | null>(null);
@@ -141,7 +139,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           </div>
         )}
         <div ref={scrollContainerRef}>
-          <JobMatchTemplateThree data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} customSectionLabels={customSectionLabels} />
+          <JobMatchTemplateThree data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} />
         </div>
       </div>
     );

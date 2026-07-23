@@ -34,11 +34,10 @@ const SLUG_TO_BACKEND: Record<string, string> = {
   wipro: 'wipro', wipro_nlth: 'wipro', '6': 'wipro',
   accenture: 'accenture',
   capgemini: 'capgemini', capgemini_exceller: 'capgemini',
-  '2': 'tcs',
-  '5': 'wipro',
-  // Custom tests use tcs as the company context (broadest question bank)
-  'custom-test': 'tcs',
-  'custom': 'tcs',
+  // Custom tests use their OWN company context so they draw from a distinct
+  // question pool instead of mirroring TCS's questions.
+  'custom-test': 'custom',
+  'custom': 'custom',
 };
 
 const FALLBACK_INFO: CompanyInfo = {

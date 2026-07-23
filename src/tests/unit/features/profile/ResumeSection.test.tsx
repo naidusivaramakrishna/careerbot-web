@@ -27,7 +27,7 @@ vi.mock('@/api/userApi', () => ({
 
 const mockSetProfileData = vi.fn();
 vi.mock('@/app/(user)/profile/context/ProfileContext', () => ({
-  useProfileContext: () => ({ setProfileData: mockSetProfileData }),
+  useProfileContext: () => ({ profileData: {}, setProfileData: mockSetProfileData }),
 }));
 
 vi.mock('@/contexts/DashboardContext', () => ({
@@ -44,16 +44,9 @@ vi.mock('@/lib/logger', () => {
 
 // ─── Component under test ─────────────────────────────────────────────────────
 import ResumeSection from '@/app/(user)/profile/_components/ResumeSection';
-import type { ProfileData } from '@/app/(user)/profile/_types/ProfileData';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
-const baseProfile: ProfileData = {
-  personalInformation: { fullName: '', email: '' },
-  skills: [],
-};
-
 const defaultProps = {
-  tempProfile: baseProfile,
   setTempProfile: vi.fn(),
 };
 

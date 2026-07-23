@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getAdminList, AdminListItem, deleteAdmin } from "@/api/adminManagementApi";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
+import { extractApiError } from "@/app/admin/_utils/apiError";
 
 interface FilterState {
   search: string;
@@ -63,6 +64,7 @@ export const useAdminManagement = () => {
       setTotalAdmins(response.total);
     } catch (error: unknown) {
       logger.error("Error fetching admins:", error);
+      toast.error(extractApiError(error, 'Failed to load admins'));
     } finally {
       setLoading(false);
     }
@@ -133,7 +135,7 @@ export const useAdminManagement = () => {
       fetchAdmins();
     } catch (error) {
       logger.error('Delete error:', error);
-      toast.error('Failed to delete admin');
+      toast.error(extractApiError(error, 'Failed to delete admin'));
     } finally {
       setIsDeleting(false);
     }

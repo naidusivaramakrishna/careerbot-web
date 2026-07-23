@@ -169,13 +169,15 @@ const DashboardContent = () => {
     })) as Array<{ name: string; value: number; count?: number }>;
   }, [dashboardData?.subscription_breakdown]);
 
+  type ChartData = { [key: string]: string | number };
+
   const userGrowthData = useMemo(
-    () => dashboardData?.user_growth ?? [],
+    () => (dashboardData?.user_growth ?? []) as unknown as ChartData[],
     [dashboardData?.user_growth]
   );
 
   const revenueData = useMemo(
-    () => dashboardData?.revenue_subscriptions ?? [],
+    () => (dashboardData?.revenue_subscriptions ?? []) as unknown as ChartData[],
     [dashboardData?.revenue_subscriptions]
   );
 

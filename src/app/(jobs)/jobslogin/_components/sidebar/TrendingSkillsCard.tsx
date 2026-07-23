@@ -18,17 +18,17 @@ function SkeletonRow() {
 
 const BAR_COLOR = (pct: number) => {
   if (pct >= 40) return "from-[#4F46E5] to-[#4338CA]";
-  if (pct >= 25) return "from-indigo-400 to-indigo-500";
+  if (pct >= 25) return "from-[#0891b2] to-[#0e7490]";
   return "from-[#64748b] to-[#475569]";
 };
 
 const PCT_COLOR = (pct: number) => {
   if (pct >= 40) return "text-[#4F46E5]";
-  if (pct >= 25) return "text-indigo-500";
+  if (pct >= 25) return "text-cyan-600";
   return "text-gray-500";
 };
 
-function TrendingSkillsCard({ compact = false }: { compact?: boolean }) {
+function TrendingSkillsCard() {
   const [skills, setSkills]   = useState<TrendingSkillItem[]>([]);
   const [period, setPeriod]   = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -51,7 +51,6 @@ function TrendingSkillsCard({ compact = false }: { compact?: boolean }) {
   useEffect(() => { fetch(); }, []);
 
   const maxDemand = skills.length > 0 ? Math.max(...skills.map((s) => s.demand_pct)) : 100;
-  const visibleSkills = skills.slice(0, compact ? 5 : 7);
 
   return (
     <div>
@@ -87,7 +86,7 @@ function TrendingSkillsCard({ compact = false }: { compact?: boolean }) {
       <div className="px-4 py-3.5">
         {loading ? (
           <div className="space-y-3">
-            {Array.from({ length: compact ? 5 : 7 }).map((_, i) => <SkeletonRow key={i} />)}
+            {Array.from({ length: 7 }).map((_, i) => <SkeletonRow key={i} />)}
           </div>
         ) : error ? (
           <div className="text-center py-4">
@@ -102,7 +101,7 @@ function TrendingSkillsCard({ compact = false }: { compact?: boolean }) {
           </div>
         ) : (
           <div className="space-y-3.5">
-            {visibleSkills.map((item, idx) => {
+            {skills.map((item, idx) => {
               const barWidth = Math.max(6, Math.round((item.demand_pct / maxDemand) * 100));
               return (
                 <div key={item.skill} className="group flex items-center gap-3">
@@ -139,22 +138,9 @@ function TrendingSkillsCard({ compact = false }: { compact?: boolean }) {
         )}
 
         {!loading && !error && skills.length > 0 && (
-          <>
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2.5">
-              <span className="flex items-center gap-1 text-[9.5px] font-semibold text-slate-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#4F46E5]" /> 40%+
-              </span>
-              <span className="flex items-center gap-1 text-[9.5px] font-semibold text-slate-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> 25–39%
-              </span>
-              <span className="flex items-center gap-1 text-[9.5px] font-semibold text-slate-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-500" /> &lt;25%
-              </span>
-            </div>
-            <p className="mt-2 text-[10px] text-slate-400">
-              % of active listings requiring each skill
-            </p>
-          </>
+          <p className="mt-3 border-t border-slate-100 pt-2.5 text-[10px] text-slate-400">
+            % of active listings requiring each skill
+          </p>
         )}
       </div>
     </div>
