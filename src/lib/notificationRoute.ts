@@ -28,7 +28,7 @@ const VALID_EXACT_PATHS = new Set([
   '/scheduler',
   '/dashboard',
   '/profile',
-  '/alerts',
+  '/notifications',
   '/settings/subscription',
 ]);
 
@@ -36,6 +36,9 @@ const VALID_EXACT_PATHS = new Set([
 const TYPE_FALLBACK: Record<string, string | null> = {
   job:           '/jobs',
   jobmatch:      '/jobmatch',
+  profile:       '/profile',
+  user:          '/profile',
+  account:       '/profile',
   resume:        '/builder/start/list',
   parser:        '/parser',
   ats:           '/ats',

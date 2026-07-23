@@ -1,6 +1,7 @@
 ﻿import type { ReactElement } from "react";
 import {
   BadgeCheck,
+  BellRing,
   BriefcaseBusiness,
   ChevronRight,
   ClipboardCheck,
@@ -13,6 +14,7 @@ import {
   ReceiptText,
   Rocket,
   FileScan,
+  ShieldCheck,
   Sparkles,
   SquareChartGantt,
   UserRound,
@@ -64,6 +66,8 @@ export const EnterpriseBillingHistoryIcon = createEnterpriseNavIcon(ReceiptText)
 export const EnterpriseCoverLetterIcon = createEnterpriseNavIcon(FilePenLine);
 export const EnterprisePlanIcon = createEnterpriseNavIcon(Crown, 1.9);
 export const EnterpriseUpgradeIcon = createEnterpriseNavIcon(Rocket, 1.9);
+export const EnterpriseNotificationIcon = createEnterpriseNavIcon(BellRing, 1.9);
+export const EnterpriseSystemNotificationIcon = createEnterpriseNavIcon(ShieldCheck, 1.9);
 export const EnterpriseAiActionIcon = createEnterpriseNavIcon(Sparkles, 1.9);
 export const EnterpriseChevronRightIcon = createEnterpriseNavIcon(ChevronRight, 2.25);
 

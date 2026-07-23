@@ -1,10 +1,19 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  Bell, Settings, LogOut, Wand2, Briefcase,
-  User, AlertCircle, CheckCheck, X, ChevronRight, Crown,
+  Settings, LogOut, CheckCheck, X, ChevronRight, Crown,
+  ArrowUpRight,
 } from 'lucide-react';
+import {
+  EnterpriseInterviewPrepIcon as IcoInterview,
+  EnterpriseNotificationIcon as IcoNotification,
+  EnterpriseJobsIcon as IcoJobs,
+  EnterpriseProfileIcon as IcoProfile,
+  EnterpriseResumeIcon as IcoResume,
+  EnterpriseSubscriptionIcon as IcoCredits,
+  EnterpriseSystemNotificationIcon as IcoSystem,
+} from '@/components/icons/EnterpriseNavIcons';
 import { useCreditsBalance } from '@/hooks/useCreditsBalance';
 import { useNotificationStream } from '@/hooks/useNotificationStream';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
@@ -17,38 +26,131 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-/* ── Notification type mapping ───────────────────────── */
-const NOTIF_META: Record<string, { icon: React.ReactNode; grad: string; dot: string }> = {
-  job:       { icon: <Briefcase size={14} />,   grad: 'linear-gradient(135deg,#f59e0b,#ef4444)', dot: '#f59e0b' },
-  credit:    { icon: <AlertCircle size={14} />, grad: 'linear-gradient(135deg,#f97316,#ef4444)', dot: '#f97316' },
-  system:    { icon: <AlertCircle size={14} />, grad: 'linear-gradient(135deg,#94a3b8,#64748b)', dot: '#94a3b8' },
-  interview: { icon: <User size={14} />,        grad: 'linear-gradient(135deg,#8b5cf6,#6366f1)', dot: '#8b5cf6' },
-  resume:    { icon: <Wand2 size={14} />,       grad: 'linear-gradient(135deg,#6366f1,#8b5cf6)', dot: '#6366f1' },
+type NotificationMeta = {
+  icon: React.ReactNode;
+  label: string;
+  grad: string;
+  dot: string;
+  bg: string;
+  text: string;
+  border: string;
 };
 
-const getNotifMeta = (type: string) => {
-  return NOTIF_META[type] || {
-    icon: <AlertCircle size={14} />,
-    grad: 'linear-gradient(135deg,#5896d7,#2557a7)',
-    dot: '#5896d7',
-  };
+const NOTIF_META: Record<string, NotificationMeta> = {
+  job: {
+    icon: <IcoJobs size={14} sw={1.9} />,
+    label: 'Jobs',
+    grad: '#f8fafc',
+    dot: '#2557a7',
+    bg: '#f8fafc',
+    text: '#2557a7',
+    border: '#e5e7eb',
+  },
+  credit: {
+    icon: <IcoCredits size={14} sw={1.9} />,
+    label: 'Credits',
+    grad: '#f8fafc',
+    dot: '#2557a7',
+    bg: '#f8fafc',
+    text: '#111827',
+    border: '#e5e7eb',
+  },
+  system: {
+    icon: <IcoSystem size={14} sw={1.9} />,
+    label: 'System',
+    grad: '#f8fafc',
+    dot: '#2557a7',
+    bg: '#f8fafc',
+    text: '#111827',
+    border: '#e5e7eb',
+  },
+  interview: {
+    icon: <IcoInterview size={14} sw={1.9} />,
+    label: 'Interview',
+    grad: '#f8fafc',
+    dot: '#2557a7',
+    bg: '#f8fafc',
+    text: '#2557a7',
+    border: '#e5e7eb',
+  },
+  profile: {
+    icon: <IcoProfile size={14} sw={1.9} />,
+    label: 'Profile',
+    grad: '#f8fafc',
+    dot: '#2557a7',
+    bg: '#f8fafc',
+    text: '#111827',
+    border: '#e5e7eb',
+  },
+  resume: {
+    icon: <IcoResume size={14} sw={1.9} />,
+    label: 'Resume',
+    grad: '#f8fafc',
+    dot: '#2557a7',
+    bg: '#f8fafc',
+    text: '#2557a7',
+    border: '#e5e7eb',
+  },
 };
 
-const formatTimeAgo = (timestamp: string): string => {
-  const now = new Date();
-  const date = new Date(timestamp);
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-  if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const TYPE_TO_META: Record<string, keyof typeof NOTIF_META> = {
+  job: 'job',
+  jobmatch: 'job',
+  profile: 'profile',
+  user: 'profile',
+  account: 'profile',
+  onboarding: 'profile',
+  resume: 'resume',
+  parser: 'resume',
+  parse: 'resume',
+  enhance: 'resume',
+  enhancer: 'resume',
+  resume_parse: 'resume',
+  resume_enhance: 'resume',
+  resume_created: 'resume',
+  resume_updated: 'resume',
+  resume_builder: 'resume',
+  builder: 'resume',
+  credit: 'credit',
+  pricing: 'credit',
+  payment: 'credit',
+  interview: 'interview',
+  communication: 'interview',
+  'mock-test': 'interview',
+  prep: 'interview',
+  ats: 'system',
+  atslogin: 'system',
+  scheduler: 'system',
+  system: 'system',
 };
 
-/* ── Header ─────────────────────────────────────────── */
+const resolveMetaKey = (notification: Pick<Notification, 'type' | 'title' | 'body' | 'action_url'> | string): keyof typeof NOTIF_META => {
+  if (typeof notification === 'string') {
+    return TYPE_TO_META[notification.toLowerCase()] ?? 'system';
+  }
+
+  const text = [notification.type, notification.title, notification.body, notification.action_url]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  const hasAny = (keywords: string[]) => keywords.some((keyword) => text.includes(keyword));
+
+  if (hasAny(['credit', 'pricing', 'payment', 'subscription', 'plan', 'balance'])) return 'credit';
+  if (hasAny(['/profile', 'profile', 'user profile', 'complete your profile', 'completeness', 'personal detail', 'personal info', 'personal information', 'avatar'])) return 'profile';
+  if (hasAny(['resume', 'parser', 'parsed', 'parse', 'enhance', 'enhanced', 'builder', ' cv'])) return 'resume';
+  if (hasAny(['interview', 'communication', 'assessment', 'english', 'mock-test', 'mock test', 'prep', 'score'])) return 'interview';
+  if (hasAny(['job', 'jobmatch', 'match', 'application', 'tracker', 'apply'])) return 'job';
+  if (hasAny(['ats', 'scan', 'scheduler', 'system', 'security', 'verification', 'verified'])) return 'system';
+
+  return TYPE_TO_META[(notification.type ?? '').toLowerCase()] ?? 'system';
+};
+
+const getNotifMeta = (notification: Pick<Notification, 'type' | 'title' | 'body' | 'action_url'> | string) => {
+  return NOTIF_META[resolveMetaKey(notification)];
+};
+
+
+/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 export default function Header() {
   const router = useRouter();
   const { data: balance, loading } = useCreditsBalance();
@@ -67,6 +169,7 @@ export default function Header() {
 
   // Use API unread count as the source of truth, fall back to stream unread count
   const unreadCount = apiUnreadCount > 0 ? apiUnreadCount : streamUnreadCount;
+  const panelNotifications = notifications.slice(0, 4);
   const [userProfile,   setUserProfile]  = useState<UserProfile | null>(null);
   const [profilePicUrl, setProfilePicUrl]= useState<string | null>(null);
   const [showMenu,      setShowMenu]     = useState(false);
@@ -152,7 +255,7 @@ export default function Header() {
     <header className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 z-40">
       <div className="flex items-center justify-between h-full px-4 gap-3">
 
-        {/* Left: Logo + CareerBOT — clicks toggle sidebar */}
+        {/* Left: Logo + CareerBOT â€” clicks toggle sidebar */}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent("toggle-sidebar"))}
           className="flex items-center shrink-0 cursor-pointer hover:opacity-80 transition-opacity -ml-3"
@@ -177,7 +280,7 @@ export default function Header() {
           ) : (
             <Link
               href="/payments"
-              className="group flex h-11 w-44 items-center gap-2 rounded-xl border border-blue-100 bg-white px-2.5 pr-2.5 shadow-sm transition-all hover:-translate-y-px hover:border-blue-200 hover:shadow-md active:translate-y-0"
+              className="group flex h-11 w-44 items-center gap-2 rounded-xl border border-blue-100 bg-white px-2.5 pr-2.5 shadow-sm transition-all hover:-translate-y-px hover:border-[#2557a7]/30 hover:shadow-md active:translate-y-0"
               style={{ boxShadow: "0 5px 18px rgba(37,87,167,0.08)" }}
               aria-label={balance ? `Manage ${balance.plan_name} plan` : "Upgrade plan"}
             >
@@ -237,14 +340,14 @@ export default function Header() {
             </Link>
           )}
 
-          {/* ── Notification Bell ── */}
+          {/* â”€â”€ Notification Bell â”€â”€ */}
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => { setShowNotifs((v) => !v); setShowMenu(false); }}
               className="relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
               aria-label="Notifications"
             >
-              <Bell size={20} />
+              <IcoNotification size={20} sw={1.9} />
               {unreadCount > 0 && (
                 <span
                   className="absolute top-1 right-1 min-w-3.5 h-3.5 flex items-center justify-center rounded-full text-[8px] font-bold text-white px-0.5 leading-none"
@@ -258,50 +361,53 @@ export default function Header() {
             {/* Notification Panel */}
             {showNotifs && (
               <div
-                className="absolute right-0 top-11 w-[360px] bg-white border border-gray-200 rounded-2xl z-50 overflow-hidden"
-                style={{ boxShadow: "0 12px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)" }}
+                className="absolute right-0 top-11 z-50 w-[calc(100vw-24px)] overflow-hidden rounded-3xl border border-gray-200 bg-white sm:w-[372px]"
+                style={{ boxShadow: "0 24px 70px rgba(15,23,42,0.16), 0 4px 14px rgba(15,23,42,0.08)" }}
               >
-                {/* Panel header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-gray-900">Notifications</span>
+                <div className="relative overflow-hidden border-b border-gray-200 bg-white px-4 py-3">
+                  <div className="relative flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: "#2557a7" }}>
+                        <IcoNotification size={17} sw={1.9} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-gray-950">Notifications</span>
+                          {unreadCount > 0 && (
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-[#2557a7] ring-1 ring-gray-200">
+                              {unreadCount > 99 ? '99+' : unreadCount} new
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-px text-[11px] font-medium text-gray-500">Latest account and workflow updates</p>
+                      </div>
+                    </div>
+
                     {unreadCount > 0 && (
-                      <span
-                        className="text-[10px] font-black px-1.5 py-0.5 rounded-full text-white leading-none"
-                        style={{ background: "#2557a7" }}
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-xl bg-white px-2.5 text-[11px] font-bold text-[#2557a7] ring-1 ring-gray-200 transition hover:bg-[#2557a7]/5"
                       >
-                        {unreadCount} new
-                      </span>
+                        <CheckCheck size={13} />
+                        Read all
+                      </button>
                     )}
                   </div>
-                  {unreadCount > 0 && (
-                    <button
-                      onClick={handleMarkAllRead}
-                      className="flex items-center gap-1 text-[11px] font-semibold text-[#2557a7] hover:text-[#1f4e98] transition-colors"
-                    >
-                      <CheckCheck size={12} />
-                      Mark all read
-                    </button>
-                  )}
                 </div>
 
-                {/* List */}
-                <div className="max-h-[360px] overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-center px-6">
-                      <div
-                        className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
-                        style={{ background: "rgba(88,150,215,0.12)" }}
-                      >
-                        <Bell size={20} className="text-[#5896d7]" />
+                <div className="max-h-[390px] overflow-y-auto bg-gray-50 p-2">
+                  {panelNotifications.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center rounded-2xl bg-white px-6 py-12 text-center ring-1 ring-gray-100">
+                      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50 text-[#2557a7] ring-1 ring-gray-200">
+                        <IcoNotification size={22} sw={1.9} />
                       </div>
-                      <p className="text-sm font-semibold text-gray-700">All caught up!</p>
-                      <p className="text-[13px] text-gray-400 mt-0.5">No notifications right now</p>
+                      <p className="text-sm font-bold text-gray-800">All caught up</p>
+                      <p className="mt-1 text-xs leading-5 text-gray-400">No notifications require your attention right now.</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-gray-50">
-                      {notifications.map((n: Notification) => {
-                        const meta = getNotifMeta(n.type);
+                    <div className="space-y-1.5">
+                      {panelNotifications.map((n: Notification) => {
+                        const meta = getNotifMeta(n);
                         const route = resolveNotificationRoute(n);
                         const isClickable = route !== null;
                         const handleClick = () => {
@@ -317,58 +423,56 @@ export default function Header() {
                             role={isClickable ? 'button' : undefined}
                             tabIndex={isClickable ? 0 : undefined}
                             onKeyDown={isClickable ? (e) => e.key === 'Enter' && handleClick() : undefined}
-                            className={`relative flex items-start gap-3 px-4 py-3 transition-colors group ${
-                              isClickable
-                                ? `cursor-pointer ${n.read ? 'bg-white hover:bg-gray-50/80' : 'bg-blue-50/50 hover:bg-blue-50/80'}`
-                                : `cursor-default ${n.read ? 'bg-white' : 'bg-blue-50/50'}`
-                            }`}
+                            className={`group relative overflow-hidden rounded-2xl border bg-white px-3 py-2.5 transition ${
+                              isClickable ? 'cursor-pointer hover:-translate-y-px hover:border-[#2557a7]/30 hover:shadow-md' : 'cursor-default'
+                            } ${n.read ? 'border-gray-100' : 'border-gray-200 bg-[#2557a7]/5 shadow-sm'}`}
                           >
-                            {/* Unread dot */}
-                            {!n.read && (
-                              <span
-                                className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full shrink-0"
-                                style={{ background: meta.dot }}
-                              />
-                            )}
+                            {!n.read && <span className="absolute bottom-2.5 left-0 top-2.5 w-1 rounded-r-full" style={{ background: meta.dot }} />}
 
-                            {/* Icon */}
-                            <div
-                              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-white shadow-sm mt-0.5"
-                              style={{ background: meta.grad }}
-                            >
-                              {meta.icon}
-                            </div>
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-[13px] font-bold leading-snug ${n.read ? 'text-gray-600' : 'text-gray-900'}`}>
-                                {n.title}
-                              </p>
-                              <p className="text-[11px] text-gray-500 leading-relaxed mt-0.5 line-clamp-2">
-                                {n.body}
-                              </p>
-                              <p className="text-[10px] font-medium text-gray-400 mt-1">{formatTimeAgo(n.timestamp)}</p>
-                            </div>
-
-                            {/* Actions */}
-                            <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
-                              {!n.read && !isClickable && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
-                                  className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-blue-100 text-[#2557a7]"
-                                  aria-label="Mark as read"
-                                  title="Mark as read"
-                                >
-                                  <CheckCheck size={11} />
-                                </button>
-                              )}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDismiss(n.id); }}
-                                className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400"
-                                aria-label="Dismiss"
+                            <div className="flex items-start gap-3">
+                              <div
+                                className="mt-px flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm"
+                                style={{ background: meta.bg, color: meta.text, borderColor: meta.border }}
                               >
-                                <X size={11} />
-                              </button>
+                                {meta.icon}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start gap-2">
+                                  <p className={`line-clamp-1 text-sm leading-5 ${n.read ? 'font-semibold text-gray-600' : 'font-black text-gray-950'}`}>
+                                    {n.title}
+                                  </p>
+                                  {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: meta.dot }} />}
+                                </div>
+
+                                <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-gray-500">{n.body}</p>
+                              </div>
+
+                              <div className="flex w-[76px] shrink-0 items-center justify-end gap-1 self-center">
+                                {!n.read && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-50 text-[#2557a7] transition hover:bg-[#2557a7]/5"
+                                    aria-label="Mark as read"
+                                    title="Mark as read"
+                                  >
+                                    <CheckCheck size={13} />
+                                  </button>
+                                )}
+                                {isClickable && (
+                                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-50 text-gray-400 transition group-hover:text-[#2557a7]">
+                                    <ArrowUpRight size={13} />
+                                  </span>
+                                )}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDismiss(n.id); }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-50 text-gray-400 transition hover:bg-[#2557a7]/5 hover:text-[#2557a7]"
+                                  aria-label="Dismiss"
+                                  title="Dismiss"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -377,23 +481,21 @@ export default function Header() {
                   )}
                 </div>
 
-                {/* Footer CTA */}
-                <div className="border-t border-gray-100 px-4 py-2.5">
+                <div className="border-t border-gray-100 bg-white p-2">
                   <Link
-                    href="/alerts"
+                    href="/notifications"
                     onClick={() => setShowNotifs(false)}
-                    className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
-                    style={{ background: "#2557a7" }}
+                    className="flex h-9 w-full items-center justify-center gap-2 rounded-xl bg-[#2557a7] text-[13px] font-bold text-white transition hover:opacity-90 active:scale-[0.98]"
                   >
-                    View All Notifications
-                    <ChevronRight size={13} />
+                    View notification center
+                    <ChevronRight size={15} />
                   </Link>
                 </div>
               </div>
             )}
           </div>
 
-          {/* ── User Avatar + Dropdown ── */}
+          {/* User Avatar + Dropdown */}
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => { setShowMenu((v) => !v); setShowNotifs(false); }}
@@ -431,7 +533,7 @@ export default function Header() {
                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                 >
                   <LogOut size={15} className="shrink-0" />
-                  {isLoggingOut ? 'Logging out…' : 'Logout'}
+                  {isLoggingOut ? 'Logging outâ€¦' : 'Logout'}
                 </button>
               </div>
             )}

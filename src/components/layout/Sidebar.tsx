@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { getAllResumesUnified, getAllResumes } from "@/api/resumeApi";
 import { getEnhancementHistory } from "@/api/enhancerApi";
@@ -76,7 +76,7 @@ const NAV_GROUPS: {
     label: "PREPARE",
     items: [
       {
-        id: "communication", label: "Interview Prep", icon: IcoInterview, path: "",
+        id: "interview_prep", label: "Interview Prep", icon: IcoInterview, path: "",
         subItems: [
           { id: "comm_assess",    label: "Communication Assessment", path: "/communication/start" },
           { id: "mock_test",      label: "Mock Test",                path: "/mock-test" },
@@ -132,6 +132,88 @@ const VISIBLE_NAV_GROUPS = NAV_GROUPS
   .filter((group) => group.items.length > 0);
 
 const EXPANDED_PATHS = ["/dashboard", "/profile"];
+
+/* Collapsed sidebar sub-item flyout — uses JS hover + close delay so the
+   cursor can cross the gap between icon and panel without it disappearing. */
+function CollapsedSubItem({
+  item,
+  isActive,
+  pathname,
+  onNavigate,
+}: {
+  item: { id: string; label: string; icon: React.ElementType; subItems?: { id: string; label: string; path: string }[] };
+  isActive: boolean;
+  pathname: string;
+  onNavigate: (path: string) => void;
+}) {
+  const Icon = item.icon as React.ElementType<{ size?: number; sw?: number; className?: string }>;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null);
+
+  const open = useCallback(() => {
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+    if (!wrapRef.current) return;
+    const r = wrapRef.current.getBoundingClientRect();
+    setPopPos({ top: r.top, left: r.right + 4 });
+  }, []);
+
+  const close = useCallback(() => {
+    closeTimer.current = setTimeout(() => setPopPos(null), 150);
+  }, []);
+
+  return (
+    <div
+      ref={wrapRef}
+      className="w-full flex items-center justify-center py-px"
+      onMouseEnter={open}
+      onMouseLeave={close}
+    >
+      <button
+        aria-label={item.label}
+        className="group/icon"
+      >
+        <div
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+            isActive ? "" : "group-hover/icon:bg-gray-100"
+          }`}
+          style={isActive ? { background: "#2557a7", boxShadow: "0 4px 14px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" } : {}}
+        >
+          <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover/icon:text-[#2557a7]"}`} />
+        </div>
+      </button>
+
+      {popPos && (
+        <div
+          style={{ position: "fixed", top: popPos.top, left: popPos.left, zIndex: 9999 }}
+          onMouseEnter={open}
+          onMouseLeave={close}
+        >
+          <div className="bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden py-1.5 min-w-[180px]">
+            <p className="px-3 pt-0.5 pb-1.5 text-[9px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-50">
+              {item.label}
+            </p>
+            {item.subItems!.map((sub) => {
+              const subActive = pathname === sub.path || pathname.startsWith(sub.path + "/");
+              return (
+                <button
+                  key={sub.id}
+                  onClick={() => { setPopPos(null); onNavigate(sub.path); }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium transition-colors ${
+                    subActive ? "text-[#2557a7] bg-[#2557a7]/5" : "text-gray-600 hover:bg-gray-50 hover:text-[#2557a7]"
+                  }`}
+                >
+                  <span className="w-1 h-1 rounded-full shrink-0" style={{ background: subActive ? "#2557a7" : "#d1d5db" }} />
+                  {sub.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* SIDEBAR COMPONENT */
 export default function Sidebar() {
@@ -236,7 +318,7 @@ export default function Sidebar() {
         <nav className="flex-1 min-h-0 overflow-visible py-1 px-2">
           {VISIBLE_NAV_GROUPS.map((group, gi) => (
             <div key={group.label}>
-              {gi > 0 && <div className="mx-1 my-0.5 border-t border-gray-100" />}
+              {gi > 0 && <div className="mx-1 my-1.5 border-t border-gray-300" />}
               <div className="space-y-px">
                 {group.items.map((item) => {
                   const isActive = activeId === item.id;
@@ -245,46 +327,13 @@ export default function Sidebar() {
 
                   if (hasSub) {
                     return (
-                      <div key={item.id} className="relative group/collapsed w-full flex items-center justify-center py-px">
-                        <button
-                          onClick={() => handleNavigation(item)}
-                          aria-label={item.label}
-                          className="group/icon"
-                        >
-                          <div
-                            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                              isActive ? "" : "group-hover/icon:bg-gray-100"
-                            }`}
-                            style={isActive ? { background: "linear-gradient(145deg, #3063cc, #2557a7)", boxShadow: "0 4px 14px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" } : {}}
-                          >
-                            <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover/icon:text-[#2557a7]"}`} />
-                          </div>
-                        </button>
-
-                        {/* Hover popup to the right */}
-                        <div className="pointer-events-none group-hover/collapsed:pointer-events-auto opacity-0 group-hover/collapsed:opacity-100 transition-opacity duration-150 absolute left-full top-0 z-50 ml-2">
-                          <div className="bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden py-1.5 min-w-[180px]">
-                            <p className="px-3 pt-0.5 pb-1.5 text-[9px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-50">
-                              {item.label}
-                            </p>
-                            {item.subItems!.map((sub) => {
-                              const subActive = pathname === sub.path || pathname.startsWith(sub.path + "/");
-                              return (
-                                <button
-                                  key={sub.id}
-                                  onClick={() => router.push(sub.path)}
-                                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] font-medium transition-colors ${
-                                    subActive ? "text-[#2557a7] bg-[#2557a7]/5" : "text-gray-600 hover:bg-gray-50 hover:text-[#2557a7]"
-                                  }`}
-                                >
-                                  <span className="w-1 h-1 rounded-full shrink-0" style={{ background: subActive ? "#2557a7" : "#d1d5db" }} />
-                                  {sub.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
+                      <CollapsedSubItem
+                        key={item.id}
+                        item={item}
+                        isActive={isActive}
+                        pathname={pathname}
+                        onNavigate={(path) => router.push(path)}
+                      />
                     );
                   }
 
@@ -300,7 +349,7 @@ export default function Sidebar() {
                         className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
                           isActive ? "" : "group-hover:bg-gray-100"
                         }`}
-                        style={isActive ? { background: "linear-gradient(145deg, #3063cc, #2557a7)", boxShadow: "0 4px 14px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" } : {}}
+                        style={isActive ? { background: "#2557a7", boxShadow: "0 4px 14px rgba(37,87,167,0.35), inset 0 1px 0 rgba(255,255,255,0.15)" } : {}}
                       >
                         <Icon size={18} sw={isActive ? 1.75 : 1.6} className={`transition-colors ${isActive ? "text-white" : "text-gray-600 group-hover:text-[#2557a7]"}`} />
                       </div>
@@ -349,7 +398,7 @@ export default function Sidebar() {
         }`}
         style={
           isActive
-            ? { background: "linear-gradient(145deg, #3063cc, #2557a7)", boxShadow: "0 4px 16px rgba(37,87,167,0.28), inset 0 1px 0 rgba(255,255,255,0.12)" }
+            ? { background: "#2557a7", boxShadow: "0 4px 16px rgba(37,87,167,0.28), inset 0 1px 0 rgba(255,255,255,0.12)" }
             : {}
         }
       >
