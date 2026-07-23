@@ -80,6 +80,8 @@ function CategoryGroup({
     }
   };
 
+
+
   const handleBulkAdd = async () => {
     if (!isSkillActionable || bulkLoading || allAdded) return;
     setBulkLoading(true);

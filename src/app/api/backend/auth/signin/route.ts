@@ -24,7 +24,6 @@ function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
   if (parts.length === 0) return cookie;
 
   const [pair, ...attrs] = parts;
-  let hasPath = false;
   let hasSameSite = false;
   const kept: string[] = [];
 
@@ -35,12 +34,16 @@ function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
     // proxy didn't advertise https — a downgraded auth cookie is worse than a
     // dropped one.
     if (name === 'secure' && !isSecureRequest && process.env.NODE_ENV !== 'production') continue;
-    if (name === 'path') hasPath = true;
+    // Discard whatever path the backend set (e.g. /api/v1/auth/refresh).
+    // The browser would honour that restriction and not send the cookie to
+    // /dashboard, making the middleware unable to detect a valid session.
+    // Since all cookies are httpOnly, forcing Path=/ is safe.
+    if (name === 'path') { continue; }
     if (name === 'samesite') hasSameSite = true;
     kept.push(attr);
   }
 
-  if (!hasPath) kept.push('Path=/');
+  kept.push('Path=/');
   if (!hasSameSite) kept.push('SameSite=Lax');
 
   return [pair, ...kept].join('; ');

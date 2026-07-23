@@ -9,6 +9,9 @@ import {
   WsClientMessage,
   LiveCreateResponse,
 } from "@/api/mockInterviewApi";
+import { CodingTransition } from "@/components/interview/CodingTransition";
+import { CodingStep } from "@/components/interview/CodingStep";
+import type { SubmitSolutionResponse } from "@/app/coding-test/_lib/types";
 import {
   Mic,
   MicOff,
@@ -39,7 +42,14 @@ type InterviewPhase =
   | "follow-up"     // AI is asking a follow-up
   | "listening"     // Microphone recording
   | "processing"    // AI processing answer
+  | "coding"        // Live coding round active
   | "completed";    // All questions done
+
+interface CodingRoundState {
+  problemSlug: string;
+  problemTitle: string;
+  timeLimitS: number;
+}
 
 interface Question {
   number: number;
@@ -421,6 +431,10 @@ export default function LiveInterviewSessionPage() {
     };
   }, []);
 
+  // ─── Coding round state ────────────────────────────────────────────────────
+  const [codingRound, setCodingRound] = useState<CodingRoundState | null>(null);
+  const [showCodingTransition, setShowCodingTransition] = useState(false);
+
   const [showEndModal, setShowEndModal] = useState(false);
   const [showReconnectModal, setShowReconnectModal] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -492,6 +506,15 @@ export default function LiveInterviewSessionPage() {
 
   const handleWsMessage = useCallback((msg: WsServerMessage) => {
     switch (msg.type) {
+      case "coding_round_start":
+        stopTimer();
+        setCodingRound({
+          problemSlug: msg.problem_slug,
+          problemTitle: msg.problem_title,
+          timeLimitS: msg.time_limit_s,
+        });
+        setShowCodingTransition(true);
+        return;
       case "session_ready":
         setTotalQuestions(msg.total_questions);
         setWsConnected(true);
@@ -645,6 +668,28 @@ export default function LiveInterviewSessionPage() {
     } catch { /* leave modal open */ }
   }, [reconnectAttempt, sessionId, openWebSocket]);
 
+  const handleCodingSubmitted = useCallback((result: SubmitSolutionResponse) => {
+    wsSend({
+      type: "coding_answer",
+      submission_id: result.submission_id,
+      score: result.score,
+      problem_slug: result.problem_slug,
+    });
+    setPhase("processing");
+    setCodingRound(null);
+  }, [wsSend]);
+
+  const handleCodingTimeExpired = useCallback(() => {
+    wsSend({
+      type: "coding_answer",
+      submission_id: null,
+      score: null,
+      problem_slug: codingRound?.problemSlug ?? "",
+    });
+    setPhase("processing");
+    setCodingRound(null);
+  }, [wsSend, codingRound]);
+
   if (phase === "completed") {
     return <CompletedScreen sessionId={sessionId} />;
   }
@@ -666,6 +711,17 @@ export default function LiveInterviewSessionPage() {
           maxAttempts={MAX_RECONNECT}
           onRetry={handleReconnect}
           onAbandon={() => router.push(`/mock-interview/report/${sessionId}`)}
+        />
+      )}
+
+      {showCodingTransition && codingRound && (
+        <CodingTransition
+          problemTitle={codingRound.problemTitle}
+          timeLimitMin={Math.ceil(codingRound.timeLimitS / 60)}
+          onDone={() => {
+            setShowCodingTransition(false);
+            setPhase("coding");
+          }}
         />
       )}
 
@@ -758,8 +814,20 @@ export default function LiveInterviewSessionPage() {
           </div>
         )}
 
-        {/* Main content */}
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        {/* Coding phase — full-height editor */}
+        {phase === "coding" && codingRound && (
+          <div className="flex-1 overflow-hidden">
+            <CodingStep
+              problemSlug={codingRound.problemSlug}
+              timeLimitS={codingRound.timeLimitS}
+              onSubmitted={handleCodingSubmitted}
+              onTimeExpired={handleCodingTimeExpired}
+            />
+          </div>
+        )}
+
+        {/* Main content — verbal interview phases */}
+        {phase !== "coding" && <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
           <div className="w-full max-w-2xl space-y-5">
             {/* Question progress */}
             <div className="flex items-center gap-3">
@@ -932,7 +1000,7 @@ export default function LiveInterviewSessionPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
     </>
   );

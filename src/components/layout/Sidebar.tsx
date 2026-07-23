@@ -293,6 +293,26 @@ const IcoTracker = ({ size = 18, className = "", sw = 1.6 }: IP) => (
   </svg>
 );
 
+/** Coding Practice — terminal bracket + prompt cursor */
+const IcoCodingTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Screen body */}
+    <rect x="1.5" y="3" width="17" height="12.5" rx="1.5"
+      stroke="currentColor" strokeWidth={sw} />
+    {/* Chevron left — </ bracket */}
+    <path d="M6 8.5L4 10L6 11.5" stroke="currentColor" strokeWidth={sw * 0.9} />
+    {/* Chevron right — /> bracket */}
+    <path d="M9 8.5L11 10L9 11.5" stroke="currentColor" strokeWidth={sw * 0.9} />
+    {/* Cursor blink underscore */}
+    <path d="M12.5 11.5H14.5" stroke="currentColor" strokeWidth={sw * 0.9} />
+    {/* Stand stem */}
+    <path d="M10 15.5V17.5" stroke="currentColor" strokeWidth={sw} />
+    {/* Base */}
+    <path d="M7 17.5H13" stroke="currentColor" strokeWidth={sw} />
+  </svg>
+);
+
 /** Interview Prep — microphone with stand arc + base */
 const IcoInterview = ({ size = 18, className = "", sw = 1.6 }: IP) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
@@ -474,6 +494,7 @@ const NAV_GROUPS: {
     label: "PREPARE",
     items: [
       { id: "communication", label: "Interview Prep", icon: IcoInterview, path: "/prep" },
+      { id: "coding_test",   label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
     ],
   },
   {
@@ -502,6 +523,8 @@ const NAV_GROUPS: {
 const STATIC_FLAGS: Record<string, boolean> = {
   NEXT_PUBLIC_COVER_LETTER_ENABLED:
     process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED === "true",
+  NEXT_PUBLIC_CODING_TEST_ENABLED:
+    process.env.NEXT_PUBLIC_CODING_TEST_ENABLED !== "false",
 };
 
 type NavItem = {
