@@ -1,10 +1,5 @@
-import { Suspense } from "react";
-import JobsContents from "./_components/JobsContents";
+import JobsHomePage from "./_components/JobsHomePage";
 
 export default function JobsPage() {
-  return (
-    <Suspense>
-      <JobsContents />
-    </Suspense>
-  );
+  return <JobsHomePage />;
 }
