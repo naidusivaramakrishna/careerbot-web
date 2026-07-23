@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -456,9 +457,9 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                   )}
 
                   {internship.description && (
-                    <div
+                    <SafeHTML
+                      content={internship.description}
                       className="text-sm text-[#404040] mt-1 line-clamp-2"
-                      dangerouslySetInnerHTML={{ __html: internship.description }}
                     />
                   )}
                 </div>

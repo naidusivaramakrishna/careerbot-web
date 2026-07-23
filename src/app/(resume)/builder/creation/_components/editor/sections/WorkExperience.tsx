@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -470,9 +471,9 @@ Spearheaded migration of legacy monolithic application to microservices architec
                   )}
 
                   {work.description && (
-                    <div
+                    <SafeHTML
+                      content={work.description}
                       className="text-sm text-[#404040] mt-1 line-clamp-2"
-                      dangerouslySetInnerHTML={{ __html: work.description }}
                     />
                   )}
                 </div>
