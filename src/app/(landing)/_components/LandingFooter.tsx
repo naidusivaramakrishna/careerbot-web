@@ -63,7 +63,7 @@ const proofItems: { icon: LucideIcon; label: string }[] = [
 export default function LandingFooter({ cta = defaultCta }: { cta?: FooterCta }) {
   return (
     <footer className="relative overflow-hidden bg-[linear-gradient(120deg,#082d66_0%,#063b77_58%,#087b79_100%)] text-blue-100">
-      <div className="mx-auto max-w-[1240px] px-4 pb-8 pt-10 lg:px-8">
+      <div className="mx-auto max-w-[1728px] px-5 pb-8 pt-10 lg:px-[60px]">
         <div className="grid gap-7 lg:grid-cols-[360px_1fr] lg:items-start">
           <div className="rounded-lg bg-[#143e7c] px-7 py-7 text-white shadow-[0_18px_48px_rgba(0,0,0,0.18)] ring-1 ring-white/15">
             <h2 className="text-xl font-black leading-tight">{cta.title}</h2>

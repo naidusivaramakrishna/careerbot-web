@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { SidebarOpen } from "lucide-react";
 import { DropResult } from "@hello-pangea/dnd";
 import { useResume } from "../../_context/ResumeContext";
@@ -26,6 +26,7 @@ import Publications from "../editor/sections/Publications";
 import Interests from "../editor/sections/Interests";
 import Hobbies from "../editor/sections/Hobbies";
 import Languages from "../editor/sections/Languages";
+import { buildAtsSectionIssues, type AtsSectionIssue } from "../../_utils/atsMissing";
 
 interface SectionProps {
   formData: Record<string, string>;
@@ -59,6 +60,9 @@ interface ResumeSideProps {
   resumeId?: string;
   initialTab?: string;
   defaultOpen?: boolean;
+  highlightAtsMissing?: boolean;
+  requestedSection?: string | null;
+  onRequestedSectionHandled?: () => void;
 }
 
 // All standard (non-custom) section names — used to avoid re-adding custom sections to extraSections on delete
@@ -74,6 +78,9 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   onToggleTemplateSidebar,
   initialTab,
   defaultOpen = true,
+  highlightAtsMissing = false,
+  requestedSection = null,
+  onRequestedSectionHandled,
 }) => {
   // ✅ Get context first
   const {
@@ -84,7 +91,25 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     setCompletionStatus,
     sectionOrder,
     setSectionOrder,
+    enhancedAtsScore,
+    enhancedSuggestions,
   } = useResume();
+
+  const atsIssuesBySection = useMemo(() => {
+    if (!highlightAtsMissing) return {};
+
+    return buildAtsSectionIssues(enhancedAtsScore, enhancedSuggestions, resumeData).reduce<Record<string, AtsSectionIssue>>(
+      (acc, issue) => {
+        const sectionName = issue.label === "Contact Information" ? "Personal Info" : issue.label;
+        const existing = acc[sectionName];
+        if (!existing || issue.impact > existing.impact) {
+          acc[sectionName] = issue;
+        }
+        return acc;
+      },
+      {}
+    );
+  }, [enhancedAtsScore, enhancedSuggestions, highlightAtsMissing, resumeData]);
 
   // Defined before sections useState so both initializers can reference it
   const defaultExtraSections: { name: string; ai: boolean }[] = [
@@ -159,6 +184,16 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const [activeSection, setActiveSection] = useState<number | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [activeTab, setActiveTab] = useState(initialTab ?? "Editor");
+
+  useEffect(() => {
+    if (!requestedSection) return;
+    setActiveTab("Editor");
+    setIsOpen(true);
+  }, [requestedSection]);
+
+  const setEditorSidebarOpen = (nextOpen: boolean) => {
+    setIsOpen(nextOpen);
+  };
   
   const clearErrors = (fields?: string[]) => {
   if (!fields || fields.length === 0) {
@@ -580,7 +615,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 
   return (
     <div
-      className={`relative bg-gradient-to-br from-gray-50 to-white h-screen shadow-sm transition-all duration-300 flex flex-col
+      className={`relative flex min-h-[calc(100vh-3.5rem)] flex-col bg-gradient-to-br from-gray-50 to-white shadow-sm transition-all duration-300
         ${isOpen ? `${dynamicWidth}` : "w-12 p-0"}
       `}
     >
@@ -588,7 +623,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       {isOpen && (
         <Tabs
           isOpen={isOpen}
-          onToggle={() => setIsOpen(!isOpen)}
+          onToggle={() => setEditorSidebarOpen(!isOpen)}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           isTemplateSidebarOpen={isTemplateSidebarOpen}
@@ -596,7 +631,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       )}
 
       {isOpen && (
-        <div className="flex flex-col flex-1 px-1 py-4 overflow-y-scroll scrollbar-hide bg-white">
+        <div className="flex flex-col flex-1 bg-white px-3 py-4">
           {activeTab === "Editor" && (
             <EditorTab
               sections={sections}
@@ -614,6 +649,9 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
               completionStatus={completionStatus}
               onSidebarToggle={handleSidebarToggle}
               clearErrors={clearErrors}
+              atsIssuesBySection={atsIssuesBySection}
+              requestedSection={requestedSection}
+              onRequestedSectionHandled={onRequestedSectionHandled}
             />
           )}
           {activeTab === "ResumeGPT" && <ResumeGPTTab />}
@@ -623,7 +661,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 
       {!isOpen && (
         <button
-          onClick={() => setIsOpen(true)}
+          onClick={() => setEditorSidebarOpen(true)}
           className="absolute top-4 left-2 p-1.5 bg-white border  border-white rounded shadow hover:shadow-md hover:border-blue-400 transition"
         >
           <SidebarOpen className="text-blue-500" size={20} />

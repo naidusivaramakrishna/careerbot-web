@@ -10,7 +10,7 @@ const highlights = ['Free plan available', 'Review plan details before checkout'
 export default function PricingTeaser() {
   return (
     <section id="pricing" className="bg-white py-8">
-      <div className="mx-auto max-w-[1080px] px-4">
+      <div className="mx-auto max-w-[1728px] px-5 lg:px-[60px]">
         <motion.div
           className="grid items-center gap-8 rounded-lg bg-[#f7fbff] px-7 py-8 md:grid-cols-[190px_1fr_280px]"
           initial={false}

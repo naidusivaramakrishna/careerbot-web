@@ -157,6 +157,32 @@ export interface ResumeData {
   resume_id?: string;
   _id?: string;
   id?: string;
+  parser_schema_version?: "2.0" | "2.5" | string;
+  parser_mode?: string;
+  metadata?: {
+    parser_version?: string;
+    parser_schema_version?: string;
+    prompt_fingerprint?: string;
+    parse_time_ms?: number;
+    parsed_at?: string;
+    [key: string]: unknown;
+  };
+  quality?: {
+    overall_quality_score?: number;
+    status?: "high" | "medium" | "low_confidence" | string;
+    components?: Record<string, unknown>;
+    trigger_reasons?: string[];
+    version?: string;
+    [key: string]: unknown;
+  };
+  field_sources?: Record<string, unknown>;
+  section_metadata?: unknown[];
+  additional_sections?: Record<string, unknown>[] | Record<string, unknown>;
+  parsing_summary?: Record<string, unknown>;
+  parser_diagnostics_summary?: Record<string, unknown>;
+  developer_diagnostics?: Record<string, unknown>;
+  error?: unknown;
+  ocr_needed?: boolean;
   contact?: ResumeContact;
   personal_info?: ResumeContact;
   personalInfo?: ResumeContact;
@@ -273,6 +299,15 @@ export interface ATSIntelligencePenalty {
 
 export interface ATSScore {
   // Actual response fields:
+  FinalScore?: number;
+  MaxScore?: number;
+  SectionBreakdown?: Record<string, ATSSectionScore>;
+  WeightageSummary?: Record<string, unknown>;
+  Suggestions?: EnhancedSuggestion[];
+  Domain?: string;
+  Profile?: string;
+  YearsOfExperience?: number;
+  IntelligencePenalties?: ATSIntelligencePenalty[];
   final_score?: number;
   max_score?: number;
   Percentage?: number;
@@ -287,6 +322,16 @@ export interface ATSScore {
   role_focus?: string | null;
   strategy_used?: string;
   domain?: string;
+  ats_display?: AtsDisplay;
+  ats_breakdown?: Record<string, unknown>;
+  estimated_score_after_fixes?: number;
+  estimated_after_fixes?: number;
+  projected_score?: number;
+  potential_score?: number;
+  parse_confidence_warning?: string | null;
+  cost_ceiling_exceeded?: boolean;
+  cost_breakdown?: Record<string, unknown>;
+  llm_calls?: unknown[];
   // Legacy fields (kept for backward compatibility):
   total_score?: number;
   keyword_score?: number;
@@ -374,6 +419,9 @@ export interface ParseResumeRoutingFlags {
   verify_required?: boolean;
   verify_recommended?: boolean;
   verify_reason?: string;
+  quality_status?: string;
+  quality_score?: number;
+  score_anyway?: boolean;
   [key: string]: unknown;
 }
 
@@ -386,6 +434,7 @@ export interface ParseResumeResponse {
   parsing_method?: string;
   cache_hit?: boolean;
   ats_score?: ATSScore | null;
+  user_id?: string | null;
   correlation_id?: string;
   trace_id?: string;
   timestamp?: string;
@@ -425,6 +474,13 @@ export interface EnhanceResumeResponse {
   enhanced_resume?: ResumeData;
   enhancement_report?: EnhancementReport;
   Tokens_Used?: unknown;
+  current_score?: number | null;
+  estimated_score_after_fixes?: number | null;
+  points_possible?: number | null;
+  issues_count?: number | null;
+  sections_with_issues?: number | null;
+  score_status?: "complete" | "unavailable" | string | null;
+  score_source?: string | null;
 }
 
 // New-format ATS display block returned alongside the enhance result.

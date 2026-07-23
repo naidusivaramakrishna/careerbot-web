@@ -73,9 +73,14 @@ export interface ApplicationContext {
 
 export interface GenerateOptions {
   tone?: CoverLetterTone;
-  /** 200..500; default 250 */
+  /**
+   * 200..500. Omit (along with max_words) to let the AI derive a
+   * candidate-level-aware default range from the resume (e.g. ~220-320
+   * for a fresher vs ~400-650 for a leadership-level candidate) instead
+   * of forcing the flat 250 default.
+   */
   min_words?: number;
-  /** 200..500; default 400 */
+  /** 200..500. See min_words — omit both to use the AI's level-aware default. */
   max_words?: number;
   /** max 300 chars */
   candidate_note?: string | null;
