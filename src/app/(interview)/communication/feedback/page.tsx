@@ -8,6 +8,9 @@ import { getProfile } from '@/api/userApi';
 // import Header from '@/components/layout/Header';
 import logger from '@/lib/logger';
 
+// Reads useSearchParams/localStorage at runtime — opt out of static prerender
+export const dynamic = "force-dynamic";
+
 export default function FeedbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
