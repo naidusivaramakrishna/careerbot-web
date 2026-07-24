@@ -3,7 +3,7 @@ import { afterEach, beforeAll, afterAll, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 // ==================== MSW Integration Testing Setup ====================
-let server: any = null;
+let server: ReturnType<typeof import('msw/node').setupServer> | undefined;
 
 try {
   // Only load MSW if integration tests are running
@@ -13,20 +13,18 @@ try {
 
   server = setupServer(...handlers);
 
-  if (server) {
-    beforeAll(() => {
-      server.listen({ onUnhandledRequest: 'error' });
-    });
+  beforeAll(() => {
+    server!.listen({ onUnhandledRequest: 'error' });
+  });
 
     afterEach(() => {
-      server.resetHandlers();
-    });
+    server!.resetHandlers();
+  });
 
     afterAll(() => {
-      server.close();
-    });
-  }
-} catch (e) {
+    server!.close();
+  });
+} catch {
   // MSW not available - this is OK for unit tests only
   server = null;
 }
