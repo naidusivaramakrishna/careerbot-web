@@ -4,9 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Code2, ChevronRight, Loader2, Sparkles, Clock, AlertCircle, BookOpen, Server, Database, Layers } from "lucide-react";
 import { getUserProgress } from "@/api/mockInterviewApi";
-import { useMockInterview } from "../_context/MockInterviewContext";
-
-// ─── Skill categories ─────────────────────────────────────────────────────────
+import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
 
 const SKILL_CATEGORIES = [
   {
@@ -51,8 +49,6 @@ const SKILL_CATEGORIES = [
   },
 ];
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 export default function TechnicalPage() {
   const router = useRouter();
   const { userProgress } = useMockInterview();
@@ -63,21 +59,19 @@ export default function TechnicalPage() {
   useEffect(() => {
     getUserProgress()
       .then((p) => {
-        // Use live_sessions as a proxy for tech rounds until dedicated field exists
         setTechRoundsCompleted(p.live_sessions ?? 0);
       })
-      .catch(() => {/* use default 0 */})
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const handleStart = () => {
     if (!selected) return;
-    router.push(`/mock-interview/technical/practice?category=${selected}`);
+    router.push(`/notes/technical/practice?category=${selected}`);
   };
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      {/* Header */}
       <div className="mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#2557a7]/10 text-[#2557a7] rounded-full text-xs font-semibold mb-4">
           <Sparkles size={12} />
@@ -89,7 +83,6 @@ export default function TechnicalPage() {
         </p>
       </div>
 
-      {/* Stats */}
       {!loading && (userProgress?.practice_rounds ?? 0) > 0 && (
         <div className="flex items-center gap-4 mb-6 p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
           <div className="text-center">
@@ -109,7 +102,6 @@ export default function TechnicalPage() {
         </div>
       )}
 
-      {/* Category selection */}
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Select a Topic</p>
       <div className="space-y-2.5 mb-6">
         {SKILL_CATEGORIES.map((cat) => {
@@ -155,7 +147,6 @@ export default function TechnicalPage() {
         })}
       </div>
 
-      {/* Tip */}
       <div className="flex items-start gap-2 bg-[#2557a7]/5 border border-[#2557a7]/15 rounded-xl px-4 py-3 mb-6">
         <AlertCircle size={13} className="text-[#2557a7] mt-0.5 shrink-0" />
         <p className="text-xs text-gray-600">

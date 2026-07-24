@@ -197,17 +197,17 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   );
 
   const renderPhoneField = () => (
-    <div className="flex flex-col gap-1 w-full">
+    <div className="flex flex-col gap-1 w-full min-w-0">
       <label className="text-sm font-semibold text-[#3b3b3b]">
         Phone Number <span className="text-red-500">*</span>
       </label>
-      <div className="flex items-center rounded-md bg-[#faf9f8] border-b-2 border-transparent focus-within:border-[#5896d7] hover:bg-[#f3f2f1] transition-all duration-200">
+      <div className={`flex items-stretch rounded-md bg-[#faf9f8] border-2 hover:bg-[#f3f2f1] transition-all duration-200 w-full min-w-0 ${errors["phone"] || errors["countryCode"] ? "border-red-500" : "border-transparent focus-within:border-[#5896d7]"}`}>
         {/* Country Code Dropdown */}
-        <div ref={dropdownRef} className="relative">
+        <div ref={dropdownRef} className="relative flex items-stretch">
           <button
             type="button"
             onClick={() => setCodeDropdownOpen((prev) => !prev)}
-            className="flex items-center gap-1 px-2 py-3.5 text-xs bg-transparent text-black outline-none cursor-pointer font-medium whitespace-nowrap"
+            className="flex items-center gap-1 px-2 text-sm bg-transparent text-[#7b7b7a] outline-none cursor-pointer font-medium whitespace-nowrap"
           >
             {formData["countryCode"] || "+91"}
             <ChevronDown className="w-3 h-3" />
@@ -235,7 +235,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         </div>
 
         {/* Vertical Separator */}
-        <div className="w-px h-6 bg-gray-300 ml-0.5" />
+        <div className="w-px self-stretch my-3 bg-gray-300" />
 
         {/* Phone Number Input */}
         <input
@@ -246,8 +246,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
           onChange={(e) => handleChange("phone", e.target.value)}
           onBlur={() => onBlur("phone", formData["phone"] || "")}
           maxLength={15}
-          className="flex-1 px-1 py-3.5 text-sm bg-transparent text-black outline-none"
-          // className="w-35 px-1 py-3.5 rounded-md text-sm text-[#7b7b7a] bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7] transition-all duration-200 hover:bg-[#f3f2f1]"
+          className="flex-1 min-w-0 px-2 py-3.5 text-sm bg-transparent text-[#7b7b7a] outline-none"
         />
       </div>
       {(errors["phone"] || errors["countryCode"]) && (

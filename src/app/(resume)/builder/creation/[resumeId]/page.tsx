@@ -19,6 +19,7 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   const fromAts = searchParams.get("from_ats") === "true";
   const initialTab = fromAts ? "Editor" : undefined;
   const isEnhancedResume = searchParams.get("source") === "enhanced";
+  const openSection = searchParams.get("open_section") ?? undefined;
 
   // ✅ Get loading state from context to prevent rendering before data loads
   const { isLoadingResume } = useResume();
@@ -28,7 +29,9 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(isEnhancedResume);
 
   const [activeTab, setActiveTab] = useState(isEnhancedResume && !fromAts ? "Score" : "Templates");
-  const [requestedSection, setRequestedSection] = useState<string | null>(null);
+  // Seed from the ?open_section= deep link (ATS report "Fix Now" flow) so the
+  // requested editor section opens on load; falls back to null when absent.
+  const [requestedSection, setRequestedSection] = useState<string | null>(openSection ?? null);
 
   // Save sidebar state to localStorage whenever it changes (during session)
   useEffect(() => {

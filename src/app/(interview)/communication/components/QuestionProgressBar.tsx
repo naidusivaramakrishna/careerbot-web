@@ -14,18 +14,18 @@ export default function QuestionProgressBar({
   const percentage = Math.round((currentQuestion / totalQuestions) * 100);
 
   return (
-    <div className={`bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3.5 ${className}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-gray-700">
+    <div className={`rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.05)] ${className}`}>
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <span className="text-sm font-bold text-slate-800">
           Question {currentQuestion} of {totalQuestions}
         </span>
-        <span className="text-sm font-semibold text-[#2557a7]">
+        <span className="rounded-full border border-[#2557a7]/15 bg-[#2557a7]/5 px-2.5 py-1 text-xs font-black text-[#2557a7]">
           {percentage}%
         </span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-1.5">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div
-          className="bg-[#2557a7] h-1.5 rounded-full transition-all duration-300 ease-in-out"
+          className="h-full rounded-full bg-[#2557a7] transition-all duration-300 ease-in-out"
           style={{ width: `${percentage}%` }}
           role="progressbar"
           aria-valuenow={percentage}
@@ -33,6 +33,10 @@ export default function QuestionProgressBar({
           aria-valuemax={100}
           aria-label={`Question ${currentQuestion} of ${totalQuestions}`}
         />
+      </div>
+      <div className="mt-2 flex justify-between text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+        <span>Current item</span>
+        <span>{totalQuestions - currentQuestion} remaining</span>
       </div>
     </div>
   );

@@ -524,7 +524,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
               {(editingOriginalEntry !== null || savedEntries.length > 0) && (
@@ -577,7 +577,7 @@ Spearheaded migration of legacy monolithic application to microservices architec
                           value={work.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
-                          maxDate={work.endDate}
+                          maxDate={work.endDate || undefined}
                         />
                       </div>
 

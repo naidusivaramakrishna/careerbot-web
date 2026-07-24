@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight,
@@ -12,15 +12,15 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import AudioRecorder from "@/app/(interview)/communication/components/AudioRecorder";
-import FeedbackCard from "../../_components/FeedbackCard";
-import TranscriptDisplay from "../../_components/TranscriptDisplay";
+import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackCard";
+import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
 import {
   startPractice,
   submitPracticeAnswer,
   generateTechnicalQuestions,
   SubmitAnswerResponse,
 } from "@/api/mockInterviewApi";
-import { useMockInterview } from "../../_context/MockInterviewContext";
+import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
 
 
 type AnswerState = {
@@ -30,8 +30,6 @@ type AnswerState = {
   dimensions: { label: string; score: number; weight: string }[];
   answerId?: string;
 } | null;
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 function TechnicalPracticeContent() {
   const router = useRouter();
@@ -47,13 +45,8 @@ function TechnicalPracticeContent() {
   const [answeredMap, setAnsweredMap] = useState<Record<string, AnswerState>>({});
   const [currentAnswer, setCurrentAnswer] = useState<AnswerState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showTextFallback, setShowTextFallback] = useState(false);
-  const [textAnswer, setTextAnswer] = useState("");
   const [sessionLoading, setSessionLoading] = useState(true);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Map UI category IDs to backend-accepted values
   const categoryMap: Record<string, string> = {
     dsa: "technical", web: "technical", backend: "technical",
     database: "technical", core: "technical",
@@ -61,7 +54,6 @@ function TechnicalPracticeContent() {
   const backendCategory = categoryMap[category] ?? "technical";
 
   useEffect(() => {
-    // Start practice session + fetch AI-generated technical questions in parallel
     Promise.allSettled([
       startPractice({ round_number: 1, category: backendCategory }),
       generateTechnicalQuestions({ skills: [category], num_questions: 5, experience_level: (localStorage.getItem("mock_experience_level") === "experienced" ? "mid" : "fresher") }),
@@ -83,25 +75,13 @@ function TechnicalPracticeContent() {
     }).finally(() => setSessionLoading(false));
   }, [category, backendCategory]);
 
-  useEffect(() => {
-    if (!currentAnswer && !isSubmitting && !showTextFallback) {
-      setElapsedSeconds(0);
-      timerRef.current = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [currentAnswer, isSubmitting, showTextFallback]);
 
   const question = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
   const answeredCount = Object.keys(answeredMap).length;
 
   const handleRecordingComplete = useCallback(async (blob: Blob) => {
-    if (!sessionId || !question) {
-      setShowTextFallback(true);
-      return;
-    }
+    if (!sessionId || !question) return;
     setIsSubmitting(true);
     setCurrentAnswer(null);
 
@@ -126,54 +106,18 @@ function TechnicalPracticeContent() {
       setAnsweredMap((m) => ({ ...m, [question.id]: answer }));
       setCurrentAnswer(answer);
     } catch {
-      setShowTextFallback(true);
+      /* recording failed — user can try again */
     } finally {
       setIsSubmitting(false);
     }
   }, [sessionId, question]);
 
-  const handleTextSubmit = useCallback(async () => {
-    if (textAnswer.trim().length < 20 || !sessionId || !question) return;
-    setIsSubmitting(true);
-    setCurrentAnswer(null);
-    setShowTextFallback(false);
-
-    try {
-      const textBlob = new Blob([textAnswer], { type: "text/plain" });
-      const formData = new FormData();
-      formData.append("audio", textBlob, "text-answer.txt");
-      formData.append("session_id", sessionId);
-      formData.append("question_id", question.id);
-
-      const apiResponse = await submitPracticeAnswer(formData) as unknown as SubmitAnswerResponse;
-      const answer: AnswerState = {
-        transcript: textAnswer,
-        weightedScore: apiResponse.scores.weighted_score,
-        feedback: apiResponse.feedback.improvements.join(" ") + " (Note: This answer was typed. Try speaking next time.)",
-        dimensions: [
-          { label: "Content", score: apiResponse.scores.content_score, weight: "40%" },
-          { label: "Clarity", score: apiResponse.scores.clarity_score, weight: "30%" },
-          { label: "Structure", score: apiResponse.scores.structure_score, weight: "20%" },
-          { label: "Length", score: apiResponse.scores.length_score, weight: "10%" },
-        ],
-      };
-      setAnsweredMap((m) => ({ ...m, [question.id]: answer }));
-      setCurrentAnswer(answer);
-    } catch {
-      /* leave text fallback visible */
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [sessionId, question, textAnswer]);
-
   const handleNext = () => {
     setCurrentAnswer(null);
-    setShowTextFallback(false);
-    setTextAnswer("");
     const newCount = Object.keys(answeredMap).length;
     setPracticeAnswered(newCount);
     if (isLastQuestion) {
-      router.push("/mock-interview/readiness");
+      router.push("/mock-interview/live");
     } else {
       setCurrentIndex((i) => i + 1);
     }
@@ -201,7 +145,7 @@ function TechnicalPracticeContent() {
           <p className="text-sm text-gray-500 mb-4">{sessionError ?? "No questions were returned for this category."}</p>
           <div className="flex gap-3 justify-center">
             <button
-              onClick={() => router.push("/mock-interview/technical")}
+              onClick={() => router.push("/notes/technical")}
               className="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50"
             >
               Back
@@ -220,10 +164,9 @@ function TechnicalPracticeContent() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <button
-          onClick={() => router.push("/mock-interview/technical")}
+          onClick={() => router.push("/notes/technical")}
           className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
         >
           <ChevronLeft size={14} /> Back
@@ -238,7 +181,6 @@ function TechnicalPracticeContent() {
         </div>
       </div>
 
-      {/* Progress bar */}
       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-5">
         <div
           className="h-full bg-[#2557a7] rounded-full transition-all duration-500"
@@ -246,7 +188,6 @@ function TechnicalPracticeContent() {
         />
       </div>
 
-      {/* Question card */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_16px_rgba(0,0,0,0.04)] overflow-hidden mb-4">
         <div className="flex items-center gap-2 px-4 py-3 bg-[#2557a7]/5 border-b border-[#2557a7]/10">
           <Code2 size={13} className="text-[#2557a7]" />
@@ -265,63 +206,16 @@ function TechnicalPracticeContent() {
         </div>
       </div>
 
-      {/* Answer section */}
       {!currentAnswer && !isSubmitting && (
-        <div className="space-y-3">
-          {/* Audio recorder */}
-          {!showTextFallback && (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Mic size={14} className="text-[#2557a7]" />
-                <p className="text-sm font-semibold text-gray-900">Record Your Answer</p>
-                {elapsedSeconds > 0 && (
-                  <span className={`ml-auto text-xs font-mono ${elapsedSeconds > 120 ? "text-gray-400" : "text-gray-500"}`}>
-                    {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, "0")}
-                  </span>
-                )}
-              </div>
-              <AudioRecorder onRecordingComplete={handleRecordingComplete} />
-              <button
-                onClick={() => setShowTextFallback(true)}
-                className="mt-3 text-xs text-gray-400 hover:text-gray-600 underline transition-colors"
-              >
-                Use text instead
-              </button>
-            </div>
-          )}
-
-          {/* Text fallback */}
-          {showTextFallback && (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <p className="text-sm font-semibold text-gray-900 mb-3">Type Your Answer</p>
-              <textarea
-                value={textAnswer}
-                onChange={(e) => setTextAnswer(e.target.value)}
-                placeholder="Type your answer here (minimum 20 characters)…"
-                rows={5}
-                className="w-full text-sm text-gray-800 border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:border-transparent placeholder-gray-400"
-              />
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={() => { setShowTextFallback(false); setTextAnswer(""); }}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm"
-                >
-                  <Mic size={14} /> Use Mic
-                </button>
-                <button
-                  onClick={handleTextSubmit}
-                  disabled={textAnswer.trim().length < 20 || isSubmitting}
-                  className="flex-1 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-semibold hover:bg-[#1e4a8f] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                >
-                  Submit Answer
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Mic size={14} className="text-[#2557a7]" />
+            <p className="text-sm font-semibold text-gray-900">Record Your Answer</p>
+          </div>
+          <AudioRecorder onRecordingComplete={handleRecordingComplete} />
         </div>
       )}
 
-      {/* Submitting state */}
       {isSubmitting && (
         <div className="bg-white border border-gray-200 rounded-xl p-10 flex flex-col items-center gap-3 shadow-sm">
           <Loader2 size={28} className="text-[#2557a7] animate-spin" />
@@ -329,7 +223,6 @@ function TechnicalPracticeContent() {
         </div>
       )}
 
-      {/* Feedback */}
       {currentAnswer && (
         <div className="space-y-3">
           <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
@@ -362,7 +255,7 @@ function TechnicalPracticeContent() {
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-bold hover:bg-[#1e4a8f] transition-all shadow-md"
             >
               {isLastQuestion ? (
-                <>Check Readiness <ChevronRight size={14} /></>
+                <>Start Live Interview <ChevronRight size={14} /></>
               ) : (
                 <>Next Question <ChevronRight size={14} /></>
               )}
@@ -371,7 +264,6 @@ function TechnicalPracticeContent() {
         </div>
       )}
 
-      {/* Answered count footer */}
       {answeredCount > 0 && !currentAnswer && (
         <p className="text-center text-xs text-gray-400 mt-4">
           {answeredCount} of {questions.length} answered

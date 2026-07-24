@@ -754,13 +754,22 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               fullname: mapped.personalInfo?.fullname || resumeData.display_name || "",
             },
           };
-          // Store ATS score from enhanced resume response
-          if (resumeData.ats_score && !persistedAtsScore) {
-            setEnhancedAtsScore(resumeData.ats_score);
+          // Store ATS score — prefer API response; if missing, read from atsAnalysisData
+          // which is already written by the ATS analysis flow (no new storage needed).
+          // Don't overwrite a score already restored from persisted storage above.
+          const resolvedAtsScore = resumeData.ats_score ?? (() => {
+            try {
+              const cached = localStorage.getItem("atsAnalysisData");
+              if (cached) return JSON.parse(cached)?.ats_score ?? null;
+            } catch { /* ignore */ }
+            return null;
+          })();
+          if (resolvedAtsScore && !persistedAtsScore) {
+            setEnhancedAtsScore(resolvedAtsScore);
           }
           // Convert section_breakdown deductions into EnhancedSuggestion[] (after_example is the suggestion text)
           const derivedSuggestions: EnhancedSuggestion[] = [];
-          const sectionBreakdown = (resumeData.ats_score?.section_breakdown ?? {}) as Record<string, {
+          const sectionBreakdown = (resolvedAtsScore?.section_breakdown ?? {}) as Record<string, {
             deductions?: { id: string; penalty: number; after_example?: string; message?: string }[];
           }>;
           for (const [sectionName, sec] of Object.entries(sectionBreakdown)) {

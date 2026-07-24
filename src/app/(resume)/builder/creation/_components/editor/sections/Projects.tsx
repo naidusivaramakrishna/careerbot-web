@@ -377,7 +377,7 @@ Developed real-time chat application with WebSocket connections supporting 1000+
 
 Engineered machine learning recommendation system using Python and TensorFlow that increased user engagement by 35% and generated 20% more revenue through personalized suggestions`;
 
-    generateSuggestions(editIndex, prompt);
+    generateSuggestions(editIndex, prompt, "project");
   };
 
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
@@ -525,7 +525,7 @@ Engineered machine learning recommendation system using Python and TensorFlow th
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2"
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
               {(editingOriginalEntry !== null || savedEntries.length > 0) && (

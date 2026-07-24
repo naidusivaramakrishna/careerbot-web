@@ -215,11 +215,11 @@ export default function EnglishPage() {
       {/* ── Page Header ── */}
       <div className="mb-7">
         <button
-          onClick={() => router.push("/mock-interview")}
+          onClick={() => router.push("/mock-interview/live")}
           className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-5"
         >
           <ChevronLeft size={14} />
-          Back to Mock Interview
+          Back to Dashboard
         </button>
 
         <div className="flex items-start gap-4">
@@ -281,7 +281,6 @@ export default function EnglishPage() {
         {/* ────────────────── Phrases ────────────────── */}
         {activeTab === "phrases" && (
           <div>
-            {/* Panel intro */}
             <div className="px-5 py-3.5 bg-[#2557a7]/5 border-b border-[#2557a7]/15">
               <p className="text-xs text-[#2557a7] font-semibold leading-relaxed">
                 30 essential phrases that make you sound fluent and confident. Practice saying each one 3 times aloud.
@@ -290,7 +289,6 @@ export default function EnglishPage() {
 
             {POWER_PHRASES.map((group, gi) => (
               <div key={gi}>
-                {/* Category divider */}
                 <div className="px-5 py-2.5 bg-gray-50 border-y border-gray-100">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                     {group.category}
@@ -327,7 +325,6 @@ export default function EnglishPage() {
             <div className="divide-y divide-gray-100">
               {DIFFICULT_MOMENTS.map((item, i) => (
                 <div key={i} className="px-5 py-5 hover:bg-gray-50/70 transition-colors">
-                  {/* Situation label */}
                   <div className="flex items-center gap-2 mb-3.5">
                     <div className="w-5 h-5 rounded-md bg-[#2557a7]/8 border border-[#2557a7]/15 flex items-center justify-center shrink-0">
                       <AlertTriangle size={11} className="text-[#2557a7]" />
@@ -337,7 +334,6 @@ export default function EnglishPage() {
                     </p>
                   </div>
 
-                  {/* Response options */}
                   <div className="space-y-2 mb-3.5">
                     {item.responses.map((r, ri) => (
                       <div
@@ -349,7 +345,6 @@ export default function EnglishPage() {
                     ))}
                   </div>
 
-                  {/* Tip */}
                   <p className="text-xs text-gray-500 leading-relaxed pl-0.5">{item.tip}</p>
                 </div>
               ))}
@@ -373,7 +368,6 @@ export default function EnglishPage() {
               {fillerFixes.map((item, i) => (
                 <div key={i} className="px-5 py-4 hover:bg-gray-50/70 transition-colors">
                   <div className="grid grid-cols-[1fr_20px_1fr] items-center gap-2.5 mb-2">
-                    {/* Stop saying */}
                     <div className="bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
                         Stop Saying
@@ -381,12 +375,10 @@ export default function EnglishPage() {
                       <p className="text-sm font-semibold text-gray-700 leading-tight">{item.wrong}</p>
                     </div>
 
-                    {/* Arrow */}
                     <div className="flex items-center justify-center">
                       <ChevronRight size={15} className="text-gray-300 shrink-0" />
                     </div>
 
-                    {/* Say instead */}
                     <div className="bg-[#2557a7]/5 border border-[#2557a7]/15 rounded-xl px-3 py-2.5">
                       <p className="text-[10px] font-bold text-[#2557a7]/60 uppercase tracking-widest mb-1">
                         Say Instead
@@ -400,7 +392,6 @@ export default function EnglishPage() {
               ))}
             </div>
 
-            {/* Practice tip footer */}
             <div className="px-5 py-4 bg-gray-50 border-t border-gray-100">
               <p className="text-xs text-gray-600 font-medium leading-relaxed">
                 Practice tip: Record yourself for 60 seconds. Count how many fillers you use. Try to halve that number each week.
@@ -427,7 +418,6 @@ export default function EnglishPage() {
             <div className="divide-y divide-gray-100">
               {commonMistakes.map((item, i) => (
                 <div key={i} className="px-5 py-4 hover:bg-gray-50/70 transition-colors">
-                  {/* Wrong → Right */}
                   <div className="flex flex-wrap items-center gap-2 mb-2.5">
                     <span className="px-2.5 py-1 bg-gray-100 border border-gray-200 text-gray-500 text-xs rounded-lg font-medium line-through leading-tight">
                       {item.wrong}
@@ -460,20 +450,17 @@ export default function EnglishPage() {
               {phrasalVerbs.map((item, i) => (
                 <div key={i} className="px-5 py-4 hover:bg-gray-50/70 transition-colors">
                   <div className="flex items-start gap-3.5">
-                    {/* Number badge */}
                     <div className="w-7 h-7 rounded-lg bg-[#2557a7]/8 border border-[#2557a7]/12 text-[#2557a7] text-[10px] font-bold tabular-nums flex items-center justify-center shrink-0 mt-0.5">
                       {i + 1}
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      {/* Verb + meaning */}
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-2">
                         <span className="text-sm font-bold text-gray-900">{item.verb}</span>
                         <span className="text-gray-300 text-xs">—</span>
                         <span className="text-xs text-gray-500">{item.meaning}</span>
                       </div>
 
-                      {/* Example */}
                       <div className="bg-[#2557a7]/5 border border-[#2557a7]/12 rounded-xl px-4 py-2.5">
                         <p className="text-xs text-[#2557a7] leading-relaxed italic">{item.example}</p>
                       </div>
@@ -483,7 +470,6 @@ export default function EnglishPage() {
               ))}
             </div>
 
-            {/* Practice tip footer */}
             <div className="px-5 py-4 bg-gray-50 border-t border-gray-100">
               <p className="text-xs text-gray-600 font-medium leading-relaxed">
                 Practice exercise: Pick 5 of these and write a sentence about your own project using each one.
@@ -501,12 +487,10 @@ export default function EnglishPage() {
               </p>
             </div>
 
-            {/* Policy rows */}
             <div className="divide-y divide-gray-100">
               {HINGLISH_GUIDE.policy.map((p, i) => (
                 <div key={i} className="px-5 py-4 hover:bg-gray-50/70 transition-colors">
                   <div className="flex items-start gap-3.5">
-                    {/* Mode badge */}
                     <span
                       className={`text-[10px] px-2.5 py-1 rounded-full font-bold shrink-0 mt-0.5 whitespace-nowrap ${
                         i === 0
@@ -528,7 +512,6 @@ export default function EnglishPage() {
               ))}
             </div>
 
-            {/* Examples section */}
             <div className="px-5 py-2.5 bg-gray-50 border-y border-gray-100">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                 Hinglish to English Examples
@@ -552,7 +535,6 @@ export default function EnglishPage() {
               ))}
             </div>
 
-            {/* Closing philosophy quote */}
             <div className="px-5 py-4 bg-[#2557a7]/5 border-t border-[#2557a7]/15">
               <p className="text-sm text-[#2557a7] font-medium leading-relaxed">
                 &ldquo;{HINGLISH_GUIDE.tip}&rdquo;
@@ -568,7 +550,7 @@ export default function EnglishPage() {
           Reading done? Move to Stage 3.
         </p>
         <button
-          onClick={() => router.push("/mock-interview/practice")}
+          onClick={() => router.push("/notes/practice")}
           className="flex items-center gap-2 px-5 py-2.5 bg-[#2557a7] hover:bg-[#1e4a8f] text-white text-sm font-bold rounded-xl shadow-md shadow-[#2557a7]/20 transition-colors whitespace-nowrap"
         >
           Start Practice Mode

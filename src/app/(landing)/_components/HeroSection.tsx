@@ -93,8 +93,8 @@ export default function HeroSection() {
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Link
-                href="/builder/start"
-                className="inline-flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-[#2b78bc] px-7 text-[13px] font-medium text-white shadow-[0_20px_42px_rgba(43,120,188,0.32)] transition hover:-translate-y-0.5 hover:bg-[#22679f] hover:shadow-[0_24px_48px_rgba(43,120,188,0.38)]"
+                href="/builder"
+                className="inline-flex items-center justify-center rounded-xl bg-[#2557a7] px-8 py-3.5 text-sm font-bold text-white shadow-md shadow-blue-200 transition-all hover:bg-[#1e4a94] active:scale-95"
               >
                 Build My Resume Free
                 <ArrowRight size={16} strokeWidth={2.8} />

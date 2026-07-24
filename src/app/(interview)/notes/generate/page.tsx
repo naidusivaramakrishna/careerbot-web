@@ -6,7 +6,7 @@ import { generateNotes, getNotes, updateNotes } from "@/api/mockInterviewApi";
 import { getAllResumesUnified } from "@/api/resumeApi";
 import type { ResumeResponse } from "@/api/resumeApi";
 import type { EnhancedResumeSummary } from "@/types/api.types";
-import { useMockInterview } from "../_context/MockInterviewContext";
+import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
 import {
   FileText,
   Briefcase,
@@ -25,6 +25,7 @@ import {
   AlertCircle,
   Sparkles,
 } from "lucide-react";
+import { escapeHtml } from "@/lib/sanitizeHtml";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,12 +71,10 @@ interface NotesData {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
-  // Self-introduction: API may return {script, sections, key_phrases} or plain string
   const selfIntroRaw = apiNotes.self_introduction;
   const selfIntroStr =
     typeof selfIntroRaw === "string" ? selfIntroRaw : (selfIntroRaw?.script ?? "");
 
-  // HR Answers: API returns hr_answers[] directly OR inside common_answers.answers[]
   let hrAnswers: HRAnswer[] = [];
   if (Array.isArray(apiNotes.hr_answers)) {
     hrAnswers = apiNotes.hr_answers as HRAnswer[];
@@ -92,7 +91,6 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
     }));
   }
 
-  // Project explanations: API may use different field names
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const projectExplanations: ProjectNote[] = (apiNotes.project_explanations ?? []).map((p: any) => {
     const techStack = Array.isArray(p.tech_stack)
@@ -119,7 +117,6 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
     };
   });
 
-  // Additional notes: map from API keys to frontend keys
   const additional = apiNotes.additional_notes ?? {};
   const additionalNotes: NotesData["additional_notes"] = {
     hobbies: Array.isArray(additional.hobbies) ? additional.hobbies : [],
@@ -189,8 +186,6 @@ function EditableBlock({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
-  // escapeHtml first so the bracket markers below are the only real HTML —
-  // any markup inside a [CONFIRM:...] / note body renders as inert text.
   const highlighted = escapeHtml(value)
     .replace(
       /\[CONFIRM:[^\]]+\]/g,
@@ -368,9 +363,6 @@ export default function NotesPage() {
   const [resumeId, setResumeId] = useState<string>("");
   const [availableResumes, setAvailableResumes] = useState<ResumeOption[]>([]);
 
-  // ── Load all resumes (builder + enhanced) + existing notes ──
-  // Uses the same unified endpoint as the resume list page so all 4 resumes
-  // (or however many) appear in the picker, not just builder ones.
   useEffect(() => {
     if (progressLoading) return;
 
@@ -394,7 +386,6 @@ export default function NotesPage() {
 
         setAvailableResumes(allOptions);
 
-        // Prefer the stored id if it still exists across both lists; else first
         const bestId = allOptions.some((r) => r.id === storedId)
           ? storedId
           : allOptions[0].id;
@@ -426,10 +417,8 @@ export default function NotesPage() {
           setNotesGenerated(true);
           setContextNotesGenerated(true);
         }
-        // notes: {} → fall through, notesGenerated stays false → show generate screen
       })
       .catch(() => {
-        // 404 = no notes yet → show generation screen
         setNotesGenerated(false);
       })
       .finally(() => setNotesLoading(false));
@@ -471,7 +460,7 @@ export default function NotesPage() {
 
   const handleSaveAndContinue = async () => {
     if (!userId) {
-      router.push("/mock-interview/english");
+      router.push("/notes/english");
       return;
     }
     setSaving(true);
@@ -482,7 +471,7 @@ export default function NotesPage() {
     } finally {
       setSaving(false);
     }
-    router.push("/mock-interview/english");
+    router.push("/notes/english");
   };
 
   const updateSelfIntro = (v: string) =>
@@ -516,7 +505,6 @@ export default function NotesPage() {
       return { ...n, additional_notes: { ...n.additional_notes, hobbies } };
     });
 
-  // ── Loading notes ──
   if (notesLoading) {
     return (
       <div className="max-w-xl mx-auto px-4 py-16 text-center">
@@ -526,12 +514,11 @@ export default function NotesPage() {
     );
   }
 
-  // ── Pre-generation screen ──
   if (!notesGenerated && !generating) {
     return (
       <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
         <button
-          onClick={() => router.push("/mock-interview")}
+          onClick={() => router.push("/mock-interview/live")}
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
         >
           <ChevronLeft size={14} /> Back
@@ -542,16 +529,13 @@ export default function NotesPage() {
           AI-generated scripts for 12+ HR questions from your resume.
         </p>
 
-        {/* Single card: resume + role + what you get */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-          {/* Resume selection */}
           <div className="pb-3 mb-3 border-b border-gray-100">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
               {availableResumes.length > 1 ? "Select Resume" : "Resume"}
             </p>
 
             {availableResumes.length === 0 ? (
-              /* No resumes */
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
                   <FileText size={13} className="text-gray-400" />
@@ -564,7 +548,6 @@ export default function NotesPage() {
                 </div>
               </div>
             ) : availableResumes.length === 1 ? (
-              /* Single resume — auto-selected */
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-lg bg-[#2557a7]/10 flex items-center justify-center shrink-0">
                   <FileText size={13} className="text-[#2557a7]" />
@@ -577,7 +560,6 @@ export default function NotesPage() {
                 </div>
               </div>
             ) : (
-              /* Multiple resumes — radio picker */
               <div className="space-y-1.5 max-h-44 overflow-y-auto pr-0.5">
                 {availableResumes.map((r) => (
                   <label
@@ -608,7 +590,6 @@ export default function NotesPage() {
             )}
           </div>
 
-          {/* Experience level */}
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">
             Experience Level
           </label>
@@ -628,7 +609,6 @@ export default function NotesPage() {
             ))}
           </div>
 
-          {/* What you get — compact list */}
           <div className="space-y-1.5 mb-3">
             {[
               "Self-introduction script",
@@ -643,7 +623,6 @@ export default function NotesPage() {
             ))}
           </div>
 
-          {/* Target role */}
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">
             Target Role <span className="normal-case font-normal tracking-normal">(optional)</span>
           </label>
@@ -674,7 +653,6 @@ export default function NotesPage() {
     );
   }
 
-  // ── Generation in progress ──
   if (generating) {
     return (
       <div className="max-w-xl mx-auto px-4 sm:px-6 py-16">
@@ -683,18 +661,16 @@ export default function NotesPage() {
     );
   }
 
-  // ── Notes editing view ──
   if (!notes) return null;
   const unfilledCount = notes.unfilled_count;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
 
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <button
-            onClick={() => router.push("/mock-interview")}
+            onClick={() => router.push("/mock-interview/live")}
             className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-2 transition-colors"
           >
             <ChevronLeft size={14} /> Back
@@ -711,7 +687,6 @@ export default function NotesPage() {
         </button>
       </div>
 
-      {/* Unfilled alert + legend — compact inline */}
       {unfilledCount > 0 && (
         <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-[#2557a7]/5 border border-[#2557a7]/12 rounded-lg">
           <AlertCircle size={12} className="text-[#2557a7] shrink-0" />
@@ -723,7 +698,6 @@ export default function NotesPage() {
         </div>
       )}
 
-      {/* Tab bar */}
       <div className="flex gap-1 mb-4 overflow-x-auto pb-1 scrollbar-hide">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
@@ -741,7 +715,6 @@ export default function NotesPage() {
         ))}
       </div>
 
-      {/* ── Tab: Self-Intro ── */}
       {activeTab === "intro" && (
         <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
           <div>
@@ -760,7 +733,6 @@ export default function NotesPage() {
         </div>
       )}
 
-      {/* ── Tab: Projects ── */}
       {activeTab === "projects" && (
         <div className="space-y-3">
           {notes.project_explanations.map((proj, i) => (
@@ -798,10 +770,8 @@ export default function NotesPage() {
         </div>
       )}
 
-      {/* ── Tab: HR Answers ── */}
       {activeTab === "hr" && (
         <div className="space-y-3">
-          {/* Fresher / Experienced toggle */}
           <div className="flex items-center gap-3 mb-1 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <span className="text-xs font-bold text-gray-500 mr-1">I am a:</span>
             {(["fresher", "experienced"] as const).map((lvl) => (
@@ -848,11 +818,9 @@ export default function NotesPage() {
         </div>
       )}
 
-      {/* ── Tab: Additional Notes ── */}
       {activeTab === "additional" && (
         <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
 
-          {/* Hobbies */}
           <div className="border border-gray-100 rounded-xl p-4">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Hobbies & Interests</p>
             <div className="flex flex-wrap gap-2 mb-3">
@@ -888,7 +856,6 @@ export default function NotesPage() {
             <p className="text-xs text-gray-400 mt-2">💡 Only select hobbies you can talk about confidently for 30+ seconds.</p>
           </div>
 
-          {/* Career goals, why field, teamwork */}
           {[
             { key: "career_goals_short" as const, label: "Short-term Career Goals", note: "1–2 year goal. Should align with the role you're applying for." },
             { key: "career_goals_long" as const, label: "Long-term Career Goals", note: "5-year vision. Realistic and ambitious — shows growth mindset." },
@@ -901,7 +868,6 @@ export default function NotesPage() {
             </div>
           ))}
 
-          {/* Handling Gaps */}
           <div className="border border-[#2557a7]/20 bg-[#2557a7]/5 rounded-xl p-4">
             <p className="text-[10px] font-bold text-[#2557a7] uppercase tracking-widest mb-1.5">Handling Employment / Education Gaps</p>
             <p className="text-xs text-gray-600 mb-3">Only fill this if you have a gap. Interviewers may ask about it directly.</p>
@@ -913,7 +879,6 @@ export default function NotesPage() {
             <p className="text-xs text-gray-400 mt-2">💡 Be honest and brief. Always end with something positive you did during the gap.</p>
           </div>
 
-          {/* Learning Attitude */}
           <div className="border border-gray-200 bg-gray-50 rounded-xl p-4">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Learning Attitude & Self-Development</p>
             <p className="text-xs text-gray-600 mb-3">Interviewers ask: &ldquo;How do you stay updated?&rdquo; or &ldquo;What was the last thing you learned?&rdquo;</p>
@@ -927,7 +892,6 @@ export default function NotesPage() {
         </div>
       )}
 
-      {/* Save & Continue */}
       <div className="mt-5 pt-4 border-t border-gray-100 flex justify-end">
         <button
           onClick={handleSaveAndContinue}

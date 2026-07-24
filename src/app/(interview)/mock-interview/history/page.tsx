@@ -27,7 +27,7 @@ import {
   Download,
 } from "lucide-react";
 
-const FILTER_OPTIONS = ["All", "Mock", "Practice"];
+const FILTER_OPTIONS = ["All", "Mock"];
 
 // ─── Score badge ──────────────────────────────────────────────────────────────
 
@@ -80,10 +80,10 @@ function mapLiveSession(s: LiveSession) {
       year: "numeric",
     }),
     duration_min: s.duration_s ? Math.round(s.duration_s / 60) : 0,
-    question_count: 0,
+    question_count: typeof s.question_count === "number" ? s.question_count : null,
     overall_score: s.score != null ? Math.round(s.score * 10) : 0,
     improvement_pct: null as number | null,
-    pressure: "—",
+    pressure: s.pressure_tag === "pressure_affected" ? "Pressure affected" : null,
     status: s.status,
   };
 }
@@ -185,7 +185,7 @@ export default function HistoryPage() {
               Session History
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              Track your progress across all practice and mock sessions.
+              Track your completed live mock interview sessions.
             </p>
           </div>
         </div>
@@ -408,7 +408,7 @@ export default function HistoryPage() {
                         <Clock size={10} />
                         {session.duration_min} min
                       </span>
-                      <span>{session.question_count} questions</span>
+                      <span>{session.question_count !== null ? `${session.question_count} questions` : "Questions pending"}</span>
                     </div>
                   </div>
 
@@ -427,15 +427,11 @@ export default function HistoryPage() {
                           <TrendingUp size={9} />+{session.improvement_pct}%
                         </span>
                       )}
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          session.pressure === "Handled Well"
-                            ? "bg-[#2557a7]/8 border border-[#2557a7]/15 text-[#2557a7]"
-                            : "bg-gray-100 border border-gray-200 text-gray-600"
-                        }`}
-                      >
-                        {session.pressure}
-                      </span>
+                      {session.pressure && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200 text-gray-600">
+                          {session.pressure}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>

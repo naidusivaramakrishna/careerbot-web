@@ -17,6 +17,8 @@ interface DomainTemplatesModalProps {
   domainFamily: string;
   templates: TemplateResponse[];
   onClose: () => void;
+  sourceResumeId?: string;
+  source?: string;
 }
 
 const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Manager'];
@@ -59,6 +61,8 @@ export default function DomainTemplatesModal({
   domainFamily,
   templates,
   onClose,
+  sourceResumeId,
+  source,
 }: DomainTemplatesModalProps) {
   const router = useRouter();
   const domainFallback = DOMAIN_FAMILY_IMAGES[domainFamily] || FALLBACK_TEMPLATE_IMAGE;
@@ -102,10 +106,10 @@ export default function DomainTemplatesModal({
   const handleApplyTemplate = async () => {
     setIsLoading(true);
     try {
-      // Parallelize getProfile and getAllResumes for better performance
+      // Skip getAllResumes when sourceResumeId is already known (came from builder)
       const [userProfile, resumes] = await Promise.all([
         getProfile().catch(() => null),
-        getAllResumes().catch(() => null),
+        sourceResumeId ? Promise.resolve(null) : getAllResumes().catch(() => null),
       ]);
 
       let userEmail = '';
@@ -174,21 +178,21 @@ export default function DomainTemplatesModal({
         logger.info('Stored sectionOrder with domain:', correctDomainFamily, 'career level:', careerLevel, 'Order:', sectionOrder);
       }
 
-      // Get user's resumes or create a new one
-      let resumeId: string | undefined;
-      if (resumes && resumes.length > 0) {
-        // Use the first (most recent) resume
-        resumeId = resumes[0].id || (resumes[0] as unknown as Record<string, unknown>)._id as string;
-      } else {
-        // If no resume found, create a new one
-        const newResume = await createResumeWithAuth();
-        resumeId = newResume.id || (newResume as unknown as Record<string, unknown>)._id as string;
+      // Get resume ID — prefer the one passed from the builder (preserves source context)
+      let resumeId: string | undefined = sourceResumeId;
+      if (!resumeId) {
+        if (resumes && resumes.length > 0) {
+          resumeId = resumes[0].id || (resumes[0] as unknown as Record<string, unknown>)._id as string;
+        } else {
+          const newResume = await createResumeWithAuth();
+          resumeId = newResume.id || (newResume as unknown as Record<string, unknown>)._id as string;
+        }
       }
       // Catalogue is already saved in localStorage by the /templates page selection
 
-      // Redirect immediately to the resume creation page
+      // Redirect back to the builder, preserving source query param if present
       if (resumeId) {
-        router.push(`/builder/creation/${resumeId}`);
+        router.push(`/builder/creation/${resumeId}${source ? `?source=${source}` : ''}`);
       }
     } catch (error) {
       logger.error('Error applying template:', error);

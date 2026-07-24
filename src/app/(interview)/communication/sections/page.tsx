@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { startSession } from '@/api/communicationApi';
 import { useVideoRecording } from '@/contexts/VideoRecordingContext';
 import logger from '@/lib/logger';
@@ -28,24 +28,6 @@ export default function SectionsPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { startRecording } = useVideoRecording();
 
-  const startCameraPreview = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        sessionStorage.setItem('microphonePermissionGranted', 'true');
-        sessionStorage.setItem('cameraPermissionGranted', 'true');
-      }
-    } catch (error) {
-      logger.error('Error accessing media devices:', error);
-      throw error;
-    }
-  }, []);
-
   const handleStartAssessment = async () => {
     setIsRequesting(true);
     setError('');
@@ -54,7 +36,7 @@ export default function SectionsPage() {
       const testId = localStorage.getItem('test_id');
       if (!testId) throw new Error('Test ID not found. Please start from the beginning.');
 
-      // Silently read current permission state — no prompt, no dialog.
+      // Silently read current permission state - no prompt, no dialog.
       // If denied, fail early before touching fullscreen.
       // If already granted, fullscreen can go first (still in user gesture).
       // If prompt (not yet asked), ask camera/mic first then fullscreen.
@@ -71,7 +53,7 @@ export default function SectionsPage() {
       } catch (permErr) {
         const e = permErr as { name?: string };
         if (e.name === 'NotAllowedError') throw permErr;
-        // permissions API unsupported — fall through, getUserMedia will handle it
+        // permissions API unsupported - fall through, getUserMedia will handle it
       }
 
       // Fullscreen first only when we already have access (user gesture still active)
@@ -79,22 +61,22 @@ export default function SectionsPage() {
         try {
           if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
             await document.documentElement.requestFullscreen();
-            logger.info('✅ Entered fullscreen mode');
+            logger.info(' Entered fullscreen mode');
           }
         } catch (fsErr) {
           logger.warn('Could not enter fullscreen:', fsErr);
         }
       }
 
-      // Request camera/mic — shows browser prompt if not yet granted
+      // Request camera/mic - shows browser prompt if not yet granted
       await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
 
-      // Permissions just granted via prompt — try fullscreen now (Chrome keeps gesture active)
+      // Permissions just granted via prompt - try fullscreen now (Chrome keeps gesture active)
       if (!alreadyGranted) {
         try {
           if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
             await document.documentElement.requestFullscreen();
-            logger.info('✅ Entered fullscreen mode');
+            logger.info(' Entered fullscreen mode');
           }
         } catch (fsErr) {
           logger.warn('Could not enter fullscreen:', fsErr);
@@ -141,8 +123,8 @@ export default function SectionsPage() {
       if (needsRecording) {
         try {
           await startRecording();
-          logger.info('✅ Video recording started');
-          // Stop the preview stream — the recording context owns its own stream from here on.
+          logger.info(' Video recording started');
+          // Stop the preview stream - the recording context owns its own stream from here on.
           // Without this, the preview stream keeps the camera LED on even after stopRecording() is called.
           if (videoRef.current && videoRef.current.srcObject) {
             (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
@@ -153,7 +135,7 @@ export default function SectionsPage() {
         }
       }
 
-      logger.info('🚀 Navigating to see-and-repeat page...');
+      logger.info('ðŸš€ Navigating to see-and-repeat page...');
       router.push('/communication/see-and-repeat');
     } catch (err) {
       setIsRequesting(false);
@@ -175,143 +157,136 @@ export default function SectionsPage() {
     <>
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"
+        className="absolute inset-0 h-full w-full object-cover opacity-0 pointer-events-none"
         muted
         playsInline
       />
 
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-2xl mx-auto px-5 py-10">
+      <div className="min-h-screen bg-slate-50 px-5 py-8">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <span className="inline-flex rounded-full border border-[#2557a7]/15 bg-[#2557a7]/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#2557a7]">
+                  Candidate briefing
+                </span>
+                <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950">Assessment Overview</h1>
+                <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600">
+                  A structured evaluation of English communication skills across speaking, listening, grammar, and comprehension. Review the requirements before entering fullscreen.
+                </p>
+              </div>
 
-          {/* Page Header */}
-          <div className="mb-8">
-            <h1 className="text-[24px] font-bold text-gray-900 tracking-tight leading-snug">
-              Assessment Overview
-            </h1>
-            <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-              A structured evaluation of your English communication skills — speaking, listening, grammar, and comprehension.
-            </p>
+              <button
+                onClick={handleStartAssessment}
+                disabled={isRequesting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-7 py-3.5 text-sm font-black text-white shadow-lg shadow-[#2557a7]/15 transition-colors hover:bg-[#1e4a94] disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isRequesting ? 'Starting Assessment...' : 'Start Assessment'}
+                {!isRequesting && <span aria-hidden="true">-&gt;</span>}
+              </button>
+            </div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="mb-6 grid grid-cols-3 gap-3">
             {[
-              { value: '7',   label: 'Sections'  },
-              { value: '44',  label: 'Questions' },
-              { value: '20', label: 'Minutes'   },
+              { value: '7', label: 'Sections' },
+              { value: '44', label: 'Questions' },
+              { value: '20', label: 'Minutes' },
             ].map((s) => (
-              <div key={s.label} className="bg-white border border-gray-200 rounded-xl py-5 text-center shadow-sm">
-                <p className="text-[26px] font-bold text-[#2557a7] leading-none">{s.value}</p>
-                <p className="text-xs text-gray-500 mt-2 font-medium">{s.label}</p>
+              <div key={s.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-5 text-center shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+                <p className="text-3xl font-black leading-none text-[#2557a7]">{s.value}</p>
+                <p className="mt-2 text-xs font-bold text-slate-500">{s.label}</p>
               </div>
             ))}
           </div>
 
-          {/* Sections Table */}
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden mb-5">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">Assessment Sections</h2>
-              <span className="text-[11px] text-gray-400 font-medium">Complete in order</span>
-            </div>
-            <div>
-              {sections.map((section, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-4 px-5 py-3.5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/60 transition-colors"
-                >
-                  <div className="w-7 h-7 rounded-lg bg-[#2557a7]/8 border border-[#2557a7]/20 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-[#2557a7]">{index + 1}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{section.name}</p>
-                    <p className="text-xs text-gray-500">{section.description}</p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-xs font-medium text-gray-400">{section.count}Q</span>
-                    <span
-                      className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
-                        section.type === 'VOICE'
-                          ? 'bg-[#2557a7]/10 text-[#2557a7]'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {section.type}
-                    </span>
-                  </div>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <div>
+                  <h2 className="text-sm font-black text-slate-950">Assessment Sections</h2>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Complete each module in order.</p>
                 </div>
-              ))}
-            </div>
-          </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Sequential</span>
+              </div>
 
-          {/* Requirements */}
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden mb-5">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Technical Requirements</h2>
-            </div>
-            <div className="grid grid-cols-2">
-              {[
-                { label: 'Microphone', note: 'Required for all voice sections',       required: needsRecording },
-                { label: 'Camera',     note: 'Required for video proctoring',         required: needsRecording },
-                { label: 'Quiet Room', note: 'Minimise background noise',             required: false },
-                { label: 'Headphones', note: 'Recommended for listening tasks',       required: false },
-              ].map((req, i) => (
-                <div
-                  key={req.label}
-                  className={`px-5 py-4 ${
-                    i % 2 === 0 ? 'border-r border-gray-100' : ''
-                  } ${i < 2 ? 'border-b border-gray-100' : ''}`}
-                >
-                  <div className="flex items-center justify-between mb-0.5">
-                    <p className="text-sm font-semibold text-gray-900">{req.label}</p>
-                    <span className={`text-[9px] font-bold uppercase tracking-wide ${req.required ? 'text-red-500' : 'text-gray-400'}`}>
-                      {req.required ? 'Required' : 'Recommended'}
-                    </span>
+              <div className="divide-y divide-slate-100">
+                {sections.map((section, index) => (
+                  <div key={section.name} className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#2557a7]/15 bg-[#2557a7]/5 text-xs font-black text-[#2557a7]">
+                      {index + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-slate-950">{section.name}</p>
+                      <p className="mt-0.5 text-xs font-medium text-slate-500">{section.description}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs font-black text-slate-400">{section.count}Q</span>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                          section.type === 'VOICE'
+                            ? 'bg-[#2557a7]/10 text-[#2557a7]'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {section.type}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500">{req.note}</p>
+                ))}
+              </div>
+            </section>
+
+            <aside className="space-y-5">
+              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+                <div className="border-b border-slate-100 px-5 py-4">
+                  <h2 className="text-sm font-black text-slate-950">Technical Requirements</h2>
                 </div>
-              ))}
-            </div>
+                <div className="divide-y divide-slate-100">
+                  {[
+                    { label: 'Microphone', note: 'Required for voice responses', required: needsRecording },
+                    { label: 'Camera', note: 'Required for proctoring', required: needsRecording },
+                    { label: 'Quiet Room', note: 'Minimise background noise', required: false },
+                    { label: 'Headphones', note: 'Recommended for listening tasks', required: false },
+                  ].map((req) => (
+                    <div key={req.label} className="flex items-start justify-between gap-4 px-5 py-4">
+                      <div>
+                        <p className="text-sm font-black text-slate-900">{req.label}</p>
+                        <p className="mt-0.5 text-xs font-medium text-slate-500">{req.note}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wide ${req.required ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
+                        {req.required ? 'Required' : 'Recommended'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-900">Before You Begin</p>
+                <ul className="mt-3 space-y-2 text-xs font-semibold leading-5 text-amber-900">
+                  {[
+                    'You have 20 minutes to complete all 7 sections.',
+                    'Sections are sequential; you cannot skip ahead.',
+                    'Progress is saved between questions.',
+                    'Do not close or refresh the browser during the assessment.',
+                    'Speak naturally and clearly during voice sections.',
+                  ].map((tip) => (
+                    <li key={tip} className="flex gap-2">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                      <span>{tip}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </aside>
           </div>
 
-          {/* Before You Begin */}
-          <div className="border border-amber-200 bg-amber-50 rounded-xl px-5 py-4 mb-8">
-            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2.5">
-              Before You Begin
-            </p>
-            <ul className="space-y-1.5 text-xs text-amber-800">
-              {[
-                'You have 20 minutes to complete all 7 sections.',
-                'Sections are sequential — you cannot skip ahead.',
-                'Progress is auto-saved between questions.',
-                'Do not close or refresh the browser during the assessment.',
-                'Speak naturally and clearly — this is a learning evaluation, not a perfection test.',
-              ].map((tip, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <span className="shrink-0 font-bold text-amber-500 mt-0.5">–</span>
-                  {tip}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Error */}
           {error && (
-            <div className="mb-6 px-4 py-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm font-semibold text-red-700" role="alert">
               {error}
             </div>
           )}
-
-          {/* CTA */}
-          <div className="flex justify-center">
-            <button
-              onClick={handleStartAssessment}
-              disabled={isRequesting}
-              className="bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-10 py-3.5 rounded-xl font-semibold text-sm transition-colors shadow-sm"
-            >
-              {isRequesting ? 'Starting Assessment…' : 'Start Assessment →'}
-            </button>
-          </div>
-
         </div>
       </div>
     </>

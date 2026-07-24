@@ -510,7 +510,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
               {(editingOriginalEntry !== null || savedEntries.length > 0) && (
@@ -563,8 +563,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                           value={internship.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
-                          error={errors[`internship-${globalIndex}-startDate`]}
-                          maxDate={internship.endDate}
+                          maxDate={internship.endDate || undefined}
                         />
                       </div>
 
@@ -575,7 +574,6 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                             value={internship.endDate}
                             onChange={(val) => handleChange(editIndex, "endDate", val)}
                             placeholder="MM/YY"
-                            error={errors[`internship-${globalIndex}-endDate`]}
                             minDate={internship.startDate}
                           />
                         </div>

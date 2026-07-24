@@ -532,9 +532,9 @@ function WhyTooltip({ text }: { text: string }) {
 
 /* ─── ISSUE CARD ──────────────────────────────────────── */
 function IssueCard({
-  issue, Icon, onFix,
+  issue, Icon, onDismiss, onFix,
 }: {
-  issue: IssueCard; Icon: React.ElementType; onFix: () => void;
+  issue: IssueCard; Icon: React.ElementType; onDismiss: () => void; onFix: () => void;
 }) {
   const SECTION_IMPACT: Record<string, number> = {
     Keywords: 20, Skills: 18, Experience: 16, Summary: 14,
@@ -635,6 +635,16 @@ function IssueCard({
         </button>
       </div>
 
+      {/* Dismiss on hover */}
+      <button
+        onClick={onDismiss}
+        className="absolute top-2 right-2 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all"
+        title="Dismiss"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -642,11 +652,12 @@ function IssueCard({
 /* ─── PRIORITY GROUP ──────────────────────────────────── */
 function PriorityGroup({
   title, subtitle, accent, accentBg, issues, sectionIcons,
-  onFix, tooltip,
+  onDismiss, onFix, tooltip,
 }: {
   title: string; subtitle: string; accent: string; accentBg: string;
   issues: IssueCard[]; sectionIcons: Record<string, React.ElementType>;
-  onFix: () => void; tooltip: string;
+  onDismiss: (id: string) => void;
+  onFix: (section: string) => void; tooltip: string;
 }) {
   const [open, setOpen] = useState(true);
   if (!issues.length) return null;
@@ -720,7 +731,8 @@ function PriorityGroup({
                         key={issue.id}
                         issue={issue}
                         Icon={SectionIcon}
-                        onFix={onFix}
+                        onDismiss={() => onDismiss(issue.id)}
+                        onFix={() => onFix(issue.section)}
                       />
                     ))}
                   </div>
@@ -779,6 +791,7 @@ function ATSLoginReport() {
   const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [isFixing,  setIsFixing]  = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [filter,       setFilter       ] = useState<"all" | "critical" | "urgent" | "optional">("all");
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -810,10 +823,10 @@ function ATSLoginReport() {
   const issues = useMemo(() => scoreData ? extractIssues(scoreData.Breakdown) : [], [scoreData]);
 
   const grouped = useMemo(() => ({
-      critical: issues.filter(i => i.priority === "critical"),
-      urgent:   issues.filter(i => i.priority === "urgent"),
-      optional: issues.filter(i => i.priority === "optional"),
-  }), [issues]);
+      critical: issues.filter(i => i.priority === "critical" && !dismissedIds.has(i.id)),
+      urgent:   issues.filter(i => i.priority === "urgent"   && !dismissedIds.has(i.id)),
+      optional: issues.filter(i => i.priority === "optional" && !dismissedIds.has(i.id)),
+  }), [issues, dismissedIds]);
 
   const roadmapItems = useMemo(() => {
     const sectionInfo = new Map<string, { count: number; priority: IssueCard["priority"] }>();
@@ -901,7 +914,7 @@ function ATSLoginReport() {
     }, 150);
   }, [grouped]);
 
-  const handleFixNow = async () => {
+  const handleFixNow = async (section?: string) => {
     if (isFixing) return;
     try {
       const raw = localStorage.getItem("atsAnalysisData");
@@ -984,7 +997,7 @@ function ATSLoginReport() {
       localStorage.setItem(`atsAnalysis_${resumeId}`, JSON.stringify(updatedAnalysis));
 
       toast.dismiss("fix-now");
-      router.push(`/builder/creation/${enhancedResumeId}?source=enhanced&from_ats=true`);
+      router.push(`/builder/creation/${enhancedResumeId}?source=enhanced&from_ats=true${section ? `&open_section=${encodeURIComponent(section)}` : ""}`);
     } catch (error) {
       console.error("[ATS report] Failed to open enhancer", error);
       toast.dismiss("fix-now");
@@ -1404,17 +1417,17 @@ function ATSLoginReport() {
                     {(filter === "all" || filter === "critical") && (
                       <PriorityGroup title="Fix First" subtitle="Blocking your ATS pass rate" accent="#dc2626" accentBg="#fef2f2"
                         issues={grouped.critical} sectionIcons={SECTION_ICONS} tooltip={WHY_TEXT.General}
-                        onFix={handleFixNow} />
+                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
                     )}
                     {(filter === "all" || filter === "urgent") && (
                       <PriorityGroup title="High Impact" subtitle="Significant score improvements" accent="#F59E0B" accentBg="#FEF3C7"
                         issues={grouped.urgent} sectionIcons={SECTION_ICONS} tooltip="These issues cost meaningful ATS points. Fixing them moves your score into the competitive range."
-                        onFix={handleFixNow} />
+                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
                     )}
                     {(filter === "all" || filter === "optional") && (
                       <PriorityGroup title="Nice to Improve" subtitle="Polish that separates good from great" accent="#3465BC" accentBg="#EFF6FF"
                         issues={grouped.optional} sectionIcons={SECTION_ICONS} tooltip="Low-severity polish items. Address after fixing critical and urgent issues for maximum ROI."
-                        onFix={handleFixNow} />
+                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
                     )}
                     {((filter === "critical" && !grouped.critical.length) || (filter === "urgent" && !grouped.urgent.length) || (filter === "optional" && !grouped.optional.length)) && (
                       <div style={{ padding: "48px 0", textAlign: "center", borderRadius: 14, background: "#ECFDF5", border: "1px solid #6EE7A0" }}>

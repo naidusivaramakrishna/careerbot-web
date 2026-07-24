@@ -12,13 +12,13 @@ import { saveTextAnswer } from '@/utils/audioUtils';
 import logger from '@/lib/logger';
 
 const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), {
-  loading: () => <div className="w-65 bg-white border-r border-gray-200 shrink-0 animate-pulse" />,
+  loading: () => <div className="hidden h-full w-56 shrink-0 border-r border-gray-200 bg-white animate-pulse lg:block xl:w-60" />,
 });
 const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), {
   loading: () => null,
 });
 const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), {
-  loading: () => <div className="h-14 bg-white rounded-xl border border-gray-200 mb-6 animate-pulse" />,
+  loading: () => <div className="mb-3 h-12 shrink-0 rounded-xl border border-gray-200 bg-white animate-pulse" />,
 });
 
 export default function JumbledSentencesPage() {
@@ -146,13 +146,13 @@ export default function JumbledSentencesPage() {
         ]}
       />
 
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="flex h-full min-h-0 overflow-hidden bg-gray-50">
         <AssessmentSidebar currentSectionId={3} />
 
-        <main className="flex-1 px-8 py-7 min-w-0">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-3 lg:px-6 lg:py-4">
 
           {/* Section Header */}
-          <div className="mb-5">
+          <div className="mb-2 shrink-0">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 3 of 7</p>
             <h1 className="text-lg font-bold text-gray-900">{sectionName}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{sectionDescription}</p>
@@ -162,14 +162,14 @@ export default function JumbledSentencesPage() {
           <QuestionProgressBar
             currentQuestion={sectionQuestionNumber}
             totalQuestions={SECTION_TOTAL_QUESTIONS}
-            className="mb-6"
+            className="mb-3 shrink-0"
           />
 
           {/* Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto pr-1 assessment-scroll lg:grid-cols-2">
 
             {/* Left — Words display */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="min-h-0 overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Words</p>
                 <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
@@ -218,7 +218,7 @@ export default function JumbledSentencesPage() {
                   )}
                 </>
               ) : loading ? (
-                <div className="space-y-2.5">
+                <div className="space-y-1.5">
                   <div className="h-4 bg-gray-100 rounded animate-pulse w-3/4" />
                   <div className="h-4 bg-gray-100 rounded animate-pulse w-full" />
                 </div>
@@ -226,11 +226,11 @@ export default function JumbledSentencesPage() {
             </div>
 
             {/* Right — Options */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="min-h-0 overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Select the Correct Order</p>
 
               {backendOptions.length > 0 ? (
-                <div className="space-y-2.5">
+                <div className="space-y-1.5">
                   {backendOptions.map((optionOrdering: string, index: number) => (
                     <button
                       key={index}
@@ -281,7 +281,7 @@ export default function JumbledSentencesPage() {
           </div>
 
           {/* Footer nav */}
-          <div className="flex items-center justify-between">
+          <div className="flex shrink-0 items-center justify-between">
             <p className="text-xs text-gray-400">
               Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
             </p>

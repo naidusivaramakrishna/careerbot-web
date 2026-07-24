@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useVideoRecording } from '@/contexts/VideoRecordingContext';
 
@@ -9,7 +9,9 @@ const TOTAL_SECONDS = 20 * 60; // 20 minutes
 
 export default function CommunicationHeader() {
   const router = useRouter();
-  const { isCameraLost, isMicLost, restartRecording } = useVideoRecording();
+  const pathname = usePathname();
+  const isAssessmentOver = pathname === '/communication/feedback' || pathname === '/communication/report';
+  const { isCameraLost, isMicLost, restartRecording, stopRecording } = useVideoRecording();
   const [restarting, setRestarting] = useState(false);
   const [restartError, setRestartError] = useState('');
 
@@ -24,6 +26,9 @@ export default function CommunicationHeader() {
       setRestarting(false);
     }
   };
+  const [tabSwitched, setTabSwitched] = useState(false);
+  const [violations, setViolations] = useState(0);
+  const MAX_VIOLATIONS = 3;
   const [showConfirm, setShowConfirm] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [timeExpired, setTimeExpired] = useState(false);
@@ -41,6 +46,7 @@ export default function CommunicationHeader() {
         setTimeLeft(remaining);
         if (remaining === 0 && !expiredRef.current) {
           expiredRef.current = true;
+          localStorage.removeItem('test_start_date');
           setTimeExpired(true);
           if (interval) clearInterval(interval);
         }
@@ -94,12 +100,50 @@ export default function CommunicationHeader() {
     };
   }, []);
 
+  // Block Ctrl+T (new tab) and Ctrl+N (new window) during active assessment
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!localStorage.getItem('test_start_date')) return;
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && (e.key === 't' || e.key === 'T' || e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Detect tab switch / app switch during active assessment
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!localStorage.getItem('test_start_date')) return;
+      if (document.hidden) {
+        setTabSwitched(true);
+        setViolations((v) => v + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // Auto-terminate when violations exceed the limit
+  useEffect(() => {
+    if (violations >= MAX_VIOLATIONS && localStorage.getItem('test_start_date')) {
+      localStorage.removeItem('test_start_date');
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      stopRecording().finally(() => {
+        router.push('/communication/feedback?reason=timeout');
+      });
+    }
+  }, [violations, router, stopRecording]);
+
   // Detect user exiting fullscreen mid-assessment (e.g. pressing Escape)
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isAssessmentActive = !!localStorage.getItem('test_start_date');
       if (!document.fullscreenElement && isAssessmentActive) {
         setFullscreenExited(true);
+        setViolations((v) => v + 1);
       } else {
         setFullscreenExited(false);
       }
@@ -107,6 +151,16 @@ export default function CommunicationHeader() {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Auto-return to fullscreen after 5s if user doesn't click the button
+  useEffect(() => {
+    if (!fullscreenExited) return;
+    const t = setTimeout(() => {
+      document.documentElement.requestFullscreen().catch(() => {});
+      setFullscreenExited(false);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [fullscreenExited]);
 
   const handleReturnFullscreen = () => {
     document.documentElement.requestFullscreen().catch(() => {});
@@ -144,11 +198,12 @@ export default function CommunicationHeader() {
 
   return (
     <>
-      {/* Static header — part of flex column, no fixed positioning */}
-      <header className="h-12 w-full shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-5 z-50">
+      {/* Static header - part of flex column, no fixed positioning */}
+      <header className="h-14 w-full shrink-0 border-b border-slate-200 bg-white/95 px-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur z-50">
 
+        <div className="grid h-full grid-cols-[1fr_auto_1fr] items-center gap-4">
         {/* Left: Logo + name */}
-        <div className="flex items-center">
+        <div className="flex min-w-0 items-center">
           <Image
             src="/assets/icons/Logo.png"
             alt="CareerBot"
@@ -156,16 +211,19 @@ export default function CommunicationHeader() {
             height={50}
             className="object-contain"
           />
-          <span className="-ml-1.5 text-lg font-bold text-gray-900 tracking-tight">CareerBot</span>
+          <div className="-ml-1.5 min-w-0">
+            <span className="block text-base font-black leading-none tracking-tight text-slate-950">CareerBot</span>
+            <span className="hidden text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 sm:block">Live assessment</span>
+          </div>
         </div>
 
         {/* Center: Assessment label + timer */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+        <div className="hidden items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 sm:flex">
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
             Communication Assessment
           </span>
-          {timeLeft !== null && (
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums ${timerBg} ${timerColor}`}>
+          {timeLeft !== null && !isAssessmentOver && (
+            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black tabular-nums ${timerBg} ${timerColor}`}>
               <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -177,17 +235,44 @@ export default function CommunicationHeader() {
         {/* Right: Exit button */}
         <button
           onClick={handleExit}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+          className="justify-self-end flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
           Exit
         </button>
+        </div>
       </header>
 
+      {/* Tab switch / app switch detected overlay */}
+      {!isAssessmentOver && tabSwitched && !timeExpired && !isCameraLost && !isMicLost && !fullscreenExited && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="h-0.5 bg-amber-500" />
+            <div className="p-7 text-center">
+              <div className="inline-flex items-center justify-center w-14 h-14 bg-amber-50 border border-amber-100 rounded-2xl mb-4">
+                <svg className="w-7 h-7 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <h2 className="text-base font-bold text-gray-900 mb-1.5">Tab Switch Detected</h2>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                You navigated away from the assessment. Switching tabs or apps is not allowed during the exam.
+              </p>
+              <button
+                onClick={() => setTabSwitched(false)}
+                className="mt-6 w-full py-2.5 bg-[#2557a7] hover:bg-[#1e4a94] text-white rounded-xl font-semibold text-sm transition-colors"
+              >
+                Return to Assessment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Fullscreen exited overlay */}
-      {fullscreenExited && !timeExpired && !isCameraLost && (
+      {!isAssessmentOver && fullscreenExited && !timeExpired && !isCameraLost && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm mx-4 overflow-hidden">
             <div className="h-0.5 bg-amber-500" />
@@ -213,7 +298,7 @@ export default function CommunicationHeader() {
       )}
 
       {/* Camera / mic lost overlay */}
-      {(isCameraLost || isMicLost) && !timeExpired && (() => {
+      {!isAssessmentOver && (isCameraLost || isMicLost) && !timeExpired && (() => {
         const bothLost = isCameraLost && isMicLost;
         const title = bothLost
           ? 'Camera & Microphone Disconnected'
@@ -256,7 +341,7 @@ export default function CommunicationHeader() {
                   {restarting && (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   )}
-                  {restarting ? 'Enabling…' : buttonLabel}
+                  {restarting ? 'Enabling...' : buttonLabel}
                 </button>
               </div>
             </div>
@@ -265,7 +350,7 @@ export default function CommunicationHeader() {
       })()}
 
       {/* Time expired overlay */}
-      {timeExpired && (
+      {!isAssessmentOver && timeExpired && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm mx-4 overflow-hidden">
             <div className="h-0.5 bg-red-500" />
@@ -280,7 +365,12 @@ export default function CommunicationHeader() {
                 Your assessment time has ended. You can still share your feedback before leaving.
               </p>
               <button
-                onClick={() => router.push('/communication/feedback?reason=timeout')}
+                onClick={async () => {
+                  localStorage.removeItem('test_start_date');
+                  setTimeExpired(false);
+                  await stopRecording();
+                  router.push('/communication/feedback?reason=timeout');
+                }}
                 className="mt-6 w-full py-2.5 bg-[#2557a7] hover:bg-[#1e4a94] text-white rounded-xl font-semibold text-sm transition-colors"
               >
                 Continue to Feedback
@@ -321,3 +411,5 @@ export default function CommunicationHeader() {
     </>
   );
 }
+
+

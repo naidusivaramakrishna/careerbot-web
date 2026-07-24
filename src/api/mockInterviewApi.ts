@@ -205,7 +205,8 @@ export const generateNotes = async (data: GenerateNotesRequest): Promise<Generat
     logger.debug('📝 Generating mock interview notes', data);
     const response = await httpClient.post<GenerateNotesResponse>(
       '/mock-interview/generate-notes',
-      data as unknown as Record<string, unknown>
+      data as unknown as Record<string, unknown>,
+      { timeout: 180_000 } // 3 min — AI generation takes longer than the default 30s
     );
     logger.info('✅ Notes generated successfully');
     return response.data;
@@ -553,6 +554,7 @@ export const downloadReportPdf = async (sessionId: string): Promise<void> => {
 export interface LiveCreateRequest {
   session_type: 'hr' | 'technical' | 'mixed' | 'technical_coding';
   resume_id?: string;
+  enable_streaming_stt?: boolean;
 }
 
 export interface LiveCreateResponse {
@@ -579,6 +581,8 @@ export interface LiveSession {
   created_at: string;
   score?: number;
   duration_s?: number;
+  question_count?: number;
+  pressure_tag?: 'pressure_affected' | null;
 }
 
 // ── WS Message types (client → server) ──

@@ -57,8 +57,14 @@ const Education: React.FC = () => {
 
   const [savedEntries, setSavedEntries] = useState<EducationEntry[]>(() => {
     if (resumeData.education && resumeData.education.length) {
-      const validEntries = resumeData.education.filter(hasValidData);
-      return validEntries;
+      const seen = new Set<string>();
+      return resumeData.education.filter(entry => {
+        if (!hasValidData(entry)) return false;
+        const key = `${entry.school}||${entry.degree}||${entry.startDate}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
     return [];
   });
@@ -331,7 +337,7 @@ const Education: React.FC = () => {
           {/* Left Side: Scrollable Form Fields Section */}
           <div
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+            className="flex-1 mt-6 pr-2"
           >
             {(editingOriginalEntry !== null || savedEntries.length > 0) && (
               <button

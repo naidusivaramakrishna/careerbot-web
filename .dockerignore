@@ -24,3 +24,4 @@ jest.config.js
 .vercel
 .turbo
 coverage
+*.zip

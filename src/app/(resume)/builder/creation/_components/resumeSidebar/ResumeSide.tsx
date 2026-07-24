@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { SidebarOpen } from "lucide-react";
 import { DropResult } from "@hello-pangea/dnd";
 import { useResume } from "../../_context/ResumeContext";
@@ -54,12 +54,41 @@ const sectionComponents: Record<string, React.FC<SectionProps>> = {
   Languages,
 };
 
+// Maps ATS report section names → builder section names
+const ATS_SECTION_TO_BUILDER: Record<string, string> = {
+  Contact: "Personal Info",
+  Headline: "Professional Summary",
+  Summary: "Professional Summary",
+  Formatting: "Professional Summary",
+  ATSCompatibility: "Personal Info",
+  Experience: "Work Experience",
+  WorkExperience: "Work Experience",
+  ContentQuality: "Work Experience",
+  Leadership: "Work Experience",
+  Education: "Education",
+  Skills: "Skills",
+  Keywords: "Skills",
+  Projects: "Projects",
+  Certifications: "Certifications",
+  Internships: "Internships",
+  Achievements: "Achievements",
+  Volunteering: "Volunteering",
+  Awards: "Awards",
+  Languages: "Languages",
+  Publications: "Publications",
+  Hobbies: "Hobbies",
+  Interests: "Interests",
+  References: "References",
+};
+
 interface ResumeSideProps {
   isTemplateSidebarOpen?: boolean;
   onToggleTemplateSidebar?: (isOpen: boolean) => void;
   resumeId?: string;
   initialTab?: string;
   defaultOpen?: boolean;
+  /** ATS section name to auto-open on mount (e.g. "Experience", "Skills") */
+  openSection?: string;
   highlightAtsMissing?: boolean;
   requestedSection?: string | null;
   onRequestedSectionHandled?: () => void;
@@ -78,6 +107,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   onToggleTemplateSidebar,
   initialTab,
   defaultOpen = true,
+  openSection,
   highlightAtsMissing = false,
   requestedSection = null,
   onRequestedSectionHandled,
@@ -184,6 +214,20 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const [activeSection, setActiveSection] = useState<number | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [activeTab, setActiveTab] = useState(initialTab ?? "Editor");
+
+  // Auto-open the section specified by the ATS report "Fix Now" button
+  const openSectionDone = useRef(false);
+  useEffect(() => {
+    if (!openSection || isLoadingResume || openSectionDone.current) return;
+    openSectionDone.current = true;
+    const builderName = ATS_SECTION_TO_BUILDER[openSection] ?? openSection;
+    const idx = sections.findIndex(s => s.name === builderName);
+    if (idx !== -1) {
+      setIsOpen(true);
+      setActiveTab("Editor");
+      setActiveSection(idx);
+    }
+  }, [openSection, isLoadingResume, sections]);
 
   useEffect(() => {
     if (!requestedSection) return;
@@ -521,6 +565,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const lowerKey = key.toLowerCase();
   const optionalFields = [
     "linkedin",
+    "github",
     "portfolio",
     "currentlyworking",
     "link",
@@ -649,6 +694,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
               completionStatus={completionStatus}
               onSidebarToggle={handleSidebarToggle}
               clearErrors={clearErrors}
+              setErrors={setErrors}
               atsIssuesBySection={atsIssuesBySection}
               requestedSection={requestedSection}
               onRequestedSectionHandled={onRequestedSectionHandled}
