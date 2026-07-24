@@ -3,25 +3,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
+  ArrowRight,
   BarChart2,
   Bell,
   Bookmark,
   Briefcase,
   Building2,
-  CalendarCheck2,
-  CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Cloud,
   Code2,
   Filter,
+  FileText,
   Flame,
   IndianRupee,
   MapPin,
-  Monitor,
+  Mic2,
   PenTool,
   PieChart,
   Puzzle,
@@ -32,6 +33,7 @@ import {
   Target,
   TrendingUp,
   Users,
+  LayoutDashboard,
   Zap,
 } from "lucide-react";
 import SignUpModal from "@/components/SignUpModal";
@@ -43,13 +45,6 @@ import { useAuth } from "@/hooks/useAuth";
    Sample content — static previews shown on the marketing home page only.
    The real, live-data experience lives at /jobslogin.
 ──────────────────────────────────────────────────────────────────────── */
-
-const QUICK_SEARCHES = [
-  { label: "Remote jobs", icon: Briefcase },
-  { label: "Data analyst", icon: BarChart2 },
-  { label: "React developer", icon: Monitor },
-  { label: "Product manager", icon: TrendingUp },
-];
 
 const SEARCH_SUGGESTIONS = [
   // Languages, frameworks & tools (skills)
@@ -99,6 +94,49 @@ const EXPERIENCE_OPTIONS = [
   "10 yrs", "11+ yrs",
 ];
 
+const FEATURE_STORIES = [
+  {
+    key: "matching",
+    eyebrow: "AI Job Matching",
+    title: "Opportunities selected around your strengths.",
+    description: "CareerBOT compares your skills and goals with live roles to surface stronger matches first.",
+    accent: "#176cf0",
+    soft: "#dceaff",
+    image: "/images/jobs/feature-stories/ai-job-matching-v2.png",
+    icon: Target,
+  },
+  {
+    key: "resume",
+    eyebrow: "Resume Intelligence",
+    title: "Know exactly what your resume needs next.",
+    description: "Get a focused score, missing-skill signals, and practical improvements before you apply.",
+    accent: "#7c3aed",
+    soft: "#eee6ff",
+    image: "/images/jobs/feature-stories/resume-intelligence.png",
+    icon: FileText,
+  },
+  {
+    key: "interview",
+    eyebrow: "Interview Practice",
+    title: "Practice smarter. Interview confidently.",
+    description: "Rehearse realistic questions and get focused coaching on every answer.",
+    accent: "#0f9f73",
+    soft: "#dcf8ef",
+    image: "/images/jobs/feature-stories/interview-practice-v2.png",
+    icon: Mic2,
+  },
+  {
+    key: "tracking",
+    eyebrow: "Application Tracking",
+    title: "Keep every opportunity and next step in view.",
+    description: "Organize applications, interviews, follow-ups, and offers from one simple workspace.",
+    accent: "#ea580c",
+    soft: "#ffeadc",
+    image: "/images/jobs/feature-stories/application-tracking.png",
+    icon: LayoutDashboard,
+  },
+] as const;
+
 const MODE_STYLES: Record<string, string> = {
   Remote: "bg-violet-50 text-violet-600",
   Hybrid: "bg-blue-50 text-blue-600",
@@ -106,10 +144,10 @@ const MODE_STYLES: Record<string, string> = {
 };
 
 const JOB_PREVIEWS = [
-  { title: "Senior Data Scientist", company: "Google", location: "Hyderabad, India", mode: "Remote", salary: "₹18 - 28 LPA", rating: "4.8", match: "92%", posted: "2h ago", brand: "#4285F4" },
-  { title: "Product Designer", company: "Microsoft", location: "Bengaluru, India", mode: "Hybrid", salary: "₹12 - 20 LPA", rating: "4.5", match: "89%", posted: "5h ago", brand: "#00A4EF" },
-  { title: "Backend Engineer", company: "Amazon", location: "Pune, India", mode: "Remote", salary: "₹15 - 24 LPA", rating: "4.6", match: "91%", posted: "1d ago", brand: "#FF9900" },
-  { title: "Marketing Analyst", company: "HubSpot", location: "Bengaluru, India", mode: "On-site", salary: "₹8 - 14 LPA", rating: "4.4", match: "87%", posted: "1d ago", brand: "#FF7A59" },
+  { title: "Senior Data Scientist", company: "Google", location: "Hyderabad, India", mode: "Remote", salary: "₹18 - 28 LPA", rating: "4.8", match: "92%", posted: "2h ago", brand: "#4285F4", logo: "/assets/icons/google-icon.svg" },
+  { title: "Product Designer", company: "Microsoft", location: "Bengaluru, India", mode: "Hybrid", salary: "₹12 - 20 LPA", rating: "4.5", match: "89%", posted: "5h ago", brand: "#00A4EF", logo: "/assets/icons/microsoft-icon.svg" },
+  { title: "Backend Engineer", company: "Amazon", location: "Pune, India", mode: "Remote", salary: "₹15 - 24 LPA", rating: "4.6", match: "91%", posted: "1d ago", brand: "#FF9900", logo: null },
+  { title: "Marketing Analyst", company: "HubSpot", location: "Bengaluru, India", mode: "On-site", salary: "₹8 - 14 LPA", rating: "4.4", match: "87%", posted: "1d ago", brand: "#FF7A59", logo: null },
 ];
 
 const POPULAR_ROLES = [
@@ -131,31 +169,37 @@ const BOTTOM_STATS = [
 const FEATURES = [
   {
     icon: Target,
+    iconBg: "bg-blue-50 text-blue-600",
     title: "Resume-Aware Matching",
     desc: "See a match score for every job based on your resume, powered by Smart Match.",
   },
   {
     icon: Filter,
+    iconBg: "bg-violet-50 text-violet-600",
     title: "Smart Filters",
     desc: "Narrow results by location, salary, experience, source, and posting date in one click.",
   },
   {
     icon: Bookmark,
+    iconBg: "bg-emerald-50 text-emerald-600",
     title: "Save & Track",
     desc: "Bookmark roles you like and track every application from one dashboard.",
   },
   {
     icon: Bell,
+    iconBg: "bg-amber-50 text-amber-600",
     title: "New Job Alerts",
     desc: "Get notified as soon as roles matching your profile are posted.",
   },
   {
     icon: Briefcase,
+    iconBg: "bg-cyan-50 text-cyan-600",
     title: "Live Job Feed",
     desc: "Fresh listings pulled from top job portals and company career pages, updated continuously.",
   },
   {
     icon: Puzzle,
+    iconBg: "bg-indigo-50 text-indigo-600",
     title: "Browser Extension",
     desc: "Capture any job description from the web directly into your workflow.",
   },
@@ -176,6 +220,9 @@ export default function JobsHomePage() {
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [selectedExperience, setSelectedExperience] = useState("");
   const [showExperienceDropdown, setShowExperienceDropdown] = useState(false);
+  const [activeFeature, setActiveFeature] = useState(0);
+  const featureTouchStart = useRef<number | null>(null);
+  const reduceMotion = useReducedMotion();
   const locationRef = useRef<HTMLDivElement>(null);
   const experienceRef = useRef<HTMLDivElement>(null);
 
@@ -269,6 +316,17 @@ export default function JobsHomePage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveFeature((current) => (current + 1) % FEATURE_STORIES.length);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const showFeature = (index: number) => {
+    setActiveFeature((index + FEATURE_STORIES.length) % FEATURE_STORIES.length);
+  };
+
   const openSignup = () => {
     setAuthFormType("signup");
     setShowAuthModal(true);
@@ -282,37 +340,77 @@ export default function JobsHomePage() {
     <>
       <LandingNavbar onOpenSignup={openSignup} onOpenSignin={openSignin} />
 
-      {/* HERO — two-column, illustration-led */}
-      <section
-        className="relative overflow-hidden py-16 md:py-20"
-        style={{ background: "radial-gradient(circle at 72% 22%, rgba(37,87,167,0.12), transparent 30%), linear-gradient(180deg,#ffffff 0%,#f6faff 72%,#ffffff 100%)" }}
-      >
-        <div className="relative mx-auto max-w-6xl px-6 lg:px-8">
-          <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
+      {/* HERO — full-height, illustration-led */}
+      <section className="relative isolate flex min-h-[calc(100svh-88px)] items-center overflow-hidden bg-[radial-gradient(circle_at_82%_21%,rgba(125,211,252,0.28),transparent_30%),radial-gradient(circle_at_74%_76%,rgba(99,102,241,0.13),transparent_34%),radial-gradient(circle_at_21%_62%,rgba(219,234,254,0.52),transparent_38%),linear-gradient(135deg,#ffffff_0%,#f8fbff_45%,#f1f7ff_100%)] py-9 sm:py-10 xl:py-12">
+        {/* Background — soft gradient wash */}
+        <div
+          className="pointer-events-none absolute inset-0 -z-20"
+          style={{ background: "transparent" }}
+        />
+        {/* Blurred decorative circles */}
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-45">
+          <div className="absolute -left-28 bottom-5 h-72 w-[620px] rotate-[-17deg] rounded-[999px] bg-[linear-gradient(90deg,rgba(219,234,254,0),rgba(147,197,253,0.36),rgba(255,255,255,0))] blur-2xl" />
+          <div className="absolute bottom-20 right-[-7%] h-40 w-[760px] rotate-[-5deg] rounded-[999px] bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(79,70,229,0.22),rgba(14,165,233,0.2),rgba(255,255,255,0))] blur-xl" />
+          <div className="absolute left-[45%] top-[38%] h-px w-[680px] -rotate-[21deg] bg-gradient-to-r from-transparent via-white/90 to-transparent" />
+        </div>
+        {/* Dot pattern */}
+        <div
+          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.35]"
+          style={{
+            backgroundImage: "radial-gradient(circle, rgba(37,87,167,0.18) 1px, transparent 1px)",
+            backgroundSize: "26px 26px",
+            WebkitMaskImage: "radial-gradient(ellipse 85% 60% at 50% 25%, black 35%, transparent 85%)",
+            maskImage: "radial-gradient(ellipse 85% 60% at 50% 25%, black 35%, transparent 85%)",
+          }}
+        />
+        {/* Floating sparkles — minimal, low-opacity accents */}
+        {[
+          { top: "12%", left: "6%", size: 12, duration: 4.5 },
+          { top: "22%", left: "44%", size: 9, duration: 5.2 },
+          { top: "68%", left: "9%", size: 10, duration: 3.8 },
+          { top: "78%", left: "48%", size: 8, duration: 4.8 },
+          { top: "16%", left: "92%", size: 10, duration: 4.2 },
+        ].map((s, i) => (
+          <motion.span
+            key={i}
+            className="pointer-events-none absolute -z-10 text-[#9fc3ff]"
+            style={{ top: s.top, left: s.left }}
+            animate={{ y: [0, -10, 0], opacity: [0.25, 0.6, 0.25] }}
+            transition={{ duration: s.duration, repeat: Infinity, ease: "easeInOut", delay: i * 0.4 }}
+          >
+            <Sparkles size={s.size} fill="currentColor" />
+          </motion.span>
+        ))}
+
+        <div className="relative mx-auto w-full max-w-[1728px] px-5 sm:px-8 lg:px-10 2xl:px-[60px]">
+          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[43%_minmax(0,1fr)] lg:gap-6 xl:grid-cols-[44%_minmax(0,1fr)] xl:gap-8 2xl:grid-cols-[46%_minmax(0,1fr)] 2xl:gap-10">
             {/* LEFT — copy + search bar */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.55 }}
+              className="min-w-0"
             >
-              <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full border border-[#d7e5ff] bg-[#f3f7ff] px-4 py-1.5 text-[13px] font-semibold text-[#2557a7]">
-                <Flame size={14} className="text-orange-500" fill="currentColor" />
-                We&apos;re Hiring!
+              <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-[#cfe0ff] bg-white/70 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] text-[#0b55d9] shadow-[0_10px_28px_rgba(37,87,167,0.08)] backdrop-blur">
+                <Sparkles size={13} />
+                AI Career Intelligence
               </div>
 
-              <h1 className="text-[40px] font-black leading-[1.1] tracking-tight text-[#08143f] sm:text-[48px] lg:text-[52px]">
-                Find the right job.
+              <h1 className="max-w-[760px] text-[clamp(34px,3.6vw,58px)] font-black leading-[1.08] tracking-[-0.045em] text-[#06113f]">
+                Your next opportunity,
                 <br />
-                <span className="text-[#0d5be1]">Right</span> now.
+                <span className="bg-gradient-to-r from-[#0b55d9] via-[#176cf0] to-[#4d91ff] bg-clip-text text-transparent">
+                  intelligently matched.
+                </span>
               </h1>
 
-              <p className="mt-5 max-w-md text-[15.5px] leading-relaxed text-[#33446c]">
-                Explore thousands of opportunities from top companies and build your dream career.
+              <p className="mt-5 max-w-[540px] text-[clamp(14px,1.2vw,16px)] leading-7 text-[#3e5076] xl:mt-6">
+                Discover roles aligned with your skills, ambitions, and salary goals—so you can move forward with clarity.
               </p>
 
               {/* Search bar */}
-              <div className="mt-8 flex flex-col gap-0 divide-y divide-slate-100 rounded-lg bg-white p-2 shadow-[0_18px_48px_rgba(37,87,167,0.08)] md:flex-row md:items-center md:divide-x md:divide-y-0">
-                <div ref={searchRef} className="relative flex min-w-0 flex-1 items-center gap-2 px-3.5 py-3 md:min-w-[150px]">
+              <div className="mt-7 flex flex-col gap-0 divide-y divide-slate-100 rounded-2xl border border-white/80 bg-white/92 p-2 shadow-[0_20px_48px_rgba(37,87,167,0.13)] backdrop-blur-md transition-shadow focus-within:border-[#bcd6f7] focus-within:shadow-[0_22px_54px_rgba(13,91,225,0.2)] sm:flex-row sm:flex-wrap sm:items-center sm:divide-x sm:divide-y-0 xl:grid xl:grid-cols-[minmax(125px,1fr)_auto_auto_auto] 2xl:grid-cols-[minmax(145px,1fr)_auto_auto_auto]">
+                <div ref={searchRef} className="relative flex min-w-0 flex-1 items-center gap-2 px-4 py-3.5 md:min-w-[150px] md:py-0">
                   <Search size={17} className="shrink-0 text-slate-400" />
                   <input
                     ref={searchInputRef}
@@ -346,7 +444,7 @@ export default function JobsHomePage() {
                   <button
                     type="button"
                     onClick={() => { setShowLocationDropdown((v) => !v); setShowExperienceDropdown(false); }}
-                    className="flex shrink-0 items-center gap-2 px-2.5 py-3 lg:px-3.5"
+                    className="flex shrink-0 items-center gap-2 px-3 py-3.5 md:py-0"
                   >
                     <MapPin size={16} className="shrink-0 text-slate-400" />
                     <span
@@ -408,7 +506,7 @@ export default function JobsHomePage() {
                   <button
                     type="button"
                     onClick={() => { setShowExperienceDropdown((v) => !v); setShowLocationDropdown(false); }}
-                    className="flex shrink-0 items-center gap-2 px-2.5 py-3 lg:px-3.5"
+                    className="flex shrink-0 items-center gap-2 px-3 py-3.5 md:py-0"
                   >
                     <Briefcase size={16} className="shrink-0 text-slate-400" />
                     <span
@@ -445,139 +543,417 @@ export default function JobsHomePage() {
                     </div>
                   )}
                 </div>
-                <button
+                <motion.button
                   onClick={() => goToSearch(searchValue)}
-                  className="m-1 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#0b55d9] px-3.5 py-3 text-[13px] font-bold text-white shadow-[0_14px_28px_rgba(13,91,225,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0848ba]"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0b55d9] px-4 py-3 text-[13px] font-bold text-white shadow-[0_14px_28px_rgba(13,91,225,0.24)] transition-colors hover:bg-[#0848ba] sm:ml-auto sm:w-auto sm:whitespace-nowrap lg:ml-0"
                 >
-                  Search Jobs
-                  <Search size={14} className="shrink-0" />
-                </button>
+                  Search jobs
+                  <ArrowRight size={17} className="shrink-0" />
+                </motion.button>
               </div>
 
-              {/* Popular searches */}
-              <div className="mt-5 flex flex-wrap items-center gap-2.5">
-                <span className="text-[13px] font-medium text-slate-500">Popular Searches:</span>
-                {QUICK_SEARCHES.map(({ label, icon: Icon }) => (
-                  <button
-                    key={label}
-                    onClick={() => goToSearch(label)}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#eef5ff] px-3.5 py-1.5 text-[12.5px] font-semibold text-[#2557a7] transition-colors hover:bg-[#e3efff]"
-                  >
-                    <Icon size={13} className="shrink-0" />
-                    {label}
-                  </button>
-                ))}
+              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-medium text-[#607397]">
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldCheck size={14} className="text-[#0b55d9]" />
+                  Verified employers
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-[#0b55d9]" />
+                  Matches tailored to you
+                </span>
               </div>
+
             </motion.div>
 
-            {/* RIGHT — illustration + floating UI cards */}
+            {/* RIGHT — cinematic animated-style career visual */}
+            {true && (
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.65, delay: 0.15 }}
-              className="relative mx-auto w-full max-w-[520px] self-start px-4 py-6 lg:-mt-4"
+              className="relative mx-auto w-full min-w-0 max-w-[650px] py-3 lg:-mr-1"
             >
-              {/* Background blob + dot pattern */}
-              <div
-                className="pointer-events-none absolute inset-6 rounded-[48%_52%_58%_42%/42%_48%_52%_58%]"
-                style={{ background: "linear-gradient(135deg, #dbe8ff 0%, #eef5ff 100%)" }}
-              />
-              <div
-                className="pointer-events-none absolute inset-6 rounded-[48%_52%_58%_42%/42%_48%_52%_58%] opacity-60"
-                style={{ backgroundImage: "radial-gradient(circle,rgba(37,87,167,0.22) 1.5px,transparent 1.5px)", backgroundSize: "18px 18px" }}
-              />
-              {[
-                { top: "6%", left: "4%", size: 9, shape: "circle" },
-                { top: "14%", right: "10%", size: 7, shape: "circle" },
-                { bottom: "18%", left: "2%", size: 8, shape: "square" },
-                { bottom: "8%", right: "6%", size: 10, shape: "circle" },
-              ].map((d, i) => (
-                <span
-                  key={i}
-                  className={`pointer-events-none absolute border-2 border-[#bcd6f7] ${d.shape === "circle" ? "rounded-full" : "rotate-45 rounded-sm"}`}
-                  style={{ width: d.size, height: d.size, top: d.top, left: d.left, right: d.right, bottom: d.bottom }}
-                />
-              ))}
-
-              {/* Illustration — edges masked to blend the image's own background into the page */}
-              <Image
-                src="/images/ChatGPT Image Jul 4, 2026, 03_02_48 PM.png"
-                alt="Job seeker browsing matched job listings"
-                width={1536}
-                height={1024}
-                priority
-                className="relative h-auto w-full"
-                style={{
-                  WebkitMaskImage: "radial-gradient(ellipse 60% 65% at center, black 55%, transparent 92%)",
-                  maskImage: "radial-gradient(ellipse 60% 65% at center, black 55%, transparent 92%)",
-                  transform: "translate(-24%, 6%)",
-                }}
-              />
-
-              {/* Floating search bubble */}
+              <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[44px] bg-[radial-gradient(circle_at_55%_44%,rgba(76,145,255,0.26),transparent_66%)] blur-2xl" />
               <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute left-[-2%] top-[10%] z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-[0_8px_24px_rgba(37,87,167,0.12)]"
+                className="relative aspect-[4/3] overflow-hidden rounded-[30px] border-[8px] border-white/90 bg-[#0c3e9b] shadow-[0_30px_78px_rgba(31,92,180,0.22)]"
+                initial={reduceMotion ? false : { scale: 0.985 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: reduceMotion ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] }}
               >
-                <Search size={20} className="text-[#0d5be1]" />
-              </motion.div>
-
-              {/* AI Match Score card */}
-              <motion.div
-                initial={{ opacity: 0, y: -14, rotate: 2 }}
-                animate={{ opacity: 1, y: 0, rotate: 2 }}
-                transition={{ duration: 0.55, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute right-[0%] top-0 z-20 w-[200px] rounded-lg bg-white p-3.5 shadow-[0_18px_40px_rgba(37,87,167,0.14)]"
-              >
-                <div className="relative mb-2 inline-flex">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0b55d9] text-white">
-                    <Target size={17} />
-                  </div>
-                  <span className="absolute -right-1.5 -top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-sm">
-                    <CheckCircle2 size={15} className="text-[#0b55d9]" />
-                  </span>
+                <motion.div
+                  className="absolute inset-0"
+                  animate={reduceMotion ? undefined : { scale: [1, 1.035, 1], x: [0, -5, 0], y: [0, -3, 0] }}
+                  transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <Image
+                    src="/images/jobs/career-match-workspace-v1.png"
+                    alt="Animated illustration of a professional using AI to match their skills with the right opportunity"
+                    fill
+                    priority
+                    sizes="(min-width: 1024px) 44vw, 92vw"
+                    className="object-cover object-center"
+                  />
+                </motion.div>
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,0.08),transparent_34%,rgba(3,22,70,0.12))]" />
+                <div className="absolute bottom-5 left-5 rounded-full border border-white/35 bg-[#061b4c]/55 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white shadow-lg backdrop-blur-md">
+                  Skills matched to opportunity
                 </div>
-                <p className="text-[13px] font-bold text-slate-900">AI Match Score</p>
-                <p className="mt-1 text-[22px] font-extrabold leading-none text-emerald-600">92%</p>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <div className="h-full w-[92%] rounded-full bg-emerald-500" />
-                </div>
-              </motion.div>
-
-              {/* Interview Scheduled card */}
-              <motion.div
-                initial={{ opacity: 0, y: 14, rotate: -1 }}
-                animate={{ opacity: 1, y: 0, rotate: -1 }}
-                transition={{ duration: 0.55, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute right-[-4%] bottom-[6%] z-20 w-[190px] rounded-lg bg-white p-3.5 shadow-[0_18px_40px_rgba(37,87,167,0.14)]"
-              >
-                <div className="relative mb-2 inline-flex">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#7c3aed] text-white">
-                    <CalendarCheck2 size={17} />
-                  </div>
-                  <span className="absolute -right-1.5 -top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-sm">
-                    <CheckCircle2 size={15} className="text-[#7c3aed]" />
-                  </span>
-                </div>
-                <p className="text-[13px] font-bold text-slate-900">Interview Scheduled</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">Your next interview is on Monday.</p>
               </motion.div>
             </motion.div>
+            )}
+
+            {/* Previous product card retained in source for reference only. */}
+            {false && (
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, delay: 0.15 }}
+              className="relative mx-auto w-full min-w-0 max-w-[650px] py-3 lg:-mr-1"
+            >
+              <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[44px] bg-[radial-gradient(circle_at_55%_40%,rgba(76,145,255,0.2),transparent_66%)] blur-2xl" />
+              <div className="overflow-hidden rounded-[28px] border border-[#dce7f7] bg-white shadow-[0_24px_64px_rgba(31,92,180,0.14)]">
+                <div className="flex items-center justify-between border-b border-[#e7eef8] px-5 py-3.5 sm:px-6">
+                  <div>
+                    <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#0b55d9]">
+                      <Target size={14} />
+                      Your strongest match
+                    </div>
+                    <p className="mt-1 text-[12px] text-[#7181a0]">Personalized from your skills and preferences</p>
+                  </div>
+                  <div className="rounded-full bg-[#eafaf3] px-3 py-1.5 text-[12px] font-bold text-[#087a55]">
+                    94% match
+                  </div>
+                </div>
+
+                <div className="px-5 py-4 sm:px-6 sm:py-5">
+                  <div className="flex items-start gap-4">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-[#e2e9f5] bg-white shadow-sm">
+                      <Image src="/assets/icons/microsoft-icon.svg" alt="" width={24} height={24} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#607397]">
+                        Microsoft
+                        <ShieldCheck size={13} className="text-[#0b55d9]" aria-label="Verified employer" />
+                      </p>
+                      <h2 className="mt-0.5 text-[22px] font-black tracking-[-0.025em] text-[#071744]">
+                        Senior Product Designer
+                      </h2>
+                      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] font-medium text-[#607397]">
+                        <span className="inline-flex items-center gap-1.5"><MapPin size={14} /> Bengaluru · Hybrid</span>
+                        <span className="inline-flex items-center gap-1.5"><Briefcase size={14} /> Full-time</span>
+                        <span className="inline-flex items-center gap-1.5"><TrendingUp size={14} /> Senior level</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-y border-[#e7eef8] py-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8a99b4]">Estimated salary</p>
+                      <p className="mt-0.5 text-[20px] font-black text-[#071744]">₹18–28 LPA</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {["Product strategy", "Figma", "Design systems"].map((skill) => (
+                        <span key={skill} className="rounded-lg border border-[#dce7f7] bg-[#f7faff] px-2.5 py-1.5 text-[10px] font-semibold text-[#486188]">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[13px] font-bold text-[#172c54]">Why this role fits you</p>
+                    <div className="mt-2.5 grid gap-2">
+                      {[
+                        "Your core design skills align with the role",
+                        "The seniority matches your recent experience",
+                        "Location and salary fit your preferences",
+                      ].map((reason) => (
+                        <div key={reason} className="flex items-center gap-2.5 text-[12px] text-[#5a6d93]">
+                          <ShieldCheck size={15} className="shrink-0 text-[#0aa673]" />
+                          {reason}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => goToSearch("Senior Product Designer")}
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#0b55d9] px-5 text-[13px] font-bold text-white shadow-[0_14px_28px_rgba(13,91,225,0.22)] transition-colors hover:bg-[#0848ba]"
+                    >
+                      View role details
+                      <ArrowRight size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Save matched role"
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#d7e4f6] text-[#274a80] transition-colors hover:bg-[#f4f8ff]"
+                    >
+                      <Bookmark size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+            )}
+
+            {/* Previous carousel retained in source for reference only. */}
+            {false && (
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, delay: 0.15 }}
+              className="relative mx-auto w-full min-w-0 max-w-[680px] py-4 lg:-mr-2"
+              onTouchStart={(event) => {
+                featureTouchStart.current = event.touches[0]?.clientX ?? null;
+              }}
+              onTouchEnd={(event) => {
+                const start = featureTouchStart.current;
+                const end = event.changedTouches[0]?.clientX;
+                if (start != null && end != null && Math.abs(start - end) > 45) {
+                  showFeature(activeFeature + (start > end ? 1 : -1));
+                }
+                featureTouchStart.current = null;
+              }}
+            >
+              <div className="pointer-events-none absolute -inset-3 rounded-[38px] bg-[radial-gradient(circle_at_55%_45%,rgba(63,145,255,0.2),transparent_64%)] blur-2xl" />
+              <div className="relative aspect-[16/10] overflow-hidden rounded-[32px] border border-white/90 bg-white/55 p-2 shadow-[0_28px_72px_rgba(31,92,180,0.18)] backdrop-blur-xl">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={FEATURE_STORIES[activeFeature].key}
+                    initial={reduceMotion ? false : { opacity: 0, x: 34, scale: 0.985 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={reduceMotion ? undefined : { opacity: 0, x: -28, scale: 0.99 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}
+                    className="relative h-full overflow-hidden rounded-[28px]"
+                    style={{
+                      background: `radial-gradient(circle at 72% 34%, ${FEATURE_STORIES[activeFeature].soft}, transparent 34%), linear-gradient(145deg, #fafdff 0%, #edf5ff 100%)`,
+                    }}
+                  >
+                    <motion.div
+                      className="absolute inset-x-0 top-0 h-[70%] overflow-hidden"
+                      initial={reduceMotion ? false : { scale: 1.035, x: 12 }}
+                      animate={{ scale: 1, x: 0 }}
+                      transition={{ duration: reduceMotion ? 0 : 5.5, ease: "easeOut" }}
+                    >
+                      <Image
+                        src={FEATURE_STORIES[activeFeature].image}
+                        alt={`${FEATURE_STORIES[activeFeature].eyebrow} animated illustration`}
+                        fill
+                        priority={activeFeature === 0}
+                        sizes="(min-width: 1024px) 46vw, 92vw"
+                        className={`object-cover ${
+                          FEATURE_STORIES[activeFeature].key === "interview"
+                            ? "object-top"
+                            : "object-center"
+                        }`}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-white/30" />
+                    </motion.div>
+                    <div className="hidden">
+                      {FEATURE_STORIES[activeFeature].key === "matching" && (
+                        <div className="relative mx-auto mt-8 h-[220px] max-w-[480px]">
+                          {[0, 1, 2].map((ring) => (
+                            <motion.div
+                              key={ring}
+                              className="absolute left-1/2 top-1/2 rounded-full border border-[#93baff]/50"
+                              style={{ width: 116 + ring * 64, height: 116 + ring * 64, marginLeft: -(58 + ring * 32), marginTop: -(58 + ring * 32) }}
+                              animate={reduceMotion ? undefined : { rotate: ring % 2 ? -360 : 360 }}
+                              transition={{ duration: 18 + ring * 5, repeat: Infinity, ease: "linear" }}
+                            >
+                              <span className="absolute -right-2 top-1/2 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-[#176cf0] shadow-lg">
+                                {ring === 0 ? <Briefcase size={14} /> : ring === 1 ? <MapPin size={14} /> : <Star size={14} />}
+                              </span>
+                            </motion.div>
+                          ))}
+                          <motion.div
+                            className="absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[28px] bg-[#176cf0] text-white shadow-[0_24px_60px_rgba(23,108,240,0.35)]"
+                            animate={reduceMotion ? undefined : { y: [-4, 4, -4] }}
+                            transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+                          >
+                            <Target size={38} />
+                          </motion.div>
+                          <div className="absolute right-2 top-4 rounded-2xl border border-white bg-white/90 px-4 py-3 shadow-xl">
+                            <p className="text-[10px] font-semibold text-slate-400">Match score</p>
+                            <p className="text-[24px] font-black text-emerald-500">94%</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {FEATURE_STORIES[activeFeature].key === "resume" && (
+                        <div className="relative mx-auto mt-7 flex h-[230px] max-w-[430px] items-center justify-center">
+                          <motion.div
+                            className="relative h-[210px] w-[270px] rounded-[24px] border border-white bg-white p-5 shadow-[0_26px_65px_rgba(60,70,150,0.18)]"
+                            animate={reduceMotion ? undefined : { rotate: [-1.5, 1, -1.5] }}
+                            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eee6ff] text-[#7c3aed]"><FileText size={20} /></span>
+                              <div className="space-y-2"><div className="h-2 w-28 rounded bg-slate-200" /><div className="h-1.5 w-20 rounded bg-slate-100" /></div>
+                            </div>
+                            <div className="mt-5 space-y-3">
+                              {[84, 96, 72, 90].map((width, index) => (
+                                <motion.div
+                                  key={width}
+                                  className="h-2 rounded-full bg-[#d9c8ff]"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${width}%` }}
+                                  transition={{ duration: 0.8, delay: index * 0.12 }}
+                                />
+                              ))}
+                            </div>
+                          </motion.div>
+                          <motion.div
+                            className="absolute -right-2 top-8 flex h-28 w-28 items-center justify-center rounded-full border-[10px] border-[#7c3aed] border-l-[#e8dcff] bg-white shadow-xl"
+                            animate={reduceMotion ? undefined : { scale: [1, 1.04, 1] }}
+                            transition={{ duration: 2.4, repeat: Infinity }}
+                          >
+                            <div className="text-center"><p className="text-[27px] font-black text-[#26105c]">88</p><p className="text-[9px] text-slate-400">Resume score</p></div>
+                          </motion.div>
+                        </div>
+                      )}
+
+                      {FEATURE_STORIES[activeFeature].key === "interview" && (
+                        <div className="relative mx-auto mt-8 flex h-[220px] max-w-[470px] items-center justify-center">
+                          <div className="absolute inset-x-8 top-4 rounded-[26px] border border-white bg-white/85 p-5 shadow-[0_25px_60px_rgba(15,159,115,0.16)]">
+                            <div className="flex items-center justify-between">
+                              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#dcf8ef] text-[#0f9f73]"><Mic2 size={24} /></span>
+                              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold text-emerald-600">Live practice</span>
+                            </div>
+                            <div className="mt-6 flex h-20 items-center justify-center gap-2">
+                              {[28, 52, 76, 44, 88, 60, 34, 70, 48, 82, 38, 58].map((height, index) => (
+                                <motion.span
+                                  key={index}
+                                  className="w-2 rounded-full bg-[#0f9f73]"
+                                  animate={reduceMotion ? { height } : { height: [height * 0.45, height, height * 0.55] }}
+                                  transition={{ duration: 0.9 + (index % 4) * 0.18, repeat: Infinity, ease: "easeInOut" }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {FEATURE_STORIES[activeFeature].key === "tracking" && (
+                        <div className="mx-auto mt-8 grid h-[220px] max-w-[500px] grid-cols-3 gap-3 px-4">
+                          {[
+                            ["Applied", 2],
+                            ["Interview", 3],
+                            ["Offer", 1],
+                          ].map(([label, count], column) => (
+                            <div key={String(label)} className="rounded-2xl border border-white bg-white/76 p-3 shadow-[0_18px_45px_rgba(234,88,12,0.1)]">
+                              <div className="flex items-center justify-between text-[10px] font-bold text-[#5b6478]"><span>{label}</span><span>{count}</span></div>
+                              <div className="mt-3 space-y-2">
+                                {Array.from({ length: Number(count) }).map((_, card) => (
+                                  <motion.div
+                                    key={card}
+                                    className="rounded-xl border border-[#ffe1ce] bg-white p-2.5"
+                                    initial={{ opacity: 0, y: 14 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: column * 0.12 + card * 0.1 }}
+                                  >
+                                    <div className="h-2 w-3/4 rounded bg-[#ffd3b8]" /><div className="mt-2 h-1.5 w-1/2 rounded bg-slate-100" />
+                                  </motion.div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/96 to-white/35 px-6 pb-5 pt-12 sm:px-8">
+                      <div className="flex items-end justify-between gap-4">
+                        <div className="max-w-[470px]">
+                          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: FEATURE_STORIES[activeFeature].accent }}>
+                            {(() => {
+                              const ActiveIcon = FEATURE_STORIES[activeFeature].icon;
+                              return <ActiveIcon size={14} />;
+                            })()}
+                            {FEATURE_STORIES[activeFeature].eyebrow}
+                          </div>
+                          <h3 className="mt-1.5 text-[19px] font-black leading-tight tracking-[-0.02em] text-[#071744] sm:text-[22px]">
+                            {FEATURE_STORIES[activeFeature].title}
+                          </h3>
+                          <p className="mt-1.5 max-w-[500px] text-[11px] leading-[1.55] text-[#5a6d93] sm:text-[12px]">
+                            {FEATURE_STORIES[activeFeature].description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+
+                <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
+                  <button type="button" onClick={() => showFeature(activeFeature - 1)} aria-label="Previous feature" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/80 text-[#173263] shadow-sm backdrop-blur transition hover:bg-white">
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button type="button" onClick={() => showFeature(activeFeature + 1)} aria-label="Next feature" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/80 text-[#173263] shadow-sm backdrop-blur transition hover:bg-white">
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                <div className="absolute bottom-5 right-6 z-20 flex items-center gap-2">
+                  {FEATURE_STORIES.map((story, index) => (
+                    <button key={story.key} type="button" onClick={() => showFeature(index)} aria-label={`Show ${story.eyebrow}`} className="relative h-1.5 w-8 overflow-hidden rounded-full bg-[#d8e4f6]">
+                      {index === activeFeature && (
+                        <motion.span
+                          key={activeFeature}
+                          className="absolute inset-y-0 left-0 rounded-full"
+                          style={{ backgroundColor: story.accent }}
+                          initial={{ width: reduceMotion ? "100%" : "0%" }}
+                          animate={{ width: "100%" }}
+                          transition={{ duration: reduceMotion ? 0 : 5, ease: "linear" }}
+                        />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+            )}
           </div>
+
+          {false && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.45 }}
+            className="mt-6 grid overflow-hidden rounded-[22px] border border-white/90 bg-white/72 shadow-[0_22px_54px_rgba(37,87,167,0.11)] backdrop-blur-xl sm:grid-cols-3"
+          >
+            {[
+              { icon: Briefcase, value: "120K+", label: "opportunities", sub: "curated and updated daily" },
+              { icon: Building2, value: "5K+", label: "companies", sub: "hiring across industries" },
+              { icon: Sparkles, value: "Updated daily", label: "fresh matches", sub: "so you never miss out" },
+            ].map((item, index) => (
+              <div key={item.value} className={`flex items-center gap-4 px-6 py-5 ${index > 0 ? "border-t border-[#dfe9f8] sm:border-l sm:border-t-0" : ""}`}>
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#d7e5fb] bg-[#f6f9ff] text-[#0b55d9]">
+                  <item.icon size={20} />
+                </span>
+                <div>
+                  <p className="text-[22px] font-black leading-tight text-[#071744]">{item.value}</p>
+                  <p className="text-[11px] font-bold text-[#32486e]">{item.label}</p>
+                  <p className="mt-0.5 text-[10px] text-slate-400">{item.sub}</p>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+          )}
         </div>
       </section>
 
       {/* JOBS YOU MAY BE INTERESTED IN — horizontal preview row */}
       <section className="bg-[#f6f7fb] py-10">
-        <div className="mx-auto max-w-6xl px-6 lg:px-8">
+        <div className="mx-auto max-w-[1440px] px-5 lg:px-10">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
-            className="rounded-lg border border-[#dce8fb] bg-white p-6 shadow-[0_10px_26px_rgba(37,87,167,0.07)] sm:p-8"
+            className="rounded-[24px] border border-[#dce8fb] bg-white p-6 shadow-[0_18px_44px_rgba(37,87,167,0.07)] sm:p-8"
           >
             <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -596,7 +972,7 @@ export default function JobsHomePage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
               {JOB_PREVIEWS.map((job, i) => (
                 <motion.button
                   key={job.title}
@@ -605,14 +981,15 @@ export default function JobsHomePage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.35, delay: i * 0.06 }}
-                  className="rounded-lg border border-[#dce8fb] bg-white p-4 text-left shadow-sm transition-shadow hover:shadow-md"
+                  className="group flex min-h-[250px] flex-col rounded-[18px] border border-[#dce8fb] bg-white p-5 text-left shadow-[0_8px_24px_rgba(37,87,167,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#b9d2f4] hover:shadow-[0_18px_38px_rgba(37,87,167,0.12)]"
                 >
                   <div className="flex items-start justify-between">
-                    <div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[14px] font-black text-white"
-                      style={{ backgroundColor: job.brand }}
-                    >
-                      {job.company.charAt(0)}
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] border border-[#e3ebf7] bg-white shadow-sm">
+                      {job.logo ? (
+                        <Image src={job.logo} alt={`${job.company} logo`} width={25} height={25} />
+                      ) : (
+                        <Building2 size={22} style={{ color: job.brand }} />
+                      )}
                     </div>
                     <span className="flex items-center gap-1 text-[11px] text-slate-400">
                       <Clock size={11} />
@@ -620,29 +997,35 @@ export default function JobsHomePage() {
                     </span>
                   </div>
 
-                  <span
-                    className={`mt-3 inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold ${MODE_STYLES[job.mode]}`}
-                  >
-                    {job.mode}
-                  </span>
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold ${MODE_STYLES[job.mode]}`}>
+                      {job.mode}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10.5px] font-bold text-emerald-600">
+                      <TrendingUp size={11} />
+                      {job.match} match
+                    </span>
+                  </div>
 
-                  <p className="mt-2 text-[13.5px] font-bold text-slate-900">{job.title}</p>
-                  <p className="mt-0.5 text-[12px] text-slate-500">
-                    {job.company} · {job.location}
+                  <p className="mt-4 text-[16px] font-bold tracking-[-0.01em] text-slate-900">{job.title}</p>
+                  <p className="mt-1 text-[12.5px] font-semibold text-[#40577d]">{job.company}</p>
+                  <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-slate-500">
+                    <MapPin size={12} className="text-slate-400" />
+                    {job.location}
                   </p>
-                  <p className="mt-1.5 flex items-center gap-1 text-[12px] font-semibold text-slate-600">
-                    <IndianRupee size={11} className="text-emerald-600" />
+                  <p className="mt-2 flex items-center gap-1 text-[12.5px] font-bold text-slate-700">
+                    <IndianRupee size={12} className="text-emerald-600" />
                     {job.salary}
                   </p>
 
-                  <div className="mt-3 flex items-center justify-between">
+                  <div className="mt-auto flex items-center justify-between border-t border-[#edf2f8] pt-4">
                     <span className="flex items-center gap-1 text-[12px] font-bold text-slate-700">
                       <Star size={12} style={{ fill: "#f59e0b", color: "#f59e0b" }} />
                       {job.rating}
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-600">
-                      <TrendingUp size={11} />
-                      {job.match} Match
+                    <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-[#0b55d9]">
+                      View role
+                      <ArrowRight size={13} className="transition-transform group-hover:translate-x-1" />
                     </span>
                   </div>
                 </motion.button>
@@ -654,13 +1037,13 @@ export default function JobsHomePage() {
 
       {/* DISCOVER JOBS ACROSS POPULAR ROLES */}
       <section className="bg-[#f6f7fb] py-10">
-        <div className="mx-auto max-w-6xl px-6 lg:px-8">
+        <div className="mx-auto max-w-[1440px] px-5 lg:px-10">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
-            className="rounded-lg border border-[#dce8fb] bg-white p-6 shadow-[0_10px_26px_rgba(37,87,167,0.07)] sm:p-8"
+            className="rounded-[24px] border border-[#dce8fb] bg-white p-6 shadow-[0_18px_44px_rgba(37,87,167,0.07)] sm:p-8"
           >
             <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -679,7 +1062,7 @@ export default function JobsHomePage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {POPULAR_ROLES.map((role, i) => (
                 <motion.button
                   key={role.title}
@@ -688,22 +1071,28 @@ export default function JobsHomePage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.3, delay: i * 0.05 }}
-                  className={`relative flex flex-col rounded-lg p-4 text-left transition-transform hover:-translate-y-0.5 ${role.tint}`}
+                  className="group relative flex min-h-[190px] flex-col rounded-[18px] border border-[#dce8fb] bg-white p-5 text-left shadow-[0_8px_24px_rgba(37,87,167,0.05)] transition duration-300 hover:-translate-y-1 hover:border-[#b9d2f4] hover:shadow-[0_18px_38px_rgba(37,87,167,0.11)]"
                 >
                   <div className="flex items-start justify-between">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${role.iconBg}`}>
-                      <role.icon size={18} />
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-[14px] ring-1 ring-inset ring-black/[0.03] ${role.iconBg}`}>
+                      <role.icon size={21} strokeWidth={1.8} />
                     </div>
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e1e9f5] bg-white text-slate-400 shadow-sm transition-colors group-hover:border-[#b9d2f4] group-hover:text-[#0b55d9]">
                       <ChevronRight size={15} />
                     </span>
                   </div>
-                  <p className="mt-3 text-[14.5px] font-bold text-slate-900">{role.title}</p>
-                  <p className="text-[12px] text-slate-500">{role.count} Open Jobs</p>
-                  <span className={`mt-4 inline-flex w-fit items-center gap-1 text-[11.5px] font-bold ${role.tagColor}`}>
-                    <role.tagIcon size={12} />
-                    {role.tagText}
-                  </span>
+                  <p className="mt-4 text-[16px] font-bold tracking-[-0.01em] text-slate-900">{role.title}</p>
+                  <p className="mt-1 text-[12.5px] font-semibold text-[#607397]">{role.count} open positions</p>
+                  <div className="mt-auto flex items-center justify-between border-t border-[#edf2f8] pt-4">
+                    <span className={`inline-flex w-fit items-center gap-1.5 text-[11.5px] font-bold ${role.tagColor}`}>
+                      <role.tagIcon size={12} />
+                      {role.tagText}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-[#0b55d9]">
+                      Explore
+                      <ArrowRight size={13} className="transition-transform group-hover:translate-x-1" />
+                    </span>
+                  </div>
                 </motion.button>
               ))}
             </div>
@@ -713,23 +1102,28 @@ export default function JobsHomePage() {
 
       {/* PLATFORM STATS — recap bar */}
       <section className="bg-[#f6f7fb] py-10">
-        <div className="mx-auto max-w-6xl px-6 lg:px-8">
+        <div className="mx-auto max-w-[1440px] px-5 lg:px-10">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
-            className="grid grid-cols-2 gap-6 rounded-lg border border-[#dce8fb] bg-white p-6 shadow-[0_10px_26px_rgba(37,87,167,0.07)] sm:grid-cols-4 sm:p-8"
+            className="grid overflow-hidden rounded-[24px] border border-[#dce8fb] bg-white shadow-[0_18px_44px_rgba(37,87,167,0.07)] sm:grid-cols-2 lg:grid-cols-4"
           >
-            {BOTTOM_STATS.map((s) => (
-              <div key={s.label} className="flex items-center gap-3">
-                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${s.iconBg}`}>
-                  <s.icon size={20} />
+            {BOTTOM_STATS.map((s, index) => (
+              <div
+                key={s.label}
+                className={`flex items-center gap-4 px-6 py-6 sm:px-7 ${
+                  index > 0 ? "border-t border-[#e7eef8] sm:[&:nth-child(even)]:border-l lg:border-l lg:border-t-0" : ""
+                } ${index > 1 ? "sm:border-t lg:border-t-0" : ""}`}
+              >
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] ring-1 ring-inset ring-black/[0.03] ${s.iconBg}`}>
+                  <s.icon size={20} strokeWidth={1.8} />
                 </div>
                 <div>
-                  <p className="text-[19px] font-extrabold leading-tight text-[#08143f]">{s.value}</p>
-                  <p className="text-[12.5px] font-semibold text-slate-600">{s.label}</p>
-                  <p className="text-[11px] text-slate-400">{s.sub}</p>
+                  <p className="text-[23px] font-black leading-none tracking-[-0.02em] text-[#08143f]">{s.value}</p>
+                  <p className="mt-1.5 text-[12.5px] font-bold text-[#40577d]">{s.label}</p>
+                  <p className="mt-0.5 text-[10.5px] text-slate-400">{s.sub}</p>
                 </div>
               </div>
             ))}
@@ -738,14 +1132,15 @@ export default function JobsHomePage() {
       </section>
 
       {/* WHY CAREERBOT — differentiators vs. a plain job board */}
-      <section className="bg-white py-16 md:py-20">
-        <div className="mx-auto max-w-6xl px-6 lg:px-8">
+      <section className="bg-[#f6f7fb] py-10 md:py-14">
+        <div className="mx-auto max-w-[1440px] px-5 lg:px-10">
+          <div className="rounded-[24px] border border-[#dce8fb] bg-white p-6 shadow-[0_18px_44px_rgba(37,87,167,0.07)] sm:p-8">
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
-            className="text-center text-[26px] font-black text-[#08143f] sm:text-[30px]"
+            className="text-[25px] font-black tracking-[-0.02em] text-[#08143f] sm:text-[29px]"
           >
             More than a job board
           </motion.h2>
@@ -754,27 +1149,28 @@ export default function JobsHomePage() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mx-auto mt-2 max-w-lg text-center text-[13.5px] text-slate-500"
+            className="mt-2 max-w-2xl text-[13.5px] leading-6 text-slate-500"
           >
             Everything you need to know if a job is worth your time — before you apply.
           </motion.p>
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3">
-            {FEATURES.map(({ icon: Icon, title, desc }, i) => (
+          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {FEATURES.map(({ icon: Icon, iconBg, title, desc }, i) => (
               <motion.div
                 key={title}
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: i * 0.06 }}
-                className="rounded-lg border border-[#dce8fb] bg-white p-6 shadow-[0_10px_26px_rgba(37,87,167,0.06)] transition hover:-translate-y-1 hover:shadow-[0_18px_38px_rgba(37,87,167,0.12)]"
+                className="group rounded-[18px] border border-[#dce8fb] bg-white p-5 transition duration-300 hover:-translate-y-1 hover:border-[#b9d2f4] hover:shadow-[0_16px_34px_rgba(37,87,167,0.1)]"
               >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef3ff] text-[#2557a7]">
-                  <Icon size={20} />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-[14px] ring-1 ring-inset ring-black/[0.03] ${iconBg}`}>
+                  <Icon size={21} strokeWidth={1.8} />
                 </div>
-                <h3 className="mt-4 text-[15px] font-bold text-slate-900">{title}</h3>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-slate-600">{desc}</p>
+                <h3 className="mt-4 text-[15.5px] font-bold text-slate-900">{title}</h3>
+                <p className="mt-2 text-[12.5px] leading-5 text-slate-600">{desc}</p>
               </motion.div>
             ))}
+          </div>
           </div>
         </div>
       </section>

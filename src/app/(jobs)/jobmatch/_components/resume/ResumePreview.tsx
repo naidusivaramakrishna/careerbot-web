@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import DOMPurify from "dompurify";
 import JobMatchTemplateThree from "./JobMatchTemplateThree";
 
 interface ResumePreviewProps {
@@ -59,6 +60,10 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         // Use mammoth to convert DOCX to HTML
         const mammoth = await import("mammoth");
         const result = await mammoth.convertToHtml({ arrayBuffer: await docxBlob.arrayBuffer() });
+        const safeBody = DOMPurify.sanitize(result.value, {
+          FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
+          FORBID_ATTR: ["style", "onerror", "onload", "onclick", "srcdoc"],
+        });
 
         // Create a simple HTML document for preview
         const htmlContent = `
@@ -70,7 +75,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 .section { margin-bottom: 20px; }
               </style>
             </head>
-            <body>${result.value}</body>
+            <body>${safeBody}</body>
           </html>
         `;
 
@@ -221,6 +226,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         <iframe
           key={docxPreview}
           src={docxPreview}
+          sandbox=""
           className="w-full h-full border-none"
           title="Resume DOCX Preview"
         />

@@ -14,6 +14,7 @@ import {
   SavedJob,
 } from "@/utils/jobTracking";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { isSafeExternalUrl } from "@/utils/validators";
 
 /* ══════════════════════════════════════════
    Status management (localStorage)
@@ -325,7 +326,7 @@ function AppliedRow({
       <StatusDropdown jobId={app.jobId} status={status} onChange={(s) => onStatusChange(app.jobId, s)} />
 
       {/* Link */}
-      {app.url && (
+      {isSafeExternalUrl(app.url) && (
         <a
           href={app.url}
           target="_blank"

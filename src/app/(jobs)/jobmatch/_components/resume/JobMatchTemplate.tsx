@@ -668,7 +668,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                     <div className="font-bold text-sm text-gray-900 flex items-center gap-2">
                       {title}
                       {link && (
-                        <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
+                        <a href={link.startsWith('http') ? link : `https://${link}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
                           [Link]
                         </a>
                       )}
@@ -971,7 +971,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                   <div className="font-semibold text-sm text-gray-900 flex items-center gap-2">
                     {title}
                     {url && (
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
+                      <a href={url.startsWith('http') ? url : `https://${url}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
                         [Link]
                       </a>
                     )}
