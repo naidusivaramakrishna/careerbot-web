@@ -1,249 +1,167 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import DashboardPage from '@/app/(user)/dashboard/page';
+import { useDashboard } from '@/contexts/DashboardContext';
+import { toast } from 'sonner';
+import type { DashboardSummary } from '@/types/dashboard.types';
 
-// Mock dashboard data
-const mockDashboardData = {
-  user: {
-    id: 'user-123',
-    name: 'John Doe',
-    email: 'john@example.com',
-    planId: 'free',
-    creditsRemaining: 5,
-  },
-  stats: {
-    resumesCreated: 2,
-    atsScansCompleted: 1,
-    jobApplications: 5,
-  },
-  recentResumes: [
-    {
-      id: 'resume-1',
-      title: 'Software Engineer Resume',
-      lastModified: new Date().toISOString(),
-      score: 85,
-    },
-  ],
-};
-
-// Mock FirstTimeDashboard component
-const MockFirstTimeDashboard = ({ data }: any) => (
-  <div data-testid="dashboard-content">
-    <h1>Dashboard for {data.user.name}</h1>
-    <p>Plan: {data.user.planId}</p>
-    <p>Credits: {data.user.creditsRemaining}</p>
-    <div data-testid="resumes-list">
-      {data.recentResumes.map((r: any) => (
-        <div key={r.id}>{r.title}</div>
-      ))}
-    </div>
-  </div>
-);
-
-// Mock DashboardContext
 vi.mock('@/contexts/DashboardContext', () => ({
-  useDashboard: vi.fn(() => ({
-    data: mockDashboardData,
-    loading: false,
-    error: null,
-  })),
+  useDashboard: vi.fn(),
 }));
 
-// Test component that uses the context
-const DashboardPage = () => {
-  const { data: dashboardData, loading, error } = require('@/contexts/DashboardContext').useDashboard();
+vi.mock('@/app/(user)/dashboard/_components/FirstTimeDashboard', () => ({
+  default: ({ data }: { data: DashboardSummary }) => (
+    <section data-testid="first-time-dashboard">Dashboard for {data.user.name}</section>
+  ),
+}));
 
-  if (loading) {
-    return (
-      <div className="p-6 max-w-[1400px] mx-auto space-y-6 animate-pulse">
-        <div className="flex justify-center items-center h-screen">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-[#2200ff] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600 text-lg font-medium">Loading resume data...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+const mockUseDashboard = vi.mocked(useDashboard);
+const mockToast = vi.mocked(toast);
 
-  if (error || !dashboardData) {
-    return (
-      <div className="p-6 max-w-[1400px] mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-          <h2 className="text-xl font-semibold text-red-900 mb-2">Failed to Load Dashboard</h2>
-          <p className="text-red-700 mb-4">We couldn't load your dashboard data. Please try again.</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
-            data-testid="retry-button"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return <MockFirstTimeDashboard data={dashboardData} />;
+const dashboardSummary: DashboardSummary = {
+  user: {
+    id: 'user-1',
+    name: 'John Doe',
+    email: 'john@example.com',
+  },
+  plan: {
+    plan_id: 'free',
+    plan_name: 'Free',
+    credits_total: 100,
+    credits_remaining: 25,
+  },
+  profile: {
+    completeness: 40,
+    missing_fields: ['experience'],
+  },
+  recommended_step: {
+    step_number: 1,
+    step_name: 'upload_resume',
+    title: 'Upload Resume',
+    description: 'Upload your resume',
+    credit_cost: 5,
+    cta_text: 'Upload Resume',
+    cta_path: '/builder/start',
+  },
+  progress: {
+    resume_uploaded: false,
+    profile_completed: false,
+    ats_scan_done: false,
+    resume_enhanced: false,
+    job_applied: false,
+  },
+  usage_counts: {
+    resumes_created: 0,
+    resumes_parsed: 0,
+    ats_scans: 0,
+    resumes_enhanced: 0,
+    job_matches: 0,
+    job_applications: 0,
+    assessments_taken: 0,
+  },
+  best_scores: {},
+  recent_activity: [],
+  trending_roles: [],
 };
 
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseDashboard.mockReturnValue({
+      data: dashboardSummary,
+      loading: false,
+      error: null,
+      creditsRemaining: dashboardSummary.plan.credits_remaining,
+      refreshDashboard: vi.fn(),
+    });
   });
 
-  it('renders dashboard when data loads successfully', async () => {
+  it('renders the production dashboard component when summary data is available', () => {
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('dashboard-content')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Dashboard for John Doe')).toBeInTheDocument();
-    expect(screen.getByText('Plan: free')).toBeInTheDocument();
+    expect(screen.getByTestId('first-time-dashboard')).toHaveTextContent('Dashboard for John Doe');
   });
 
-  it('displays loading skeleton while fetching data', () => {
-    const { useDashboard } = require('@/contexts/DashboardContext');
-    useDashboard.mockReturnValue({
+  it('renders skeleton loading blocks while dashboard data is loading', () => {
+    mockUseDashboard.mockReturnValue({
       data: null,
       loading: true,
       error: null,
+      creditsRemaining: null,
+      refreshDashboard: vi.fn(),
     });
 
-    render(<DashboardPage />);
+    const { container } = render(<DashboardPage />);
 
-    expect(screen.getByText('Loading resume data...')).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass('animate-pulse');
+    expect(screen.queryByText(/Failed to Load Dashboard/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('first-time-dashboard')).not.toBeInTheDocument();
   });
 
-  it('shows error state when dashboard data fails to load', async () => {
-    const { useDashboard } = require('@/contexts/DashboardContext');
-    useDashboard.mockReturnValue({
+  it('shows the error panel when the dashboard request fails', () => {
+    mockUseDashboard.mockReturnValue({
       data: null,
       loading: false,
-      error: new Error('Failed to load'),
+      error: new Error('Network down'),
+      creditsRemaining: null,
+      refreshDashboard: vi.fn(),
     });
 
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Failed to Load Dashboard/i)).toBeInTheDocument();
-    });
-
+    expect(screen.getByRole('heading', { name: /Failed to Load Dashboard/i })).toBeInTheDocument();
     expect(screen.getByText(/We couldn't load your dashboard data/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
   });
 
-  it('displays user credits and plan information', async () => {
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Plan: free')).toBeInTheDocument();
-      expect(screen.getByText('Credits: 5')).toBeInTheDocument();
-    });
-  });
-
-  it('displays recent resumes in dashboard', async () => {
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('resumes-list')).toBeInTheDocument();
-      expect(screen.getByText('Software Engineer Resume')).toBeInTheDocument();
-    });
-  });
-
-  it('handles null dashboard data gracefully', async () => {
-    const { useDashboard } = require('@/contexts/DashboardContext');
-    useDashboard.mockReturnValue({
+  it('shows the same error panel when loading completes without data', () => {
+    mockUseDashboard.mockReturnValue({
       data: null,
       loading: false,
       error: null,
+      creditsRemaining: null,
+      refreshDashboard: vi.fn(),
     });
 
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Failed to Load Dashboard/i)).toBeInTheDocument();
-    });
+    expect(screen.getByRole('heading', { name: /Failed to Load Dashboard/i })).toBeInTheDocument();
   });
 
-  it('renders retry button on error', async () => {
-    const { useDashboard } = require('@/contexts/DashboardContext');
-    useDashboard.mockReturnValue({
+  it('dismisses toasts and reloads the page when retry is clicked', () => {
+    const reload = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, reload },
+      writable: true,
+    });
+    mockUseDashboard.mockReturnValue({
       data: null,
       loading: false,
-      error: new Error('Failed to load'),
+      error: new Error('Network down'),
+      creditsRemaining: null,
+      refreshDashboard: vi.fn(),
     });
 
     render(<DashboardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /Retry/i }));
 
-    const retryButton = screen.getByTestId('retry-button');
-    expect(retryButton).toBeInTheDocument();
-    expect(retryButton).toHaveTextContent('Retry');
+    expect(mockToast.dismiss).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it('handles multiple resumes in dashboard', async () => {
-    const { useDashboard } = require('@/contexts/DashboardContext');
-    const multipleResumesData = {
-      ...mockDashboardData,
-      recentResumes: [
-        { id: '1', title: 'Resume 1', lastModified: new Date().toISOString(), score: 80 },
-        { id: '2', title: 'Resume 2', lastModified: new Date().toISOString(), score: 85 },
-        { id: '3', title: 'Resume 3', lastModified: new Date().toISOString(), score: 90 },
-      ],
-    };
-
-    useDashboard.mockReturnValue({
-      data: multipleResumesData,
-      loading: false,
+  it('prefers the loading state when loading is true even if stale data exists', () => {
+    mockUseDashboard.mockReturnValue({
+      data: dashboardSummary,
+      loading: true,
       error: null,
+      creditsRemaining: dashboardSummary.plan.credits_remaining,
+      refreshDashboard: vi.fn(),
     });
 
-    render(<DashboardPage />);
+    const { container } = render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Resume 1')).toBeInTheDocument();
-      expect(screen.getByText('Resume 2')).toBeInTheDocument();
-      expect(screen.getByText('Resume 3')).toBeInTheDocument();
-    });
-  });
-
-  it('displays different plan types', async () => {
-    const { useDashboard } = require('@/contexts/DashboardContext');
-    const premiumData = {
-      ...mockDashboardData,
-      user: { ...mockDashboardData.user, planId: 'premium' },
-    };
-
-    useDashboard.mockReturnValue({
-      data: premiumData,
-      loading: false,
-      error: null,
-    });
-
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Plan: premium')).toBeInTheDocument();
-    });
-  });
-
-  it('handles zero credits', async () => {
-    const { useDashboard } = require('@/contexts/DashboardContext');
-    const noCreditsData = {
-      ...mockDashboardData,
-      user: { ...mockDashboardData.user, creditsRemaining: 0 },
-    };
-
-    useDashboard.mockReturnValue({
-      data: noCreditsData,
-      loading: false,
-      error: null,
-    });
-
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Credits: 0')).toBeInTheDocument();
-    });
+    expect(container.firstElementChild).toHaveClass('animate-pulse');
+    expect(screen.queryByTestId('first-time-dashboard')).not.toBeInTheDocument();
   });
 });

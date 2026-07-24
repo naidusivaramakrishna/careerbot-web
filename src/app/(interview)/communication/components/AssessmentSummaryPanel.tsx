@@ -6,7 +6,6 @@ import { getAudioStatus } from '@/api/communicationApi';
 
 interface AssessmentSummaryPanelProps {
   isOpen: boolean;
-  onClose: () => void;
   onFinish: () => void;
   isSubmitting: boolean;
 }
@@ -18,7 +17,6 @@ interface QuestionStatus {
 
 export default function AssessmentSummaryPanel({
   isOpen,
-  onClose,
   onFinish,
   isSubmitting,
 }: AssessmentSummaryPanelProps) {
@@ -69,7 +67,7 @@ export default function AssessmentSummaryPanel({
         }
 
         setCompletedCount(completed);
-        logger.info(`📊 Loaded assessment progress: ${completed}/44 questions completed`);
+        logger.info(` Loaded assessment progress: ${completed}/44 questions completed`);
       }
 
       setQuestionStatuses(statuses);
@@ -97,19 +95,19 @@ export default function AssessmentSummaryPanel({
       // Call backend API to get real-time transcription status
       const status = await getAudioStatus(sessionId);
 
-      logger.info(`📊 Transcription status: ${status.completed}/${status.total_expected} completed, ${status.processing} processing, ${status.failed} failed`);
+      logger.info(` Transcription status: ${status.completed}/${status.total_expected} completed, ${status.processing} processing, ${status.failed} failed`);
 
       // Check if all transcriptions are complete
-      if (status.overall_status === 'complete' && status.completed === status.total_expected) {
+      if (status.overall_status === 'completed' && status.completed === status.total_expected) {
         setIsTranscriptionReady(true);
         setWaitingTimeLeft(0);
-        logger.info('✅ All audio transcriptions are complete');
+        logger.info(' All audio transcriptions are complete');
       } else {
         setIsTranscriptionReady(false);
         // Calculate remaining questions (processing + pending)
         const remaining = status.total_expected - status.completed;
         setWaitingTimeLeft(remaining);
-        logger.info(`⏳ Waiting for ${remaining} transcriptions (${status.processing} processing, ${status.missing.length} pending)`);
+        logger.info(` Waiting for ${remaining} transcriptions (${status.processing} processing, ${status.missing.length} pending)`);
       }
     } catch (error) {
       logger.error('Failed to check transcription readiness:', error);
@@ -125,35 +123,25 @@ export default function AssessmentSummaryPanel({
       {/* Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 backdrop-blur-sm bg-black/20 z-40 transition-all duration-300"
-          onClick={onClose}
+          className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm transition-all duration-300"
         />
       )}
 
       {/* Slide-in Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+        className={`fixed right-0 top-0 z-50 h-full w-full max-w-[420px] transform border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <div className="h-full flex flex-col">
 
           {/* Header */}
-          <div className="px-6 pt-6 pb-5 border-b border-gray-200 shrink-0">
+          <div className="shrink-0 border-b border-slate-200 bg-[#f5f8ff] px-6 pb-5 pt-6">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Overview</p>
-                <h2 className="text-base font-bold text-gray-900">Assessment Summary</h2>
+                <p className="mb-0.5 text-[10px] font-black uppercase tracking-[0.22em] text-[#2557a7]">Overview</p>
+                <h2 className="text-base font-black text-slate-950">Assessment Summary</h2>
               </div>
-              <button
-                onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
-                aria-label="Close panel"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
 
             {/* Circular Progress */}
@@ -175,13 +163,13 @@ export default function AssessmentSummaryPanel({
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-bold text-gray-900 leading-none">{completedCount}</span>
+                  <span className="text-xl font-black leading-none text-slate-950">{completedCount}</span>
                   <span className="text-[10px] text-gray-400 mt-0.5">of 44</span>
                 </div>
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{progressPercentage.toFixed(0)}%</p>
-                <p className="text-sm text-gray-500 mt-0.5">Questions answered</p>
+                <p className="text-2xl font-black text-slate-950">{progressPercentage.toFixed(0)}%</p>
+                <p className="mt-0.5 text-sm font-semibold text-slate-500">Questions answered</p>
                 {completedCount < 44 && (
                   <p className="text-xs text-amber-600 font-medium mt-1">
                     {44 - completedCount} remaining
@@ -193,16 +181,16 @@ export default function AssessmentSummaryPanel({
 
           {/* Question Grid */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Question Status</p>
-            <div className="grid grid-cols-8 gap-1.5">
+            <p className="mb-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Question Status</p>
+            <div className="grid grid-cols-8 gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               {questionStatuses.map((status) => (
                 <div
                   key={status.questionNumber}
-                  title={`Question ${status.questionNumber} — ${status.isCompleted ? 'Answered' : 'Pending'}`}
-                  className={`aspect-square flex items-center justify-center rounded-md text-[11px] font-semibold transition-all duration-200 ${
+                  title={`Question ${status.questionNumber} - ${status.isCompleted ? 'Answered' : 'Pending'}`}
+                  className={`flex aspect-square items-center justify-center rounded-md text-[11px] font-black transition-all duration-200 ${
                     status.isCompleted
-                      ? 'bg-[#2557a7] text-white'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      ? 'bg-[#2557a7] text-white shadow-sm'
+                      : 'bg-white text-slate-400 ring-1 ring-slate-200 hover:bg-slate-100'
                   }`}
                 >
                   {status.questionNumber}
@@ -211,7 +199,7 @@ export default function AssessmentSummaryPanel({
             </div>
 
             {/* Legend */}
-            <div className="mt-5 flex items-center gap-4 text-xs text-gray-500">
+            <div className="mt-5 flex items-center gap-4 text-xs font-semibold text-slate-500">
               <div className="flex items-center gap-1.5">
                 <div className="w-3.5 h-3.5 rounded bg-[#2557a7]" />
                 <span>Answered</span>
@@ -224,13 +212,13 @@ export default function AssessmentSummaryPanel({
           </div>
 
           {/* Footer */}
-          <div className="px-6 pb-6 pt-4 border-t border-gray-100 shrink-0">
+          <div className="shrink-0 border-t border-slate-100 bg-white px-6 pb-6 pt-4">
             {/* Transcription warning */}
             {!isTranscriptionReady && !isSubmitting && waitingTimeLeft > 0 && (
-              <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-xs font-semibold text-amber-800">Processing Audio</p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  {waitingTimeLeft} transcription{waitingTimeLeft !== 1 ? 's' : ''} remaining — please wait…
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs font-black text-amber-900">Processing Audio</p>
+                <p className="mt-0.5 text-xs font-semibold text-amber-800">
+                  {waitingTimeLeft} transcription{waitingTimeLeft !== 1 ? 's' : ''} remaining - please wait...
                 </p>
               </div>
             )}
@@ -241,10 +229,10 @@ export default function AssessmentSummaryPanel({
                 onFinish();
               }}
               disabled={isSubmitting || !isTranscriptionReady}
-              className={`w-full py-3.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-black transition-all ${
                 isSubmitting || !isTranscriptionReady
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-[#2557a7] hover:bg-[#1e4a94] text-white shadow-sm'
+                  ? 'cursor-not-allowed bg-slate-200 text-slate-400'
+                  : 'bg-[#2557a7] text-white shadow-lg shadow-[#2557a7]/15 hover:bg-[#1e4a94]'
               }`}
             >
               {isSubmitting ? (
@@ -253,7 +241,7 @@ export default function AssessmentSummaryPanel({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Submitting…
+                  Submitting...
                 </>
               ) : !isTranscriptionReady ? (
                 <>
@@ -261,10 +249,10 @@ export default function AssessmentSummaryPanel({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Processing Transcriptions…
+                  Processing Transcriptions...
                 </>
               ) : (
-                'Finish Assessment →'
+                'Finish Assessment ->'
               )}
             </button>
           </div>

@@ -27,13 +27,26 @@ try {
   });
 } catch {
   // MSW not available - this is OK for unit tests only
+  server = null;
 }
 
 // ==================== Common Test Setup ====================
 
 // Cleanup after each test
 afterEach(() => {
-  cleanup();
+  vi.clearAllMocks();
+  try {
+    cleanup();
+  } catch (e) {
+    // Cleanup may fail if component not mounted - that's OK
+  }
+});
+
+// Mock navigator.clipboard for copy-to-clipboard tests
+Object.assign(navigator, {
+  clipboard: {
+    writeText: vi.fn(() => Promise.resolve()),
+  },
 });
 
 // Mock next/navigation
@@ -103,9 +116,38 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
 });
 
-// Suppress console errors and warnings in tests
-global.console = {
-  ...console,
-  error: vi.fn(),
-  warn: vi.fn(),
-};
+// Mock IntersectionObserver for lazy-load / scroll tests
+class MockIntersectionObserver {
+  constructor(public callback: IntersectionObserverCallback) {}
+  observe = vi.fn();
+  disconnect = vi.fn();
+  unobserve = vi.fn();
+}
+vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+
+// Mock ResizeObserver for layout tests
+class MockResizeObserver {
+  observe = vi.fn();
+  disconnect = vi.fn();
+  unobserve = vi.fn();
+}
+vi.stubGlobal('ResizeObserver', MockResizeObserver);
+
+// Suppress Next.js server-side warnings in test output
+const originalError = console.error;
+beforeAll(() => {
+  console.error = (...args: any[]) => {
+    if (
+      typeof args[0] === 'string' &&
+      (args[0].includes('Warning: useLayoutEffect') ||
+        args[0].includes('Not implemented: HTMLFormElement.prototype.submit'))
+    ) {
+      return;
+    }
+    originalError.call(console, ...args);
+  };
+});
+
+afterAll(() => {
+  console.error = originalError;
+});

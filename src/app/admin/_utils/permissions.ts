@@ -53,5 +53,5 @@ export const formatRoleName = (role: AdminRole | string): string => {
     'MODERATOR': 'Moderator',
     'SUPPORT': 'Support Staff',
   };
-  return roleMap[role] || role;
+  return roleMap[role?.toUpperCase() ?? ''] || role;
 };

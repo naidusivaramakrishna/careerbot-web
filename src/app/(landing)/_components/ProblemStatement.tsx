@@ -103,7 +103,7 @@ export default function ProblemStatement() {
         <div className="absolute -bottom-24 -right-24 h-[420px] w-[420px] rounded-full bg-white opacity-20 blur-[140px]" />
       </div>
 
-      <div className="mx-auto w-full max-w-[1440px] px-5 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
+      <div className="mx-auto w-full max-w-[1728px] px-5 lg:px-[60px]">
         <motion.div
           className="grid min-w-0 gap-5 md:grid-cols-2 lg:grid-cols-[240px_repeat(4,minmax(0,1fr))] xl:grid-cols-[300px_repeat(4,minmax(0,1fr))] 2xl:grid-cols-[360px_repeat(4,minmax(0,1fr))] 2xl:gap-6"
           initial="hidden"

@@ -13,7 +13,7 @@ export default function ReportPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [candidateName, setCandidateName] = useState('');
   const [testDate, setTestDate] = useState('');
-  const [timeTaken, setTimeTaken] = useState('—');
+  const [timeTaken, setTimeTaken] = useState('-');
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -21,9 +21,9 @@ export default function ReportPage() {
         const profile = await getProfile();
         const fullName = profile.full_name || profile.username || 'User';
         setCandidateName(fullName);
-        logger.info('✅ Loaded candidate name from profile:', fullName);
+        logger.info(' Loaded candidate name from profile:', fullName);
       } catch (error) {
-        logger.error('❌ Failed to fetch user profile:', error);
+        logger.error(' Failed to fetch user profile:', error);
         const username = localStorage.getItem('username') || 'User';
         setCandidateName(username);
       }
@@ -99,15 +99,15 @@ export default function ReportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       {/* <Sidebar /> */}
       {/* <Header /> */}
 
       <main>
-        <div className="max-w-3xl mx-auto px-5 py-12">
+        <div className="mx-auto max-w-4xl px-5 py-10">
 
           {/* Success Banner */}
-          <div className="bg-[#2557a7] rounded-2xl p-7 mb-6 text-white">
+          <div className="mb-6 rounded-2xl bg-[#2557a7] p-7 text-white shadow-[0_24px_60px_rgba(37,87,167,0.22)]">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
                 <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -115,38 +115,38 @@ export default function ReportPage() {
                 </svg>
               </div>
               <div>
-                <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-0.5">Assessment Complete</p>
-                <h1 className="text-xl font-bold text-white">Communication Assessment Report</h1>
-                <p className="text-sm text-white/70 mt-1">Your responses have been recorded and are being evaluated.</p>
+                <p className="mb-0.5 text-xs font-black uppercase tracking-[0.2em] text-white/70">Assessment Complete</p>
+                <h1 className="text-2xl font-black text-white">Communication Assessment Report</h1>
+                <p className="text-sm text-white/70 mt-1">Your responses are submitted. Evaluation artifacts are being prepared for the final PDF.</p>
               </div>
             </div>
           </div>
 
           {/* Summary Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-5">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">Assessment Summary</h2>
-              <span className="text-xs text-gray-400">{assessmentResults.testDate}</span>
+          <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-slate-950">Assessment Summary</h2>
+              <span className="text-xs text-slate-400">{assessmentResults.testDate}</span>
             </div>
 
             {/* Candidate info */}
-            <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
+            <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100">
               {[
-                { label: 'Candidate', value: assessmentResults.candidateName || '—' },
-                { label: 'Date',      value: assessmentResults.testDate      || '—' },
+                { label: 'Candidate', value: assessmentResults.candidateName || '-' },
+                { label: 'Date',      value: assessmentResults.testDate      || '-' },
                 { label: 'Duration',  value: assessmentResults.totalTime              },
               ].map((item) => (
                 <div key={item.label} className="px-5 py-4">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">{item.label}</p>
-                  <p className="text-sm font-semibold text-gray-900 truncate">{item.value}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{item.label}</p>
+                  <p className="text-sm font-bold text-slate-950 truncate">{item.value}</p>
                 </div>
               ))}
             </div>
 
             {/* Overall progress */}
-            <div className="px-6 py-5 border-b border-gray-100">
+            <div className="px-6 py-5 border-b border-slate-100">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold text-gray-700">Overall Completion</p>
+                <p className="text-sm font-bold text-slate-700">Overall Completion</p>
                 <span className="text-sm font-bold text-[#2557a7]">
                   {completedQuestions}/{totalQuestions} questions
                 </span>
@@ -157,25 +157,25 @@ export default function ReportPage() {
                   style={{ width: `${completionPercent}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1.5">{completionPercent}% complete</p>
+              <p className="text-xs text-slate-400 mt-1.5">{completionPercent}% complete</p>
             </div>
 
             {/* Section breakdown */}
             <div className="px-6 py-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Section Breakdown</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Section Breakdown</p>
               <div className="space-y-2">
                 {assessmentResults.sections.map((section, index) => {
                   const done = section.questionsCompleted === section.totalQuestions;
                   return (
                     <div
                       key={index}
-                      className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl border border-gray-100"
+                      className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100"
                     >
                       <div className="w-6 h-6 bg-[#2557a7]/10 rounded-md flex items-center justify-center shrink-0">
                         <span className="text-[10px] font-bold text-[#2557a7]">{index + 1}</span>
                       </div>
                       <span className="flex-1 text-sm font-medium text-gray-800">{section.name}</span>
-                      <span className="text-xs text-gray-400 mr-2">
+                      <span className="text-xs text-slate-400 mr-2">
                         {section.questionsCompleted}/{section.totalQuestions}
                       </span>
                       {done ? (
@@ -199,26 +199,26 @@ export default function ReportPage() {
           </div>
 
           {/* Download Report */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-5">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Download Report</h2>
+          <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h2 className="text-sm font-bold text-slate-950">Download Report</h2>
             </div>
             <div className="px-6 py-5 flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm text-gray-700 font-medium">Detailed PDF Report</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Download your full assessment results for your records.
+                <p className="text-sm text-slate-700 font-medium">Detailed PDF Report</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Download the detailed PDF when evaluation output is available.
                 </p>
               </div>
               <button
                 onClick={handleDownloadReport}
                 disabled={isDownloading}
-                className="shrink-0 px-5 py-2.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm transition-colors flex items-center gap-2"
+                className="shrink-0 px-5 py-2.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center gap-2"
               >
                 {isDownloading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Generating…
+                    Generating...
                   </>
                 ) : (
                   <>
@@ -233,22 +233,22 @@ export default function ReportPage() {
           </div>
 
           {/* What Happens Next */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">What Happens Next?</h2>
+          <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h2 className="text-sm font-bold text-slate-950">What Happens Next?</h2>
             </div>
             <div className="px-6 py-5">
               <ol className="space-y-4">
                 {[
                   'Your responses will be reviewed by our assessment team.',
                   'You will receive detailed feedback on your communication skills.',
-                  'Results will be sent to your registered email within 3–5 business days.',
+                  'Results will be sent to your registered email within 3-5 business days.',
                 ].map((step, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <div className="w-6 h-6 bg-[#2557a7]/10 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                       <span className="text-xs font-bold text-[#2557a7]">{i + 1}</span>
                     </div>
-                    <p className="text-sm text-gray-700 leading-relaxed">{step}</p>
+                    <p className="text-sm text-slate-700 leading-relaxed">{step}</p>
                   </li>
                 ))}
               </ol>
@@ -259,13 +259,13 @@ export default function ReportPage() {
           <div className="flex justify-center">
             <button
               onClick={() => router.push('/communication/dashboard')}
-              className="bg-[#2557a7] hover:bg-[#1e4a94] text-white px-8 py-3.5 rounded-xl font-semibold text-sm transition-colors"
+              className="bg-[#2557a7] hover:bg-[#1e4a94] text-white px-8 py-3.5 rounded-xl font-bold text-sm transition-colors"
             >
-              Back to Dashboard →
+              Back to Dashboard {'->'}
             </button>
           </div>
 
-          <p className="text-center text-xs text-gray-400 mt-6">
+          <p className="text-center text-xs text-slate-400 mt-6">
             Thank you for completing the Communication Assessment.
           </p>
 

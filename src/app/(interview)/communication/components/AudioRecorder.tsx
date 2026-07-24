@@ -3,14 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import logger from '@/lib/logger';
 
-// interface AudioRecorderProps {
-//   onRecordingComplete?: (audioBlob: Blob) => void;
-//   maxDuration?: number;
-// }
 interface AudioRecorderProps {
   onRecordingComplete?: (audioBlob: Blob, durationMs?: number) => void;
   maxDuration?: number;
-  // NEW: For progressive upload
   sessionId?: string;
   questionId?: string;
   onUploadStatusChange?: (
@@ -19,9 +14,9 @@ interface AudioRecorderProps {
     error?: string
   ) => void;
   enableProgressiveUpload?: boolean;
-  disabled?: boolean; // Disable recording button
+  disabled?: boolean;
+  captured?: boolean;
 }
-
 
 export default function AudioRecorder({
   onRecordingComplete,
@@ -31,34 +26,30 @@ export default function AudioRecorder({
   onUploadStatusChange,
   enableProgressiveUpload = false,
   disabled = false,
+  captured,
 }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(maxDuration);
+  const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
+  const [inputLevel, setInputLevel] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Web Audio
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataArrayRef = useRef<Uint8Array | null>(null);
-
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
-
-  // ➡️ scrolling position for silence line
-  const silentOffsetRef = useRef<number>(0);
-  // Track recording start time for duration calculation
   const recordingStartRef = useRef<number | null>(null);
 
+  const elapsed = maxDuration - timeLeft;
+  const capturedSeconds = lastDurationMs ? Math.max(1, Math.round(lastDurationMs / 1000)) : null;
+  const isCaptured = captured ?? disabled;
+
   const getSupportedMimeType = () => {
-    const types = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/mp4',
-    ];
+    const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
     return types.find((t) => MediaRecorder.isTypeSupported(t));
   };
 
@@ -79,31 +70,24 @@ export default function AudioRecorder({
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
 
-    // recorder.onstop = () => {
-    //   const blob = new Blob(chunksRef.current, { type: mimeType });
-    //   onRecordingComplete?.(blob);
-    //   chunksRef.current = [];
-    // };
     recorder.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: mimeType });
       const durationMs = recordingStartRef.current != null ? Date.now() - recordingStartRef.current : undefined;
       recordingStartRef.current = null;
+      setLastDurationMs(durationMs ?? null);
       onRecordingComplete?.(blob, durationMs);
       chunksRef.current = [];
 
-      // NEW: Progressive upload if enabled
       if (enableProgressiveUpload && sessionId && questionId) {
         onUploadStatusChange?.(questionId, 'uploading');
 
         try {
-          // Import dynamically to avoid circular deps
           const { uploadAudio } = await import('@/api/communicationApi');
-          // uploadAudio expects specific parameters, need to adjust this call
           const result = await uploadAudio({
             session_id: sessionId,
             question_id: questionId,
-            test_id: '', // This should be passed as a prop if needed
-            audio_file: blob
+            test_id: '',
+            audio_file: blob,
           });
 
           if (result.success) {
@@ -126,7 +110,6 @@ export default function AudioRecorder({
     const analyser = audioContext.createAnalyser();
 
     analyser.fftSize = 2048;
-
     source.connect(analyser);
 
     audioContextRef.current = audioContext;
@@ -135,69 +118,24 @@ export default function AudioRecorder({
   };
 
   const draw = () => {
-    const canvas = canvasRef.current;
     const analyser = analyserRef.current;
     const dataArray = dataArrayRef.current;
 
-    if (!canvas || !analyser || !dataArray) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!analyser || !dataArray) return;
 
     analyser.getByteTimeDomainData(dataArray as Uint8Array<ArrayBuffer>);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-
-    let isSilent = true;
+    let peak = 0;
     for (let i = 0; i < dataArray.length; i++) {
-      const v = dataArray[i] / 128.0;
-      if (Math.abs(v - 1) > 0.02) {
-        isSilent = false;
-        break;
-      }
+      peak = Math.max(peak, Math.abs(dataArray[i] - 128));
     }
 
-    // 🔇 SILENCE → moving straight line
-    if (isSilent) {
-      silentOffsetRef.current -= 1;
-      if (silentOffsetRef.current < -canvas.width) {
-        silentOffsetRef.current = canvas.width;
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(silentOffsetRef.current, canvas.height / 2);
-      ctx.lineTo(
-        silentOffsetRef.current + canvas.width,
-        canvas.height / 2
-      );
-      ctx.stroke();
-    }
-    // 🔊 VOICE → waveform
-    else {
-      silentOffsetRef.current = canvas.width;
-
-      ctx.beginPath();
-      const sliceWidth = canvas.width / dataArray.length;
-      let x = 0;
-
-      for (let i = 0; i < dataArray.length; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = (v * canvas.height) / 2;
-
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-
-        x += sliceWidth;
-      }
-      ctx.stroke();
-    }
-
+    setInputLevel(Math.min(100, Math.round((peak / 48) * 100)));
     animationRef.current = requestAnimationFrame(draw);
   };
 
   const startRecording = async () => {
+    setLastDurationMs(null);
     await initRecorder();
 
     const recorder = mediaRecorderRef.current;
@@ -207,18 +145,14 @@ export default function AudioRecorder({
     recordingStartRef.current = Date.now();
     setIsRecording(true);
     setTimeLeft(maxDuration);
-    silentOffsetRef.current = canvasRef.current?.width || 0;
+    setInputLevel(0);
 
     draw();
 
-    timerRef.current = setInterval(async () => {
+    timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
-          // Call async stopRecording without awaiting in setState
-          // This is OK because the recording will complete regardless
-          stopRecording().catch((err) => {
-            logger.error('Error stopping recording:', err);
-          });
+          stopRecording().catch((err) => logger.error('Error stopping recording:', err));
           return 0;
         }
         return t - 1;
@@ -227,11 +161,8 @@ export default function AudioRecorder({
   };
 
   const stopRecording = async () => {
-    if (mediaRecorderRef.current?.state !== 'recording') {
-      return;
-    }
+    if (mediaRecorderRef.current?.state !== 'recording') return;
 
-    // Create a promise that resolves when onstop callback completes
     const stopPromise = new Promise<void>((resolve) => {
       const recorder = mediaRecorderRef.current;
       if (!recorder) {
@@ -239,43 +170,29 @@ export default function AudioRecorder({
         return;
       }
 
-      // Store original onstop handler
       const originalOnStop = recorder.onstop;
-
-      // Wrap onstop to resolve promise after it completes
       recorder.onstop = async (event: Event) => {
         try {
-          // Call original onstop handler
-          if (originalOnStop) {
-            await originalOnStop.call(recorder, event);
-          }
+          if (originalOnStop) await originalOnStop.call(recorder, event);
         } finally {
-          // Resolve the promise after onstop completes
           resolve();
         }
       };
-
-      // Now stop the recorder - this will trigger onstop callback
       recorder.stop();
     });
 
-    // Wait for onstop callback to complete
     await stopPromise;
 
-    // NOW cleanup resources after blob is fully created
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
 
-    // Stop audio context and stream AFTER blob creation
     audioContextRef.current?.close();
     audioContextRef.current = null;
 
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-
-    // Reset the media recorder ref so it can be re-initialized
     mediaRecorderRef.current = null;
 
     if (timerRef.current) {
@@ -285,96 +202,116 @@ export default function AudioRecorder({
 
     setIsRecording(false);
     setTimeLeft(maxDuration);
+    setInputLevel(0);
   };
 
   useEffect(() => {
     return () => {
-      // Don't await cleanup in useEffect return, just call it
-      stopRecording().catch((err) => {
-        logger.error('Error during cleanup:', err);
-      });
+      stopRecording().catch((err) => logger.error('Error during cleanup:', err));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center text-center w-full">
-      {!isRecording && (
-        <>
-          <h3 className="text-sm font-semibold text-gray-700 mb-8">
-            Record your response:
-          </h3>
+    <div className="flex h-full min-h-0 w-full flex-col rounded-2xl border border-slate-200 bg-white p-3 text-center shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-3 text-left">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Voice capture</p>
+          <h3 className="mt-0.5 text-sm font-black text-slate-900">Record your response</h3>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
+            isRecording
+              ? 'border border-red-200 bg-red-50 text-red-600'
+              : disabled
+                ? 'border border-green-200 bg-green-50 text-green-700'
+                : 'border border-[#2557a7]/15 bg-[#2557a7]/5 text-[#2557a7]'
+          }`}
+        >
+          {isRecording ? 'Recording' : isCaptured ? 'Captured' : 'Ready'}
+        </span>
+      </div>
 
-          <div className="mb-6">
-            <div className="w-36 h-36 rounded-full border-4 border-[#2557a7]/25 flex items-center justify-center">
-              <div className="w-20 h-20 rounded-full bg-[#2557a7]/8 flex items-center justify-center">
-                <svg className="w-9 h-9 text-[#2557a7]" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3z" />
-                  <path d="M5 11a7 7 0 0014 0h-2a5 5 0 01-10 0H5z" />
-                </svg>
-              </div>
+      <div className={`mx-auto mb-3 flex h-[clamp(5.5rem,18vh,8rem)] w-[clamp(5.5rem,18vh,8rem)] shrink-0 items-center justify-center rounded-full border ${isRecording ? 'border-red-200 bg-red-50' : isCaptured ? 'border-green-200 bg-green-50' : 'border-[#2557a7]/15 bg-[#2557a7]/5'}`}>
+        <div className={`flex h-[clamp(3.5rem,11vh,5rem)] w-[clamp(3.5rem,11vh,5rem)] items-center justify-center rounded-full ${isRecording ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' : isCaptured ? 'bg-green-600 text-white' : 'bg-white text-[#2557a7] shadow-sm'}`}>
+          {isRecording ? (
+            <span className="h-6 w-6 rounded bg-white" aria-hidden="true" />
+          ) : isCaptured ? (
+            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3z" />
+              <path d="M5 11a7 7 0 0014 0h-2a5 5 0 01-10 0H5z" />
+            </svg>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-2 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+        {isRecording ? (
+          <div className="space-y-2 text-left">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Input level</span>
+              <span className="text-[11px] font-black text-red-600">Live</span>
+            </div>
+            <div className="flex h-7 items-end gap-1" aria-label={`Microphone input level ${inputLevel}%`}>
+              {[14, 28, 42, 56, 70, 84, 98].map((threshold) => (
+                <span
+                  key={threshold}
+                  className={`flex-1 rounded-full transition-all duration-100 ${
+                    inputLevel >= threshold ? 'bg-red-500' : 'bg-slate-200'
+                  }`}
+                  style={{ height: `${Math.max(7, threshold / 2)}%` }}
+                />
+              ))}
             </div>
           </div>
-
-          <button
-            onClick={startRecording}
-            disabled={disabled}
-            className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition-all ${
-              disabled
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-[#2557a7] hover:bg-[#1e4a94] text-white'
-            }`}
-          >
-            Start Recording
-          </button>
-        </>
-      )}
-
-      {isRecording && (
-        <>
-          <h3 className="text-sm font-semibold text-gray-700 mb-8">
-            Record your response:
-          </h3>
-
-          <div className="mb-6">
-            <div className="w-36 h-36 rounded-full border-4 border-red-400/40 flex items-center justify-center">
-              <div className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center overflow-hidden">
-                {/* Animated Waveform Bars */}
-                <div className="flex items-center justify-center gap-0.5 h-full">
-                  {[...Array(12)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-1 bg-white rounded-full animate-pulse"
-                      style={{
-                        height: `${Math.random() * 30 + 10}px`,
-                        animationDelay: `${i * 0.1}s`,
-                        animationDuration: '0.8s',
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
+        ) : (
+          <div className="flex h-9 items-center justify-center text-xs font-semibold text-slate-500">
+            {disabled
+              ? `Response captured${capturedSeconds ? ` in ${capturedSeconds}s` : ''}`
+              : 'Microphone input appears while recording'}
           </div>
+        )}
+      </div>
 
-          <p className="text-sm text-gray-500 mb-4">
-            Recording in progress…
-          </p>
-
+      {isRecording ? (
+        <>
+          <div className="mb-2 flex shrink-0 items-center justify-between rounded-xl bg-slate-950 px-3 py-2 text-white">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">Elapsed</span>
+            <span className="text-sm font-black tabular-nums">{elapsed}s / {maxDuration}s</span>
+          </div>
           <button
+            type="button"
             onClick={stopRecording}
-            className="flex items-center gap-2 px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold text-sm transition-colors"
+            className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 py-2.5 text-sm font-black text-white transition-colors hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
           >
-            <span className="w-2.5 h-2.5 bg-white rounded-sm"></span>
+            <span className="h-2.5 w-2.5 rounded-sm bg-white" />
             Stop Recording
           </button>
-
-          <p className="text-xs text-gray-400 mt-3 tabular-nums">
-            {timeLeft}s remaining
+          <p className="mt-2 shrink-0 text-xs font-semibold text-slate-500 tabular-nums">{timeLeft}s remaining</p>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={startRecording}
+            disabled={disabled}
+            className={`w-full shrink-0 rounded-xl px-5 py-2.5 text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2 ${
+              disabled
+                ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                : 'bg-[#2557a7] text-white shadow-lg shadow-[#2557a7]/15 hover:bg-[#1e4a94]'
+            }`}
+          >
+            {isCaptured ? 'Response Captured' : 'Start Recording'}
+          </button>
+          <p className="mt-2 shrink-0 text-xs font-semibold text-slate-500">
+            Maximum recording window: {maxDuration}s
           </p>
         </>
       )}
     </div>
   );
 }
-

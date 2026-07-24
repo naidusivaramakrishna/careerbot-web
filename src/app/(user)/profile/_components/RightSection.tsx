@@ -118,14 +118,6 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 1️⃣ Extract resume first — some backends auto-save parsed data to profile
             const result: ResumeExtractResponse = await extractResume(file);
 
-            // 2️⃣ Store the file immediately after parsing succeeds (independent of profile save steps)
-            uploadResume(file)
-                .then((res) => { if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url })); })
-                .catch((err) => {
-                    logger.warn("Resume file storage failed:", err);
-                    toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
-                });
-
             // 3️⃣ Map to ProfileData format
             const mapped = mapResumeToProfile(result);
 
@@ -345,6 +337,16 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }));
 
             toast.success("Resume imported successfully!", { id: "resume-upload" });
+
+            // Store the file after the full import succeeds (intentional trade-off:
+            // if any profile-save step above throws, resume_url is not persisted —
+            // this is preferred over storing a file whose data was never applied).
+            uploadResume(file)
+                .then((res) => { if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url })); })
+                .catch((err) => {
+                    logger.warn("Resume file storage failed:", err);
+                    toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
+                });
 
             // ✅ FINAL: Refresh dashboard AFTER all profile updates complete
             // Use setTimeout to ensure profile context has updated first

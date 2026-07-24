@@ -16,9 +16,8 @@ const publicRoutes = [
     "/blog",
     "/terms-of-service",
     "/privacy-policy",
-    // Builder and cover-letter creation flow remain public. Cover-letter
+    // Cover-letter creation flow remain public. Cover-letter
     // export/download handles auth at the action level.
-    "/builder",
     "/cover-letter",
     // Coding-test practice (list + problem detail) is a public preview slice;
     // the backing API is public/no-auth. Submit/grading will gate at the
@@ -96,6 +95,18 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     logger.info(`[${request.method}] ${pathname}`);
 
+    // Maintenance mode — checked before public-route bail-outs so it applies to
+    // ALL routes including /, /browse-templates, /blog, etc.
+    // Admin/recruiter bypass so they can reach the dashboard to turn it off.
+    // /maintenance itself is always let through to avoid an infinite redirect loop.
+    const isAdminOrRecruiter =
+        pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
+    if (!isAdminOrRecruiter && pathname !== '/maintenance' && !pathname.startsWith('/maintenance/')) {
+        if (await isMaintenanceMode(request.url)) {
+            return NextResponse.redirect(new URL('/maintenance', request.url));
+        }
+    }
+
     // Allow public routes without authentication
     const isPublicRoute =
         publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'));
@@ -103,18 +114,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Landing pages accessible without auth (exact path only — sub-paths remain protected)
-    const publicLandingPages = ['/jobmatch', '/ats', '/jobs', '/payments'];
+    // Landing pages accessible without auth (exact path only — sub-paths remain protected).
+    // Add a path here to make ONLY that exact URL public; /path/anything stays protected.
+    const publicLandingPages = ['/ats', '/jobmatch', '/jobs', '/payments', '/mock-interview', '/builder', '/communication'];
     if (publicLandingPages.includes(pathname)) {
         return NextResponse.next();
-    }
-
-    // Maintenance mode — only for regular user routes (admin/recruiter bypass so
-    // admins can always reach the dashboard to turn maintenance off)
-    const isAdminOrRecruiter =
-        pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
-    if (!isAdminOrRecruiter && await isMaintenanceMode(request.url)) {
-        return NextResponse.redirect(new URL('/maintenance', request.url));
     }
 
     // For admin paths, prefer admin_access_token to avoid stale user session
@@ -131,23 +135,6 @@ export async function middleware(request: NextRequest) {
         return redirectToLogin(request);
     }
 
-    // Role-gated areas (admin / recruiter) REQUIRE a working verifier. If
-    // JWT_SECRET is absent the server is misconfigured — deny rather than fail
-    // open and let an unverifiable token through.
-    const isProtectedArea =
-        pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
-
-    const loginRedirect = () => {
-        const loginUrl = pathname.startsWith(ADMIN_PREFIX)
-            ? '/admin/login'
-            : pathname.startsWith(RECRUITER_PREFIX)
-            ? '/recruiter/auth'
-            : buildUserLoginUrl(request);
-        return NextResponse.redirect(
-            typeof loginUrl === 'string' ? new URL(loginUrl, request.url) : loginUrl
-        );
-    }
- 
     // JWT role enforcement — decode access_token to check role claim
     if (token && process.env.JWT_SECRET) {
         try {

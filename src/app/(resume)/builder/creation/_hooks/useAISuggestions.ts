@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { generateAIDescription } from "@/api/suggestionGenerationApi";
+import type { AIContentType } from "@/api/suggestionGenerationApi";
 import logger from "@/lib/logger";
+
 export function useAISuggestions() {
   const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<Record<number, string[]>>({});
@@ -8,28 +11,13 @@ export function useAISuggestions() {
   const generateSuggestions = async (
     index: number,
     prompt: string,
-    type: "experience" | "project" | "summary" = "experience"
+    type: AIContentType = "experience"
   ) => {
     if (!prompt) return;
     setLoadingIndex(index);
 
     try {
-      const response = await fetch("/api/generate-description", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, prompt }),
-      });
-
-      const data = await response.json();
-
-      const text =
-        type === "summary"
-          ? data?.summary?.trim()
-          : data?.description?.trim();
-
-      if (!text) {
-        throw new Error("No content returned");
-      }
+      const text = await generateAIDescription(type, prompt);
 
       const options = text
         .split(/\n+/)

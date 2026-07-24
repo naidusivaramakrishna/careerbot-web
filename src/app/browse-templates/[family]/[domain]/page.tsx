@@ -8,6 +8,7 @@ import { getAllResumes, createResumeWithAuth, getTemplatesByCategory } from "@/a
 import { getProfile } from "@/api/userApi"
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder"
 import { logger } from "@/lib/logger"
+import { toast } from "sonner"
 import { resolveTemplateImageUrl } from "@/lib/imageUtils"
 import {
   FAMILY_TEMPLATES,
@@ -229,13 +230,16 @@ export default function TemplateDetailPage({ params }: PageProps) {
       await getProfile({ skipAuthRedirect: true })
       authenticated = true
       await applyTemplate(selectedLevel)
-    } catch {
+    } catch (err) {
       if (!authenticated) {
         localStorage.setItem("bt_pending_family", family)
         localStorage.setItem("bt_pending_domain", domain)
         localStorage.setItem("bt_pending_career_level", selectedLevel)
         localStorage.setItem("pendingTemplateFamily", family)
         setAuthOpen(true)
+      } else {
+        const msg = err instanceof Error ? err.message : "Failed to apply template. Please try again."
+        toast.error(msg)
       }
     }
   }, [family, domain, selectedLevel, applyTemplate])

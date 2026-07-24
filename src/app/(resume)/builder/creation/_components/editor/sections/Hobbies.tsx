@@ -1,5 +1,6 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -398,9 +399,9 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
                   )}
                   
                   {hobby.description && (
-                    <div 
-                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
-                      dangerouslySetInnerHTML={{ __html: hobby.description }} 
+                    <SafeHTML
+                      content={hobby.description}
+                      className="text-sm text-[#404040] mt-1 line-clamp-2"
                     />
                   )}
                   
@@ -457,7 +458,7 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2"
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
               {(editingOriginalEntry !== null || savedEntries.length > 0) && (

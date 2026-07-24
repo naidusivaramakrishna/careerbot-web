@@ -193,7 +193,7 @@ function BrowserExtensionBand() {
 export function CareerPromoSection() {
   return (
     <section className="bg-white py-8">
-      <div className="mx-auto grid max-w-[1320px] gap-5 px-4 lg:grid-cols-2 lg:px-8">
+      <div className="mx-auto grid max-w-[1728px] gap-5 px-5 lg:grid-cols-2 lg:px-[60px]">
         {promoCards.map((card, index) => (
           <motion.article
             key={card.title}
@@ -239,7 +239,7 @@ export function CareerPromoSection() {
 export function MockTestSection() {
   return (
     <section id="mock-test" className="bg-white pb-12 pt-3">
-      <div className="mx-auto max-w-[1320px] px-4 lg:px-8">
+      <div className="mx-auto max-w-[1728px] px-5 lg:px-[60px]">
         <div className="overflow-hidden rounded-2xl border border-[#244b9a] bg-[radial-gradient(circle_at_72%_20%,rgba(93,76,222,0.55),transparent_28%),linear-gradient(110deg,#071f55_0%,#0b3174_58%,#071f55_100%)] p-8 text-white shadow-[0_22px_52px_rgba(7,31,85,0.28)] md:p-10">
           <div className="grid gap-10 lg:grid-cols-[1fr_360px] lg:items-center">
             <div>
@@ -297,7 +297,7 @@ export default function FeaturesSection() {
   return (
     <div id="features" className="bg-white">
       <section className="py-8">
-        <div className="mx-auto max-w-[1320px] px-4 lg:px-8">
+        <div className="mx-auto max-w-[1728px] px-5 lg:px-[60px]">
           <div className="mx-auto max-w-3xl text-center">
             <SectionLabel>Complete Career Platform</SectionLabel>
             <h2 className="mt-4 text-[30px] font-black leading-tight text-[#08143f] md:text-[36px]">

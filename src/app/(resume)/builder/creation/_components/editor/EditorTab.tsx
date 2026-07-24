@@ -33,7 +33,6 @@ import {
 } from "@hello-pangea/dnd";
 import SectionItem from "./SectionItem";
 import AddNewSection from "./AddNewSection";
-import CircularProgress from "./CircularProgress";
 import CustomSectionEditor from "./CustomSectionEditor";
 import { sectionIcons } from "../../_utils/sectionsConfig";
 import { Plus, Sparkles, X, LayoutGrid } from "lucide-react";
@@ -42,6 +41,7 @@ import { updateResume, getAllResumes, autoSaveResume } from "@/api/resumeApi";
 import { autoSaveEnhancedResume, updateEnhancedResume } from "@/api/enhancerApi";
 import { toast } from "sonner";
 import logger from "@/lib/logger";
+import type { AtsSectionIssue } from "../../_utils/atsMissing";
 
 
 interface SectionComponentProps {
@@ -68,6 +68,10 @@ interface Props {
   completionStatus: Record<string, boolean>;
   onSidebarToggle?: (isOpen: boolean) => void;
   clearErrors: (fields?: string[]) => void;
+  setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  atsIssuesBySection?: Record<string, AtsSectionIssue>;
+  requestedSection?: string | null;
+  onRequestedSectionHandled?: () => void;
 }
 
 
@@ -75,6 +79,7 @@ const EditorTab: React.FC<Props> = ({
   sections,
   extraSections,
   activeSection,
+  setActiveSection,
   formData,
   errors,
   sectionComponents,
@@ -86,6 +91,10 @@ const EditorTab: React.FC<Props> = ({
   completionStatus = {},
   onSidebarToggle,
   clearErrors,
+  setErrors,
+  atsIssuesBySection = {},
+  requestedSection = null,
+  onRequestedSectionHandled,
 }) => {
   const nonDeletableSections = [
     "Personal Info",
@@ -102,6 +111,8 @@ const EditorTab: React.FC<Props> = ({
     setCompletionStatus,
     resumeData,
     setResumeData,
+    enhancedSuggestions,
+    applyManualFix,
     addCustomSection,
     removeCustomSection,
   } = useResume();
@@ -523,13 +534,14 @@ const EditorTab: React.FC<Props> = ({
       const cats = resumeData.categorizedSkills;
       if (cats) {
         const toNameObjs = (arr: string[]) => (arr || []).map(s => ({ name: s }));
+        const anyCats = cats as Record<string, string[]>;
         return {
-          programming_languages: toNameObjs(cats.programming_languages),
-          frameworks: toNameObjs(cats.frameworks),
-          databases: toNameObjs(cats.databases),
-          tools: toNameObjs(cats.tools),
-          cloud_platforms: toNameObjs(cats.cloud_platforms),
-          soft_skills: toNameObjs(cats.soft_skills),
+          programming_languages: toNameObjs(anyCats.programming_languages),
+          frameworks: toNameObjs(anyCats.frameworks),
+          databases: toNameObjs(anyCats.databases),
+          tools: toNameObjs(anyCats.tools),
+          cloud_platforms: toNameObjs(anyCats.cloud_platforms),
+          soft_skills: toNameObjs(anyCats.soft_skills),
         };
       }
       return {};
@@ -559,6 +571,105 @@ const EditorTab: React.FC<Props> = ({
     
     return {};
   };
+
+  useEffect(() => {
+    if (!requestedSection) return;
+    const sectionIndex = sections.findIndex((section) => section.name === requestedSection);
+    if (sectionIndex < 0) {
+      const optionalSection = extraSections.find((section) => section.name === requestedSection);
+      if (optionalSection) handleAddSection(optionalSection);
+      return;
+    }
+
+    setActiveSection(null);
+    setOpenModalSection(requestedSection);
+    onRequestedSectionHandled?.();
+  }, [extraSections, handleAddSection, onRequestedSectionHandled, requestedSection, sections]);
+
+  const getManualFixValue = (sectionName: string): string => {
+    const lowerSection = sectionName.toLowerCase();
+
+    if (sectionName === "Personal Info") {
+      return JSON.stringify({
+        fullname: formData.fullname || resumeData.personalInfo.fullname || "",
+        email: formData.email || resumeData.personalInfo.email || "",
+        phone: formData.phone || resumeData.personalInfo.phone || "",
+        location: formData.location || resumeData.personalInfo.location || "",
+        linkedinUrl: formData.linkedinUrl || resumeData.personalInfo.linkedinUrl || "",
+        githubUrl: formData.githubUrl || resumeData.personalInfo.githubUrl || "",
+        portfolioUrl: formData.portfolioUrl || resumeData.personalInfo.portfolioUrl || "",
+      });
+    }
+
+    if (sectionName === "Professional Summary") {
+      return resumeData.professionalSummary.summary || formData.professionalSummary || "";
+    }
+
+    const sectionData = transformFormDataToBackend(sectionName);
+    if (typeof sectionData === "string") return sectionData;
+    if (Array.isArray(sectionData) || typeof sectionData === "object") {
+      return JSON.stringify(sectionData);
+    }
+    return lowerSection;
+  };
+
+  const isSuggestionResolvedByCurrentEdit = (sectionName: string, message: string): boolean => {
+    const text = message.toLowerCase();
+
+    if (sectionName === "Personal Info") {
+      if (text.includes("linkedin")) return Boolean((formData.linkedinUrl || resumeData.personalInfo.linkedinUrl || "").trim());
+      if (text.includes("github")) return Boolean((formData.githubUrl || resumeData.personalInfo.githubUrl || "").trim());
+      if (text.includes("portfolio") || text.includes("website")) return Boolean((formData.portfolioUrl || resumeData.personalInfo.portfolioUrl || "").trim());
+      if (text.includes("phone")) return Boolean((formData.phone || resumeData.personalInfo.phone || "").trim());
+      if (text.includes("email")) return Boolean((formData.email || resumeData.personalInfo.email || "").trim());
+      if (text.includes("location")) return Boolean((formData.location || resumeData.personalInfo.location || "").trim());
+      return true;
+    }
+
+    if (sectionName === "Professional Summary") {
+      return Boolean((resumeData.professionalSummary.summary || formData.professionalSummary || "").replace(/<[^>]*>/g, "").trim());
+    }
+
+    return true;
+  };
+
+  const getSuggestionSectionsForEditorSection = (sectionName: string): string[] => {
+    const map: Record<string, string[]> = {
+      "Personal Info": ["Contact", "PersonalInfo", "PersonalInfoShort"],
+      "Professional Summary": ["Summary", "ProfessionalSummary", "Formatting", "content"],
+      "Work Experience": ["WorkExperience", "Experience", "ContentQuality", "Leadership"],
+      Skills: ["Skills", "Keywords"],
+      Projects: ["Projects", "ContentQuality", "Leadership"],
+      Education: ["Education"],
+      Certifications: ["Certifications"],
+      Achievements: ["Achievements"],
+      Internships: ["Internships", "ContentQuality", "Leadership"],
+      Awards: ["Awards"],
+      Volunteering: ["Volunteering"],
+      Publications: ["Publications"],
+      Languages: ["Languages", "IntelligencePenalty"],
+      References: ["References"],
+    };
+    return map[sectionName] || [sectionName.replace(/\s+/g, "")];
+  };
+
+  const applyResolvedManualFixes = async (sectionName: string) => {
+    if (!isEnhancedResume) return;
+    const sectionKeys = getSuggestionSectionsForEditorSection(sectionName);
+    const matchingManualSuggestions = enhancedSuggestions.filter((suggestion) =>
+      suggestion.fix_type !== "auto" &&
+      sectionKeys.includes(suggestion.section) &&
+      isSuggestionResolvedByCurrentEdit(sectionName, suggestion.message)
+    );
+
+    if (matchingManualSuggestions.length === 0) return;
+
+    const value = getManualFixValue(sectionName);
+    for (const suggestion of matchingManualSuggestions) {
+      await applyManualFix(suggestion.id, value);
+    }
+  };
+
   const handleSaveForm = async () => {
   if (!openModalSection) return;
 
@@ -693,6 +804,10 @@ const EditorTab: React.FC<Props> = ({
 
     // ✅ Step 6: Mark section complete + clear all validation
     // For custom sections: only mark green when all fields have values
+    if (isEnhancedResume && openModalSection) {
+      await applyResolvedManualFixes(openModalSection);
+    }
+
     const isComplete = isCustomSection
       ? (() => {
           const cs = (resumeData.customSections || []).find(c => c.sectionName === openModalSection);
@@ -711,8 +826,22 @@ const EditorTab: React.FC<Props> = ({
     toast.success(`${openModalSection} saved successfully!`);
     closeModal();
   } catch (error) {
-    // // console.error("❌ Save failed:", error);
-    if (error instanceof Error) {
+    const axiosError = error as { response?: { data?: { error?: { message?: string; details?: { validation_errors?: Array<{ field: string; message: string }> } } } } };
+    const validationErrors = axiosError?.response?.data?.error?.details?.validation_errors;
+
+    if (validationErrors && validationErrors.length > 0) {
+      // Set inline field errors and show exact messages from the API
+      const fieldErrors: Record<string, string> = {};
+      validationErrors.forEach(ve => {
+        // field format: "personalInfo → phone" → extract key after "→ "
+        const fieldKey = ve.field.includes("→") ? ve.field.split("→").pop()?.trim() ?? ve.field : ve.field;
+        fieldErrors[fieldKey] = ve.message;
+        toast.error(ve.message, { duration: 6000 });
+      });
+      setErrors(prev => ({ ...prev, ...fieldErrors }));
+    } else if (axiosError?.response?.data?.error?.message) {
+      toast.error(axiosError.response.data.error.message);
+    } else if (error instanceof Error) {
       toast.error(error.message || "Failed to save section.");
     } else {
       toast.error("Unexpected error occurred while saving.");
@@ -725,6 +854,13 @@ const EditorTab: React.FC<Props> = ({
 
 
   const handleCreateCustomSection = (name: string) => {
+    const alreadyExists = sections.some(
+      (s) => s.name.toLowerCase() === name.toLowerCase()
+    );
+    if (alreadyExists) {
+      toast.error(`"${name}" section already exists`);
+      return;
+    }
     const newSection: CustomSection = {
       id: `custom_${Date.now()}`,
       sectionName: name,
@@ -763,21 +899,38 @@ const EditorTab: React.FC<Props> = ({
 
   const completionPercentage = getCompletionPercentage();
   const totalSections = Object.keys(completionStatus).length;
+  const completedSections = Object.values(completionStatus).filter(Boolean).length;
+  const remainingSections = Math.max(totalSections - completedSections, 0);
 
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-[#2557a7] mb-2">
+      <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-[15px] font-black text-slate-950">
             Resume Sections
           </h3>
-          <p className="text-xs text-gray-800">
-            Complete each section to build a perfect resume
-          </p>
+          <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">
+            {completedSections}/{totalSections}
+          </span>
         </div>
-        <div className="relative">
-          <CircularProgress percentage={completionPercentage} totalSections={totalSections} size={54} strokeWidth={4} />
+
+        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+          <div
+            className="h-full rounded-full bg-[#2557a7] transition-all duration-300"
+            style={{ width: `${completionPercentage}%` }}
+          />
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 items-center gap-3 text-xs">
+          <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap font-semibold text-emerald-700">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            {completedSections} Completed
+          </div>
+          <div className="flex min-w-0 items-center justify-end gap-1.5 whitespace-nowrap font-semibold text-rose-700">
+            <span className="h-2 w-2 rounded-full bg-rose-500" />
+            {remainingSections} Remaining
+          </div>
         </div>
       </div>
 
@@ -788,13 +941,14 @@ const EditorTab: React.FC<Props> = ({
             <div
               ref={provided.innerRef}
               {...provided.droppableProps}
-              className="flex flex-col gap-2 p-1 rounded-xl"
+              className="flex flex-col gap-2"
             >
               {visibleSections.map((s, idx) => {
                 const originalIndex =
                   activeSection !== null ? activeSection : idx;
                 const Icon = sectionIcons[s.name] || LayoutGrid;
                 const id = `${s.name}-${originalIndex}`;
+                const atsIssue = atsIssuesBySection[s.name];
 
 
                 return (
@@ -843,6 +997,7 @@ const EditorTab: React.FC<Props> = ({
                           isComplete={completionStatus[s.name] || false}
                           resumeId={localStorage.getItem("current_resume_id") || undefined}
                           sectionKey={SECTION_KEY_MAP[s.name] || s.name.toLowerCase().replace(/\s+/g, "_")}
+                          atsIssue={atsIssue}
                         />
                       </div>
                     )}

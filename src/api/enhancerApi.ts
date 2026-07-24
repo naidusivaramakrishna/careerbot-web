@@ -272,6 +272,107 @@ export async function deleteEnhancedResume(enhanced_id: string): Promise<void> {
 }
 
 /**
+ * Add skill to enhanced resume category
+ * POST /api/v1/resume/enhance/{enhanced_id}/skills/{category}
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param category - Skill category key (e.g. programmingLanguages, frameworks)
+ * @param skillName - Name of the skill to add
+ */
+export async function addSkillToEnhancedResume(
+  enhanced_id: string,
+  category: string,
+  skillName: string
+): Promise<{ id?: string }> {
+  try {
+    logApiRequest('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, { name: skillName });
+    const response = await httpClient.post<{ id?: string; _id?: string }>(
+      `/resume/enhance/${enhanced_id}/skills/${category}`,
+      { name: skillName }
+    );
+    logApiResponse('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, response.status, response.headers['x-trace-id']);
+    const id = response.data?.id ?? response.data?._id;
+    return { id };
+  } catch (err: unknown) {
+    logApiError('POST', `/resume/enhance/${enhanced_id}/skills/${category}`, err);
+    throw err;
+  }
+}
+
+/**
+ * Delete section item by ID from enhanced resume
+ * DELETE /api/v1/resume/enhance/{enhanced_id}/sections/{section}/items/{item_id}
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param section - Section name (e.g. workExperience, education, projects)
+ * @param itemId - ID of the item to delete
+ */
+export async function deleteSectionItemFromEnhancedResume(
+  enhanced_id: string,
+  section: string,
+  itemId: string
+): Promise<void> {
+  try {
+    logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, {});
+    const response = await httpClient.delete(
+      `/resume/enhance/${enhanced_id}/sections/${section}/items/${encodeURIComponent(itemId)}`
+    );
+    logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('DELETE', `/resume/enhance/${enhanced_id}/sections/${section}/items/${itemId}`, err);
+    throw err;
+  }
+}
+
+/**
+ * Delete skill by ID from enhanced resume
+ * DELETE /api/v1/resume/enhance/{enhanced_id}/skills/{category}/{skill_id}
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param category - Skill category key (e.g. programmingLanguages, frameworks)
+ * @param skillId - ID or name of the skill to delete
+ */
+export async function deleteSkillFromEnhancedResume(
+  enhanced_id: string,
+  category: string,
+  skillId: string
+): Promise<void> {
+  try {
+    logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, {});
+    const response = await httpClient.delete(
+      `/resume/enhance/${enhanced_id}/skills/${category}/${encodeURIComponent(skillId)}`
+    );
+    logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('DELETE', `/resume/enhance/${enhanced_id}/skills/${category}/${skillId}`, err);
+    throw err;
+  }
+}
+
+/**
+ * Delete skill category from enhanced resume
+ * DELETE /api/v1/resume/enhance/{enhanced_id}/skills/categories/{category}
+ *
+ * @param enhanced_id - ID of the enhanced resume
+ * @param category - Skill category key to delete (e.g. programmingLanguages, frameworks)
+ */
+export async function deleteSkillCategoryFromEnhancedResume(
+  enhanced_id: string,
+  category: string
+): Promise<void> {
+  try {
+    logApiRequest('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, {});
+    const response = await httpClient.delete(
+      `/resume/enhance/${enhanced_id}/skills/categories/${category}`
+    );
+    logApiResponse('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, response.status, response.headers['x-trace-id']);
+  } catch (err: unknown) {
+    logApiError('DELETE', `/resume/enhance/${enhanced_id}/skills/categories/${category}`, err);
+    throw err;
+  }
+}
+
+/**
  * Get Enhancement History
  * GET /api/v1/resume/enhance/history/list
  *

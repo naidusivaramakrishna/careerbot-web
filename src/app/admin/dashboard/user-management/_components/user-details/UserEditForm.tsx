@@ -1,5 +1,5 @@
-import React, { memo, useState, useEffect } from 'react'
-import { Check } from 'lucide-react'
+import React, { memo, useState, useEffect, useCallback } from 'react'
+import { Check, AlertTriangle } from 'lucide-react'
 import Dropdown from '@/components/common/CustomDropdown'
 import type { UserDetailsResponse } from '@/api/userManagementApi'
 
@@ -32,6 +32,7 @@ export const UserEditForm = memo(({
         full_name: user.full_name,
         role: user.role,
     })
+    const [showRoleConfirm, setShowRoleConfirm] = useState(false)
 
     useEffect(() => {
         setEditForm({
@@ -40,9 +41,16 @@ export const UserEditForm = memo(({
         })
     }, [user])
 
-    const handleSave = async () => {
+    const handleSave = useCallback(async () => {
+        const roleChanged = editForm.role.toLowerCase() !== user.role.toLowerCase()
+        const promotingToAdmin = roleChanged && editForm.role.toLowerCase() === 'admin'
+        if (promotingToAdmin && !showRoleConfirm) {
+            setShowRoleConfirm(true)
+            return
+        }
+        setShowRoleConfirm(false)
         await onSave(editForm)
-    }
+    }, [editForm, user.role, showRoleConfirm, onSave])
 
     return (
         <div className="bg-white p-4 rounded-lg border border-gray-300 my-4">
@@ -69,7 +77,7 @@ export const UserEditForm = memo(({
                         Role
                     </label>
                     <Dropdown
-                        options={['User', 'Admin']}
+                        options={['Role', 'User', 'Admin']}
                         defaultValue={capitalize(editForm.role)}
                         onChange={(value) => setEditForm({ ...editForm, role: value.toLowerCase() })}
                         bgColor="bg-gray-100"
@@ -78,6 +86,16 @@ export const UserEditForm = memo(({
                     />
                 </div>
             </div>
+
+            {/* Role promotion confirmation */}
+            {showRoleConfirm && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                        This will promote the user to <strong>Admin</strong>. Confirm to proceed.
+                    </span>
+                </div>
+            )}
 
             {/* Save/Cancel Buttons */}
             <div className="flex gap-2 mt-4">

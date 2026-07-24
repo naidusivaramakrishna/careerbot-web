@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { deleteCertification, Certification, getCertification, updateCertification } from "@/api/userApi";
 import { addCertificationItem } from "../../_utils/autoFillHelper";
@@ -34,13 +34,14 @@ export default function CertificationsSection({
         index?: number;
     } | null>(null);
 
+    const hasExistingData = useRef((tempProfile.certifications?.length ?? 0) > 0);
+
     useEffect(() => {
+        if (hasExistingData.current) {
+            setEditingIndex(null);
+            return;
+        }
         const fetchCertifications = async () => {
-            //  Only fetch if certification data doesn't exist yet
-            if (tempProfile.certifications && tempProfile.certifications.length > 0) {
-                if (tempProfile.certifications.length > 0) setEditingIndex(null);
-                return;
-            }
             try {
                 setLoading(true);
                 const data = await getCertification();
@@ -54,8 +55,7 @@ export default function CertificationsSection({
             }
         };
         fetchCertifications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // intentional: fetch once on mount, bail out if data already exists
+    }, []); // safe: hasExistingData is a ref, setters are stable
 
     const handleSave = async () => {
         try {

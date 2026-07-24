@@ -19,12 +19,21 @@ export async function getAllArticles(): Promise<Article[]> {
   const files = await fs.readdir(CONTENT_DIR);
   const jsonFiles = files.filter((file) => file.endsWith('.json'));
 
-  const articles = await Promise.all(
+  const results = await Promise.allSettled(
     jsonFiles.map(async (file) => {
       const raw = await fs.readFile(path.join(CONTENT_DIR, file), 'utf-8');
       return JSON.parse(raw) as Article;
     }),
   );
+
+  const articles: Article[] = [];
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      articles.push(result.value);
+    } else {
+      console.error(`[blog] Failed to load ${jsonFiles[i]}:`, result.reason);
+    }
+  });
 
   return articles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 }

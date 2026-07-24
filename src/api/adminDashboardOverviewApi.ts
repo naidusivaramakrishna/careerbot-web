@@ -53,12 +53,17 @@ export interface AutoRefreshSettings {
 export interface UserGrowthDataPoint {
     month: string;
     users: number;
+    // Index signature required to satisfy Recharts' DataKey generic constraint.
+    // Trade-off: typo'd property accesses resolve to string|number instead of erroring.
+    [key: string]: string | number;
 }
 
 export interface RevenueSubscriptionsDataPoint {
     month: string;
     revenue: number;
     subscriptions: number;
+    // Same Recharts constraint as above.
+    [key: string]: string | number;
 }
 
 export interface DashboardOverviewResponse {

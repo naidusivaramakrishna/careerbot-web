@@ -137,6 +137,24 @@ const Skills: React.FC = () => {
     });
   };
 
+  const handleCustomCategoryNameBlur = (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const predefinedLabels = SKILL_CATEGORIES.map((c) => c.label.toLowerCase());
+    const otherCustomNames = customCategories
+      .filter((c) => c.id !== id)
+      .map((c) => c.name.toLowerCase());
+    const allExisting = [...predefinedLabels, ...otherCustomNames];
+    if (allExisting.includes(trimmed.toLowerCase())) {
+      toast.error(`"${trimmed}" category already exists`);
+      updateSkills({
+        ...categorizedSkills,
+        custom_categories: customCategories.map((c) => (c.id === id ? { ...c, name: "" } : c)),
+      });
+      nameInputRefs.current[id]?.focus();
+    }
+  };
+
   const handleCustomCategorySkillsChange = (id: string, skills: string[]) => {
     updateSkills({
       ...categorizedSkills,
@@ -168,7 +186,7 @@ const Skills: React.FC = () => {
         {/* Left: Scrollable form */}
         <div
           ref={formScrollRef}
-          className="flex-1 h-[500px] overflow-y-auto mt-6 scrollbar-hide pr-2"
+          className="flex-1 mt-6 pr-2"
         >
           <div className="flex flex-col gap-6">
             {/* Standard categories — hidden for enhanced resumes */}
@@ -238,6 +256,7 @@ const Skills: React.FC = () => {
                       type="text"
                       value={custom.name}
                       onChange={(e) => handleCustomCategoryNameChange(custom.id, e.target.value)}
+                      onBlur={(e) => handleCustomCategoryNameBlur(custom.id, e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();

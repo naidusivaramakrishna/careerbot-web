@@ -147,7 +147,7 @@ const ProfessionalSummary: React.FC = () => {
         const prompt = `Generate 5 concise unique(different) professional summary options for a resume targeting the following role:
 Target Role: ${resumeData.professionalSummary.targetRole}
 Requirements for each summary:
-- Length: 1-2 lines maximum (approximately 15-20 words)
+- Length: 3-4 lines maximum (approximately 25-30 words)
 - Start directly with your professional identity or key strength (e.g., "Results-driven software engineer...", "Strategic marketing professional...", "Detail-oriented data analyst...")
 - Highlight years of experience, core competencies, and measurable achievements
 - Include industry-specific keywords and technical skills relevant to ${resumeData.professionalSummary.targetRole}
@@ -168,7 +168,7 @@ Strategic Product Manager with proven ability to launch 10+ successful features,
 Innovative UX Designer specializing in user-centered design methodologies, creating intuitive interfaces that improved user satisfaction scores by 50% and reduced customer support tickets by 30%`;
 
 
-    generateSuggestions(0, prompt);
+    generateSuggestions(0, prompt, "summary");
   };
 
 
@@ -231,7 +231,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
         {/* Left Side: Scrollable Form Fields Section */}
         <div 
           ref={formScrollRef}
-          className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+          className="flex-1 mt-6 pr-2"
         >
           <div className="flex flex-col gap-3">
             {/* Target Role Input with Autocomplete */}

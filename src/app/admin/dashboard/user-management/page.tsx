@@ -89,7 +89,7 @@ const UserManagement = () => {
           </p>
         </div>
         <Dropdown
-          options={['Export as CSV', 'Export as Xlsx']}
+          options={['Export', 'Export as CSV', 'Export as Xlsx']}
           defaultValue="Export"
           onChange={handleExportChange}
           bgColor="bg-[#5E5EFF]"

@@ -23,7 +23,8 @@
 # next.js
 /.next/
 /out/
-
+!MSW_INTEGRATION_GUIDE.md
+!TESTING_GUIDE.md
 # production
 /build
 
@@ -59,3 +60,7 @@ next-env.d.ts
 
 # editor / scratch backups
 *.backup
+
+# local debug scripts / screenshots (never commit)
+verify-login.mjs
+verify-*.png

@@ -1,5 +1,6 @@
 import { httpClient } from '@/lib/http';
 import logger from '@/lib/logger';
+import { clearAdminRoleCache } from '@/app/admin/_hooks/adminRoleCache';
 // ==================== INTERFACES ====================
 
 export interface AdminBootstrapRequest {
@@ -199,9 +200,12 @@ export const adminLogin = async (
       formData.append('totp_code', data.totp_code);
     }
 
-    logger.info('🔐 Attempting admin login for:', data.email);
+    logger.info('🔐 Attempting admin login');
 
-    // Clear cached role before login to ensure fresh role on next page access
+    // Clear cached role before login to ensure fresh role on next page access.
+    // Reset the in-memory role cache too — SPA login (no full refresh) would
+    // otherwise let a previous admin's role gate the UI for up to the TTL.
+    clearAdminRoleCache();
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('admin_role');
     }
@@ -231,7 +235,6 @@ export const adminLogin = async (
     const axiosError = error as { response?: { status?: number; data?: unknown }; request?: unknown; message?: string };
     if (axiosError.response) {
       logger.error('Response status:', axiosError.response.status);
-      logger.error('Response data:', axiosError.response.data);
     } else if (axiosError.request) {
       logger.error('No response received:', axiosError.request);
     } else if (axiosError.message) {
@@ -277,6 +280,8 @@ export const adminLogout = async (): Promise<void> => {
   } catch (error) {
     logger.error('Error logging out admin:', error);
   } finally {
+    // Reset the in-memory role cache so a stale role can't survive logout.
+    clearAdminRoleCache();
     if (typeof window !== 'undefined') {
       // Clear cached admin role from sessionStorage so next login uses fresh role
       sessionStorage.removeItem('admin_role');

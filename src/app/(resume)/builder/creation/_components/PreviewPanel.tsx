@@ -6,11 +6,14 @@ import {
   Layout,
   Zap,
   ArrowDownToLine,
+  AlertTriangle,
   ZoomIn,
   ZoomOut,
   LayoutGrid,
   BarChart2,
   Shuffle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useResume } from "../_context/ResumeContext";
 import { useScore } from "../_context/ScoreContext";
@@ -24,19 +27,21 @@ import Template1 from "../../../templates/Template1";
 import Template2 from "../../../templates/Template2";
 import Template3 from "../../../templates/Template3";
 import Template4 from "../../../templates/Template4";
-import { toPng } from "html-to-image";
-import jsPDF from "jspdf";
+import ResumePagePager from "./templates/ResumePagePager";
 import { downloadResume } from "../../../../../api/resumeApi";
 import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
 import { getProfile } from "@/api/userApi";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
+import { buildAtsSectionIssues, getAtsScoreValue } from "../_utils/atsMissing";
 interface PreviewPanelProps {
   isTemplateSidebarOpen: boolean;
   onTabClick: (tab: string) => void;
   onOpenSidebar?: (tab: string) => void;
+  onOpenEditorSection?: (sectionName: string) => void;
   resumeId?: string;
   isEnhancedResume?: boolean;
+  fromAts?: boolean;
 }
 
 const tabs = [
@@ -50,39 +55,99 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   isTemplateSidebarOpen,
   onTabClick,
   onOpenSidebar,
+  onOpenEditorSection,
   resumeId: resumeIdProp,
   isEnhancedResume = false,
+  fromAts = false,
 }) => {
-  const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, sectionOrder, previewCatalogueKey } = useResume();
+  const { selectedTemplate, resumeData, resumeStyle, resumeSource, enhancedAtsScore, enhancedSuggestions, sectionOrder, previewCatalogueKey } = useResume();
   const { canonicalScore, setCanonicalScore } = useScore();
   const previewScore = useResumeScorePreview(resumeData);
 
   // For enhanced resumes, seed the canonical score from the enhancer's ATS score
   // so the toolbar and any other score consumers show the correct value.
   useEffect(() => {
-    if (isEnhancedResume && enhancedAtsScore?.final_score) {
-      setCanonicalScore(Math.round(enhancedAtsScore.final_score));
+    const enhancedScoreValue = getAtsScoreValue(enhancedAtsScore);
+    if (isEnhancedResume && enhancedScoreValue > 0) {
+      setCanonicalScore(enhancedScoreValue);
     }
   }, [isEnhancedResume, enhancedAtsScore, setCanonicalScore]);
 
-  const displayScore = isEnhancedResume && enhancedAtsScore?.final_score
-    ? Math.round(enhancedAtsScore.final_score)
+  const enhancedScoreValue = getAtsScoreValue(enhancedAtsScore);
+  const displayScore = isEnhancedResume && enhancedScoreValue > 0
+    ? enhancedScoreValue
     : (canonicalScore ?? previewScore.score);
   const scoreLabel = "Score";
+  const atsIssues = fromAts ? buildAtsSectionIssues(enhancedAtsScore, enhancedSuggestions, resumeData) : [];
+  const topAtsIssue = atsIssues[0];
+
+  const openAtsIssue = (issue: typeof topAtsIssue) => {
+    if (!issue) return;
+    const sectionName = issue.label === "Contact Information" ? "Personal Info" : issue.label;
+    onOpenEditorSection?.(sectionName);
+  };
 
   useEffect(() => {
     console.warn("📋 PreviewPanel - sectionOrder:", sectionOrder, "selectedTemplate:", selectedTemplate);
   }, [sectionOrder, selectedTemplate]);
 
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [isEmailReady, setIsEmailReady] = useState(false);
 
-  // Get user email for scoped localStorage keys
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedTemplate, previewCatalogueKey]);
+
+  const handlePageCountChange = React.useCallback((count: number) => {
+    const safeCount = Math.max(1, count);
+    setTotalPages(safeCount);
+    setCurrentPage((page) => Math.min(page, safeCount));
+  }, []);
+
+  const goToPreviousPage = () => {
+    setCurrentPage((page) => Math.max(1, page - 1));
+  };
+
+  const goToNextPage = () => {
+    setCurrentPage((page) => Math.min(totalPages, page + 1));
+  };
+
+  const pageNavigation = (
+    <div className="flex h-8 items-center overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <button
+        type="button"
+        onClick={goToPreviousPage}
+        disabled={currentPage <= 1}
+        className="flex h-8 w-7 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-[#2557a7] disabled:cursor-not-allowed disabled:opacity-35"
+        aria-label="Previous resume page"
+      >
+        <ChevronLeft size={18} />
+      </button>
+      <div className="min-w-[48px] border-x border-slate-200 px-1.5 text-center text-xs font-black text-slate-700">
+        {currentPage} / {totalPages}
+      </div>
+      <button
+        type="button"
+        onClick={goToNextPage}
+        disabled={currentPage >= totalPages}
+        className="flex h-8 w-7 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-[#2557a7] disabled:cursor-not-allowed disabled:opacity-35"
+        aria-label="Next resume page"
+      >
+        <ChevronRight size={18} />
+      </button>
+    </div>
+  );
+
+  // Fetch email before rendering template to avoid flash between global and
+  // scoped localStorage keys — used for scoped localStorage keys.
   useEffect(() => {
     const fetchUserEmail = async () => {
       try {
@@ -93,6 +158,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         }
       } catch (err) {
         logger.warn('Failed to get user email for scoped storage', err);
+      } finally {
+        setIsEmailReady(true);
       }
     };
 
@@ -174,100 +241,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       setIsDownloading(false);
     }
   };
-
-  const handleDownloadPDF = async () => {
-    const el = contentRef.current;
-    if (!el) return;
-    setShowExportOptions(false);
-
-    const prevTransform = el.style.transform;
-    el.style.transform = "none";
-
-    try {
-      const dataUrl = await toPng(el, {
-        pixelRatio: 3,
-        backgroundColor: "#ffffff",
-        skipFonts: true,
-      });
-
-      const img = new Image();
-      img.src = dataUrl;
-      await new Promise<void>(resolve => { img.onload = () => resolve(); });
-
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const imgW = pageW;
-      const imgH = (img.naturalHeight * imgW) / img.naturalWidth;
-
-      let posY = 0;
-      let remaining = imgH;
-
-      pdf.addImage(dataUrl, "PNG", 0, posY, imgW, imgH);
-      remaining -= pageH;
-
-      while (remaining > 0) {
-        posY -= pageH;
-        pdf.addPage();
-        pdf.addImage(dataUrl, "PNG", 0, posY, imgW, imgH);
-        remaining -= pageH;
-      }
-
-      const fullname = resumeData.personalInfo?.fullname || "";
-      const sanitizedName = fullname.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
-      const filename = sanitizedName ? `${sanitizedName}.pdf` : "resume.pdf";
-
-      pdf.save(filename);
-    } finally {
-      el.style.transform = prevTransform;
-    }
-  };
-
-  const handleDownloadDOCX = async () => {
-    const el = contentRef.current;
-    if (!el) return;
-    setShowExportOptions(false);
-    setIsDownloading(true);
-    setDownloadError(null);
-
-    const prevTransform = el.style.transform;
-    el.style.transform = "none";
-
-    try {
-      // Send resume HTML to server-side API route (runs html-to-docx in Node.js)
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>${el.outerHTML}</body></html>`;
-
-      const response = await fetch("/api/generate-docx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: "Server error" }));
-        throw new Error(err.error || "Server error");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      const fullname = resumeData.personalInfo?.fullname || "";
-      const sanitizedName = fullname.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 50);
-      link.setAttribute("download", sanitizedName ? `${sanitizedName}.docx` : "resume.docx");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Failed to generate DOCX";
-      setDownloadError(`DOCX generation failed. ${msg}`);
-    } finally {
-      el.style.transform = prevTransform;
-      setIsDownloading(false);
-    }
-  };
-
+  
   const handleResumeScoreClick = () => {
     if (onOpenSidebar) {
       onOpenSidebar("Score");
@@ -329,30 +303,30 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         case 'marine_merchant_navy':
         case 'core_engineering':
         case 'finance':
-          return <Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+          return <ResumePagePager currentPage={currentPage} onPageCountChange={handlePageCountChange}><Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} /></ResumePagePager>;
         case 'legal':
-          return <Template4 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+          return <ResumePagePager currentPage={currentPage} onPageCountChange={handlePageCountChange}><Template4 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} /></ResumePagePager>;
         case 'government_standard':
-          return <Template3 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+          return <ResumePagePager currentPage={currentPage} onPageCountChange={handlePageCountChange}><Template3 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} /></ResumePagePager>;
         default:
-          return <Template1 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+          return <ResumePagePager currentPage={currentPage} onPageCountChange={handlePageCountChange}><Template1 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} /></ResumePagePager>;
       }
     };
 
     // Template map with both string template_ids and numeric IDs
     const templateMap: { [key: string]: JSX.Element } = {
       // String-based template IDs
-      'compact_professional': <TemplateOne data={resumeData} style={resumeStyle} />,
-      'clean_simple': <TemplateTwo data={resumeData} style={resumeStyle} />,
-      'minimalist_classic': <TemplateThree data={resumeData} style={resumeStyle} />,
-      'professional_classic': <TemplateFour data={resumeData} style={resumeStyle} />,
-      'classic_professional': <TemplateFive data={resumeData} style={resumeStyle} />,
+      'compact_professional': <TemplateOne data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
+      'clean_simple': <TemplateTwo data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
+      'minimalist_classic': <TemplateThree data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
+      'professional_classic': <TemplateFour data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
+      'classic_professional': <TemplateFive data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
       // Numeric IDs for backward compatibility
-      '1': <TemplateOne data={resumeData} style={resumeStyle} />,
-      '2': <TemplateTwo data={resumeData} style={resumeStyle} />,
-      '3': <TemplateThree data={resumeData} style={resumeStyle} />,
-      '4': <TemplateFour data={resumeData} style={resumeStyle} />,
-      '5': <TemplateFive data={resumeData} style={resumeStyle} />,
+      '1': <TemplateOne data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
+      '2': <TemplateTwo data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
+      '3': <TemplateThree data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
+      '4': <TemplateFour data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
+      '5': <TemplateFive data={resumeData} style={resumeStyle} onPageCountChange={handlePageCountChange} currentPage={currentPage} />,
     };
 
     // Check if this is a career level template and render appropriate template based on domain
@@ -380,7 +354,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     logger.info('Career level logic not triggered, checking templateMap');
 
     // Get the template based on selectedTemplate
-    const template = templateMap[String(selectedTemplate)];
+    const template = templateMap[String(selectedTemplate)] || templateMap.clean_simple || templateMap["2"];
 
     if (template) {
       // // console.log("✅ Template found and rendering:", selectedTemplate);
@@ -427,30 +401,37 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   };
 
   return (
-    <section className="flex flex-col flex-1 bg-[#f8fafd] px-2 items-center h-[95vh] relative">
+    <section className={`relative flex flex-1 flex-col items-center bg-[#f8fafd] px-3 ${fromAts ? "h-auto" : "h-[95vh]"}`}>
       {/* Toolbar - When Sidebar is Open */}
       {isTemplateSidebarOpen && (
         <div
-          className="flex items-center justify-between border border-gray-300 rounded px-6 py-1.5 mb-0 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out"
+          className="relative z-30 mb-0 grid grid-cols-[1fr_auto_1fr] items-center rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm transition-all duration-300 ease-in-out"
           style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
         >
-          <div className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-3 py-1 text-xs font-semibold">
-            <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
+          <div
+            onClick={handleResumeScoreClick}
+            className="w-fit cursor-pointer rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-black transition hover:border-emerald-200 hover:bg-emerald-100"
+          >
+            <span className="text-slate-700">{scoreLabel}</span>
+            <span className="ml-1.5 text-emerald-700">{displayScore}%</span>
           </div>
 
-          <div className="text-base font-semibold text-[#2d2d2d]">
+          <div className="flex items-center gap-2 justify-self-center text-sm font-black uppercase tracking-normal text-[#2557a7]">
             <span>PREVIEW</span>
+            <span className="absolute bottom-0 left-1/2 h-0.5 w-14 -translate-x-1/2 rounded-full bg-[#2557a7]" />
+            {pageNavigation}
           </div>
 
-          <div className="relative">
+          <div className="flex items-center justify-end gap-2">
+            <div className="relative">
             <button
               onClick={() => setShowExportOptions((prev) => !prev)}
               disabled={isDownloading}
-              className={`flex items-center gap-1 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
+              className={`flex items-center gap-2 rounded-lg border border-[#2557a7] bg-[#2557a7] px-4 py-2 text-xs font-black text-white shadow-sm transition hover:border-[#1f4e98] hover:bg-[#1f4e98] hover:text-white ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
                 }`}
             >
               <ArrowDownToLine size={16} />
-              {isDownloading ? "Downloading..." : " Export"}
+              {isDownloading ? "Downloading..." : "Export"}
             </button>
             {showExportOptions && !isDownloading && (
               <div className="absolute right-0 mt-2 w-28 bg-white border rounded-md shadow-lg z-50">
@@ -468,6 +449,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
                 </button>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -475,15 +457,15 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       {/* Toolbar - When Sidebar is Closed */}
       {!isTemplateSidebarOpen && (
         <div
-          className="flex items-center justify-between rounded border border-gray-300 px-2 py-1.5 gap-2 bg-white shadow-sm relative z-30 transition-all duration-300 ease-in-out mx-auto"
-          style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
+          className="relative z-30 mx-auto flex w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm transition-all duration-300 ease-in-out"
         >
-          <div className="flex items-center gap-8 ml-4">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               onClick={handleResumeScoreClick}
-              className="flex flex-col items-center justify-center bg-[#e8eff9] border border-[#c9dcf2] rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-[#d4e6f7] transition cursor-pointer"
+              className="flex cursor-pointer items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-black transition hover:border-emerald-200 hover:bg-emerald-100"
             >
-              <span className="text-[#2d2d2d]">{`${scoreLabel} ${displayScore}%`}</span>
+              <span className="text-slate-700">{scoreLabel}</span>
+              <span className="ml-1.5 text-emerald-700">{displayScore}%</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -493,7 +475,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
                   <button
                     key={tab.label}
                     onClick={() => onTabClick(tab.label)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:text-[#2557a7] hover:bg-gray-100 rounded-lg transition"
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-gray-800 hover:text-[#2557a7] hover:bg-gray-100 rounded-lg transition"
                     title={tab.label}
                   >
                     <Icon size={16} />
@@ -504,30 +486,33 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-0 bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden">
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
+            {pageNavigation}
+            <div className="flex h-8 items-center gap-0 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
             <button
               onClick={handleZoomOut}
-              className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 transition"
+              className="flex h-8 w-7 items-center justify-center hover:bg-gray-100 transition"
             >
               <ZoomOut size={16} className="text-[#2557a7]" />
             </button>
 
-            <div className="px-3 text-sm font-semibold text-gray-700 min-w-7.5 text-center">
+            <div className="min-w-[54px] px-2 text-center text-xs font-semibold text-gray-700">
               {Math.round(zoomLevel * 100)}%
             </div>
 
             <button
               onClick={handleZoomIn}
-              className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 transition"
+              className="flex h-8 w-7 items-center justify-center hover:bg-gray-100 transition"
             >
               <ZoomIn size={16} className="text-[#2557a7]" />
             </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-8 mr-4">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               onClick={() => onTabClick("Job Match")}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:text-[#2557a7] hover:bg-gray-100 rounded-lg transition"
+              className="flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-gray-800 hover:text-[#2557a7] hover:bg-gray-100 rounded-lg transition"
             >
               <Shuffle size={16} />
               Job Match
@@ -537,11 +522,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               <button
                 onClick={() => setShowExportOptions((prev) => !prev)}
                 disabled={isDownloading}
-                className={`flex items-center gap-1 bg-[#2557a7] rounded-lg px-5 py-1.5 text-[#ffffff] text-xs font-semibold hover:bg-[#1f4e98] transition ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
+                className={`flex shrink-0 items-center gap-2 rounded-lg border border-[#2557a7] bg-[#2557a7] px-4 py-2 text-xs font-black text-white shadow-sm transition hover:border-[#1f4e98] hover:bg-[#1f4e98] hover:text-white ${isDownloading ? "opacity-50 cursor-not-allowed" : ""
                   }`}
               >
                 <ArrowDownToLine size={16} />
-                {isDownloading ? "Downloading..." : " Export"}
+                {isDownloading ? "Downloading..." : "Export"}
               </button>
               {showExportOptions && !isDownloading && (
                 <div className="absolute right-0 mt-2 w-28 bg-white border rounded-md shadow-lg z-50">
@@ -573,10 +558,36 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         </div>
       )}
 
+      {fromAts && topAtsIssue && (
+        <div
+          className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 shadow-sm"
+          style={{ width: isTemplateSidebarOpen ? '99%' : '90%' }}
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-rose-500 shadow-sm">
+              <AlertTriangle size={17} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-black text-rose-700">{topAtsIssue.label} is missing</span>
+              </div>
+              <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-600">{topAtsIssue.message}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => openAtsIssue(topAtsIssue)}
+            className="shrink-0 rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 transition hover:bg-rose-100"
+          >
+            Fix This Section
+          </button>
+        </div>
+      )}
+
       <div
         ref={previewContainerRef}
         id="resume-preview"
-        className="h-225 overflow-y-auto bg-white rounded-xl shadow-lg mx-auto flex flex-col screen:overflow-auto print:overflow-visible print:h-auto print:shadow-none relative transition-all duration-300 ease-in-out"
+        className={`${fromAts ? "h-[760px]" : "h-225"} relative mx-auto flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-all duration-300 ease-in-out print:h-auto print:overflow-visible print:shadow-none`}
         style={{
           width: isTemplateSidebarOpen ? '99%' : '90%',
           maxWidth: isTemplateSidebarOpen ? '100%' : '1400px'
@@ -613,7 +624,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             width: "100%",
           }}
         >
-          {renderTemplate()}
+          {isEmailReady ? renderTemplate() : (
+            <div className="w-full flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
         </div>
       </div>
     </section>
