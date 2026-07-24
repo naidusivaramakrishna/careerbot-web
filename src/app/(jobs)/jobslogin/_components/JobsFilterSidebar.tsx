@@ -288,7 +288,7 @@ export default function JobsFilterSidebar({
 
 
   return (
-    <div className="jobs-filter-bar pt-3 pb-1" ref={containerRef}>
+    <div className="pt-3 pb-1" ref={containerRef}>
       {/* Filter pills — all in one wrapping row */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* ── WORK MODEL PILL ── */}
@@ -305,7 +305,7 @@ export default function JobsFilterSidebar({
             }`}
           >
             <Building2 size={14} className={activeWorkModels.length > 0 ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
-            <span>{activeWorkModels.length === 1 ? activeWorkModels[0] : "Work Model"}</span>
+            <span>Work Model</span>
             {activeWorkModels.length > 1 && (
               <span className="bg-white/20 text-[10px] font-bold rounded-full w-4.5 h-4.5 flex items-center justify-center">
                 {activeWorkModels.length}
@@ -364,7 +364,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── JOB TYPE PILL ── */}
-        <div className="relative hidden">
+        <div className="relative">
           <button
             type="button"
             onClick={() => toggleDropdown("jobType")}
@@ -449,7 +449,7 @@ export default function JobsFilterSidebar({
             }`}
           >
             <GraduationCap size={14} className={hasExpFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
-            <span>{selectedExpValue ?? "Experience"}</span>
+            <span>Experience</span>
             <ChevronDown
               size={13}
               className={`transition-transform duration-200 ${openDropdown === "experience" ? "rotate-180" : ""} ${
@@ -545,7 +545,7 @@ export default function JobsFilterSidebar({
             }`}
           >
             <IndianRupee size={14} className={hasSalaryFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
-            <span>{selectedSalaryFilter?.replace("salary:", "") ?? "Salary"}</span>
+            <span>Salary</span>
             <ChevronDown
               size={13}
               className={`transition-transform duration-200 ${openDropdown === "salary" ? "rotate-180" : ""} ${
@@ -670,7 +670,7 @@ export default function JobsFilterSidebar({
             }`}
           >
             <MapPin size={14} className={hasLocFilter ? "text-white/80" : "text-gray-400 group-hover:text-[#4F46E5]"} />
-            <span>{activeLocFilters.length === 1 ? activeLocFilters[0] : "Location"}</span>
+            <span>Location</span>
             {activeLocFilters.length > 1 && (
               <span className="bg-white/20 text-[10px] font-bold rounded-full w-4.5 h-4.5 flex items-center justify-center">
                 {activeLocFilters.length}
@@ -800,7 +800,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── EDUCATION PILL ── */}
-        <div className="relative hidden">
+        <div className="relative">
           <button
             type="button"
             onClick={() => toggleDropdown("education")}
@@ -934,7 +934,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── DATE POSTED PILL ── */}
-        <div className="relative hidden">
+        <div className="relative">
           <button
             type="button"
             onClick={() => toggleDropdown("datePosted")}
@@ -1000,7 +1000,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── SOURCE PILL ── */}
-        <div className="relative hidden">
+        <div className="relative">
           <button
             type="button"
             onClick={() => toggleDropdown("source")}

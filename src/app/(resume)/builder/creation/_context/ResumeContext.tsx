@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { getResumeById } from "@/api/resumeApi";
 import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
 import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
 import logger from "@/lib/logger";
+import { getAtsScoreValue } from "../_utils/atsMissing";
 
 // Extract country code from a combined phone string like "+911234567890"
 function splitPhone(phone: string): { countryCode: string; phoneNumber: string } {
@@ -266,6 +267,7 @@ interface ResumeContextType {
   updateCustomFieldValue: (sectionId: string, fieldId: string, value: string | string[]) => void;
   deleteCustomField: (sectionId: string, fieldId: string) => void;
   applyAutoFix: (suggestionId: string) => Promise<void>;
+  applyManualFix: (suggestionId: string, value: string) => Promise<void>;
 }
 
 const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
@@ -290,6 +292,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
   const [enhancedAtsScore, setEnhancedAtsScore] = useState<EnhancedAtsScore>(null);
   const [enhancedSuggestions, setEnhancedSuggestions] = useState<EnhancedSuggestion[]>([]);
+  const latestFixRequestRef = useRef(0);
 
   const [resumeData, setResumeData] = useState<ResumeData>(() => {
     // ✅ If resumeId is provided, don't use localStorage (we'll load from backend)
@@ -641,7 +644,12 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             const cached = JSON.parse(cachedRaw);
             // Only use cache if it belongs to this exact resumeId
             if (cached?.resumeId === resumeId) {
-              data = cached.data;
+              // Enhanced caches created before the backend score projection
+              // rollout contain only the current score. Fetch the persisted
+              // backend response instead of rendering that stale value twice.
+              data = source === "enhanced" && !hasAtsScoreProjection(cached.data)
+                ? undefined
+                : cached.data;
               localStorage.removeItem("cached_resume_data");
             } else {
               // Stale cache for a different resume — discard and fetch fresh
@@ -673,6 +681,62 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           })(),
         ]);
 
+        // ATS handoffs may load from the local builder cache. Preserve the
+        // report's backend score metadata instead of recalculating from fields.
+        const resumeRecord = resumeData as Record<string, unknown> | null | undefined;
+        const scoreProjectionKeys = [
+          "current_score",
+          "estimated_score_after_fixes",
+          "points_possible",
+          "issues_count",
+          "sections_with_issues",
+          "score_status",
+          "score_source",
+        ];
+        const backendScoreSources = [
+          resumeRecord,
+          resumeRecord?.enhancer_state,
+          (resumeRecord?.enhancer_state as Record<string, unknown> | undefined)?.ats_breakdown,
+          (resumeRecord?.enhancer_state as Record<string, unknown> | undefined)?.ats_display,
+        ];
+        const topLevelProjection = Object.fromEntries(
+          scoreProjectionKeys
+            .filter((key) => backendScoreSources.some(
+              (source) => source && typeof source === "object" && Object.prototype.hasOwnProperty.call(source, key)
+            ))
+            .map((key) => {
+              const source = backendScoreSources.find(
+                (candidate) => candidate && typeof candidate === "object" && Object.prototype.hasOwnProperty.call(candidate, key)
+              ) as Record<string, unknown> | undefined;
+              return [key, source?.[key]];
+            })
+        );
+        const storedScore = resumeRecord?.ats_score;
+        let persistedAtsScore = storedScore && typeof storedScore === "object"
+          ? { ...(storedScore as Record<string, unknown>), ...topLevelProjection }
+          : Object.keys(topLevelProjection).length > 0
+            ? topLevelProjection
+            : undefined;
+        if (typeof window !== "undefined") {
+          try {
+            const analysis = JSON.parse(localStorage.getItem("atsAnalysisData") || "null") as Record<string, unknown> | null;
+            if (analysis?.enhanced_resume_id === resumeId && analysis.ats_score) {
+              persistedAtsScore = {
+                ...((persistedAtsScore as Record<string, unknown> | null | undefined) ?? {}),
+                ...(analysis.ats_score as Record<string, unknown>),
+                ...(typeof analysis.estimated_score_after_fixes === "number"
+                  ? { estimated_score_after_fixes: analysis.estimated_score_after_fixes }
+                  : {}),
+              };
+            }
+          } catch {
+            // Ignore malformed legacy analysis cache and continue with API data.
+          }
+        }
+        if (persistedAtsScore && typeof persistedAtsScore === "object") {
+          setEnhancedAtsScore(persistedAtsScore as EnhancedAtsScore);
+        }
+
         // Process resume data
         let processedData;
         if (source === "enhanced" && resumeData?.enhanced_data) {
@@ -690,13 +754,22 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
               fullname: mapped.personalInfo?.fullname || resumeData.display_name || "",
             },
           };
-          // Store ATS score from enhanced resume response
-          if (resumeData.ats_score) {
-            setEnhancedAtsScore(resumeData.ats_score);
+          // Store ATS score — prefer API response; if missing, read from atsAnalysisData
+          // which is already written by the ATS analysis flow (no new storage needed).
+          // Don't overwrite a score already restored from persisted storage above.
+          const resolvedAtsScore = resumeData.ats_score ?? (() => {
+            try {
+              const cached = localStorage.getItem("atsAnalysisData");
+              if (cached) return JSON.parse(cached)?.ats_score ?? null;
+            } catch { /* ignore */ }
+            return null;
+          })();
+          if (resolvedAtsScore && !persistedAtsScore) {
+            setEnhancedAtsScore(resolvedAtsScore);
           }
           // Convert section_breakdown deductions into EnhancedSuggestion[] (after_example is the suggestion text)
           const derivedSuggestions: EnhancedSuggestion[] = [];
-          const sectionBreakdown = (resumeData.ats_score?.section_breakdown ?? {}) as Record<string, {
+          const sectionBreakdown = (resolvedAtsScore?.section_breakdown ?? {}) as Record<string, {
             deductions?: { id: string; penalty: number; after_example?: string; message?: string }[];
           }>;
           for (const [sectionName, sec] of Object.entries(sectionBreakdown)) {
@@ -962,13 +1035,13 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     }));
   };
 
-  const applyAutoFix = async (suggestionId: string): Promise<void> => {
-    if (!resumeIdProp) return;
-    const response = await applyFix({
-      enhancer_state: resumeIdProp,
-      suggestion_id: suggestionId,
-      fix_type: "auto",
-    });
+  const syncApplyFixResponse = (
+    response: Awaited<ReturnType<typeof applyFix>>,
+    suggestionId: string,
+    requestId: number
+  ) => {
+    if (requestId !== latestFixRequestRef.current) return;
+
     if (response.success && response.enhancer_state) {
       // Re-map raw parser resume into builder format
       const mapped = mapParserOutputToBuilderData({
@@ -999,14 +1072,47 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           qualifications: mapped.personalInfo?.qualifications || prev.personalInfo.qualifications || '',
         },
       }));
-      if (response.enhancer_state.ats_breakdown) {
-        setEnhancedAtsScore(response.enhancer_state.ats_breakdown as unknown as ATSScore);
+      const nextAtsScore =
+        (response.enhancer_state.ats_breakdown as unknown as ATSScore | undefined) ??
+        (response.ats_display ? ({ ats_display: response.ats_display } as unknown as ATSScore) : undefined);
+      if (nextAtsScore) {
+        setEnhancedAtsScore(prev => {
+          const nextValue = getAtsScoreValue(nextAtsScore);
+          const prevValue = getAtsScoreValue(prev);
+          return nextValue > 0 || prevValue === 0 ? nextAtsScore : prev;
+        });
       }
-      // Delay removal so the "Applied!" button state is visible to the user before it disappears
-      setTimeout(() => {
+      if (response.suggestions) {
+        setEnhancedSuggestions(response.suggestions);
+      } else {
         setEnhancedSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      }, 1200);
+      }
     }
+  };
+
+  const applyAutoFix = async (suggestionId: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const requestId = latestFixRequestRef.current + 1;
+    latestFixRequestRef.current = requestId;
+    const response = await applyFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+      fix_type: "auto",
+    });
+    syncApplyFixResponse(response, suggestionId, requestId);
+  };
+
+  const applyManualFix = async (suggestionId: string, value: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const requestId = latestFixRequestRef.current + 1;
+    latestFixRequestRef.current = requestId;
+    const response = await applyFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+      fix_type: "manual",
+      value,
+    });
+    syncApplyFixResponse(response, suggestionId, requestId);
   };
 
   const createResume = async () => {
@@ -1047,6 +1153,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         updateCustomFieldValue,
         deleteCustomField,
         applyAutoFix,
+        applyManualFix,
       }}
     >
       {children}

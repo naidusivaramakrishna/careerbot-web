@@ -153,7 +153,7 @@ export default function ConsentModal({ onAccept, onDecline, isReConsent = false 
                 Saving…
               </>
             ) : (
-              "I Agree — Start Preparing"
+              "I Agree — Continue"
             )}
           </button>
           <button

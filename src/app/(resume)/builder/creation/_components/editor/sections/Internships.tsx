@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
+import SafeHTML from "@/components/common/SafeHTML";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -456,9 +457,9 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                   )}
 
                   {internship.description && (
-                    <div
+                    <SafeHTML
+                      content={internship.description}
                       className="text-sm text-[#404040] mt-1 line-clamp-2"
-                      dangerouslySetInnerHTML={{ __html: internship.description }}
                     />
                   )}
                 </div>
@@ -509,7 +510,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
         <div className="flex gap-6 items-start">
           <div 
             ref={formScrollRef}
-            className="flex-1 h-[350px] overflow-y-auto mt-6 scrollbar-hide pr-2 "
+            className="flex-1 mt-6 pr-2"
           >
             <div className="flex flex-col gap-3">
               {(editingOriginalEntry !== null || savedEntries.length > 0) && (
@@ -562,8 +563,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                           value={internship.startDate}
                           onChange={(val) => handleChange(editIndex, "startDate", val)}
                           placeholder="MM/YY"
-                          error={errors[`internship-${globalIndex}-startDate`]}
-                          maxDate={internship.endDate}
+                          maxDate={internship.endDate || undefined}
                         />
                       </div>
 
@@ -574,7 +574,6 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                             value={internship.endDate}
                             onChange={(val) => handleChange(editIndex, "endDate", val)}
                             placeholder="MM/YY"
-                            error={errors[`internship-${globalIndex}-endDate`]}
                             minDate={internship.startDate}
                           />
                         </div>

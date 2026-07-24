@@ -62,13 +62,12 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
   /* ── action buttons – appear on section hover ── */
   const SectionActions = ({ sectionKey }: { sectionKey: string }) =>
     (onEditSection || onDeleteSection) ? (
-      <div className="absolute -right-10 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity duration-200 group-hover/section:opacity-100 group-focus-within/section:opacity-100">
+      <div className="absolute top-1/2 -translate-y-1/2 right-0 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200 z-10 flex items-center gap-1">
         {onEditSection && (
           <button
             onClick={() => onEditSection(sectionKey)}
             title="Edit section"
-            aria-label={`Edit ${sectionKey} section`}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-white shadow-md transition-colors hover:border-blue-400 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-blue-50 hover:border-blue-400 transition-colors"
           >
             <Edit3 className="w-3.5 h-3.5 text-blue-600" />
           </button>
@@ -77,8 +76,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
           <button
             onClick={() => onDeleteSection(sectionKey)}
             title="Remove section"
-            aria-label={`Remove ${sectionKey} section`}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-white shadow-md transition-colors hover:border-red-400 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            className="bg-white border border-gray-200 rounded-full p-1.5 shadow-md hover:bg-red-50 hover:border-red-400 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5 text-red-500" />
           </button>
@@ -657,7 +655,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
               const startDate = toStr(proj.startDate || proj.start_date);
               const endDate = toStr(proj.endDate || proj.end_date || proj.date || proj.period);
               const description = toStr(proj.description || proj.summary);
-              const rawTech = proj.tech_stack || proj.technologies || proj.techStack || proj.tools;
+              const rawTech = proj.technologies || proj.techStack || proj.tools;
               const technologies: string[] = Array.isArray(rawTech)
                 ? rawTech.map((t: any) => toStr(t)).filter(Boolean) // eslint-disable-line @typescript-eslint/no-explicit-any
                 : rawTech ? [toStr(rawTech)].filter(Boolean) : [];
@@ -754,6 +752,7 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
               const year = typeof cert === 'object' ? toStr(cert.year || cert.date || cert.completion_date || cert.issued_date) : "";
               const expiryDate = typeof cert === 'object' ? toStr(cert.expiryDate || cert.expiry_date) : "";
               const credentialId = typeof cert === 'object' ? toStr(cert.credentialId || cert.credential_id) : "";
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const certBullets: string[] = typeof cert === 'object' ? parseDescription(cert.bullets || cert.bullet_points || cert.points || cert.highlights || cert.responsibilities || cert.description || cert.details) : [];
 
               if (!certName) return null;

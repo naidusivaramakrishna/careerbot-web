@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Calendar, GraduationCap, Pencil, Trash2 } from "lucide-react";
 import { Education } from "@/api/userApi";
 import { format } from "date-fns";
@@ -9,7 +10,7 @@ interface Props {
   onDelete: (id?: string, index?: number) => void;
 }
 
-function formatDateRange(start?: string | Date, end?: string | Date): string {
+function formatEduDateRange(start?: string | Date, end?: string | Date): string {
   if (!start && !end) return "";
 
   const parseDate = (value?: string | Date) => {
@@ -48,14 +49,14 @@ function formatDateRange(start?: string | Date, end?: string | Date): string {
   return formattedEnd ? `${formattedStart} – ${formattedEnd}` : formattedStart;
 }
 
-export default function EducationCard({ edu, index, onEdit, onDelete }: Props) {
-  const dateLabel = !edu.start_date && edu.end_date
-    ? `Passed out: ${formatDateRange(edu.start_date, edu.end_date)}`
-    : formatDateRange(edu.start_date, edu.end_date);
+const EducationCard = memo(function EducationCard({ edu, index, onEdit, onDelete }: Props) {
+  const dateLabel = useMemo(() => {
+    const range = formatEduDateRange(edu.start_date, edu.end_date);
+    return !edu.start_date && edu.end_date ? `Passed out: ${range}` : range;
+  }, [edu.start_date, edu.end_date]);
 
   return (
     <div
-      key={edu.id || index}
       data-testid={`education-card-${index}`}
       className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-4 flex items-start justify-between gap-3"
     >
@@ -111,4 +112,6 @@ export default function EducationCard({ edu, index, onEdit, onDelete }: Props) {
       </div>
     </div>
   );
-}
+});
+
+export default EducationCard;

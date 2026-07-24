@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { getExperience, updateExperience, deleteExperience, Experience } from "@/api/userApi";
 import { addExperienceItem } from "../../_utils/autoFillHelper";
@@ -12,8 +12,6 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import ExperienceEmptyState from "./ExperienceEmptyState";
 import Modal from "@/components/common/Modal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
-import logger from "@/lib/logger";
-
 interface WorkExperienceSectionProps extends ExperienceSectionProps {
     isAutoFill?: boolean; // Flag to indicate if data is from resume/LinkedIn import
 }
@@ -35,20 +33,19 @@ export default function WorkExperienceSection({
         index?: number;
     } | null>(null);
 
-    useEffect(() => {
+    const hasExistingData = useRef((tempProfile.workExperience?.length ?? 0) > 0);
 
+    useEffect(() => {
+        if (hasExistingData.current) {
+            setEditingIndex(null);
+            return;
+        }
         const fetchExperience = async () => {
-            //  Only fetch if experience data doesn't exist yet
-            if (tempProfile.workExperience && tempProfile.workExperience.length > 0) {
-                if (tempProfile.workExperience.length > 0) setEditingIndex(null);
-                return;
-            }
             try {
                 setLoading(true);
                 const data = await getExperience();
-                const updatedProfile = { ...tempProfile, workExperience: data }
-                setTempProfile(updatedProfile);
-                setProfileData(updatedProfile) //  Update context too
+                setTempProfile((prev) => ({ ...prev, workExperience: data }));
+                setProfileData((prev) => ({ ...prev, workExperience: data }));
                 if (data.length > 0) setEditingIndex(null);
             } catch {
                 toast.error("Failed to load experience details.");
@@ -57,7 +54,7 @@ export default function WorkExperienceSection({
             }
         };
         fetchExperience();
-    }, []);
+    }, []); // safe: hasExistingData is a ref, setters are stable
 
     const handleSave = async () => {
         try {
@@ -142,11 +139,7 @@ export default function WorkExperienceSection({
 
             //  Update both local and context state using functional updates
             setTempProfile((prev) => ({ ...prev, workExperience: updated }));
-            setProfileData((prev) => {
-                const newProfile = { ...prev, workExperience: updated };
-                logger.info('✅ Updated profile data after delete:', newProfile);
-                return newProfile;
-            });
+            setProfileData((prev) => ({ ...prev, workExperience: updated }));
 
             // Refresh dashboard with delay to prevent multiple toast notifications
             setTimeout(() => {
@@ -162,17 +155,21 @@ export default function WorkExperienceSection({
         }
     };
 
-    const openAddModal = () => {
+    const openAddModal = useCallback(() => {
         setExperienceForm({});
         setEditingIndex(null);
         setIsModalOpen(true);
-    };
+    }, []);
 
-    const openEditModal = (exp: Partial<Experience>, index: number) => {
+    const openEditModal = useCallback((exp: Partial<Experience>, index: number) => {
         setExperienceForm(exp);
         setEditingIndex(index);
         setIsModalOpen(true);
-    };
+    }, []);
+
+    const openDeleteModal = useCallback((id?: string, index?: number) => {
+        setDeleteTarget({ id, index });
+    }, []);
 
     const modalTitle =
         editingIndex === null ? "Add Work Experience" : "Edit Work Experience";
@@ -187,7 +184,7 @@ export default function WorkExperienceSection({
                     <ExperienceList
                         experienceList={tempProfile.workExperience}
                         onEdit={openEditModal}
-                        onDelete={(id, index) => setDeleteTarget({ id, index })}
+                        onDelete={openDeleteModal}
                         onAdd={openAddModal}
                     />
                 </>

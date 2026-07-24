@@ -30,6 +30,7 @@ import { parseJDByJob, parseJDFile, parseJDText, parseJDUrl } from "@/api/parser
 import { getResumeById } from "@/api/resumeApi";
 import { extractResume } from "@/api/resumeParsingApi";
 import SignUpModal from "@/components/SignUpModal";
+import { CoverLetterTemplatePreview } from "@/app/cover-letter/_components/CoverLetterTemplatePreview";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { useDefaultCoverLetterResume } from "@/hooks/useDefaultCoverLetterResume";
 import { useGenerateCoverLetter } from "@/hooks/useGenerateCoverLetter";
@@ -43,6 +44,9 @@ import type { CoverLetterFormSubmit, CoverLetterResumeOption, CoverLetterTemplat
 const MAX_RESUME_UPLOAD_MB = 10;
 const MIN_JD_CHARS = 50;
 const MAX_NOTE_CHARS = 300;
+// Mirrors the backend GenerateOptions bounds exactly (ge=200, le=500).
+const WORD_COUNT_FLOOR = 200;
+const WORD_COUNT_CEIL = 500;
 const COVER_LETTER_TEMPLATE_PREF_KEY = "careerbot:cover-letter-template";
 const ALLOWED_RESUME_TYPES = new Set([
   "application/pdf",
@@ -58,7 +62,7 @@ const ALLOWED_JD_FILE_TYPES = new Set([
 type ParsedResumeBlob = Record<string, unknown>;
 type BuilderStep = "resume" | "generate";
 type CreationSource = "jd" | "tracker" | "url" | "upload";
-type ToneChoice = "professional" | "confident" | "concise" | "warm";
+type ToneChoice = "professional" | "warm" | "concise";
 type TemplateStyleId =
   | "classic"
   | "modern"
@@ -117,7 +121,6 @@ const sourceOptions: Array<{
 
 const toneOptions: Array<{ id: ToneChoice; label: string; helper: string }> = [
   { id: "professional", label: "Professional", helper: "Balanced and recruiter-friendly" },
-  { id: "confident", label: "Confident", helper: "More direct and achievement-led" },
   { id: "concise", label: "Concise", helper: "Shorter, sharper paragraphs" },
   { id: "warm", label: "Warm", helper: "Human but still polished" },
 ];
@@ -282,8 +285,17 @@ export default function CoverLetterNewPage() {
   const [companyName, setCompanyName] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
   const [location, setLocation] = useState("");
+  const [hiringManagerName, setHiringManagerName] = useState("");
+  const [candidateSignatureName, setCandidateSignatureName] = useState("");
   const [includeContactDetails, setIncludeContactDetails] = useState(false);
   const [tone, setTone] = useState<ToneChoice>("professional");
+  // "auto" (default/recommended) omits min_words/max_words entirely so the
+  // AI service applies its own candidate-level-aware word-count range
+  // (e.g. ~220-320 words for a fresher vs ~400-650 for a leadership-level
+  // candidate). "custom" lets the user override with an explicit range.
+  const [wordCountMode, setWordCountMode] = useState<"auto" | "custom">("auto");
+  const [minWords, setMinWords] = useState(250);
+  const [maxWords, setMaxWords] = useState(400);
   const [selectedTemplateId, setSelectedTemplateId] = useState<TemplateStyleId>("modern");
   const pendingTemplateIdRef = useRef<TemplateStyleId>("modern");
   const [apiError, setApiError] = useState<string | null>(null);
@@ -441,6 +453,11 @@ export default function CoverLetterNewPage() {
       setApiError(getJobSourceMissingMessage(source));
       return;
     }
+    if (wordCountMode === "custom" && minWords > maxWords) {
+      setActiveStep("resume");
+      setApiError("Minimum words can't be greater than maximum words.");
+      return;
+    }
     const request = buildRequest();
     const attemptKey = mintIdempotencyKey(userId ?? "anon");
     pendingTemplateIdRef.current = selectedTemplateId;
@@ -490,9 +507,7 @@ export default function CoverLetterNewPage() {
   }, [generatedLetterId, router]);
 
   function buildRequest(): CoverLetterFormSubmit {
-    const backendTone = tone === "confident" ? "professional" : tone;
     const noteParts = [
-      tone === "confident" && "Preferred tone: confident, direct, and achievement-led.",
       location.trim() && `Role location: ${location.trim()}.`,
       selectedTemplate && `Preferred layout style: ${selectedTemplate.name}.`,
     ].filter(Boolean);
@@ -500,6 +515,8 @@ export default function CoverLetterNewPage() {
     const appCtxFields = {
       ...(companyName.trim() && { company_name: companyName.trim() }),
       ...(roleTitle.trim() && { role_title: roleTitle.trim() }),
+      ...(hiringManagerName.trim() && { hiring_manager_name: hiringManagerName.trim() }),
+      ...(candidateSignatureName.trim() && { candidate_signature_name: candidateSignatureName.trim() }),
       ...(includeContactDetails && { include_contact_details: true }),
     };
 
@@ -509,9 +526,11 @@ export default function CoverLetterNewPage() {
         application_context: { ...appCtxFields, source: "user" as const },
       }),
       options: {
-        tone: backendTone,
-        min_words: 250,
-        max_words: 400,
+        tone,
+        // "auto": omit both so the AI derives level-appropriate bounds from
+        // the resume. "custom": send the user-chosen range (200-500, backend-
+        // validated: min_words must not exceed max_words).
+        ...(wordCountMode === "custom" && { min_words: minWords, max_words: maxWords }),
         ...(note && { candidate_note: note }),
         include_debug_metadata: false,
       },
@@ -689,11 +708,21 @@ export default function CoverLetterNewPage() {
                 onRoleTitleChange={setRoleTitle}
                 location={location}
                 onLocationChange={setLocation}
+                hiringManagerName={hiringManagerName}
+                onHiringManagerNameChange={setHiringManagerName}
+                candidateSignatureName={candidateSignatureName}
+                onCandidateSignatureNameChange={setCandidateSignatureName}
                 includeContactDetails={includeContactDetails}
                 onIncludeContactDetailsChange={setIncludeContactDetails}
                 jdReady={jobSourceReady}
                 tone={tone}
                 onToneChange={setTone}
+                wordCountMode={wordCountMode}
+                onWordCountModeChange={setWordCountMode}
+                minWords={minWords}
+                onMinWordsChange={setMinWords}
+                maxWords={maxWords}
+                onMaxWordsChange={setMaxWords}
                 selectedTemplateId={selectedTemplateId}
                 onTemplateChange={setSelectedTemplateId}
                 onContinue={() => void handleSubmit()}
@@ -846,11 +875,21 @@ function CoverLetterStepOneMock({
   onRoleTitleChange,
   location,
   onLocationChange,
+  hiringManagerName,
+  onHiringManagerNameChange,
+  candidateSignatureName,
+  onCandidateSignatureNameChange,
   includeContactDetails,
   onIncludeContactDetailsChange,
   jdReady,
   tone,
   onToneChange,
+  wordCountMode,
+  onWordCountModeChange,
+  minWords,
+  onMinWordsChange,
+  maxWords,
+  onMaxWordsChange,
   selectedTemplateId,
   onTemplateChange,
   onContinue,
@@ -881,11 +920,21 @@ function CoverLetterStepOneMock({
   onRoleTitleChange: (v: string) => void;
   location: string;
   onLocationChange: (v: string) => void;
+  hiringManagerName: string;
+  onHiringManagerNameChange: (v: string) => void;
+  candidateSignatureName: string;
+  onCandidateSignatureNameChange: (v: string) => void;
   includeContactDetails: boolean;
   onIncludeContactDetailsChange: (v: boolean) => void;
   jdReady: boolean;
   tone: ToneChoice;
   onToneChange: (tone: ToneChoice) => void;
+  wordCountMode: "auto" | "custom";
+  onWordCountModeChange: (mode: "auto" | "custom") => void;
+  minWords: number;
+  onMinWordsChange: (v: number) => void;
+  maxWords: number;
+  onMaxWordsChange: (v: number) => void;
   selectedTemplateId: TemplateStyleId;
   onTemplateChange: (id: TemplateStyleId) => void;
   onContinue: () => void;
@@ -897,7 +946,7 @@ function CoverLetterStepOneMock({
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const selectedTemplate = templateStyles.find((template) => template.id === selectedTemplateId) ?? templateStyles[1];
   const stats = deriveResumeStatsForStepOne(resume);
-  const canContinue = hasResume && jdReady;
+  const canContinue = hasResume && jdReady && (wordCountMode === "auto" || minWords <= maxWords);
   const resumeName = getResumeDisplayName(resume);
   const isBuilderResume = resume?.source === "builder";
   const isDefaultResume = Boolean(resume?.is_user_default);
@@ -1253,6 +1302,30 @@ function CoverLetterStepOneMock({
                 suggestions={locationSuggestions}
               />
             </div>
+            <div>
+              <label className="text-sm font-black text-[#070b33]">
+                Hiring manager <span className="font-semibold text-[#6b789c]">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={hiringManagerName}
+                onChange={(e) => onHiringManagerNameChange(e.target.value)}
+                placeholder="e.g. Priya Sharma"
+                className="mt-2 h-11 w-full rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 text-sm font-semibold text-[#070b33] outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:h-14 2xl:px-4 2xl:text-[15px]"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-black text-[#070b33]">
+                Signature name <span className="font-semibold text-[#6b789c]">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={candidateSignatureName}
+                onChange={(e) => onCandidateSignatureNameChange(e.target.value)}
+                placeholder="e.g. Ananya Rao"
+                className="mt-2 h-11 w-full rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 text-sm font-semibold text-[#070b33] outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:h-14 2xl:px-4 2xl:text-[15px]"
+              />
+            </div>
             <label className="flex cursor-pointer items-start gap-4 rounded-lg border border-[#d8e0ef] bg-[#f8fbff] px-4 py-4 transition hover:border-[#2557a7] hover:bg-blue-50/40 sm:col-span-2">
               <input
                 type="checkbox"
@@ -1291,7 +1364,7 @@ function CoverLetterStepOneMock({
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 2xl:mt-7 2xl:gap-5">
           {toneOptions.map((option) => {
             const selected = tone === option.id;
-            const ToneIcon = option.id === "professional" ? BriefcaseBusiness : option.id === "confident" ? Zap : option.id === "warm" ? Sparkles : PenLine;
+            const ToneIcon = option.id === "professional" ? BriefcaseBusiness : option.id === "warm" ? Sparkles : PenLine;
             return (
               <button
                 key={option.id}
@@ -1302,7 +1375,7 @@ function CoverLetterStepOneMock({
                   selected ? "border-[#2557a7] bg-blue-50/30 shadow-[0_16px_36px_rgba(37,87,167,0.12)]" : "border-[#dfe6f5]",
                 ].join(" ")}
               >
-                <span className={["flex h-11 w-11 items-center justify-center rounded-full 2xl:h-16 2xl:w-16", option.id === "professional" ? "bg-blue-50 text-[#2557a7]" : option.id === "confident" ? "bg-emerald-50 text-emerald-600" : option.id === "warm" ? "bg-purple-50 text-purple-600" : "bg-orange-50 text-orange-500"].join(" ")}>
+                <span className={["flex h-11 w-11 items-center justify-center rounded-full 2xl:h-16 2xl:w-16", option.id === "professional" ? "bg-blue-50 text-[#2557a7]" : option.id === "warm" ? "bg-purple-50 text-purple-600" : "bg-orange-50 text-orange-500"].join(" ")}>
                   <ToneIcon className="h-5 w-5 2xl:h-8 2xl:w-8" />
                 </span>
                 <span className="absolute right-5 top-5 flex h-5 w-5 items-center justify-center rounded-full border border-[#bfd0ef] bg-white 2xl:right-7 2xl:top-7 2xl:h-6 2xl:w-6">
@@ -1314,6 +1387,76 @@ function CoverLetterStepOneMock({
             );
           })}
         </div>
+      </div>
+
+      <div className="rounded-lg border border-[#dfe6f5] bg-white px-5 py-5 shadow-[0_14px_38px_rgba(18,42,94,0.06)] 2xl:px-7 2xl:py-7">
+        <h2 className="text-[20px] font-black leading-tight text-[#070b33] 2xl:text-[22px]">Word count</h2>
+        <p className="mt-3 text-sm font-medium leading-6 text-[#344272] 2xl:text-[15px] 2xl:leading-7">
+          Let the AI pick a length that fits your experience level, or set your own range.
+        </p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onWordCountModeChange("auto")}
+            className={[
+              "rounded-lg border p-4 text-left transition duration-200",
+              wordCountMode === "auto" ? "border-[#2557a7] bg-blue-50/30 shadow-[0_10px_24px_rgba(37,87,167,0.1)]" : "border-[#dfe6f5] hover:border-[#bfd0ef]",
+            ].join(" ")}
+          >
+            <span className="block text-sm font-black text-[#070b33]">Match my experience level (recommended)</span>
+            <span className="mt-1 block text-xs font-medium leading-5 text-[#344272]">
+              The AI adapts the length to your resume &mdash; shorter for early-career, longer for senior/leadership roles.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onWordCountModeChange("custom")}
+            className={[
+              "rounded-lg border p-4 text-left transition duration-200",
+              wordCountMode === "custom" ? "border-[#2557a7] bg-blue-50/30 shadow-[0_10px_24px_rgba(37,87,167,0.1)]" : "border-[#dfe6f5] hover:border-[#bfd0ef]",
+            ].join(" ")}
+          >
+            <span className="block text-sm font-black text-[#070b33]">Set a custom range</span>
+            <span className="mt-1 block text-xs font-medium leading-5 text-[#344272]">
+              Choose your own min/max word count ({WORD_COUNT_FLOOR}&ndash;{WORD_COUNT_CEIL}).
+            </span>
+          </button>
+        </div>
+        {wordCountMode === "custom" && (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-xs font-black uppercase tracking-wide text-[#344272]">Minimum words</span>
+              <input
+                type="number"
+                min={WORD_COUNT_FLOOR}
+                max={WORD_COUNT_CEIL}
+                step={10}
+                value={minWords}
+                onChange={(e) => onMinWordsChange(Number(e.target.value))}
+                onBlur={() => onMinWordsChange(Math.min(Math.max(minWords, WORD_COUNT_FLOOR), WORD_COUNT_CEIL))}
+                className="mt-2 h-11 w-full rounded-lg border border-[#dfe6f5] px-3 text-sm font-semibold text-[#070b33] focus:border-[#2557a7] focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-black uppercase tracking-wide text-[#344272]">Maximum words</span>
+              <input
+                type="number"
+                min={WORD_COUNT_FLOOR}
+                max={WORD_COUNT_CEIL}
+                step={10}
+                value={maxWords}
+                onChange={(e) => onMaxWordsChange(Number(e.target.value))}
+                onBlur={() => onMaxWordsChange(Math.min(Math.max(maxWords, WORD_COUNT_FLOOR), WORD_COUNT_CEIL))}
+                className="mt-2 h-11 w-full rounded-lg border border-[#dfe6f5] px-3 text-sm font-semibold text-[#070b33] focus:border-[#2557a7] focus:outline-none"
+              />
+            </label>
+            {minWords > maxWords && (
+              <p className="sm:col-span-2 text-xs font-semibold text-red-600">
+                Minimum words can&apos;t be greater than maximum words.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-[#dfe6f5] bg-white px-5 py-5 shadow-[0_14px_38px_rgba(18,42,94,0.06)] 2xl:px-7 2xl:py-6">
@@ -1738,7 +1881,7 @@ function TemplatePickerDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/30 p-3 backdrop-blur-sm sm:p-5">
-        <div className="flex h-full w-full max-w-[520px] flex-col rounded-lg border border-white/70 bg-white shadow-2xl">
+        <div className="flex h-full w-full max-w-[720px] flex-col rounded-lg border border-white/70 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-[#e4ebf7] p-5">
           <div>
             <h2 className="text-xl font-black text-[#070b33]">Browse Templates</h2>
@@ -1764,13 +1907,13 @@ function TemplatePickerDrawer({
                   onClose();
                 }}
                 className={[
-                  "grid grid-cols-[96px_minmax(0,1fr)] gap-4 rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md",
+                  "grid grid-cols-[170px_minmax(0,1fr)] gap-4 rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md",
                   selected
                     ? "border-[#2557a7] bg-blue-50 ring-1 ring-[#2557a7]"
                     : "border-[#d8e2f3] bg-white hover:border-[#2557a7]",
                 ].join(" ")}
               >
-                <div className={["rounded-lg border border-white/70 p-3", template.paper].join(" ")}>
+                <div className={["rounded-lg border border-white/70 p-2", template.paper].join(" ")}>
                   <DocumentPreview template={template} />
                 </div>
                 <div className="min-w-0">
@@ -1781,7 +1924,7 @@ function TemplatePickerDrawer({
                   <p className="mt-1 text-xs font-black uppercase tracking-[0.16em] text-[#2557a7]">
                     {template.category}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-[#10235f]">{template.description}</p>
+                  <p className="mt-2 text-sm leading-5 text-[#10235f]">{template.description}</p>
                   <p className="mt-2 text-xs font-semibold text-slate-500">Best for {template.bestFor}</p>
                 </div>
               </button>
@@ -2359,161 +2502,13 @@ function GeneratingModal({
 
 function DocumentPreview({
   template,
-  tall = false,
 }: {
   template: (typeof templateStyles)[number];
   tall?: boolean;
 }) {
-  const documentSize = tall ? "h-72 w-48" : "h-44 w-32";
-  const lineCount = tall ? 12 : 7;
-  const lineClass = tall ? "h-1.5" : "h-1";
-  const lineWidths = ["w-full", "w-10/12", "w-8/12", "w-11/12", "w-9/12"];
-
-  if (template.previewStyle === "executive") {
-    return (
-      <div className={["flex justify-center rounded-lg p-4", template.paper].join(" ")}>
-        <div className={[documentSize, "grid grid-cols-[0.34fr_1fr] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-md"].join(" ")}>
-          <div className={["p-2 text-white", template.accent].join(" ")}>
-            <div className="h-7 w-7 rounded-full border border-white/60" />
-            <div className="mt-4 space-y-1.5">
-              <div className="h-1 w-8 rounded-full bg-white/80" />
-              <div className="h-1 w-6 rounded-full bg-white/50" />
-              <div className="h-1 w-7 rounded-full bg-white/50" />
-            </div>
-            <div className="mt-5 space-y-1">
-              {Array.from({ length: tall ? 6 : 4 }).map((_, index) => (
-                <div key={index} className="h-0.5 w-full rounded-full bg-white/30" />
-              ))}
-            </div>
-          </div>
-          <div className="p-3">
-            <div className="mb-2 h-2 w-16 rounded-full bg-slate-800" />
-            <div className="mb-1 h-1 w-10 rounded-full bg-slate-300" />
-            <div className="mb-4 h-px w-full bg-slate-200" />
-            <PreviewLines count={lineCount} lineClass={lineClass} widths={lineWidths} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (template.previewStyle === "modern") {
-    return (
-      <div className={["flex justify-center rounded-lg p-4", template.paper].join(" ")}>
-        <div className={[documentSize, "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-md"].join(" ")}>
-          <div className={["px-3 py-3 text-white", template.accent].join(" ")}>
-            <div className="h-2 w-16 rounded-full bg-white" />
-            <div className="mt-2 flex gap-1">
-              <span className="h-1 w-7 rounded-full bg-white/70" />
-              <span className="h-1 w-9 rounded-full bg-white/50" />
-            </div>
-          </div>
-          <div className="p-3">
-            <PreviewLines count={lineCount} lineClass={lineClass} widths={["w-10/12", "w-8/12", "w-full", "w-9/12"]} />
-            <div className={["mt-4 h-1 w-16 rounded-full", template.accent].join(" ")} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (template.previewStyle === "compact") {
-    return (
-      <div className={["flex justify-center rounded-lg p-4", template.paper].join(" ")}>
-        <div className={[documentSize, "rounded-lg border border-blue-100 bg-white p-2.5 shadow-md"].join(" ")}>
-          <div className="mb-2 grid grid-cols-[1fr_0.38fr] gap-2">
-            <div>
-              <div className={["mb-1 h-2 w-14 rounded-full", template.accent].join(" ")} />
-              <div className="h-1 w-9 rounded-full bg-slate-300" />
-            </div>
-            <div className="space-y-1">
-              <div className="h-1 w-full rounded-full bg-slate-300" />
-              <div className="h-1 w-4/5 rounded-full bg-slate-200" />
-            </div>
-          </div>
-          <div className="mb-2 h-px w-full bg-blue-100" />
-          <PreviewLines count={tall ? 20 : 12} lineClass="h-1" widths={["w-full", "w-11/12", "w-10/12", "w-full", "w-8/12"]} tight />
-        </div>
-      </div>
-    );
-  }
-
-  if (template.previewStyle === "minimal") {
-    return (
-      <div className={["flex justify-center rounded-lg p-4", template.paper].join(" ")}>
-        <div className={[documentSize, "rounded-lg border border-slate-200 bg-white p-4 shadow-md"].join(" ")}>
-          <div className="ml-auto h-1 w-10 rounded-full bg-slate-300" />
-          <div className="mt-7 h-2 w-20 rounded-full bg-slate-700" />
-          <div className={["mt-3 h-0.5 w-14 rounded-full", template.accent].join(" ")} />
-          <div className="mt-7">
-            <PreviewLines count={tall ? 8 : 4} lineClass={lineClass} widths={["w-full", "w-9/12", "w-11/12", "w-7/12"]} spacious />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (template.previewStyle === "signature") {
-    return (
-      <div className={["flex justify-center rounded-lg p-4", template.paper].join(" ")}>
-        <div className={[documentSize, "rounded-lg border border-emerald-100 bg-white p-3 shadow-md"].join(" ")}>
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <div className={["mb-1.5 h-2 w-16 rounded-full", template.accent].join(" ")} />
-              <div className="h-1 w-11 rounded-full bg-slate-300" />
-            </div>
-            <div className={["flex h-8 w-8 items-center justify-center rounded-full text-[9px] font-black text-white", template.accent].join(" ")}>
-              CB
-            </div>
-          </div>
-          <PreviewLines count={lineCount} lineClass={lineClass} widths={lineWidths} />
-          <div className="mt-4 flex items-center gap-2">
-            <div className={["h-1.5 w-14 rounded-full", template.accent].join(" ")} />
-            <div className="h-px flex-1 bg-emerald-100" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={["flex justify-center rounded-lg p-4", template.paper].join(" ")}>
-      <div className={[documentSize, "rounded-lg border border-slate-200 bg-white p-3 shadow-md"].join(" ")}>
-        <div className="mb-2 flex items-end justify-between gap-3">
-          <div>
-            <div className={["mb-1 h-2 w-16 rounded-full", template.accent].join(" ")} />
-            <div className="h-1 w-10 rounded-full bg-slate-300" />
-          </div>
-          <div className="h-5 w-5 rounded-full border border-slate-300" />
-        </div>
-        <div className={["mb-3 h-1 w-full rounded-full", template.accent].join(" ")} />
-        <PreviewLines count={lineCount} lineClass={lineClass} widths={lineWidths} />
-      </div>
-    </div>
-  );
-}
-
-function PreviewLines({
-  count,
-  lineClass,
-  widths,
-  tight = false,
-  spacious = false,
-}: {
-  count: number;
-  lineClass: string;
-  widths: string[];
-  tight?: boolean;
-  spacious?: boolean;
-}) {
-  return (
-    <div className={spacious ? "space-y-3" : tight ? "space-y-1" : "space-y-1.5"}>
-      {Array.from({ length: count }).map((_, index) => (
-        <div
-          key={index}
-          className={[lineClass, "rounded-full bg-slate-200", widths[index % widths.length]].join(" ")}
-        />
-      ))}
+    <div className={["flex justify-center rounded-lg p-2", template.paper].join(" ")}>
+      <CoverLetterTemplatePreview template={template} size="large" />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { CheckCircle2, XCircle, ChevronDown, ChevronUp, Zap } from "lucide-react";
+import { CheckCircle2, XCircle, ChevronDown, ChevronUp } from "lucide-react";
 
 const IMPORTANCE_STYLES: Record<string, { bg: string; border: string; color: string }> = {
   required: { bg: "#fff0f0", border: "#fecaca", color: "#dc2626" },
@@ -27,7 +27,7 @@ interface SectionCardProps {
 }
 
 function SectionCard({ label, score, passText, children }: SectionCardProps) {
-  const [expanded, setExpanded] = useState(score < 100);
+  const [expanded, setExpanded] = useState(true);
   const passed = score >= 100;
   const hasDetails = !!children && !passed;
 
@@ -37,12 +37,12 @@ function SectionCard({ label, score, passText, children }: SectionCardProps) {
     ? "linear-gradient(90deg,#fbbf24,#f59e0b)"
     : "linear-gradient(90deg,#f87171,#ef4444)";
   const barColor  = passed ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
-  const titleColor = "#0f172a";
+  const titleColor = passed ? "#16a34a" : "#dc2626";
   const iconColor  = passed ? "#22c55e" : "#ef4444";
-  const cardBg = "#ffffff";
+  const cardBg    = passed ? "linear-gradient(145deg,#f0fdf4,#fff)" : "linear-gradient(145deg,#fff,#fff)";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200/80 shadow-[0_10px_35px_-30px_rgba(15,23,42,.5)]" style={{ background: cardBg }}>
+    <div className="rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden" style={{ background: cardBg }}>
       <div className="flex">
         <div className="flex-1 px-5 py-4">
           {/* Title row */}
@@ -65,11 +65,10 @@ function SectionCard({ label, score, passText, children }: SectionCardProps) {
               >
                 {score.toFixed(score % 1 === 0 ? 0 : 1)}%
               </span>
-              {(hasDetails || passed) && (
+              {hasDetails && (
                 <button
                   onClick={() => setExpanded(v => !v)}
-                  aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700"
+                  className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-all"
                 >
                   {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>
@@ -90,7 +89,7 @@ function SectionCard({ label, score, passText, children }: SectionCardProps) {
           </div>
 
           {/* Pass message */}
-          {passed && expanded && (
+          {passed && (
             <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl bg-green-50 border border-green-100">
               <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
               <p className="text-[12.5px] text-green-700">
@@ -119,15 +118,15 @@ interface ImpactGroupProps {
 
 function ImpactGroup({ label, bolts, children }: ImpactGroupProps) {
   const style = bolts >= 3
-    ? { bg: "transparent", border: "transparent", text: "#dc2626", dot: "#ef4444" }
+    ? { bg: "#fff3f0", border: "#fecaca", text: "#c2410c", dot: "#ef4444" }
     : bolts === 2
-    ? { bg: "transparent", border: "transparent", text: "#b45309", dot: "#f59e0b" }
-    : { bg: "transparent", border: "transparent", text: "#2563eb", dot: "#3b82f6" };
+    ? { bg: "#fffbeb", border: "#fde68a", text: "#b45309", dot: "#f59e0b" }
+    : { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8", dot: "#3b82f6" };
 
   return (
     <div className="space-y-3">
       <div
-        className="flex items-center gap-2 px-1 py-1"
+        className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 shadow-sm"
         style={{ background: style.bg, border: `1px solid ${style.border}` }}
       >
         <span
@@ -179,13 +178,10 @@ export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
   const starSeniority: string  = star.seniority ?? "";
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start gap-3 px-1">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><Zap className="h-4 w-4" /></span>
-        <div>
-          <h3 className="text-[18px] font-extrabold tracking-[-0.02em] text-slate-950">Score breakdown</h3>
-          <p className="mt-0.5 text-xs text-slate-500">See what helps your score and what needs attention.</p>
-        </div>
+    <div className="space-y-5">
+      <div className="flex items-center gap-2.5 px-1">
+        <div className="w-1 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
+        <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Score Breakdown</h3>
       </div>
 
       {/* HIGH IMPACT */}

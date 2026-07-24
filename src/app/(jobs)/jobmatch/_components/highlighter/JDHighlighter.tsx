@@ -7,9 +7,9 @@ import { JDHighlighterProps } from "../_types";
 const HIGHLIGHT_COLORS: Record<string, string> = {
   'matched-tech':  '#DCFCE7',
   'missing-tech':  '#FEE2E2',
-  'matched-soft':  '#DCFCE7',
-  'missing-soft':  '#FEE2E2',
-  'matched-cap':   '#DBEAFE',
+  'matched-soft':  '#DBEAFE',
+  'missing-soft':  '#FEF9C3',
+  'matched-cap':   '#EDE9FE',
 };
 
 const JDHighlighter: React.FC<JDHighlighterProps> = ({
@@ -30,7 +30,7 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
     matchType === 'missing-tech' || matchType === 'missing-soft';
 
   return (
-    <p className="w-full whitespace-pre-wrap wrap-break-word text-[14px] leading-[1.65] text-slate-800">
+    <p className="w-full text-[13px] leading-normal text-gray-900 whitespace-pre-wrap wrap-break-word">
       {spans.map((s, i) =>
         s.match ? (
           <mark
@@ -43,25 +43,11 @@ const JDHighlighter: React.FC<JDHighlighterProps> = ({
               cursor: isMissing(s.matchType) && onMissingSkillClick ? "pointer" : "default",
             }}
             title={isMissing(s.matchType) ? "Click to add to resume" : undefined}
-            role={isMissing(s.matchType) && onMissingSkillClick ? "button" : undefined}
-            tabIndex={isMissing(s.matchType) && onMissingSkillClick ? 0 : undefined}
-            aria-label={isMissing(s.matchType) && onMissingSkillClick ? `Add ${s.text} to resume` : undefined}
             onClick={
               isMissing(s.matchType) && onMissingSkillClick
                 ? () => onMissingSkillClick(s.text)
                 : undefined
             }
-            onKeyDown={
-              isMissing(s.matchType) && onMissingSkillClick
-                ? (event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onMissingSkillClick(s.text);
-                    }
-                  }
-                : undefined
-            }
-            className="outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
           >
             {s.text}
           </mark>

@@ -1,7 +1,10 @@
+import { useCallback } from "react";
 import { EmploymentInfo } from "@/api/userApi";
-import { ValidationError } from "../../_types/experience-types";
 import MultiSelectAutocomplete from "@/components/common/MultiSelectAutocomplete";
-import { industries, roles, locations, jobTypes, noticePeriod } from "../../_utils/employmentData";
+import {
+    industries, roles, locations, jobTypes, noticePeriod,
+    ynOptions, disabilityOptions, workModeOptions, genderOptions, employmentStatusOptions,
+} from "../../_utils/employmentData";
 
 interface Props {
     employmentInfoForm: Partial<EmploymentInfo>;
@@ -9,8 +12,9 @@ interface Props {
     onSave: () => void;
     onCancel: () => void;
     loading: boolean;
-    validationErrors: ValidationError[];
 }
+
+const selectClass = "w-full border border-gray-200 text-sm rounded-lg px-3 py-2.5 bg-gray-50 outline-none transition hover:border-gray-300 focus:ring-2 focus:ring-[#2257a7]/20 focus:border-[#2257a7] focus:bg-white";
 
 export default function EmploymentInfoForm({
     employmentInfoForm,
@@ -19,11 +23,9 @@ export default function EmploymentInfoForm({
     onCancel,
     loading,
 }: Props) {
-    const updateForm = (data: Partial<EmploymentInfo>) => {
+    const updateForm = useCallback((data: Partial<EmploymentInfo>) => {
         setEmploymentInfoForm((prev) => ({ ...prev, ...data }));
-    };
-
-    const selectClass = "w-full border border-gray-200 text-sm rounded-lg px-3 py-2.5 bg-gray-50 outline-none transition hover:border-gray-300 focus:ring-2 focus:ring-[#2257a7]/20 focus:border-[#2257a7] focus:bg-white";
+    }, [setEmploymentInfoForm]);
 
     return (
         <div className="flex flex-col gap-5">
@@ -35,20 +37,17 @@ export default function EmploymentInfoForm({
                         onChange={(e) => updateForm({ authorized_to_work: e.target.value === "true" })}
                         className={selectClass}>
                         <option value="">Select</option>
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
+                        {ynOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium text-gray-600">Disability</label>
                     <select name="disability_status" id="disability-status" data-testid="employment-disability-select"
                         value={employmentInfoForm.disability_status ?? ""}
-                        onChange={(e) => updateForm({ disability_status: e.target.value })}
+                        onChange={(e) => updateForm({ disability_status: e.target.value as typeof employmentInfoForm["disability_status"] })}
                         className={selectClass}>
                         <option value="">Select</option>
-                        <option value="yes">Yes</option>
-                        <option value="no">No</option>
-                        <option value="prefer_not_to_say">Prefer not to say</option>
+                        {disabilityOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -58,8 +57,7 @@ export default function EmploymentInfoForm({
                         onChange={(e) => updateForm({ willing_to_relocate: e.target.value === "true" })}
                         className={selectClass}>
                         <option value="">Select</option>
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
+                        {ynOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -68,9 +66,7 @@ export default function EmploymentInfoForm({
                         value={employmentInfoForm.work_mode || ""}
                         onChange={(e) => updateForm({ work_mode: e.target.value as typeof employmentInfoForm["work_mode"] })}
                         className={selectClass}>
-                        <option value="onsite">On-site</option>
-                        <option value="remote">Remote</option>
-                        <option value="hybrid">Hybrid</option>
+                        {workModeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -79,10 +75,7 @@ export default function EmploymentInfoForm({
                         value={employmentInfoForm.gender ?? "male"}
                         onChange={(e) => updateForm({ gender: e.target.value as typeof employmentInfoForm["gender"] })}
                         className={selectClass}>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="non_binary">Non-binary</option>
-                        <option value="prefer_not_to_say">Prefer not to say</option>
+                        {genderOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -92,9 +85,7 @@ export default function EmploymentInfoForm({
                         onChange={(e) => updateForm({ preferred_job_type: e.target.value as typeof employmentInfoForm["preferred_job_type"] })}
                         className={selectClass}>
                         <option value="">Select Job Type</option>
-                        {jobTypes.map((type) => (
-                            <option key={type.value} value={type.value}>{type.label}</option>
-                        ))}
+                        {jobTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
                     </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -103,10 +94,7 @@ export default function EmploymentInfoForm({
                         value={employmentInfoForm.employment_status ?? "student"}
                         onChange={(e) => updateForm({ employment_status: e.target.value as typeof employmentInfoForm["employment_status"] })}
                         className={selectClass}>
-                        <option value="student">Student</option>
-                        <option value="employed">Employed</option>
-                        <option value="unemployed">Unemployed</option>
-                        <option value="freelancer">Freelancer</option>
+                        {employmentStatusOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -116,9 +104,7 @@ export default function EmploymentInfoForm({
                         onChange={(e) => updateForm({ notice_period_days: e.target.value as typeof employmentInfoForm["notice_period_days"] })}
                         className={selectClass}>
                         <option value="">Select Notice Period</option>
-                        {noticePeriod.map((days) => (
-                            <option key={days.value} value={days.value}>{days.label}</option>
-                        ))}
+                        {noticePeriod.map(days => <option key={days.value} value={days.value}>{days.label}</option>)}
                     </select>
                 </div>
             </div>

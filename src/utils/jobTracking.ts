@@ -9,11 +9,6 @@ export interface JobApplication {
   company: string;
   url: string;
   appliedAt: string;
-  // Full card data captured at apply time, so the Applied tab can render a
-  // complete card without a network round-trip. Required for aggregated
-  // jobs (client-generated "composite-" ids — see jobIdHelper.ts), which
-  // the backend has no record of and can never be looked up by id.
-  snapshot?: Record<string, unknown>;
 }
  
 export interface SavedJob {
@@ -23,11 +18,6 @@ export interface SavedJob {
   location: string;
   type: string;
   savedAt: string;
-  // Full card data captured at save time, so the Saved tab can render a
-  // complete card without a network round-trip. Required for aggregated
-  // jobs (client-generated "composite-" ids — see jobIdHelper.ts), which
-  // the backend has no record of and can never be looked up by id.
-  snapshot?: Record<string, unknown>;
 }
  
 const APPLIED_JOBS_KEY = "appliedJobs";
@@ -77,8 +67,7 @@ export function recordJobApplication(
   title: string,
   company: string,
   url: string,
-  userId?: string | null,
-  snapshot?: Record<string, unknown>
+  userId?: string | null
 ): void {
   if (typeof window === "undefined") return;
 
@@ -96,7 +85,6 @@ export function recordJobApplication(
       company,
       url,
       appliedAt: new Date().toISOString(),
-      ...(snapshot ? { snapshot } : {}),
     };
 
     history.push(newApplication);
@@ -108,25 +96,6 @@ export function recordJobApplication(
 
 export function getApplicationCount(userId?: string | null): number {
   return getApplicationHistory(userId).length;
-}
-
-export function removeJobApplication(jobId: string, userId?: string | null): void {
-  if (typeof window === "undefined") return;
-
-  try {
-    // Mirror getApplicationHistory's scoped+unscoped merge so a removal
-    // clears the entry regardless of which bucket it was written to.
-    const scopedK = scopedKey(APPLIED_JOBS_KEY, userId);
-    const scoped = readApplicationsAt(scopedK).filter((app) => app.jobId !== jobId);
-    localStorage.setItem(scopedK, JSON.stringify(scoped));
-
-    if (userId) {
-      const unscoped = readApplicationsAt(APPLIED_JOBS_KEY).filter((app) => app.jobId !== jobId);
-      localStorage.setItem(APPLIED_JOBS_KEY, JSON.stringify(unscoped));
-    }
-  } catch (e) {
-    console.error("removeJobApplication: Failed to remove application:", e instanceof Error ? e.message : String(e));
-  }
 }
 
 // ==================== SAVED JOBS TRACKING ====================
@@ -158,8 +127,7 @@ export function toggleJobSaved(
   company: string,
   location: string,
   type: string,
-  userId?: string | null,
-  snapshot?: Record<string, unknown>
+  userId?: string | null
 ): boolean {
   if (typeof window === "undefined") return false;
 
@@ -183,7 +151,6 @@ export function toggleJobSaved(
         location,
         type,
         savedAt: new Date().toISOString(),
-        ...(snapshot ? { snapshot } : {}),
       };
 
       saved.push(newSavedJob);

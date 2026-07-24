@@ -46,9 +46,8 @@ function isApiError(err: unknown): err is ApiError {
 }
 
 const AdminLoginPage = () => {
-    const [isSignUp, setIsSignUp] = useState(false); // Start with Sign In
-    const [showSignUpPassword, setShowSignUpPassword] = useState(false);
-    const [showLoginPassword, setShowLoginPassword] = useState(false);
+    const [isSignUp, setIsSignUp] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
@@ -174,7 +173,7 @@ const AdminLoginPage = () => {
                     password: formData.password,
                     totp_code: totpRequired ? formData.totpCode : undefined
                 });
-                logger.info('✅ Login response:', response);
+                logger.info('✅ Login successful');
                 toast.success("Login successful");
 
                 // Redirect to admin dashboard on successful login
@@ -192,10 +191,14 @@ const AdminLoginPage = () => {
                 const status = err.response.status;
                 const data = err.response.data;
 
-                logger.error('Server error:', { status, data });
+                logger.error('Server error:', { status });
 
                 // Check for 2FA requirement (various possible error formats)
-                const apiErrorMsg = data?.detail || data?.error?.message || '';
+                // FastAPI 422 returns detail as an array; normalize to string
+                const rawDetail = data?.detail;
+                const apiErrorMsg = Array.isArray(rawDetail)
+                    ? (rawDetail[0]?.msg || rawDetail[0]?.message || 'Validation error')
+                    : (rawDetail || data?.error?.message || '');
                 const detailStr = typeof apiErrorMsg === 'string' ? apiErrorMsg : '';
                 const is2FARequired =
                     (status === 403 || status === 401) &&
@@ -267,8 +270,7 @@ const AdminLoginPage = () => {
                                     setTotpRequired(false);
                                     setError('');
                                     setFieldErrors({});
-                                    setShowSignUpPassword(false);
-                                    setShowLoginPassword(false);
+                                    setShowPassword(false);
                                     setFormData({ fullName: '', email: '', password: '', totpCode: '' });
                                 }}
                                 className={`flex-1 cursor-pointer py-2 rounded-full text-sm font-medium transition-all ${isSignUp ? "bg-black text-white" : "text-gray-600"
@@ -283,8 +285,7 @@ const AdminLoginPage = () => {
                                     setTotpRequired(false);
                                     setError('');
                                     setFieldErrors({});
-                                    setShowSignUpPassword(false);
-                                    setShowLoginPassword(false);
+                                    setShowPassword(false);
                                     setFormData({ fullName: '', email: '', password: '', totpCode: '' });
                                 }}
                                 className={`flex-1 cursor-pointer py-2 rounded-full text-sm font-medium transition-all ${!isSignUp ? "bg-black text-white" : "text-gray-600"
@@ -339,7 +340,7 @@ const AdminLoginPage = () => {
                         </div>
                         <div className="relative">
                             <input
-                                type={(isSignUp ? showSignUpPassword : showLoginPassword) ? "text" : "password"}
+                                type={showPassword ? "text" : "password"}
                                 name="password"
                                 value={formData.password}
                                 onChange={handleInputChange}
@@ -350,16 +351,10 @@ const AdminLoginPage = () => {
                             />
                             <button
                                 type="button"
-                                onClick={() => {
-                                    if (isSignUp) {
-                                        setShowSignUpPassword(!showSignUpPassword);
-                                    } else {
-                                        setShowLoginPassword(!showLoginPassword);
-                                    }
-                                }}
+                                onClick={() => setShowPassword(v => !v)}
                                 className="absolute inset-y-0 right-3 flex items-center text-gray-600"
                             >
-                                {(isSignUp ? showSignUpPassword : showLoginPassword) ? <Eye size={20} className="cursor-pointer" /> : <EyeClosed size={20} className="cursor-pointer" />}
+                                {showPassword ? <Eye size={20} className="cursor-pointer" /> : <EyeClosed size={20} className="cursor-pointer" />}
                             </button>
                             {fieldErrors.password && (
                                 <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>

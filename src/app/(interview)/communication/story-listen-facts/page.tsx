@@ -13,9 +13,9 @@ import { getSectionRoute } from '@/utils/sectionRouter';
 import logger from '@/lib/logger';
 
 const TextToSpeechPlayer = dynamic(() => import('../components/TextToSpeechPlayer'), { loading: () => <div className="animate-pulse p-4">Loading...</div>, ssr: false });
-const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="w-64 bg-gray-100 animate-pulse" /> });
+const AssessmentSidebar = dynamic(() => import('../components/AssessmentSidebar'), { loading: () => <div className="hidden h-full w-56 shrink-0 bg-gray-100 animate-pulse lg:block xl:w-60" /> });
 const SectionStartModal = dynamic(() => import('../components/SectionStartModal'), { loading: () => null });
-const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200 h-20 animate-pulse" /> });
+const QuestionProgressBar = dynamic(() => import('../components/QuestionProgressBar'), { loading: () => <div className="mb-3 h-12 shrink-0 rounded-xl border border-gray-200 bg-white animate-pulse" /> });
 
 // Option type for MCQ questions
 interface Option {
@@ -37,7 +37,7 @@ export default function StoryListenFactsPage() {
   // Track which story has been played (by story text content)
   const [playedStories, setPlayedStories] = useState<Set<string>>(new Set());
 
-  // ✅ Track section-specific question number for display only (1-3 for "Story Listening")
+  //  Track section-specific question number for display only (1-3 for "Story Listening")
   // Note: currentQuestion.question_number remains global for backend upload API
   const [sectionQuestionNumber, setSectionQuestionNumber] = useState(1);
   const SECTION_TOTAL_QUESTIONS = 3; // Total 3 questions for the story
@@ -89,7 +89,7 @@ export default function StoryListenFactsPage() {
       if (!sessionId) throw new Error('Session ID not found');
 
       const response = await getCurrentQuestion(sessionId);
-      // ✅ Normalize section name to match backend's naming
+      //  Normalize section name to match backend's naming
       setCurrentQuestion({
         ...response,
         section_name: 'Story Listen Facts', // Backend uses this name
@@ -109,7 +109,7 @@ export default function StoryListenFactsPage() {
 
   const handleStartSection = async () => {
     setShowModal(false);
-    setSectionQuestionNumber(1); // ✅ Start at question 1 for this section
+    setSectionQuestionNumber(1); //  Start at question 1 for this section
     setAudioCompleted(false); // Reset audio completion state
     await fetchCurrentQuestion();
   };
@@ -117,7 +117,7 @@ export default function StoryListenFactsPage() {
   // Handler for when audio finishes playing
   const handleAudioEnd = () => {
     setAudioCompleted(true);
-    logger.info('✅ Story audio playback completed - Start Questions button now enabled');
+    logger.info(' Story audio playback completed - Start Questions button now enabled');
   };
 
   // Handle option selection for MCQ
@@ -130,8 +130,8 @@ export default function StoryListenFactsPage() {
     // Save the selected option directly to sessionStorage
     saveTextAnswer(currentQuestion.question_id, optionText);
 
-    logger.info('✅ Selected answer:', optionText);
-    logger.info('✅ Saved answer as-is');
+    logger.info(' Selected answer:', optionText);
+    logger.info(' Saved answer as-is');
 
     // Mark as saved immediately
     setAnswerSaved(true);
@@ -164,14 +164,14 @@ export default function StoryListenFactsPage() {
 
       if (!sessionId) throw new Error('Session ID not found');
 
-      // ✅ Mark question as completed in sessionStorage for Assessment Summary Panel
+      //  Mark question as completed in sessionStorage for Assessment Summary Panel
       if (currentQuestion.question_number) {
         sessionStorage.setItem(`q_${currentQuestion.question_number}_completed`, 'true');
-        logger.info(`✅ Marked question ${currentQuestion.question_number} as completed`);
+        logger.info(` Marked question ${currentQuestion.question_number} as completed`);
       }
 
       // Fetch next question directly (no audio upload for story listen facts)
-      logger.info('📬 Fetching next question for:', currentQuestion.question_id);
+      logger.info('Fetching next question for:', currentQuestion.question_id);
       const response = await getNextQuestion({
         session_id: sessionId,
         question_id: currentQuestion.question_id,
@@ -188,20 +188,20 @@ export default function StoryListenFactsPage() {
       logger.info('==========================================================');
 
       if (response.completed) {
-        logger.info('✅ Assessment completed, routing to feedback');
+        logger.info(' Assessment completed, routing to feedback');
         router.push('/communication/feedback');
         return;
       }
 
       // Check if section changed to next section
       if (response.section_name !== currentQuestion.section_name) {
-        logger.info('✅ Section changed from', currentQuestion.section_name, 'to:', response.section_name);
+        logger.info(' Section changed from', currentQuestion.section_name, 'to:', response.section_name);
 
         // Get the route for the new section dynamically
         const nextRoute = getSectionRoute(response.section_name);
 
         if (nextRoute) {
-          logger.info('🚀 Routing to next section page:', nextRoute);
+          logger.info('Routing to next section page:', nextRoute);
           logger.info('Current URL before routing:', window.location.pathname);
 
           router.push(nextRoute);
@@ -212,11 +212,11 @@ export default function StoryListenFactsPage() {
         return;
       }
 
-      logger.info('➡️ Staying in Story Listen Facts section, showing next question');
+      logger.info(' Staying in Story Listen Facts section, showing next question');
       // Update to the next question with normalized section name
       setCurrentQuestion({
         ...response,
-        section_name: 'Story Listen Facts', // ✅ Normalize to match backend
+        section_name: 'Story Listen Facts', //  Normalize to match backend
         question_number: currentQuestion.question_number ? currentQuestion.question_number + 1 : response.question_number,
       });
       setSelectedAnswer(null);
@@ -227,12 +227,12 @@ export default function StoryListenFactsPage() {
         setAudioCompleted(false);
       }
 
-      // ✅ Increment section-specific question number for display
+      //  Increment section-specific question number for display
       setSectionQuestionNumber((prev) => prev + 1);
       setLoading(false);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to fetch next question');
-      logger.error('❌ Error fetching next question:', err);
+      logger.error(' Error fetching next question:', err);
       setError(error.message);
       setLoading(false);
     }
@@ -243,7 +243,7 @@ export default function StoryListenFactsPage() {
 
   return (
     <>
-      {/* 🔔 START MODAL */}
+      {/* START MODAL */}
       <SectionStartModal
         open={showModal}
         onStart={handleStartSection}
@@ -259,13 +259,13 @@ export default function StoryListenFactsPage() {
         ]}
       />
 
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="flex h-full min-h-0 overflow-hidden bg-gray-50">
         <AssessmentSidebar currentSectionId={6} />
 
-        <main className="flex-1 px-8 py-7 min-w-0">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-3 lg:px-6 lg:py-4">
 
           {/* Section Header */}
-          <div className="mb-5">
+          <div className="mb-2 shrink-0">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Section 6 of 7</p>
             <h1 className="text-lg font-bold text-gray-900">
               {currentQuestion?.section_name || 'Story Listen Facts'}
@@ -278,7 +278,7 @@ export default function StoryListenFactsPage() {
           <QuestionProgressBar
             currentQuestion={sectionQuestionNumber}
             totalQuestions={SECTION_TOTAL_QUESTIONS}
-            className="mb-6"
+            className="mb-3 shrink-0"
           />
 
           {error ? (
@@ -290,8 +290,8 @@ export default function StoryListenFactsPage() {
               {shouldShowStoryAudio ? (
                 <>
                   {/* Story Audio Card */}
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-7 mb-5 max-w-2xl">
-                    <div className="mb-5">
+                  <div className="mb-3 max-w-2xl rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="mb-2 shrink-0">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Story</p>
                       <h2 className="text-lg font-bold text-gray-900">Listen to the Story</h2>
                       <p className="text-sm text-gray-500 mt-0.5">
@@ -309,7 +309,7 @@ export default function StoryListenFactsPage() {
 
                     <div className="mt-4 px-4 py-3 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
                       <p className="text-sm font-semibold text-amber-900">
-                        You can only listen to this story once — listen carefully before proceeding.
+                        You can only listen to this story once - listen carefully before proceeding.
                       </p>
                     </div>
                   </div>
@@ -332,16 +332,16 @@ export default function StoryListenFactsPage() {
                           : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       }`}
                     >
-                      Start Questions →
+                      Start Questions {'->'}
                     </button>
                   </div>
                 </>
               ) : (
                 <>
                   {/* MCQ Question */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto pr-1 assessment-scroll lg:grid-cols-2">
                     {/* Question Card */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                    <div className="min-h-0 overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center justify-between mb-4">
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question</p>
                         <span className="text-xs font-semibold text-[#2557a7] bg-[#2557a7]/8 px-2.5 py-0.5 rounded-full">
@@ -349,7 +349,7 @@ export default function StoryListenFactsPage() {
                         </span>
                       </div>
 
-                      <h2 className="text-base font-semibold text-gray-900 mb-4 leading-relaxed">
+                      <h2 className="mb-3 text-base font-semibold leading-relaxed text-gray-900">
                         {currentQuestion.question_text}
                       </h2>
 
@@ -361,15 +361,18 @@ export default function StoryListenFactsPage() {
                     </div>
 
                     {/* Options Card */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                    <div className="min-h-0 overflow-y-auto assessment-scroll rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Select Your Answer</p>
 
-                      <div className="space-y-2.5">
+                      <div className="space-y-1.5">
                         {options.map((option) => (
-                          <div
+                          <button
                             key={option.id}
+                            type="button"
+                            disabled={answerSaved}
+                            aria-pressed={selectedAnswer === option.text}
                             onClick={() => handleOptionSelect(option.text)}
-                            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all ${
+                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border text-left transition-all focus:outline-none focus:ring-2 focus:ring-[#2557a7] focus:ring-offset-2 ${
                               answerSaved ? 'cursor-not-allowed' : 'cursor-pointer'
                             } ${
                               selectedAnswer === option.text
@@ -392,13 +395,13 @@ export default function StoryListenFactsPage() {
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
                             )}
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between">
+                  <div className="flex shrink-0 items-center justify-between">
                     <p className="text-xs text-gray-400">
                       Question {sectionQuestionNumber} of {SECTION_TOTAL_QUESTIONS}
                     </p>
@@ -412,7 +415,7 @@ export default function StoryListenFactsPage() {
                           : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       }`}
                     >
-                      {loading ? 'Loading…' : 'Next Question →'}
+                      {loading ? 'Loading...' : 'Next Question ->'}
                     </button>
                   </div>
                 </>

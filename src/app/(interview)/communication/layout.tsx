@@ -1,5 +1,5 @@
 "use client";
-// import { usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 // import Sidebar from "@/components/layout/Sidebar";
 // import Header from "@/components/layout/Header";
 import { Montserrat } from "next/font/google";
@@ -18,13 +18,16 @@ export default function CommunicationLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const showCommunicationHeader = pathname !== "/communication";
+
   // All communication pages: h-screen flex-col keeps everything within viewport, no browser scroll
   return (
     <DashboardProvider>
       <VideoRecordingProvider>
         <div className={`${montserrat.variable} antialiased font-montserrat h-screen flex flex-col overflow-hidden`}>
-          <CommunicationHeader />
-          <div className="flex-1 min-h-0 overflow-auto">
+          {showCommunicationHeader && <CommunicationHeader />}
+          <div className={`flex-1 min-h-0 ${showCommunicationHeader ? "overflow-hidden" : "overflow-auto"}`}>
             {children}
           </div>
         </div>

@@ -9,6 +9,7 @@ import {
 } from '@/api/adminAuthApi';
 import { AdminData, Setup2FAResponse } from '../types';
 import { logger } from '@/lib/logger';
+import { extractApiError } from '@/app/admin/_utils/apiError';
 
 interface UseTwoFactorAuthReturn {
     twoFAEnabled: boolean;
@@ -62,8 +63,7 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
             toast.success('2FA setup initiated. Scan the QR code with your authenticator app.');
         } catch (error: unknown) {
             logger.error('Error setting up 2FA:', error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to setup 2FA';
-            toast.error(errorMessage);
+            toast.error(extractApiError(error, 'Failed to setup 2FA'));
         } finally {
             setLoading(false);
         }
@@ -98,8 +98,7 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
             fetchAdminData();
         } catch (error: unknown) {
             logger.error('Error enabling 2FA:', error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to enable 2FA. Please check your code.';
-            toast.error(errorMessage);
+            toast.error(extractApiError(error, 'Failed to enable 2FA. Please check your code.'));
         } finally {
             setLoading(false);
         }
@@ -128,8 +127,7 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
             fetchAdminData();
         } catch (error: unknown) {
             logger.error('Error disabling 2FA:', error);
-            const errorMessage = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to disable 2FA. Please check your password.';
-            toast.error(errorMessage);
+            toast.error(extractApiError(error, 'Failed to disable 2FA. Please check your password.'));
         } finally {
             setLoading(false);
         }

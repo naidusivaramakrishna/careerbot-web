@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Briefcase, Calendar, MapPin, Pencil, Trash2 } from "lucide-react";
 import { formatDateRange } from "@/utils/formatDate";
 import { Experience } from "@/api/userApi";
@@ -18,14 +19,23 @@ const jobTypeLabel: Record<string, string> = {
     freelance: "Freelance",
 };
 
-export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) {
-    const sanitizedDescription = exp.description
-        ? DOMPurify.sanitize(exp.description.replace(/\n/g, '<br />'))
-        : '';
+const ExperienceCard = memo(function ExperienceCard({ exp, index, onEdit, onDelete }: Props) {
+    const sanitizedDescription = useMemo(() => {
+        if (!exp.description) return '';
+        try {
+            return DOMPurify.sanitize(exp.description.replace(/\n/g, '<br />'));
+        } catch {
+            return '';
+        }
+    }, [exp.description]);
+
+    const dateRange = useMemo(
+        () => formatDateRange(exp.start_date, exp.end_date),
+        [exp.start_date, exp.end_date]
+    );
 
     return (
         <div
-            key={exp.id || index}
             data-testid={`experience-card-${index}`}
             className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-4 flex items-start justify-between gap-3"
         >
@@ -45,10 +55,10 @@ export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) 
                                 {exp.location}
                             </span>
                         )}
-                        {formatDateRange(exp.start_date, exp.end_date) && (
+                        {dateRange && (
                             <span className="flex items-center gap-1 text-xs text-gray-500">
                                 <Calendar className="w-3.5 h-3.5 shrink-0" />
-                                {formatDateRange(exp.start_date, exp.end_date)}
+                                {dateRange}
                             </span>
                         )}
                         {exp.job_type && (
@@ -88,4 +98,6 @@ export default function ExperienceCard({ exp, index, onEdit, onDelete }: Props) 
             </div>
         </div>
     );
-}
+});
+
+export default ExperienceCard;

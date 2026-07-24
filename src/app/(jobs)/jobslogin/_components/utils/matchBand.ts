@@ -11,10 +11,10 @@ export interface MatchBandConfig {
 }
 
 export const MATCH_BAND_CONFIG: Record<MatchBand, MatchBandConfig> = {
-  strong:  { label: "Excellent Match", color: "#4338ca", bg: "rgba(238,242,255,0.96)" },
-  good:    { label: "Very Good Match", color: "#4f46e5", bg: "rgba(238,242,255,0.82)" },
-  partial: { label: "Good Match",      color: "#475569", bg: "rgba(241,245,249,0.96)" },
-  low:     { label: "Fair Match",      color: "#64748b", bg: "rgba(248,250,252,0.98)" },
+  strong:  { label: "Excellent Match", color: "#16a34a", bg: "rgba(220,252,231,0.9)" },
+  good:    { label: "Very Good Match", color: "#4F46E5", bg: "rgba(219,234,254,0.9)" },
+  partial: { label: "Good Match",      color: "#d97706", bg: "rgba(254,243,199,0.9)" },
+  low:     { label: "Fair Match",      color: "#dc2626", bg: "rgba(254,226,226,0.9)" },
 };
 
 export function getMatchBandConfig(band?: string | null): MatchBandConfig {

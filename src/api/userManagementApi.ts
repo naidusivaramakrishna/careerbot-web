@@ -1,5 +1,6 @@
 import { httpClient } from '@/lib/http';
 import logger from '@/lib/logger';
+import { buildQueryString } from './utils';
 
 // ==================== INTERFACES ====================
 
@@ -192,21 +193,7 @@ export const getUserList = async (
     params?: UserListQueryParams
 ): Promise<UserListResponse> => {
     try {
-        const queryParams = new URLSearchParams();
-
-        if (params?.page) queryParams.append('page', params.page.toString());
-        if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
-        if (params?.role) queryParams.append('role', params.role);
-        if (params?.status) queryParams.append('status', params.status);
-        if (params?.subscription) queryParams.append('subscription', params.subscription);
-        if (params?.search) queryParams.append('search', params.search);
-        if (params?.created_from) queryParams.append('created_from', params.created_from);
-        if (params?.created_to) queryParams.append('created_to', params.created_to);
-        if (params?.sort_by) queryParams.append('sort_by', params.sort_by);
-        if (params?.sort_order) queryParams.append('sort_order', params.sort_order);
-
-        const url = `/admin/users/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-
+        const url = `/admin/users/${buildQueryString(params)}`;
         const response = await httpClient.get<UserListResponse>(url);
         return response.data;
     } catch (error) {
@@ -412,15 +399,7 @@ export const getUserActivity = async (
     params?: UserActivityQueryParams
 ): Promise<UserActivityResponse> => {
     try {
-        const queryParams = new URLSearchParams();
-
-        if (params?.page) queryParams.append('page', params.page.toString());
-        if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
-        if (params?.start_date) queryParams.append('start_date', params.start_date);
-        if (params?.end_date) queryParams.append('end_date', params.end_date);
-        if (params?.event_type) queryParams.append('event_type', params.event_type);
-
-        const url = `/admin/users/${userId}/activity${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+        const url = `/admin/users/${userId}/activity${buildQueryString(params)}`;
 
         const response = await httpClient.get<UserActivityResponse>(url);
         return response.data;

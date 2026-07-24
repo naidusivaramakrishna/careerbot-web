@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { getFeatureFlags, updateFeatureFlags } from '@/api/adminFeatureFlagsApi';
 import { FeatureFlag } from '../types';
 import { logger } from '@/lib/logger';
+import { extractApiError } from '@/app/admin/_utils/apiError';
 
 interface UseFeatureFlagsReturn {
     featureFlags: FeatureFlag[];
@@ -46,7 +47,7 @@ export const useFeatureFlags = (): UseFeatureFlagsReturn => {
             toast.success(`${formattedKey} ${!currentValue ? 'enabled' : 'disabled'}`);
         } catch (error: unknown) {
             logger.error('Error updating feature flag:', error);
-            toast.error('Failed to update feature flag');
+            toast.error(extractApiError(error, 'Failed to update feature flag'));
             // Revert on error
             fetchFeatureFlags();
         }
@@ -54,6 +55,7 @@ export const useFeatureFlags = (): UseFeatureFlagsReturn => {
 
     const handleSaveAllFeatures = useCallback(async () => {
         try {
+            setLoading(true);
             const flagsObject: Record<string, boolean> = {};
             featureFlags.forEach(flag => {
                 flagsObject[flag.key] = flag.enabled;
@@ -61,11 +63,14 @@ export const useFeatureFlags = (): UseFeatureFlagsReturn => {
 
             await updateFeatureFlags({ flags: flagsObject });
             toast.success('All feature flags saved successfully');
+            fetchFeatureFlags();
         } catch (error: unknown) {
             logger.error('Error saving feature flags:', error);
-            toast.error('Failed to save feature flags');
+            toast.error(extractApiError(error, 'Failed to save feature flags'));
+        } finally {
+            setLoading(false);
         }
-    }, [featureFlags]);
+    }, [featureFlags, fetchFeatureFlags]);
 
     return {
         featureFlags,

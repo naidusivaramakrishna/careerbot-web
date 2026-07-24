@@ -118,7 +118,7 @@ const AdminSettings: React.FC = () => {
             <ConfirmDeleteModal
                 open={showDisableConfirmModal}
                 title="Disable Two-Factor Authentication"
-                description="Are you sure you want to disable 2FA? This will make your account less secure."
+                description="Are you sure you want to disable 2FA? Disabling 2FA removes an important layer of protection and makes your admin account significantly more vulnerable to unauthorized access."
                 loading={twoFALoading}
                 onCancel={cancelDisable2FA}
                 onConfirm={confirmDisable2FA}

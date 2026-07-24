@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Projects, deleteProject, getProjects, updateProjects } from "@/api/userApi";
 import { addProjectItem } from "../../_utils/autoFillHelper";
@@ -33,20 +33,19 @@ export default function ProjectsSection({
         index?: number;
     } | null>(null);
 
-    useEffect(() => {
+    const hasExistingData = useRef((tempProfile.projects?.length ?? 0) > 0);
 
+    useEffect(() => {
+        if (hasExistingData.current) {
+            setEditingIndex(null);
+            return;
+        }
         const fetchProjects = async () => {
-            //  Only fetch if projects data doesn't exist yet
-            if (tempProfile.projects && tempProfile.projects.length > 0) {
-                if (tempProfile.projects.length > 0) setEditingIndex(null);
-                return;
-            }
             try {
                 setLoading(true);
                 const data = await getProjects();
-                const updatedProfile = { ...tempProfile, projects: data }
-                setTempProfile(updatedProfile);
-                setProfileData(updatedProfile) //  Update context too
+                setTempProfile((prev) => ({ ...prev, projects: data }));
+                setProfileData((prev) => ({ ...prev, projects: data }));
                 if (data.length > 0) setEditingIndex(null);
             } catch {
                 toast.error("Failed to load project details.");
@@ -55,7 +54,7 @@ export default function ProjectsSection({
             }
         };
         fetchProjects();
-    }, []);
+    }, []); // safe: hasExistingData is a ref, setters are stable
 
     const handleSave = async () => {
         try {
@@ -139,10 +138,7 @@ export default function ProjectsSection({
 
             //  Update both local and context state using functional updates
             setTempProfile((prev) => ({ ...prev, projects: updated }));
-            setProfileData((prev) => {
-                const newProfile = { ...prev, projects: updated };
-                return newProfile;
-            });
+            setProfileData((prev) => ({ ...prev, projects: updated }));
 
             // Refresh dashboard with delay to prevent multiple toast notifications
             setTimeout(() => {
@@ -158,17 +154,21 @@ export default function ProjectsSection({
         }
     };
 
-    const openAddModal = () => {
+    const openAddModal = useCallback(() => {
         setProjectsForm({});
         setEditingIndex(null);
         setIsModalOpen(true);
-    };
+    }, []);
 
-    const openEditModal = (exp: Partial<Projects>, index: number) => {
+    const openEditModal = useCallback((exp: Partial<Projects>, index: number) => {
         setProjectsForm(exp);
         setEditingIndex(index);
         setIsModalOpen(true);
-    };
+    }, []);
+
+    const openDeleteModal = useCallback((id?: string, index?: number) => {
+        setDeleteTarget({ id, index });
+    }, []);
 
     const modalTitle =
         editingIndex === null ? "Add Projects" : "Edit Projects";
@@ -183,7 +183,7 @@ export default function ProjectsSection({
                     <ProjectsList
                         projectsList={tempProfile.projects}
                         onEdit={openEditModal}
-                        onDelete={(id, index) => setDeleteTarget({ id, index })}
+                        onDelete={openDeleteModal}
                         onAdd={openAddModal}
                     />
                 </>
@@ -209,6 +209,8 @@ export default function ProjectsSection({
             <ConfirmDeleteModal
                 open={!!deleteTarget}
                 loading={loading}
+                title="Delete Project"
+                description="Are you sure you want to delete this project? This action cannot be undone."
                 onCancel={() => setDeleteTarget(null)}
                 onConfirm={async () => {
                     if (!deleteTarget) return;

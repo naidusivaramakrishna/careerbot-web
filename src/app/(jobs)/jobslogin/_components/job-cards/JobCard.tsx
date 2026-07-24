@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, MapPin, Sparkles, Briefcase, CircleDollarSign, Layers, MoreHorizontal, Home, Calendar, XCircle, CheckCircle, Share2, Flag, AlertTriangle, ChevronRight } from "lucide-react";
+import { Heart, MapPin, Sparkles, Briefcase, CircleDollarSign, Layers, MoreHorizontal, Home, Calendar, XCircle, CheckCircle, Share2, Flag, AlertTriangle } from "lucide-react";
 import { GoLocation } from "react-icons/go";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -18,7 +18,6 @@ import { matchResumeAndJD, getResume, getMatchAnalytics, parseJDText } from "@/a
 import { isValidBackendJobId } from "@/utils/jobIdHelper";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { getMatchBandConfig } from "../utils/matchBand";
-import { recordJobPreferenceSignal, type JobPreferenceSignal } from "@/utils/jobPreferenceLearning";
 
 const SKIP_RESUME_PROMPT_KEY = "skipResumeCustomizePrompt";
 
@@ -57,15 +56,22 @@ interface JobCardProps {
   onBotClick: () => void;
   onRemove?: () => void;
   onApplyClick?: () => void;
-  onSelect?: () => void;
-  isSelected?: boolean;
 }
 
 // Assign a consistent color to each company based on first letter
 const LOGO_PALETTE = [
-  { bg: "bg-indigo-50", text: "text-indigo-700" },
-  { bg: "bg-slate-100", text: "text-slate-700" },
-  { bg: "bg-[#f1f3ff]", text: "text-[#4F46E5]" },
+  { bg: "bg-blue-100",   text: "text-blue-700"   },
+  { bg: "bg-violet-100", text: "text-violet-700"  },
+  { bg: "bg-emerald-100",text: "text-emerald-700" },
+  { bg: "bg-amber-100",  text: "text-amber-700"   },
+  { bg: "bg-rose-100",   text: "text-rose-700"    },
+  { bg: "bg-indigo-100", text: "text-indigo-700"  },
+  { bg: "bg-cyan-100",   text: "text-cyan-700"    },
+  { bg: "bg-orange-100", text: "text-orange-700"  },
+  { bg: "bg-teal-100",   text: "text-teal-700"    },
+  { bg: "bg-pink-100",   text: "text-pink-700"    },
+  { bg: "bg-sky-100",    text: "text-sky-700"     },
+  { bg: "bg-lime-100",   text: "text-lime-700"    },
 ];
 
 function getLogoColor(company: string) {
@@ -180,9 +186,6 @@ export default function JobCard(props: JobCardProps) {
   }, [props.id, userId]);
 
   const externalUrl = props.url || props.application_url;
-  const recordSignal = (signal: JobPreferenceSignal) => {
-    recordJobPreferenceSignal(signal, props, userId);
-  };
 
   // For external jobs the "Apply Now" element renders as a real <a target="_blank">
   // (see JSX below) so the browser treats it as a normal user-initiated navigation
@@ -209,8 +212,7 @@ export default function JobCard(props: JobCardProps) {
       if (result.success) {
         setIsApplied(true);
         setIsModalOpen(false);
-        recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId, { ...props });
-        recordSignal("applied");
+        recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId);
         toast[result.status === "already_applied" ? "info" : "success"](result.message);
         return;
       }
@@ -223,9 +225,8 @@ export default function JobCard(props: JobCardProps) {
   };
 
   const handleSaveJob = () => {
-    const newState = toggleJobSaved(props.id, props.title, props.company, props.location, props.type, userId, { ...props });
+    const newState = toggleJobSaved(props.id, props.title, props.company, props.location, props.type, userId);
     setIsSaved(newState);
-    recordSignal(newState ? "saved" : "unsaved");
     toast[newState ? "success" : "info"](newState ? "Job saved!" : "Job removed from saved");
   };
 
@@ -338,7 +339,6 @@ export default function JobCard(props: JobCardProps) {
       sessionStorage.setItem("jm_parsedJDData", JSON.stringify(null));
       sessionStorage.setItem("jm_jdText", props.description || `${props.title} at ${props.company}`);
       sessionStorage.setItem("jm_skipWizard", "true");
-      recordSignal("tailored");
 
       // Hard navigation, not router.push(): if /jobmatch/app was already
       // visited earlier this session, Next's client-side route cache can
@@ -387,8 +387,8 @@ export default function JobCard(props: JobCardProps) {
   const circleStroke = props.match_band ? bandCfg.color : "#14b8a6";
   const circleLabel = props.match_band ? bandCfg.label.toUpperCase() : "";
   const contentMinHeight = hasMatchScore
-    ? (hasMissingSkills ? 218 : 168) + (whyYouMatch ? 18 : 0)
-    : 136;
+    ? (hasMissingSkills ? 282 : 214) + (whyYouMatch ? 26 : 0)
+    : 142;
 
   const skillsNode = (() => {
     const hasMatchData =
@@ -398,16 +398,11 @@ export default function JobCard(props: JobCardProps) {
     if (!hasMatchData) {
       return skillChips.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 mt-3">
-          {skillChips.slice(0, 3).map((skill) => (
+          {skillChips.map((skill) => (
             <span key={skill} className="px-3 py-1 bg-gray-50 text-gray-600 text-[11px] font-medium rounded-full border border-gray-200/70">
               {skill}
             </span>
           ))}
-          {skillChips.length > 3 && (
-            <span className="px-2.5 py-1 text-[11px] font-semibold text-slate-400">
-              +{skillChips.length - 3} more
-            </span>
-          )}
         </div>
       ) : null;
     }
@@ -437,7 +432,7 @@ export default function JobCard(props: JobCardProps) {
 
     if (chips.length === 0) return null;
 
-    const visible = chips.slice(0, 4);
+    const visible = chips.slice(0, 7);
     const matchedNeutral = visible.filter((c) => c.state !== "missing");
     const missingChips   = visible.filter((c) => c.state === "missing");
 
@@ -495,17 +490,11 @@ export default function JobCard(props: JobCardProps) {
       {[
         {
           icon: XCircle, label: "Remove From List",
-          action: () => { setShowMenu(false); recordSignal("dismissed"); props.onRemove?.(); toast.success("Job removed from list"); },
+          action: () => { setShowMenu(false); props.onRemove?.(); toast.success("Job removed from list"); },
         },
         {
           icon: CheckCircle, label: "Already Applied",
-          action: () => {
-            recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId, { ...props });
-            recordSignal("applied");
-            setIsApplied(true);
-            setShowMenu(false);
-            toast.success("Marked as applied");
-          },
+          action: () => { setIsApplied(true); setShowMenu(false); toast.success("Marked as applied"); },
         },
         {
           icon: Share2, label: "Share",
@@ -550,29 +539,15 @@ export default function JobCard(props: JobCardProps) {
     return (
       <>
         <motion.div
-          role="group"
-          tabIndex={0}
-          data-job-id={props.id}
-          aria-label={`${props.title} at ${props.company}. Press Enter to open job preview.`}
-          data-selected={props.isSelected || undefined}
-          onClick={(event) => {
-            if ((event.target as HTMLElement).closest("button, a")) return;
-            props.onSelect?.();
+          className="group relative overflow-hidden rounded-[18px] border border-slate-200/80 bg-white px-5 py-4 shadow-[0_8px_28px_rgba(15,23,42,0.055)] transition-colors"
+          whileHover={{
+            y: -2,
+            boxShadow: "0 16px 42px rgba(15,23,42,0.10), 0 0 0 1px rgba(79,70,229,0.10)",
           }}
-          onKeyDown={(event) => {
-            if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
-              event.preventDefault();
-              props.onSelect?.();
-            }
-          }}
-          className={`jobs-card group relative overflow-hidden border bg-white px-5 py-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5] focus-visible:ring-offset-2 ${
-            props.isSelected ? "border-[#4F46E5]/45 ring-2 ring-[#4F46E5]/10" : "border-slate-200/80"
-          }`}
-          whileHover={{}}
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         >
-          <div className="flex min-w-0 items-start gap-3">
-            <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[14px] ${logoColor.bg} ring-1 ring-black/5 shadow-sm`}>
+          <div className="flex min-w-0 items-start gap-4">
+            <div className={`flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full ${logoColor.bg} ring-1 ring-black/5 shadow-sm`}>
               {props.logo && props.logo.trim() && !logoError ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -591,19 +566,19 @@ export default function JobCard(props: JobCardProps) {
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="mb-1 flex flex-wrap items-center gap-2">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
                 {(props.created_at || props.posted_date) && (
-                  <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700">
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
                     {formatPostedTime(props.created_at || props.posted_date)}
                   </span>
                 )}
                 {isNew && (
-                  <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700">
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
                     Be an early applicant
                   </span>
                 )}
               </div>
-              <h3 className="line-clamp-1 text-[17px] font-extrabold leading-snug text-slate-950 transition-colors group-hover:text-[#4F46E5]">
+              <h3 className="line-clamp-1 text-[19px] font-extrabold leading-snug text-slate-950 transition-colors group-hover:text-[#4F46E5]">
                 {props.title || "Job Title"}
               </h3>
               <p className="mt-0.5 truncate text-[13px] text-slate-500">
@@ -612,87 +587,73 @@ export default function JobCard(props: JobCardProps) {
               </p>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => props.onSelect?.()}
-                className="group/view inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[11.5px] font-bold text-[#4F46E5] transition-colors hover:text-[#4338CA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/35 focus-visible:ring-offset-2"
-                title="Open quick view"
-                aria-label="Open quick view"
-              >
-                Quick view
-                <ChevronRight size={13} strokeWidth={2.25} className="transition-transform group-hover/view:translate-x-0.5" />
-              </button>
-              <button
-                ref={menuBtnRef}
-                type="button"
-                onClick={handleMenuOpen}
-                className="rounded-xl p-1.5 text-slate-300 transition-all hover:bg-slate-100 hover:text-slate-600"
-                title="More options"
-                aria-label="More options"
-              >
-                <MoreHorizontal size={17} />
-              </button>
-            </div>
+            <button
+              ref={menuBtnRef}
+              type="button"
+              onClick={handleMenuOpen}
+              className="shrink-0 rounded-xl p-1.5 text-slate-300 transition-all hover:bg-slate-100 hover:text-slate-600"
+              title="More options"
+              aria-label="More options"
+            >
+              <MoreHorizontal size={17} />
+            </button>
           </div>
 
           {(props.location || props.type || props.salary || props.mode || level || props.experience) && (
-              <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-200 pt-2.5">
+            <>
+              <div className="my-3.5 border-t border-slate-200" />
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
                 {props.location && (
-                  <span className="inline-flex min-w-0 max-w-[min(360px,45vw)] items-center gap-1.5 text-[12.5px] font-semibold text-slate-700" title={props.location}>
-                    <GoLocation size={15} stroke="currentColor" strokeWidth={1.5} className="shrink-0 text-slate-500" />
+                  <span className="inline-flex items-center gap-2 text-[14px] font-bold text-slate-700">
+                    <GoLocation size={18} stroke="currentColor" strokeWidth={1} className="shrink-0 text-slate-600" />
                     <span className="truncate">{props.location}</span>
                   </span>
                 )}
                 {props.type && (
-                  <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-700">
-                    <Briefcase size={15} strokeWidth={2} className="shrink-0 text-slate-500" />
+                  <span className="inline-flex items-center gap-2 text-[14px] font-bold text-slate-700">
+                    <Briefcase size={18} strokeWidth={2.5} className="shrink-0 text-slate-600" />
                     {props.type}
                   </span>
                 )}
                 {props.salary && (
-                  <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-700">
-                    <CircleDollarSign size={15} strokeWidth={2} className="shrink-0 text-slate-500" />
+                  <span className="inline-flex items-center gap-2 text-[14px] font-bold text-slate-700">
+                    <CircleDollarSign size={18} strokeWidth={2.5} className="shrink-0 text-slate-600" />
                     {props.salary}
                   </span>
                 )}
                 {props.mode && (
-                  <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-700">
-                    <Home size={15} strokeWidth={2} className="shrink-0 text-slate-500" />
+                  <span className="inline-flex items-center gap-2 text-[14px] font-bold text-slate-700">
+                    <Home size={18} strokeWidth={2.5} className="shrink-0 text-slate-600" />
                     {props.mode}
                   </span>
                 )}
                 {level && (
-                  <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-700">
-                    <Layers size={15} strokeWidth={2} className="shrink-0 text-slate-500" />
+                  <span className="inline-flex items-center gap-2 text-[14px] font-bold text-slate-700">
+                    <Layers size={18} strokeWidth={2.5} className="shrink-0 text-slate-600" />
                     {level}
                   </span>
                 )}
                 {props.experience && (
-                  <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-700">
-                    <Calendar size={15} strokeWidth={2} className="shrink-0 text-slate-500" />
+                  <span className="inline-flex items-center gap-2 text-[14px] font-bold text-slate-700">
+                    <Calendar size={18} strokeWidth={2.5} className="shrink-0 text-slate-600" />
                     {props.experience}
                   </span>
                 )}
               </div>
+            </>
           )}
 
           {skillChips.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {skillChips.slice(0, 3).map((skill) => (
+              {skillChips.map((skill) => (
                 <span key={skill} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-500">
                   {skill}
                 </span>
               ))}
-              {skillChips.length > 3 && (
-                <span className="px-2 py-1 text-[11.5px] font-semibold text-slate-400">
-                  +{skillChips.length - 3} more
-                </span>
-              )}
             </div>
           )}
 
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-200 pt-2.5">
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
             <span className="text-[12px] text-slate-400">
               {props.applicant_count !== undefined && props.applicant_count !== null
                 ? Number(props.applicant_count) < 25
@@ -705,7 +666,7 @@ export default function JobCard(props: JobCardProps) {
               {props.onRemove && (
                 <motion.button
                   type="button"
-                  onClick={() => { recordSignal("dismissed"); props.onRemove?.(); toast.success("Job removed from list"); }}
+                  onClick={() => { props.onRemove?.(); toast.success("Job removed from list"); }}
                   whileHover={{ scale: 1.08 }}
                   whileTap={{ scale: 0.92 }}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition-all hover:bg-slate-200 hover:text-slate-900"
@@ -721,21 +682,21 @@ export default function JobCard(props: JobCardProps) {
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.92 }}
                 className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
-                  isSaved ? "bg-indigo-50 text-[#4F46E5]" : "bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-[#4F46E5]"
+                  isSaved ? "bg-red-50 text-red-500" : "bg-slate-100 text-slate-700 hover:bg-red-50 hover:text-red-500"
                 }`}
                 title={isSaved ? "Remove from saved" : "Save job"}
                 aria-label={isSaved ? "Remove from saved" : "Save job"}
               >
-                <Heart size={16} strokeWidth={2.5} className={isSaved ? "fill-[#4F46E5]" : ""} />
+                <Heart size={16} strokeWidth={2.5} className={isSaved ? "fill-red-500" : ""} />
               </motion.button>
               <button
                 type="button"
                 onClick={props.onBotClick}
                 aria-label="Ask Nancy AI about this job"
-                className="jobs-card-secondary-action inline-flex h-10 items-center gap-1.5 border border-[#4F46E5]/15 bg-white px-4 text-[12px] font-bold text-[#4F46E5] transition-all hover:border-[#4F46E5]/30 hover:bg-[#eef3ff]"
+                className="inline-flex h-10 items-center gap-1.5 rounded-2xl border border-[#4F46E5]/10 bg-white px-4 text-[12px] font-bold text-[#4F46E5] shadow-sm transition-all hover:border-[#4F46E5]/25 hover:bg-[#eef3ff]"
               >
                 <Sparkles size={12} />
-                Check fit
+                Ask Nancy
               </button>
               {externalUrl && !isApplied ? (
                 <motion.a
@@ -746,7 +707,7 @@ export default function JobCard(props: JobCardProps) {
                   onClick={handleExternalApplyClick}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
-                  className="jobs-card-primary-action inline-flex h-10 items-center whitespace-nowrap bg-[#4F46E5] px-5 text-[13px] font-bold text-white transition-all hover:bg-[#4338CA]"
+                  className="inline-flex h-10 items-center whitespace-nowrap rounded-2xl bg-[#4F46E5] px-5 text-[13px] font-bold text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] transition-all hover:bg-[#4338CA]"
                 >
                   Apply Now
                 </motion.a>
@@ -793,25 +754,12 @@ export default function JobCard(props: JobCardProps) {
     <>
     {/* Card: outer flex row so dark panel can span full height as a sibling */}
     <motion.div
-      role="group"
-      tabIndex={0}
-      data-job-id={props.id}
-      aria-label={`${props.title} at ${props.company}. Press Enter to open job preview.`}
-      data-selected={props.isSelected || undefined}
-      onClick={(event) => {
-        if ((event.target as HTMLElement).closest("button, a")) return;
-        props.onSelect?.();
+      className="group relative flex overflow-hidden rounded-[22px] border border-slate-200/70 bg-white"
+      style={{ boxShadow: "0 14px 38px rgba(15,23,42,0.07), 0 1px 0 rgba(255,255,255,0.9)" }}
+      whileHover={{
+        y: -4,
+        boxShadow: "0 22px 60px rgba(15,23,42,0.12), 0 8px 24px rgba(79,70,229,0.10), 0 0 0 1px rgba(79,70,229,0.14)",
       }}
-      onKeyDown={(event) => {
-        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          props.onSelect?.();
-        }
-      }}
-      className={`jobs-card jobs-card--matched group relative flex overflow-hidden border bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5] focus-visible:ring-offset-2 ${
-        props.isSelected ? "border-[#4F46E5]/45 ring-2 ring-[#4F46E5]/10" : "border-slate-200/70"
-      }`}
-      whileHover={{}}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
     >
 {/* ── LEFT COLUMN ── */}
@@ -831,9 +779,9 @@ export default function JobCard(props: JobCardProps) {
                 transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
                 className="absolute inset-0 flex flex-col"
               >
-                <div className="flex items-start gap-3 px-4 pt-4 pb-0">
+                <div className="flex items-start gap-3.5 px-5 pt-[18px] pb-0">
                   {/* Logo */}
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[14px] ${logoColor.bg} ring-1 ring-black/5 shadow-[0_10px_22px_rgba(15,23,42,0.11)]`}>
+                  <div className={`flex h-[54px] w-[54px] shrink-0 items-center justify-center overflow-hidden rounded-[18px] ${logoColor.bg} ring-1 ring-black/5 shadow-[0_10px_22px_rgba(15,23,42,0.11)]`}>
                     {props.logo && props.logo.trim() && !logoError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={props.logo} alt={props.company} width={56} height={56}
@@ -855,8 +803,8 @@ export default function JobCard(props: JobCardProps) {
                             </span>
                           )}
                           {isNew && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                              <span className="h-1.5 w-1.5 rounded-full bg-[#4F46E5] animate-pulse" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-full border border-emerald-200/70">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                               Early Applicant
                             </span>
                           )}
@@ -879,32 +827,20 @@ export default function JobCard(props: JobCardProps) {
                           {sourceLabel && <span className="text-gray-400"> · {sourceLabel}</span>}
                         </p>
                       </div>
-                      <div className="mt-0.5 flex shrink-0 items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => props.onSelect?.()}
-                          className="group/view inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[11.5px] font-bold text-[#4F46E5] transition-colors hover:text-[#4338CA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/35 focus-visible:ring-offset-2"
-                          title="Open quick view"
-                          aria-label="Open quick view"
-                        >
-                          Quick view
-                          <ChevronRight size={13} strokeWidth={2.25} className="transition-transform group-hover/view:translate-x-0.5" />
-                        </button>
-                        <button ref={menuBtnRef} type="button" onClick={handleMenuOpen}
-                          className="rounded-xl p-1.5 text-slate-300 opacity-0 transition-all hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100"
-                          title="More options" aria-label="More options">
-                          <MoreHorizontal size={16} />
-                        </button>
-                      </div>
+                      <button ref={menuBtnRef} type="button" onClick={handleMenuOpen}
+                        className="mt-0.5 shrink-0 rounded-xl p-1.5 text-slate-300 opacity-0 transition-all hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100"
+                        title="More options" aria-label="More options">
+                        <MoreHorizontal size={16} />
+                      </button>
                     </div>
                   </div>
                 </div>
-                <div className="px-4 pt-2.5 pb-2.5">
+                <div className="px-5 pt-3.5 pb-3">
                   <div className="flex flex-wrap gap-1.5">
                     {props.location && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600" title={props.location}>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-1 text-[11.5px] font-medium text-slate-600">
                         <MapPin size={11} className="text-gray-400 shrink-0" />
-                        <span className="max-w-[180px] truncate">{props.location}</span>
+                        <span className="truncate max-w-[110px]">{props.location}</span>
                       </span>
                     )}
                     {props.type && (
@@ -932,8 +868,8 @@ export default function JobCard(props: JobCardProps) {
                       </span>
                     )}
                     {props.salary && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11.5px] font-semibold text-slate-600">
-                        <CircleDollarSign size={11} className="shrink-0 text-slate-400" />
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11.5px] font-bold text-emerald-700">
+                        <CircleDollarSign size={11} className="text-emerald-500 shrink-0" />
                         {props.salary}
                       </span>
                     )}
@@ -1031,8 +967,8 @@ export default function JobCard(props: JobCardProps) {
                           const r = 22;
                           const circ = 2 * Math.PI * r;
                           const offset = circ - (score / 100) * circ;
-                          const color = score >= 50 ? "#4f46e5" : "#64748b";
-                          const trackColor = score >= 50 ? "#e0e7ff" : "#e2e8f0";
+                          const color = score >= 75 ? "#10b981" : score >= 50 ? "#3b82f6" : score >= 30 ? "#f59e0b" : "#ef4444";
+                          const trackColor = score >= 75 ? "#d1fae5" : score >= 50 ? "#dbeafe" : score >= 30 ? "#fef3c7" : "#fee2e2";
                           return (
                             <div key={label} className="flex flex-col items-center gap-0.5 flex-1">
                               <svg width="54" height="54" viewBox="0 0 54 54">
@@ -1063,7 +999,7 @@ export default function JobCard(props: JobCardProps) {
         </div>
 
         {/* Action row */}
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-[linear-gradient(180deg,#fbfdff_0%,#f4f7fb_100%)] px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200/70 bg-[linear-gradient(180deg,#fbfdff_0%,#f4f7fb_100%)] px-5 py-3">
           {/* Left: applicant count + match analysis */}
           <div className="flex items-center gap-2.5 min-w-0">
             {props.applicant_count !== undefined && props.applicant_count !== null && (
@@ -1102,22 +1038,22 @@ export default function JobCard(props: JobCardProps) {
               whileTap={{ scale: 0.88 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
               className={`flex h-9 w-9 items-center justify-center rounded-2xl border transition-all duration-200 ${
-                isSaved ? "border-indigo-200 bg-indigo-50 text-[#4F46E5]" : "border-slate-200 bg-white text-slate-400 hover:border-indigo-200 hover:bg-indigo-50 hover:text-[#4F46E5]"
+                isSaved ? "bg-red-50 border-red-200 text-red-500" : "bg-white border-gray-200 text-gray-400 hover:bg-red-50 hover:border-red-200 hover:text-red-400"
               }`}
               title={isSaved ? "Remove from saved" : "Save job"}
               aria-label={isSaved ? "Remove from saved" : "Save job"}
             >
-              <Heart size={15} className={`transition-all ${isSaved ? "fill-[#4F46E5]" : ""}`} />
+              <Heart size={15} className={`transition-all ${isSaved ? "fill-red-500" : ""}`} />
             </motion.button>
 
             <button
               type="button"
               onClick={props.onBotClick}
               aria-label="Ask Nancy AI about this job"
-              className="jobs-card-secondary-action inline-flex shrink-0 items-center gap-1.5 border border-[#4F46E5]/15 bg-white px-3.5 py-2 text-[12px] font-bold text-[#4F46E5] transition-all hover:border-[#4F46E5]/30 hover:bg-[#eef3ff]"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#4F46E5]/10 bg-white px-3.5 py-2 text-[12px] font-bold text-[#4F46E5] shadow-sm transition-all hover:border-[#4F46E5]/25 hover:bg-[#eef3ff] hover:shadow-md"
             >
               <Sparkles size={11} className="text-[#4F46E5]" />
-              Check fit
+              Ask Nancy
             </button>
 
             {shouldPromptResumeCustomize && !isApplied ? (
@@ -1127,7 +1063,7 @@ export default function JobCard(props: JobCardProps) {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className="jobs-card-primary-action inline-flex items-center gap-1.5 whitespace-nowrap bg-[#4F46E5] px-5 py-2.5 text-[13px] font-bold text-white transition-all duration-150 hover:bg-[#4338CA] active:scale-[0.98]"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#4F46E5] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] transition-all duration-150 hover:bg-[#4338CA] hover:shadow-[0_12px_26px_rgba(79,70,229,0.34)] active:scale-[0.97]"
               >
                 Apply Now
               </motion.button>
@@ -1141,7 +1077,7 @@ export default function JobCard(props: JobCardProps) {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className="jobs-card-primary-action inline-flex items-center gap-1.5 whitespace-nowrap bg-[#4F46E5] px-5 py-2.5 text-[13px] font-bold text-white transition-all duration-150 hover:bg-[#4338CA] active:scale-[0.98]"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#4F46E5] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_8px_20px_rgba(79,70,229,0.22)] transition-all duration-150 hover:bg-[#4338CA] hover:shadow-[0_12px_26px_rgba(79,70,229,0.34)] active:scale-[0.97]"
               >
                 Apply Now
               </motion.a>
@@ -1153,7 +1089,7 @@ export default function JobCard(props: JobCardProps) {
                 whileHover={!isApplied && !isSubmitting ? { scale: 1.03 } : undefined}
                 whileTap={!isApplied && !isSubmitting ? { scale: 0.96 } : undefined}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className={`jobs-card-primary-action inline-flex items-center gap-1.5 whitespace-nowrap px-5 py-2.5 text-[13px] font-bold transition-all duration-150 ${
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-5 py-2.5 text-[13px] font-bold transition-all duration-150 ${
                   isSubmitting
                     ? "bg-emerald-400 text-white cursor-wait opacity-70"
                     : isApplied
@@ -1172,11 +1108,11 @@ export default function JobCard(props: JobCardProps) {
       {/* ── RIGHT: AI match panel ── */}
       {hasMatchScore && props.match_band && (
         <div
-          className="flex w-[112px] shrink-0 cursor-pointer select-none flex-col"
+          className="flex w-[128px] shrink-0 cursor-pointer select-none flex-col"
           onClick={handleScoreHover}
         >
           <div
-            className="jobs-match-panel group/panel relative flex flex-1 flex-col items-center justify-center gap-2.5 overflow-hidden px-3 py-4 transition-all duration-300"
+            className="group/panel relative flex flex-1 flex-col items-center justify-center gap-2.5 overflow-hidden px-3 py-4 transition-all duration-300"
             style={{ background: "linear-gradient(160deg, #0f1d33 0%, #172b4a 46%, #214b86 100%)" }}
           >
             {/* Ambient glow behind ring */}
@@ -1269,17 +1205,11 @@ export default function JobCard(props: JobCardProps) {
         {[
           {
             icon: XCircle, label: "Remove From List",
-            action: () => { setShowMenu(false); recordSignal("dismissed"); props.onRemove?.(); toast.success("Job removed from list"); },
+            action: () => { setShowMenu(false); props.onRemove?.(); toast.success("Job removed from list"); },
           },
           {
             icon: CheckCircle, label: "Already Applied",
-            action: () => {
-              recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId, { ...props });
-              recordSignal("applied");
-              setIsApplied(true);
-              setShowMenu(false);
-              toast.success("Marked as applied");
-            },
+            action: () => { setIsApplied(true); setShowMenu(false); toast.success("Marked as applied"); },
           },
           {
             icon: Share2, label: "Share",

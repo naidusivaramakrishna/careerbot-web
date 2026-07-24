@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 import {
   Crown, Sparkles, ChevronRight, Upload, ScanSearch, Briefcase,
   MessageSquare, FileText, Search, Wand2, ArrowRight,
-  User, Zap, X, Activity, Check, TrendingUp,
+  User, Zap, X, Activity, Check, TrendingUp, Code2,
 } from "lucide-react";
 import ProfileFillModal from "./ProfileFillModal";
 import { useResumeProfileFill } from "@/hooks/useResumeProfileFill";
@@ -27,7 +27,7 @@ const timeAgo = (ts: string) => {
   if (d < 7) return `${d}d ago`;
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
-const STEP_LABELS = ["Upload Resume", "ATS Scan", "AI Enhance", "Build Profile", "Apply to Jobs"];
+const STEP_LABELS = ["Upload Resume", "Complete Profile", "ATS Scan", "Browse & Apply"];
 
 /* ─── card shell ──────────────────────────────────────────────────── */
 const Card: React.FC<{ className?: string; style?: React.CSSProperties; children: React.ReactNode }> = ({
@@ -140,7 +140,7 @@ const HeroCard: React.FC<{ step: StepConfig }> = ({ step }) => {
                     {label}
                   </span>
                 </div>
-                {i < 4 && (
+                {i < STEP_LABELS.length - 1 && (
                   <div
                     className="flex-1 h-px mx-2 min-w-[8px]"
                     style={{ background: done ? "#2557a7" : "#e2e8f0" }}
@@ -161,7 +161,7 @@ const HeroCard: React.FC<{ step: StepConfig }> = ({ step }) => {
               className="inline-block text-[9px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-full"
               style={{ background: "#eef3fb", color: "#2557a7" }}
             >
-              Step {step.stepNum} of 5
+              Step {step.stepNum} of 4
             </span>
           </div>
           <h2 className="text-[22px] font-black text-gray-950 leading-tight tracking-tight mb-2">
@@ -273,12 +273,13 @@ const StatCard: React.FC<{
    4. CAREER TOOLS
 ═══════════════════════════════════════════════════════════════════ */
 const TOOLS = [
-  { Icon: ScanSearch,    title: "ATS Scan",       desc: "Instant compatibility score with keyword gap analysis.",          href: "/atslogin"      },
-  { Icon: FileText,      title: "Resume Builder", desc: "AI-assisted templates with live scoring and real-time feedback.", href: "/builder/start" },
-  { Icon: Search,        title: "Jobs",           desc: "Browse 150+ curated listings matched to your experience.",        href: "/jobs"          },
-  { Icon: Briefcase,     title: "Job Match",      desc: "Paste any job description for instant AI-powered fit analysis.",  href: "/jobmatch"      },
-  { Icon: Wand2,         title: "AI Enhance",     desc: "AI rewrites bullet points for maximum recruiter impact.",         href: "/enhancer"      },
-  { Icon: MessageSquare, title: "Interview Prep", desc: "Practice with live AI mock interviews and real-time coaching.",   href: "/communication" },
+  { Icon: ScanSearch,    title: "ATS Scan",          desc: "Instant compatibility score with keyword gap analysis.",          href: "/atslogin"      },
+  { Icon: FileText,      title: "Resume Builder",    desc: "AI-assisted templates with live scoring and real-time feedback.", href: "/builder/start" },
+  { Icon: Search,        title: "Jobs",              desc: "Browse 150+ curated listings matched to your experience.",        href: "/jobs"          },
+  { Icon: Briefcase,     title: "Job Match",         desc: "Paste any job description for instant AI-powered fit analysis.",  href: "/jobmatch"      },
+  { Icon: Wand2,         title: "AI Enhance",        desc: "AI rewrites bullet points for maximum recruiter impact.",         href: "/enhancer"      },
+  { Icon: MessageSquare, title: "Interview Prep",    desc: "Practice with live AI mock interviews and real-time coaching.",   href: "/communication" },
+  { Icon: Code2,         title: "Coding Practice",  desc: "Solve problems in Python, Java, C++ with instant AI grading.",   href: "/coding-test"   },
 ];
 
 const ToolCard: React.FC<{
@@ -619,10 +620,11 @@ const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
     }
   };
 
-  const hasResume   = usage_counts.resumes_parsed > 0 || usage_counts.resumes_created > 0 || resumeFilled;
-  const hasAtsScan  = usage_counts.ats_scans > 0;
-  const hasEnhanced = usage_counts.resumes_enhanced > 0;
-  const currentStep = !hasResume ? 1 : !hasAtsScan ? 2 : !hasEnhanced ? 3 : profile.completeness < 80 ? 4 : 5;
+  // 4-step progression: Upload Resume → Complete Profile → ATS Scan → Browse & Apply
+  const hasResume    = usage_counts.resumes_parsed > 0 || usage_counts.resumes_created > 0 || resumeFilled;
+  const profileDone  = profile.completeness >= 80;
+  const hasAtsScan   = usage_counts.ats_scans > 0;
+  const currentStep  = !hasResume ? 1 : !profileDone ? 2 : !hasAtsScan ? 3 : 4;
 
   const stepConfig: StepConfig = !hasResume
     ? {
@@ -632,35 +634,27 @@ const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
         ctaText: "Upload Resume", onCtaClick: () => fileInputRef.current?.click(), creditCost: 5,
         profilePct: profile.completeness,
       }
-    : !hasAtsScan
+    : !profileDone
     ? {
-        stepNum: 2, title: "Check Your ATS Score",
-        description: "See how your resume performs against ATS filters. Get a detailed compatibility report and know exactly which keywords to add.",
-        tags: ["ATS Compatibility", "Keyword Gaps", "Instant Report"],
-        ctaText: "Scan Resume", onCtaClick: handleAtsScan, ctaLoading: atsScanLoading, creditCost: 3,
-        profilePct: profile.completeness, atsScore,
-      }
-    : !hasEnhanced
-    ? {
-        stepNum: 3, title: "Enhance with AI",
-        description: "AI rewrites and strengthens every section of your resume. Stand out with compelling, recruiter-optimized content.",
-        tags: ["AI Rewrite", "Stronger Bullets", "Keyword Boost"],
-        ctaText: "Enhance Resume", ctaHref: "/enhancer", creditCost: 10,
-        profilePct: profile.completeness,
-      }
-    : profile.completeness < 80
-    ? {
-        stepNum: 4, title: "Complete Your Profile",
+        stepNum: 2, title: "Complete Your Profile",
         description: "A complete profile unlocks AI job matching, personalized interview prep, and career-specific recommendations built around you.",
         tags: ["Job Matching", "Interview Prep", "Career Insights"],
         ctaText: "Complete Profile", ctaHref: "/profile",
         profilePct: profile.completeness,
       }
+    : !hasAtsScan
+    ? {
+        stepNum: 3, title: "Check Your ATS Score",
+        description: "See how your resume performs against ATS filters. Get a detailed compatibility report and know exactly which keywords to add.",
+        tags: ["ATS Compatibility", "Keyword Gaps", "Instant Report"],
+        ctaText: "Scan Resume", onCtaClick: handleAtsScan, ctaLoading: atsScanLoading, creditCost: 3,
+        profilePct: profile.completeness, atsScore,
+      }
     : {
-        stepNum: 5, title: "Browse & Apply to Jobs",
-        description: "You're all set. Explore curated job listings matched to your profile and apply in seconds.",
+        stepNum: 4, title: "Browse & Apply to Jobs",
+        description: "You're all set! Your profile is complete and your resume is ATS-optimized. Explore curated job listings matched to your skills and apply in seconds.",
         tags: ["Curated Listings", "AI Job Match", "1-Click Apply"],
-        ctaText: "Explore Jobs", ctaHref: "/jobs",
+        ctaText: "Browse Jobs", ctaHref: "/jobs",
         profilePct: profile.completeness,
       };
 
@@ -728,7 +722,7 @@ const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
           />
           <StatCard
             icon={Activity} label="Career Step"
-            value={`${currentStep}/5`}
+            value={`${currentStep}/4`}
             sub={STEP_LABELS[currentStep - 1]}
           />
         </div>
@@ -743,7 +737,7 @@ const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {TOOLS.map(tool => (
               <ToolCard key={tool.title} {...tool} />
             ))}
