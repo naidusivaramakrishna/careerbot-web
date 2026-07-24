@@ -58,15 +58,23 @@ export async function POST(request: NextRequest) {
     formData.append('username', username);
     formData.append('password', password);
 
-    const response = await fetch(`${BACKEND_URL}/api/v1/auth/signin`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'accept': 'application/json',
-        'X-Tenant-Id': tenantId,
-      },
-      body: formData.toString(),
-    });
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 85000);
+    let response: Response;
+    try {
+      response = await fetch(`${BACKEND_URL}/api/v1/auth/signin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'accept': 'application/json',
+          'X-Tenant-Id': tenantId,
+        },
+        body: formData.toString(),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(fetchTimeout);
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Authentication failed' }));

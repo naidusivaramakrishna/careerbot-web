@@ -45,22 +45,44 @@ export default function CodingPracticeHub() {
   };
 
   useEffect(() => {
-    Promise.all([
-      fetchProblems().then((r) => r.total),
-      fetchProgress().catch(() => null),
-    ]).then(([total, prog]) => {
-      setTotalProblems(total);
-      if (prog) {
-        const attempted = prog.summary.problems_attempted;
-        const solved = prog.summary.problems_accepted;
-        setProgress({
-          solved,
-          attempted,
-          accuracy: attempted > 0 ? Math.round((solved / attempted) * 100) : 0,
-        });
-      }
-      setReady(true);
-    });
+    const loadData = () =>
+      Promise.all([
+        fetchProblems().then((r) => r.total).catch(() => null),
+        fetchProgress().catch(() => null),
+      ]).then(([total, prog]) => {
+        if (total !== null) setTotalProblems(total);
+        if (prog) {
+          const attempted = prog.summary.problems_attempted;
+          const solved    = prog.summary.problems_accepted;
+          setProgress({
+            solved,
+            attempted,
+            accuracy: attempted > 0 ? Math.round((solved / attempted) * 100) : 0,
+          });
+        }
+        setReady(true);
+      });
+
+    loadData();
+
+    // Re-fetch when the user returns to this tab (e.g. after submitting on a
+    // problem page) so the Solved count always reflects the latest state.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadData();
+    };
+
+    // Also re-fetch when the problem page signals an accepted submit via
+    // localStorage (works even if visibilitychange doesn't fire in the same tab).
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'progress_updated') loadData();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
 
   const arc = (progress.accuracy / 100) * CIRC;

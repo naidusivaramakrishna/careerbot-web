@@ -363,11 +363,15 @@ export default function CodingProblemDetailPage() {
       const res = await submitCode(slug, language, code[language]);
       setJudgeResult(res);
       setActionState('done');
+      if (res.verdict === 'accepted') {
+        localStorage.setItem('progress_updated', Date.now().toString());
+        router.refresh();
+      }
     } catch (err) {
       setActionState('idle');
       setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to submit your solution.');
     }
-  }, [isBusy, code, language, slug]);
+  }, [isBusy, code, language, slug, router]);
 
   /* ── derived ── */
   const isReady = loadState === 'ready' && !!problem;
