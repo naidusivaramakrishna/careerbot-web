@@ -12,16 +12,31 @@ export function hasAllowedDocumentExtension(fileName: string): boolean {
 }
 
 /**
- * Guards against javascript:/data:/vbscript: URIs sneaking into an <a href>
- * from API-supplied job/application URLs (e.g. third-party job aggregators).
+ * Normalizes a possibly scheme-less external URL — aggregator data frequently
+ * carries bare-domain URLs like "www.company.com/jobs/123" with no
+ * http(s):// prefix — and returns it only if it resolves to a safe http(s)
+ * URL. Rejects javascript:/data:/vbscript: URIs sneaking into an <a href>:
+ * anything that doesn't already start with http(s):// gets one prepended
+ * before validation, so a dangerous scheme can never surface as the
+ * resulting URL's actual protocol. Returns undefined for anything invalid
+ * or unsafe so callers can gate rendering on it directly.
  */
-export function isSafeExternalUrl(url?: string | null): boolean {
-  if (!url) return false;
+export function getSafeExternalUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
   const trimmed = url.trim();
-  if (!trimmed) return false;
+  if (!trimmed) return undefined;
+  const withScheme =
+    trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? trimmed
+      : `https://${trimmed}`;
   try {
-    return SAFE_URL_PROTOCOLS.has(new URL(trimmed).protocol);
+    return SAFE_URL_PROTOCOLS.has(new URL(withScheme).protocol) ? withScheme : undefined;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+/** Boolean form of {@link getSafeExternalUrl} for simple render guards. */
+export function isSafeExternalUrl(url?: string | null): boolean {
+  return getSafeExternalUrl(url) !== undefined;
 }

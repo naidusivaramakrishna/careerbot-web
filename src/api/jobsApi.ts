@@ -126,6 +126,10 @@ export interface SmartMatchParams {
   min_education_score?: number;
   location?: string;
   mode?: string;
+  // Bypasses the backend's own scored-results cache (see cache_hit on
+  // SmartMatchResponse) — needed for "Retry Smart Match" to actually get a
+  // fresh computation instead of the same cached response.
+  force_refresh?: boolean;
 }
 
 // ==================== APPLICATION TYPES ====================

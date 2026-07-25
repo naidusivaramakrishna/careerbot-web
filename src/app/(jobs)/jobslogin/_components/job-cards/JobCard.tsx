@@ -18,6 +18,7 @@ import { parseResumeFromProfile, parseJdByJob } from "@/api/premiumApi";
 import { matchResumeAndJD, getResume, getMatchAnalytics, parseJDText } from "@/api/parserApi";
 import { isValidBackendJobId } from "@/utils/jobIdHelper";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { getSafeExternalUrl } from "@/utils/validators";
 import { getMatchBandConfig } from "../utils/matchBand";
 
 const SKIP_RESUME_PROMPT_KEY = "skipResumeCustomizePrompt";
@@ -190,7 +191,13 @@ export default function JobCard(props: JobCardProps) {
     setIsSaved(isJobSaved(props.id, userId));
   }, [props.id, userId]);
 
-  const externalUrl = props.url || props.application_url;
+  // Normalized + filtered at the source so every render sink downstream
+  // (this card's own apply anchors, JobPreviewModal, ApplicationModal)
+  // automatically gets a safe, absolute value — job urls originate from
+  // third-party aggregators and are frequently bare-domain (no http(s)://)
+  // and could contain javascript:/data: URIs.
+  const rawExternalUrl = props.url || props.application_url;
+  const externalUrl = getSafeExternalUrl(rawExternalUrl);
 
   // For external jobs the "Apply Now" element renders as a real <a target="_blank">
   // (see JSX below) so the browser treats it as a normal user-initiated navigation

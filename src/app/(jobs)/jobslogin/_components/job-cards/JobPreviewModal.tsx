@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { getMatchBandConfig } from "../utils/matchBand";
+import { getSafeExternalUrl } from "@/utils/validators";
 
 interface JobPreviewModalProps {
   title: string;
@@ -84,6 +85,9 @@ export default function JobPreviewModal(props: JobPreviewModalProps) {
     : [];
   const matchedSet = new Set((props.matched_skills || []).map((skill) => skill.toLowerCase()));
   const missingSet = new Set((props.missing_skills || []).map((skill) => skill.toLowerCase()));
+  // Re-derived here (not just trusted from the caller) so this modal is safe
+  // to reuse even if a future caller passes a raw, unnormalized job URL.
+  const safeExternalUrl = getSafeExternalUrl(props.externalUrl);
 
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -336,9 +340,9 @@ export default function JobPreviewModal(props: JobPreviewModalProps) {
             <Heart size={19} className={props.isSaved ? "fill-rose-600" : ""} />
           </button>
 
-          {props.externalUrl && !props.isApplied ? (
+          {safeExternalUrl && !props.isApplied ? (
             <a
-              href={props.externalUrl}
+              href={safeExternalUrl}
               target="_blank"
               rel="noopener noreferrer"
               data-allow-new-tab
