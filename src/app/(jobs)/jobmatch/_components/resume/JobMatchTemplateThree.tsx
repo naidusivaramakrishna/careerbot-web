@@ -22,7 +22,10 @@ interface JobMatchTemplateTHREEProps {
 }
 
 const SKILL_CATEGORY_KEYWORDS: { label: string; keywords: string[] }[] = [
-  { label: "Languages", keywords: ["python", "javascript", "typescript", "java", "c++", "c#", "golang", "rust", "swift", "kotlin", "php", "ruby", "scala", "perl", "dart", "language"] },
+  // "language" was removed — as a bare keyword it matched natural-language
+  // skill entries too ("Spanish (language)", "sign language"), miscategorizing
+  // them as programming languages under this same-named bucket.
+  { label: "Languages", keywords: ["python", "javascript", "typescript", "java", "c++", "c#", "golang", "rust", "swift", "kotlin", "php", "ruby", "scala", "perl", "dart"] },
   { label: "Databases", keywords: ["mysql", "postgresql", "postgres", "mongodb", "oracle", "sql server", "sqlite", "dynamodb", "cassandra", "mariadb", "firebase", "elasticsearch"] },
   { label: "Tools", keywords: ["git", "github", "gitlab", "bitbucket", "docker", "jira", "confluence", "postman", "jenkins", "webpack", "vite", "npm", "yarn", "figma"] },
   { label: "Cloud Platforms", keywords: ["aws", "amazon web services", "azure", "google cloud", "gcp", "digitalocean", "heroku", "vercel", "netlify", "cloudflare"] },
@@ -31,12 +34,29 @@ const SKILL_CATEGORY_KEYWORDS: { label: string; keywords: string[] }[] = [
 ];
 const SKILL_CATEGORY_ORDER = ["Languages", "Databases", "Tools", "Cloud Platforms", "Methodologies", "Technologies", "Testing"];
 
+// Single-word keywords (java, php, dart, …) are short enough to false-match
+// as a substring of an unrelated word, so those require a real word
+// boundary; multi-word phrases (e.g. "sql server") are specific enough that
+// a plain substring check is safe.
+function isWholeWordMatch(text: string, keyword: string): boolean {
+  const idx = text.indexOf(keyword);
+  if (idx === -1) return false;
+  const isWordChar = (c: string) => /[a-z0-9]/i.test(c);
+  const before = idx > 0 ? text[idx - 1] : "";
+  const after = idx + keyword.length < text.length ? text[idx + keyword.length] : "";
+  return !isWordChar(before) && !isWordChar(after);
+}
+
+function keywordMatches(text: string, keyword: string): boolean {
+  return keyword.includes(" ") ? text.includes(keyword) : isWholeWordMatch(text, keyword);
+}
+
 /** Buckets a flat skill list into labeled groups (Languages, Databases, Tools, …) via keyword match, falling back to "Technologies". */
 function categorizeTechnicalSkills(items: string[]): { label: string; skills: string[] }[] {
   const buckets: Record<string, string[]> = {};
   for (const skill of items) {
     const lower = skill.toLowerCase();
-    const match = SKILL_CATEGORY_KEYWORDS.find(({ keywords }) => keywords.some((kw) => lower.includes(kw)));
+    const match = SKILL_CATEGORY_KEYWORDS.find(({ keywords }) => keywords.some((kw) => keywordMatches(lower, kw)));
     const label = match ? match.label : "Technologies";
     (buckets[label] ??= []).push(skill);
   }

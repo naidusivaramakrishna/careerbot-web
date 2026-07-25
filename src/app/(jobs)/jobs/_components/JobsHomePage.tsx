@@ -12,17 +12,14 @@ import {
   Briefcase,
   Building2,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Clock,
   Cloud,
   Code2,
   Filter,
-  FileText,
   Flame,
   IndianRupee,
   MapPin,
-  Mic2,
   PenTool,
   PieChart,
   Puzzle,
@@ -33,7 +30,6 @@ import {
   Target,
   TrendingUp,
   Users,
-  LayoutDashboard,
   Zap,
 } from "lucide-react";
 import SignUpModal from "@/components/SignUpModal";
@@ -93,49 +89,6 @@ const EXPERIENCE_OPTIONS = [
   "Fresher", "1 yr", "2 yrs", "3 yrs", "4 yrs", "5 yrs", "6 yrs", "7 yrs", "8 yrs", "9 yrs",
   "10 yrs", "11+ yrs",
 ];
-
-const FEATURE_STORIES = [
-  {
-    key: "matching",
-    eyebrow: "AI Job Matching",
-    title: "Opportunities selected around your strengths.",
-    description: "CareerBOT compares your skills and goals with live roles to surface stronger matches first.",
-    accent: "#176cf0",
-    soft: "#dceaff",
-    image: "/images/jobs/feature-stories/ai-job-matching-v2.png",
-    icon: Target,
-  },
-  {
-    key: "resume",
-    eyebrow: "Resume Intelligence",
-    title: "Know exactly what your resume needs next.",
-    description: "Get a focused score, missing-skill signals, and practical improvements before you apply.",
-    accent: "#7c3aed",
-    soft: "#eee6ff",
-    image: "/images/jobs/feature-stories/resume-intelligence.png",
-    icon: FileText,
-  },
-  {
-    key: "interview",
-    eyebrow: "Interview Practice",
-    title: "Practice smarter. Interview confidently.",
-    description: "Rehearse realistic questions and get focused coaching on every answer.",
-    accent: "#0f9f73",
-    soft: "#dcf8ef",
-    image: "/images/jobs/feature-stories/interview-practice-v2.png",
-    icon: Mic2,
-  },
-  {
-    key: "tracking",
-    eyebrow: "Application Tracking",
-    title: "Keep every opportunity and next step in view.",
-    description: "Organize applications, interviews, follow-ups, and offers from one simple workspace.",
-    accent: "#ea580c",
-    soft: "#ffeadc",
-    image: "/images/jobs/feature-stories/application-tracking.png",
-    icon: LayoutDashboard,
-  },
-] as const;
 
 const MODE_STYLES: Record<string, string> = {
   Remote: "bg-violet-50 text-violet-600",
@@ -220,8 +173,6 @@ export default function JobsHomePage() {
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [selectedExperience, setSelectedExperience] = useState("");
   const [showExperienceDropdown, setShowExperienceDropdown] = useState(false);
-  const [activeFeature, setActiveFeature] = useState(0);
-  const featureTouchStart = useRef<number | null>(null);
   const reduceMotion = useReducedMotion();
   const locationRef = useRef<HTMLDivElement>(null);
   const experienceRef = useRef<HTMLDivElement>(null);
@@ -315,15 +266,6 @@ export default function JobsHomePage() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
-
-  // NOTE: the auto-rotating interval that used to drive this was removed —
-  // its only consumer is the "retained in source for reference only" dead
-  // carousel block below ({false && (...)}), so it was running forever on
-  // every visit to this public page for a value nothing ever rendered.
-  // Restore it here if that carousel is ever re-enabled.
-  const showFeature = (index: number) => {
-    setActiveFeature((index + FEATURE_STORIES.length) % FEATURE_STORIES.length);
-  };
 
   const openSignup = () => {
     setAuthFormType("signup");
@@ -602,344 +544,8 @@ export default function JobsHomePage() {
             </motion.div>
             )}
 
-            {/* Previous product card retained in source for reference only. */}
-            {false && (
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.65, delay: 0.15 }}
-              className="relative mx-auto w-full min-w-0 max-w-[650px] py-3 lg:-mr-1"
-            >
-              <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[44px] bg-[radial-gradient(circle_at_55%_40%,rgba(76,145,255,0.2),transparent_66%)] blur-2xl" />
-              <div className="overflow-hidden rounded-[28px] border border-[#dce7f7] bg-white shadow-[0_24px_64px_rgba(31,92,180,0.14)]">
-                <div className="flex items-center justify-between border-b border-[#e7eef8] px-5 py-3.5 sm:px-6">
-                  <div>
-                    <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#0b55d9]">
-                      <Target size={14} />
-                      Your strongest match
-                    </div>
-                    <p className="mt-1 text-[12px] text-[#7181a0]">Personalized from your skills and preferences</p>
-                  </div>
-                  <div className="rounded-full bg-[#eafaf3] px-3 py-1.5 text-[12px] font-bold text-[#087a55]">
-                    94% match
-                  </div>
-                </div>
-
-                <div className="px-5 py-4 sm:px-6 sm:py-5">
-                  <div className="flex items-start gap-4">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-[#e2e9f5] bg-white shadow-sm">
-                      <Image src="/assets/icons/microsoft-icon.svg" alt="" width={24} height={24} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#607397]">
-                        Microsoft
-                        <ShieldCheck size={13} className="text-[#0b55d9]" aria-label="Verified employer" />
-                      </p>
-                      <h2 className="mt-0.5 text-[22px] font-black tracking-[-0.025em] text-[#071744]">
-                        Senior Product Designer
-                      </h2>
-                      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] font-medium text-[#607397]">
-                        <span className="inline-flex items-center gap-1.5"><MapPin size={14} /> Bengaluru · Hybrid</span>
-                        <span className="inline-flex items-center gap-1.5"><Briefcase size={14} /> Full-time</span>
-                        <span className="inline-flex items-center gap-1.5"><TrendingUp size={14} /> Senior level</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-y border-[#e7eef8] py-3">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8a99b4]">Estimated salary</p>
-                      <p className="mt-0.5 text-[20px] font-black text-[#071744]">₹18–28 LPA</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {["Product strategy", "Figma", "Design systems"].map((skill) => (
-                        <span key={skill} className="rounded-lg border border-[#dce7f7] bg-[#f7faff] px-2.5 py-1.5 text-[10px] font-semibold text-[#486188]">
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <p className="text-[13px] font-bold text-[#172c54]">Why this role fits you</p>
-                    <div className="mt-2.5 grid gap-2">
-                      {[
-                        "Your core design skills align with the role",
-                        "The seniority matches your recent experience",
-                        "Location and salary fit your preferences",
-                      ].map((reason) => (
-                        <div key={reason} className="flex items-center gap-2.5 text-[12px] text-[#5a6d93]">
-                          <ShieldCheck size={15} className="shrink-0 text-[#0aa673]" />
-                          {reason}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => goToSearch("Senior Product Designer")}
-                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#0b55d9] px-5 text-[13px] font-bold text-white shadow-[0_14px_28px_rgba(13,91,225,0.22)] transition-colors hover:bg-[#0848ba]"
-                    >
-                      View role details
-                      <ArrowRight size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Save matched role"
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#d7e4f6] text-[#274a80] transition-colors hover:bg-[#f4f8ff]"
-                    >
-                      <Bookmark size={18} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-            )}
-
-            {/* Previous carousel retained in source for reference only. */}
-            {false && (
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.65, delay: 0.15 }}
-              className="relative mx-auto w-full min-w-0 max-w-[680px] py-4 lg:-mr-2"
-              onTouchStart={(event) => {
-                featureTouchStart.current = event.touches[0]?.clientX ?? null;
-              }}
-              onTouchEnd={(event) => {
-                const start = featureTouchStart.current;
-                const end = event.changedTouches[0]?.clientX;
-                if (start != null && end != null && Math.abs(start - end) > 45) {
-                  showFeature(activeFeature + (start > end ? 1 : -1));
-                }
-                featureTouchStart.current = null;
-              }}
-            >
-              <div className="pointer-events-none absolute -inset-3 rounded-[38px] bg-[radial-gradient(circle_at_55%_45%,rgba(63,145,255,0.2),transparent_64%)] blur-2xl" />
-              <div className="relative aspect-[16/10] overflow-hidden rounded-[32px] border border-white/90 bg-white/55 p-2 shadow-[0_28px_72px_rgba(31,92,180,0.18)] backdrop-blur-xl">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={FEATURE_STORIES[activeFeature].key}
-                    initial={reduceMotion ? false : { opacity: 0, x: 34, scale: 0.985 }}
-                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                    exit={reduceMotion ? undefined : { opacity: 0, x: -28, scale: 0.99 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}
-                    className="relative h-full overflow-hidden rounded-[28px]"
-                    style={{
-                      background: `radial-gradient(circle at 72% 34%, ${FEATURE_STORIES[activeFeature].soft}, transparent 34%), linear-gradient(145deg, #fafdff 0%, #edf5ff 100%)`,
-                    }}
-                  >
-                    <motion.div
-                      className="absolute inset-x-0 top-0 h-[70%] overflow-hidden"
-                      initial={reduceMotion ? false : { scale: 1.035, x: 12 }}
-                      animate={{ scale: 1, x: 0 }}
-                      transition={{ duration: reduceMotion ? 0 : 5.5, ease: "easeOut" }}
-                    >
-                      <Image
-                        src={FEATURE_STORIES[activeFeature].image}
-                        alt={`${FEATURE_STORIES[activeFeature].eyebrow} animated illustration`}
-                        fill
-                        priority={activeFeature === 0}
-                        sizes="(min-width: 1024px) 46vw, 92vw"
-                        className={`object-cover ${
-                          FEATURE_STORIES[activeFeature].key === "interview"
-                            ? "object-top"
-                            : "object-center"
-                        }`}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-white/30" />
-                    </motion.div>
-                    <div className="hidden">
-                      {FEATURE_STORIES[activeFeature].key === "matching" && (
-                        <div className="relative mx-auto mt-8 h-[220px] max-w-[480px]">
-                          {[0, 1, 2].map((ring) => (
-                            <motion.div
-                              key={ring}
-                              className="absolute left-1/2 top-1/2 rounded-full border border-[#93baff]/50"
-                              style={{ width: 116 + ring * 64, height: 116 + ring * 64, marginLeft: -(58 + ring * 32), marginTop: -(58 + ring * 32) }}
-                              animate={reduceMotion ? undefined : { rotate: ring % 2 ? -360 : 360 }}
-                              transition={{ duration: 18 + ring * 5, repeat: Infinity, ease: "linear" }}
-                            >
-                              <span className="absolute -right-2 top-1/2 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-[#176cf0] shadow-lg">
-                                {ring === 0 ? <Briefcase size={14} /> : ring === 1 ? <MapPin size={14} /> : <Star size={14} />}
-                              </span>
-                            </motion.div>
-                          ))}
-                          <motion.div
-                            className="absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[28px] bg-[#176cf0] text-white shadow-[0_24px_60px_rgba(23,108,240,0.35)]"
-                            animate={reduceMotion ? undefined : { y: [-4, 4, -4] }}
-                            transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
-                          >
-                            <Target size={38} />
-                          </motion.div>
-                          <div className="absolute right-2 top-4 rounded-2xl border border-white bg-white/90 px-4 py-3 shadow-xl">
-                            <p className="text-[10px] font-semibold text-slate-400">Match score</p>
-                            <p className="text-[24px] font-black text-emerald-500">94%</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {FEATURE_STORIES[activeFeature].key === "resume" && (
-                        <div className="relative mx-auto mt-7 flex h-[230px] max-w-[430px] items-center justify-center">
-                          <motion.div
-                            className="relative h-[210px] w-[270px] rounded-[24px] border border-white bg-white p-5 shadow-[0_26px_65px_rgba(60,70,150,0.18)]"
-                            animate={reduceMotion ? undefined : { rotate: [-1.5, 1, -1.5] }}
-                            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eee6ff] text-[#7c3aed]"><FileText size={20} /></span>
-                              <div className="space-y-2"><div className="h-2 w-28 rounded bg-slate-200" /><div className="h-1.5 w-20 rounded bg-slate-100" /></div>
-                            </div>
-                            <div className="mt-5 space-y-3">
-                              {[84, 96, 72, 90].map((width, index) => (
-                                <motion.div
-                                  key={width}
-                                  className="h-2 rounded-full bg-[#d9c8ff]"
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${width}%` }}
-                                  transition={{ duration: 0.8, delay: index * 0.12 }}
-                                />
-                              ))}
-                            </div>
-                          </motion.div>
-                          <motion.div
-                            className="absolute -right-2 top-8 flex h-28 w-28 items-center justify-center rounded-full border-[10px] border-[#7c3aed] border-l-[#e8dcff] bg-white shadow-xl"
-                            animate={reduceMotion ? undefined : { scale: [1, 1.04, 1] }}
-                            transition={{ duration: 2.4, repeat: Infinity }}
-                          >
-                            <div className="text-center"><p className="text-[27px] font-black text-[#26105c]">88</p><p className="text-[9px] text-slate-400">Resume score</p></div>
-                          </motion.div>
-                        </div>
-                      )}
-
-                      {FEATURE_STORIES[activeFeature].key === "interview" && (
-                        <div className="relative mx-auto mt-8 flex h-[220px] max-w-[470px] items-center justify-center">
-                          <div className="absolute inset-x-8 top-4 rounded-[26px] border border-white bg-white/85 p-5 shadow-[0_25px_60px_rgba(15,159,115,0.16)]">
-                            <div className="flex items-center justify-between">
-                              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#dcf8ef] text-[#0f9f73]"><Mic2 size={24} /></span>
-                              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold text-emerald-600">Live practice</span>
-                            </div>
-                            <div className="mt-6 flex h-20 items-center justify-center gap-2">
-                              {[28, 52, 76, 44, 88, 60, 34, 70, 48, 82, 38, 58].map((height, index) => (
-                                <motion.span
-                                  key={index}
-                                  className="w-2 rounded-full bg-[#0f9f73]"
-                                  animate={reduceMotion ? { height } : { height: [height * 0.45, height, height * 0.55] }}
-                                  transition={{ duration: 0.9 + (index % 4) * 0.18, repeat: Infinity, ease: "easeInOut" }}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {FEATURE_STORIES[activeFeature].key === "tracking" && (
-                        <div className="mx-auto mt-8 grid h-[220px] max-w-[500px] grid-cols-3 gap-3 px-4">
-                          {[
-                            ["Applied", 2],
-                            ["Interview", 3],
-                            ["Offer", 1],
-                          ].map(([label, count], column) => (
-                            <div key={String(label)} className="rounded-2xl border border-white bg-white/76 p-3 shadow-[0_18px_45px_rgba(234,88,12,0.1)]">
-                              <div className="flex items-center justify-between text-[10px] font-bold text-[#5b6478]"><span>{label}</span><span>{count}</span></div>
-                              <div className="mt-3 space-y-2">
-                                {Array.from({ length: Number(count) }).map((_, card) => (
-                                  <motion.div
-                                    key={card}
-                                    className="rounded-xl border border-[#ffe1ce] bg-white p-2.5"
-                                    initial={{ opacity: 0, y: 14 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: column * 0.12 + card * 0.1 }}
-                                  >
-                                    <div className="h-2 w-3/4 rounded bg-[#ffd3b8]" /><div className="mt-2 h-1.5 w-1/2 rounded bg-slate-100" />
-                                  </motion.div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/96 to-white/35 px-6 pb-5 pt-12 sm:px-8">
-                      <div className="flex items-end justify-between gap-4">
-                        <div className="max-w-[470px]">
-                          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: FEATURE_STORIES[activeFeature].accent }}>
-                            {(() => {
-                              const ActiveIcon = FEATURE_STORIES[activeFeature].icon;
-                              return <ActiveIcon size={14} />;
-                            })()}
-                            {FEATURE_STORIES[activeFeature].eyebrow}
-                          </div>
-                          <h3 className="mt-1.5 text-[19px] font-black leading-tight tracking-[-0.02em] text-[#071744] sm:text-[22px]">
-                            {FEATURE_STORIES[activeFeature].title}
-                          </h3>
-                          <p className="mt-1.5 max-w-[500px] text-[11px] leading-[1.55] text-[#5a6d93] sm:text-[12px]">
-                            {FEATURE_STORIES[activeFeature].description}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
-
-                <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
-                  <button type="button" onClick={() => showFeature(activeFeature - 1)} aria-label="Previous feature" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/80 text-[#173263] shadow-sm backdrop-blur transition hover:bg-white">
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button type="button" onClick={() => showFeature(activeFeature + 1)} aria-label="Next feature" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/80 text-[#173263] shadow-sm backdrop-blur transition hover:bg-white">
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-
-                <div className="absolute bottom-5 right-6 z-20 flex items-center gap-2">
-                  {FEATURE_STORIES.map((story, index) => (
-                    <button key={story.key} type="button" onClick={() => showFeature(index)} aria-label={`Show ${story.eyebrow}`} className="relative h-1.5 w-8 overflow-hidden rounded-full bg-[#d8e4f6]">
-                      {index === activeFeature && (
-                        <motion.span
-                          key={activeFeature}
-                          className="absolute inset-y-0 left-0 rounded-full"
-                          style={{ backgroundColor: story.accent }}
-                          initial={{ width: reduceMotion ? "100%" : "0%" }}
-                          animate={{ width: "100%" }}
-                          transition={{ duration: reduceMotion ? 0 : 5, ease: "linear" }}
-                        />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-            )}
           </div>
 
-          {false && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.45 }}
-            className="mt-6 grid overflow-hidden rounded-[22px] border border-white/90 bg-white/72 shadow-[0_22px_54px_rgba(37,87,167,0.11)] backdrop-blur-xl sm:grid-cols-3"
-          >
-            {[
-              { icon: Briefcase, value: "120K+", label: "opportunities", sub: "curated and updated daily" },
-              { icon: Building2, value: "5K+", label: "companies", sub: "hiring across industries" },
-              { icon: Sparkles, value: "Updated daily", label: "fresh matches", sub: "so you never miss out" },
-            ].map((item, index) => (
-              <div key={item.value} className={`flex items-center gap-4 px-6 py-5 ${index > 0 ? "border-t border-[#dfe9f8] sm:border-l sm:border-t-0" : ""}`}>
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#d7e5fb] bg-[#f6f9ff] text-[#0b55d9]">
-                  <item.icon size={20} />
-                </span>
-                <div>
-                  <p className="text-[22px] font-black leading-tight text-[#071744]">{item.value}</p>
-                  <p className="text-[11px] font-bold text-[#32486e]">{item.label}</p>
-                  <p className="mt-0.5 text-[10px] text-slate-400">{item.sub}</p>
-                </div>
-              </div>
-            ))}
-          </motion.div>
-          )}
         </div>
       </section>
 

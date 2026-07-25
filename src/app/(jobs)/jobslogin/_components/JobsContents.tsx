@@ -278,6 +278,7 @@ export default function JobsContents() {
   const [matchedLoading, setMatchedLoading] = useState(false);
   const [matchedFetched, setMatchedFetched] = useState(false);
   const [matchedNoResume, setMatchedNoResume] = useState(false);
+  const [matchedError, setMatchedError] = useState(false);
   const [matchBandFilter] = useState<"all" | "strong" | "good" | "partial" | "low">("all");
 
   // ── Sort helper ──
@@ -304,6 +305,7 @@ export default function JobsContents() {
     if (matchedFetched && page === matchedPage && !force) return;
     setMatchedLoading(true);
     setMatchedNoResume(false);
+    setMatchedError(false);
     try {
       const data = await getSmartMatchedJobs({
         limit: MATCHED_PER_PAGE,
@@ -333,7 +335,11 @@ export default function JobsContents() {
         setMatchedFetched(true);
       } else {
         // Transient failure — leave matchedFetched false so the next tab
-        // activation retries instead of caching the error.
+        // activation retries instead of caching the error. matchedError
+        // tracks this separately so the empty state can show a Retry
+        // button immediately instead of only after the user leaves and
+        // re-enters this tab (matchedFetched alone doesn't change here).
+        setMatchedError(true);
         toast.error("Could not load Smart Match jobs. Please try again later.");
       }
     } finally {
@@ -764,6 +770,8 @@ export default function JobsContents() {
                         : activeTab === "matched"
                         ? matchedNoResume
                           ? "Resume required for Smart Match"
+                          : matchedError
+                          ? "Couldn't load Smart Match"
                           : matchedSearchNarrowed
                           ? "No matches in your loaded results"
                           : "No matched jobs found"
@@ -777,6 +785,8 @@ export default function JobsContents() {
                         : activeTab === "matched"
                         ? matchedNoResume
                           ? "Smart Match analyses your resume to score every job for you. Go to Profile → Resume tab to upload your resume."
+                          : matchedError
+                          ? "Something went wrong loading your matches. Please try again."
                           : matchedSearchNarrowed
                           ? `Search and filters only apply to your currently loaded top ${matchedJobs.length} recommendations${searchQuery ? ` — none matched "${searchQuery}"` : ""}. Clear them to see all your matches.`
                           : "Smart Match ran but no strong matches found yet. Try clicking Retry or update your profile with more skills."
@@ -790,7 +800,7 @@ export default function JobsContents() {
                         Upload Resume in Profile →
                       </a>
                     )}
-                    {isMatchedTab && !matchedNoResume && matchedFetched && !matchedSearchNarrowed && (
+                    {isMatchedTab && !matchedNoResume && (matchedFetched || matchedError) && !matchedSearchNarrowed && (
                       <button
                         type="button"
                         onClick={() => fetchSmartMatchedJobs(matchedPage, true)}
