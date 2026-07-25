@@ -54,7 +54,10 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     { username: data.email, password: data.password },
     {
       baseURL: "",
-      timeout: 45000, // Extended timeout for signin (can be slow on first load)
+      // Backend /auth/signin currently takes ~25s to reject a bad password and
+      // longer to accept a good one, which overran the previous 45s timeout and
+      // failed logins outright. Stopgap until the auth-path latency is fixed.
+      timeout: 90000,
       headers: {
         "Content-Type": "application/json",
         "X-Tenant-Id": tenantId,
@@ -77,6 +80,16 @@ export const signOut = async () => {
   // User belongs to this tenant across sessions (per backend Option C)
   // Backend clears httpOnly cookies automatically - we don't need to clear tenant_id
   // clearTenantId() removed - allows re-login to same tenant
+
+  // Clear coding-test drafts so the next user starts with a clean slate.
+  // Keys are scoped per user (code:{userId}:{slug}:{lang}) so this only
+  // affects entries from this session, but we clear all to avoid bloat.
+  const codingKeys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k?.startsWith('code:')) codingKeys.push(k);
+  }
+  codingKeys.forEach((k) => localStorage.removeItem(k));
 
   ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText'].forEach(
     (key) => sessionStorage.removeItem(key)
@@ -103,7 +116,9 @@ export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
     data,
     {
       baseURL: "",
-      timeout: 45000, // Extended timeout for signup (can be slow on first load)
+      // Signup is followed immediately by a signin, so it inherits the same
+      // slow auth path. See the timeout note in signIn above.
+      timeout: 90000,
       headers: {
         "X-Tenant-Id": tenantId,
         "Content-Type": "application/json",

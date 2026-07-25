@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 import {
   Crown, Sparkles, ChevronRight, Upload, ScanSearch, Briefcase,
   MessageSquare, FileText, Search, Wand2, ArrowRight,
-  User, Zap, X, Activity, Check, TrendingUp,
+  User, Zap, X, Activity, Check, TrendingUp, Code2,
 } from "lucide-react";
 import ProfileFillModal from "./ProfileFillModal";
 import { useResumeProfileFill } from "@/hooks/useResumeProfileFill";
@@ -273,12 +273,13 @@ const StatCard: React.FC<{
    4. CAREER TOOLS
 ═══════════════════════════════════════════════════════════════════ */
 const TOOLS = [
-  { Icon: ScanSearch,    title: "ATS Scan",       desc: "Instant compatibility score with keyword gap analysis.",          href: "/atslogin"      },
-  { Icon: FileText,      title: "Resume Builder", desc: "AI-assisted templates with live scoring and real-time feedback.", href: "/builder/start" },
-  { Icon: Search,        title: "Jobs",           desc: "Browse 150+ curated listings matched to your experience.",        href: "/jobs"          },
-  { Icon: Briefcase,     title: "Job Match",      desc: "Paste any job description for instant AI-powered fit analysis.",  href: "/jobmatch"      },
-  { Icon: Wand2,         title: "AI Enhance",     desc: "AI rewrites bullet points for maximum recruiter impact.",         href: "/enhancer"      },
-  { Icon: MessageSquare, title: "Interview Prep", desc: "Practice with live AI mock interviews and real-time coaching.",   href: "/communication" },
+  { Icon: ScanSearch,    title: "ATS Scan",          desc: "Instant compatibility score with keyword gap analysis.",          href: "/atslogin"      },
+  { Icon: FileText,      title: "Resume Builder",    desc: "AI-assisted templates with live scoring and real-time feedback.", href: "/builder/start" },
+  { Icon: Search,        title: "Jobs",              desc: "Browse 150+ curated listings matched to your experience.",        href: "/jobs"          },
+  { Icon: Briefcase,     title: "Job Match",         desc: "Paste any job description for instant AI-powered fit analysis.",  href: "/jobmatch"      },
+  { Icon: Wand2,         title: "AI Enhance",        desc: "AI rewrites bullet points for maximum recruiter impact.",         href: "/enhancer"      },
+  { Icon: MessageSquare, title: "Interview Prep",    desc: "Practice with live AI mock interviews and real-time coaching.",   href: "/communication" },
+  { Icon: Code2,         title: "Coding Practice",  desc: "Solve problems in Python, Java, C++ with instant AI grading.",   href: "/coding-test"   },
 ];
 
 const ToolCard: React.FC<{
@@ -736,7 +737,7 @@ const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {TOOLS.map(tool => (
               <ToolCard key={tool.title} {...tool} />
             ))}

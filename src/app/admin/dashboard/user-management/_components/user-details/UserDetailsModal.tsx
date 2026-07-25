@@ -1,8 +1,10 @@
 "use client"
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback } from 'react'
 import { X } from 'lucide-react'
 import { useUserDetails } from '../../_hooks/useUserDetails'
+import { formatDate } from '@/app/admin/_utils/formatDate'
+import { SlidePanel } from '@/app/admin/_components/SlidePanel'
 import { UserProfileSection } from './UserProfileSection'
 import { UserEditForm, type EditFormData } from './UserEditForm'
 import { UserDetailsTabs } from './UserDetailsTabs'
@@ -32,19 +34,6 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
     const [isEditing, setIsEditing] = useState(false)
     const [showSuspendDialog, setShowSuspendDialog] = useState(false)
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-
-    // Format functions
-    const formatDate = useMemo(() => {
-        return (dateString: string | null) => {
-            if (!dateString) return 'N/A'
-            const date = new Date(dateString)
-            return date.toLocaleDateString('en-GB', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric'
-            })
-        }
-    }, [])
 
     // Handlers
     const handleEdit = useCallback(() => {
@@ -102,19 +91,16 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
 
     if (loading || !user) {
         return (
-            <div className="fixed inset-0 flex items-center justify-end bg-black/50 z-50">
-                <div className="bg-white rounded-2xl rounded-tr-none rounded-br-none shadow-lg w-full max-w-2xl p-6 relative">
-                    <div className="flex items-center justify-center h-96">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-                    </div>
+            <SlidePanel loading>
+                <div className="flex items-center justify-center h-96">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
                 </div>
-            </div>
+            </SlidePanel>
         )
     }
 
     return (
-        <div className="fixed inset-0 flex items-center justify-end bg-black/50 z-50 overflow-y-auto">
-            <div className="bg-white rounded-2xl rounded-tr-none rounded-br-none shadow-lg w-full max-w-2xl p-6 relative my-4 max-h-screen overflow-y-auto">
+        <SlidePanel>
                 {/* Close Button */}
                 <button
                     onClick={onClose}
@@ -207,8 +193,7 @@ const UserDetailsModal: React.FC<Props> = ({ userId, onClose }) => {
                         loading={actionLoading}
                     />
                 )}
-            </div>
-        </div>
+        </SlidePanel>
     )
 }
 

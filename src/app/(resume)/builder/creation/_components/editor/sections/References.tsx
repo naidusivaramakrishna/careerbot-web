@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+﻿import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
 import { RiEdit2Fill } from 'react-icons/ri';
@@ -61,9 +61,16 @@ const References: React.FC = () => {
 
   useEffect(() => {
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
-    if (JSON.stringify(resumeData.references) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, references: allEntries });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.references ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.references) === JSON.stringify(merged)) return prev;
+      return { ...prev, references: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 

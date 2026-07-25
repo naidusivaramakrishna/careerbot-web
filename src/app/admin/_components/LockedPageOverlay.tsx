@@ -51,9 +51,15 @@ export const LockedPageOverlay: React.FC<LockedPageOverlayProps> = ({
           </div>
 
           {/* Additional Info */}
-          <p className="text-sm text-gray-500">
-            Please contact your administrator to access this page.
+          <p className="text-sm text-gray-500 mb-4">
+            Please contact your administrator to request access to this page.
           </p>
+          <a
+            href="mailto:support@careerbot.ai"
+            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+          >
+            Request Access
+          </a>
         </div>
       </div>
 

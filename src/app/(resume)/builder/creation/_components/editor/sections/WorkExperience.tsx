@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+﻿import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -122,14 +122,20 @@ const WorkExperience: React.FC = () => {
   });
 
   useEffect(() => {
-    // Only include entries with actual data (filter out empty editing placeholders)
     const validEntries = [
       ...savedEntries,
       ...editingEntries.filter(hasValidData)
     ];
-    if (JSON.stringify(resumeData.workExperience) !== JSON.stringify(validEntries)) {
-      setResumeData({ ...resumeData, workExperience: validEntries });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.workExperience ?? []) as Array<Record<string, unknown>>;
+      const merged = validEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.workExperience) === JSON.stringify(merged)) return prev;
+      return { ...prev, workExperience: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 

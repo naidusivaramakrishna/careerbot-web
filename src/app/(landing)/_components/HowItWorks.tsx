@@ -35,7 +35,7 @@ export default function HowItWorks() {
         }}
       />
 
-      <div className="relative mx-auto grid max-w-[1240px] items-center gap-10 px-4 lg:grid-cols-[1.08fr_0.92fr] lg:px-8">
+      <div className="relative mx-auto grid max-w-[1728px] items-center gap-10 px-5 lg:grid-cols-[1.08fr_0.92fr] lg:px-[60px]">
         <div>
           <span className="inline-flex rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase text-blue-100 ring-1 ring-white/15">
             How it works

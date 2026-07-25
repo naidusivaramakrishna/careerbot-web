@@ -1,62 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React from "react";
 import { Mail, CheckCircle } from "lucide-react";
 import { resendVerificationEmail } from "@/api/authApi";
-import { mapAuthError } from "@/lib/authMessages";
-import { toast } from "sonner";
-import logger from "@/lib/logger";
-
-type ResendStatus = "idle" | "loading" | "success";
+import { useEmailForm } from "@/hooks/useEmailForm";
 
 const ResendVerificationPage = () => {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<ResendStatus>("idle");
-  const [emailError, setEmailError] = useState("");
-
-  const handleResendEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validate email
-    if (!email || !email.includes("@")) {
-      setEmailError("Please enter a valid email address");
-      return;
-    }
-
-    try {
-      setStatus("loading");
-      setEmailError("");
-      logger.info("Requesting to resend verification email for:", email);
-
-      const response = await resendVerificationEmail({ email });
-
-      logger.info("Resend verification email response:", response);
-
-      setStatus("success");
-      toast.success(response.message || "Verification email sent successfully!");
-
-      // Clear form
-      setEmail("");
-
-      // Redirect after 5 seconds
-      setTimeout(() => {
-        router.push("/?showLogin=true");
-      }, 5000);
-    } catch (error: unknown) {
-      logger.error("Error resending verification email:", error);
-
-      const errorMsg = mapAuthError(error, 'email_verify');
-      setStatus("idle");
-      setEmailError(errorMsg);
-    }
-  };
+  const { email, setEmail, emailError, status, handleSubmit, goToSignIn } = useEmailForm({
+    onSubmit: (email) => resendVerificationEmail({ email }),
+    errorContext: "email_verify",
+    successMessage: "Verification email sent successfully!",
+  });
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-        {/* Header */}
+
         {status !== "success" && (
           <>
             <div className="flex justify-center mb-6">
@@ -71,7 +30,6 @@ const ResendVerificationPage = () => {
           </>
         )}
 
-        {/* Success State */}
         {status === "success" && (
           <>
             <div className="flex justify-center mb-6">
@@ -86,13 +44,19 @@ const ResendVerificationPage = () => {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-700">Redirecting to Sign In in 5 seconds...</p>
             </div>
+            <button
+              type="button"
+              data-testid="goto-signin-btn"
+              onClick={goToSignIn}
+              className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
+            >
+              Go to Sign In
+            </button>
           </>
         )}
 
-
-        {/* Form */}
-        {status !== "success" ? (
-          <form onSubmit={handleResendEmail} className="space-y-4" noValidate>
+        {status !== "success" && (
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div>
               <label htmlFor="resend-email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
@@ -103,7 +67,7 @@ const ResendVerificationPage = () => {
                 type="email"
                 data-testid="resend-email-input"
                 value={email}
-                onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${emailError ? "border-red-400 focus:ring-red-300" : "border-gray-300 focus:ring-[#2257a7]"}`}
                 disabled={status === "loading"}
@@ -130,27 +94,14 @@ const ResendVerificationPage = () => {
             <button
               type="button"
               data-testid="back-to-signin-btn"
-              onClick={() => router.push("/?showLogin=true")}
+              onClick={goToSignIn}
               className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
             >
               Back to Sign In
             </button>
           </form>
-        ) : null}
-
-        {/* Success State Buttons */}
-        {status === "success" && (
-          <button
-            type="button"
-            data-testid="goto-signin-btn"
-            onClick={() => router.push("/?showLogin=true")}
-            className="w-full bg-[#2257a7] hover:bg-[#184284] text-white font-semibold py-3 rounded-lg transition-colors"
-          >
-            Go to Sign In
-          </button>
         )}
 
-        {/* Help Text */}
         <div className="mt-8 pt-6 border-t border-gray-200">
           <p className="text-sm text-gray-600 text-center mb-3">
             <strong>Tips:</strong>

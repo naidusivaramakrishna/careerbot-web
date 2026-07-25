@@ -350,10 +350,39 @@ const EditorTab: React.FC<Props> = ({
           await autoSaveEnhancedResume(resumeId, { [camelKey]: sectionData });
         } else {
           const updatePayload = { [backendKey]: sectionData };
-          // // console.log("📤 Auto-save payload:", updatePayload);
-          await autoSaveResume(resumeId, updatePayload);
+          const autoSaveResponse = await autoSaveResume(resumeId, updatePayload);
+
+          // Sync backend-assigned IDs back into resumeData. Without this, the next
+          // auto-save re-sends the same entry without an id and the backend creates
+          // another duplicate row instead of updating the one it just created.
+          if (autoSaveResponse && Array.isArray(sectionData)) {
+            const camelKeyMap: Record<string, string> = {
+              education: "education", work_experience: "workExperience",
+              projects: "projects", certifications: "certifications",
+              internships: "internships", achievements: "achievements",
+              awards: "awards", volunteering: "volunteering",
+              publications: "publications", references: "references",
+              hobbies: "hobbies", interests: "interests", languages: "languages",
+            };
+            const camelKey = camelKeyMap[backendKey];
+            const resp = autoSaveResponse as unknown as Record<string, unknown>;
+            const backendItems = camelKey ? resp[camelKey] : undefined;
+            if (Array.isArray(backendItems)) {
+              setResumeData(prev => {
+                const currentItems = prev[camelKey as keyof typeof prev];
+                if (!Array.isArray(currentItems)) return prev;
+                const merged = (currentItems as Array<Record<string, unknown>>).map((item, idx) => {
+                  if (item.id || item._id) return item;
+                  const bid = (backendItems[idx] as Record<string, unknown>)?.id
+                    || (backendItems[idx] as Record<string, unknown>)?._id;
+                  return bid ? { ...item, id: bid } : item;
+                });
+                return { ...prev, [camelKey]: merged };
+              });
+            }
+          }
         }
-        
+
         setLastSaved(new Date());
         // // console.log("✅ Auto-saved successfully");
         

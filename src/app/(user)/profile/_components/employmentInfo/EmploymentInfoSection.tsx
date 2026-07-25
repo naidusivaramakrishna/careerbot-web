@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
     EmploymentInfo,
@@ -12,8 +12,6 @@ import { ProfileData } from "../../_types/ProfileData";
 import EmploymentInfoEmptyState from "./EmploymentInfoEmptyState";
 import EmploymentInfoForm from "./EmploymentInfoForm";
 import EmploymentInfoCard from "./EmploymentInfoCard";
-import { ValidationError } from "../../_types/experience-types";
-
 interface Props {
     tempProfile: ProfileData;
     setTempProfile: React.Dispatch<React.SetStateAction<ProfileData>>;
@@ -29,9 +27,6 @@ export default function EmploymentInfoSection({
     const [employmentInfoForm, setEmploymentInfoForm] =
         useState<Partial<EmploymentInfo>>({});
     const [loading, setLoading] = useState(false);
-    const [validationErrors, setValidationErrors] = useState<ValidationError[]>(
-        []
-    );
 
     const employmentInfo = tempProfile.employmentInfo;
 
@@ -64,21 +59,20 @@ export default function EmploymentInfoSection({
     }, []);
 
     /* ---------------- MODAL HANDLERS ---------------- */
-    const openAddModal = () => {
+    const openAddModal = useCallback(() => {
         setEmploymentInfoForm({});
         setIsModalOpen(true);
-    };
+    }, []);
 
-    const openEditModal = () => {
+    const openEditModal = useCallback(() => {
         setEmploymentInfoForm(employmentInfo || {});
         setIsModalOpen(true);
-    };
+    }, [employmentInfo]);
 
-    const closeModal = () => {
+    const closeModal = useCallback(() => {
         setEmploymentInfoForm({});
-        setValidationErrors([]);
         setIsModalOpen(false);
-    };
+    }, []);
 
     /* ---------------- SAVE ---------------- */
     const handleSave = async () => {
@@ -103,9 +97,7 @@ export default function EmploymentInfoSection({
 
             toast.success("Employment information saved");
             closeModal();
-        } catch (error: unknown) {
-            const err = error as { errors?: ValidationError[] } | null;
-            setValidationErrors(err?.errors || []);
+        } catch {
             toast.error("Failed to save employment information");
         } finally {
             setLoading(false);
@@ -135,7 +127,6 @@ export default function EmploymentInfoSection({
                     onSave={handleSave}
                     onCancel={closeModal}
                     loading={loading}
-                    validationErrors={validationErrors}
                 />
             </Modal>
         </div>

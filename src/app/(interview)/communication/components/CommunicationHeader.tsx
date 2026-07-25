@@ -41,6 +41,12 @@ export default function CommunicationHeader() {
     const startCountdown = (startTime: string) => {
       if (interval) clearInterval(interval);
       const updateTimer = () => {
+        // If test_start_date was removed (e.g. submission started), stop the timer
+        if (!localStorage.getItem('test_start_date')) {
+          if (interval) clearInterval(interval);
+          setTimeLeft(null);
+          return;
+        }
         const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
         const remaining = Math.max(0, TOTAL_SECONDS - elapsed);
         setTimeLeft(remaining);

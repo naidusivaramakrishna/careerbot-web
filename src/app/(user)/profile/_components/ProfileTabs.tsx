@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import EducationSection from "./education/EducationSection";
 import CertificationsSection from "./certifications/CertificationsSection";
 import { useProfileContext } from "../context/ProfileContext";
@@ -27,14 +27,14 @@ export default function ProfileTabs({
   setProfile,
   personalInfoRef,
 }: ProfileTabsProps) {
-  const { profileData, activeTab, setActiveTab, clearSidebarActive } = useProfileContext();
+  const { profileData, activeTab, setActiveTab } = useProfileContext();
   const [tempProfile, setTempProfile] = useState(profile);
 
   useEffect(() => {
     setTempProfile(profileData);
   }, [profileData]);
 
-  const profileTabs = [
+  const profileTabs = useMemo(() => [
     {
       label: "Personal Information",
       text: "Personal",
@@ -81,14 +81,13 @@ export default function ProfileTabs({
       label: "Resume",
       text: "Resume",
       icon: <FileUp size={14} />,
-      content: <ResumeSection tempProfile={tempProfile} setTempProfile={setTempProfile} />,
+      content: <ResumeSection setTempProfile={setTempProfile} />,
     },
-  ];
+  ], [tempProfile, setTempProfile, setProfile, personalInfoRef]);
 
-  const handleTabChange = (label: string) => {
+  const handleTabChange = useCallback((label: string) => {
     setActiveTab(label);
-    clearSidebarActive();
-  };
+  }, [setActiveTab]);
 
   return <Tabs tabs={profileTabs} active={activeTab} onChange={handleTabChange} />;
 }

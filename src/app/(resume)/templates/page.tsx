@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, LayoutTemplate, Sparkles, User } from 'lucide-react';
 import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';
@@ -179,7 +179,7 @@ interface DomainModal {
   domainName: string;
 }
 
-export default function TemplatesPage() {
+function TemplatesPageContent() {
   const searchParams = useSearchParams();
   const urlResumeId = searchParams.get("resumeId") || undefined;
   const urlSource = searchParams.get("source") || undefined;
@@ -789,5 +789,14 @@ export default function TemplatesPage() {
         />
       )}
     </div>
+  );
+}
+
+// useSearchParams must be inside a Suspense boundary for static export (Next.js).
+export default function TemplatesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <TemplatesPageContent />
+    </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+﻿import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -121,27 +121,26 @@ const Projects: React.FC = () => {
 
   // ✅ Sync technologies to skills whenever projects change
   useEffect(() => {
-    // Only include entries with actual data (filter out empty editing placeholders)
     const validEntries = [
       ...savedEntries,
       ...editingEntries.filter(hasValidData)
     ];
-    if (JSON.stringify(resumeData.projects) !== JSON.stringify(validEntries)) {
-      setResumeData({ ...resumeData, projects: validEntries });
-    }
-
-    // Extract all unique technologies from all projects
     const allTechnologies = validEntries.flatMap(entry => entry.technologies);
     const uniqueTechnologies = Array.from(new Set(allTechnologies));
-
-    // Merge with existing skills (keep existing skills that aren't from projects)
-    const currentSkills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
-    const mergedSkills = Array.from(new Set([...currentSkills, ...uniqueTechnologies]));
-
-    // Only update if there's a change to avoid infinite loops
-    if (JSON.stringify(currentSkills.sort()) !== JSON.stringify(mergedSkills.sort())) {
-      setResumeData({ ...resumeData, projects: validEntries, skills: mergedSkills });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.projects ?? []) as Array<Record<string, unknown>>;
+      const merged = validEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      const currentSkills = Array.isArray(prev.skills) ? prev.skills : [];
+      const mergedSkills = Array.from(new Set([...currentSkills, ...uniqueTechnologies]));
+      const projectsChanged = JSON.stringify(prev.projects) !== JSON.stringify(merged);
+      const skillsChanged = JSON.stringify([...currentSkills].sort()) !== JSON.stringify([...mergedSkills].sort());
+      if (!projectsChanged && !skillsChanged) return prev;
+      return { ...prev, projects: merged, skills: skillsChanged ? mergedSkills : currentSkills };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 

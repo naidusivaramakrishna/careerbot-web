@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom';
-import { afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { afterEach, vi, beforeAll, afterAll } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import React from 'react';
 
 // ==================== MSW Integration Testing Setup ====================
 let server: ReturnType<typeof import('msw/node').setupServer> | undefined;
@@ -8,8 +9,8 @@ let server: ReturnType<typeof import('msw/node').setupServer> | undefined;
 try {
   // Only load MSW if integration tests are running
   // (To avoid issues with unit tests if MSW is not always needed)
-  const { setupServer } = require('msw/node');
-  const { handlers } = require('./src/tests/integration/shared/msw-handlers');
+  const { setupServer } = await import('msw/node');
+  const { handlers } = await import('./src/tests/integration/shared/msw-handlers');
 
   server = setupServer(...handlers);
 
@@ -17,11 +18,12 @@ try {
     server!.listen({ onUnhandledRequest: 'error' });
   });
 
-    afterEach(() => {
+   
+  afterEach(() => {
     server!.resetHandlers();
   });
 
-    afterAll(() => {
+  afterAll(() => {
     server!.close();
   });
 } catch {
@@ -65,18 +67,14 @@ vi.mock('next/navigation', () => ({
 
 // Mock next/image
 vi.mock('next/image', () => ({
-  default: (props: any) => {
-    const React = require('react');
-    return React.createElement('img', props);
-  },
+  default: (props: Record<string, unknown>) =>
+    React.createElement('img', props as React.ImgHTMLAttributes<HTMLImageElement>),
 }));
 
 // Mock next/link
 vi.mock('next/link', () => ({
-  default: ({ children, href }: any) => {
-    const React = require('react');
-    return React.createElement('a', { href }, children);
-  },
+  default: ({ children, href, ...rest }: { children: React.ReactNode; href: string; [key: string]: unknown }) =>
+    React.createElement('a', { href, ...rest }, children),
 }));
 
 // Mock sonner toast notifications

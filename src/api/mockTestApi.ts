@@ -1,6 +1,6 @@
 import { httpClient } from '@/lib/http';
 import { CATEGORY_SUBCATEGORIES } from '@/lib/mockTestConstants';
-import { getSeenQuestionIds } from '@/utils/seenQuestionIds';
+import { getExcludeQuestionIds } from '@/utils/seenQuestionIds';
 
 export interface MockTestCompany {
   id?: string;
@@ -100,21 +100,37 @@ const MAX_EXCLUDE_IDS = 50;
 const limitExcludeIds = (ids: string[]): string[] =>
   ids.length <= MAX_EXCLUDE_IDS ? ids : ids.slice(-MAX_EXCLUDE_IDS);
 
+/** The only difficulty values the backend accepts (mock_test schemas.py: VALID_DIFFICULTIES). */
+export type MockTestDifficulty = 'easy' | 'medium' | 'hard';
+
+export const MOCK_TEST_DIFFICULTIES: MockTestDifficulty[] = ['easy', 'medium', 'hard'];
+
+export const isMockTestDifficulty = (v: unknown): v is MockTestDifficulty =>
+  typeof v === 'string' && (MOCK_TEST_DIFFICULTIES as string[]).includes(v);
+
 export const generateMockTest = async (
   companyId: string,
   categories: string[] = ['arithmetic'],
   subcategories: string[] = [],
+  // Required: the backend rejects a missing/blank difficulty. It used to be
+  // hardcoded to 'medium' here, which silently discarded the user's choice.
+  difficulty: MockTestDifficulty,
   parentSessionId?: string,
   timeoutMs: number = 60000,
   count: number = 10,
   timeLimit: number = 20,
+  // When true, the session is created with negative marking so the backend deducts
+  // marks per wrong answer at scoring time. Company tests leave this false.
+  negativeMarking: boolean = false,
 ): Promise<MockTestSession> => {
   const resolvedSubcategories = subcategories.length > 0 ? subcategories : categories;
   // Send the IDs the user has already seen for this company so the backend
   // doesn't re-serve them on a fresh attempt. Scope by companyId so taking
   // TCS doesn't suppress the Infosys pool. See utils/seenQuestionIds.
   // Capped at MAX_EXCLUDE_IDS to satisfy backend validation.
-  const excludeIds = limitExcludeIds(getSeenQuestionIds(companyId));
+  // Exclude questions seen in this company AND across all companies (global bucket),
+  // so the same question is not re-served under a different company.
+  const excludeIds = limitExcludeIds(getExcludeQuestionIds(companyId));
   const cappedCount = Math.min(Math.max(1, count), MAX_QUESTIONS_PER_GENERATE);
   if (cappedCount !== count) {
     console.warn(`[generateMockTest] count ${count} exceeds backend limit; sending ${cappedCount}`);
@@ -126,10 +142,15 @@ export const generateMockTest = async (
     company_context: companyId,
     category: categories,
     subcategory: resolvedSubcategories,
-    difficulty: 'medium',
+    difficulty,
     cross_verify: false,
     exclude_question_ids: excludeIds,
   };
+
+  if (negativeMarking) {
+    payload.negative_marking = true;
+    payload.negative_marks_per_wrong = 1 / 3; // -1/3 per wrong answer
+  }
 
   if (parentSessionId) {
     payload.parent_session_id = parentSessionId;
@@ -193,7 +214,7 @@ export const generateCustomTest = async (
   });
   // Same dedup story as generateMockTest, scoped to the synthetic 'custom-test'
   // bucket so custom-builder attempts don't suppress company tests.
-  const excludeIds = limitExcludeIds(getSeenQuestionIds('custom-test'));
+  const excludeIds = limitExcludeIds(getExcludeQuestionIds('custom-test'));
   const payload: Record<string, any> = {
     count: 10,
     time_limit: 20,
@@ -432,10 +453,14 @@ const mapRawResult = (rawData: any): TestResult => {
     const correct = s.correct ?? 0;
     const wrong = s.wrong ?? 0;
     const skipped = s.skipped ?? 0;
-    const questionCount = correct + wrong + skipped || s.total_questions || 10;
+    // Prefer the backend's explicit question count (`total`); fall back to the sum
+    // of the three states. Never fabricate a denominator — the old `|| 10` invented
+    // a count for sections with no activity, making the report disagree with itself.
+    const questionCount = s.total ?? s.total_questions ?? (correct + wrong + skipped);
 
-    // s.total is total marks (e.g. 100), not question count
-    const totalMarks = s.total ?? 100;
+    // Marks come from `total_marks` (1 per question). `s.total` is the QUESTION count,
+    // not marks — using it as marks (and defaulting to 100) was wrong.
+    const totalMarks = s.total_marks ?? questionCount;
     const marksScored = s.marks ?? correct;
 
     return {
@@ -875,8 +900,18 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
       return `Strong on ${t} — keep momentum with a weekly refresher set${attemptsTail}.`;
     };
 
+    // Humanise a backend slug ("time_and_work") into a label ("Time And Work").
+    // Only used as a last resort — the backend normally sends a real `section` name.
+    const humanise = (s: string): string =>
+      s.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim();
+
     const toWeakArea = (item: any): WeakArea => {
-      const topic: string = item.topic ?? item.category ?? item.subcategory ?? item.section ?? item.name ?? 'Unknown';
+      // Show the SECTION name (Aptitude / Arithmetic / …), never the raw subcategory
+      // slug. The backend sends `section` plus a `subcategory` slug ("abstract",
+      // "ratios"); reading subcategory first is what surfaced those slugs in the UI.
+      const rawTopic: string =
+        item.section ?? item.section_id ?? item.topic ?? item.category ?? item.name ?? 'Unknown';
+      const topic = humanise(String(rawTopic));
       const accuracy = extractAccuracy(item);
       const attempts: number = item.attempts ?? item.total_attempts ?? item.count ?? 0;
 
@@ -893,7 +928,18 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
     const buildResult = (items: any[], backendRecs: unknown): WeakAreasAnalytics => {
       let weakItems = items.filter(isWeakItem);
       if (weakItems.length === 0) weakItems = items; // show all if nothing flagged
-      const weakAreas = weakItems.map(toWeakArea).sort((a, b) => a.accuracy - b.accuracy);
+
+      // The backend emits one row per section AND one row per weak subcategory
+      // within it. Since we now label every row by its section, those collapse
+      // into duplicates — keep only the weakest (lowest accuracy) row per section.
+      const worstBySection = new Map<string, WeakArea>();
+      for (const area of weakItems.map(toWeakArea)) {
+        const existing = worstBySection.get(area.topic);
+        if (!existing || area.accuracy < existing.accuracy) {
+          worstBySection.set(area.topic, area);
+        }
+      }
+      const weakAreas = [...worstBySection.values()].sort((a, b) => a.accuracy - b.accuracy);
       // Only forward recommendations that the backend actually sent. Removed
       // the previous "Focus on: X, Y, Z" / "Practice weak areas regularly"
       // fabrications — those were frontend boilerplate that looked like real
@@ -929,7 +975,9 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
 export interface LeaderboardEntry {
   rank: number;
   user_id?: string;
-  name: string;
+  /** May be undefined when the backend sends no name for the entry. */
+  name?: string;
+  is_current_user?: boolean;
   score?: number;
   accuracy?: number;
   tests_completed?: number;
@@ -962,23 +1010,22 @@ export const getLeaderboard = async (): Promise<Leaderboard> => {
         : Array.isArray(raw.entries) ? raw.entries
         : [];
 
-      // Only include entries with a real name field. The old code invented
-      // "Rank N" when names were missing — that produced fake-looking output
-      // for users when the backend payload was sparse. Better to drop the
-      // entry entirely so the leaderboard renders fewer real entries than
-      // pretend to have data we don't.
+      // Carry the entry through even when the backend sends no name — an older
+      // backend omits the name field entirely, and dropping those entries left
+      // the leaderboard with a single row. `is_current_user` is preserved so the
+      // UI can label the caller's own row with their real username rather than
+      // the placeholder string "You".
       const entries: LeaderboardEntry[] = list
-        .map((item: any, idx: number): LeaderboardEntry | null => {
+        .map((item: any, idx: number): LeaderboardEntry => {
           const realName: string | undefined =
-            item.display_name ?? item.username ?? item.name ?? item.user_name
-            ?? (item.is_current_user ? 'You' : undefined);
-          if (!realName) return null;
+            item.display_name ?? item.username ?? item.name ?? item.user_name;
 
           const rawAcc = item.accuracy ?? item.accuracy_pct ?? item.accuracy_percentage;
           const rawTests = item.tests_completed ?? item.total_tests ?? item.tests;
           return {
             rank: item.rank ?? idx + 1,
             name: realName,
+            is_current_user: !!item.is_current_user,
             score: (item.score ?? item.total_score ?? item.avg_score) != null
               ? Math.round((item.score ?? item.total_score ?? item.avg_score) * 10) / 10
               : undefined,
@@ -987,8 +1034,7 @@ export const getLeaderboard = async (): Promise<Leaderboard> => {
             last_test_date: item.last_test_date ?? item.date ?? item.last_attempt,
             badge: item.badge ?? undefined,
           };
-        })
-        .filter((e: LeaderboardEntry | null): e is LeaderboardEntry => e !== null);
+        });
 
       leaderboardData = {
         period: raw.period || 'All Time',

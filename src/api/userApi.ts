@@ -48,11 +48,11 @@ export interface Certification {
 export interface EmploymentInfo {
     id?: string;
     authorized_to_work?: boolean;
-    disability_status?: string;
-    gender?: string;
+    disability_status?: "yes" | "no" | "prefer_not_to_say";
+    gender?: "male" | "female" | "non_binary" | "prefer_not_to_say";
     willing_to_relocate?: boolean;
-    employment_status?: string;
-    work_mode?: string;
+    employment_status?: "student" | "employed" | "unemployed" | "freelancer";
+    work_mode?: "onsite" | "remote" | "hybrid";
     preferred_job_type?: string;
     notice_period_days?: number | string;
     preferred_industries?: string[];
@@ -163,12 +163,20 @@ export interface ProjectAutoFillRequest {
  * Get user profile
  */
 
-export const getProfile = async (options?: { skipAuthRedirect?: boolean }): Promise<UserProfile> => {
+export const getProfile = async (options?: { skipAuthRedirect?: boolean; skipRefresh?: boolean }): Promise<UserProfile> => {
     try {
         // ✅ httpOnly cookies sent automatically by httpClient with withCredentials
+        // skipRefresh: sends X-Skip-Auth-Redirect which short-circuits on 401 without
+        // attempting a token refresh — use this for "am I logged in?" checks where
+        // silently re-minting the token via refresh_token is undesired (e.g. post-logout).
+        const headers = options?.skipRefresh
+            ? { 'X-Skip-Auth-Redirect': 'true' }
+            : options?.skipAuthRedirect
+            ? { 'X-Skip-Login-Redirect': 'true' }
+            : undefined;
         const response = await httpClient.get<ApiResponse<UserProfile>>(
             '/profile/',
-            options?.skipAuthRedirect ? { headers: { 'X-Skip-Login-Redirect': 'true' } } : undefined
+            headers ? { headers } : undefined
         );
 
         let profileData: UserProfile;

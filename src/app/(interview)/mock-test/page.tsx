@@ -57,17 +57,13 @@ const TIER_MAP: Record<string, 1 | 2> = {
   tcs: 1, infosys: 1, cognizant: 1, accenture: 1, wipro: 2, capgemini: 2,
 };
 
-const ATTEMPTS_DISPLAY: Record<string, string> = {
-  tcs: '2.1k', infosys: '1.8k', cognizant: '1.4k', accenture: '1.1k', wipro: '300', capgemini: '70k',
-};
-
 const fallbackTests: MockTest[] = [
-  { id: 'tcs',       company: 'TCS NQT',            logoPath: '/assets/company_logos/Tata_Consultancy_Services.svg', initials: 'TCS', color: '#003366', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Hard',   attempts: 2100, tier: 1 },
-  { id: 'infosys',   company: 'Infosys',            logoPath: '/assets/company_logos/infosys.svg',                  initials: 'INF', color: '#007cc2', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 1800, tier: 1 },
-  { id: 'cognizant', company: 'Cognizant GenC',     logoPath: '/assets/company_logos/cognizant.svg',                initials: 'COG', color: '#1a4398', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 1400, tier: 1 },
-  { id: 'accenture', company: 'Accenture',          logoPath: '/assets/company_logos/Accenture-Logo.wine.svg',      initials: 'ACC', color: '#a100ff', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 1100, tier: 1 },
-  { id: 'wipro',     company: 'Wipro NLTH',         logoPath: '/assets/company_logos/wipro-1.svg',                  initials: 'WIP', color: '#341c5c', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Easy',   attempts: 300,  tier: 2 },
-  { id: 'capgemini', company: 'Capgemini Exceller', logoPath: '/assets/company_logos/capgemini.png',                initials: 'CAP', color: '#0070ad', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 700,  tier: 2 },
+  { id: 'tcs',       company: 'TCS NQT',            logoPath: '/assets/company_logos/Tata_Consultancy_Services.svg', initials: 'TCS', color: '#003366', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Hard',   attempts: 0, tier: 1 },
+  { id: 'infosys',   company: 'Infosys',            logoPath: '/assets/company_logos/infosys.svg',                  initials: 'INF', color: '#007cc2', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 0, tier: 1 },
+  { id: 'cognizant', company: 'Cognizant GenC',     logoPath: '/assets/company_logos/cognizant.svg',                initials: 'COG', color: '#1a4398', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 0, tier: 1 },
+  { id: 'accenture', company: 'Accenture',          logoPath: '/assets/company_logos/Accenture-Logo.wine.svg',      initials: 'ACC', color: '#a100ff', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 0, tier: 1 },
+  { id: 'wipro',     company: 'Wipro NLTH',         logoPath: '/assets/company_logos/wipro-1.svg',                  initials: 'WIP', color: '#341c5c', categories: ['ARITH','APT','READ','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Easy',   attempts: 0, tier: 2 },
+  { id: 'capgemini', company: 'Capgemini Exceller', logoPath: '/assets/company_logos/capgemini.png',                initials: 'CAP', color: '#0070ad', categories: ['ARITH','APT','REAS','TECH'], questions: 40, duration: 80, sections: 4, difficulty: 'Medium', attempts: 0, tier: 2 },
 ];
 
 // Brand palette — solid colors, no gradients.
@@ -148,9 +144,14 @@ export default function MockTestPage() {
             categories: cats,
             questions: 40,
             duration:  80,
-            sections:  4,
+            // Real section count from the template. Falls back to 4 only when the
+            // payload carries no sections array.
+            sections:  rawSections.length > 0 ? rawSections.length : 4,
             difficulty: c.difficulty ?? 'Medium',
-            attempts: c.attempts ?? c.total_attempts ?? 0,
+            // The backend counts submitted attempts per company and returns them as
+            // `attempts_count` (mock_test_service list_companies). The older names are
+            // kept only as a fallback for any deployment that predates that field.
+            attempts: c.attempts_count ?? c.attempts ?? c.total_attempts ?? 0,
             tier: TIER_MAP[id] ?? 1,
           };
         });
@@ -243,19 +244,17 @@ export default function MockTestPage() {
           </HighlightBox>
         </motion.div>
 
-        {/* ── Body grid ────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
+        {/* ── Body: company cards on the left, insights column on the right ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
 
-          {/* ── Company cards ──────────────────────────────────────── */}
+          {/* ── Company cards ─────────────────────────── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {tests.map((test, i) => {
               const isActive = activeSession?.company_id === test.id;
-              const attStr   = test.attempts > 0 ? fmtAttempts(test.attempts) : (ATTEMPTS_DISPLAY[test.id] ?? '—');
-              const diffMeta = test.difficulty === 'Hard'
-                ? { c: '#DC2626', bg: '#FEF2F2', border: '#FECACA' }
-                : test.difficulty === 'Easy'
-                  ? { c: '#059669', bg: '#ECFDF5', border: '#A7F3D0' }
-                  : { c: '#D97706', bg: '#FFFBEB', border: '#FDE68A' };
+              // Real submitted-attempt count from the backend. Zero is a truthful
+              // answer (nobody has taken this test yet) — it must NOT be swapped for
+              // an invented number.
+              const attStr   = fmtAttempts(test.attempts);
               return (
                 <motion.div
                   key={test.id}
@@ -317,46 +316,38 @@ export default function MockTestPage() {
                             {test.company}
                           </h3>
                           <div className="flex items-center gap-1.5 mt-1">
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ color: test.color, background: toRGBA(test.color, 0.08) }}>
-                              TIER {test.tier}
-                            </span>
                             <span className="text-xs" style={{ color: '#94A3B8' }}>
                               {attStr} attempts
                             </span>
                           </div>
                         </div>
                       </div>
-                      <span
-                        className="text-[11px] font-semibold px-2 py-1 rounded-md shrink-0 border"
-                        style={{ color: diffMeta.c, background: diffMeta.bg, borderColor: diffMeta.border }}
-                      >
-                        {test.difficulty}
-                      </span>
                     </div>
 
-                    {/* Stats — inline pills */}
+                    {/* Stats — one row of three. min-w-0 lets the cells shrink below their
+                        label's min-content width; without it the uppercase labels overflow
+                        the card and get clipped by overflow-hidden. */}
                     <div
-                      className="flex items-stretch rounded-xl overflow-hidden mb-4"
+                      className="grid grid-cols-3 rounded-xl overflow-hidden mb-4"
                       style={{ background: '#F8FAFC', border: '1px solid #F1F5F9' }}
                     >
                       {[
                         { label: 'Questions', val: String(test.questions) },
                         { label: 'Minutes',   val: String(test.duration) },
                         { label: 'Sections',  val: String(test.sections) },
-                        { label: 'Best',      val: test.yourBest != null ? String(test.yourBest) : '—', accent: test.yourBest != null },
-                      ].map(({ label, val, accent }, idx, arr) => (
+                      ].map(({ label, val }, idx, arr) => (
                         <div
                           key={label}
-                          className="flex-1 text-center py-3 px-2"
+                          className="min-w-0 text-center py-3 px-1"
                           style={{ borderRight: idx < arr.length - 1 ? '1px solid #F1F5F9' : 'none' }}
                         >
-                          <p
-                            className="text-[15px] font-bold tabular-nums"
-                            style={{ color: accent ? '#10B981' : '#0F172A' }}
-                          >
+                          <p className="font-bold tabular-nums" style={{ color: '#0F172A', fontSize: '15px' }}>
                             {val}
                           </p>
-                          <p className="text-[10px] mt-0.5 font-medium uppercase tracking-[0.06em]" style={{ color: '#94A3B8' }}>
+                          {/* Inline fontSize (not a Tailwind arbitrary class) so the label
+                              size is immune to a stale JIT bundle that would otherwise render
+                              it at the base 14px and truncate "Questions". */}
+                          <p className="mt-0.5 font-medium uppercase truncate" style={{ color: '#94A3B8', letterSpacing: 0, fontSize: '10px' }}>
                             {label}
                           </p>
                         </div>
@@ -400,8 +391,8 @@ export default function MockTestPage() {
             })}
           </div>
 
-          {/* ── Right sidebar ──────────────────────────────────────── */}
-          <aside className="space-y-4">
+          {/* ── Insights column (right): progress · stats · top this week · focus ── */}
+          <aside className="space-y-5">
 
             {/* Progress sparkline */}
             {sparkValues && (

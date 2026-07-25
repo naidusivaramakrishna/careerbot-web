@@ -89,7 +89,7 @@ const UserManagement = () => {
           </p>
         </div>
         <Dropdown
-          options={['Export as CSV', 'Export as Xlsx']}
+          options={['Export', 'Export as CSV', 'Export as Xlsx']}
           defaultValue="Export"
           onChange={handleExportChange}
           bgColor="bg-[#5E5EFF]"
@@ -129,7 +129,11 @@ const UserManagement = () => {
 
         {/* Results Summary */}
         <div className="mt-4 text-sm text-gray-600">
-          Showing {users.length} of {totalUsers} users
+          {totalUsers > 0 ? (
+            <>Showing {(currentPage - 1) * pageSize + 1}–{(currentPage - 1) * pageSize + users.length} of {totalUsers} users</>
+          ) : (
+            <>No users found</>
+          )}
         </div>
 
         {/* Table */}

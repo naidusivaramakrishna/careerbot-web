@@ -37,6 +37,7 @@ export default function AudioRecorder({
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoStopRef = useRef<NodeJS.Timeout | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -149,15 +150,21 @@ export default function AudioRecorder({
 
     draw();
 
+    // Use Date.now() each tick so the display reflects real elapsed time
+    // even if the browser throttles setInterval in a background tab.
     timerRef.current = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          stopRecording().catch((err) => logger.error('Error stopping recording:', err));
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
+      if (!recordingStartRef.current) return;
+      const elapsedSec = Math.floor((Date.now() - recordingStartRef.current) / 1000);
+      const left = Math.max(0, maxDuration - elapsedSec);
+      setTimeLeft(left);
+    }, 500);
+
+    // Hard-stop the recording at maxDuration using a single setTimeout.
+    // setInterval counting is unreliable in background tabs; setTimeout
+    // fires once and is not subject to cumulative drift.
+    autoStopRef.current = setTimeout(() => {
+      stopRecording().catch((err) => logger.error('Error auto-stopping recording:', err));
+    }, maxDuration * 1000);
   };
 
   const stopRecording = async () => {
@@ -198,6 +205,11 @@ export default function AudioRecorder({
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+
+    if (autoStopRef.current) {
+      clearTimeout(autoStopRef.current);
+      autoStopRef.current = null;
     }
 
     setIsRecording(false);
@@ -281,7 +293,7 @@ export default function AudioRecorder({
         <>
           <div className="mb-2 flex shrink-0 items-center justify-between rounded-xl bg-slate-950 px-3 py-2 text-white">
             <span className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">Elapsed</span>
-            <span className="text-sm font-black tabular-nums">{elapsed}s / {maxDuration}s</span>
+            <span className="text-sm font-black tabular-nums">{elapsed}s</span>
           </div>
           <button
             type="button"
@@ -291,7 +303,6 @@ export default function AudioRecorder({
             <span className="h-2.5 w-2.5 rounded-sm bg-white" />
             Stop Recording
           </button>
-          <p className="mt-2 shrink-0 text-xs font-semibold text-slate-500 tabular-nums">{timeLeft}s remaining</p>
         </>
       ) : (
         <>
@@ -307,9 +318,6 @@ export default function AudioRecorder({
           >
             {isCaptured ? 'Response Captured' : 'Start Recording'}
           </button>
-          <p className="mt-2 shrink-0 text-xs font-semibold text-slate-500">
-            Maximum recording window: {maxDuration}s
-          </p>
         </>
       )}
     </div>

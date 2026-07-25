@@ -254,113 +254,12 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
         newFormData["skills"] = resumeData.skills.join(", ");
       }
       
-      // Education
-      resumeData.education?.forEach((edu, index) => {
-        newFormData[`education_${index}_school`] = edu.school || "";
-        newFormData[`education_${index}_degree`] = edu.degree || "";
-        newFormData[`education_${index}_startDate`] = edu.startDate || "";
-        newFormData[`education_${index}_endDate`] = edu.endDate || "";
-      });
-      
-      // Work Experience
-      resumeData.workExperience?.forEach((work, index) => {
-        newFormData[`workExperience_${index}_company`] = work.company || "";
-        newFormData[`workExperience_${index}_role`] = work.role || "";
-        newFormData[`workExperience_${index}_location`] = work.location || "";
-        newFormData[`workExperience_${index}_startDate`] = work.startDate || "";
-        newFormData[`workExperience_${index}_endDate`] = work.endDate || "";
-        newFormData[`workExperience_${index}_currentlyWorking`] = String(work.currentlyWorking);
-        newFormData[`workExperience_${index}_description`] = work.description || "";
-      });
-      
-      // Projects
-      resumeData.projects?.forEach((project, index) => {
-        newFormData[`project_${index}_title`] = project.title || "";
-        newFormData[`project_${index}_description`] = project.description || "";
-        newFormData[`project_${index}_technologies`] = Array.isArray(project.technologies) 
-          ? project.technologies.join(", ") 
-          : "";
-        newFormData[`project_${index}_startDate`] = project.startDate || "";
-        newFormData[`project_${index}_endDate`] = project.endDate || "";
-        newFormData[`project_${index}_link`] = project.link || "";
-      });
-      
-      // Certifications
-      resumeData.certifications?.forEach((cert, index) => {
-        newFormData[`certification_${index}_name`] = cert.name || "";
-        newFormData[`certification_${index}_issuedBy`] = cert.issuer || "";
-        newFormData[`certification_${index}_year`] = cert.issueDate || "";
-      });
-      
-      // Achievements
-      resumeData.achievements?.forEach((ach, index) => {
-        newFormData[`achievement_${index}_title`] = ach.title || "";
-        newFormData[`achievement_${index}_date`] = ach.date || "";
-        newFormData[`achievement_${index}_description`] = ach.description || "";
-      });
-      
-      // Internships
-      resumeData.internships?.forEach((intern, index) => {
-        newFormData[`internship_${index}_company`] = intern.company || "";
-        newFormData[`internship_${index}_role`] = intern.role || "";
-        newFormData[`internship_${index}_location`] = intern.location || "";
-        newFormData[`internship_${index}_startDate`] = intern.startDate || "";
-        newFormData[`internship_${index}_endDate`] = intern.endDate || "";
-        newFormData[`internship_${index}_currentlyWorking`] = String(intern.currentlyWorking);
-        newFormData[`internship_${index}_description`] = intern.description || "";
-      });
-      
-      // Volunteering
-      resumeData.volunteering?.forEach((vol, index) => {
-        newFormData[`volunteering_${index}_organization`] = vol.organization || "";
-        newFormData[`volunteering_${index}_role`] = vol.role || "";
-        newFormData[`volunteering_${index}_startDate`] = vol.startDate || "";
-        newFormData[`volunteering_${index}_endDate`] = vol.endDate || "";
-      });
-      
-      // Awards
-      resumeData.awards?.forEach((award, index) => {
-        newFormData[`award_${index}_title`] = award.title || "";
-        newFormData[`award_${index}_issuedBy`] = award.issuedBy || "";
-        newFormData[`award_${index}_year`] = award.year || "";
-      });
-      
-      // Hobbies
-      resumeData.hobbies?.forEach((hobby, index) => {
-        newFormData[`hobbie_${index}_name`] = hobby.name || "";
-        newFormData[`hobbie_${index}_description`] = hobby.description || "";
-        newFormData[`hobbie_${index}_proficiencyLevel`] = hobby.proficiencyLevel || "";
-        newFormData[`hobbie_${index}_achievement`] = hobby.achievement || "";
-      });
-      
-      // Interests
-      resumeData.interests?.forEach((interest, index) => {
-        newFormData[`interest_${index}_name`] = interest.name || "";
-        newFormData[`interest_${index}_description`] = interest.description || "";
-        newFormData[`interest_${index}_category`] = interest.category || "";
-      });
-      
-      // Languages
-      resumeData.languages?.forEach((lang, index) => {
-        newFormData[`language_${index}_language`] = lang.language || "";
-        newFormData[`language_${index}_proficiency`] = lang.proficiency || "";
-      });
-      
-      // Publications
-      resumeData.publications?.forEach((pub, index) => {
-        newFormData[`publication_${index}_title`] = pub.title || "";
-        newFormData[`publication_${index}_authors`] = pub.authors || "";
-        newFormData[`publication_${index}_publicationName`] = pub.publicationName || "";
-        newFormData[`publication_${index}_date`] = pub.date || "";
-        newFormData[`publication_${index}_url`] = pub.url || "";
-      });
-      
-      // References
-      resumeData.references?.forEach((ref, index) => {
-        newFormData[`reference_${index}_name`] = ref.name || "";
-        newFormData[`reference_${index}_relation`] = ref.relation || "";
-        newFormData[`reference_${index}_contact`] = ref.contact || "";
-      });
+      // Multi-entry sections (Education, Work Experience, Projects, etc.) are intentionally
+      // excluded from formData. They manage their own state (savedEntries / editingEntries)
+      // and write directly to resumeData — they never read from formData.
+      // Including them here caused validateSectionFields to scan stale snapshot values
+      // (including any partial/duplicate entries from the backend) and incorrectly
+      // block the Save button with "Please fill in all required fields".
       
       setFormData(newFormData);
     }

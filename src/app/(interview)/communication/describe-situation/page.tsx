@@ -189,6 +189,10 @@ export default function SituationExplainingPage() {
   // Step 2: Complete session and run evaluations (called from panel)
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
+    // Preserve start time for report page before removing the active-assessment key
+    const startDate = localStorage.getItem('test_start_date');
+    if (startDate) localStorage.setItem('assessment_start_time', startDate);
+    localStorage.removeItem('test_start_date');
 
     try {
       const profile = await getProfile();
@@ -250,9 +254,16 @@ export default function SituationExplainingPage() {
 
             logger.info('✅ STEP 1.5 Complete: MCQ evaluation successful:', mcqEvalResponse);
 
-            if (mcqEvalResponse.mcq_evaluation_id) {
-              localStorage.setItem('mcq_evaluation_id', mcqEvalResponse.mcq_evaluation_id);
-              logger.info('✅ Stored mcq_evaluation_id:', mcqEvalResponse.mcq_evaluation_id);
+            const r = mcqEvalResponse as Record<string, unknown>;
+            const mcqEvalId =
+              mcqEvalResponse.mcq_evaluation_id ||
+              (r.data as Record<string, unknown>)?.mcq_evaluation_id as string |undefined ||
+              r.evaluation_id as string | undefined;
+            if (mcqEvalId) {
+              localStorage.setItem('mcq_evaluation_id', mcqEvalId);
+              logger.info('✅ Stored mcq_evaluation_id:', mcqEvalId);
+            } else {
+              logger.warn('⚠️ mcq_evaluation_id not found in response:', mcqEvalResponse);
             }
           } else {
             logger.warn('⚠️ No MCQ answers found for JUM, SCM, or SLF sections');

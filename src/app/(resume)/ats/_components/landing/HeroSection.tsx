@@ -83,7 +83,7 @@ const HeroATS: React.FC<HeroATSProps> = ({ onScanClick }) => {
               </button>
               <span className="flex items-center gap-1.5 text-slate-400 text-sm">
                 <ShieldCheck className="w-4 h-4 text-slate-300" />
-                Free · No signup needed
+                Free scan after sign in
               </span>
             </div>
 

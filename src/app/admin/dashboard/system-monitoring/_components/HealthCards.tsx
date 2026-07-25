@@ -14,7 +14,7 @@ const iconMap: Record<HealthCard['icon'], LucideIcon> = {
     'disk': HardDrive
 }
 
-const statusStyles = {
+const statusStyles: Record<string, { bg: string; text: string; iconBg: string; iconColor: string }> = {
     healthy: {
         bg: 'bg-[#DBEAFE]',
         text: 'text-[#3B82F6]',
@@ -33,11 +33,18 @@ const statusStyles = {
         iconBg: 'bg-[#FEE2E2]',
         iconColor: 'text-[#EF4444]'
     }
-} as const
+}
+
+const defaultStyle = {
+    bg: 'bg-gray-100',
+    text: 'text-gray-500',
+    iconBg: 'bg-gray-100',
+    iconColor: 'text-gray-500'
+}
 
 const HealthCardItem = memo(({ card }: { card: HealthCard }) => {
     const IconComponent = iconMap[card.icon] || Activity
-    const styles = statusStyles[card.status_badge]
+    const styles = statusStyles[card.status_badge] ?? defaultStyle
 
     return (
         <div className='bg-white rounded-lg p-4'>

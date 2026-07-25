@@ -8,26 +8,24 @@ import CTABand from "./landing/CTABand";
 import FAQPage from "./landing/FAQPage";
 import FeaturesSection from "./landing/FeaturesSection";
 import HeroSection from "./landing/HeroSection";
-import ResumeUploadModal from "./upload/ResumeUploadModal";
-import ResumeUpload from "./upload/ResumeUpload";
 import TestimonialsSection from "./landing/TestimonialsSection";
 import ATSScannerChecks from "./landing/ATSScannerChecks";
 import BeforeAfterSection from "./landing/BeforeAfterSection";
 
 export default function HomePage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [showTop, setShowTop] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authFormType, setAuthFormType] = useState<"signup" | "signin">("signup");
-
-  const openModal = () => setIsModalOpen(true);
-  const closeModal = () => setIsModalOpen(false);
 
   const openSignup = () => {
     setAuthFormType("signup");
     setShowAuthModal(true);
   };
   const openSignin = () => {
+    setAuthFormType("signin");
+    setShowAuthModal(true);
+  };
+  const openAtsSignin = () => {
     setAuthFormType("signin");
     setShowAuthModal(true);
   };
@@ -51,7 +49,7 @@ export default function HomePage() {
     <>
       <LandingNavbar onOpenSignup={openSignup} onOpenSignin={openSignin} />
 
-      <HeroSection onScanClick={openModal} />
+      <HeroSection onScanClick={openAtsSignin} />
       <FeaturesSection />
       <ATSScannerChecks />
       <BeforeAfterSection />
@@ -64,13 +62,9 @@ export default function HomePage() {
           description: "Check your ATS score for free. No credit card required.",
           href: "/ats",
           label: "Check Your Resume",
-          onClick: openModal,
+          onClick: openAtsSignin,
         }}
       />
-      <ResumeUploadModal isOpen={isModalOpen} onClose={closeModal}>
-        <ResumeUpload />
-      </ResumeUploadModal>
-
       {/* ── Scroll to top ── */}
       {showTop && (
         <button
@@ -116,6 +110,7 @@ export default function HomePage() {
         open={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         initialFormType={authFormType}
+        redirectTo="/atslogin"
       />
     </>
   );

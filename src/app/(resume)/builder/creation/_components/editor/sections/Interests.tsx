@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
@@ -96,9 +96,16 @@ const Interests: React.FC = () => {
 
   useEffect(() => {
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
-    if (JSON.stringify(resumeData.interests) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, interests: allEntries });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.interests ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.interests) === JSON.stringify(merged)) return prev;
+      return { ...prev, interests: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 

@@ -552,7 +552,7 @@ export const downloadReportPdf = async (sessionId: string): Promise<void> => {
 // ==================== PHASE 3 — LIVE INTERVIEW INTERFACES ====================
 
 export interface LiveCreateRequest {
-  session_type: 'hr' | 'technical' | 'mixed';
+  session_type: 'hr' | 'technical' | 'mixed' | 'technical_coding';
   resume_id?: string;
   enable_streaming_stt?: boolean;
 }
@@ -592,6 +592,7 @@ export type WsClientMessage =
   | { type: 'end_answer'; text?: string }
   | { type: 'skip_question' }
   | { type: 'end_interview' }
+  | { type: 'coding_answer'; submission_id: string | null; score: number | null; problem_slug: string }
   | { type: 'ping' };
 
 // ── WS Message types (server → client) ──
@@ -599,13 +600,14 @@ export type WsServerMessage =
   | { type: 'session_ready'; session_id: string; total_questions: number; estimated_duration_m: number }
   | { type: 'session_resumed'; session_id: string; questions_asked: number; total_questions: number; current_question: string }
   | { type: 'question_audio'; question_number: number; text: string; audio: string | null; time_limit_s: number; is_follow_up?: boolean }
-  | { type: 'partial_transcript'; text: string }
+  | { type: 'transcript_partial'; text: string; new_word?: string; word_index?: number; timestamp_ms?: number; is_final?: boolean }
   | { type: 'transcript_final'; text: string; is_final: true }
   | { type: 'answer_scored'; question_number: number; score: number; feedback?: string; key_points_hit?: number; key_points_total?: number }
   | { type: 'follow_up'; text: string; audio: string | null }
   | { type: 'question_skipped'; skipped_question_number: number }
   | { type: 'interview_complete'; report_id: string; overall_score: number }
   | { type: 'session_paused'; reason: string; reconnect_token: string | null }
+  | { type: 'coding_round_start'; problem_slug: string; problem_title: string; time_limit_s: number }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' };
 

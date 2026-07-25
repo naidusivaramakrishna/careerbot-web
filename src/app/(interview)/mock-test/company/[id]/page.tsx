@@ -4,7 +4,14 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { AlertTriangle, Play, Lock, CheckCircle, ChevronRight, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getMockTestCompanyById, generateMockTest, getProgressAnalytics, ProgressAnalytics } from '@/api/mockTestApi';
+import {
+  getMockTestCompanyById,
+  generateMockTest,
+  getProgressAnalytics,
+  ProgressAnalytics,
+  MockTestDifficulty,
+  MOCK_TEST_DIFFICULTIES,
+} from '@/api/mockTestApi';
 import LoadingScreen from '../../_components/LoadingScreen';
 import HighlightBox from '../../_components/HighlightBox';
 import { resolveCompanyId, resolveCompanyInfo } from '@/lib/mockTestConstants';
@@ -28,7 +35,6 @@ interface MockSection {
   questions: number;
   duration: number;
   description: string;
-  difficulty: 'EASY' | 'MED' | 'HARD';
 }
 
 // IMPORTANT: question_count and duration here must match what the test runner
@@ -37,10 +43,10 @@ interface MockSection {
 // Drift between these and the runner causes the "Total: 55Q / 105min" header
 // to disagree with the "40Q / 90min" stats strip and the test timer.
 const MOCK_SECTIONS: MockSection[] = [
-  { name: 'Arithmetic', questions: 10, duration: 20, description: 'Percentages, P&L, Time-Work, SI/CI',            difficulty: 'MED'  },
-  { name: 'Aptitude',   questions: 10, duration: 20, description: 'Data interpretation, permutations, probability', difficulty: 'MED'  },
-  { name: 'Reasoning',  questions: 10, duration: 20, description: 'Logical sequences, blood relations, coding',     difficulty: 'HARD' },
-  { name: 'Technical',  questions: 10, duration: 20, description: 'Python · Java · DSA · SQL · OOP',                difficulty: 'HARD' },
+  { name: 'Arithmetic', questions: 10, duration: 20, description: 'Percentages, P&L, Time-Work, SI/CI' },
+  { name: 'Aptitude',   questions: 10, duration: 20, description: 'Data interpretation, permutations, probability' },
+  { name: 'Reasoning',  questions: 10, duration: 20, description: 'Logical sequences, blood relations, coding' },
+  { name: 'Technical',  questions: 10, duration: 20, description: 'Python · Java · DSA · SQL · OOP' },
 ];
 
 // Practice-test totals — the ONE source of truth for what the user actually
@@ -94,10 +100,10 @@ function transformCompanyData(data: any): any {
   };
 }
 
-const DIFF_COLOR: Record<string, { bg: string; color: string }> = {
-  EASY: { bg: '#d1fae5', color: '#065f46' },
-  MED:  { bg: '#fef3c7', color: '#92400e' },
-  HARD: { bg: '#fee2e2', color: '#991b1b' },
+const DIFFICULTY_META: Record<MockTestDifficulty, { color: string; bg: string; border: string }> = {
+  easy:   { color: '#065f46', bg: '#d1fae5', border: '#6ee7b7' },
+  medium: { color: '#92400e', bg: '#fef3c7', border: '#fcd34d' },
+  hard:   { color: '#991b1b', bg: '#fee2e2', border: '#fca5a5' },
 };
 
 function getGrade(score: number): { label: string; bg: string; color: string } {
@@ -122,6 +128,9 @@ export default function CompanyDetailPage() {
   const [analytics, setAnalytics]     = useState<ProgressAnalytics | null>(null);
   const [rulesOpen, setRulesOpen]     = useState(false);
   const [tipsOpen, setTipsOpen]       = useState(false);
+  // No default: the user must pick a level explicitly. The backend requires one,
+  // and pre-selecting 'medium' is what let tests start with no real choice made.
+  const [difficulty, setDifficulty]   = useState<MockTestDifficulty | null>(null);
 
   useEffect(() => {
     getMockTestCompanyById(companyId)
@@ -164,13 +173,21 @@ export default function CompanyDetailPage() {
 
   const handleBeginExam = async () => {
     setStartError(null);
+    if (!difficulty) {
+      setStartError('Please select a difficulty level to begin.');
+      return;
+    }
     setStarting(true);
     try {
       const backendCompanyId = resolveCompanyId(companyId);
       const subs = ['percentages', 'time_and_work', 'profit_and_loss', 'ratios', 'number_systems'];
       const sub  = subs[Math.floor(Math.random() * subs.length)];
-      const session = await generateMockTest(backendCompanyId, ['arithmetic'], [sub], undefined, 30000);
-      router.push(`/mock-test/${companyId}?sessionId=${session.session_id}`);
+      // 180s to match the other generateMockTest call sites: generation routinely
+      // takes 30-60s (see proxyTimeout in next.config.ts), so the previous 30s
+      // aborted normal runs before the backend could answer.
+      const session = await generateMockTest(backendCompanyId, ['arithmetic'], [sub], difficulty, undefined, 180000);
+      // Forward the level so the runner generates every later section at it too.
+      router.push(`/mock-test/${companyId}?sessionId=${session.session_id}&difficulty=${difficulty}`);
     } catch (err: any) {
       const data = err?.response?.data;
       const backendError = data?.error;
@@ -257,7 +274,6 @@ export default function CompanyDetailPage() {
           <p className="text-base font-bold mb-3" style={{ color: '#0F172A' }}>Sections:</p>
           <ol className="space-y-4 mb-7">
             {MOCK_SECTIONS.map((sec, i) => {
-              const dc = DIFF_COLOR[sec.difficulty];
               const isFirst = i === 0;
               return (
                 <li key={sec.name} className="flex gap-3 text-[15px] leading-relaxed">
@@ -274,12 +290,14 @@ export default function CompanyDetailPage() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 shrink-0 text-xs" style={{ color: '#64748B' }}>
-                        <span><span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{sec.questions}</span> Q</span>
-                        <span><span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{sec.duration}</span> min</span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase"
-                          style={{ background: dc.bg, color: dc.color }}>
-                          {sec.difficulty}
+                      {/* Fixed-width columns so the counts line up down the list
+                          instead of drifting with each section's text length. */}
+                      <div className="flex items-center shrink-0 text-xs" style={{ color: '#64748B' }}>
+                        <span className="w-14 text-right">
+                          <span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{sec.questions}</span> Q
+                        </span>
+                        <span className="w-16 text-right">
+                          <span className="font-bold tabular-nums" style={{ color: '#0F172A' }}>{sec.duration}</span> min
                         </span>
                       </div>
                     </div>
@@ -374,6 +392,48 @@ export default function CompanyDetailPage() {
               )}
             </AnimatePresence>
           </div>
+        </div>
+
+        {/* Difficulty — required. Every section of the test generates at this level. */}
+        <div
+          className="mt-6 bg-white rounded-2xl border p-6"
+          style={{ borderColor: '#E5E7EB' }}
+        >
+          <fieldset>
+            <legend className="text-[15px] font-bold mb-1" style={{ color: '#0F172A' }}>
+              Difficulty <span style={{ color: '#ef4444' }}>*</span>
+            </legend>
+            <p className="text-sm mb-4" style={{ color: '#64748B' }}>
+              Choose the level for every section of this test.
+            </p>
+            <div className="flex gap-3 flex-wrap">
+              {MOCK_TEST_DIFFICULTIES.map(level => {
+                const meta = DIFFICULTY_META[level];
+                const isSelected = difficulty === level;
+                return (
+                  <label
+                    key={level}
+                    className="flex items-center gap-2 px-5 py-3 rounded-xl border cursor-pointer transition select-none"
+                    style={{
+                      background: isSelected ? meta.bg : '#fff',
+                      borderColor: isSelected ? meta.border : '#E5E7EB',
+                      color: isSelected ? meta.color : '#475569',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="difficulty"
+                      value={level}
+                      checked={isSelected}
+                      onChange={() => { setDifficulty(level); setStartError(null); }}
+                      className="sr-only"
+                    />
+                    <span className="text-sm font-bold capitalize">{level}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
         </div>
 
         {/* Bottom action row — section-intro DNA */}

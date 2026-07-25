@@ -15,6 +15,7 @@ import {
   submitParentSession,
   reportIssue,
   getActiveSession,
+  isMockTestDifficulty,
   MockTestSection,
   MockTestSession,
   AnswerFeedback,
@@ -74,14 +75,17 @@ export default function MockTestPage() {
   // launched from Weak Areas → "Practice this topic"). Falls back to a random
   // subcategory of the section's category when absent or invalid.
   const customSubcategory = isCustomTest ? searchParams.get('subcategory') : null;
-  // Total question count picked in the Custom Builder. Defaults to 30 when
-  // missing/invalid. Divided across the selected sections below.
-  const customTotalCount = isCustomTest
-    ? (() => {
-        const n = parseInt(searchParams.get('count') ?? '', 10);
-        return Number.isFinite(n) && n > 0 ? n : 30;
-      })()
-    : null;
+
+  // Difficulty chosen on the setup screen (company page / custom builder / weak
+  // areas), forwarded here so every section of the test generates at the level
+  // the user picked. Never defaulted: the backend requires an explicit value,
+  // and silently substituting 'medium' is what discarded the choice before.
+  const rawDifficulty = searchParams.get('difficulty');
+  const selectedDifficulty = isMockTestDifficulty(rawDifficulty) ? rawDifficulty : null;
+
+  // Custom builder's negative-marking toggle, forwarded so the backend creates the
+  // session with the penalty and deducts marks per wrong answer at scoring time.
+  const negativeMarking = isCustomTest && searchParams.get('negativeMarking') === '1';
 
   // Section progression: Arithmetic(0) → Aptitude(1) → Reasoning(2) → Technical(3)
 
@@ -108,6 +112,12 @@ export default function MockTestPage() {
 
   // Per-section question state (active section)
   const [questions, setQuestions] = useState<Question[]>([]);
+  // Always-current mirror of `questions`. The timer's auto-submit closure is created
+  // once per section (effect dep [phase]) and would otherwise capture a stale snapshot
+  // where every answer is still unselected — recording "0 answered" even though the
+  // answers were saved to the backend. Reading the ref avoids that staleness.
+  const questionsRef = useRef<Question[]>([]);
+  questionsRef.current = questions;
   const [currentQ, setCurrentQ] = useState(0);
 
   // Timer — starts when "Start Now" is clicked
@@ -130,8 +140,13 @@ export default function MockTestPage() {
 
   // Section submit modal
   const [sectionSubmitting, setSectionSubmitting] = useState(false);
-  const [answerSubmitting, setAnswerSubmitting] = useState(false);
-  const [answerFeedback, setAnswerFeedback] = useState<AnswerFeedback | null>(null);
+  // Per-question state, keyed by question id. These MUST NOT be global: a single
+  // shared flag meant that while one question's answer was mid-submit (it waits out
+  // a 3s backend minimum, then a network round-trip), navigating to another question
+  // showed that question's options as disabled/"frozen" and could flash the wrong
+  // question's feedback. Keying by id isolates each question.
+  const [submittingIds, setSubmittingIds] = useState<Set<string>>(new Set());
+  const [feedbackByQ, setFeedbackByQ] = useState<Record<string, AnswerFeedback>>({});
   const [loadingSection, setLoadingSection] = useState(false);
 
   // Init error (fatal — shown instead of spinner when session cannot be created)
@@ -149,20 +164,10 @@ export default function MockTestPage() {
   // Completed section results (for transition screen)
   const [sectionResults, setSectionResults] = useState<SectionResult[]>([]);
 
-  // Per-section question count. For company tests every section is a flat 10
-  // questions. For custom tests we split the user-picked total evenly across
-  // the selected sections — e.g. count=30, categories=arithmetic,aptitude →
-  // 15 per section. Any remainder lands in the first sections (16, 14).
-  const perSectionCount = isCustomTest && customTotalCount && SECTION_PROGRESSION.length > 0
-    ? Math.max(1, Math.floor(customTotalCount / SECTION_PROGRESSION.length))
-    : 10;
-  const perSectionRemainder = isCustomTest && customTotalCount && SECTION_PROGRESSION.length > 0
-    ? customTotalCount - perSectionCount * SECTION_PROGRESSION.length
-    : 0;
-  // 2 minutes per question is the same ratio used in company tests (20 min / 10 q).
-  const perSectionMinutes = Math.max(5, Math.round(perSectionCount * 2));
-  const questionCountFor = (sectionIdx: number): number =>
-    perSectionCount + (sectionIdx < perSectionRemainder ? 1 : 0);
+  // Every section — company and custom — is a flat 10 questions / 20 minutes.
+  const perSectionCount = 10;
+  const perSectionMinutes = 20;
+  const questionCountFor = (_sectionIdx: number): number => perSectionCount;
 
   // Use SECTION_PROGRESSION as the source of truth for section names
   const currentSectionProgression = SECTION_PROGRESSION[currentSectionProgressionIndex];
@@ -221,6 +226,14 @@ export default function MockTestPage() {
   const handleStartSection = async () => {
     if (!currentSection) return;
 
+    // The backend requires an explicit difficulty. If we got here without one
+    // (hand-edited or stale URL), send the user back to pick rather than
+    // quietly generating a 'medium' test they never asked for.
+    if (!selectedDifficulty) {
+      toast.error('No difficulty selected. Please start the test again from the setup screen.');
+      return;
+    }
+
     // Enter fullscreen — must run synchronously from the user-gesture click,
     // before any awaits, or the browser strips the gesture context.
     if (typeof document !== 'undefined' && !document.fullscreenElement) {
@@ -245,7 +258,7 @@ export default function MockTestPage() {
 
       let newSession: MockTestSession;
       try {
-        newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes);
+        newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], selectedDifficulty, parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes, negativeMarking);
       } catch (genErr: unknown) {
         const _genErr = genErr as { response?: { data?: { error_code?: string; details?: { session_id?: string } } } };
         if (_genErr?.response?.data?.error_code === 'ACTIVE_SESSION_EXISTS') {
@@ -253,7 +266,7 @@ export default function MockTestPage() {
           if (existingId) {
             try { await submitTest(existingId); } catch { /* ignore close errors */ }
           }
-          newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes);
+          newSession = await generateMockTest(testId, [activeCategory], [chosenSubcategory], selectedDifficulty, parentSessionIdRef.current, 180000, currentSection.question_count, currentSection.duration_minutes, negativeMarking);
         } else {
           throw genErr;
         }
@@ -304,7 +317,10 @@ export default function MockTestPage() {
 
       setQuestions(questions);
       setCurrentQ(0);
-      setAnswerFeedback(null);
+      // Fresh section — drop any per-question feedback/submitting state from the
+      // previous one so nothing carries over.
+      setFeedbackByQ({});
+      setSubmittingIds(new Set());
       setTimeRemaining((currentSection.duration_minutes ?? 30) * 60);
       setPhase('section_testing');
     } catch (err: unknown) {
@@ -476,6 +492,12 @@ export default function MockTestPage() {
   const notAnswered = questions.filter(q => q.selected === null).length;
   const flagged = questions.filter(q => q.markedForReview).length;
   const currentQuestion = questions[currentQ];
+  // Derived from the per-question maps so the rest of the render can keep using
+  // `answerFeedback` / `answerSubmitting` unchanged — but now they reflect ONLY
+  // the question on screen, never another question's in-flight submit.
+  const currentQId = currentQuestion ? String(currentQuestion.id) : '';
+  const answerFeedback: AnswerFeedback | null = feedbackByQ[currentQId] ?? null;
+  const answerSubmitting = submittingIds.has(currentQId);
   const hasNegMarking = (negMarkingSections[testId] ?? []).includes(currentSection?.section_name ?? '');
 
   // ── Answer handlers ────────────────────────────────────────────────────────
@@ -502,8 +524,8 @@ export default function MockTestPage() {
     const elapsedMs = Date.now() - questionStartTimeRef.current;
     const waitMs = Math.max(0, MIN_ANSWER_MS - elapsedMs);
 
-    setAnswerSubmitting(true);
-    setAnswerFeedback(null);
+    const qId = String(q.id);
+    setSubmittingIds(prev => new Set(prev).add(qId));
     try {
       if (waitMs > 0) {
         await new Promise(resolve => setTimeout(resolve, waitMs));
@@ -518,13 +540,19 @@ export default function MockTestPage() {
         answerLetter = String.fromCharCode(65 + answerIndex);
       }
 
-      const feedback = await submitAnswer(sessionId, String(q.id), answerLetter, timeTakenSeconds);
+      const feedback = await submitAnswer(sessionId, qId, answerLetter, timeTakenSeconds);
       if (feedback) {
-        setAnswerFeedback(feedback);
+        setFeedbackByQ(prev => ({ ...prev, [qId]: feedback }));
       }
-    } catch (err: any) {
+    } catch {
+      // Answer is already locked; a failed submit leaves it recorded locally and
+      // is reconciled at section submit. Nothing to surface to the user here.
     } finally {
-      setAnswerSubmitting(false);
+      setSubmittingIds(prev => {
+        const next = new Set(prev);
+        next.delete(qId);
+        return next;
+      });
     }
   };
 
@@ -546,14 +574,12 @@ export default function MockTestPage() {
   const handleNext = async () => {
     if (currentQ < questions.length - 1) {
       setCurrentQ(p => p + 1);
-      setAnswerFeedback(null);
     }
   };
 
   const handlePrevious = () => {
     if (currentQ > 0) {
       setCurrentQ(p => p - 1);
-      setAnswerFeedback(null);
     }
   };
 
@@ -574,10 +600,13 @@ export default function MockTestPage() {
 
   // ── Section submit ─────────────────────────────────────────────────────────
   const handleAutoSubmitSection = useCallback(async () => {
+    // Read the latest questions from the ref — the timer closure that calls this is
+    // created at section start and would otherwise see a stale, all-unanswered snapshot.
+    const latestQuestions = questionsRef.current;
     const result: SectionResult = {
       name: currentSection.section_name,
-      answered: questions.filter(q => q.selected !== null).length,
-      total: questions.length,
+      answered: latestQuestions.filter(q => q.selected !== null).length,
+      total: latestQuestions.length,
     };
     setSectionResults(prev => [...prev, result]);
 
@@ -823,9 +852,15 @@ export default function MockTestPage() {
                 <div
                   key={i}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
-                  style={{ background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}
+                  style={r.answered === r.total
+                    ? { background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }
+                    : { background: '#FFFBEB', color: '#B45309', border: '1px solid #FDE68A' }}
                 >
-                  <CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}
+                  {/* Green check only when fully answered; a partial section (e.g. timer
+                      expired at 8/10) shows an amber "partial" pill, never a completed tick. */}
+                  {r.answered === r.total
+                    ? <><CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}</>
+                    : <><AlertTriangle size={11} /> {r.name}: {r.answered}/{r.total} partial</>}
                 </div>
               ))}
             </div>
@@ -946,9 +981,15 @@ export default function MockTestPage() {
                 <div
                   key={i}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
-                  style={{ background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}
+                  style={r.answered === r.total
+                    ? { background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }
+                    : { background: '#FFFBEB', color: '#B45309', border: '1px solid #FDE68A' }}
                 >
-                  <CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}
+                  {/* Green check only when fully answered; a partial section (e.g. timer
+                      expired at 8/10) shows an amber "partial" pill, never a completed tick. */}
+                  {r.answered === r.total
+                    ? <><CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}</>
+                    : <><AlertTriangle size={11} /> {r.name}: {r.answered}/{r.total} partial</>}
                 </div>
               ))}
             </div>
@@ -1110,10 +1151,12 @@ export default function MockTestPage() {
             </div>
           </div>
 
-          {/* Center: SCORE badge */}
+          {/* Center: ATTEMPTED badge. Deliberately NOT "Score" — correctness is only
+              known after the test is submitted and evaluated by the backend. Showing a
+              "score" mid-test (really just the attempted count) misleads the user. */}
           <div className="flex md:flex-col items-center md:justify-center shrink-0 gap-2 md:gap-0">
             <div className="flex items-baseline gap-2">
-              <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: '#6b7280' }}>Score:</span>
+              <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: '#6b7280' }}>Attempted:</span>
               <span className="text-2xl md:text-3xl font-bold leading-none tabular-nums" style={{ color: '#1e3a8a' }}>{answered}</span>
             </div>
           </div>
@@ -1132,7 +1175,7 @@ export default function MockTestPage() {
                 <span className="font-mono">{formatTime(timeRemaining)}</span>
               </div>
               <span className="text-[11px] font-bold tracking-wider uppercase" style={{ color: '#6b7280' }}>
-                Answered Correctly: <span style={{ color: '#1f2937' }}>{answered}/{questions.length}</span>
+                Questions Attempted: <span style={{ color: '#1f2937' }}>{answered}/{questions.length}</span>
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -1189,7 +1232,7 @@ export default function MockTestPage() {
             return (
               <button
                 key={i}
-                onClick={() => { setCurrentQ(i); setAnswerFeedback(null); }}
+                onClick={() => setCurrentQ(i)}
                 className="w-9 h-9 rounded-lg text-xs font-bold flex items-center justify-center transition shrink-0"
                 style={{
                   background:  isCurrent ? '#1e3a8a' : isFlagged ? '#fef3c7' : isAns ? '#dbeafe' : '#f9fafb',

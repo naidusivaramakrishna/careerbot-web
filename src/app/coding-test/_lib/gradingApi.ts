@@ -12,9 +12,9 @@ import { isAxiosError } from 'axios';
 
 import { httpClient } from '@/lib/http';
 import type {
-  HistoryResponse,
   SubmitSolutionRequest,
   SubmitSolutionResponse,
+  UserProgressResponse,
 } from './types';
 
 const BASE = '/coding-test';
@@ -40,6 +40,9 @@ function toGradingError(err: unknown, fallback: string): GradingApiError {
     const status = err.response?.status;
     if (status === 401) {
       return new GradingApiError('Please sign in to submit your solution.', 401);
+    }
+    if (status === 402) {
+      return new GradingApiError('You have no grading submissions remaining. Please upgrade your plan.', 402);
     }
     if (status === 404) {
       return new GradingApiError('This problem no longer exists.', 404);
@@ -73,17 +76,14 @@ export async function submitSolution(
   }
 }
 
-export async function fetchHistory(
-  page = 1,
-  pageSize = 20,
-): Promise<HistoryResponse> {
+export async function fetchProgress(): Promise<UserProgressResponse> {
   try {
-    const { data } = await httpClient.get<HistoryResponse>(
-      `${BASE}/history?page=${page}&page_size=${pageSize}`,
+    const { data } = await httpClient.get<UserProgressResponse>(
+      `${BASE}/progress`,
       INLINE_AUTH_CONFIG,
     );
     return data;
   } catch (err) {
-    throw toGradingError(err, 'Failed to load your submission history.');
+    throw toGradingError(err, 'Failed to load your progress.');
   }
 }
