@@ -12,6 +12,12 @@ export interface JobFilterCandidate {
 
 export interface JobFilterOptions {
   includeSource?: boolean;
+  // Set false where created_at/posted_date isn't a reliable posting date —
+  // e.g. the Applied tab's local placeholders reuse created_at to hold the
+  // *application* date until background enrichment replaces it (and stay
+  // that way forever for any job whose full record can no longer be
+  // fetched), so "Date Posted" must not run against them there.
+  includeDate?: boolean;
 }
 
 function normalizeText(value: string | undefined): string {
@@ -210,8 +216,9 @@ export function matchesJobFilters(
     ? selectedFilters.find((filter) => filter.startsWith("source:"))?.replace("source:", "").toLowerCase()
     : undefined;
 
-  const dateFilter = selectedFilters.find((filter) => filter.startsWith("date:"));
-  const datePresetLabel = dateFilter ? dateFilter.replace("date:", "") : undefined;
+  const datePresetLabel = options.includeDate === false
+    ? undefined
+    : selectedFilters.find((filter) => filter.startsWith("date:"))?.replace("date:", "");
 
   return (
     matchesWorkModel(job.mode, selectedWorkModels) &&

@@ -84,6 +84,18 @@ describe('matchesJobFilters', () => {
 
     expect(result).toBe(true);
   });
+
+  it('ignores the "Date Posted" filter when includeDate is false (Applied tab)', () => {
+    // created_at here stands in for an applied-date placeholder that's well
+    // outside the window — with includeDate: false the job must still pass.
+    const result = matchesJobFilters(
+      { created_at: new Date(Date.now() - 30 * 86_400_000).toISOString() },
+      ['date:Last 7 days'],
+      { includeDate: false }
+    );
+
+    expect(result).toBe(true);
+  });
 });
 
 describe('getSafeExternalUrl', () => {

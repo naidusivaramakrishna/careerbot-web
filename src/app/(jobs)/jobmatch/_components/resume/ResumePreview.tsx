@@ -226,7 +226,13 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         <iframe
           key={docxPreview}
           src={docxPreview}
-          sandbox=""
+          // blob: URLs are scoped to the origin that created them — a fully
+          // opaque sandbox (no allow-same-origin) can fail to load them at
+          // all in some browsers. allow-scripts is deliberately still
+          // excluded, so no script execution is possible either way; the
+          // content itself is already DOMPurify-sanitized before being
+          // wrapped into this blob.
+          sandbox="allow-same-origin"
           className="w-full h-full border-none"
           title="Resume DOCX Preview"
         />

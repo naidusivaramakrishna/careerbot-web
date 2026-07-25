@@ -29,22 +29,6 @@ export interface Job {
   is_applied?: boolean;
 }
 
-export interface JobSearchParams {
-  q?: string;           // text search across title, company, location
-  query?: string;       // legacy alias for q
-  title?: string;       // filter by title (case-insensitive)
-  company?: string;     // filter by company (case-insensitive)
-  location?: string;    // filter by location (case-insensitive)
-  job_type?: string;    // filter by job type (e.g. "Contract")
-  source?: string;      // filter by source
-  date_from?: string;   // ISO date string
-  date_to?: string;     // ISO date string
-  page?: number;        // 1-based page number
-  skip?: number;        // records to skip (derived from page if omitted)
-  limit?: number;       // max records (default 20)
-  sort_by?: string;
-}
-
 export interface JobListMinimal {
   id: string;
   title: string;
@@ -206,30 +190,6 @@ export const getJobById = async (jobId: string): Promise<ApiResponse<Job>> => {
 
 // ==================== LISTING ====================
 
-export const searchJobs = async (params: JobSearchParams): Promise<ApiResponse<Job[]>> => {
-  const limit = params.limit || 20;
-  const skip = params.skip ?? (params.page ? (params.page - 1) * limit : 0);
-
-  const backendParams: Record<string, unknown> = { skip, limit };
-
-  const q = params.q || params.query;
-  if (q) backendParams.q = q;
-  if (params.title) backendParams.title = params.title;
-  if (params.company) backendParams.company = params.company;
-  if (params.location) backendParams.location = params.location;
-  if (params.job_type) backendParams.job_type = params.job_type;
-  if (params.source) backendParams.source = params.source;
-  if (params.date_from) backendParams.date_from = params.date_from;
-  if (params.date_to) backendParams.date_to = params.date_to;
-  // do NOT send page — backend rejects requests that have both skip and page
-
-  const response = await httpClient.get<ApiResponse<Job[]>>('/jobs/all', {
-    params: backendParams,
-    ...getRequestConfig(),
-  });
-  return response.data;
-};
-
 export const getAllJobs = async (skip = 0, limit = 20, source?: string): Promise<ApiResponse<Job[]>> => {
   const params: Record<string, unknown> = { skip, limit };
   if (source) params.source = source;
@@ -375,7 +335,6 @@ export const runJobAggregator = async (): Promise<ApiResponse<{ job_count: numbe
 
 const jobsApi = {
   createJob,
-  searchJobs,
   listJobsMinimal,
   getAllJobs,
   getMyJobs,

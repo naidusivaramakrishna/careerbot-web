@@ -527,11 +527,15 @@ export default function JobsContents() {
     }
 
     // Applied tab: fetched directly by id from local application history,
-    // same reasoning as Saved — see fetchAppliedJobsList.
+    // same reasoning as Saved — see fetchAppliedJobsList. created_at on
+    // these placeholders holds the *application* date (for sort order)
+    // until/unless background enrichment replaces it with the real posting
+    // date — includeDate: false keeps "Date Posted" from silently filtering
+    // by application date instead.
     let filtered = [...appliedJobsList];
     if (selectedFilters.length > 0) {
       filtered = filtered.filter((job) =>
-        matchesJobFilters(job, selectedFilters, { includeSource: true })
+        matchesJobFilters(job, selectedFilters, { includeSource: true, includeDate: false })
       );
     }
     filtered = filtered.filter(matchesQuery);
