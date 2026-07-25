@@ -63,10 +63,6 @@ export interface JobAnalytics {
   success_rate?: number;
 }
 
-export interface CleanedJob extends Job {
-  is_cleaned: boolean;
-}
-
 export interface Pagination {
   total: number;
   skip: number;
@@ -125,9 +121,11 @@ export interface SmartMatchParams {
   skip?: number;
   limit?: number;
   min_score?: number;
+  min_skill_score?: number;
+  min_experience_score?: number;
+  min_education_score?: number;
   location?: string;
   mode?: string;
-  force_refresh?: boolean;
 }
 
 // ==================== APPLICATION TYPES ====================
@@ -255,28 +253,6 @@ export const getMyJobs = async (skip = 0, limit = 20): Promise<ApiResponse<Job[]
   return response.data;
 };
 
-export const getCleanedJobs = async (params: JobSearchParams = {}): Promise<ApiResponse<CleanedJob[]>> => {
-  const limit = params.limit || 20;
-  const skip = params.skip ?? (params.page ? (params.page - 1) * limit : 0);
-
-  const backendParams: Record<string, unknown> = { skip, limit };
-  const q = params.q || params.query;
-  if (q) backendParams.q = q;
-  if (params.title)    backendParams.title    = params.title;
-  if (params.company)  backendParams.company  = params.company;
-  if (params.location) backendParams.location = params.location;
-  if (params.job_type) backendParams.job_type = params.job_type;
-  if (params.source)   backendParams.source   = params.source;
-  if (params.date_from) backendParams.date_from = params.date_from;
-  if (params.date_to)   backendParams.date_to   = params.date_to;
-
-  const response = await httpClient.get<ApiResponse<CleanedJob[]>>('/jobs/aggregator/jobs/cleaned', {
-    params: backendParams,
-    ...getRequestConfig(),
-  });
-  return response.data;
-};
-
 export const getRecruiterJobs = async (skip = 0, limit = 20): Promise<ApiResponse<Job[]>> => {
   const response = await httpClient.get<ApiResponse<Job[]>>('/recruiters/jobs', {
     params: { skip, limit },
@@ -324,9 +300,12 @@ export const chatAboutJob = async (
 };
 
 // ==================== SMARTMATCH ====================
+// Uses /jobs/scored — scores every job in the pool against the user's
+// profile (unlike /jobs/matched, which drops jobs before scoring when they
+// share no skills with the profile or demand far more experience).
 
 export const getSmartMatchedJobs = async (params: SmartMatchParams = {}): Promise<SmartMatchResponse> => {
-  const response = await httpClient.get<SmartMatchResponse>('/jobs/matched', {
+  const response = await httpClient.get<SmartMatchResponse>('/jobs/scored', {
     params,
     ...getRequestConfig(),
   });
@@ -403,7 +382,6 @@ const jobsApi = {
   clearJobCaches,
   jobsHealthCheck,
   runJobAggregator,
-  getCleanedJobs,
   getRecruiterJobs,
   getSmartMatchedJobs,
   applyToJobApi,

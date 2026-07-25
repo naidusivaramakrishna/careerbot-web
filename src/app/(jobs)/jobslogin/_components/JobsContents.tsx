@@ -75,6 +75,9 @@ interface NormalizedJob {
   education: string;
   source: string;
   is_applied: boolean;
+  remote: boolean;
+  requirements: string[];
+  responsibilities: string;
   matched_skills?: string[];
   missing_skills?: string[];
   match_band?: string;
@@ -135,6 +138,11 @@ function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: 
     education: str(job, "education", "qualification", "education_required", "min_education"),
     source: str(job, "source"),
     is_applied: !!job["is_applied"],
+    remote: !!job["remote"],
+    requirements: Array.isArray(job["requirements_list"])
+      ? (job["requirements_list"] as unknown[]).filter((r): r is string => typeof r === "string" && r.trim().length > 0)
+      : [],
+    responsibilities: str(job, "responsibilities"),
     matched_skills: matchData?.matched_skills,
     missing_skills: matchData?.missing_skills,
     match_band: matchData?.band,
@@ -163,7 +171,7 @@ export default function JobsContents() {
   const [roleFilter, setRoleFilter] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [activeFilters, setActiveFilters] = useState<FilterParams>({});
-  const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [activeTab, setActiveTab] = useState<TabType>("matched");
   const [selectedLocation] = useState("All Locations");
   const [sortBy, setSortBy] = useState<SortType>("relevance");
   const [filterSort, setFilterSort] = useState<FilterSort>("most-recent");
@@ -399,7 +407,6 @@ export default function JobsContents() {
       const data = await getSmartMatchedJobs({
         limit: MATCHED_PER_PAGE,
         skip: (page - 1) * MATCHED_PER_PAGE,
-        ...(force && { force_refresh: true }),
       });
       const normalized = (data.jobs || []).map((item) =>
         normalizeJob(item.job, item.match.score, item.match)

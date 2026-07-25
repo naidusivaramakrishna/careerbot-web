@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { isJobSaved, toggleJobSaved, recordJobApplication } from "@/utils/jobTracking";
 import ApplicationModal, { ApplicationData } from "./ApplicationModal";
 import MatchAnalysisModal from "./MatchAnalysisModal";
+import JobPreviewModal from "./JobPreviewModal";
 import ResumeCustomizePrompt from "./ResumeCustomizePrompt";
 import { applyToJob } from "@/utils/jobApplication";
 import { getMatchExplanation } from "@/api/insightsApi";
@@ -53,6 +54,9 @@ interface JobCardProps {
   match_band?: string;
   applicant_count?: number | string;
   h1b_sponsor?: boolean;
+  remote?: boolean;
+  requirements?: string[];
+  responsibilities?: string;
   onBotClick: () => void;
   onRemove?: () => void;
   onApplyClick?: () => void;
@@ -122,6 +126,7 @@ export default function JobCard(props: JobCardProps) {
   const [explanation, setExplanation] = useState<MatchExplanationResponse | null>(null);
   const [explanationLoading, setExplanationLoading] = useState(false);
   const [showMatchModal, setShowMatchModal] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number; left: number } | null>(null);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
@@ -578,7 +583,10 @@ export default function JobCard(props: JobCardProps) {
                   </span>
                 )}
               </div>
-              <h3 className="line-clamp-1 text-[19px] font-extrabold leading-snug text-slate-950 transition-colors group-hover:text-[#4F46E5]">
+              <h3
+                onClick={() => setShowPreview(true)}
+                className="line-clamp-1 cursor-pointer text-[19px] font-extrabold leading-snug text-slate-950 transition-colors group-hover:text-[#4F46E5]"
+              >
                 {props.title || "Job Title"}
               </h3>
               <p className="mt-0.5 truncate text-[13px] text-slate-500">
@@ -746,6 +754,32 @@ export default function JobCard(props: JobCardProps) {
         />
 
         {menuNode}
+
+        {showPreview && (
+          <JobPreviewModal
+            title={props.title}
+            company={props.company}
+            location={props.location}
+            type={props.type}
+            mode={props.mode}
+            remote={props.remote}
+            salary={props.salary}
+            experience={props.experience}
+            education={props.education}
+            skills={props.skills}
+            description={props.description}
+            responsibilities={props.responsibilities}
+            requirements={props.requirements}
+            source={props.source}
+            postedLabel={formatPostedTime(props.created_at || props.posted_date)}
+            isSaved={isSaved}
+            isApplied={isApplied}
+            externalUrl={externalUrl}
+            onClose={() => setShowPreview(false)}
+            onSaveClick={handleSaveJob}
+            onApplyClick={externalUrl ? handleExternalApplyClick : handleApplyNow}
+          />
+        )}
       </>
     );
   }
@@ -810,17 +844,12 @@ export default function JobCard(props: JobCardProps) {
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="line-clamp-1 cursor-pointer text-[18px] font-extrabold leading-snug text-slate-950 transition-colors duration-150 hover:text-[#4F46E5]">
+                          <h3
+                            onClick={() => setShowPreview(true)}
+                            className="line-clamp-1 cursor-pointer text-[18px] font-extrabold leading-snug text-slate-950 transition-colors duration-150 hover:text-[#4F46E5]"
+                          >
                             {props.title || "Job Title"}
                           </h3>
-                          {hasMatchScore && (
-                            <span
-                              className="shrink-0 text-[11px] font-bold tabular-nums px-2 py-0.5 rounded-full"
-                              style={{ color: bandCfg.color, background: bandCfg.bg }}
-                            >
-                              {Math.round(props.matchScore!)}% Match
-                            </span>
-                          )}
                         </div>
                         <p className="mt-0.5 truncate text-[13px] text-slate-500">
                           <span className="font-bold text-slate-700">{props.company || "Company"}</span>
@@ -1193,6 +1222,36 @@ export default function JobCard(props: JobCardProps) {
         jobTitle={props.title}
         company={props.company}
         onClose={() => setShowMatchModal(false)}
+      />
+    )}
+
+    {showPreview && (
+      <JobPreviewModal
+        title={props.title}
+        company={props.company}
+        location={props.location}
+        type={props.type}
+        mode={props.mode}
+        remote={props.remote}
+        salary={props.salary}
+        experience={props.experience}
+        education={props.education}
+        skills={props.skills}
+        description={props.description}
+        responsibilities={props.responsibilities}
+        requirements={props.requirements}
+        source={props.source}
+        postedLabel={formatPostedTime(props.created_at || props.posted_date)}
+        matchScore={props.matchScore}
+        match_band={props.match_band}
+        matched_skills={props.matched_skills}
+        missing_skills={props.missing_skills}
+        isSaved={isSaved}
+        isApplied={isApplied}
+        externalUrl={externalUrl}
+        onClose={() => setShowPreview(false)}
+        onSaveClick={handleSaveJob}
+        onApplyClick={externalUrl ? handleExternalApplyClick : handleApplyNow}
       />
     )}
 

@@ -42,10 +42,9 @@ export default function JobsTabs({
   const dropRef = useRef<HTMLDivElement>(null);
 
   const TABS: Array<{ id: TabType; label: string; count?: number; prefix?: string }> = [
-    { id: "all",     label: "All Jobs",    count: allCount > 0 ? allCount : undefined },
+    { id: "matched", label: "Smart Match", count: matchedCount },
     { id: "saved",   label: "Saved",       count: savedCount   },
     { id: "applied", label: "Applied",     count: appliedCount },
-    { id: "matched", label: "Smart Match", count: matchedCount },
   ];
 
   const selectedLabel = FILTER_OPTIONS.find((o) => o.id === filterSort)?.label ?? "Most Recent";
