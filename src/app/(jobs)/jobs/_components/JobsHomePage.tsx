@@ -316,13 +316,11 @@ export default function JobsHomePage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setActiveFeature((current) => (current + 1) % FEATURE_STORIES.length);
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, []);
-
+  // NOTE: the auto-rotating interval that used to drive this was removed —
+  // its only consumer is the "retained in source for reference only" dead
+  // carousel block below ({false && (...)}), so it was running forever on
+  // every visit to this public page for a value nothing ever rendered.
+  // Restore it here if that carousel is ever re-enabled.
   const showFeature = (index: number) => {
     setActiveFeature((index + FEATURE_STORIES.length) % FEATURE_STORIES.length);
   };

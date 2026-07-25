@@ -217,15 +217,16 @@ export default function JobCard(props: JobCardProps) {
     toast.error("Job application method not configured");
   };
 
-  // Applying from inside the preview modal for an internal/recruiter job
-  // opens ApplicationModal on top of it — close the preview first so the
-  // two dialogs don't stack.
+  // Applying from inside the preview modal opens either ApplicationModal
+  // (internal/recruiter job) or a new tab (external job) — close the
+  // preview first in both cases so it isn't left stacked/stranded
+  // underneath once the user comes back to this tab.
   const handlePreviewApplyClick = () => {
+    setShowPreview(false);
     if (externalUrl) {
       handleExternalApplyClick();
       return;
     }
-    setShowPreview(false);
     handleApplyNow();
   };
 

@@ -1174,9 +1174,6 @@ export default function JobsFilterSidebar({
             experienceOptionsAll={experienceOptions}
             handleExpApply={handleExpApply}
             handleExpSelect={handleExpSelect}
-            selectedSalaryFilter={selectedSalaryFilter ?? null}
-            activeDateFilter={activeDateFilter}
-            activeSourceFilter={activeSourceFilter}
           />
         );
       })(), document.body)}

@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { matchesJobFilters } from '@/app/(jobs)/jobslogin/_components/utils/jobFilterUtils';
 import { getSafeExternalUrl } from '@/utils/validators';
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock('@/hooks/useCurrentUserId', () => ({
+  useCurrentUserId: () => ({ userId: 'test-user' }),
+}));
+
+import { normalizeJob } from '@/app/(jobs)/jobslogin/_components/JobsContents';
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 //
@@ -123,5 +132,36 @@ describe('getSafeExternalUrl', () => {
     expect(getSafeExternalUrl('')).toBeUndefined();
     expect(getSafeExternalUrl(null)).toBeUndefined();
     expect(getSafeExternalUrl(undefined)).toBeUndefined();
+  });
+});
+
+describe('normalizeJob', () => {
+  // Pins the field-key mapping so a future rename can't silently reintroduce
+  // the requirements_list/requirements mismatch this was fixed for — every
+  // other place "requirements" appears in the codebase (recruiter job-post/
+  // edit-job forms, JobDescription type) uses the bare "requirements" key.
+  it('reads the Requirements section from the "requirements" key', () => {
+    const job = normalizeJob({ id: 'job-1', title: 'Engineer', requirements: ['Must relocate', ''] });
+    expect(job.requirements).toEqual(['Must relocate']);
+  });
+
+  it('falls back to "requirements_list" if "requirements" is absent', () => {
+    const job = normalizeJob({ id: 'job-1', title: 'Engineer', requirements_list: ['3+ years experience'] });
+    expect(job.requirements).toEqual(['3+ years experience']);
+  });
+
+  it('prefers "requirements" over "requirements_list" when both are present', () => {
+    const job = normalizeJob({
+      id: 'job-1',
+      title: 'Engineer',
+      requirements: ['Correct one'],
+      requirements_list: ['Wrong one'],
+    });
+    expect(job.requirements).toEqual(['Correct one']);
+  });
+
+  it('returns an empty array when neither key is present', () => {
+    const job = normalizeJob({ id: 'job-1', title: 'Engineer' });
+    expect(job.requirements).toEqual([]);
   });
 });

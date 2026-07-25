@@ -48,7 +48,7 @@ interface PendingApplyJob {
 const PENDING_APPLY_KEY = "pendingApplyJob";
 
 // ── Normalized shape used throughout the component ──
-interface NormalizedJob {
+export interface NormalizedJob {
   id: string;
   title: string;
   company: string;
@@ -92,7 +92,17 @@ function str(job: Record<string, unknown>, ...keys: string[]): string {
   return "";
 }
 
-function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: MatchedJobItem["match"]): NormalizedJob {
+function strArr(job: Record<string, unknown>, ...keys: string[]): string[] {
+  for (const k of keys) {
+    const v = job[k];
+    if (Array.isArray(v)) {
+      return v.filter((r): r is string => typeof r === "string" && r.trim().length > 0);
+    }
+  }
+  return [];
+}
+
+export function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: MatchedJobItem["match"]): NormalizedJob {
   const title = str(job, "title", "job_title") || "Job Title";
   const company = str(job, "company", "company_name", "organization", "about_company", "employer");
   const location = str(job, "location", "job_location", "city", "place") || "Location not specified";
@@ -139,9 +149,11 @@ function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: 
     source: str(job, "source"),
     is_applied: !!job["is_applied"],
     remote: !!job["remote"],
-    requirements: Array.isArray(job["requirements_list"])
-      ? (job["requirements_list"] as unknown[]).filter((r): r is string => typeof r === "string" && r.trim().length > 0)
-      : [],
+    // "requirements" matches every other place this concept appears in the
+    // codebase (recruiter job-post/edit-job forms, JobDescription type) —
+    // "requirements_list" appears nowhere else, so it's kept only as a
+    // defensive fallback in case this endpoint's payload genuinely differs.
+    requirements: strArr(job, "requirements", "requirements_list"),
     responsibilities: str(job, "responsibilities"),
     matched_skills: matchData?.matched_skills,
     missing_skills: matchData?.missing_skills,
@@ -164,7 +176,6 @@ export default function JobsContents() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>("matched");
-  const [selectedLocation] = useState("All Locations");
   const [sortBy, setSortBy] = useState<SortType>("relevance");
   const [filterSort, setFilterSort] = useState<FilterSort>("most-recent");
 
@@ -635,7 +646,6 @@ export default function JobsContents() {
                       : displayLoading
                       ? "Loading…"
                       : "No results"}
-                    {selectedLocation !== "All Locations" && ` · ${selectedLocation}`}
                   </p>
                 </div>
               </div>

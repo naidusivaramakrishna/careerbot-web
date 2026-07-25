@@ -3,7 +3,6 @@
 import React from "react";
 import MultiColorCircularScore from "@/app/(resume)/builder/creation/_components/score/MultiColorCircularScore";
 import ResumePreview from "../resume/ResumePreview";
-import PDFPreviewError from "./PDFPreviewError";
 import { AnalysisContentProps } from "../_types";
 import {
   FileText, Download, Pencil, User, Briefcase, GraduationCap,
@@ -119,13 +118,6 @@ export default function AnalysisContent({
   parsedResumeData,
   onBackToUpload,
 }: AnalysisContentProps) {
-  const [pdfBlobUrl]  = React.useState<string>("");
-  const [isLoading]   = React.useState(false);
-  const [pdfError]    = React.useState<string | null>(null);
-  const [isUpdating]  = React.useState(false);
-  const [isDocx]      = React.useState(false);
-  const [docxBlob]    = React.useState<Blob | null>(null);
-
   const [isEditMode, setIsEditMode] = React.useState(false);
   const [openSection, setOpenSection] = React.useState<string | null>(null);
   const [isSavingSection, setIsSavingSection] = React.useState(false);
@@ -491,25 +483,24 @@ export default function AnalysisContent({
               </div>
             </div>
             <div className="overflow-auto p-5" style={{ zoom: 1.1, scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
-              {pdfError ? (
-                <PDFPreviewError error={pdfError} />
-              ) : (
-                <ResumePreview
-                  pdfBlobUrl={pdfBlobUrl}
-                  pdfError={pdfError}
-                  isLoading={isLoading}
-                  isUpdating={isUpdating}
-                  isDocx={isDocx}
-                  docxBlob={docxBlob}
-                  parsedData={mergedParsedData}
-                  resumeId=""
-                  addedFields={{ skills: addedSkillFields }}
-                  editOverrides={resumeSections}
-                  onEditSection={(key) => { setIsEditMode(true); setOpenSection(key); }}
-                  onDeleteSection={(key) => { setDeletedSectionIds((prev) => [...prev, key]); setActiveSectionIds((prev) => prev.filter((id) => id !== key)); }}
-                  deletedSections={deletedSectionIds}
-                />
-              )}
+              {/* This view always has parsedData synchronously from props —
+                  there's no PDF/DOCX blob or async load here — so those
+                  ResumePreview props are fixed no-ops rather than real state. */}
+              <ResumePreview
+                pdfBlobUrl={null}
+                pdfError={null}
+                isLoading={false}
+                isUpdating={false}
+                isDocx={false}
+                docxBlob={null}
+                parsedData={mergedParsedData}
+                resumeId=""
+                addedFields={{ skills: addedSkillFields }}
+                editOverrides={resumeSections}
+                onEditSection={(key) => { setIsEditMode(true); setOpenSection(key); }}
+                onDeleteSection={(key) => { setDeletedSectionIds((prev) => [...prev, key]); setActiveSectionIds((prev) => prev.filter((id) => id !== key)); }}
+                deletedSections={deletedSectionIds}
+              />
             </div>
 
           </div>
