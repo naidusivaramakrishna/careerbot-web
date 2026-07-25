@@ -35,8 +35,3 @@ export function getSafeExternalUrl(url?: string | null): string | undefined {
     return undefined;
   }
 }
-
-/** Boolean form of {@link getSafeExternalUrl} for simple render guards. */
-export function isSafeExternalUrl(url?: string | null): boolean {
-  return getSafeExternalUrl(url) !== undefined;
-}

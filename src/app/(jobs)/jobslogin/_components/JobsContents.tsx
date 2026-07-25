@@ -299,7 +299,14 @@ export default function JobsContents() {
         skip: (page - 1) * MATCHED_PER_PAGE,
         ...(force && { force_refresh: true }),
       });
-      const normalized = (data.jobs || []).map((item) =>
+      // A malformed/unexpected response shape (e.g. the backend contract
+      // for this endpoint drifts) must not be silently treated the same as
+      // "0 scored jobs" — that would show a misleading empty state instead
+      // of surfacing the failure.
+      if (!Array.isArray(data.jobs)) {
+        throw new Error("Unexpected Smart Match response shape");
+      }
+      const normalized = data.jobs.map((item) =>
         normalizeJob(item.job, item.match.score, item.match)
       );
       setMatchedJobs(normalized);
@@ -590,6 +597,12 @@ export default function JobsContents() {
     : appliedJobsListLoading;
   const matchedCount = matchedTotal;
   const matchedTotalPages = Math.max(1, Math.ceil(matchedTotal / MATCHED_PER_PAGE));
+  // True when Smart Match has real results loaded but the active search/
+  // filters narrowed them to zero — as opposed to Smart Match genuinely
+  // having no matches. Search only covers the currently-loaded page of
+  // matches, so this case needs its own, honest copy (see empty state below).
+  const matchedSearchNarrowed =
+    isMatchedTab && !matchedNoResume && matchedJobs.length > 0 && !!(searchQuery || selectedFilters.length > 0);
 
   return (
     <div className="flex h-full w-full max-w-full min-w-0 items-stretch gap-4 overflow-hidden bg-white">
@@ -743,6 +756,8 @@ export default function JobsContents() {
                         : activeTab === "matched"
                         ? matchedNoResume
                           ? "Resume required for Smart Match"
+                          : matchedSearchNarrowed
+                          ? "No matches in your loaded results"
                           : "No matched jobs found"
                         : "No results found"}
                     </h3>
@@ -754,6 +769,8 @@ export default function JobsContents() {
                         : activeTab === "matched"
                         ? matchedNoResume
                           ? "Smart Match analyses your resume to score every job for you. Go to Profile → Resume tab to upload your resume."
+                          : matchedSearchNarrowed
+                          ? `Search and filters only apply to your currently loaded top ${matchedJobs.length} recommendations${searchQuery ? ` — none matched "${searchQuery}"` : ""}. Clear them to see all your matches.`
                           : "Smart Match ran but no strong matches found yet. Try clicking Retry or update your profile with more skills."
                         : "Try adjusting your search or filters to find more jobs."}
                     </p>
@@ -765,7 +782,7 @@ export default function JobsContents() {
                         Upload Resume in Profile →
                       </a>
                     )}
-                    {isMatchedTab && !matchedNoResume && matchedFetched && (
+                    {isMatchedTab && !matchedNoResume && matchedFetched && !matchedSearchNarrowed && (
                       <button
                         type="button"
                         onClick={() => fetchSmartMatchedJobs(matchedPage, true)}

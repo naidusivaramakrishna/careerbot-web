@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { Edit3, Trash2 } from "lucide-react";
 import { RESUME_FONTS } from "./ResumeHeader";
+import { getSafeExternalUrl } from "@/utils/validators";
 
 interface JobMatchTemplateProps {
   data: any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -477,28 +478,28 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
             {phone && <span>{hl('contact', 'phone', phone)}</span>}
             {phone && location && <span>|</span>}
             {location && <span>{hl('contact', 'location', location)}</span>}
-            {linkedin && (
+            {getSafeExternalUrl(linkedin) && (
               <>
                 <span>|</span>
-                <a href={linkedin.startsWith('http') ? linkedin : `https://${linkedin}`}
+                <a href={getSafeExternalUrl(linkedin)}
                    className="text-gray-700 hover:underline" target="_blank" rel="noopener noreferrer">
                   {hl('contact', 'linkedin', 'LinkedIn')}
                 </a>
               </>
             )}
-            {github && (
+            {getSafeExternalUrl(github) && (
               <>
                 <span>|</span>
-                <a href={github.startsWith('http') ? github : `https://${github}`}
+                <a href={getSafeExternalUrl(github)}
                    className="text-gray-700 hover:underline" target="_blank" rel="noopener noreferrer">
                   {hl('contact', 'github', 'GitHub')}
                 </a>
               </>
             )}
-            {portfolio && (
+            {getSafeExternalUrl(portfolio) && (
               <>
                 <span>|</span>
-                <a href={portfolio.startsWith('http') ? portfolio : `https://${portfolio}`}
+                <a href={getSafeExternalUrl(portfolio)}
                    className="text-gray-700 hover:underline" target="_blank" rel="noopener noreferrer">
                   {hl('contact', 'portfolio', 'Portfolio')}
                 </a>
@@ -667,8 +668,8 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                   <div className="flex justify-between items-start mb-1">
                     <div className="font-bold text-sm text-gray-900 flex items-center gap-2">
                       {title}
-                      {link && (
-                        <a href={link.startsWith('http') ? link : `https://${link}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
+                      {getSafeExternalUrl(link) && (
+                        <a href={getSafeExternalUrl(link)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
                           [Link]
                         </a>
                       )}
@@ -970,8 +971,8 @@ const JobMatchTemplate: React.FC<JobMatchTemplateProps> = ({ data: rawData, acti
                 <div key={idx} className="mb-3">
                   <div className="font-semibold text-sm text-gray-900 flex items-center gap-2">
                     {title}
-                    {url && (
-                      <a href={url.startsWith('http') ? url : `https://${url}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
+                    {getSafeExternalUrl(url) && (
+                      <a href={getSafeExternalUrl(url)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
                         [Link]
                       </a>
                     )}

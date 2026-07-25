@@ -4,6 +4,7 @@ import React from "react";
 import { Edit3, Trash2 } from "lucide-react";
 import SafeHTML from "@/components/common/SafeHTML";
 import AutoPaginator from "@/components/common/AutoPaginator";
+import { getSafeExternalUrl } from "@/utils/validators";
 
 interface JobMatchTemplateTHREEProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -510,8 +511,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
             {tags.length > 0 && (
               <p style={{ fontSize: "13px", color: "#4b5563", margin: "3px 0 0" }}>{tags.join(", ")}</p>
             )}
-            {url && (
-              <a href={url.startsWith("http") ? url : `https://${url}`} target="_blank" rel="noopener noreferrer"
+            {getSafeExternalUrl(url) && (
+              <a href={getSafeExternalUrl(url)} target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: "12.5px", color: "#1d4ed8", textDecoration: "none" }}>
                 [Link]
               </a>
@@ -565,22 +566,22 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
   if (email) contactParts.push(<span key="email">{hl("contact", "email", email)}</span>);
   if (phone) contactParts.push(<span key="phone">{hl("contact", "phone", phone)}</span>);
   if (location) contactParts.push(<span key="loc">{hl("contact", "location", location)}</span>);
-  if (linkedin) contactParts.push(
-    <a key="li" href={linkedin.startsWith("http") ? linkedin : `https://${linkedin}`}
+  if (getSafeExternalUrl(linkedin)) contactParts.push(
+    <a key="li" href={getSafeExternalUrl(linkedin)}
       target="_blank" rel="noopener noreferrer"
       style={{ color: "#1d4ed8", textDecoration: "none" }}>
       {hl("contact", "linkedin", "LinkedIn")}
     </a>
   );
-  if (github) contactParts.push(
-    <a key="gh" href={github.startsWith("http") ? github : `https://${github}`}
+  if (getSafeExternalUrl(github)) contactParts.push(
+    <a key="gh" href={getSafeExternalUrl(github)}
       target="_blank" rel="noopener noreferrer"
       style={{ color: "#1d4ed8", textDecoration: "none" }}>
       {hl("contact", "github", "GitHub")}
     </a>
   );
-  if (portfolio) contactParts.push(
-    <a key="pf" href={portfolio.startsWith("http") ? portfolio : `https://${portfolio}`}
+  if (getSafeExternalUrl(portfolio)) contactParts.push(
+    <a key="pf" href={getSafeExternalUrl(portfolio)}
       target="_blank" rel="noopener noreferrer"
       style={{ color: "#1d4ed8", textDecoration: "none" }}>
       {hl("contact", "portfolio", "Portfolio")}
@@ -777,8 +778,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                           <span style={{ fontSize: "14.5px", fontWeight: 700, color: "#111827" }}>{projTitle}</span>
-                          {link && (
-                            <a href={link.startsWith("http") ? link : `https://${link}`}
+                          {getSafeExternalUrl(link) && (
+                            <a href={getSafeExternalUrl(link)}
                               target="_blank" rel="noopener noreferrer"
                               style={{ fontSize: "12.5px", color: "#1d4ed8", textDecoration: "none" }}>
                               [Link]
@@ -1040,8 +1041,8 @@ const JobMatchTemplateThree: React.FC<JobMatchTemplateTHREEProps> = ({
                     <div key={idx} style={{ marginBottom: "8px" }} className="page-break-inside-avoid">
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <span style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{pubTitle}</span>
-                        {url && (
-                          <a href={url.startsWith("http") ? url : `https://${url}`} target="_blank" rel="noopener noreferrer"
+                        {getSafeExternalUrl(url) && (
+                          <a href={getSafeExternalUrl(url)} target="_blank" rel="noopener noreferrer"
                             style={{ fontSize: "12.5px", color: "#1d4ed8", textDecoration: "none" }}>[Link]</a>
                         )}
                       </div>
