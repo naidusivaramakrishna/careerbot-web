@@ -25,10 +25,10 @@ export function getSafeExternalUrl(url?: string | null): string | undefined {
   if (!url) return undefined;
   const trimmed = url.trim();
   if (!trimmed) return undefined;
-  const withScheme =
-    trimmed.startsWith("http://") || trimmed.startsWith("https://")
-      ? trimmed
-      : `https://${trimmed}`;
+  // Case-insensitive: "HTTP://example.com" already has a scheme and must not
+  // get a second "https://" prepended (which would turn it into an
+  // unparseable/wrong URL and silently drop an otherwise-legitimate link).
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   try {
     return SAFE_URL_PROTOCOLS.has(new URL(withScheme).protocol) ? withScheme : undefined;
   } catch {

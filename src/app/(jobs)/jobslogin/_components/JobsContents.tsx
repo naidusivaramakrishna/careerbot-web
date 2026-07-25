@@ -457,7 +457,9 @@ export default function JobsContents() {
     setSavedJobsCount(getSavedJobsCount(userId));
   }, [userId]);
 
-  // ── Trigger SmartMatch fetch when tab becomes active ──
+  // ── Trigger SmartMatch fetch when tab becomes active — also covers the
+  //    initial mount fetch (for the sidebar's "Top Picks") since "matched"
+  //    is the default active tab. ──
   useEffect(() => {
     if (activeTab === "matched") {
       fetchSmartMatchedJobs();
@@ -469,14 +471,6 @@ export default function JobsContents() {
       fetchAppliedJobsList();
     }
   }, [activeTab, fetchSmartMatchedJobs, fetchSavedJobsList, fetchAppliedJobsList]);
-
-  // ── Eagerly fetch Smart Match jobs on mount so the sidebar's "Top Picks"
-  //    (real resume-matched recommendations) has data without requiring the
-  //    user to open the Smart Match tab first. ──
-  useEffect(() => {
-    fetchSmartMatchedJobs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ── Top Picks — real recommendations, sorted by match score ──
   const topPickJobs = useMemo(
