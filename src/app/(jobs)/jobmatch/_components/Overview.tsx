@@ -21,9 +21,13 @@ import {
   getMatchAnalytics,
 } from "@/api/parserApi";
 import { getExtensionSession } from "@/api/extensionApi";
+import { hasAllowedDocumentExtension } from "@/utils/validators";
+
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 
 async function getMatchByIds(resume_id: string, jd_id: string) {
-  const response = await fetch(`/api/v1/matcher/match?resume_id=${resume_id}&jd_id=${jd_id}`);
+  const params = new URLSearchParams({ resume_id, jd_id });
+  const response = await fetch(`/api/v1/matcher/match?${params.toString()}`);
   if (!response.ok) throw new Error("Failed to fetch match");
   return response.json();
 }
@@ -138,13 +142,16 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
   const handleResumeUpload = (file: File) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { setError("Resume must be under 10MB."); return; }
+    if (!hasAllowedDocumentExtension(file.name)) { setError("Please upload a PDF, DOC, DOCX, or TXT file."); return; }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Resume must be under 10MB."); return; }
     setUploadedFile(file);
     setError(null);
   };
 
   const handleJDFileUpload = async (file: File) => {
     if (!file) return;
+    if (!hasAllowedDocumentExtension(file.name)) { setError("Please upload a PDF, DOC, DOCX, or TXT file."); return; }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Job description file must be under 10MB."); return; }
     const token = ++jdUploadTokenRef.current;
     setJdFile(file);
     setJdFileParsed(null);

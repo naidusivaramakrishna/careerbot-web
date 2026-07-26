@@ -29,7 +29,7 @@ export interface ParseJdByJobResponse {
 
 export const parseJdByJob = async (jobId: string): Promise<ParseJdByJobResponse> => {
   const response = await httpClient.post<ParseJdByJobResponse>(
-    `/jd/parse-by-job/${jobId}`,
+    `/jd/parse-by-job/${encodeURIComponent(jobId)}`,
     {}
   );
   return response.data;

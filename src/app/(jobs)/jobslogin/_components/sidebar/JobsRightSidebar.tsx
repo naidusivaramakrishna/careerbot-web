@@ -103,49 +103,6 @@ export default function JobsRightSidebar({
         </div>
       </div>
 
-      {/* Nancy floating widget — pinned to the panel's own corner (not the
-          scroll content), so it never drifts over cards while scrolling. */}
-      <div className="hidden">
-        {!bubbleDismissed && (
-          <div
-            className="relative rounded-2xl rounded-br-sm bg-white px-4 py-3"
-            style={{
-              boxShadow: "0 8px 24px rgba(15,23,42,0.12), 0 1px 4px rgba(15,23,42,0.06)",
-              border: "1px solid rgba(148,163,184,0.22)",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setBubbleDismissed(true)}
-              className="absolute right-2 top-2 text-gray-400 hover:text-gray-600 transition-colors"
-              aria-label="Dismiss"
-            >
-              <X size={13} />
-            </button>
-            <p className="pr-4 text-[13px] leading-snug text-slate-700">
-              Hi! 👋 Ask me about job fit,<br />salary, or your next best move.
-            </p>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setBubbleDismissed(false);
-            onChatOpen?.();
-          }}
-          className="relative h-14 w-14 rounded-full transition-transform hover:scale-105 active:scale-95 focus:outline-none"
-          style={{ boxShadow: "0 8px 24px rgba(79,70,229,0.25), 0 2px 8px rgba(15,23,42,0.10)" }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/images/ac4923bc-9ee8-4734-ad60-fc93e8935797.png"
-            alt="Nancy AI"
-            className="h-full w-full rounded-full object-cover"
-          />
-          <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400" />
-        </button>
-      </div>
-
       <div className="fixed bottom-6 right-6 z-30 flex flex-col items-end gap-2 xl:hidden">
         {!bubbleDismissed && (
           <div

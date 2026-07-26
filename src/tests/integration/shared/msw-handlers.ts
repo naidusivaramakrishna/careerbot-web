@@ -129,7 +129,7 @@ export const handlers = [
     });
   }),
 
-  http.get(`${API_BASE}/v1/jobs/matched`, () => {
+  http.get(`${API_BASE}/v1/jobs/scored`, () => {
     return HttpResponse.json(mockResponses.jobs.smartMatch);
   }),
 
