@@ -35,6 +35,9 @@ interface JobItem {
   match_band?: string;
   applicant_count?: number | string;
   h1b_sponsor?: boolean;
+  remote?: boolean;
+  requirements?: string[];
+  responsibilities?: string;
 }
 
 type JobListProps = {

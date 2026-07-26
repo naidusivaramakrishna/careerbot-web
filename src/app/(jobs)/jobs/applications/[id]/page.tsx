@@ -372,7 +372,7 @@ export default function ApplicationTrackingPage() {
         setError(null);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
-        console.error("Error fetching application:", err);
+        console.error("Error fetching application:", err?.response?.status || err?.message || err);
         if (err.response?.status === 404) {
           setError("Application not found");
         } else {

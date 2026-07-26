@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useJobTracker } from '../_hooks/useJobTracker';
 import { JobApplicationRecord } from './mockTrackerData';
+import { getSafeExternalUrl } from '@/utils/validators';
 
 type TabType = 'Applied' | 'Saved' | 'Interview' | 'Offer' | 'Rejected';
 
@@ -151,6 +152,7 @@ function JobCard({
   job, isExpanded, onToggleExpand, onStatusChange, onNotesChange, onDelete, editingNotes,
 }: JobCardProps) {
   const cfg = TAB_CFG[job.status];
+  const safeJobUrl = getSafeExternalUrl(job.jobUrl);
 
   return (
     <div
@@ -247,9 +249,9 @@ function JobCard({
 
           {/* Footer actions */}
           <div className="flex items-center justify-between pt-1">
-            {job.jobUrl ? (
+            {safeJobUrl ? (
               <a
-                href={job.jobUrl}
+                href={safeJobUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#2557a7] hover:text-[#1a3e8c] transition-colors"

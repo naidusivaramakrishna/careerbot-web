@@ -3,14 +3,14 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
-import { searchJobs, getSmartMatchedJobs, getJobById } from "@/api/jobsApi";
+import { getSmartMatchedJobs, getJobById } from "@/api/jobsApi";
 import type { MatchedJobItem } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/filterConstants";
 import { toast } from "sonner";
 import { getSavedJobIds, getSavedJobsCount, getApplicationHistory, getApplicationCount, recordJobApplication } from "@/utils/jobTracking";
 import { getJobId } from "@/utils/jobIdHelper";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
-import { Bookmark, Zap, Search, AlertTriangle, RotateCcw, FileX, MessageCircle, CheckCircle2, Briefcase, X } from "lucide-react";
+import { Bookmark, Zap, Search, RotateCcw, FileX, MessageCircle, CheckCircle2, Briefcase, X } from "lucide-react";
 
 import JobsTabs, { TabType, SortType, FilterSort } from "./JobsTabs";
 import JobList from "./sidebar/JobList";
@@ -48,7 +48,7 @@ interface PendingApplyJob {
 const PENDING_APPLY_KEY = "pendingApplyJob";
 
 // ── Normalized shape used throughout the component ──
-interface NormalizedJob {
+export interface NormalizedJob {
   id: string;
   title: string;
   company: string;
@@ -75,6 +75,9 @@ interface NormalizedJob {
   education: string;
   source: string;
   is_applied: boolean;
+  remote: boolean;
+  requirements: string[];
+  responsibilities: string;
   matched_skills?: string[];
   missing_skills?: string[];
   match_band?: string;
@@ -89,7 +92,17 @@ function str(job: Record<string, unknown>, ...keys: string[]): string {
   return "";
 }
 
-function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: MatchedJobItem["match"]): NormalizedJob {
+function strArr(job: Record<string, unknown>, ...keys: string[]): string[] {
+  for (const k of keys) {
+    const v = job[k];
+    if (Array.isArray(v)) {
+      return v.filter((r): r is string => typeof r === "string" && r.trim().length > 0);
+    }
+  }
+  return [];
+}
+
+export function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: MatchedJobItem["match"]): NormalizedJob {
   const title = str(job, "title", "job_title") || "Job Title";
   const company = str(job, "company", "company_name", "organization", "about_company", "employer");
   const location = str(job, "location", "job_location", "city", "place") || "Location not specified";
@@ -135,6 +148,13 @@ function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: 
     education: str(job, "education", "qualification", "education_required", "min_education"),
     source: str(job, "source"),
     is_applied: !!job["is_applied"],
+    remote: !!job["remote"],
+    // "requirements" matches every other place this concept appears in the
+    // codebase (recruiter job-post/edit-job forms, JobDescription type) —
+    // "requirements_list" appears nowhere else, so it's kept only as a
+    // defensive fallback in case this endpoint's payload genuinely differs.
+    requirements: strArr(job, "requirements", "requirements_list"),
+    responsibilities: str(job, "responsibilities"),
     matched_skills: matchData?.matched_skills,
     missing_skills: matchData?.missing_skills,
     match_band: matchData?.band,
@@ -142,29 +162,20 @@ function normalizeJob(job: Record<string, unknown>, matchScore = 0, matchData?: 
   };
 }
 
-const JOBS_PER_PAGE = 50;
 const MATCHED_PER_PAGE = 50;
 
 export default function JobsContents() {
   const searchParams = useSearchParams();
   const { userId } = useCurrentUserId();
 
-  // ── Fetch / pagination ──
-  const [jobs, setJobs] = useState<NormalizedJob[]>([]);
+  // ── Filtered results (derived per active tab — see the effect below) ──
   const [filteredJobs, setFilteredJobs] = useState<NormalizedJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalJobs, setTotalJobs] = useState<number | undefined>(undefined);
 
-  // ── Search & filter ──
+  // ── Search & filter — searchQuery filters client-side within whichever
+  //    tab is active (Smart Match/Saved/Applied), see the filter effect ──
   const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [activeFilters, setActiveFilters] = useState<FilterParams>({});
-  const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [selectedLocation] = useState("All Locations");
+  const [activeTab, setActiveTab] = useState<TabType>("matched");
   const [sortBy, setSortBy] = useState<SortType>("relevance");
   const [filterSort, setFilterSort] = useState<FilterSort>("most-recent");
 
@@ -219,8 +230,6 @@ export default function JobsContents() {
     setSearchQuery(val);
     setInputValue(val);
     setShowSuggestions(false);
-    setCurrentPage(1);
-    setJobs([]);
   };
 
   // ── Seed search from ?q= (e.g. arriving from the homepage search bar) ──
@@ -229,8 +238,6 @@ export default function JobsContents() {
     if (q) {
       setSearchQuery(q);
       setInputValue(q);
-      setCurrentPage(1);
-      setJobs([]);
     }
 
     const location = searchParams.get("location");
@@ -271,6 +278,7 @@ export default function JobsContents() {
   const [matchedLoading, setMatchedLoading] = useState(false);
   const [matchedFetched, setMatchedFetched] = useState(false);
   const [matchedNoResume, setMatchedNoResume] = useState(false);
+  const [matchedError, setMatchedError] = useState(false);
   const [matchBandFilter] = useState<"all" | "strong" | "good" | "partial" | "low">("all");
 
   // ── Sort helper ──
@@ -287,121 +295,31 @@ export default function JobsContents() {
     });
   }, []);
 
-  // ── Filter change handler ──
-  const handleFilterChange = useCallback((filters: FilterParams) => {
-    setActiveFilters((prev) => ({ ...prev, ...filters }));
-    setCurrentPage(1);
-    setJobs([]);
-  }, []);
-
-  // ── Fetch all/search jobs ──
-  const fetchJobs = useCallback(
-    async (page = 1) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // Derive server-side params from selectedFilters
-        const activeLocationChips = selectedFilters
-          .filter((f) => f.startsWith("location:"))
-          .map((f) => f.replace("location:", ""));
-        const datePreset = selectedFilters.find((f) => f.startsWith("date:"));
-        const sourceChip = selectedFilters.find((f) => f.startsWith("source:"));
-
-        const dateFrom = (() => {
-          if (!datePreset) return undefined;
-          const dayMap: Record<string, number> = {
-            "Last 24 hours": 1,
-            "Last 7 days": 7,
-            "Last 30 days": 30,
-            "Last 3 months": 90,
-          };
-          const days = dayMap[datePreset.replace("date:", "")];
-          return days ? new Date(Date.now() - days * 86_400_000).toISOString() : undefined;
-        })();
-
-        const serverLocation =
-          activeLocationChips.length === 1
-            ? activeLocationChips[0]
-            : selectedLocation !== "All Locations"
-            ? selectedLocation
-            : undefined;
-        const serverSource = sourceChip ? sourceChip.replace("source:", "") : undefined;
-
-        const response = await searchJobs({
-          q: searchQuery || roleFilter || undefined,
-          location: serverLocation,
-          source: activeFilters.source || serverSource,
-          date_from: activeFilters.date_from || dateFrom,
-          page,
-          limit: JOBS_PER_PAGE,
-        });
-
-        if (!response.success || !response.data) {
-          throw new Error(response.message || "Failed to fetch jobs");
-        }
-
-        const jobsData = Array.isArray(response.data) ? response.data : [];
-        const pagination = response.pagination;
-        const normalized = jobsData.map((job) => normalizeJob(job as unknown as Record<string, unknown>));
-
-        // Deduplicate by ID
-        const seenIds = new Set<string>();
-        const deduped = normalized.filter((j) => {
-          if (seenIds.has(j.id)) return false;
-          seenIds.add(j.id);
-          return true;
-        });
-
-        // Deduplicate by title+company+location
-        const seenKeys = new Set<string>();
-        const unique = deduped.filter((j) => {
-          const key = `${j.title}||${j.company}||${j.location}`.toLowerCase();
-          if (seenKeys.has(key)) return false;
-          seenKeys.add(key);
-          return true;
-        });
-
-        setJobs(unique);
-        setCurrentPage(page);
-        setSavedJobsCount(getSavedJobsCount(userId));
-        setAppliedJobsCount(getApplicationCount(userId));
-
-        const total = pagination?.total || normalized.length;
-        const hasNext = pagination?.has_next || false;
-        const calcPages =
-          pagination?.total_pages ||
-          (total > 0 ? Math.ceil(total / JOBS_PER_PAGE) : hasNext ? page + 1 : page);
-        setTotalPages(calcPages);
-        setTotalJobs(pagination?.total ?? undefined);
-
-        if (normalized.length === 0) {
-          toast.info("No jobs found matching your criteria");
-        }
-      } catch (err: unknown) {
-        const msg =
-          err instanceof Error ? err.message : "Failed to fetch jobs. Please try again.";
-        setError(msg);
-        toast.error(msg);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [activeFilters, selectedLocation, searchQuery, roleFilter, selectedFilters, userId]
-  );
+  // ── Filter change handler — required by JobsFilterSidebar's salary-range
+  //    control, but actual salary filtering runs through the "salary:" chip
+  //    (selectedFilters) via matchesJobFilters, so there's nothing to store. ──
+  const handleFilterChange = useCallback((_filters: FilterParams) => {}, []);
 
   // ── Fetch SmartMatch jobs (lazy — only when tab first activated; paginated) ──
   const fetchSmartMatchedJobs = useCallback(async (page = 1, force = false) => {
     if (matchedFetched && page === matchedPage && !force) return;
     setMatchedLoading(true);
     setMatchedNoResume(false);
+    setMatchedError(false);
     try {
       const data = await getSmartMatchedJobs({
         limit: MATCHED_PER_PAGE,
         skip: (page - 1) * MATCHED_PER_PAGE,
         ...(force && { force_refresh: true }),
       });
-      const normalized = (data.jobs || []).map((item) =>
+      // A malformed/unexpected response shape (e.g. the backend contract
+      // for this endpoint drifts) must not be silently treated the same as
+      // "0 scored jobs" — that would show a misleading empty state instead
+      // of surfacing the failure.
+      if (!Array.isArray(data.jobs)) {
+        throw new Error("Unexpected Smart Match response shape");
+      }
+      const normalized = data.jobs.map((item) =>
         normalizeJob(item.job, item.match.score, item.match)
       );
       setMatchedJobs(normalized);
@@ -417,7 +335,11 @@ export default function JobsContents() {
         setMatchedFetched(true);
       } else {
         // Transient failure — leave matchedFetched false so the next tab
-        // activation retries instead of caching the error.
+        // activation retries instead of caching the error. matchedError
+        // tracks this separately so the empty state can show a Retry
+        // button immediately instead of only after the user leaves and
+        // re-enters this tab (matchedFetched alone doesn't change here).
+        setMatchedError(true);
         toast.error("Could not load Smart Match jobs. Please try again later.");
       }
     } finally {
@@ -546,17 +468,22 @@ export default function JobsContents() {
     fetchAppliedJobsList();
   };
 
-  // ── Initial / search / filter fetch ──
+  // ── Saved count is a local (no-network) read — refresh on mount so the
+  //    tab badge is accurate without requiring a visit to the Saved tab. ──
   useEffect(() => {
-    setCurrentPage(1);
-    setJobs([]);
-    setFilteredJobs([]);
-    fetchJobs(1);
-  }, [fetchJobs]);
+    setSavedJobsCount(getSavedJobsCount(userId));
+  }, [userId]);
 
-  // ── Trigger SmartMatch fetch when tab becomes active ──
+  // ── Trigger SmartMatch fetch when tab becomes active — also covers the
+  //    initial mount fetch (for the sidebar's "Top Picks") since "matched"
+  //    is the default active tab. ──
   useEffect(() => {
-    if (activeTab === "matched") {
+    // Only auto-fetch on FIRST activation. Paginating updates matchedPage,
+    // which recreates fetchSmartMatchedJobs (its useCallback dep), reruns this
+    // effect, and would refetch page 1 — snapping the user back. The
+    // matchedFetched guard prevents that while still loading on initial entry
+    // and re-loading after a tab switch only when nothing is cached yet.
+    if (activeTab === "matched" && !matchedFetched) {
       fetchSmartMatchedJobs();
     }
     if (activeTab === "saved") {
@@ -565,15 +492,7 @@ export default function JobsContents() {
     if (activeTab === "applied") {
       fetchAppliedJobsList();
     }
-  }, [activeTab, fetchSmartMatchedJobs, fetchSavedJobsList, fetchAppliedJobsList]);
-
-  // ── Eagerly fetch Smart Match jobs on mount so the sidebar's "Top Picks"
-  //    (real resume-matched recommendations) has data without requiring the
-  //    user to open the Smart Match tab first. ──
-  useEffect(() => {
-    fetchSmartMatchedJobs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeTab, matchedFetched, fetchSmartMatchedJobs, fetchSavedJobsList, fetchAppliedJobsList]);
 
   // ── Top Picks — real recommendations, sorted by match score ──
   const topPickJobs = useMemo(
@@ -581,18 +500,20 @@ export default function JobsContents() {
     [matchedJobs]
   );
 
-  const handlePageChange = (page: number) => {
-    fetchJobs(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   const handleMatchedPageChange = (page: number) => {
     fetchSmartMatchedJobs(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // ── Client-side filter / tab logic ──
+  // ── Client-side filter / tab logic — searchQuery filters by title/company
+  //    within whichever tab is active (there's no separate "all jobs" list
+  //    to search server-side anymore). For Smart Match this only searches
+  //    within the currently-loaded page of matches, not the full dataset. ──
   useEffect(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesQuery = (job: NormalizedJob) =>
+      !query || job.title.toLowerCase().includes(query) || job.company.toLowerCase().includes(query);
+
     // Matched tab: apply band filter + other filters
     if (activeTab === "matched") {
       let filtered = [...matchedJobs];
@@ -602,19 +523,19 @@ export default function JobsContents() {
         filtered = filtered.filter((j) => j.match_band === matchBandFilter);
       }
 
-      // Apply other filters (same logic as All Jobs tab)
       if (selectedFilters.length > 0) {
         filtered = filtered.filter((job) =>
           matchesJobFilters(job, selectedFilters, { includeSource: true })
         );
       }
+      filtered = filtered.filter(matchesQuery);
 
       setFilteredJobs(sortJobs(filtered, filterSort));
       return;
     }
 
     // Saved tab: fetched directly by id, independent of what's currently
-    // loaded in "All Jobs"/"Smart Match" — see fetchSavedJobsList.
+    // loaded in Smart Match — see fetchSavedJobsList.
     if (activeTab === "saved") {
       let filtered = [...savedJobsList];
       if (selectedFilters.length > 0) {
@@ -622,46 +543,33 @@ export default function JobsContents() {
           matchesJobFilters(job, selectedFilters, { includeSource: true })
         );
       }
+      filtered = filtered.filter(matchesQuery);
       setFilteredJobs(sortJobs(filtered, filterSort));
       return;
     }
 
     // Applied tab: fetched directly by id from local application history,
-    // same reasoning as Saved — see fetchAppliedJobsList.
-    if (activeTab === "applied") {
-      let filtered = [...appliedJobsList];
-      if (selectedFilters.length > 0) {
-        filtered = filtered.filter((job) =>
-          matchesJobFilters(job, selectedFilters, { includeSource: true })
-        );
-      }
-      setFilteredJobs(sortJobs(filtered, filterSort));
-      return;
-    }
-
-    let filtered = [...jobs];
-
-    // selectedLocation and single locationChip are server-side — skip client filter for them
-    // searchQuery and roleFilter are server-side (sent as `q`) — skip client filter
-
+    // same reasoning as Saved — see fetchAppliedJobsList. created_at on
+    // these placeholders holds the *application* date (for sort order)
+    // until/unless background enrichment replaces it with the real posting
+    // date — includeDate: false keeps "Date Posted" from silently filtering
+    // by application date instead.
+    let filtered = [...appliedJobsList];
     if (selectedFilters.length > 0) {
       filtered = filtered.filter((job) =>
-        matchesJobFilters(job, selectedFilters, { includeSource: true })
+        matchesJobFilters(job, selectedFilters, { includeSource: true, includeDate: false })
       );
     }
-
+    filtered = filtered.filter(matchesQuery);
     setFilteredJobs(sortJobs(filtered, filterSort));
   }, [
-    jobs,
     matchedJobs,
     savedJobsList,
     appliedJobsList,
     matchBandFilter,
     searchQuery,
-    roleFilter,
     selectedFilters,
     activeTab,
-    selectedLocation,
     filterSort,
     sortJobs,
   ]);
@@ -702,15 +610,19 @@ export default function JobsContents() {
   // ── Derived values ──
   const isMatchedTab = activeTab === "matched";
   const isSavedTab = activeTab === "saved";
-  const isAppliedTab = activeTab === "applied";
   const displayLoading = isMatchedTab
     ? matchedLoading
     : isSavedTab
     ? savedJobsListLoading
-    : isAppliedTab
-    ? appliedJobsListLoading
-    : loading;
+    : appliedJobsListLoading;
   const matchedCount = matchedTotal;
+  const matchedTotalPages = Math.max(1, Math.ceil(matchedTotal / MATCHED_PER_PAGE));
+  // True when Smart Match has real results loaded but the active search/
+  // filters narrowed them to zero — as opposed to Smart Match genuinely
+  // having no matches. Search only covers the currently-loaded page of
+  // matches, so this case needs its own, honest copy (see empty state below).
+  const matchedSearchNarrowed =
+    isMatchedTab && !matchedNoResume && matchedJobs.length > 0 && !!(searchQuery || selectedFilters.length > 0);
 
   return (
     <div className="flex h-full w-full max-w-full min-w-0 items-stretch gap-4 overflow-hidden bg-white">
@@ -726,13 +638,13 @@ export default function JobsContents() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5">
                     <h1 className="truncate text-[26px] font-extrabold leading-tight text-slate-950">
-                      {isMatchedTab
-                        ? "Smart Match Jobs"
-                        : searchQuery
+                      {searchQuery
                         ? `Results for "${searchQuery}"`
-                        : roleFilter
-                        ? `${roleFilter} Jobs`
-                        : "All Jobs"}
+                        : isMatchedTab
+                        ? "Smart Match Jobs"
+                        : isSavedTab
+                        ? "Saved Jobs"
+                        : "Applied Jobs"}
                     </h1>
                     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#4F46E5]/15 bg-[#eef3ff] px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[#4F46E5] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
                       <span className="w-1.5 h-1.5 rounded-full bg-[#4F46E5] animate-pulse shrink-0" />
@@ -745,7 +657,6 @@ export default function JobsContents() {
                       : displayLoading
                       ? "Loading…"
                       : "No results"}
-                    {selectedLocation !== "All Locations" && ` · ${selectedLocation}`}
                   </p>
                 </div>
               </div>
@@ -818,7 +729,7 @@ export default function JobsContents() {
                   selectedFilters={selectedFilters}
                   onFilterToggle={handleFilterToggle}
                   onFilterChange={handleFilterChange}
-                  jobs={isMatchedTab ? matchedJobs : jobs}
+                  jobs={isMatchedTab ? matchedJobs : isSavedTab ? savedJobsList : appliedJobsList}
                 />
 
                 <JobsTabs
@@ -827,7 +738,6 @@ export default function JobsContents() {
                   savedCount={savedJobsCount}
                   appliedCount={appliedJobsCount}
                   matchedCount={matchedCount}
-                  allCount={totalJobs ?? filteredJobs.length}
                   sortBy={sortBy}
                   onSortChange={setSortBy}
                   filterSort={filterSort}
@@ -842,22 +752,6 @@ export default function JobsContents() {
                     {Array.from({ length: 5 }).map((_, i) => (
                       <JobSkeleton key={i} />
                     ))}
-                  </div>
-                ) : error && !isMatchedTab ? (
-                  <div className="flex flex-col items-center justify-center py-14 px-8 text-center">
-                    <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mb-4 shadow-sm">
-                      <AlertTriangle size={24} className="text-red-400" />
-                    </div>
-                    <h3 className="text-[15px] font-bold text-gray-800">Failed to Load Jobs</h3>
-                    <p className="text-gray-500 text-[12.5px] mt-1.5 max-w-xs leading-relaxed">{error}</p>
-                    <button
-                      type="button"
-                      onClick={() => fetchJobs(currentPage)}
-                      className="mt-5 inline-flex items-center gap-2 px-5 py-2 bg-[#4F46E5] text-white text-[13px] font-semibold rounded-full hover:bg-[#4338CA] transition-colors"
-                    >
-                      <RotateCcw size={13} />
-                      Try Again
-                    </button>
                   </div>
                 ) : filteredJobs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
@@ -881,6 +775,10 @@ export default function JobsContents() {
                         : activeTab === "matched"
                         ? matchedNoResume
                           ? "Resume required for Smart Match"
+                          : matchedError
+                          ? "Couldn't load Smart Match"
+                          : matchedSearchNarrowed
+                          ? "No matches in your loaded results"
                           : "No matched jobs found"
                         : "No results found"}
                     </h3>
@@ -892,6 +790,10 @@ export default function JobsContents() {
                         : activeTab === "matched"
                         ? matchedNoResume
                           ? "Smart Match analyses your resume to score every job for you. Go to Profile → Resume tab to upload your resume."
+                          : matchedError
+                          ? "Something went wrong loading your matches. Please try again."
+                          : matchedSearchNarrowed
+                          ? `Search and filters only apply to your currently loaded top ${matchedJobs.length} recommendations${searchQuery ? ` — none matched "${searchQuery}"` : ""}. Clear them to see all your matches.`
                           : "Smart Match ran but no strong matches found yet. Try clicking Retry or update your profile with more skills."
                         : "Try adjusting your search or filters to find more jobs."}
                     </p>
@@ -903,7 +805,7 @@ export default function JobsContents() {
                         Upload Resume in Profile →
                       </a>
                     )}
-                    {isMatchedTab && !matchedNoResume && matchedFetched && (
+                    {isMatchedTab && !matchedNoResume && (matchedFetched || matchedError) && !matchedSearchNarrowed && (
                       <button
                         type="button"
                         onClick={() => fetchSmartMatchedJobs(matchedPage, true)}
@@ -913,22 +815,20 @@ export default function JobsContents() {
                         Retry Smart Match
                       </button>
                     )}
-                    {!isMatchedTab &&
-                      (searchQuery || roleFilter || selectedFilters.length > 0) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSearchQuery("");
-                            setInputValue("");
-                            setRoleFilter("");
-                            setSelectedFilters([]);
-                          }}
-                          className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#0f172a] text-white text-sm font-semibold rounded-full hover:bg-[#1e293b] transition-colors"
-                        >
-                          <FileX size={13} />
-                          Clear Filters &amp; Try Again
-                        </button>
-                      )}
+                    {(searchQuery || selectedFilters.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setInputValue("");
+                          setSelectedFilters([]);
+                        }}
+                        className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#0f172a] text-white text-sm font-semibold rounded-full hover:bg-[#1e293b] transition-colors"
+                      >
+                        <FileX size={13} />
+                        Clear Filters &amp; Try Again
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <JobList
@@ -948,41 +848,16 @@ export default function JobsContents() {
                   />
                 )}
 
-                {/* Pagination — Saved/Applied tabs are fully-loaded personal lists, no paging needed */}
-                {filteredJobs.length > 0 && !isSavedTab && !isAppliedTab &&
-                  (() => {
-                    if (isMatchedTab) {
-                      const matchedTotalPages = Math.max(1, Math.ceil(matchedTotal / MATCHED_PER_PAGE));
-                      return matchedTotalPages > 1 ? (
-                        <Pagination
-                          currentPage={matchedPage}
-                          totalPages={matchedTotalPages}
-                          totalItems={matchedTotal}
-                          itemsPerPage={MATCHED_PER_PAGE}
-                          onPageChange={handleMatchedPageChange}
-                        />
-                      ) : null;
-                    }
-
-                    const hasClientFilter = !!(
-                      roleFilter ||
-                      searchQuery ||
-                      selectedFilters.length > 0 ||
-                      selectedLocation !== "All Locations"
-                    );
-                    const effectiveTotalPages = hasClientFilter
-                      ? Math.max(1, Math.ceil(filteredJobs.length / JOBS_PER_PAGE))
-                      : totalPages;
-                    return effectiveTotalPages > 1 ? (
-                      <Pagination
-                        currentPage={currentPage}
-                        totalPages={effectiveTotalPages}
-                        totalItems={totalJobs}
-                        itemsPerPage={JOBS_PER_PAGE}
-                        onPageChange={handlePageChange}
-                      />
-                    ) : null;
-                  })()}
+                {/* Pagination — Smart Match only; Saved/Applied are fully-loaded personal lists */}
+                {filteredJobs.length > 0 && isMatchedTab && matchedTotalPages > 1 && (
+                  <Pagination
+                    currentPage={matchedPage}
+                    totalPages={matchedTotalPages}
+                    totalItems={matchedTotal}
+                    itemsPerPage={MATCHED_PER_PAGE}
+                    onPageChange={handleMatchedPageChange}
+                  />
+                )}
               </div>
             </div>
           </div>

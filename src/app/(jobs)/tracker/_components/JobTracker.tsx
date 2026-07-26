@@ -14,6 +14,7 @@ import {
   SavedJob,
 } from "@/utils/jobTracking";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
+import { getSafeExternalUrl } from "@/utils/validators";
 
 /* ══════════════════════════════════════════
    Status management (localStorage)
@@ -289,6 +290,7 @@ function AppliedRow({
   onStatusChange: (id: string, s: AppStatus) => void;
 }) {
   const cfg = STATUS_CFG[status];
+  const safeUrl = getSafeExternalUrl(app.url);
   return (
     <div
       className="group flex items-center gap-4 pl-0 pr-5 py-3.5 border-b border-gray-50 hover:bg-[#f8faff] transition-all relative"
@@ -325,9 +327,9 @@ function AppliedRow({
       <StatusDropdown jobId={app.jobId} status={status} onChange={(s) => onStatusChange(app.jobId, s)} />
 
       {/* Link */}
-      {app.url && (
+      {safeUrl && (
         <a
-          href={app.url}
+          href={safeUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-[#2557a7] hover:bg-[#eff6ff]"
