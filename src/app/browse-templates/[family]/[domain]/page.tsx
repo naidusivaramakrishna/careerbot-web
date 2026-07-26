@@ -77,7 +77,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
   // The template API requires authentication — guard with getProfile first to avoid
   // triggering the auth-redirect interceptor for unauthenticated visitors.
   useEffect(() => {
-    getProfile({ skipAuthRedirect: true })
+    getProfile({ skipRefresh: true })
       .then(() => getTemplatesByCategory())
       .then(all => {
         const familyTpls = all.filter(
@@ -227,7 +227,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
   const handleApply = useCallback(async () => {
     let authenticated = false
     try {
-      await getProfile({ skipAuthRedirect: true })
+      await getProfile({ skipRefresh: true })
       authenticated = true
       await applyTemplate(selectedLevel)
     } catch (err) {

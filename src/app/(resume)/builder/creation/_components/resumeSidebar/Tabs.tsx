@@ -23,6 +23,7 @@ const Tabs: React.FC<TabsProps> = ({
   onToggle,
   activeTab,
   setActiveTab,
+  isTemplateSidebarOpen = true,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 

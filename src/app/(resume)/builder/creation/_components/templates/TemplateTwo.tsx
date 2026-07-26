@@ -10,10 +10,9 @@ interface Props {
   data: ResumeData;
   style: ResumeStyle;
   onPageCountChange?: (count: number) => void;
-  currentPage?: number;
 }
 
-const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) => {
+const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
   const { resumeStyle, sectionOrder } = useResume();
   
   const {
@@ -170,7 +169,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
                 SUMMARY
               </h3>
               {/* ✅ Changed to support HTML formatting */}
-              <SafeHTML content={professionalSummary.summary} className="text-justify resume-description" style={baseTextStyle} />
+              <SafeHTML content={professionalSummary.summary} className="text-justify resume-description" />
             </section>
           )
         );
@@ -196,7 +195,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {exp.description && (
-                    <SafeHTML content={exp.description} className="mt-2 resume-description" style={descriptionStyle} />
+                    <SafeHTML content={exp.description} className="mt-2 resume-description" />
                   )}
                 </div>
               ))}
@@ -266,7 +265,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {proj.description && (
-                    <SafeHTML content={proj.description} className="mb-2 resume-description" style={descriptionStyle} />
+                    <SafeHTML content={proj.description} className="mb-2 resume-description" />
                   )}
                   {proj.technologies && proj.technologies.length > 0 && (
                     <div className="text-sm mt-1" style={baseTextStyle}>
@@ -364,7 +363,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {intern.description && (
-                    <SafeHTML content={intern.description} className="mt-2 resume-description" style={descriptionStyle} />
+                    <SafeHTML content={intern.description} className="mt-2 resume-description" />
                   )}
                 </div>
               ))}
@@ -428,7 +427,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
                   </div>
                   {/* ✅ Changed to support HTML formatting */}
                   {achievement.description && (
-                    <SafeHTML content={achievement.description} className="text-sm resume-description" style={baseTextStyle} />
+                    <SafeHTML content={achievement.description} className="text-sm resume-description" />
                   )}
                 </div>
               ))}
@@ -495,7 +494,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
                   <span className="font-semibold" style={titleStyle}>{hobby.name}</span>
                   {/* ✅ Changed to support HTML formatting */}
                   {hobby.description && (
-                    <SafeHTML as="span" content={` — ${hobby.description}`} className="resume-description" style={baseTextStyle} />
+                    <SafeHTML as="span" content={` — ${hobby.description}`} className="resume-description" />
                   )}
                   {hobby.proficiencyLevel && <span className="text-sm" style={baseTextStyle}> ({hobby.proficiencyLevel})</span>}
                   {hobby.achievement && <span className="text-sm" style={baseTextStyle}> • {hobby.achievement}</span>}
@@ -518,7 +517,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
                   {interest.category && <span className="text-sm" style={baseTextStyle}> ({interest.category})</span>}
                   {/* ✅ Changed to support HTML formatting */}
                   {interest.description && (
-                    <SafeHTML as="span" content={` — ${interest.description}`} className="resume-description" style={baseTextStyle} />
+                    <SafeHTML as="span" content={` — ${interest.description}`} className="resume-description" />
                   )}
                 </div>
               ))}
@@ -641,7 +640,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
                           {field.value as string}
                         </a>
                       ) : field.fieldType === "textarea" ? (
-                        <SafeHTML content={field.value as string} className="resume-description" style={baseTextStyle} />
+                        <SafeHTML content={field.value as string} className="resume-description" />
                       ) : (
                         <div style={baseTextStyle}>{field.value as string}</div>
                       )}
@@ -692,7 +691,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange, currentPage }) 
         }
       `}</style>
       
-      <AutoPaginator onPageCountChange={onPageCountChange} currentPage={currentPage}>
+      <AutoPaginator onPageCountChange={onPageCountChange}>
         {sectionOrder.map((section, idx) => (
           <React.Fragment key={idx}>{renderSection(section)}</React.Fragment>
         ))}

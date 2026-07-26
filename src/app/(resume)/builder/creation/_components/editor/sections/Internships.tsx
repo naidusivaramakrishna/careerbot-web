@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState } from "react";
-import SafeHTML from "@/components/common/SafeHTML";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -124,9 +123,16 @@ const Internships: React.FC = () => {
 
   useEffect(() => {
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
-    if (JSON.stringify(resumeData.internships) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, internships: allEntries });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.internships ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.internships) === JSON.stringify(merged)) return prev;
+      return { ...prev, internships: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 
@@ -457,9 +463,9 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
                   )}
 
                   {internship.description && (
-                    <SafeHTML
-                      content={internship.description}
+                    <div
                       className="text-sm text-[#404040] mt-1 line-clamp-2"
+                      dangerouslySetInnerHTML={{ __html: internship.description }}
                     />
                   )}
                 </div>

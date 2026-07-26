@@ -29,10 +29,10 @@ function BuilderLayoutInner({ children }: { children: React.ReactNode }) {
       <ResumeProvider resumeId={resumeId} source={source}>
         <ScoreProvider>
           <Header />
-          <div className="flex min-h-[calc(100vh-3.5rem)] items-start bg-blue-100 pt-14">
+          <div className="flex pt-14 bg-blue-100">
             <Sidebar />
             <div
-              className="min-w-0 flex-1"
+              className="flex-1 overflow-auto"
               style={{ marginLeft: "var(--sidebar-width, 64px)", transition: "margin 300ms" }}
             >
               {children}
