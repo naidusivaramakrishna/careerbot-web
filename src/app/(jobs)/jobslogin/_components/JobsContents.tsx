@@ -478,7 +478,12 @@ export default function JobsContents() {
   //    initial mount fetch (for the sidebar's "Top Picks") since "matched"
   //    is the default active tab. ──
   useEffect(() => {
-    if (activeTab === "matched") {
+    // Only auto-fetch on FIRST activation. Paginating updates matchedPage,
+    // which recreates fetchSmartMatchedJobs (its useCallback dep), reruns this
+    // effect, and would refetch page 1 — snapping the user back. The
+    // matchedFetched guard prevents that while still loading on initial entry
+    // and re-loading after a tab switch only when nothing is cached yet.
+    if (activeTab === "matched" && !matchedFetched) {
       fetchSmartMatchedJobs();
     }
     if (activeTab === "saved") {
@@ -487,7 +492,7 @@ export default function JobsContents() {
     if (activeTab === "applied") {
       fetchAppliedJobsList();
     }
-  }, [activeTab, fetchSmartMatchedJobs, fetchSavedJobsList, fetchAppliedJobsList]);
+  }, [activeTab, matchedFetched, fetchSmartMatchedJobs, fetchSavedJobsList, fetchAppliedJobsList]);
 
   // ── Top Picks — real recommendations, sorted by match score ──
   const topPickJobs = useMemo(
