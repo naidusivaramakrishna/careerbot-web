@@ -18,7 +18,6 @@ try {
     server!.listen({ onUnhandledRequest: 'error' });
   });
 
-   
   afterEach(() => {
     server!.resetHandlers();
   });

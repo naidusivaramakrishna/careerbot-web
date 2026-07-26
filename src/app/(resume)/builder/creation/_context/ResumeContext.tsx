@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { getResumeById } from "@/api/resumeApi";
 import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
@@ -291,6 +291,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
   const [enhancedAtsScore, setEnhancedAtsScore] = useState<EnhancedAtsScore>(null);
   const [enhancedSuggestions, setEnhancedSuggestions] = useState<EnhancedSuggestion[]>([]);
+  // Guards against out-of-order apply-fix responses: each call bumps this ref;
+  // a response whose id no longer matches the latest is dropped, so a slower,
+  // older fix can't stomp the resume state written by a newer one.
+  const latestFixRequestRef = useRef(0);
 
   const [resumeData, setResumeData] = useState<ResumeData>(() => {
     // ✅ If resumeId is provided, don't use localStorage (we'll load from backend)
@@ -973,11 +977,14 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
   const applyAutoFix = async (suggestionId: string): Promise<void> => {
     if (!resumeIdProp) return;
+    const requestId = ++latestFixRequestRef.current;
     const response = await applyFix({
       enhancer_state: resumeIdProp,
       suggestion_id: suggestionId,
       fix_type: "auto",
     });
+    // Drop a response superseded by a newer apply-fix click (out-of-order guard).
+    if (requestId !== latestFixRequestRef.current) return;
     if (response.success && response.enhancer_state) {
       // Re-map raw parser resume into builder format
       const mapped = mapParserOutputToBuilderData({
@@ -1020,12 +1027,15 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
 
   const applyManualFix = async (suggestionId: string, value: string): Promise<void> => {
     if (!resumeIdProp) return;
+    const requestId = ++latestFixRequestRef.current;
     const response = await applyFix({
       enhancer_state: resumeIdProp,
       suggestion_id: suggestionId,
       fix_type: "manual",
       value,
     });
+    // Drop a response superseded by a newer apply-fix click (out-of-order guard).
+    if (requestId !== latestFixRequestRef.current) return;
     if (response.success && response.enhancer_state) {
       if (response.enhancer_state.ats_breakdown) {
         setEnhancedAtsScore(response.enhancer_state.ats_breakdown as unknown as ATSScore);

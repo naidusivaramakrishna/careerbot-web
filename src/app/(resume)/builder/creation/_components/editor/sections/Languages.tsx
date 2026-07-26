@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useRef, useEffect, useState } from "react";
 import { useResume } from "../../../_context/ResumeContext";
 import { useValidation } from "../../../_hooks/useValidation";
