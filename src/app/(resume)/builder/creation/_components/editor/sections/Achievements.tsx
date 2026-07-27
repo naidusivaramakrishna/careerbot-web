@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState } from "react";
-import SafeHTML from "@/components/common/SafeHTML";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -107,9 +106,16 @@ const Achievements: React.FC = () => {
 
   useEffect(() => {
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
-    if (JSON.stringify(resumeData.achievements) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, achievements: allEntries });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.achievements ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.achievements) === JSON.stringify(merged)) return prev;
+      return { ...prev, achievements: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 
@@ -409,9 +415,9 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
                   )}
                   
                   {achievement.description && (
-                    <SafeHTML
-                      content={achievement.description}
-                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                    <div 
+                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
+                      dangerouslySetInnerHTML={{ __html: achievement.description }} 
                     />
                   )}
                 </div>

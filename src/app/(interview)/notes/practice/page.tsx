@@ -82,6 +82,52 @@ type AnswerState = {
   attemptNumber?: number;
 } | null;
 
+// ─── Session persistence ───────────────────────────────────────────────────────
+
+const STORAGE_KEY = "practice_session_v1";
+const SESSION_TTL_MS = 14400 * 1000; // 4 hours — matches PRACTICE_SESSION_TTL on the backend
+
+type Question = { question_id: string; question_text: string; order: number; difficulty: string; why_asked: string; expected_duration_s: number; note_script: string; keywords: string[] };
+
+type SavedSession = {
+  roundNumber: number;
+  sessionId: string;
+  questions: Question[];
+  currentIndex: number;
+  answeredMap: Record<string, AnswerState>;
+  notesMap: Record<string, string>;
+  savedAt?: number;
+  userId?: string;
+};
+
+function storageKey(userId?: string | null) {
+  return userId ? `${STORAGE_KEY}_${userId}` : STORAGE_KEY;
+}
+
+function loadSavedSession(roundNumber: number, userId?: string | null): SavedSession | null {
+  try {
+    const raw = localStorage.getItem(storageKey(userId));
+    if (!raw) return null;
+    const parsed: SavedSession = JSON.parse(raw);
+    if (parsed.roundNumber !== roundNumber) return null;
+    if (Date.now() - (parsed.savedAt ?? 0) > SESSION_TTL_MS) {
+      localStorage.removeItem(storageKey(userId));
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(data: SavedSession) {
+  try { localStorage.setItem(storageKey(data.userId), JSON.stringify({ ...data, savedAt: Date.now() })); } catch {}
+}
+
+function clearSession(userId?: string | null) {
+  try { localStorage.removeItem(storageKey(userId)); } catch {}
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function PracticeContent() {
@@ -89,28 +135,63 @@ function PracticeContent() {
   const searchParams = useSearchParams();
   const { setPracticeAnswered, setPracticeTotal, userId } = useMockInterview();
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const initialRound = Math.min(2, Math.max(1, Number(searchParams.get("round")) || 1));
+  // Derive directly from searchParams so URL changes (round 1 → round 2) are
+  // picked up without a remount — useState only reads the initial value once.
+  const roundNumber = Math.min(2, Math.max(1, Number(searchParams.get("round")) || 1));
   const questionsRemaining = Number(searchParams.get("resume")) || 0;
-  const [roundNumber] = useState(initialRound);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answeredMap, setAnsweredMap] = useState<Record<string, AnswerState>>({});
   const [currentAnswer, setCurrentAnswer] = useState<AnswerState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNotes, setShowNotes] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  type Question = { question_id: string; question_text: string; order: number; difficulty: string; why_asked: string; expected_duration_s: number; note_script: string; keywords: string[] };
   const [questions, setQuestions] = useState<Question[]>([]);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [notesMap, setNotesMap] = useState<Record<string, string>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const errorDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipSaveRef = useRef(false);
+
+  const showSubmitError = useCallback((msg: string) => {
+    if (errorDismissRef.current) clearTimeout(errorDismissRef.current);
+    setSubmitError(msg);
+    errorDismissRef.current = setTimeout(() => setSubmitError(null), 5000);
+  }, []);
+
+  // Persist progress to sessionStorage whenever key state changes so a
+  // page refresh can resume rather than restart from question 1.
+  useEffect(() => {
+    if (!sessionId || questions.length === 0 || skipSaveRef.current) return;
+    saveSession({ roundNumber, sessionId, questions, currentIndex, answeredMap, notesMap, userId: userId ?? undefined });
+  }, [sessionId, questions, currentIndex, answeredMap, notesMap, roundNumber]);
 
   useEffect(() => {
+    setCurrentAnswer(null);
+    skipSaveRef.current = false;
+
+    // Restore from localStorage if a matching in-progress session exists.
+    const saved = loadSavedSession(roundNumber, userId);
+    if (saved && saved.sessionId && saved.questions.length > 0) {
+      setSessionId(saved.sessionId);
+      setQuestions(saved.questions);
+      setPracticeTotal(saved.questions.length);
+      setCurrentIndex(saved.currentIndex);
+      setAnsweredMap(saved.answeredMap);
+      setNotesMap(saved.notesMap || {});
+      // Restore feedback for the current question if it was already answered
+      const restoredQ = saved.questions[saved.currentIndex];
+      if (restoredQ && saved.answeredMap[restoredQ.question_id]) {
+        setCurrentAnswer(saved.answeredMap[restoredQ.question_id]);
+      }
+      setSessionLoading(false);
+      return;
+    }
+
     setSessionLoading(true);
     setCurrentIndex(0);
     setAnsweredMap({});
-    setCurrentAnswer(null);
     startPractice({ round_number: roundNumber })
       .then((data) => {
         setSessionId(data.session_id);
@@ -179,7 +260,7 @@ function PracticeContent() {
 
     const MIN_DURATION_MS = 2000;
     if (durationMs !== undefined && durationMs < MIN_DURATION_MS) {
-      setSubmitError("No speech detected. Please speak clearly for at least 2 seconds when recording.");
+      showSubmitError("No speech detected. Please speak clearly for at least 2 seconds when recording.");
       return;
     }
 
@@ -221,17 +302,19 @@ function PracticeContent() {
       setAnsweredMap((m) => ({ ...m, [question.question_id]: answer }));
       getPracticeProgress(sessionId).catch(() => {});
     } catch {
-      setSubmitError("Could not score your answer. Please check your connection and try again.");
+      showSubmitError("Could not score your answer. Please check your connection and try again.");
     } finally {
       setIsSubmitting(false);
     }
-  }, [sessionId, question?.question_id, roundNumber, questions, currentIndex]);
+  }, [sessionId, question?.question_id, roundNumber, questions, currentIndex, showSubmitError]);
 
   const handleNext = () => {
     setCurrentAnswer(null);
     const newCount = Object.keys(answeredMap).length;
     setPracticeAnswered(newCount);
     if (isLastQuestion) {
+      skipSaveRef.current = true;
+      clearSession(userId);
       if (roundNumber < 2) {
         router.push(`/notes/practice?round=${roundNumber + 1}`);
       } else {
@@ -341,7 +424,7 @@ function PracticeContent() {
             {questions.map((q, i) => (
               <button
                 key={q.question_id}
-                onClick={() => { setCurrentIndex(i); setCurrentAnswer(null); }}
+                onClick={() => { setCurrentIndex(i); setCurrentAnswer(answeredMap[q.question_id] ?? null); }}
                 className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${
                   i === currentIndex
                     ? "bg-[#2557a7] text-white shadow-md scale-110"
@@ -466,7 +549,7 @@ function PracticeContent() {
                 </div>
                 <AudioRecorder
                   onRecordingComplete={handleRecordingComplete}
-                  maxDuration={120}
+                  maxDuration={Math.min(Math.round(question.expected_duration_s * 1.5), 120)}
                 />
               </div>
             )}
@@ -508,7 +591,7 @@ function PracticeContent() {
                   onClick={handleNext}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#2557a7] text-white rounded-xl text-sm font-bold hover:bg-[#1e4a8f] transition-all shadow-md"
                 >
-                  {isLastQuestion ? "Start Live Interview" : "Next Question"}
+                  {isLastQuestion ? (roundNumber < 2 ? "Start Round 2" : "Start Live Interview") : "Next Question"}
                   <ChevronRight size={15} />
                 </button>
               </div>

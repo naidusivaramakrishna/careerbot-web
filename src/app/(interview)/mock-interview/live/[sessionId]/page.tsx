@@ -667,6 +667,7 @@ export default function LiveInterviewSessionPage() {
 
   const [showInactivityBanner, setShowInactivityBanner] = useState(false);
   const inactivityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMicActiveRef = useRef<number>(Date.now());
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -796,17 +797,39 @@ export default function LiveInterviewSessionPage() {
     return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
   }, [wsConnected, phase, wsSend]);
 
+  // Track last mic activity so the inactivity banner uses real silence,
+  // not transcript updates (STT latency can exceed 30s so transcript is
+  // a lagged and unreliable proxy for whether the user is speaking).
   useEffect(() => {
-    if (phase === "listening") {
-      if (inactivityRef.current) clearTimeout(inactivityRef.current);
+    if (micLevel > 8) lastMicActiveRef.current = Date.now();
+  }, [micLevel]);
+
+  useEffect(() => {
+    if (phase !== "listening") {
       setShowInactivityBanner(false);
-      inactivityRef.current = setTimeout(() => setShowInactivityBanner(true), 30_000);
-    } else {
-      setShowInactivityBanner(false);
       if (inactivityRef.current) clearTimeout(inactivityRef.current);
+      return;
     }
+
+    setShowInactivityBanner(false);
+    lastMicActiveRef.current = Date.now();
+
+    const SILENCE_THRESHOLD_MS = 30_000;
+
+    const schedule = () => {
+      const silentFor = Date.now() - lastMicActiveRef.current;
+      const remaining = SILENCE_THRESHOLD_MS - silentFor;
+      if (remaining <= 0) {
+        setShowInactivityBanner(true);
+      } else {
+        inactivityRef.current = setTimeout(schedule, remaining);
+      }
+    };
+
+    inactivityRef.current = setTimeout(schedule, SILENCE_THRESHOLD_MS);
+
     return () => { if (inactivityRef.current) clearTimeout(inactivityRef.current); };
-  }, [phase, partialTranscript]);
+  }, [phase]);
 
   const showScoreToast = useCallback((questionNum: number, score: number) => {
     if (scoreToastTimerRef.current) clearTimeout(scoreToastTimerRef.current);
@@ -857,7 +880,7 @@ export default function LiveInterviewSessionPage() {
         playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, setInterviewerMouthLevel, afterFollowUp);
         break;
       }
-      case "partial_transcript":
+      case "transcript_partial":
         setServerError(null);
         setPartialTranscript(msg.text);
         break;
@@ -1341,7 +1364,9 @@ export default function LiveInterviewSessionPage() {
                             <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#2557a7]" />
                           </p>
                         ) : (
-                          <p className="text-sm italic text-gray-400">Start speaking... transcript will appear here.</p>
+                          <p className="text-sm italic text-gray-400">
+                            {micLevel > 8 ? "Transcribing your speech..." : "Start speaking... transcript will appear here."}
+                          </p>
                         )}
                       </div>
                     </div>

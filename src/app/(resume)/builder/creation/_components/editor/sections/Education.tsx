@@ -77,14 +77,20 @@ const Education: React.FC = () => {
   });
 
   useEffect(() => {
-    // Only include entries with actual data (filter out empty editing placeholders)
     const validEntries = [
       ...savedEntries,
       ...editingEntries.filter(hasValidData)
     ];
-    if (JSON.stringify(resumeData.education) !== JSON.stringify(validEntries)) {
-      setResumeData({ ...resumeData, education: validEntries });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.education ?? []) as Array<Record<string, unknown>>;
+      const merged = validEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.education) === JSON.stringify(merged)) return prev;
+      return { ...prev, education: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 

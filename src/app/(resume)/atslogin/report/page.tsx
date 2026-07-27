@@ -1137,10 +1137,10 @@ function ATSLoginReport() {
 
       {/* ── MAIN GRID ── */}
       <div style={{ maxWidth: 1520, margin: "0 auto" }} className="px-4 md:px-10 py-6 md:py-8 pb-16">
-        <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <div className="relative grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)] gap-5 items-start">
 
           {/* ── LEFT (4 cols sticky) ── */}
-          <div className="custom-scrollbar lg:col-span-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-2 self-start space-y-5">
+          <div className="self-start space-y-5">
 
             {/* Score card */}
             <div style={CARD}>
@@ -1289,10 +1289,10 @@ function ATSLoginReport() {
           </div>
 
           {/* ── RIGHT (8 cols) ── */}
-          <div className="lg:col-span-6 lg:contents space-y-5 lg:space-y-0">
+          <div className="min-w-0 space-y-5">
 
             {/* AI Summary */}
-            <div className="lg:col-start-4 lg:row-start-1 lg:col-span-9" style={{ ...CARD, background: "linear-gradient(135deg,#f7faff 0%,#ffffff 65%)" }}>
+            <div style={{ ...CARD, background: "linear-gradient(135deg,#f7faff 0%,#ffffff 65%)" }}>
               <div style={{ padding: "12px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -1348,7 +1348,8 @@ function ATSLoginReport() {
             )}
 
             {/* Issues Card */}
-            <div className="lg:col-start-4 lg:row-start-2 lg:col-span-6 lg:mt-0" style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #e5eaf2", boxShadow: "0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)" }}>
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(280px,0.9fr)] gap-5 items-start">
+            <div className="min-w-0" style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #e5eaf2", boxShadow: "0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)" }}>
               {/* Header */}
               <div style={{ background: "linear-gradient(135deg, #3465BC 0%, #4a7fd4 55%, #5e94e8 100%)", padding: "28px 28px 0", position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: -40, right: -40, width: 220, height: 220, borderRadius: "50%", background: "rgba(88,150,215,0.12)", filter: "blur(40px)", pointerEvents: "none" }} />
@@ -1440,10 +1441,8 @@ function ATSLoginReport() {
               </div>
             </div>
 
-          </div>
-
           {/* RIGHT: roadmap and estimated score */}
-          <div className="lg:col-start-10 lg:row-start-2 lg:col-span-3 space-y-5">
+          <div className="min-w-0 space-y-5">
             <div style={CARD}>
               <div style={{ padding: "20px 18px" }}>
                 <p style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 18 }}>Fix Roadmap</p>
@@ -1470,6 +1469,8 @@ function ATSLoginReport() {
                 </div>
               </div>
             </div>
+          </div>
+          </div>
           </div>
         </div>
       </div>

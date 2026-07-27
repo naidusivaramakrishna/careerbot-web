@@ -102,7 +102,7 @@ function FeedbackPageContent() {
   const displayRating = hoveredRating || rating;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="h-full overflow-y-auto bg-slate-50 assessment-scroll">
       {/* <Sidebar /> */}
       {/* <Header /> */}
 
@@ -227,7 +227,7 @@ function FeedbackPageContent() {
 
 export default function FeedbackPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+    <Suspense fallback={<div className="h-full bg-slate-50" />}>
       <FeedbackPageContent />
     </Suspense>
   );

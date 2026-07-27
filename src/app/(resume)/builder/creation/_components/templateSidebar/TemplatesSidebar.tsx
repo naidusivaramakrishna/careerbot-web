@@ -19,7 +19,7 @@ const TemplatesSidebar: React.FC<TemplatesSidebarProps> = ({
   isOpen: externalIsOpen,
   activeTab,
   setActiveTab,
-  resumeId,
+  resumeId
 }) => {
   const [isOpen, setIsOpen] = React.useState(true);
 
@@ -44,7 +44,7 @@ const TemplatesSidebar: React.FC<TemplatesSidebarProps> = ({
   return (
     <div
       // className={`transition-all duration-300 bg-white border-l border-gray-200 relative flex flex-col min-h-[calc(100vh-60px)]
-      className={`relative flex min-h-[calc(100vh-3.5rem)] flex-col bg-gradient-to-br from-gray-50 to-white shadow-sm transition-all duration-300
+      className={`relative bg-gradient-to-br from-gray-50 to-white h-screen shadow-sm transition-all duration-300 flex flex-col
         ${isOpen ? "w-[28%]" : "w-12 p-0"}`}
     >
       {isOpen && (
@@ -57,7 +57,7 @@ const TemplatesSidebar: React.FC<TemplatesSidebarProps> = ({
       )}
 
       {isOpen && (
-        <div className="flex flex-col flex-1 px-2 py-4 bg-white">
+        <div className="flex flex-col flex-1 px-2 py-4 overflow-y-scroll scrollbar-hide bg-white">
           {activeTab === "Templates" && (
             <TemplatesTab onTemplateSelect={handleTemplateSelect} resumeId={resumeId} />
           )}

@@ -136,19 +136,7 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
     // Step 1: filter by section
     let matched = enhancedSuggestions.filter((s) => sectionKeys.includes(s.section));
 
-    // Step 2a: drop suggestions for contact fields that are already populated.
-    matched = matched.filter((s) => {
-      const text = `${s.section} ${s.message}`.toLowerCase();
-      if (text.includes("linkedin") && resumeData.personalInfo.linkedinUrl?.trim()) return false;
-      if (text.includes("github") && resumeData.personalInfo.githubUrl?.trim()) return false;
-      if ((text.includes("portfolio") || text.includes("website")) && resumeData.personalInfo.portfolioUrl?.trim()) return false;
-      if (text.includes("phone") && resumeData.personalInfo.phone?.trim()) return false;
-      if (text.includes("email") && resumeData.personalInfo.email?.trim()) return false;
-      if (text.includes("location") && resumeData.personalInfo.location?.trim()) return false;
-      return true;
-    });
-
-    // Step 2b: if entryContent provided, try to scope suggestions to this specific entry.
+    // Step 2: if entryContent provided, try to scope suggestions to this specific entry.
     // ATS section_breakdown deductions are section-level (generic messages) and won't match
     // any entry identifier — in that case keep all section-level suggestions visible.
     if (entryContent !== undefined) {
