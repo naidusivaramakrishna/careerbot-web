@@ -2,11 +2,9 @@
 import React, { useRef, useEffect } from "react";
 import {
   Edit3,
-  MessageSquare,
   SidebarOpen,
   SidebarClose,
 } from "lucide-react";
-import { RiSparkling2Fill } from 'react-icons/ri';
 
 
 interface TabsProps {
@@ -47,9 +45,7 @@ const Tabs: React.FC<TabsProps> = ({
 
 
   const tabs = [
-    { name: "ResumeGPT", icon: RiSparkling2Fill },
     { name: "Editor", icon: Edit3 },
-    { name: "AI Review", icon: MessageSquare },
   ];
 
 

@@ -69,12 +69,20 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     (Array.isArray(p.technical_skills) ? p.technical_skills : null)
   );
   const llmByCategory: Record<string, string[]> = {};
+  // skill_id_map from flat technical_skills array: keyed as "DisplayName:SkillName"
+  const llmSkillIdMap: Record<string, string> = {};
   for (const s of llmTechArr) {
     const cat = str(s.category);
     const skill = str(s.skill);
     if (cat && skill) {
       if (!llmByCategory[cat]) llmByCategory[cat] = [];
       llmByCategory[cat].push(skill);
+      // Store both raw key and display-name key so Skills.tsx lookup always hits
+      if (s.id) {
+        const displayName = cat.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+        llmSkillIdMap[`${cat}:${skill}`] = str(s.id);
+        llmSkillIdMap[`${displayName}:${skill}`] = str(s.id);
+      }
     }
   }
   const llmCat = (...cats: string[]): string[] =>
@@ -193,6 +201,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       str(exp.end_date || exp.endDate).toLowerCase() === "present"
     );
     return {
+      ...(exp.id ? { id: str(exp.id) } : {}),
       company: str(exp.company) || str(exp.organization),
       role: str(exp.role) || str(exp.title) || str(exp.position),
       location: str(exp.location),
@@ -221,6 +230,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     const startFromDuration = durationParts[0]?.trim() || "";
     const endFromDuration = durationParts[1]?.trim() || "";
     return {
+      ...(edu.id ? { id: str(edu.id) } : {}),
       school:
         str(edu.institution) ||
         str(edu.school) ||
@@ -249,6 +259,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   const projects = arr<AnyRecord>(
     llm.projects || p.projects || p.project_details
   ).map((proj) => ({
+    ...(proj.id ? { id: str(proj.id) } : {}),
     title: str(proj.name) || str(proj.title) || str(proj.projectName),
     description:
       str(proj.description) ||
@@ -283,6 +294,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       str(intern.end_date || intern.endDate).toLowerCase() === "present"
     );
     return {
+      ...(intern.id ? { id: str(intern.id) } : {}),
       company: str(intern.company) || str(intern.organization),
       role: str(intern.role) || str(intern.title),
       location: str(intern.location),
@@ -316,6 +328,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
         : customCategoriesFromLlm.length > 0
         ? customCategoriesFromLlm
         : undefined,
+    ...(Object.keys(llmSkillIdMap).length > 0 && { skill_id_map: llmSkillIdMap }),
   };
 
   // Flat skills array: all skills come from custom_categories
@@ -360,6 +373,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     }) as AnyRecord | undefined;
 
     return {
+      ...(cert.id ? { id: str(cert.id) } : {}),
       name: certName,
       issuedBy:
         str(cert.issuing_organization) ||
@@ -389,6 +403,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
 
   /* ── Achievements ── */
   const achievements = arr<AnyRecord>(llm.achievements || p.achievements).map((ach) => ({
+    ...(ach.id ? { id: str(ach.id) } : {}),
     title: str(ach.title) || str(ach.achievement) || str(ach.name),
     date: str(ach.date) || str(ach.year),
     description: str(ach.description),
@@ -396,6 +411,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
 
   /* ── Volunteering ── */
   const volunteering = arr<AnyRecord>(llm.volunteering || p.volunteering).map((vol) => ({
+    ...(vol.id ? { id: str(vol.id) } : {}),
     organization: str(vol.organization),
     role: str(vol.role) || str(vol.position),
     startDate: str(vol.start_date) || str(vol.from) || str(vol.startDate),
@@ -404,6 +420,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
 
   /* ── Awards ── */
   const awards = arr<AnyRecord>(llm.awards || p.awards).map((awd) => ({
+    ...(awd.id ? { id: str(awd.id) } : {}),
     title: str(awd.title) || str(awd.name) || str(awd.award),
     issuedBy: str(awd.issued_by) || str(awd.organization) || str(awd.issuer) || str(awd.issuedBy),
     year: str(awd.year) || str(awd.date),
@@ -414,6 +431,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     (lang) => {
       if (typeof lang === "string") return { language: lang, proficiency: "" };
       return {
+        ...(lang.id ? { id: str(lang.id) } : {}),
         language: str(lang.language) || str(lang.name),
         proficiency: str(lang.proficiency) || str(lang.level),
       };
@@ -422,12 +440,14 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
 
   /* ── Hobbies ── */
   const hobbies = arr<AnyRecord>(llm.hobbies || p.hobbies).map((h) => ({
+    ...(h.id ? { id: str(h.id) } : {}),
     name: str(h.name) || str(h.hobby),
     description: str(h.description),
   }));
 
   /* ── Interests ── */
   const interests = arr<AnyRecord>(llm.interests || p.interests).map((i) => ({
+    ...(i.id ? { id: str(i.id) } : {}),
     name: str(i.name) || str(i.interest),
     description: str(i.description),
     category: str(i.category),
@@ -435,6 +455,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
 
   /* ── Publications ── */
   const publications = arr<AnyRecord>(llm.publications || p.publications).map((pub) => ({
+    ...(pub.id ? { id: str(pub.id) } : {}),
     title: str(pub.title),
     authors: str(pub.authors),
     publicationName:
@@ -449,6 +470,7 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
 
   /* ── References ── */
   const references = arr<AnyRecord>(llm.references || p.references).map((ref) => ({
+    ...(ref.id ? { id: str(ref.id) } : {}),
     name: str(ref.name),
     relation: str(ref.relation) || str(ref.designation) || str(ref.title),
     contact: str(ref.contact) || str(ref.email) || str(ref.phone),

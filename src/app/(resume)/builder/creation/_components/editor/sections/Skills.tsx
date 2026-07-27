@@ -7,6 +7,7 @@ import SectionTipsPanel from "../SectionTipsPanel";
 import { useValidation } from "../../../_hooks/useValidation";
 import TechnologyChipsInput, { type TechnologyChipsInputHandle } from "../TechnologyChipsInput";
 import { addSkillToCategory, deleteSkillCategory, deleteSkillById } from "@/api/resumeApi";
+import { addSkillToEnhancedResume, deleteSkillFromEnhancedResume, deleteSkillCategoryFromEnhancedResume } from "@/api/enhancerApi";
 import { toast } from "sonner";
 
 const CATEGORY_KEY_MAP: Record<string, string> = {
@@ -101,7 +102,11 @@ const Skills: React.FC = () => {
     const resumeId = resumeData.resume_id;
     if (resumeId) {
       try {
-        await deleteSkillCategory(resumeId, categoryKey);
+        if (isEnhancedResume) {
+          await deleteSkillCategoryFromEnhancedResume(resumeId, categoryKey);
+        } else {
+          await deleteSkillCategory(resumeId, categoryKey);
+        }
       } catch {
         toast.error("Failed to delete category. Please try again.");
         return;
@@ -140,7 +145,11 @@ const Skills: React.FC = () => {
   const handleCustomCategoryNameBlur = (id: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const predefinedLabels = SKILL_CATEGORIES.map((c) => c.label.toLowerCase());
+    // For enhanced resumes the predefined categories are hidden, so they are not
+    // "existing" from the user's perspective and should not block custom category names.
+    const predefinedLabels = isEnhancedResume
+      ? []
+      : SKILL_CATEGORIES.map((c) => c.label.toLowerCase());
     const otherCustomNames = customCategories
       .filter((c) => c.id !== id)
       .map((c) => c.name.toLowerCase());
@@ -167,7 +176,11 @@ const Skills: React.FC = () => {
     const custom = customCategories.find((c) => c.id === id);
     if (resumeId && custom?.name) {
       try {
-        await deleteSkillCategory(resumeId, custom.name);
+        if (isEnhancedResume) {
+          await deleteSkillCategoryFromEnhancedResume(resumeId, custom.name);
+        } else {
+          await deleteSkillCategory(resumeId, custom.name);
+        }
       } catch {
         toast.error("Failed to delete category. Please try again.");
         return;
@@ -207,7 +220,9 @@ const Skills: React.FC = () => {
                         onAddSkill={resumeData.resume_id ? async (skill) => {
                           try {
                             const apiCategory = CATEGORY_KEY_MAP[cat.key] ?? cat.key;
-                            const { id } = await addSkillToCategory(resumeData.resume_id!, apiCategory, skill);
+                            const { id } = isEnhancedResume
+                              ? await addSkillToEnhancedResume(resumeData.resume_id!, apiCategory, skill)
+                              : await addSkillToCategory(resumeData.resume_id!, apiCategory, skill);
                             if (id) {
                               const updatedMap = { ...(categorizedSkills.skill_id_map ?? {}), [`${cat.key}:${skill}`]: id };
                               setResumeData({ ...resumeData, categorizedSkills: { ...categorizedSkills, skill_id_map: updatedMap } });
@@ -223,7 +238,11 @@ const Skills: React.FC = () => {
                           try {
                             const apiCategory = CATEGORY_KEY_MAP[cat.key] ?? cat.key;
                             const skillId = categorizedSkills.skill_id_map?.[`${cat.key}:${skill}`] ?? skill;
-                            await deleteSkillById(resumeData.resume_id!, apiCategory, skillId);
+                            if (isEnhancedResume) {
+                              await deleteSkillFromEnhancedResume(resumeData.resume_id!, apiCategory, skillId);
+                            } else {
+                              await deleteSkillById(resumeData.resume_id!, apiCategory, skillId);
+                            }
                             toast.success("Skill removed successfully.");
                           } catch (err) {
                             const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";
@@ -277,7 +296,13 @@ const Skills: React.FC = () => {
                       placeholder={custom.name ? `Add ${custom.name} skills...` : "Add skills..."}
                       onAddSkill={resumeData.resume_id && custom.name ? async (skill) => {
                         try {
-                          await addSkillToCategory(resumeData.resume_id!, custom.name, skill);
+                          const { id } = isEnhancedResume
+                            ? await addSkillToEnhancedResume(resumeData.resume_id!, custom.name, skill)
+                            : await addSkillToCategory(resumeData.resume_id!, custom.name, skill);
+                          if (id) {
+                            const updatedMap = { ...(categorizedSkills.skill_id_map ?? {}), [`${custom.name}:${skill}`]: id };
+                            setResumeData({ ...resumeData, categorizedSkills: { ...categorizedSkills, skill_id_map: updatedMap } });
+                          }
                           toast.success("Skill added successfully.");
                         } catch (err) {
                           const errorMsg = err instanceof Error ? err.message : "Failed to add skill. Please try again.";
@@ -287,7 +312,12 @@ const Skills: React.FC = () => {
                       } : undefined}
                       onRemoveSkill={resumeData.resume_id && custom.name ? async (skill) => {
                         try {
-                          await deleteSkillById(resumeData.resume_id!, custom.name, skill);
+                          const skillId = categorizedSkills.skill_id_map?.[`${custom.name}:${skill}`] ?? skill;
+                          if (isEnhancedResume) {
+                            await deleteSkillFromEnhancedResume(resumeData.resume_id!, custom.name, skillId);
+                          } else {
+                            await deleteSkillById(resumeData.resume_id!, custom.name, skillId);
+                          }
                           toast.success("Skill removed successfully.");
                         } catch (err) {
                           const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";
