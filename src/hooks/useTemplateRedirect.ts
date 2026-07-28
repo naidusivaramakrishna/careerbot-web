@@ -73,7 +73,7 @@ export function useTemplateRedirect() {
 
           // Sort by career level
           const sortedTemplates = careerTemplates.sort((a, b) => {
-            const careerLevels = ['fresher', 'early career', 'mid-level', 'senior-level', 'manager']
+            const careerLevels = ['fresher', 'early career', 'mid-level', 'senior-level', 'lead', 'architect', 'manager']
             const aName = (a.name || '').toLowerCase()
             const bName = (b.name || '').toLowerCase()
 
@@ -118,6 +118,10 @@ export function useTemplateRedirect() {
             careerLevel = 'mid-level'
           } else if (templateName.includes('fresher')) {
             careerLevel = 'fresher'
+          } else if (templateName.includes('lead')) {
+            careerLevel = 'lead'
+          } else if (templateName.includes('architect')) {
+            careerLevel = 'architect'
           } else if (templateName.includes('manager')) {
             careerLevel = 'manager'
           }

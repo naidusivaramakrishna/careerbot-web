@@ -7,6 +7,7 @@ export const FAMILY_TEMPLATES: Record<string, { id: number; image: string; previ
       'Early Career': '/assets/templates/previews/software_engineering_early_career_resume.png',
       'Mid-Level':    '/assets/templates/previews/software_engineering_mid_level_resume.png',
       'Lead':         '/assets/templates/previews/software_engineering_lead_resume.png',
+      'Architect':    '/assets/templates/previews/software_engineering_architect_resume.png',
       'Manager':      '/assets/templates/previews/software_engineering_manager_resume.png',
     },
     description: 'Modern template for tech professionals',
@@ -52,6 +53,7 @@ export const FAMILY_TEMPLATES: Record<string, { id: number; image: string; previ
       'Early Career': '/assets/templates/previews/cybersecurity_early_career.png',
       'Mid-Level':    '/assets/templates/previews/cybersecurity_mid_level.png',
       'Senior-Level': '/assets/templates/previews/cybersecurity_senior_level.png',
+      'Architect':    '/assets/templates/previews/cybersecurity_architect.png',
     },
     description: 'Specialized template for security professionals',
   },
@@ -63,6 +65,7 @@ export const FAMILY_TEMPLATES: Record<string, { id: number; image: string; previ
       'Early Career': '/assets/templates/previews/core_engineering_early_career_resume.png',
       'Mid-Level':    '/assets/templates/previews/core_engineering_mid_level_resume.png',
       'Senior-Level': '/assets/templates/previews/core_engineering_senior_level_resume.png',
+      'Architect':    '/assets/templates/previews/core_engineering_architect_resume.png',
       'Manager':      '/assets/templates/previews/core_engineering_manager_resume.png',
     },
     description: 'Template for mechanical, civil, and core engineers',
@@ -75,6 +78,7 @@ export const FAMILY_TEMPLATES: Record<string, { id: number; image: string; previ
       'Early Career': '/assets/templates/previews/electronics_and_vlsi_early_career.png',
       'Mid-Level':    '/assets/templates/previews/electronics_and_vlsi_mid_level.png',
       'Senior-Level': '/assets/templates/previews/electronics_and_vlsi_senior_level.png',
+      'Architect':    '/assets/templates/previews/electronics_and_vlsi_architect.png',
     },
     description: 'Technical template for electronics professionals',
   },
@@ -163,6 +167,7 @@ export const FAMILY_TEMPLATES: Record<string, { id: number; image: string; previ
       'Early Career': '/assets/templates/previews/classic_clean_early_career.png',
       'Mid-Level':    '/assets/templates/previews/classic_clean_mid_level.png',
       'Senior-Level': '/assets/templates/previews/classic_clean_senior_level.png',
+      'Architect':    '/assets/templates/previews/classic_clean_architect.png',
     },
     description: 'Professional template for any industry',
   },
@@ -340,6 +345,6 @@ export const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
   general_professional: 'General Professional',
 }
 
-export const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Manager']
+export const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager']
 
 export const FALLBACK_IMAGE = '/assets/templates/template-1.png'

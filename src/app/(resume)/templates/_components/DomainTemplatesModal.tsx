@@ -21,7 +21,7 @@ interface DomainTemplatesModalProps {
   source?: string;
 }
 
-const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Manager'];
+const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager'];
 
 
 // Map domain names to domain_family codes (handles both lowercase and title case)
@@ -163,6 +163,10 @@ export default function DomainTemplatesModal({
           careerLevel = 'mid-level';
         } else if (nameStr.includes('fresher')) {
           careerLevel = 'fresher';
+        } else if (nameStr.includes('lead')) {
+          careerLevel = 'lead';
+        } else if (nameStr.includes('architect')) {
+          careerLevel = 'architect';
         } else if (nameStr.includes('manager')) {
           careerLevel = 'manager';
         }
@@ -320,6 +324,10 @@ export default function DomainTemplatesModal({
                         careerLevel = 'Mid-Level';
                       } else if (nameStr.includes('fresher')) {
                         careerLevel = 'Fresher';
+                      } else if (nameStr.includes('lead')) {
+                        careerLevel = 'Lead';
+                      } else if (nameStr.includes('architect')) {
+                        careerLevel = 'Architect';
                       } else if (nameStr.includes('manager')) {
                         careerLevel = 'Manager';
                       }

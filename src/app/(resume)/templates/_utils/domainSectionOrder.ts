@@ -13,7 +13,7 @@ export const getSectionOrderByDomainAndCareer = (
 
   // For Mid-Level, Senior-Level, and Manager: move Education to end
   const level = careerLevel?.toLowerCase() || '';
-  const isAdvancedLevel = level.includes('mid') || level.includes('senior') || level.includes('manager');
+  const isAdvancedLevel = level.includes('mid') || level.includes('senior') || level.includes('lead') || level.includes('architect') || level.includes('manager');
 
   console.warn("🎯 getSectionOrderByDomainAndCareer - domainFamily:", domainFamily, "careerLevel:", careerLevel);
   console.warn("🎯 getSectionOrderByDomainAndCareer - baseOrder:", baseOrder);
