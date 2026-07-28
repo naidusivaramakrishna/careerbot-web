@@ -113,8 +113,10 @@ export default function TemplateDetailPage({ params }: PageProps) {
             previewUrl: resolveTemplateImageUrl(staticUrls[label]) || familyFallback,
           }))
         setAvailableLevels(levels)
-        setSelectedLevel(levels[0].label)
-        setImgSrc(levels[0].previewUrl)
+        if (levels.length > 0) {
+          setSelectedLevel(levels[0].label)
+          setImgSrc(levels[0].previewUrl)
+        }
       })
   }, [family])
 
