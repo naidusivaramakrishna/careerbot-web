@@ -23,6 +23,21 @@ interface DomainTemplatesModalProps {
 
 const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager'];
 
+// Canonical career-level detection — most-specific/senior keyword wins, matching
+// the apply-site if-else precedence (e.g. "Lead Architect" → Architect). Sorting
+// still orders by CAREER_LEVELS progression via indexOf of the detected level.
+const detectCareerLevel = (name: string): string | undefined => {
+  const n = (name || '').toLowerCase();
+  if (n.includes('early') && n.includes('career')) return 'Early Career';
+  if (n.includes('fresher')) return 'Fresher';
+  if (n.includes('architect')) return 'Architect';
+  if (n.includes('manager')) return 'Manager';
+  if (n.includes('lead')) return 'Lead';
+  if (n.includes('senior')) return 'Senior-Level';
+  if (n.includes('mid')) return 'Mid-Level';
+  return undefined;
+};
+
 
 // Map domain names to domain_family codes (handles both lowercase and title case)
 const DOMAIN_NAME_MAP: Record<string, string> = {
@@ -70,16 +85,12 @@ export default function DomainTemplatesModal({
   // Sort templates by career level
   const sortedTemplates = useMemo(() => {
     return [...templates].sort((a, b) => {
-      const aName = (a.name || '').toLowerCase();
-      const bName = (b.name || '').toLowerCase();
+      const aLevel = detectCareerLevel(a.name || '');
+      const bLevel = detectCareerLevel(b.name || '');
+      const aLevelIndex = aLevel ? CAREER_LEVELS.indexOf(aLevel) : -1;
+      const bLevelIndex = bLevel ? CAREER_LEVELS.indexOf(bLevel) : -1;
 
-      const aLevelIndex = CAREER_LEVELS.findIndex((level) =>
-        aName.includes(level.toLowerCase())
-      );
-      const bLevelIndex = CAREER_LEVELS.findIndex((level) =>
-        bName.includes(level.toLowerCase())
-      );
-
+      if (aLevelIndex === -1 && bLevelIndex === -1) return 0; // both unknown → stable order
       if (aLevelIndex === -1) return 1;
       if (bLevelIndex === -1) return -1;
       return aLevelIndex - bLevelIndex;
@@ -92,11 +103,7 @@ export default function DomainTemplatesModal({
   const selectedTemplate = sortedTemplates[selectedTemplateIndex];
 
   const getCareerLevel = (templateName: string) => {
-    return (
-      CAREER_LEVELS.find((level) =>
-        templateName.toLowerCase().includes(level.toLowerCase())
-      ) || 'Custom'
-    );
+    return detectCareerLevel(templateName) || 'Custom';
   };
 
   const handleSelectTemplate = (index: number) => {
