@@ -457,13 +457,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           // Extract career level from template name like "Core Engineering - Fresher"
           let extractedLevel: string | undefined;
 
-          // Check in order of specificity
+          // Canonical precedence: early career → fresher → architect → manager → lead → senior → mid
           if (templateName.includes('early') && templateName.includes('career')) {
             extractedLevel = 'early career';
-          } else if (templateName.includes('senior') && (templateName.includes('level') || templateName.includes('-'))) {
-            extractedLevel = 'senior-level';
-          } else if (templateName.includes('mid') && (templateName.includes('level') || templateName.includes('-'))) {
-            extractedLevel = 'mid-level';
           } else if (templateName.includes('fresher')) {
             extractedLevel = 'fresher';
           } else if (templateName.includes('architect')) {
@@ -476,8 +472,6 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             extractedLevel = 'senior-level';
           } else if (templateName.includes('mid')) {
             extractedLevel = 'mid-level';
-          } else if (templateName.includes('early')) {
-            extractedLevel = 'early career';
           }
 
           console.warn("🔍 Extracted career level:", extractedLevel, "from template name:", applied.name);

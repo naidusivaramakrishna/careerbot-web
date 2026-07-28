@@ -91,7 +91,7 @@ export function useTemplateRedirect() {
             name: t.name,
             preview_url: t.preview_url || '/assets/templates/template-1.jpg',
             description: t.description || 'Professional resume template',
-            ats_friendly: t.ats_friendly || true,
+            ats_friendly: t.ats_friendly ?? true,
             subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
             domain_family: pendingTemplateFamily,
             domain_display_name: FAMILY_TO_DISPLAY_NAME[pendingTemplateFamily] || pendingTemplateFamily,
