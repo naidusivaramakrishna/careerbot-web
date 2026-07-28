@@ -23,12 +23,12 @@ import {
 function getCareerLevelLabel(name: string): string | null {
   const n = name.toLowerCase()
   if (n.includes('early') && n.includes('career')) return 'Early Career'
-  if (n.includes('senior')) return 'Senior-Level'
-  if (n.includes('mid'))    return 'Mid-Level'
-  if (n.includes('manager')) return 'Manager'
-  if (n.includes('lead'))   return 'Lead'
+  if (n.includes('fresher'))   return 'Fresher'
   if (n.includes('architect')) return 'Architect'
-  if (n.includes('fresher')) return 'Fresher'
+  if (n.includes('manager'))   return 'Manager'
+  if (n.includes('lead'))      return 'Lead'
+  if (n.includes('senior'))    return 'Senior-Level'
+  if (n.includes('mid'))       return 'Mid-Level'
   return null
 }
 

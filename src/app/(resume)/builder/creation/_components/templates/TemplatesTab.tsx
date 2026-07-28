@@ -192,6 +192,13 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         setCareerLevelData(null);
       }
     } else {
+      // Only auto-populate when the user hasn't explicitly chosen a catalogue/style template.
+      // If user_chose_style is set, clearing careerLevelTemplates (done by handleApplyTemplate)
+      // must not re-seed SE data and silently discard their explicit style choice.
+      const styleKey = `user_chose_style_${userEmail}`;
+      if (localStorage.getItem(styleKey) === 'true') {
+        setCareerLevelData(null);
+      } else {
       // New user with no domain selected — auto-populate software_engineering career levels
       // so TemplatesTab shows career level cards and PreviewPanel shows Template2.tsx.
       const autoPopulate = async () => {
@@ -255,6 +262,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         }
       };
       autoPopulate();
+      }
     }
   }, [userEmail, setSelectedTemplate]);
 
@@ -595,8 +603,15 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                 {careerLevelData.map((careerTpl, index) => {
                   // Match by template name AND ID for safety
                   const isSelected = (appliedTemplateId === careerTpl.id || appliedTemplateId === String(careerTpl.id)) && careerTpl.name;
-                  const careerLevels = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager'];
-                  const careerLevel = careerLevels[index] || 'Custom';
+                  const _n = (careerTpl.name || '').toLowerCase();
+                  const careerLevel =
+                    (_n.includes('early') && _n.includes('career')) ? 'Early Career' :
+                    _n.includes('fresher')   ? 'Fresher'      :
+                    _n.includes('architect') ? 'Architect'    :
+                    _n.includes('manager')   ? 'Manager'      :
+                    _n.includes('lead')      ? 'Lead'         :
+                    _n.includes('senior')    ? 'Senior-Level' :
+                    _n.includes('mid')       ? 'Mid-Level'    : 'Custom';
                   const familyImage = DOMAIN_FAMILY_IMAGES[careerTpl.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE;
                   const cardImgSrc = !careerImgErrors[careerTpl.id] && careerTpl.preview_url
                     ? resolveTemplateImageUrl(careerTpl.preview_url)
