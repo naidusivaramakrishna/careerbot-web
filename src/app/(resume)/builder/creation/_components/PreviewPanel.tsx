@@ -77,11 +77,15 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [isEmailReady, setIsEmailReady] = useState(false);
-  // Read once at mount so renderTemplate() stays pure; clear via useEffect (StrictMode-safe).
-  const [isFreshStart] = useState(() =>
+  // Read once at mount; cleared after first paint so subsequent in-session domain selections
+  // (e.g. switching to legal → Template4) are not blocked by the stale fresh-start guard.
+  const isFreshStartRef = useRef(
     typeof window !== 'undefined' && sessionStorage.getItem('builder_fresh_start') === 'true'
   );
-  useEffect(() => { sessionStorage.removeItem('builder_fresh_start'); }, []);
+  useEffect(() => {
+    sessionStorage.removeItem('builder_fresh_start');
+    isFreshStartRef.current = false;
+  }, []);
 
   // Fetch email before rendering template to avoid flash between global and scoped localStorage keys
   useEffect(() => {
@@ -296,13 +300,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
           if (applied) {
             const name = applied.name.toLowerCase();
-            if (name.includes('fresher')) return 'Fresher';
-            if (name.includes('early')) return 'Early Career';
-            if (name.includes('manager')) return 'Manager';
+            if (name.includes('early') && name.includes('career')) return 'Early Career';
+            if (name.includes('fresher'))   return 'Fresher';
             if (name.includes('architect')) return 'Architect';
-            if (name.includes('lead')) return 'Lead';
-            if (name.includes('mid')) return 'Mid-Level';
-            if (name.includes('senior')) return 'Senior-Level';
+            if (name.includes('manager'))   return 'Manager';
+            if (name.includes('lead'))      return 'Lead';
+            if (name.includes('senior'))    return 'Senior-Level';
+            if (name.includes('mid'))       return 'Mid-Level';
           }
         }
       } catch (err) {
@@ -359,8 +363,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       '5': <TemplateFive data={resumeData} style={resumeStyle} />,
     };
 
-    // isFreshStart is initialised once from sessionStorage at mount (see useState above)
-    // and cleared by a useEffect — no side-effects inside the render path.
+    // isFreshStartRef is set at mount and cleared to false after first paint (see useEffect above).
+    const isFreshStart = isFreshStartRef.current;
 
     // Check if this is a career level template and render appropriate template based on domain
     const appliedTemplateId = localStorage.getItem(selectedTemplateKey);

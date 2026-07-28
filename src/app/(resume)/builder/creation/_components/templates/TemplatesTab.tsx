@@ -227,7 +227,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
             name: t.name,
             preview_url: t.preview_url || '/assets/templates/template-1.jpg',
             description: t.description || 'Professional resume template',
-            ats_friendly: t.ats_friendly || true,
+            ats_friendly: t.ats_friendly ?? true,
             subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
             domain_family: 'software_engineering',
             domain_display_name: 'Software Engineering',

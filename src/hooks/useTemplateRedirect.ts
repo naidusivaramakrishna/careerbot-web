@@ -112,18 +112,18 @@ export function useTemplateRedirect() {
           let careerLevel: string | undefined
           if (templateName.includes('early') && templateName.includes('career')) {
             careerLevel = 'early career'
-          } else if (templateName.includes('senior')) {
-            careerLevel = 'senior-level'
-          } else if (templateName.includes('mid')) {
-            careerLevel = 'mid-level'
           } else if (templateName.includes('fresher')) {
             careerLevel = 'fresher'
-          } else if (templateName.includes('lead')) {
-            careerLevel = 'lead'
           } else if (templateName.includes('architect')) {
             careerLevel = 'architect'
           } else if (templateName.includes('manager')) {
             careerLevel = 'manager'
+          } else if (templateName.includes('lead')) {
+            careerLevel = 'lead'
+          } else if (templateName.includes('senior')) {
+            careerLevel = 'senior-level'
+          } else if (templateName.includes('mid')) {
+            careerLevel = 'mid-level'
           }
 
           const sectionOrder = getSectionOrderByDomainAndCareer(pendingTemplateFamily, careerLevel)
