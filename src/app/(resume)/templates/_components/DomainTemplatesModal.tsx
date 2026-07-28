@@ -21,7 +21,22 @@ interface DomainTemplatesModalProps {
   source?: string;
 }
 
-const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Manager'];
+const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager'];
+
+// Canonical career-level detection — most-specific/senior keyword wins, matching
+// the apply-site if-else precedence (e.g. "Lead Architect" → Architect). Sorting
+// still orders by CAREER_LEVELS progression via indexOf of the detected level.
+const detectCareerLevel = (name: string): string | undefined => {
+  const n = (name || '').toLowerCase();
+  if (n.includes('early') && n.includes('career')) return 'Early Career';
+  if (n.includes('fresher')) return 'Fresher';
+  if (n.includes('architect')) return 'Architect';
+  if (n.includes('manager')) return 'Manager';
+  if (n.includes('lead')) return 'Lead';
+  if (n.includes('senior')) return 'Senior-Level';
+  if (n.includes('mid')) return 'Mid-Level';
+  return undefined;
+};
 
 
 // Map domain names to domain_family codes (handles both lowercase and title case)
@@ -70,16 +85,12 @@ export default function DomainTemplatesModal({
   // Sort templates by career level
   const sortedTemplates = useMemo(() => {
     return [...templates].sort((a, b) => {
-      const aName = (a.name || '').toLowerCase();
-      const bName = (b.name || '').toLowerCase();
+      const aLevel = detectCareerLevel(a.name || '');
+      const bLevel = detectCareerLevel(b.name || '');
+      const aLevelIndex = aLevel ? CAREER_LEVELS.indexOf(aLevel) : -1;
+      const bLevelIndex = bLevel ? CAREER_LEVELS.indexOf(bLevel) : -1;
 
-      const aLevelIndex = CAREER_LEVELS.findIndex((level) =>
-        aName.includes(level.toLowerCase())
-      );
-      const bLevelIndex = CAREER_LEVELS.findIndex((level) =>
-        bName.includes(level.toLowerCase())
-      );
-
+      if (aLevelIndex === -1 && bLevelIndex === -1) return 0; // both unknown → stable order
       if (aLevelIndex === -1) return 1;
       if (bLevelIndex === -1) return -1;
       return aLevelIndex - bLevelIndex;
@@ -92,11 +103,7 @@ export default function DomainTemplatesModal({
   const selectedTemplate = sortedTemplates[selectedTemplateIndex];
 
   const getCareerLevel = (templateName: string) => {
-    return (
-      CAREER_LEVELS.find((level) =>
-        templateName.toLowerCase().includes(level.toLowerCase())
-      ) || 'Custom'
-    );
+    return detectCareerLevel(templateName) || 'Custom';
   };
 
   const handleSelectTemplate = (index: number) => {
@@ -142,7 +149,7 @@ export default function DomainTemplatesModal({
           name: t.name,
           preview_url: t.preview_url || FALLBACK_TEMPLATE_IMAGE,
           description: t.description || 'Professional resume template',
-          ats_friendly: t.ats_friendly || true,
+          ats_friendly: t.ats_friendly ?? true,
           subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
           domain_family: ((t as unknown) as Record<string, unknown>).domain_family as string || correctDomainFamily,
           domain_display_name: domainName,
@@ -157,14 +164,18 @@ export default function DomainTemplatesModal({
         const nameStr = templateName.toLowerCase();
         if (nameStr.includes('early') && nameStr.includes('career')) {
           careerLevel = 'early career';
+        } else if (nameStr.includes('fresher')) {
+          careerLevel = 'fresher';
+        } else if (nameStr.includes('architect')) {
+          careerLevel = 'architect';
+        } else if (nameStr.includes('manager')) {
+          careerLevel = 'manager';
+        } else if (nameStr.includes('lead')) {
+          careerLevel = 'lead';
         } else if (nameStr.includes('senior')) {
           careerLevel = 'senior-level';
         } else if (nameStr.includes('mid')) {
           careerLevel = 'mid-level';
-        } else if (nameStr.includes('fresher')) {
-          careerLevel = 'fresher';
-        } else if (nameStr.includes('manager')) {
-          careerLevel = 'manager';
         }
         const newDomainOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
         // Preserve extra sections the user had added before opening this modal
@@ -314,14 +325,18 @@ export default function DomainTemplatesModal({
                       let careerLevel = '';
                       if (nameStr.includes('early') && nameStr.includes('career')) {
                         careerLevel = 'Early Career';
+                      } else if (nameStr.includes('fresher')) {
+                        careerLevel = 'Fresher';
+                      } else if (nameStr.includes('architect')) {
+                        careerLevel = 'Architect';
+                      } else if (nameStr.includes('manager')) {
+                        careerLevel = 'Manager';
+                      } else if (nameStr.includes('lead')) {
+                        careerLevel = 'Lead';
                       } else if (nameStr.includes('senior')) {
                         careerLevel = 'Senior-Level';
                       } else if (nameStr.includes('mid')) {
                         careerLevel = 'Mid-Level';
-                      } else if (nameStr.includes('fresher')) {
-                        careerLevel = 'Fresher';
-                      } else if (nameStr.includes('manager')) {
-                        careerLevel = 'Manager';
                       }
 
                       if (careerLevel) {

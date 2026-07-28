@@ -7,7 +7,7 @@ import { ExternalLink } from "lucide-react";
 interface Props {
   data: ResumeData;
   style: ResumeStyle;
-  careerLevel?: "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Manager";
+  careerLevel?: "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager";
   domainFamily?: string;
   sectionOrder?: string[];
   onPageCountChange?: (count: number) => void;
@@ -38,11 +38,11 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
   const getSectionTitle = (section: string): string => {
     if (section === "Professional Summary") {
       if (careerLevel === "Fresher") return "OBJECTIVE";
-      if (careerLevel === "Manager") return "EXECUTIVE SUMMARY";
+      if (careerLevel === "Architect" || careerLevel === "Manager") return "EXECUTIVE SUMMARY";
       return "PROFESSIONAL SUMMARY";
     }
     if (section === "Skills") {
-      return (careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Manager") ? "CORE COMPETENCIES" : "SKILLS AND TOOLS";
+      return (careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager") ? "CORE COMPETENCIES" : "SKILLS AND TOOLS";
     }
     if (section === "Work Experience") {
       return "PROFESSIONAL EXPERIENCE";

@@ -91,7 +91,7 @@ export const signOut = async () => {
   }
   codingKeys.forEach((k) => localStorage.removeItem(k));
 
-  ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText'].forEach(
+  ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText', 'last_resume_path', 'builder_fresh_start'].forEach(
     (key) => sessionStorage.removeItem(key)
   );
   window.location.href = "/";

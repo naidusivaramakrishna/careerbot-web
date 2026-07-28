@@ -1,10 +1,6 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
 import {
-  Eye,
-  Sparkles,
-  Layout,
-  Zap,
   ArrowDownToLine,
   ZoomIn,
   ZoomOut,
@@ -20,7 +16,6 @@ import TemplateTwo from "./templates/TemplateTwo";
 import TemplateThree from "./templates/TemplateThree";
 import TemplateFour from "./templates/TemplateFour";
 import TemplateFive from "./templates/TemplateFive";
-import Template1 from "../../../templates/Template1";
 import Template2 from "../../../templates/Template2";
 import Template3 from "../../../templates/Template3";
 import Template4 from "../../../templates/Template4";
@@ -285,7 +280,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
 
     // Extract career level from localStorage appliedTemplateId
-    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Manager" => {
+    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" => {
       try {
         const careerLevelStorage = localStorage.getItem(careerLevelKey);
         const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
@@ -296,12 +291,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
           if (applied) {
             const name = applied.name.toLowerCase();
-            if (name.includes('fresher')) return 'Fresher';
-            if (name.includes('early')) return 'Early Career';
-            if (name.includes('manager')) return 'Manager';
-            if (name.includes('lead')) return 'Lead';
-            if (name.includes('mid')) return 'Mid-Level';
-            if (name.includes('senior')) return 'Senior-Level';
+            if (name.includes('early') && name.includes('career')) return 'Early Career';
+            if (name.includes('fresher'))   return 'Fresher';
+            if (name.includes('architect')) return 'Architect';
+            if (name.includes('manager'))   return 'Manager';
+            if (name.includes('lead'))      return 'Lead';
+            if (name.includes('senior'))    return 'Senior-Level';
+            if (name.includes('mid'))       return 'Mid-Level';
           }
         }
       } catch (err) {
@@ -338,7 +334,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         case 'government_standard':
           return <Template3 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
         default:
-          return <Template1 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+          return <Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
       }
     };
 
@@ -358,11 +354,18 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       '5': <TemplateFive data={resumeData} style={resumeStyle} />,
     };
 
+    // Read and immediately consume the fresh-start flag so it only governs the first
+    // email-ready render. Reading sessionStorage here (after isEmailReady) is safe —
+    // getProfile() resolves after the mount effect that would have cleared the ref,
+    // so a ref approach was inert; direct sessionStorage read is the only reliable path.
+    const isFreshStart = typeof window !== 'undefined' && sessionStorage.getItem('builder_fresh_start') === 'true';
+    if (isFreshStart) sessionStorage.removeItem('builder_fresh_start');
+
     // Check if this is a career level template and render appropriate template based on domain
     const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
     const careerLevelStorage = localStorage.getItem(careerLevelKey);
     logger.info('Career level render check:', { appliedTemplateId, hasCareerLevelStorage: !!careerLevelStorage });
-    if (appliedTemplateId && careerLevelStorage) {
+    if (!isFreshStart && appliedTemplateId && careerLevelStorage) {
       try {
         const careerLevels = JSON.parse(careerLevelStorage) as Array<{
           id: string;
@@ -382,51 +385,19 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     }
     logger.info('Career level logic not triggered, checking templateMap');
 
-    // Get the template based on selectedTemplate
-    const template = templateMap[String(selectedTemplate)];
-
-    if (template) {
-      // // console.log("✅ Template found and rendering:", selectedTemplate);
-      return template;
+    // Only honour catalogue/style templates that the user explicitly applied
+    // via TemplatesTab. initializeBuilder auto-sets selectedTemplate to the API
+    // default ("clean_simple") on every load — without this guard that would
+    // cause new users to see old TemplateTwo instead of Template2.tsx.
+    const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
+    const userChoseStyle = localStorage.getItem(styleKey) === 'true';
+    if (userChoseStyle) {
+      const explicitTemplate = templateMap[String(selectedTemplate)];
+      if (explicitTemplate) return explicitTemplate;
     }
 
-    // Default empty state
-    // // console.log("⚠️ No template selected, showing empty state");
-    return (
-      <div className="w-full max-w-full min-h-200 bg-white rounded-xl shadow-lg flex flex-col px-2 py-14 items-center">
-        <div className="mb-6">
-          <span
-            className="inline-flex items-center justify-center rounded-full bg-blue-50 shadow-sm"
-            style={{ width: 56, height: 56 }}
-          >
-            <Eye className="w-7 h-7 text-[#2557a7]" />
-          </span>
-        </div>
-        <div className="text-center">
-          <div className="text-lg font-bold text-gray-700 mb-1">
-            Your resume preview will appear here
-          </div>
-          <div className="text-gray-500 mb-6 text-sm">
-            Select template and start by adding your personal information
-            and professional summary to see your resume come to life.
-          </div>
-          <div className="flex justify-center gap-2 flex-wrap">
-            <span className="flex items-center gap-1 bg-gray-200 rounded-full px-3 py-1 text-xs text-gray-600 font-medium shadow-sm">
-              <Sparkles className="w-4 h-4 text-yellow-500" />
-              AI-powered content
-            </span>
-            <span className="flex items-center gap-1 bg-gray-200 rounded-full px-3 py-1 text-xs text-gray-600 font-medium shadow-sm">
-              <Layout className="w-4 h-4 text-gray-800" />
-              Professional templates
-            </span>
-            <span className="flex items-center gap-1 bg-gray-200 rounded-full px-3 py-1 text-xs text-gray-600 font-medium shadow-sm">
-              <Zap className="w-4 h-4 text-yellow-500" />
-              Real-time preview
-            </span>
-          </div>
-        </div>
-      </div>
-    );
+    // Default: Template2.tsx with software_engineering domain
+    return getTemplateByDomain('software_engineering');
   };
 
   return (
