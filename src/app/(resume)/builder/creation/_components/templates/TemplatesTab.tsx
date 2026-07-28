@@ -192,8 +192,69 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
         setCareerLevelData(null);
       }
     } else {
-      setCareerLevelData(null);
-      logger.info('⚠ No career level data found in localStorage');
+      // New user with no domain selected — auto-populate software_engineering career levels
+      // so TemplatesTab shows career level cards and PreviewPanel shows Template2.tsx.
+      const autoPopulate = async () => {
+        try {
+          const allTemplates = await getTemplatesByCategory();
+          const seTemplates = (allTemplates || []).filter((t: TemplateResponse) => {
+            return (t as unknown as Record<string, unknown>).domain_family === 'software_engineering';
+          });
+
+          if (seTemplates.length === 0) {
+            setCareerLevelData(null);
+            return;
+          }
+
+          const levelOrder = ['fresher', 'early career', 'mid-level', 'senior-level', 'lead', 'architect', 'manager'];
+          const sorted = [...seTemplates].sort((a, b) => {
+            const aIdx = levelOrder.findIndex(l => (a.name || '').toLowerCase().includes(l));
+            const bIdx = levelOrder.findIndex(l => (b.name || '').toLowerCase().includes(l));
+            if (aIdx === -1) return 1;
+            if (bIdx === -1) return -1;
+            return aIdx - bIdx;
+          });
+
+          const careerLevelData = sorted.map((t: TemplateResponse) => ({
+            id: t.id?.toString() || t._id || '',
+            name: t.name,
+            preview_url: t.preview_url || '/assets/templates/template-1.jpg',
+            description: t.description || 'Professional resume template',
+            ats_friendly: t.ats_friendly || true,
+            subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
+            domain_family: 'software_engineering',
+            domain_display_name: 'Software Engineering',
+          }));
+
+          // Find Early Career template; fall back to first in list
+          const earlyCareerTpl = careerLevelData.find(t =>
+            t.name.toLowerCase().includes('early') && t.name.toLowerCase().includes('career')
+          ) || careerLevelData[0];
+
+          localStorage.setItem(careerLevelKey, JSON.stringify(careerLevelData));
+          const domainFamilyKey = `domainFamily_${userEmail}`;
+          localStorage.setItem(domainFamilyKey, 'software_engineering');
+
+          if (earlyCareerTpl?.id) {
+            localStorage.setItem(selectedTemplateKey, earlyCareerTpl.id);
+            setAppliedTemplateId(earlyCareerTpl.id);
+            setSelectedTemplate(null);
+
+            // Set section order for software_engineering + early career
+            const sectionOrder = getSectionOrderByDomainAndCareer('software_engineering', 'early career');
+            const sectionOrderKey = `sectionOrder_${userEmail}`;
+            localStorage.setItem(sectionOrderKey, JSON.stringify(sectionOrder));
+            setSectionOrder(sectionOrder);
+          }
+
+          setCareerLevelData(careerLevelData);
+          logger.info('Auto-populated software_engineering career levels:', careerLevelData.length, '| applied:', earlyCareerTpl?.name);
+        } catch (err) {
+          logger.warn('Failed to auto-populate software_engineering templates', err);
+          setCareerLevelData(null);
+        }
+      };
+      autoPopulate();
     }
   }, [userEmail, setSelectedTemplate]);
 
@@ -413,6 +474,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           localStorage.removeItem('selected_catalogue');
           setCareerLevelData(null);
 
+          // Mark that user explicitly applied a catalogue/style template
+          const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
+          localStorage.setItem(styleKey, 'true');
+
           // Sync resumeStyle with the backend's template config so preview matches download
           const templateDefaults = TEMPLATE_DEFAULT_STYLES[previewTemplate.template_id];
           if (templateDefaults) {
@@ -432,6 +497,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           // Persist career level template selection to localStorage
           const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
           localStorage.setItem(selectedTemplateKey, previewTemplate.id);
+
+          // Clear style-template flag — domain templates take over
+          const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
+          localStorage.removeItem(styleKey);
         }
 
         setPreviewTemplate(null);
@@ -526,7 +595,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                 {careerLevelData.map((careerTpl, index) => {
                   // Match by template name AND ID for safety
                   const isSelected = (appliedTemplateId === careerTpl.id || appliedTemplateId === String(careerTpl.id)) && careerTpl.name;
-                  const careerLevels = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Manager'];
+                  const careerLevels = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager'];
                   const careerLevel = careerLevels[index] || 'Custom';
                   const familyImage = DOMAIN_FAMILY_IMAGES[careerTpl.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE;
                   const cardImgSrc = !careerImgErrors[careerTpl.id] && careerTpl.preview_url
@@ -538,6 +607,11 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                       onClick={() => {
                         setAppliedTemplateId(careerTpl.id);
                         setSelectedTemplate(null);
+
+                        // Clear style-template flag — domain template now active
+                        const _styleEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
+                        const _styleKey = _styleEmail ? `user_chose_style_${_styleEmail}` : 'user_chose_style';
+                        localStorage.removeItem(_styleKey);
 
                         // ✅ Update sectionOrder in localStorage AND context when career level changes
                         try {
@@ -615,6 +689,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                               careerLevel = 'Fresher';
                             } else if (nameStr.includes('manager')) {
                               careerLevel = 'Manager';
+                            } else if (nameStr.includes('architect')) {
+                              careerLevel = 'Architect';
                             } else if (nameStr.includes('lead')) {
                               careerLevel = 'Lead';
                             } else if (nameStr.includes('senior')) {
@@ -757,6 +833,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                           careerLevel = 'Fresher';
                         } else if (nameStr.includes('manager')) {
                           careerLevel = 'Manager';
+                        } else if (nameStr.includes('architect')) {
+                          careerLevel = 'Architect';
                         } else if (nameStr.includes('lead')) {
                           careerLevel = 'Lead';
                         } else if (nameStr.includes('senior')) {

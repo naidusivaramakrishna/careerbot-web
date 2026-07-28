@@ -400,6 +400,10 @@ const EmptyState = ({ selected, onSelect }: {
         resumeId = newResume.id;
       }
 
+      // Signal to the builder that this is a fresh start so PreviewPanel
+      // skips stale localStorage template values for this render only.
+      sessionStorage.setItem('builder_fresh_start', 'true');
+
       router.push(buildCreationUrl(resumeId));
     } catch (error: unknown) {
       logger.error("Error:", error);

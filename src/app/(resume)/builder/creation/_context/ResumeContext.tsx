@@ -466,6 +466,12 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             extractedLevel = 'mid-level';
           } else if (templateName.includes('fresher')) {
             extractedLevel = 'fresher';
+          } else if (templateName.includes('architect')) {
+            extractedLevel = 'architect';
+          } else if (templateName.includes('manager')) {
+            extractedLevel = 'manager';
+          } else if (templateName.includes('lead')) {
+            extractedLevel = 'lead';
           } else if (templateName.includes('senior')) {
             extractedLevel = 'senior-level';
           } else if (templateName.includes('mid')) {

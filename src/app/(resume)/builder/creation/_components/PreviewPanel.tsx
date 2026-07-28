@@ -20,7 +20,6 @@ import TemplateTwo from "./templates/TemplateTwo";
 import TemplateThree from "./templates/TemplateThree";
 import TemplateFour from "./templates/TemplateFour";
 import TemplateFive from "./templates/TemplateFive";
-import Template1 from "../../../templates/Template1";
 import Template2 from "../../../templates/Template2";
 import Template3 from "../../../templates/Template3";
 import Template4 from "../../../templates/Template4";
@@ -285,7 +284,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
 
     // Extract career level from localStorage appliedTemplateId
-    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Manager" => {
+    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" => {
       try {
         const careerLevelStorage = localStorage.getItem(careerLevelKey);
         const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
@@ -299,6 +298,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             if (name.includes('fresher')) return 'Fresher';
             if (name.includes('early')) return 'Early Career';
             if (name.includes('manager')) return 'Manager';
+            if (name.includes('architect')) return 'Architect';
             if (name.includes('lead')) return 'Lead';
             if (name.includes('mid')) return 'Mid-Level';
             if (name.includes('senior')) return 'Senior-Level';
@@ -338,7 +338,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         case 'government_standard':
           return <Template3 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
         default:
-          return <Template1 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
+          return <Template2 data={resumeData} style={resumeStyle} careerLevel={careerLevel} domainFamily={domainFamily} sectionOrder={sectionOrder} layoutVariant={layoutVariant} />;
       }
     };
 
@@ -358,11 +358,16 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       '5': <TemplateFive data={resumeData} style={resumeStyle} />,
     };
 
+    // If the user clicked "Build from Scratch", skip stale localStorage values
+    // for this render only, then clear the flag.
+    const isFreshStart = sessionStorage.getItem('builder_fresh_start') === 'true';
+    if (isFreshStart) sessionStorage.removeItem('builder_fresh_start');
+
     // Check if this is a career level template and render appropriate template based on domain
     const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
     const careerLevelStorage = localStorage.getItem(careerLevelKey);
     logger.info('Career level render check:', { appliedTemplateId, hasCareerLevelStorage: !!careerLevelStorage });
-    if (appliedTemplateId && careerLevelStorage) {
+    if (!isFreshStart && appliedTemplateId && careerLevelStorage) {
       try {
         const careerLevels = JSON.parse(careerLevelStorage) as Array<{
           id: string;
@@ -382,16 +387,19 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     }
     logger.info('Career level logic not triggered, checking templateMap');
 
-    // Get the template based on selectedTemplate
-    const template = templateMap[String(selectedTemplate)];
-
-    if (template) {
-      // // console.log("✅ Template found and rendering:", selectedTemplate);
-      return template;
+    // Only honour catalogue/style templates that the user explicitly applied
+    // via TemplatesTab. initializeBuilder auto-sets selectedTemplate to the API
+    // default ("clean_simple") on every load — without this guard that would
+    // cause new users to see old TemplateTwo instead of Template2.tsx.
+    const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
+    const userChoseStyle = localStorage.getItem(styleKey) === 'true';
+    if (userChoseStyle) {
+      const explicitTemplate = templateMap[String(selectedTemplate)];
+      if (explicitTemplate) return explicitTemplate;
     }
 
-    // Default empty state
-    // // console.log("⚠️ No template selected, showing empty state");
+    // Default: Template2.tsx with software_engineering domain
+    return getTemplateByDomain('software_engineering');
     return (
       <div className="w-full max-w-full min-h-200 bg-white rounded-xl shadow-lg flex flex-col px-2 py-14 items-center">
         <div className="mb-6">
