@@ -35,7 +35,7 @@ function getCareerLevelLabel(name: string): string | null {
 // Canonical sort order so career levels always appear from entry-level to senior.
 const LEVEL_ORDER: Record<string, number> = {
   'Fresher': 0, 'Early Career': 1, 'Mid-Level': 2,
-  'Senior-Level': 3, 'Lead': 3, 'Architect': 4, 'Manager': 5,
+  'Senior-Level': 3, 'Lead': 4, 'Architect': 5, 'Manager': 6,
 }
 
 interface AvailableLevel {

@@ -157,18 +157,18 @@ export default function DomainTemplatesModal({
         const nameStr = templateName.toLowerCase();
         if (nameStr.includes('early') && nameStr.includes('career')) {
           careerLevel = 'early career';
-        } else if (nameStr.includes('senior')) {
-          careerLevel = 'senior-level';
-        } else if (nameStr.includes('mid')) {
-          careerLevel = 'mid-level';
         } else if (nameStr.includes('fresher')) {
           careerLevel = 'fresher';
-        } else if (nameStr.includes('lead')) {
-          careerLevel = 'lead';
         } else if (nameStr.includes('architect')) {
           careerLevel = 'architect';
         } else if (nameStr.includes('manager')) {
           careerLevel = 'manager';
+        } else if (nameStr.includes('lead')) {
+          careerLevel = 'lead';
+        } else if (nameStr.includes('senior')) {
+          careerLevel = 'senior-level';
+        } else if (nameStr.includes('mid')) {
+          careerLevel = 'mid-level';
         }
         const newDomainOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
         // Preserve extra sections the user had added before opening this modal
@@ -318,18 +318,18 @@ export default function DomainTemplatesModal({
                       let careerLevel = '';
                       if (nameStr.includes('early') && nameStr.includes('career')) {
                         careerLevel = 'Early Career';
-                      } else if (nameStr.includes('senior')) {
-                        careerLevel = 'Senior-Level';
-                      } else if (nameStr.includes('mid')) {
-                        careerLevel = 'Mid-Level';
                       } else if (nameStr.includes('fresher')) {
                         careerLevel = 'Fresher';
-                      } else if (nameStr.includes('lead')) {
-                        careerLevel = 'Lead';
                       } else if (nameStr.includes('architect')) {
                         careerLevel = 'Architect';
                       } else if (nameStr.includes('manager')) {
                         careerLevel = 'Manager';
+                      } else if (nameStr.includes('lead')) {
+                        careerLevel = 'Lead';
+                      } else if (nameStr.includes('senior')) {
+                        careerLevel = 'Senior-Level';
+                      } else if (nameStr.includes('mid')) {
+                        careerLevel = 'Mid-Level';
                       }
 
                       if (careerLevel) {
