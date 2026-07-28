@@ -142,7 +142,7 @@ export default function DomainTemplatesModal({
           name: t.name,
           preview_url: t.preview_url || FALLBACK_TEMPLATE_IMAGE,
           description: t.description || 'Professional resume template',
-          ats_friendly: t.ats_friendly || true,
+          ats_friendly: t.ats_friendly ?? true,
           subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
           domain_family: ((t as unknown) as Record<string, unknown>).domain_family as string || correctDomainFamily,
           domain_display_name: domainName,
