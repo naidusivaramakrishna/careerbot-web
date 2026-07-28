@@ -145,6 +145,8 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
   useEffect(() => {
     if (typeof window === 'undefined' || !userEmail) return; // Wait for userEmail to be set
 
+    let ignore = false; // guard: skip state writes if unmounted / userEmail changed mid-fetch
+
     // Create user-scoped localStorage keys
     const selectedTemplateKey = `selectedTemplateId_${userEmail}`;
     const careerLevelKey = `careerLevelTemplates_${userEmail}`;
@@ -214,6 +216,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       const autoPopulate = async () => {
         try {
           const allTemplates = await getTemplatesByCategory();
+          if (ignore) return; // unmounted / email changed before the fetch resolved
           const seTemplates = (allTemplates || []).filter((t: TemplateResponse) => {
             return (t as unknown as Record<string, unknown>).domain_family === 'software_engineering';
           });
@@ -274,6 +277,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       autoPopulate();
       }
     }
+    return () => { ignore = true; };
   }, [userEmail, setSelectedTemplate]);
 
   // Fetch templates from API
