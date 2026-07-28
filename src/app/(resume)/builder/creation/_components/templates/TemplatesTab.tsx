@@ -197,10 +197,12 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       // must not re-seed SE data and silently discard their explicit style choice.
       const styleKey = `user_chose_style_${userEmail}`;
 
-      // Migration for pre-flag users: if selectedTemplateId is already set but neither
-      // careerLevelTemplates nor user_chose_style exists, the user chose a style template
-      // before this flag was introduced — backfill so auto-populate doesn't clobber them.
-      if (localStorage.getItem(selectedTemplateKey) && !localStorage.getItem(styleKey)) {
+      // Migration: if the user applied a style template after this flag was introduced
+      // (signalled by styleTemplateApplied_{email}) but user_chose_style was somehow lost,
+      // restore it. Note: truly pre-deploy style users have no persistent localStorage signal
+      // and will see SE auto-populate once; they self-heal by re-applying their style.
+      const styleAppliedKey = userEmail ? `styleTemplateApplied_${userEmail}` : null;
+      if (styleAppliedKey && localStorage.getItem(styleAppliedKey) && !localStorage.getItem(styleKey)) {
         localStorage.setItem(styleKey, 'true');
       }
 
@@ -493,6 +495,9 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           // Mark that user explicitly applied a catalogue/style template
           const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
           localStorage.setItem(styleKey, 'true');
+          // Persist the chosen style id so the migration can detect it on future mounts
+          // (selectedTemplateId is removed above, so a separate key is needed)
+          if (userEmail) localStorage.setItem(`styleTemplateApplied_${userEmail}`, previewTemplate.template_id);
 
           // Sync resumeStyle with the backend's template config so preview matches download
           const templateDefaults = TEMPLATE_DEFAULT_STYLES[previewTemplate.template_id];
@@ -709,10 +714,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                               careerLevel = 'Early Career';
                             } else if (nameStr.includes('fresher')) {
                               careerLevel = 'Fresher';
-                            } else if (nameStr.includes('manager')) {
-                              careerLevel = 'Manager';
                             } else if (nameStr.includes('architect')) {
                               careerLevel = 'Architect';
+                            } else if (nameStr.includes('manager')) {
+                              careerLevel = 'Manager';
                             } else if (nameStr.includes('lead')) {
                               careerLevel = 'Lead';
                             } else if (nameStr.includes('senior')) {
@@ -853,10 +858,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                           careerLevel = 'Early Career';
                         } else if (nameStr.includes('fresher')) {
                           careerLevel = 'Fresher';
-                        } else if (nameStr.includes('manager')) {
-                          careerLevel = 'Manager';
                         } else if (nameStr.includes('architect')) {
                           careerLevel = 'Architect';
+                        } else if (nameStr.includes('manager')) {
+                          careerLevel = 'Manager';
                         } else if (nameStr.includes('lead')) {
                           careerLevel = 'Lead';
                         } else if (nameStr.includes('senior')) {
