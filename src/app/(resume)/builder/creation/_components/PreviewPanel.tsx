@@ -77,17 +77,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [isEmailReady, setIsEmailReady] = useState(false);
-  // Read once at mount; cleared after first paint so subsequent in-session domain selections
-  // (e.g. switching to legal → Template4) are not blocked by the stale fresh-start guard.
-  const isFreshStartRef = useRef(
-    typeof window !== 'undefined' && sessionStorage.getItem('builder_fresh_start') === 'true'
-  );
-  // Mutating a ref doesn't schedule a render; the transition from isFreshStart=true
-  // to false is picked up by the subsequent render triggered by the userEmail effect below.
-  useEffect(() => {
-    sessionStorage.removeItem('builder_fresh_start');
-    isFreshStartRef.current = false;
-  }, []);
 
   // Fetch email before rendering template to avoid flash between global and scoped localStorage keys
   useEffect(() => {
@@ -365,8 +354,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       '5': <TemplateFive data={resumeData} style={resumeStyle} />,
     };
 
-    // isFreshStartRef is set at mount and cleared to false after first paint (see useEffect above).
-    const isFreshStart = isFreshStartRef.current;
+    // Read and immediately consume the fresh-start flag so it only governs the first
+    // email-ready render. Reading sessionStorage here (after isEmailReady) is safe —
+    // getProfile() resolves after the mount effect that would have cleared the ref,
+    // so a ref approach was inert; direct sessionStorage read is the only reliable path.
+    const isFreshStart = typeof window !== 'undefined' && sessionStorage.getItem('builder_fresh_start') === 'true';
+    if (isFreshStart) sessionStorage.removeItem('builder_fresh_start');
 
     // Check if this is a career level template and render appropriate template based on domain
     const appliedTemplateId = localStorage.getItem(selectedTemplateKey);

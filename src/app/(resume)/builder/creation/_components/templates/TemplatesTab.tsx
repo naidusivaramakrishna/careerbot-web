@@ -519,9 +519,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
           const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
           localStorage.setItem(selectedTemplateKey, previewTemplate.id);
 
-          // Clear style-template flag — domain templates take over
+          // Clear style-template flags — domain templates take over
           const styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
           localStorage.removeItem(styleKey);
+          if (userEmail) localStorage.removeItem(`styleTemplateApplied_${userEmail}`);
         }
 
         setPreviewTemplate(null);
@@ -636,9 +637,10 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                         setAppliedTemplateId(careerTpl.id);
                         setSelectedTemplate(null);
 
-                        // Clear style-template flag — domain template now active
+                        // Clear style-template flags — domain template now active
                         const _styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
                         localStorage.removeItem(_styleKey);
+                        if (userEmail) localStorage.removeItem(`styleTemplateApplied_${userEmail}`);
 
                         // ✅ Update sectionOrder in localStorage AND context when career level changes
                         try {
