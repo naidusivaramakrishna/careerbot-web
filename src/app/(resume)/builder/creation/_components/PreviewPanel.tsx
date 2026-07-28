@@ -82,6 +82,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const isFreshStartRef = useRef(
     typeof window !== 'undefined' && sessionStorage.getItem('builder_fresh_start') === 'true'
   );
+  // Mutating a ref doesn't schedule a render; the transition from isFreshStart=true
+  // to false is picked up by the subsequent render triggered by the userEmail effect below.
   useEffect(() => {
     sessionStorage.removeItem('builder_fresh_start');
     isFreshStartRef.current = false;

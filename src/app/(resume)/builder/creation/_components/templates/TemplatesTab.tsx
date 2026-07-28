@@ -196,6 +196,14 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
       // If user_chose_style is set, clearing careerLevelTemplates (done by handleApplyTemplate)
       // must not re-seed SE data and silently discard their explicit style choice.
       const styleKey = `user_chose_style_${userEmail}`;
+
+      // Migration for pre-flag users: if selectedTemplateId is already set but neither
+      // careerLevelTemplates nor user_chose_style exists, the user chose a style template
+      // before this flag was introduced — backfill so auto-populate doesn't clobber them.
+      if (localStorage.getItem(selectedTemplateKey) && !localStorage.getItem(styleKey)) {
+        localStorage.setItem(styleKey, 'true');
+      }
+
       if (localStorage.getItem(styleKey) === 'true') {
         setCareerLevelData(null);
       } else {
@@ -624,8 +632,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                         setSelectedTemplate(null);
 
                         // Clear style-template flag — domain template now active
-                        const _styleEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : null;
-                        const _styleKey = _styleEmail ? `user_chose_style_${_styleEmail}` : 'user_chose_style';
+                        const _styleKey = userEmail ? `user_chose_style_${userEmail}` : 'user_chose_style';
                         localStorage.removeItem(_styleKey);
 
                         // ✅ Update sectionOrder in localStorage AND context when career level changes
