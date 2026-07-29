@@ -6,10 +6,18 @@ export interface JobFilterCandidate {
   location?: string;
   education?: string;
   source?: string;
+  created_at?: string | null;
+  posted_date?: string | null;
 }
 
 export interface JobFilterOptions {
   includeSource?: boolean;
+  // Set false where created_at/posted_date isn't a reliable posting date —
+  // e.g. the Applied tab's local placeholders reuse created_at to hold the
+  // *application* date until background enrichment replaces it (and stay
+  // that way forever for any job whose full record can no longer be
+  // fetched), so "Date Posted" must not run against them there.
+  includeDate?: boolean;
 }
 
 function normalizeText(value: string | undefined): string {
@@ -145,6 +153,35 @@ function matchesSource(jobSource: string | undefined, sourceFilterValue: string 
   return normalizeText(jobSource || "").includes(normalizeText(sourceFilterValue));
 }
 
+const DATE_PRESET_DAYS: Record<string, number> = {
+  "Last 24 hours": 1,
+  "Last 7 days": 7,
+  "Last 30 days": 30,
+  "Last 3 months": 90,
+};
+
+// Previously applied server-side only (as a `date_from` request param on the
+// now-removed "All Jobs" fetch) — computed client-side here so the "Date
+// Posted" chip still does something on the tabs that remain (Smart
+// Match/Saved/Applied), which only ever get client-side filtering.
+function matchesDatePosted(
+  createdAt: string | null | undefined,
+  postedDate: string | null | undefined,
+  datePresetLabel: string | undefined
+): boolean {
+  if (!datePresetLabel) return true;
+  const days = DATE_PRESET_DAYS[datePresetLabel];
+  if (!days) return true;
+
+  const raw = createdAt || postedDate;
+  if (!raw) return false;
+
+  const postedTime = new Date(raw).getTime();
+  if (Number.isNaN(postedTime)) return false;
+
+  return postedTime >= Date.now() - days * 86_400_000;
+}
+
 export function matchesJobFilters(
   job: JobFilterCandidate,
   selectedFilters: string[],
@@ -179,6 +216,10 @@ export function matchesJobFilters(
     ? selectedFilters.find((filter) => filter.startsWith("source:"))?.replace("source:", "").toLowerCase()
     : undefined;
 
+  const datePresetLabel = options.includeDate === false
+    ? undefined
+    : selectedFilters.find((filter) => filter.startsWith("date:"))?.replace("date:", "");
+
   return (
     matchesWorkModel(job.mode, selectedWorkModels) &&
     matchesType(job.type, selectedTypeFilters) &&
@@ -186,6 +227,7 @@ export function matchesJobFilters(
     matchesSalary(job.salary, salaryLabel) &&
     matchesLocation(job.location, locationFilters) &&
     matchesEducation(job.education, educationFilters) &&
-    matchesSource(job.source, sourceFilterValue)
+    matchesSource(job.source, sourceFilterValue) &&
+    matchesDatePosted(job.created_at, job.posted_date, datePresetLabel)
   );
 }

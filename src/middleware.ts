@@ -135,6 +135,10 @@ export async function middleware(request: NextRequest) {
         return redirectToLogin(request);
     }
 
+    // Role-gated areas (admin / recruiter) require a verified token.
+    const isProtectedArea =
+        pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(RECRUITER_PREFIX);
+
     // JWT role enforcement — decode access_token to check role claim
     if (token && process.env.JWT_SECRET) {
         try {
@@ -160,7 +164,7 @@ export async function middleware(request: NextRequest) {
     //    sends it on a page navigation — gating on it alone bounced freshly
     //    signed-in users straight back to login whenever the access token
     //    could not be verified here (JWT_SECRET unset, or token simply expired).
-    if (!isAdminOrRecruiter) {
+    if (!isProtectedArea) {
         return (token || refreshToken) ? NextResponse.next() : redirectToLogin(request);
     }
 

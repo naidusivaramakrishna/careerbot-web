@@ -98,14 +98,14 @@ const NAV_GROUPS: {
     label: "GENERATE",
     items: [
       { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history", flag: "NEXT_PUBLIC_COVER_LETTER_ENABLED" },
-      { id: "notes",        label: "Notes",          icon: IcoNotes,       path: "/notes/generate" },
+      { id: "interview_notes",        label: "Interview Notes",          icon: IcoNotes,       path: "/notes/generate" },
     ],
   },
   {
     label: "PREPARE",
     items: [
       {
-        id: "interview_prep", label: "Interview Prep", icon: IcoInterview, path: "",
+        id: "mock_interview", label: "Mock Interview", icon: IcoInterview, path: "",
         subItems: [
           { id: "comm_assess",    label: "Communication Assessment", path: "/communication/start" },
           { id: "mock_test",      label: "Mock Test",                path: "/mock-test" },
@@ -187,7 +187,7 @@ function CollapsedSubItem({
     if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
     if (!wrapRef.current) return;
     const r = wrapRef.current.getBoundingClientRect();
-    setPopPos({ top: r.top, left: r.right + 4 });
+    setPopPos({ top: r.top - 48, left: r.right + 4 });
   }, []);
 
   const close = useCallback(() => {

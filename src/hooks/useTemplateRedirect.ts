@@ -73,7 +73,7 @@ export function useTemplateRedirect() {
 
           // Sort by career level
           const sortedTemplates = careerTemplates.sort((a, b) => {
-            const careerLevels = ['fresher', 'early career', 'mid-level', 'senior-level', 'manager']
+            const careerLevels = ['fresher', 'early career', 'mid-level', 'senior-level', 'lead', 'architect', 'manager']
             const aName = (a.name || '').toLowerCase()
             const bName = (b.name || '').toLowerCase()
 
@@ -91,7 +91,7 @@ export function useTemplateRedirect() {
             name: t.name,
             preview_url: t.preview_url || '/assets/templates/template-1.jpg',
             description: t.description || 'Professional resume template',
-            ats_friendly: t.ats_friendly || true,
+            ats_friendly: t.ats_friendly ?? true,
             subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
             domain_family: pendingTemplateFamily,
             domain_display_name: FAMILY_TO_DISPLAY_NAME[pendingTemplateFamily] || pendingTemplateFamily,
@@ -112,14 +112,18 @@ export function useTemplateRedirect() {
           let careerLevel: string | undefined
           if (templateName.includes('early') && templateName.includes('career')) {
             careerLevel = 'early career'
+          } else if (templateName.includes('fresher')) {
+            careerLevel = 'fresher'
+          } else if (templateName.includes('architect')) {
+            careerLevel = 'architect'
+          } else if (templateName.includes('manager')) {
+            careerLevel = 'manager'
+          } else if (templateName.includes('lead')) {
+            careerLevel = 'lead'
           } else if (templateName.includes('senior')) {
             careerLevel = 'senior-level'
           } else if (templateName.includes('mid')) {
             careerLevel = 'mid-level'
-          } else if (templateName.includes('fresher')) {
-            careerLevel = 'fresher'
-          } else if (templateName.includes('manager')) {
-            careerLevel = 'manager'
           }
 
           const sectionOrder = getSectionOrderByDomainAndCareer(pendingTemplateFamily, careerLevel)

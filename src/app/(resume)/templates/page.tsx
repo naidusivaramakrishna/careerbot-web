@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, LayoutTemplate, Sparkles, User } from 'lucide-react';
 import { getTemplatesByCategory, getTemplateCategories, type TemplateResponse } from '@/api/resumeApi';

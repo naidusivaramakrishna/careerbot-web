@@ -5,12 +5,11 @@ import React, { useEffect, useRef, useState } from "react";
 interface AutoPaginatorProps {
   children: React.ReactNode;
   onPageCountChange?: (count: number) => void; // send page count to PreviewPanel
-  currentPage?: number;
 }
 
-const PAGE_HEIGHT = 760;
+const PAGE_HEIGHT = 1122;
 
-const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChange, currentPage = 1 }) => {
+const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChange }) => {
   const measureRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<React.ReactNode[][]>([]);
 
@@ -19,17 +18,32 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
     if (!container) return;
 
     const reactNodes = React.Children.toArray(children);
-    const blocks = Array.from(container.children) as HTMLElement[];
-    const heights = blocks.map((block) => block.offsetHeight);
+    container.replaceChildren();
 
-    // Group elements into preview pages
+    const heights: number[] = [];
+
+    reactNodes.forEach((child, idx) => {
+      const wrapper = document.createElement("div");
+      wrapper.style.width = "100%";
+      container.appendChild(wrapper);
+
+      const temp = document.createElement("div"); // safe: static empty element
+      wrapper.appendChild(temp);
+
+      temp.innerHTML = serialize(child); // safe: serialize() outputs React-controlled HTML, no user-supplied raw strings
+      heights[idx] = temp.offsetHeight;
+
+      wrapper.remove();
+    });
+
+    // Group elements into A4 pages
     const newPages: React.ReactNode[][] = [[]];
     let curHeight = 0;
 
     reactNodes.forEach((child, idx) => {
       const h = heights[idx];
 
-      if (curHeight > 0 && curHeight + h > PAGE_HEIGHT - 60) {
+      if (curHeight + h > PAGE_HEIGHT - 60) {
         newPages.push([]);
         curHeight = 0;
       }
@@ -44,21 +58,14 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
 
   return (
     <>
-      {/* Rendered off-canvas so browser layout returns real heights. */}
-      <div ref={measureRef} className="resume-measure-container" aria-hidden="true">
-        {React.Children.map(children, (child, index) => (
-          <div key={index} className="resume-measure-block">{child}</div>
-        ))}
-      </div>
+      {/* hidden measuring container */}
+      <div ref={measureRef} className="hidden-content" />
 
-      {/* rendered preview pages */}
+      {/* rendered A4 pages */}
       <div className="resume-container">
-        {pages.map((page, index) => (
-          <div
-            key={index}
-            className={`resume-pagination-page a2-page ${index + 1 === currentPage ? "resume-pagination-page--active" : ""}`}
-          >
-            <div className="a2-page-content">
+        {pages.map((page, idx) => (
+          <div key={idx} className="a4-page">
+            <div className="a4-page-content">
               {page.map((node, i) => (
                 <React.Fragment key={i}>{node}</React.Fragment>
               ))}
@@ -70,4 +77,20 @@ const AutoPaginator: React.FC<AutoPaginatorProps> = ({ children, onPageCountChan
   );
 };
 
+/* Convert React node to HTML string for height measurement */
+function serialize(child: unknown): string {
+  if (typeof child === "string" || typeof child === "number") return `${child}`;
+  const reactChild = child as { props?: { children?: React.ReactNode } };
+  if (!reactChild?.props) return "";
+
+  let html = "<div>";
+  React.Children.forEach(reactChild.props.children, (inner) => {
+    html += serialize(inner);
+  });
+  html += "</div>";
+
+  return html;
+}
+
 export default AutoPaginator;
+

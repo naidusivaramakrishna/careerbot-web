@@ -28,12 +28,12 @@ export default function ReportPage() {
         setCandidateName(username);
       }
 
-      const testStartDate = localStorage.getItem('test_start_date');
+      // assessment_start_time is saved when submission begins (test_start_date is removed then)
+      const testStartDate = localStorage.getItem('assessment_start_time') || localStorage.getItem('test_start_date');
       if (testStartDate) {
         const date = new Date(testStartDate);
         setTestDate(date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
 
-        // Calculate time taken
         const endTimeStr = localStorage.getItem('assessment_end_time');
         const endMs = endTimeStr ? new Date(endTimeStr).getTime() : Date.now();
         const diffMs = endMs - new Date(testStartDate).getTime();
@@ -83,7 +83,8 @@ export default function ReportPage() {
       const url = window.URL.createObjectURL(pdfBlob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `assessment-report-${testId}.pdf`;
+      const safeName = candidateName.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+      link.download = `${safeName || 'candidate'}_assessment_report.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -99,7 +100,7 @@ export default function ReportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="h-full overflow-y-auto bg-slate-50 assessment-scroll">
       {/* <Sidebar /> */}
       {/* <Header /> */}
 
@@ -240,9 +241,10 @@ export default function ReportPage() {
             <div className="px-6 py-5">
               <ol className="space-y-4">
                 {[
-                  'Your responses will be reviewed by our assessment team.',
-                  'You will receive detailed feedback on your communication skills.',
-                  'Results will be sent to your registered email within 3-5 business days.',
+                  'Download your PDF report above to view your detailed section-wise scores and performance breakdown.',
+                  'Review sections where you scored lower and focus your practice on those specific skill areas.',
+                  'Retake the assessment after practising to track your improvement over time.',
+                  'Use your communication score to apply for jobs that match your proficiency level.',
                 ].map((step, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <div className="w-6 h-6 bg-[#2557a7]/10 rounded-full flex items-center justify-center shrink-0 mt-0.5">

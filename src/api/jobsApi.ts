@@ -29,22 +29,6 @@ export interface Job {
   is_applied?: boolean;
 }
 
-export interface JobSearchParams {
-  q?: string;           // text search across title, company, location
-  query?: string;       // legacy alias for q
-  title?: string;       // filter by title (case-insensitive)
-  company?: string;     // filter by company (case-insensitive)
-  location?: string;    // filter by location (case-insensitive)
-  job_type?: string;    // filter by job type (e.g. "Contract")
-  source?: string;      // filter by source
-  date_from?: string;   // ISO date string
-  date_to?: string;     // ISO date string
-  page?: number;        // 1-based page number
-  skip?: number;        // records to skip (derived from page if omitted)
-  limit?: number;       // max records (default 20)
-  sort_by?: string;
-}
-
 export interface JobListMinimal {
   id: string;
   title: string;
@@ -61,10 +45,6 @@ export interface JobAnalytics {
   top_skills?: string[];
   total_applications?: number;
   success_rate?: number;
-}
-
-export interface CleanedJob extends Job {
-  is_cleaned: boolean;
 }
 
 export interface Pagination {
@@ -125,8 +105,14 @@ export interface SmartMatchParams {
   skip?: number;
   limit?: number;
   min_score?: number;
+  min_skill_score?: number;
+  min_experience_score?: number;
+  min_education_score?: number;
   location?: string;
   mode?: string;
+  // Bypasses the backend's own scored-results cache (see cache_hit on
+  // SmartMatchResponse) — needed for "Retry Smart Match" to actually get a
+  // fresh computation instead of the same cached response.
   force_refresh?: boolean;
 }
 
@@ -204,30 +190,6 @@ export const getJobById = async (jobId: string): Promise<ApiResponse<Job>> => {
 
 // ==================== LISTING ====================
 
-export const searchJobs = async (params: JobSearchParams): Promise<ApiResponse<Job[]>> => {
-  const limit = params.limit || 20;
-  const skip = params.skip ?? (params.page ? (params.page - 1) * limit : 0);
-
-  const backendParams: Record<string, unknown> = { skip, limit };
-
-  const q = params.q || params.query;
-  if (q) backendParams.q = q;
-  if (params.title) backendParams.title = params.title;
-  if (params.company) backendParams.company = params.company;
-  if (params.location) backendParams.location = params.location;
-  if (params.job_type) backendParams.job_type = params.job_type;
-  if (params.source) backendParams.source = params.source;
-  if (params.date_from) backendParams.date_from = params.date_from;
-  if (params.date_to) backendParams.date_to = params.date_to;
-  // do NOT send page — backend rejects requests that have both skip and page
-
-  const response = await httpClient.get<ApiResponse<Job[]>>('/jobs/all', {
-    params: backendParams,
-    ...getRequestConfig(),
-  });
-  return response.data;
-};
-
 export const getAllJobs = async (skip = 0, limit = 20, source?: string): Promise<ApiResponse<Job[]>> => {
   const params: Record<string, unknown> = { skip, limit };
   if (source) params.source = source;
@@ -250,28 +212,6 @@ export const listJobsMinimal = async (skip = 0, limit = 10): Promise<ApiResponse
 export const getMyJobs = async (skip = 0, limit = 20): Promise<ApiResponse<Job[]>> => {
   const response = await httpClient.get<ApiResponse<Job[]>>('/jobs/my-jobs', {
     params: { skip, limit },
-    ...getRequestConfig(),
-  });
-  return response.data;
-};
-
-export const getCleanedJobs = async (params: JobSearchParams = {}): Promise<ApiResponse<CleanedJob[]>> => {
-  const limit = params.limit || 20;
-  const skip = params.skip ?? (params.page ? (params.page - 1) * limit : 0);
-
-  const backendParams: Record<string, unknown> = { skip, limit };
-  const q = params.q || params.query;
-  if (q) backendParams.q = q;
-  if (params.title)    backendParams.title    = params.title;
-  if (params.company)  backendParams.company  = params.company;
-  if (params.location) backendParams.location = params.location;
-  if (params.job_type) backendParams.job_type = params.job_type;
-  if (params.source)   backendParams.source   = params.source;
-  if (params.date_from) backendParams.date_from = params.date_from;
-  if (params.date_to)   backendParams.date_to   = params.date_to;
-
-  const response = await httpClient.get<ApiResponse<CleanedJob[]>>('/jobs/aggregator/jobs/cleaned', {
-    params: backendParams,
     ...getRequestConfig(),
   });
   return response.data;
@@ -324,9 +264,12 @@ export const chatAboutJob = async (
 };
 
 // ==================== SMARTMATCH ====================
+// Uses /jobs/scored — scores every job in the pool against the user's
+// profile (unlike /jobs/matched, which drops jobs before scoring when they
+// share no skills with the profile or demand far more experience).
 
 export const getSmartMatchedJobs = async (params: SmartMatchParams = {}): Promise<SmartMatchResponse> => {
-  const response = await httpClient.get<SmartMatchResponse>('/jobs/matched', {
+  const response = await httpClient.get<SmartMatchResponse>('/jobs/scored', {
     params,
     ...getRequestConfig(),
   });
@@ -392,7 +335,6 @@ export const runJobAggregator = async (): Promise<ApiResponse<{ job_count: numbe
 
 const jobsApi = {
   createJob,
-  searchJobs,
   listJobsMinimal,
   getAllJobs,
   getMyJobs,
@@ -403,7 +345,6 @@ const jobsApi = {
   clearJobCaches,
   jobsHealthCheck,
   runJobAggregator,
-  getCleanedJobs,
   getRecruiterJobs,
   getSmartMatchedJobs,
   applyToJobApi,

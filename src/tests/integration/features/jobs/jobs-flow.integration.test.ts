@@ -174,7 +174,7 @@ describe('Jobs Integration Flow', () => {
   // ─── SmartMatch ───────────────────────────────────────────────────────────
 
   it('returns smart matched jobs with scores and breakdown', async () => {
-    const res = await fetch(`${API_BASE}/v1/jobs/matched?limit=50`);
+    const res = await fetch(`${API_BASE}/v1/jobs/scored?limit=50`);
 
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -186,7 +186,7 @@ describe('Jobs Integration Flow', () => {
   });
 
   it('matched job has required match fields', async () => {
-    const res = await fetch(`${API_BASE}/v1/jobs/matched?limit=50`);
+    const res = await fetch(`${API_BASE}/v1/jobs/scored?limit=50`);
     const data = await res.json();
     const match = data.jobs[0].match;
 
@@ -200,7 +200,7 @@ describe('Jobs Integration Flow', () => {
 
   it('returns 404 when user has no resume for smart match', async () => {
     useHandler(
-      http.get(`${API_BASE}/v1/jobs/matched`, () => {
+      http.get(`${API_BASE}/v1/jobs/scored`, () => {
         return HttpResponse.json(
           { message: 'No resume found for user' },
           { status: 404 }
@@ -208,18 +208,18 @@ describe('Jobs Integration Flow', () => {
       })
     );
 
-    const res = await fetch(`${API_BASE}/v1/jobs/matched`);
+    const res = await fetch(`${API_BASE}/v1/jobs/scored`);
     expect(res.status).toBe(404);
   });
 
   it('smart match returns cache_hit flag', async () => {
     useHandler(
-      http.get(`${API_BASE}/v1/jobs/matched`, () => {
+      http.get(`${API_BASE}/v1/jobs/scored`, () => {
         return HttpResponse.json({ ...mockResponses.jobs.smartMatch, cache_hit: true });
       })
     );
 
-    const res = await fetch(`${API_BASE}/v1/jobs/matched`);
+    const res = await fetch(`${API_BASE}/v1/jobs/scored`);
     const data = await res.json();
     expect(data.cache_hit).toBe(true);
   });

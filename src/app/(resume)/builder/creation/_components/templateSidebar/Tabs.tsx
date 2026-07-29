@@ -14,7 +14,7 @@ interface TabsProps {
   onToggle: () => void;
 }
 
-const baseTabs = [
+const tabs = [
   { label: "Templates", icon: LayoutGrid },
   { label: "Score", icon: BarChart2 },
   { label: "Job Match", icon: Shuffle },
@@ -27,7 +27,6 @@ const Tabs: React.FC<TabsProps> = ({
   onToggle,
 }) => {
   if (!isOpen) return null; // hide tabs completely when sidebar closed
-  const tabs = baseTabs;
 
   return (
     <div className="flex items-center mb-1 border border-gray-200 rounded px-3 pt-0.5 w-full shadow-sm relative z-30 transition-all duration-300 ease-in-out">

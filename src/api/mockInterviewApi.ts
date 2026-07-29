@@ -600,7 +600,7 @@ export type WsServerMessage =
   | { type: 'session_ready'; session_id: string; total_questions: number; estimated_duration_m: number }
   | { type: 'session_resumed'; session_id: string; questions_asked: number; total_questions: number; current_question: string }
   | { type: 'question_audio'; question_number: number; text: string; audio: string | null; time_limit_s: number; is_follow_up?: boolean }
-  | { type: 'partial_transcript'; text: string }
+  | { type: 'transcript_partial'; text: string; new_word?: string; word_index?: number; timestamp_ms?: number; is_final?: boolean }
   | { type: 'transcript_final'; text: string; is_final: true }
   | { type: 'answer_scored'; question_number: number; score: number; feedback?: string; key_points_hit?: number; key_points_total?: number }
   | { type: 'follow_up'; text: string; audio: string | null }

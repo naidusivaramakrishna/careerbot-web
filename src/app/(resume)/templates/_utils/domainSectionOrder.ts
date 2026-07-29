@@ -1,7 +1,7 @@
 /**
  * Domain-family and career-level specific section ordering
  * Different domain families show different sections as main sections
- * For Mid-Level, Senior-Level, and Manager, Education moves to the end
+ * For Mid-Level, Senior-Level, Lead, Architect, and Manager, Education moves to the end
  */
 
 export const getSectionOrderByDomainAndCareer = (
@@ -11,9 +11,9 @@ export const getSectionOrderByDomainAndCareer = (
   // Get base domain-specific order
   const baseOrder = getDomainSectionOrder(domainFamily);
 
-  // For Mid-Level, Senior-Level, and Manager: move Education to end
+  // For Mid-Level, Senior-Level, Lead, Architect, and Manager: move Education to end
   const level = careerLevel?.toLowerCase() || '';
-  const isAdvancedLevel = level.includes('mid') || level.includes('senior') || level.includes('manager');
+  const isAdvancedLevel = level.includes('mid') || level.includes('senior') || level.includes('lead') || level.includes('architect') || level.includes('manager');
 
   console.warn("🎯 getSectionOrderByDomainAndCareer - domainFamily:", domainFamily, "careerLevel:", careerLevel);
   console.warn("🎯 getSectionOrderByDomainAndCareer - baseOrder:", baseOrder);

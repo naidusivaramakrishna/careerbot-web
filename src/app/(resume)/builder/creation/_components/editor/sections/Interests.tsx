@@ -1,6 +1,5 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
-import SafeHTML from "@/components/common/SafeHTML";
 import { useResume } from "../../../_context/ResumeContext";
 import { useAISuggestions } from "../../../_hooks/useAISuggestions";
 import { useValidation } from "../../../_hooks/useValidation";
@@ -97,9 +96,16 @@ const Interests: React.FC = () => {
 
   useEffect(() => {
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
-    if (JSON.stringify(resumeData.interests) !== JSON.stringify(allEntries)) {
-      setResumeData({ ...resumeData, interests: allEntries });
-    }
+    setResumeData(prev => {
+      const prevItems = (prev.interests ?? []) as Array<Record<string, unknown>>;
+      const merged = allEntries.map((entry, idx) => {
+        if ((entry as Record<string, unknown>).id) return entry;
+        const prevId = prevItems[idx]?.id as string | undefined;
+        return prevId ? { ...entry, id: prevId } : entry;
+      });
+      if (JSON.stringify(prev.interests) === JSON.stringify(merged)) return prev;
+      return { ...prev, interests: merged };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedEntries, editingEntries]);
 
@@ -409,9 +415,9 @@ Master blockchain technologies and distributed systems architecture, contributin
                   )}
                   
                   {interest.description && (
-                    <SafeHTML
-                      content={interest.description}
-                      className="text-sm text-[#404040] mt-1 line-clamp-2"
+                    <div 
+                      className="text-sm text-[#404040] mt-1 line-clamp-2" 
+                      dangerouslySetInnerHTML={{ __html: interest.description }} 
                     />
                   )}
                 </div>
