@@ -149,7 +149,7 @@ export default function JumbledSentencesPage() {
       <div className="flex h-full min-h-0 overflow-hidden bg-gray-50">
         <AssessmentSidebar currentSectionId={3} />
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-3 lg:px-6 lg:py-4">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-3 assessment-scroll lg:px-6 lg:py-4">
 
           {/* Section Header */}
           <div className="mb-2 shrink-0">

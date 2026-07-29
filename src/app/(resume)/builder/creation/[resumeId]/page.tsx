@@ -23,10 +23,10 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
   // ✅ Get loading state from context to prevent rendering before data loads
   const { isLoadingResume } = useResume();
 
-  // When source=enhanced, open the template sidebar and collapse the editor sidebar by default
-  const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(isEnhancedResume);
+  // When source=enhanced, collapse the template sidebar (Score is now in ResumeSide)
+  const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(false);
 
-  const [activeTab, setActiveTab] = useState(isEnhancedResume ? "Score" : "Templates");
+  const [activeTab, setActiveTab] = useState("Templates");
 
   // Save sidebar state to localStorage whenever it changes (during session)
   useEffect(() => {
@@ -67,8 +67,8 @@ function BuilderPageInner({ resumeId }: { resumeId: string }) {
           isTemplateSidebarOpen={isTemplateSidebarOpen}
           onToggleTemplateSidebar={handleToggleTemplateSidebar}
           resumeId={resumeId}
-          initialTab={initialTab}
-          defaultOpen={!isEnhancedResume}
+          initialTab={isEnhancedResume ? "Score" : initialTab}
+          defaultOpen={true}
           openSection={openSection}
         />
 

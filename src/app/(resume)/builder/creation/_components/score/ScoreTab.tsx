@@ -17,8 +17,18 @@ function tier(score: number) {
   return               { arc: "#EF4444", light: "#FEF2F2", muted: "#FEE2E2", text: "#991B1B", dot: "bg-red-400"     };
 }
 
+// Extract 1-based entry number from messages like "Project 1: ...", "Education entry 2: ..."
+function parseEntryIndex(message: string): number | undefined {
+  const match = message.match(/\b(\d+)\s*:/);
+  if (match) {
+    const n = parseInt(match[1], 10);
+    return n >= 1 ? n - 1 : undefined;
+  }
+  return undefined;
+}
+
 // ─── Enhanced resume panel ────────────────────────────────────────────────────
-function EnhancedScorePanel() {
+function EnhancedScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIndex?: number) => void }) {
   const { enhancedAtsScore } = useResume();
 
   if (!enhancedAtsScore) {
@@ -79,9 +89,19 @@ function EnhancedScorePanel() {
                     />
                   </div>
                   {sec.deductions?.slice(0, 1).map((d, i) => (
-                    <p key={i} className="text-[10px] text-[#B45309] leading-snug mt-0.5">
-                      {d.after_example || d.message}
-                    </p>
+                    <div key={i} className="flex items-start justify-between gap-2 mt-0.5">
+                      <p className="text-[10px] text-[#B45309] leading-snug flex-1">
+                        {d.after_example || d.message}
+                      </p>
+                      {onFixNow && (
+                        <button
+                          onClick={() => onFixNow(name, parseEntryIndex(d.message || d.after_example || ""))}
+                          className="shrink-0 text-[10px] font-semibold text-white bg-[#2557a7] hover:bg-[#1a4585] px-2 py-0.5 rounded-full transition-colors whitespace-nowrap"
+                        >
+                          Fix Now
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               );
@@ -115,7 +135,7 @@ function EnhancedScorePanel() {
 }
 
 // ─── Builder score panel ──────────────────────────────────────────────────────
-export default function ATSScorePanel() {
+export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: string, entryIndex?: number) => void } = {}) {
   const { resumeData, resumeSource, completionStatus } = useResume();
   const { canonicalScore, canonicalStatus, lastCalculatedAt, setCanonicalScore, setCanonicalStatus, markScoreStale } = useScore();
 
@@ -189,7 +209,7 @@ export default function ATSScorePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedCount, canonicalStatus, isEnhanced]);
 
-  if (isEnhanced) return <EnhancedScorePanel />;
+  if (isEnhanced) return <EnhancedScorePanel onFixNow={onFixNow} />;
 
   const showFullScore  = canonicalStatus === "ready" || canonicalStatus === "stale";
   const isCalcRunning  = isCalculating || canonicalStatus === "calculating";

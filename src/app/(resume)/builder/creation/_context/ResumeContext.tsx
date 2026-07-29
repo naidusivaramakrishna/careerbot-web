@@ -71,12 +71,35 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
   buildIdMap('project_management', s.projectManagement);
   buildIdMap('marketing_sales', s.marketingSales);
 
+  // For custom/unknown category keys, populate skill_id_map using both the raw
+  // camelCase key AND a display-name form so Skills.tsx lookup always finds the ID.
+  const PREDEFINED = new Set(['programmingLanguages', 'frameworks', 'softSkills', 'projectManagement', 'marketingSales']);
+  const customCategories: CustomCategory[] = [];
+  Object.entries(s).forEach(([camelKey, items]) => {
+    if (PREDEFINED.has(camelKey) || !Array.isArray(items)) return;
+    const typedItems = items as BackendSkillItem[];
+    // Derive a human-readable display name: "databaseTools" → "Database Tools"
+    const displayName = camelKey
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, c => c.toUpperCase())
+      .trim();
+    // Store under both keys so whichever form custom.name takes, the lookup hits
+    buildIdMap(camelKey, typedItems);
+    buildIdMap(displayName, typedItems);
+    customCategories.push({
+      id: `custom_backend_${camelKey}`,
+      name: displayName,
+      skills: extractNames(typedItems),
+    });
+  });
+
   return {
     programming_languages: extractNames(s.programmingLanguages),
     frameworks: extractNames(s.frameworks),
     soft_skills: extractNames(s.softSkills),
     project_management: extractNames(s.projectManagement),
     marketing_sales: extractNames(s.marketingSales),
+    ...(customCategories.length > 0 && { custom_categories: customCategories }),
     skill_id_map: idMap,
   };
 }
