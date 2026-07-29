@@ -69,6 +69,9 @@ interface Props {
   onSidebarToggle?: (isOpen: boolean) => void;
   clearErrors: (fields?: string[]) => void;
   setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  pendingOpenSection?: string | null;
+  pendingEditEntryIndex?: number | null;
+  onClearPendingSection?: () => void;
 }
 
 
@@ -88,6 +91,9 @@ const EditorTab: React.FC<Props> = ({
   onSidebarToggle,
   clearErrors,
   setErrors,
+  pendingOpenSection,
+  pendingEditEntryIndex,
+  onClearPendingSection,
 }) => {
   const nonDeletableSections = [
     "Personal Info",
@@ -108,6 +114,23 @@ const EditorTab: React.FC<Props> = ({
   } = useResume();
 
   const [openModalSection, setOpenModalSection] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingOpenSection) return;
+    setOpenModalSection(pendingOpenSection);
+    if (pendingEditEntryIndex !== null && pendingEditEntryIndex !== undefined) {
+      const section = pendingOpenSection;
+      const idx = pendingEditEntryIndex;
+      // Dispatch after the section component mounts inside the modal and registers its listener
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("resume-open-entry", {
+          detail: { section, entryIndex: idx },
+        }));
+      }, 80);
+    }
+    onClearPendingSection?.();
+  }, [pendingOpenSection, pendingEditEntryIndex, onClearPendingSection]);
+
   const [isAddingCustomSection, setIsAddingCustomSection] = useState(false);
   const [newCustomSectionName, setNewCustomSectionName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -610,10 +633,20 @@ const EditorTab: React.FC<Props> = ({
     const sectionFields = getSectionFields(openModalSection);
     clearErrors(sectionFields);
 
-    // ✅ Step 2: Validate again using the current up-to-date formData
+    // ✅ Step 2a: For multi-entry sections, trigger component-level validation via DOM event.
+    // The section component (WorkExperience, Education, etc.) runs validateRequired on all
+    // editing entries synchronously and sets resultRef.valid = false if any required field is empty.
+    const sectionValidationResult = { valid: true };
+    window.dispatchEvent(
+      new CustomEvent("resume-validate-section", {
+        detail: { section: openModalSection, resultRef: sectionValidationResult },
+      })
+    );
+
+    // ✅ Step 2b: Validate formData-based fields (Personal Info, Professional Summary)
     const { isValid, newErrors } = validateSectionFields();
 
-    if (!isValid) {
+    if (!isValid || !sectionValidationResult.valid) {
       // show errors and stop save
       Object.entries(newErrors).forEach(([key]) => {
         handleBlur(key, formData[key] || "");

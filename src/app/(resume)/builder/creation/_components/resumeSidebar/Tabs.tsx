@@ -2,6 +2,7 @@
 import React, { useRef, useEffect } from "react";
 import {
   Edit3,
+  BarChart2,
   SidebarOpen,
   SidebarClose,
 } from "lucide-react";
@@ -46,13 +47,14 @@ const Tabs: React.FC<TabsProps> = ({
 
   const tabs = [
     { name: "Editor", icon: Edit3 },
+    { name: "Score", icon: BarChart2 },
   ];
 
 
   return (
     <div className="flex items-center mb-1 border border-gray-300 rounded px-3 pt-0.5 w-full shadow-sm relative z-30 transition-all duration-300 ease-in-out">
-      {/* Tab buttons — evenly spaced */}
-      <div className="flex items-center justify-between flex-1">
+      {/* Tab buttons — equal-width, centered */}
+      <div className="flex flex-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.name;
@@ -61,13 +63,13 @@ const Tabs: React.FC<TabsProps> = ({
             <button
               key={tab.name}
               onClick={() => setActiveTab(tab.name)}
-              className={`relative flex items-center gap-1 py-2.5 text-sm font-semibold transition whitespace-nowrap ${
+              className={`relative flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-semibold transition whitespace-nowrap ${
                 isActive
                   ? "text-[#2557a7]"
-                  : "text-gray-800 hover:text-[#2557a7]"
+                  : "text-gray-600 hover:text-[#2557a7]"
               }`}
             >
-              <Icon size={16} />
+              <Icon size={15} />
               {tab.name}
               {isActive && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#2557a7] rounded-t"></span>
@@ -80,9 +82,9 @@ const Tabs: React.FC<TabsProps> = ({
       {/* Sidebar Toggle Button */}
       <button
         onClick={onToggle}
-        className="ml-3 py-2 text-gray-500 flex-shrink-0"
+        className="py-2 text-gray-400 hover:text-gray-600 flex-shrink-0 transition"
       >
-        {isOpen ? <SidebarClose size={18} /> : <SidebarOpen size={18} />}
+        {isOpen ? <SidebarClose size={17} /> : <SidebarOpen size={17} />}
       </button>
     </div>
   );

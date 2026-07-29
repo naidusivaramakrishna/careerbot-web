@@ -7,6 +7,7 @@ import Tabs from "./Tabs";
 import EditorTab from "../editor/EditorTab";
 import ResumeGPTTab from "../resumeGPT/ResumeGPTTab";
 import AIReviewTab from "../aiReview/AIReviewTab";
+import ScoreTab from "../score/ScoreTab";
 
 import PersonalInfo from "../editor/sections/PersonalInfo";
 import ProfessionalSummary from "../editor/sections/ProfessionalSummary";
@@ -189,6 +190,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const [activeSection, setActiveSection] = useState<number | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [activeTab, setActiveTab] = useState(initialTab ?? "Editor");
+  const [pendingOpenSection, setPendingOpenSection] = useState<string | null>(null);
+  const [pendingEditEntryIndex, setPendingEditEntryIndex] = useState<number | null>(null);
 
   // Auto-open the section specified by the ATS report "Fix Now" button
   const openSectionDone = useRef(false);
@@ -459,6 +462,12 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 };
 
 
+  const handleFixNow = (atsSection: string, entryIndex?: number) => {
+    const builderName = ATS_SECTION_TO_BUILDER[atsSection] ?? atsSection;
+    setPendingEditEntryIndex(entryIndex ?? null);
+    setPendingOpenSection(builderName);
+  };
+
   const handleSidebarToggle = (isOpen: boolean) => {
     if (onToggleTemplateSidebar) {
       onToggleTemplateSidebar(isOpen);
@@ -541,7 +550,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
 
       {isOpen && (
         <div className="flex flex-col flex-1 px-1 py-4 overflow-y-scroll scrollbar-hide bg-white">
-          {activeTab === "Editor" && (
+          {/* Always mounted so the fixed modal overlay works from any tab */}
+          <div className={activeTab === "Editor" ? "flex flex-col flex-1" : "h-0 overflow-hidden"}>
             <EditorTab
               sections={sections}
               extraSections={extraSections}
@@ -559,8 +569,12 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
               onSidebarToggle={handleSidebarToggle}
               clearErrors={clearErrors}
               setErrors={setErrors}
+              pendingOpenSection={pendingOpenSection}
+              pendingEditEntryIndex={pendingEditEntryIndex}
+              onClearPendingSection={() => { setPendingOpenSection(null); setPendingEditEntryIndex(null); }}
             />
-          )}
+          </div>
+          {activeTab === "Score" && <ScoreTab onFixNow={handleFixNow} />}
           {activeTab === "ResumeGPT" && <ResumeGPTTab />}
           {activeTab === "AI Review" && <AIReviewTab />}
         </div>
