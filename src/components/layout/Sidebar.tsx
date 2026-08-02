@@ -31,6 +31,16 @@ type SubNavItem = { id: string; label: string; path: string };
 ══════════════════════════════════════════════════════════════ */
 type IP = { size?: number; className?: string; sw?: number };
 
+/** Mock Test — clipboard checklist */
+const IcoMockTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="4" y="3" width="12" height="15" rx="1.5" stroke="currentColor" strokeWidth={sw} />
+    <path d="M7.5 3.5V2.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1" stroke="currentColor" strokeWidth={sw} />
+    <path d="M7 8h6M7 11.5h6M7 15h3.5" stroke="currentColor" strokeWidth={sw * 0.85} />
+  </svg>
+);
+
 /** Coding Practice — terminal bracket + prompt cursor */
 const IcoCodingTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
@@ -104,15 +114,15 @@ const NAV_GROUPS: {
   {
     label: "PREPARE",
     items: [
+      { id: "mock_interview", label: "Mock Interview", icon: IcoInterview, path: "/mock-interview/live" },
       {
-        id: "mock_interview", label: "Mock Interview", icon: IcoInterview, path: "",
+        id: "mock_test", label: "Mock Test", icon: IcoMockTest, path: "",
         subItems: [
           { id: "comm_assess",    label: "Communication Assessment", path: "/communication/start" },
-          { id: "mock_test",      label: "Mock Test",                path: "/mock-test" },
-          { id: "mock_interview", label: "Mock Interview",           path: "/mock-interview/live" },
+          { id: "mock_test_sub",  label: "Mock Test",                path: "/mock-test" },
         ],
       },
-      { id: "coding_test",   label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
+      { id: "coding_test", label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
     ],
   },
   {
@@ -290,9 +300,10 @@ export default function Sidebar() {
         }
       }
     }
-    if (pathname.startsWith("/notes"))                   return "notes";
-    if (pathname.startsWith("/mock-interview") || pathname.startsWith("/mock-test") || pathname.startsWith("/communication")) return "communication";
-    if (pathname.startsWith("/settings"))               return "settings";
+    if (pathname.startsWith("/notes"))                                          return "notes";
+    if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
+    if (pathname.startsWith("/mock-test") || pathname.startsWith("/communication")) return "mock_test";
+    if (pathname.startsWith("/settings"))                                       return "settings";
     if (pathname.startsWith("/account/subscriptions"))  return "subscription";
     if (pathname.startsWith("/settings/billing"))       return "billing_history";
     return "";
@@ -345,6 +356,18 @@ export default function Sidebar() {
   /* COLLAPSED - 64 px */
   if (!isExpanded) {
     return (
+      <>
+      <button
+        onClick={handleToggle}
+        title="Expand sidebar"
+        style={{ position: "fixed", top: 58, left: 50, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+      >
+        {/* Expand icon: filled strip on the right */}
+        <svg width="15" height="13" viewBox="0 0 15 13" fill="none">
+          <rect x="0.7" y="0.7" width="13.6" height="11.6" rx="2" stroke="#2557a7" strokeWidth="1.3" />
+          <rect x="10.2" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
+        </svg>
+      </button>
       <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-16 bg-white flex flex-col z-30 overflow-visible"
         style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
         <nav className="flex-1 min-h-0 overflow-visible py-1 px-2">
@@ -393,6 +416,7 @@ export default function Sidebar() {
           ))}
         </nav>
       </div>
+      </>
     );
   }
 
@@ -488,6 +512,18 @@ export default function Sidebar() {
   };
 
   return (
+    <>
+    <button
+      onClick={handleToggle}
+      title="Collapse sidebar"
+      style={{ position: "fixed", top: 58, left: 226, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+    >
+      {/* Collapse icon: filled strip on the left */}
+      <svg width="15" height="13" viewBox="0 0 15 13" fill="none">
+        <rect x="0.7" y="0.7" width="13.6" height="11.6" rx="2" stroke="#2557a7" strokeWidth="1.3" />
+        <rect x="0.7" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
+      </svg>
+    </button>
     <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-60 bg-white flex flex-col z-30 overflow-hidden"
       style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
 
@@ -514,7 +550,6 @@ export default function Sidebar() {
         ))}
       </nav>
     </div>
-
-
-);
+    </>
+  );
 }

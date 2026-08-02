@@ -69,6 +69,9 @@ interface Props {
   onSidebarToggle?: (isOpen: boolean) => void;
   clearErrors: (fields?: string[]) => void;
   setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  pendingOpenSection?: string | null;
+  pendingEditEntryIndex?: number | null;
+  onClearPendingSection?: () => void;
 }
 
 
@@ -88,6 +91,9 @@ const EditorTab: React.FC<Props> = ({
   onSidebarToggle,
   clearErrors,
   setErrors,
+  pendingOpenSection,
+  pendingEditEntryIndex,
+  onClearPendingSection,
 }) => {
   const nonDeletableSections = [
     "Personal Info",
@@ -108,6 +114,23 @@ const EditorTab: React.FC<Props> = ({
   } = useResume();
 
   const [openModalSection, setOpenModalSection] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingOpenSection) return;
+    setOpenModalSection(pendingOpenSection);
+    if (pendingEditEntryIndex !== null && pendingEditEntryIndex !== undefined) {
+      const section = pendingOpenSection;
+      const idx = pendingEditEntryIndex;
+      // Dispatch after the section component mounts inside the modal and registers its listener
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("resume-open-entry", {
+          detail: { section, entryIndex: idx },
+        }));
+      }, 80);
+    }
+    onClearPendingSection?.();
+  }, [pendingOpenSection, pendingEditEntryIndex, onClearPendingSection]);
+
   const [isAddingCustomSection, setIsAddingCustomSection] = useState(false);
   const [newCustomSectionName, setNewCustomSectionName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -332,7 +355,17 @@ const EditorTab: React.FC<Props> = ({
           };
           const key = sectionMap[sectionName];
           const data = key ? live[key] : undefined;
-          sectionData = Array.isArray(data) ? data : [];
+          if (isEnhancedResume) {
+            // Enhanced: PATCH sends the full section (backend does full replace).
+            // Filtering here would wipe items that haven't been explicitly saved yet.
+            sectionData = Array.isArray(data) ? data : [];
+          } else {
+            // Builder: only send items with a backend ID so auto-save never INSERTs new
+            // rows. New items are created only on explicit Save (handleSaveForm → updateResume).
+            sectionData = Array.isArray(data)
+              ? (data as Array<Record<string, unknown>>).filter(item => item.id || item._id)
+              : [];
+          }
         }
         
         const backendKey = SECTION_KEY_MAP[sectionName] || sectionName.toLowerCase().replace(/\s+/g, "_");
@@ -600,10 +633,20 @@ const EditorTab: React.FC<Props> = ({
     const sectionFields = getSectionFields(openModalSection);
     clearErrors(sectionFields);
 
-    // ✅ Step 2: Validate again using the current up-to-date formData
+    // ✅ Step 2a: For multi-entry sections, trigger component-level validation via DOM event.
+    // The section component (WorkExperience, Education, etc.) runs validateRequired on all
+    // editing entries synchronously and sets resultRef.valid = false if any required field is empty.
+    const sectionValidationResult = { valid: true };
+    window.dispatchEvent(
+      new CustomEvent("resume-validate-section", {
+        detail: { section: openModalSection, resultRef: sectionValidationResult },
+      })
+    );
+
+    // ✅ Step 2b: Validate formData-based fields (Personal Info, Professional Summary)
     const { isValid, newErrors } = validateSectionFields();
 
-    if (!isValid) {
+    if (!isValid || !sectionValidationResult.valid) {
       // show errors and stop save
       Object.entries(newErrors).forEach(([key]) => {
         handleBlur(key, formData[key] || "");
@@ -678,27 +721,31 @@ const EditorTab: React.FC<Props> = ({
       saveResponse = await updateResume(resumeId, updatePayload);
     }
 
-    // ✅ Step 5b: Sync backend-assigned IDs back into context (builder only — enhancer has no IDs)
-    if (!isEnhancedResume && saveResponse && openModalSection) {
+    // ✅ Step 5b: Sync backend-assigned IDs back into context (builder + enhanced)
+    const sectionToRespKey: Record<string, string> = {
+      "Education": "education",
+      "Work Experience": "workExperience",
+      "Projects": "projects",
+      "Certifications": "certifications",
+      "Internships": "internships",
+      "Achievements": "achievements",
+      "Awards": "awards",
+      "Volunteering": "volunteering",
+      "Publications": "publications",
+      "References": "references",
+      "Hobbies": "hobbies",
+      "Interests": "interests",
+      "Languages": "languages",
+    };
+    if (saveResponse && openModalSection) {
       const resp = saveResponse as unknown as Record<string, unknown>;
-      const sectionToRespKey: Record<string, string> = {
-        "Education": "education",
-        "Work Experience": "workExperience",
-        "Projects": "projects",
-        "Certifications": "certifications",
-        "Internships": "internships",
-        "Achievements": "achievements",
-        "Awards": "awards",
-        "Volunteering": "volunteering",
-        "Publications": "publications",
-        "References": "references",
-        "Hobbies": "hobbies",
-        "Interests": "interests",
-        "Languages": "languages",
-      };
+      // Enhanced response may nest section data under enhanced_resume
+      const respSource = isEnhancedResume
+        ? ((resp?.enhanced_resume as Record<string, unknown>) ?? resp)
+        : resp;
       const respKey = sectionToRespKey[openModalSection];
-      if (respKey && Array.isArray(resp[respKey])) {
-        const backendItems = resp[respKey] as Array<{ id?: string; _id?: string }>;
+      if (respKey && Array.isArray(respSource[respKey])) {
+        const backendItems = respSource[respKey] as Array<{ id?: string; _id?: string }>;
         setResumeData(prev => {
           const currentItems = prev[respKey as keyof typeof prev];
           if (!Array.isArray(currentItems)) return prev;
@@ -709,14 +756,9 @@ const EditorTab: React.FC<Props> = ({
           return { ...prev, [respKey]: merged };
         });
       }
-      if (isCustomSection && Array.isArray(resp.customSections) && (resp.customSections as unknown[]).length > 0) {
-        setResumeData(prev => ({ ...prev, customSections: resp.customSections as typeof resumeData.customSections }));
-      }
-    } else if (isEnhancedResume) {
-      // Enhanced response nests customSections under enhanced_resume
-      const rawResponse = saveResponse as unknown as Record<string, unknown>;
-      const rawEnhanced = rawResponse?.enhanced_resume as Record<string, unknown> | undefined;
-      const syncedCustomSections = (rawResponse?.customSections ?? rawEnhanced?.customSections) as typeof resumeData.customSections | undefined;
+      // Sync customSections for both builder and enhanced
+      const rawEnhanced = resp?.enhanced_resume as Record<string, unknown> | undefined;
+      const syncedCustomSections = (resp?.customSections ?? rawEnhanced?.customSections) as typeof resumeData.customSections | undefined;
       if (isCustomSection && syncedCustomSections && syncedCustomSections.length > 0) {
         setResumeData(prev => ({ ...prev, customSections: syncedCustomSections }));
       }
