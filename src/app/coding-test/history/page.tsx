@@ -10,13 +10,21 @@ import {
   History as HistoryIcon,
   RotateCw,
   SearchX,
+  Sparkles,
 } from 'lucide-react';
 
-import { fetchProgress, GradingApiError } from '../_lib/gradingApi';
+import { fetchProgress, fetchSubmissions, GradingApiError } from '../_lib/gradingApi';
 import { fetchProblems } from '../_lib/api';
-import type { UserProgressEntry } from '../_lib/types';
+import type { HistoryEntry, UserProgressEntry } from '../_lib/types';
 
 type LoadState = 'loading' | 'error' | 'auth' | 'ready';
+
+function scoreColor(score: number | null): string {
+  if (score == null) return 'text-slate-400';
+  if (score >= 70)   return 'text-emerald-600';
+  if (score >= 50)   return 'text-amber-600';
+  return 'text-rose-600';
+}
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -25,6 +33,7 @@ function formatDate(iso: string): string {
 
 export default function CodingTestHistoryPage() {
   const [entries, setEntries] = useState<UserProgressEntry[]>([]);
+  const [submissions, setSubmissions] = useState<HistoryEntry[]>([]);
   const [state, setState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -43,13 +52,17 @@ export default function CodingTestHistoryPage() {
     setState('loading');
     setErrorMessage('');
 
-    fetchProgress()
-      .then((res) => {
+    Promise.all([
+      fetchProgress(),
+      fetchSubmissions(1, 50),
+    ])
+      .then(([progressRes, historyRes]) => {
         if (!active) return;
-        const sorted = [...res.entries].sort(
+        const sorted = [...progressRes.entries].sort(
           (a, b) => new Date(b.last_run_at).getTime() - new Date(a.last_run_at).getTime(),
         );
         setEntries(sorted);
+        setSubmissions(historyRes.entries);
         setState('ready');
       })
       .catch((err: unknown) => {
@@ -178,6 +191,49 @@ export default function CodingTestHistoryPage() {
               ))}
             </ul>
           </>
+        )}
+
+        {state === 'ready' && submissions.length > 0 && (
+          <section className="mt-10">
+            <header className="mb-4 flex items-center gap-2 text-slate-900">
+              <Sparkles className="h-4 w-4 text-indigo-500" aria-hidden />
+              <h2 className="text-lg font-semibold">Graded Submissions</h2>
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                {submissions.length}
+              </span>
+            </header>
+            <ul className="space-y-2">
+              {submissions.map((s) => (
+                <li key={s.submission_id}>
+                  <Link
+                    href={`/coding-test/${s.problem_slug}`}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-indigo-300 hover:shadow-sm"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">
+                        {s.problem_title ?? s.problem_slug}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        <span className="capitalize">{s.language}</span>
+                        {' · '}{formatDate(s.submitted_at)}
+                      </p>
+                      {s.error && (
+                        <p className="mt-0.5 text-xs text-rose-500">{s.error}</p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-baseline gap-0.5">
+                      <span className={`text-xl font-bold tabular-nums ${scoreColor(s.score)}`}>
+                        {s.score ?? '—'}
+                      </span>
+                      {s.score != null && (
+                        <span className="text-xs text-slate-400">/ 100</span>
+                      )}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </div>
     </main>

@@ -4,12 +4,18 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { fetchProblems } from './_lib/api';
-import { fetchProgress } from './_lib/gradingApi';
-import type { CodingTestLanguage } from './_lib/types';
+import { fetchProgress, fetchProblemsAnnotated, fetchQuota } from './_lib/gradingApi';
+import type { CodingTestLanguage, QuotaResponse } from './_lib/types';
 import OnboardingModal from '@/components/coding-test/OnboardingModal';
 import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 
 type Progress = { solved: number; attempted: number; accuracy: number };
+
+function creditColor(remaining: number): string {
+  if (remaining === 0) return 'text-rose-500';
+  if (remaining <= 5)  return 'text-amber-500';
+  return 'text-indigo-600';
+}
 
 const LANG_CONFIG: {
   value: CodingTestLanguage;
@@ -30,6 +36,7 @@ export default function CodingPracticeHub() {
   const { userId } = useCurrentUserId();
   const [totalProblems, setTotalProblems] = useState<number | null>(null);
   const [progress, setProgress] = useState<Progress>({ solved: 0, attempted: 0, accuracy: 0 });
+  const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [ready, setReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -47,9 +54,12 @@ export default function CodingPracticeHub() {
   useEffect(() => {
     const loadData = () =>
       Promise.all([
-        fetchProblems().then((r) => r.total).catch(() => null),
+        fetchProblemsAnnotated()
+          .then((res) => res.length)
+          .catch(() => fetchProblems().then((r) => r.total).catch(() => null)),
         fetchProgress().catch(() => null),
-      ]).then(([total, prog]) => {
+        fetchQuota().catch(() => null),
+      ]).then(([total, prog, q]) => {
         if (total !== null) setTotalProblems(total);
         if (prog) {
           const attempted = prog.summary.problems_attempted;
@@ -60,6 +70,7 @@ export default function CodingPracticeHub() {
             accuracy: attempted > 0 ? Math.round((solved / attempted) * 100) : 0,
           });
         }
+        if (q) setQuota(q);
         setReady(true);
       });
 
@@ -150,10 +161,47 @@ export default function CodingPracticeHub() {
               </Link>{' '}
               and filter by language, difficulty, or tag.
             </p>
+
+            <Link
+              href="/coding-test/playground"
+              className="mt-2 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-800">
+                <span className="font-mono text-sm font-bold text-slate-200">&gt;_</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Code Playground</p>
+                <p className="text-xs text-slate-500">Free-form code, any language</p>
+              </div>
+            </Link>
           </div>
 
           {/* ── Right sidebar ─────────────────────────────────────────── */}
           <div className="flex w-full flex-col gap-4 lg:w-64 lg:shrink-0">
+
+            {/* AI CREDITS */}
+            {quota && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  AI Grading Credits
+                </p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-3xl font-extrabold tabular-nums ${creditColor(quota.submissions_remaining)}`}>
+                    {quota.submissions_remaining}
+                  </span>
+                  <span className="text-sm text-slate-400">submissions left</span>
+                </div>
+                {quota.submissions_remaining === 0 && (
+                  <p className="mt-1.5 text-xs font-medium text-rose-500">Out of credits — upgrade to continue.</p>
+                )}
+                {quota.submissions_remaining > 0 && quota.submissions_remaining <= 5 && (
+                  <p className="mt-1.5 text-xs font-medium text-amber-600">Running low on credits.</p>
+                )}
+                <p className="mt-2 text-[11px] capitalize text-slate-400">
+                  {quota.plan} plan · {quota.cost_per_submission} credit per submit
+                </p>
+              </div>
+            )}
 
             {/* YOUR PROGRESS */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -199,6 +247,14 @@ export default function CodingPracticeHub() {
                     </span>
                   </div>
                 </div>
+              </div>
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <Link
+                  href="/coding-test/history"
+                  className="text-xs font-medium text-indigo-600 hover:underline"
+                >
+                  View full history →
+                </Link>
               </div>
             </div>
 

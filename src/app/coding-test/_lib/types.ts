@@ -117,6 +117,14 @@ export interface QuotaResponse {
   plan: string;
 }
 
+// ---- Annotated problem list (GET /coding-test/problems/annotated) ----------
+
+export type UserProblemStatusAnnotated = 'attempted' | 'accepted';
+
+export interface ProblemWithStatus extends CodingProblemSummary {
+  user_status: UserProblemStatusAnnotated | null;
+}
+
 // ---- Per-user progress (GET /coding-test/progress) -------------------------
 
 export type UserProblemStatus = 'attempted' | 'accepted';
@@ -171,6 +179,15 @@ export interface JudgeResponse {
   passed: number;
   total: number;
   results: JudgeTestCaseResult[];
+}
+
+// ---- Async code execution (POST /execute → queue + stream) -----------------
+
+export interface ExecuteJobQueued {
+  job_id: string;
+  status: 'queued';
+  poll_url: string;
+  stream_url: string;
 }
 
 // ---- Code execution (legacy — kept for reference) ---------------------------

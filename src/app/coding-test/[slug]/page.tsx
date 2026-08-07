@@ -5,17 +5,21 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
-  Clock, Database, FileText, Keyboard, Loader2, Maximize2, Minimize2,
+  Clock, Database, FileText, Keyboard, Loader2, Maximize2,
   Pause, Play, RotateCw, ShieldAlert, X,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useCurrentUserId } from '@/hooks/useCurrentUserId';
 import { CodingTestApiError, fetchProblem, fetchProblems } from '../_lib/api';
 import { RunApiError, runCode, submitCode } from '../_lib/runApi';
+import { GradingApiError, fetchQuota, mockGrade } from '../_lib/gradingApi';
 import JudgePanel from '../_components/JudgePanel';
+import GradingResultPanel from '@/components/coding-test/GradingResult';
+import SubmitButton from '@/components/coding-test/SubmitButton';
 import type { CodeEditorProps } from '../_components/CodeEditor';
 import type {
   CodingProblemDetail, CodingProblemSummary, CodingTestLanguage, JudgeResponse,
+  QuotaResponse, SubmitSolutionResponse,
 } from '../_lib/types';
 import { DIFFICULTY_BADGE, LANGUAGES } from '../_lib/ui';
 
@@ -100,6 +104,7 @@ export default function CodingProblemDetailPage() {
   const backHref     = searchParams.get('language')
     ? `/coding-test/problems?language=${searchParams.get('language')}`
     : '/coding-test/problems';
+  const isPracticeMode = searchParams.get('mode') === 'practice';
 
   const { userId } = useCurrentUserId();
 
@@ -171,14 +176,19 @@ export default function CodingProblemDetailPage() {
   const nextProblem  = currentIndex < problemList.length - 1 ? problemList[currentIndex + 1] : null;
 
   const navigateTo = (target: CodingProblemSummary) => {
+    document.documentElement.requestFullscreen?.().catch(() => {});
     router.push(`/coding-test/${target.slug}`);
   };
 
   /* ── run / submit ── */
-  const [actionState,  setActionState]  = useState<ActionState>('idle');
-  const [judgeResult,  setJudgeResult]  = useState<JudgeResponse | null>(null);
-  const [judgeMode,    setJudgeMode]    = useState<'run' | 'submit'>('run');
-  const [actionError,  setActionError]  = useState('');
+  const [actionState,   setActionState]   = useState<ActionState>('idle');
+  const [judgeResult,   setJudgeResult]   = useState<JudgeResponse | null>(null);
+  const [judgeMode,     setJudgeMode]     = useState<'run' | 'submit'>('run');
+  const [actionError,   setActionError]   = useState('');
+  const [gradingResult, setGradingResult] = useState<SubmitSolutionResponse | null>(null);
+  const [gradingError,  setGradingError]  = useState('');
+  const [isGrading,     setIsGrading]     = useState(false);
+  const [quota,         setQuota]         = useState<QuotaResponse | null>(null);
 
   /* ── timer ── */
   const [timerSeconds, setTimerSeconds] = useState(TIMER_DEFAULT);
@@ -191,6 +201,11 @@ export default function CodingProblemDetailPage() {
     const id = setInterval(() => setTimerSeconds((s) => s - 1), 1000);
     return () => clearInterval(id);
   }, [timerRunning, timerSeconds]);
+
+  /* ── quota (loaded once on mount; refreshed after each AI grade) ── */
+  useEffect(() => {
+    fetchQuota().then(setQuota).catch(() => {});
+  }, []);
 
   /* ── plain editor ── */
   const [plainEditor, setPlainEditor] = useState(false);
@@ -232,13 +247,13 @@ export default function CodingProblemDetailPage() {
     };
   }, []);
 
-  /* ── maximize ── */
-  const [isMaximized, setIsMaximized] = useState(false);
+  /* ── maximize: tracks real browser fullscreen state ── */
+  const [isMaximized, setIsMaximized] = useState(true);
   useEffect(() => {
-    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape' && isMaximized) setIsMaximized(false); };
-    document.addEventListener('keydown', fn);
-    return () => document.removeEventListener('keydown', fn);
-  }, [isMaximized]);
+    const onFSChange = () => setIsMaximized(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFSChange);
+    return () => document.removeEventListener('fullscreenchange', onFSChange);
+  }, []);
 
   /* ── keyboard shortcuts dialog ── */
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -287,7 +302,7 @@ export default function CodingProblemDetailPage() {
   /* ── console panel ── */
   const [consoleHeight,    setConsoleHeight]    = useState(CONSOLE_DEFAULT);
   const [consoleCollapsed, setConsoleCollapsed] = useState(false);
-  const [consoleTab,       setConsoleTab]       = useState<'output' | 'tests'>('output');
+  const [consoleTab,       setConsoleTab]       = useState<'output' | 'tests' | 'grade'>('output');
 
   const startConsoleResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button')) return;
@@ -313,6 +328,7 @@ export default function CodingProblemDetailPage() {
   /* ── helpers ── */
   const clearRunOutput = useCallback(() => {
     setJudgeResult(null); setActionError(''); setActionState('idle');
+    setGradingResult(null); setGradingError(''); setIsGrading(false);
   }, []);
 
   const resetToStarter = () => {
@@ -355,23 +371,52 @@ export default function CodingProblemDetailPage() {
     if (isBusy) return;
     const src = code[language]?.trim();
     if (!src) { setActionError('Write some code before submitting.'); return; }
-    setActionState('submitting'); setActionError(''); setJudgeResult(null);
+    setActionState('submitting'); setActionError('');
+    setJudgeResult(null); setGradingResult(null); setGradingError('');
     setJudgeMode('submit');
     setConsoleCollapsed(false);
     setConsoleTab('tests');
+
+    // In practice mode skip AI grading entirely — run judge only.
+    const judgePromise = submitCode(slug, language, code[language]);
+    const gradePromise = isPracticeMode ? null : mockGrade(slug, language, code[language], problem?.title);
+
     try {
-      const res = await submitCode(slug, language, code[language]);
-      setJudgeResult(res);
+      const judgeRes = await judgePromise;
+      setJudgeResult(judgeRes);
       setActionState('done');
-      if (res.verdict === 'accepted') {
+      if (judgeRes.verdict === 'accepted') {
         localStorage.setItem('progress_updated', Date.now().toString());
         router.refresh();
       }
     } catch (err) {
       setActionState('idle');
       setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to submit your solution.');
+      return;
     }
-  }, [isBusy, code, language, slug, router]);
+
+    if (!gradePromise) return;
+
+    // Await the grade (already running in parallel); only switch tab on success.
+    setIsGrading(true);
+    try {
+      const gradeRes = await gradePromise;
+      setGradingResult(gradeRes);
+      setConsoleTab('grade');
+      // A credit was consumed — refresh the displayed balance.
+      fetchQuota().then(setQuota).catch(() => {});
+    } catch (gradeErr) {
+      if (gradeErr instanceof GradingApiError && gradeErr.status === 402) {
+        setGradingError('No grading credits remaining. Upgrade your plan to see AI feedback.');
+      } else if (gradeErr instanceof GradingApiError && (gradeErr.status === 502 || gradeErr.status === 503)) {
+        setGradingError('AI grading is temporarily unavailable. Try again later.');
+      } else {
+        setGradingError(gradeErr instanceof Error ? gradeErr.message : 'AI grading unavailable.');
+      }
+    } finally {
+      setIsGrading(false);
+    }
+  }, [isBusy, code, language, slug, router, problem, isPracticeMode]);
 
   /* ── derived ── */
   const isReady = loadState === 'ready' && !!problem;
@@ -382,11 +427,7 @@ export default function CodingProblemDetailPage() {
     : timerSeconds < 300
     ? 'bg-amber-50 border-amber-200 text-amber-600'
     : 'bg-emerald-50 border-emerald-200 text-emerald-700';
-  const timerBadgeDark = timerSeconds < 120
-    ? 'bg-red-900/30 border-red-700 text-red-400 animate-pulse'
-    : timerSeconds < 300
-    ? 'bg-amber-900/30 border-amber-700 text-amber-400'
-    : 'bg-slate-800 border-slate-700 text-slate-300';
+
 
   /* Panel widths */
   const leftStyle = isDesktop
@@ -445,7 +486,7 @@ export default function CodingProblemDetailPage() {
      RENDER
   ════════════════════════════════════════════════════════ */
   return (
-    <main className="flex flex-col bg-slate-50 lg:h-screen lg:overflow-hidden">
+    <main className={`flex flex-col bg-slate-50 ${isMaximized ? 'h-screen overflow-hidden' : 'lg:h-screen lg:overflow-hidden'}`}>
 
       {/* ── Modals ── */}
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
@@ -475,80 +516,10 @@ export default function CodingProblemDetailPage() {
         </div>
       )}
 
-      {/* ── Maximized overlay ── */}
-      {isMaximized && problem && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-[#1e1e1e]">
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-700 bg-[#252526] px-4 py-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-semibold text-slate-200">{problem.title}</span>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${DIFFICULTY_BADGE[problem.difficulty]}`}>
-                {problem.difficulty}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition-colors ${timerBadgeDark}`}>
-                <Clock className="h-3.5 w-3.5" aria-hidden />
-                <span className="font-mono text-sm font-semibold tabular-nums">{formatTimer(timerSeconds)}</span>
-                <button type="button" onClick={() => setTimerRunning((r) => !r)} className="opacity-70 hover:opacity-100 transition-opacity">
-                  {timerRunning ? <Pause className="h-3.5 w-3.5" aria-hidden /> : <Play className="h-3.5 w-3.5" aria-hidden />}
-                </button>
-                {!timerRunning && timerSeconds < TIMER_DEFAULT && (
-                  <button type="button" onClick={() => setTimerSeconds(TIMER_DEFAULT)} className="opacity-60 hover:opacity-100">
-                    <RotateCw className="h-3 w-3" aria-hidden />
-                  </button>
-                )}
-              </div>
-              <button type="button" onClick={resetToStarter} className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-indigo-400 transition">
-                <RotateCw className="h-3.5 w-3.5" aria-hidden />Reset
-              </button>
-              <button type="button" onClick={togglePlainEditor} className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-indigo-400 transition">
-                <FileText className="h-3.5 w-3.5" aria-hidden />{plainEditor ? 'Code editor' : 'Plain text'}
-              </button>
-              <button type="button" onClick={handleRun} disabled={isBusy}
-                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:bg-emerald-800 transition">
-                {actionState === 'running'
-                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Running…</>
-                  : <><Play className="h-3.5 w-3.5" aria-hidden />Run</>}
-              </button>
-              <button type="button" onClick={handleSubmit} disabled={isBusy}
-                className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:bg-indigo-900 transition">
-                {actionState === 'submitting'
-                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Submitting…</>
-                  : 'Submit'}
-              </button>
-              <button type="button" onClick={() => setIsMaximized(false)}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-600 px-2 py-1.5 text-xs font-medium text-slate-300 hover:border-indigo-500 hover:text-indigo-400 transition">
-                <Minimize2 className="h-3.5 w-3.5" aria-hidden />
-                <span className="hidden sm:inline">Exit full screen</span>
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 overflow-hidden p-2">{editorNode}</div>
-          {(actionError || (actionState === 'done' && judgeResult)) && (
-            <div className="shrink-0 border-t border-slate-700 max-h-48 overflow-y-auto">
-              {actionError && (
-                <div className="flex items-start gap-2 bg-[#252526] p-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" aria-hidden />
-                  <p className="text-sm text-rose-400">{actionError}</p>
-                </div>
-              )}
-              {actionState === 'done' && judgeResult && (
-                <JudgePanel result={judgeResult} mode={judgeMode} />
-              )}
-            </div>
-          )}
-          <div className="shrink-0 border-t border-slate-800 px-4 py-1 text-center">
-            <span className="text-[10px] text-slate-600">
-              Press <kbd className="rounded border border-slate-700 px-1 font-mono text-[10px] text-slate-500">Esc</kbd> to exit
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* ════════════════════════════════════════
           TOP NAV BAR
       ════════════════════════════════════════ */}
-      <nav className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2">
+      <nav className={`${isMaximized ? 'hidden' : 'flex'} shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2`}>
         {/* Left: back + prev/next + title */}
         <div className="flex min-w-0 items-center gap-2">
           <Link href={backHref}
@@ -684,7 +655,7 @@ export default function CodingProblemDetailPage() {
       {isReady && problem && (
         <div
           ref={containerRef}
-          className={`flex flex-col lg:flex-1 lg:flex-row lg:overflow-hidden${isDragging ? ' select-none' : ''}`}
+          className={`flex ${isMaximized ? 'flex-row flex-1 overflow-hidden' : 'flex-col lg:flex-1 lg:flex-row lg:overflow-hidden'}${isDragging ? ' select-none' : ''}`}
         >
 
           {/* ── Left panel: problem statement ── */}
@@ -813,8 +784,8 @@ export default function CodingProblemDetailPage() {
               >
                 {/* Tabs */}
                 <div className="flex items-center">
-                  {(['output', 'tests'] as const).map((tab) => {
-                    const LABELS = { output: 'Output', tests: 'Test Cases' };
+                  {(['output', 'tests', 'grade'] as const).map((tab) => {
+                    const LABELS = { output: 'Output', tests: 'Test Cases', grade: 'AI Grade' };
                     const active = consoleTab === tab;
                     return (
                       <button
@@ -836,6 +807,16 @@ export default function CodingProblemDetailPage() {
                               : 'bg-rose-600 text-white'
                           }`}>
                             {judgeResult.passed}/{judgeResult.total}
+                          </span>
+                        )}
+                        {tab === 'grade' && isGrading && (
+                          <Loader2 className="h-2.5 w-2.5 animate-spin text-indigo-400" aria-hidden />
+                        )}
+                        {tab === 'grade' && !isGrading && gradingResult?.score != null && (
+                          <span className={`rounded-full px-1.5 py-px text-[9px] font-bold leading-none ${
+                            gradingResult.score >= 70 ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
+                          }`}>
+                            {gradingResult.score}
                           </span>
                         )}
                       </button>
@@ -922,9 +903,55 @@ export default function CodingProblemDetailPage() {
                       </div>
                     )
                   )}
+
+                  {/* AI Grade tab */}
+                  {consoleTab === 'grade' && (
+                    <div className="p-3">
+                      {isPracticeMode ? (
+                        <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                          <ShieldAlert className="h-8 w-8 text-slate-600" aria-hidden />
+                          <p className="text-sm font-medium text-slate-400">AI grading is not available in practice mode.</p>
+                          <p className="text-xs text-slate-600">Submit your solution in an assessment to receive AI feedback.</p>
+                        </div>
+                      ) : (
+                        <>
+                          {isGrading && !gradingResult && !gradingError && (
+                            <div className="flex items-center gap-2 font-mono text-[13px] italic text-slate-400">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                              Getting AI feedback…
+                            </div>
+                          )}
+                          {gradingError && !gradingResult && (
+                            <div className="flex items-start gap-2 rounded-lg border border-rose-800 bg-rose-950/40 p-3">
+                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" aria-hidden />
+                              <p className="text-sm text-rose-400">{gradingError}</p>
+                            </div>
+                          )}
+                          {gradingResult && (
+                            <GradingResultPanel result={gradingResult} />
+                          )}
+                          {!isGrading && !gradingResult && !gradingError && (
+                            <p className="font-mono text-[13px] italic text-slate-500">
+                              Press <span className="font-semibold text-indigo-400">Submit</span> to get AI feedback on your solution.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* ── Low-credit warning ── */}
+            {quota && quota.submissions_remaining > 0 && quota.submissions_remaining <= 5 && (
+              <div className="flex shrink-0 items-center gap-2 border-t border-amber-200 bg-amber-50 px-4 py-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+                <p className="text-xs text-amber-700">
+                  Only <strong>{quota.submissions_remaining}</strong> AI grading credit{quota.submissions_remaining === 1 ? '' : 's'} remaining.
+                </p>
+              </div>
+            )}
 
             {/* ── Run bar ── */}
             <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2.5">
@@ -939,28 +966,14 @@ export default function CodingProblemDetailPage() {
                 Saved
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleRun}
-                  disabled={isBusy}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {actionState === 'running'
-                    ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden />Running…</>
-                    : <><Play className="h-4 w-4" aria-hidden />Run Code</>}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={isBusy}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {actionState === 'submitting'
-                    ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden />Submitting…</>
-                    : 'Submit'}
-                </button>
-              </div>
+              <SubmitButton
+                onRun={handleRun}
+                onSubmit={handleSubmit}
+                runState={actionState === 'running' ? 'running' : 'idle'}
+                submitState={actionState === 'submitting' ? 'submitting' : 'idle'}
+                submissionsRemaining={quota?.submissions_remaining ?? null}
+                disabled={isGrading}
+              />
             </div>
           </section>
 
