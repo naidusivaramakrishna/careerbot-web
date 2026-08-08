@@ -242,7 +242,7 @@ export default function Header() {
     refetchUnreadCount();
   };
 
-  const displayName    = userProfile?.full_name || userProfile?.username || 'User';
+  const displayName    = userProfile?.username || 'User';
   const displayEmail   = userProfile?.email || '';
   const displayInitial = (userProfile?.full_name || userProfile?.username || 'U')[0].toUpperCase();
   const creditPct = balance?.credits_total
@@ -515,6 +515,9 @@ export default function Header() {
               <div className="absolute right-0 top-10 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
+                  {userProfile?.full_name && (
+                    <p className="text-[12px] text-gray-600 truncate">{userProfile.full_name}</p>
+                  )}
                   {displayEmail && (
                     <p className="text-[13px] text-gray-500 truncate mt-0.5">{displayEmail}</p>
                   )}
