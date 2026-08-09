@@ -705,6 +705,17 @@ export default function MockTestPage() {
     // keydown, and the disabled button only disables after a re-render.
     if (submitLatchRef.current === currentSectionProgressionIndex) return;
 
+    // Refuse to record a section that has no questions loaded. Without this the
+    // "all answered" check below silently passes — filtering an empty array
+    // yields an empty array — and the section is recorded as 0 answered of 0,
+    // which renders on Review & Submit as "Skipped / 0%" even though the user
+    // never had anything to answer. That is indistinguishable from the reported
+    // "section shows an incorrect completion percentage".
+    if (questions.length === 0) {
+      toast.error('This section has no questions loaded. Please restart the section.');
+      return;
+    }
+
     // Validate that all questions have been attempted
     const unattemptedQuestions = questions.filter(q => q.selected === null);
 
