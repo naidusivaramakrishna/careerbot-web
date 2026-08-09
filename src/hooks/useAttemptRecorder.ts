@@ -47,11 +47,19 @@ export interface AttemptRecorder {
 
 const pickMimeType = (): string => {
   if (typeof MediaRecorder === 'undefined') return '';
+  // MP4 first. MediaRecorder's WebM carries no duration in its header (it is
+  // written before recording ends and never patched), so server-side decoders
+  // frequently reject it — the AI evaluator returned
+  // "Uploaded video file is corrupted or unreadable" for exactly that. MP4/H.264
+  // is far more reliably decodable; WebM stays as the fallback for browsers that
+  // cannot record MP4.
   const candidates = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1',
+    'video/mp4',
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm',
-    'video/mp4',
   ];
   return candidates.find(t => MediaRecorder.isTypeSupported(t)) ?? '';
 };
@@ -158,7 +166,9 @@ export function useAttemptRecorder(): AttemptRecorder {
         resolve(blob);
       };
       try {
-        recorder.requestData();
+        // stop() already flushes the outstanding buffer as a final dataavailable.
+        // The requestData() that used to precede it emitted an extra partial
+        // cluster, appending a fragment that can leave the container unreadable.
         recorder.stop();
       } catch {
         cleanup();

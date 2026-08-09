@@ -781,8 +781,20 @@ export default function MockTestPage() {
     //
     // A client-side route change does not tear down an in-flight XHR, so the
     // upload carries on after we navigate and reports its outcome by toast.
-    if (attemptVideo && attemptVideo.size > 0) {
+    // A header-only blob is not a playable video and the evaluator will reject it
+    // as corrupt, so don't spend an upload on it — say what happened instead.
+    const MIN_PLAUSIBLE_VIDEO_BYTES = 16 * 1024;
+    if (attemptVideo && attemptVideo.size > 0 && attemptVideo.size < MIN_PLAUSIBLE_VIDEO_BYTES) {
+      console.error('[finalSubmit] recording too small to be valid', {
+        bytes: attemptVideo.size, type: attemptVideo.type,
+      });
+      toast.warning('The proctoring recording was too short to be saved. Your answers were submitted and scored.');
+    } else if (attemptVideo && attemptVideo.size > 0) {
       const sizeMb = Math.max(1, Math.round(attemptVideo.size / (1024 * 1024)));
+      // Logged so a rejection can be tied to the exact container and size produced.
+      console.info('[finalSubmit] uploading recording', {
+        bytes: attemptVideo.size, type: attemptVideo.type, extension: recorder.fileExtension,
+      });
       toast.info(`Uploading your ${sizeMb} MB proctoring recording in the background.`);
       void uploadSessionVideo(
         parentSessionIdRef.current,          // backend resolves parent → child session
