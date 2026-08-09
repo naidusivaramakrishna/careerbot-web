@@ -1087,16 +1087,21 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
 
     // Pick the best accuracy value from an item regardless of exact field name.
     // Backend may send 0–1 decimal (e.g. 0.10) or 0–100 percentage (e.g. 10).
+    // Read the score from the field the backend actually sends (`score_percent`,
+    // already 0-100 and rounded to 1dp), with narrow fallbacks for older shapes.
+    //
+    // This replaces a scan that fell back to "any non-zero numeric field" — which
+    // would happily report an attempts count or a question total as if it were an
+    // accuracy percentage. Nothing here guesses: an unrecognised payload reads 0
+    // rather than inventing a number.
     const extractAccuracy = (item: any): number => {
-      // Dynamic scan: prefer any numeric field whose key contains "accuracy", then "score"
-      const entries = Object.entries(item as Record<string, unknown>)
-        .filter(([, v]) => typeof v === 'number' && !isNaN(v as number))
-        .map(([k, v]) => ({ k, v: v as number }));
-      const pick = (re: RegExp) => entries.find(e => re.test(e.k) && e.v !== 0);
-      const found = pick(/accuracy/i) ?? pick(/score/i) ?? pick(/rate|pct|percent/i) ?? entries.find(e => e.v !== 0);
-      const raw = found?.v ?? 0;
-      // Normalise: if value is in 0–1 range it's a decimal fraction → multiply by 100
-      return Math.round(raw > 0 && raw <= 1 ? raw * 100 : raw);
+      const candidates = [item?.score_percent, item?.accuracy, item?.accuracy_percentage, item?.score];
+      const raw = candidates.find(v => typeof v === 'number' && !isNaN(v));
+      if (typeof raw !== 'number') return 0;
+      // Some older payloads express accuracy as a 0-1 fraction. Only treat a value
+      // as a fraction when it is strictly below 1 — 1 itself is far more likely to
+      // mean "1%" on a weak-area row than "100%".
+      return Math.round(raw > 0 && raw < 1 ? raw * 100 : raw);
     };
 
     const isWeakItem = (item: any): boolean => {
@@ -1140,12 +1145,19 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
       s.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim();
 
     const toWeakArea = (item: any): WeakArea => {
-      // Show the SECTION name (Aptitude / Arithmetic / …), never the raw subcategory
-      // slug. The backend sends `section` plus a `subcategory` slug ("abstract",
-      // "ratios"); reading subcategory first is what surfaced those slugs in the UI.
-      const rawTopic: string =
-        item.section ?? item.section_id ?? item.topic ?? item.category ?? item.name ?? 'Unknown';
-      const topic = humanise(String(rawTopic));
+      // The backend emits TWO kinds of row: a section-level one (subcategory null)
+      // whose score is the section's accuracy, and per-subcategory rows scored on
+      // that topic alone. Labelling both with just the section name made a topic's
+      // score read as the section's score — the reported wrong accuracy.
+      // Section rows keep the plain section name; subcategory rows are qualified
+      // with the topic, so each number is labelled with what it measures.
+      const sectionName = humanise(String(
+        item.section ?? item.section_id ?? item.topic ?? item.category ?? item.name ?? 'Unknown'
+      ));
+      const subcategory = typeof item.subcategory === 'string' ? item.subcategory.trim() : '';
+      const topic = subcategory
+        ? `${sectionName} · ${humanise(subcategory)}`
+        : sectionName;
       const accuracy = extractAccuracy(item);
       const attempts: number = item.attempts ?? item.total_attempts ?? item.count ?? 0;
 
@@ -1163,17 +1175,16 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
       let weakItems = items.filter(isWeakItem);
       if (weakItems.length === 0) weakItems = items; // show all if nothing flagged
 
-      // The backend emits one row per section AND one row per weak subcategory
-      // within it. Since we now label every row by its section, those collapse
-      // into duplicates — keep only the weakest (lowest accuracy) row per section.
-      const worstBySection = new Map<string, WeakArea>();
+      // Section and subcategory rows are now labelled distinctly, so they are no
+      // longer duplicates to be collapsed. Collapsing them by section and keeping
+      // the LOWEST score is what displayed a subcategory's accuracy under the
+      // section's name. Dedupe only on the final label, which can still repeat if
+      // the backend sends the same row twice.
+      const byLabel = new Map<string, WeakArea>();
       for (const area of weakItems.map(toWeakArea)) {
-        const existing = worstBySection.get(area.topic);
-        if (!existing || area.accuracy < existing.accuracy) {
-          worstBySection.set(area.topic, area);
-        }
+        if (!byLabel.has(area.topic)) byLabel.set(area.topic, area);
       }
-      const weakAreas = [...worstBySection.values()].sort((a, b) => a.accuracy - b.accuracy);
+      const weakAreas = [...byLabel.values()].sort((a, b) => a.accuracy - b.accuracy);
       // Only forward recommendations that the backend actually sent. Removed
       // the previous "Focus on: X, Y, Z" / "Practice weak areas regularly"
       // fabrications — those were frontend boilerplate that looked like real
