@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, EyeOff, AlertTriangle, CheckCircle, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, EyeOff, AlertTriangle, CheckCircle, Star, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { resolveCompanyId, resolveCompanyInfo, CATEGORY_SUBCATEGORIES } from '@/lib/mockTestConstants';
 import { addSeenQuestionIds } from '@/utils/seenQuestionIds';
+import { useAttemptRecorder } from '@/hooks/useAttemptRecorder';
 import {
   generateMockTest,
   getSectionQuestions,
@@ -16,8 +17,11 @@ import {
   reportIssue,
   getActiveSession,
   isMockTestDifficulty,
+  parseMockTestError,
+  uploadSessionVideo,
   MockTestSection,
   MockTestSession,
+  MockTestApiError,
   AnswerFeedback,
 } from '@/api/mockTestApi';
 
@@ -39,6 +43,10 @@ interface Question {
 type Phase = 'loading' | 'section_intro' | 'section_testing' | 'results_summary' | 'submitting';
 
 interface SectionResult {
+  /** Position in SECTION_PROGRESSION. This is the row's IDENTITY — results are
+   *  upserted by it, so a section can never be recorded twice or land out of
+   *  order in the Review & Submit list. */
+  index: number;
   name: string;
   answered: number;
   total: number;
@@ -152,6 +160,21 @@ export default function MockTestPage() {
   // Init error (fatal — shown instead of spinner when session cannot be created)
   const [initError, setInitError] = useState<string | null>(null);
 
+  // Why a section failed to start. Persisted (rather than only toasted) because
+  // the common cause is running out of credits, which the user has to act on —
+  // a toast that fades after 4s left the intro screen looking simply broken.
+  const [sectionError, setSectionError] = useState<MockTestApiError | null>(null);
+
+  // Why the final "Submit Full Test" failed, shown on the Review & Submit screen
+  // so a failed submission is visible and retryable instead of silent.
+  const [finalSubmitError, setFinalSubmitError] = useState<string | null>(null);
+
+  // ── Proctoring: webcam recording of the attempt ──────────────────────────
+  // Camera access is REQUIRED to start a section. The recording spans the whole
+  // attempt (it keeps running across section intros) and is uploaded to
+  // /mock-test/{session}/video-evaluation once the test is submitted.
+  const recorder = useAttemptRecorder();
+
   // Report issue modal
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -240,7 +263,24 @@ export default function MockTestPage() {
       document.documentElement.requestFullscreen().catch(() => { /* denied or unsupported */ });
     }
 
+    // Proctoring gate: the camera is REQUIRED. Started here, still inside the
+    // click gesture, and only once — the recording continues across every
+    // section so the upload covers the whole attempt rather than the last part.
+    // A refusal aborts the section instead of silently running unproctored.
+    if (!recorder.isRecording) {
+      try {
+        await recorder.start();
+      } catch (camErr: unknown) {
+        const message = (camErr as { message?: string })?.message
+          ?? 'Camera access is required to start this proctored test.';
+        setSectionError({ message, insufficientCredits: false });
+        toast.error(message);
+        return;
+      }
+    }
+
     setLoadingSection(true);
+    setSectionError(null);
     try {
       let backendSectionId: string;
 
@@ -324,14 +364,18 @@ export default function MockTestPage() {
       setTimeRemaining((currentSection.duration_minutes ?? 30) * 60);
       setPhase('section_testing');
     } catch (err: unknown) {
-      const _err = err as { response?: { status?: number; data?: { detail?: string; message?: string; error?: string } }; message?: string };
-      const backendMsg = _err?.response?.data?.detail
-        ?? _err?.response?.data?.message
-        ?? _err?.response?.data?.error
-        ?? _err?.message
-        ?? 'Unknown error';
+      const _err = err as { response?: { status?: number; data?: unknown }; message?: string };
+      // parseMockTestError unwraps the { error: { message, details } } envelope.
+      // Reading `data.error` directly used to yield an object, so every failure —
+      // including a routine out-of-credits 402 — surfaced as "[object Object]".
+      const parsed = parseMockTestError(err);
       console.error('[handleStartSection] failed:', _err?.response?.status, _err?.response?.data ?? _err?.message);
-      toast.error(`Failed to load ${currentSection.section_name}: ${backendMsg}`);
+      setSectionError(parsed);
+      toast.error(
+        parsed.insufficientCredits
+          ? parsed.message
+          : `Failed to load ${currentSection.section_name}: ${parsed.message}`
+      );
     } finally {
       setLoadingSection(false);
     }
@@ -343,18 +387,14 @@ export default function MockTestPage() {
       if (timerRef.current) clearInterval(timerRef.current);
       return;
     }
+    // The updater stays PURE — it only decrements. Auto-submit used to be called
+    // from inside it, but React treats updaters as replayable and may invoke them
+    // more than once, which could fire the submit (and its setSectionResults)
+    // twice for a single section. The expiry is handled by its own effect below.
     timerRef.current = setInterval(() => {
-      setTimeRemaining(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          handleAutoSubmitSection();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setTimeRemaining(prev => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   // ── beforeunload warning ───────────────────────────────────────────────────
@@ -599,18 +639,32 @@ export default function MockTestPage() {
   };
 
   // ── Section submit ─────────────────────────────────────────────────────────
-  const handleAutoSubmitSection = useCallback(async () => {
-    // Read the latest questions from the ref — the timer closure that calls this is
-    // created at section start and would otherwise see a stale, all-unanswered snapshot.
-    const latestQuestions = questionsRef.current;
-    const result: SectionResult = {
-      name: currentSection.section_name,
-      answered: latestQuestions.filter(q => q.selected !== null).length,
-      total: latestQuestions.length,
-    };
-    setSectionResults(prev => [...prev, result]);
 
-    const nextProgressionIndex = currentSectionProgressionIndex + 1;
+  /**
+   * Record one section's outcome, keyed by its position in SECTION_PROGRESSION.
+   *
+   * Upsert, not append. The previous code pushed unconditionally, so anything
+   * that ran the submit path twice for one section (timer expiry racing a manual
+   * submit, a held-down "S" key repeating keydown, a double-click) added a second
+   * row. Review & Submit then listed 5+ rows for a 4-section test, with the extra
+   * one showing a partial count — which is exactly the "not all sections at 100%"
+   * report. Keying by index makes a repeat submission a no-op overwrite.
+   */
+  /** Index of the section already submitted, so a repeat submit is a no-op. */
+  const submitLatchRef = useRef<number | null>(null);
+
+  const recordSectionResult = useCallback((index: number, name: string, qs: Question[]) => {
+    const result: SectionResult = {
+      index,
+      name,
+      answered: qs.filter(q => q.selected !== null).length,
+      total: qs.length,
+    };
+    setSectionResults(prev => [...prev.filter(r => r.index !== index), result].sort((a, b) => a.index - b.index));
+  }, []);
+
+  const advanceAfterSection = useCallback((fromIndex: number) => {
+    const nextProgressionIndex = fromIndex + 1;
     if (nextProgressionIndex >= SECTION_PROGRESSION.length) {
       setPhase('results_summary');
     } else {
@@ -619,10 +673,38 @@ export default function MockTestPage() {
       setCurrentQ(0);
       setPhase('section_intro');
     }
+  }, [SECTION_PROGRESSION.length]);
+
+  const handleAutoSubmitSection = useCallback(async () => {
+    // Read the latest questions from the ref — the timer closure that calls this is
+    // created at section start and would otherwise see a stale, all-unanswered snapshot.
+    recordSectionResult(currentSectionProgressionIndex, currentSection.section_name, questionsRef.current);
+    advanceAfterSection(currentSectionProgressionIndex);
+  }, [currentSection, currentSectionProgressionIndex, recordSectionResult, advanceAfterSection]);
+
+  // Timer expiry → auto-submit. Lives here rather than inside the interval's
+  // state updater so it runs exactly once per section. The ref latch also stops a
+  // re-render at timeRemaining === 0 from submitting the same section again.
+  const autoSubmittedForRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (phase !== 'section_testing') return;
+    if (timeRemaining !== 0) return;
+    if (autoSubmittedForRef.current === currentSectionProgressionIndex) return;
+    autoSubmittedForRef.current = currentSectionProgressionIndex;
+    handleAutoSubmitSection();
+  // handleAutoSubmitSection is intentionally omitted: it depends on currentSection,
+  // which is rebuilt every render, so including it would re-run this effect on every
+  // render. The expiry condition + ref latch above are what gate the call.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, currentBackendSectionId, currentSection, questions, currentSectionProgressionIndex]);
+  }, [phase, timeRemaining, currentSectionProgressionIndex]);
 
   const handleSectionSubmit = async () => {
+    // Re-entrancy latch. A ref, not the `sectionSubmitting` state: that state is
+    // set and cleared inside this same function, so a second call would still read
+    // the pre-render value and sail straight through. A held "S" key repeats
+    // keydown, and the disabled button only disables after a re-render.
+    if (submitLatchRef.current === currentSectionProgressionIndex) return;
+
     // Validate that all questions have been attempted
     const unattemptedQuestions = questions.filter(q => q.selected === null);
 
@@ -631,41 +713,83 @@ export default function MockTestPage() {
       return;
     }
 
+    submitLatchRef.current = currentSectionProgressionIndex;
     setSectionSubmitting(true);
     if (timerRef.current) clearInterval(timerRef.current);
 
-    const result: SectionResult = {
-      name: currentSection.section_name,
-      answered,
-      total: questions.length,
-    };
-    setSectionResults(prev => [...prev, result]);
-
-    // Check if there are more sections in progression
-    const nextProgressionIndex = currentSectionProgressionIndex + 1;
-    if (nextProgressionIndex < SECTION_PROGRESSION.length) {
-      // Move to next section intro - it will load when user clicks "Start Now"
-      setCurrentSectionProgressionIndex(nextProgressionIndex);
-      setQuestions([]);
-      setCurrentQ(0);
-      setPhase('section_intro');
-    } else {
-      // All sections completed - show results summary
-      setPhase('results_summary');
-    }
+    recordSectionResult(currentSectionProgressionIndex, currentSection.section_name, questions);
+    advanceAfterSection(currentSectionProgressionIndex);
 
     setSectionSubmitting(false);
   };
 
   // ── Final test submission ──────────────────────────────────────────────────
+  const finalSubmitLatchRef = useRef(false);
+
   const finalSubmit = async () => {
+    // Re-entrancy latch. Without it a second click started a second submit and a
+    // second delayed navigation.
+    if (finalSubmitLatchRef.current) return;
+    finalSubmitLatchRef.current = true;
+
+    setFinalSubmitError(null);
     setPhase('submitting');
+
+    // Stop the proctoring recording BEFORE submitting, so the camera light goes
+    // out as soon as the test is over and the blob is ready to upload.
+    let attemptVideo: Blob | null = null;
+    try {
+      attemptVideo = await recorder.stop();
+    } catch (recErr) {
+      console.error('[finalSubmit] could not finalise recording:', recErr);
+    }
+
     try {
       await submitParentSession(parentSessionIdRef.current);
-    } catch {
-      // non-fatal — proceed to results even if parent submit fails
+    } catch (err: unknown) {
+      // Previously this was a bare `catch {}` that swallowed EVERY failure and
+      // navigated on regardless — so a failed submit looked like a dead button:
+      // the user waited on a spinner, landed on a results page that could not
+      // load, and was never told the report had not been submitted.
+      const parsed = parseMockTestError(err);
+      console.error('[finalSubmit] parent submit failed:', err);
+      finalSubmitLatchRef.current = false;
+      setFinalSubmitError(parsed.message);
+      setPhase('results_summary');   // hand the screen back so they can retry
+      toast.error(`Could not submit your test: ${parsed.message}`);
+      return;
     }
-    await new Promise(resolve => setTimeout(resolve, 4000));
+
+    // Upload the proctoring recording WITHOUT awaiting it.
+    //
+    // This used to block the navigation below. Reaching 100% only means the bytes
+    // are sent — the backend then forwards the file to the AI evaluator, which is
+    // allowed up to 600s for a long recording. So the user sat on
+    // "Uploading proctoring recording — 100%" for minutes before their results
+    // appeared, for a file that has no bearing on their score.
+    //
+    // A client-side route change does not tear down an in-flight XHR, so the
+    // upload carries on after we navigate and reports its outcome by toast.
+    if (attemptVideo && attemptVideo.size > 0) {
+      const sizeMb = Math.max(1, Math.round(attemptVideo.size / (1024 * 1024)));
+      toast.info(`Uploading your ${sizeMb} MB proctoring recording in the background.`);
+      void uploadSessionVideo(
+        parentSessionIdRef.current,          // backend resolves parent → child session
+        attemptVideo,
+        `attempt-${parentSessionIdRef.current}${recorder.fileExtension}`,
+      )
+        .then(() => toast.success('Proctoring recording uploaded.'))
+        .catch((videoErr: unknown) => {
+          console.error('[finalSubmit] proctoring upload failed:', videoErr);
+          toast.warning(
+            `Your answers were submitted and scored, but the proctoring recording could not be uploaded: ${parseMockTestError(videoErr).message}`,
+          );
+        });
+    }
+
+    // No artificial delay. The old code slept 4s before navigating, which made a
+    // ~60ms submit feel broken. The results page already polls while the backend
+    // finishes scoring, so there is nothing to wait for here.
     const resultUrl = `/mock-test/results/${testId}?parentSession=${parentSessionIdRef.current}`;
     router.push(resultUrl);
   };
@@ -736,9 +860,28 @@ export default function MockTestPage() {
 
   // ── Results Summary ───────────────────────────────────────────────────────
   if (phase === 'results_summary') {
-    const totalQuestions = sectionResults.reduce((sum, r) => sum + r.total, 0);
-    const totalAnswered = sectionResults.reduce((sum, r) => sum + r.answered, 0);
+    // Drive the list from SECTION_PROGRESSION — the authoritative set of sections
+    // for this test — instead of from whatever happened to get recorded. A
+    // 4-section test therefore ALWAYS renders 4 rows, in order, even if a section
+    // was skipped or its result failed to record. Previously the page rendered
+    // sectionResults directly, so a missing entry silently dropped a whole row and
+    // a duplicate entry added a spurious one.
+    const summaryRows = SECTION_PROGRESSION.map((s, i) => {
+      const recorded = sectionResults.find(r => r.index === i);
+      const name = s.name.charAt(0).toUpperCase() + s.name.slice(1);
+      return {
+        index: i,
+        name: recorded?.name ?? name,
+        answered: recorded?.answered ?? 0,
+        total: recorded?.total ?? 0,
+        attempted: !!recorded && recorded.total > 0,
+      };
+    });
+
+    const totalQuestions = summaryRows.reduce((sum, r) => sum + r.total, 0);
+    const totalAnswered = summaryRows.reduce((sum, r) => sum + r.answered, 0);
     const percentage = totalQuestions > 0 ? Math.round((totalAnswered / totalQuestions) * 100) : 0;
+    const allComplete = summaryRows.every(r => r.attempted && r.answered === r.total);
 
     const now    = new Date();
     const dayStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
@@ -768,17 +911,26 @@ export default function MockTestPage() {
             {/* Header */}
             <div className="flex items-start justify-between gap-4 mb-7 flex-wrap">
               <div>
+                {/* Badge and copy now follow the actual data. They previously
+                    asserted "Test Complete / All N sections attempted"
+                    unconditionally, even when a section was partial or missing. */}
                 <span
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase mb-3"
-                  style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}
+                  style={allComplete
+                    ? { background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }
+                    : { background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}
                 >
-                  <CheckCircle size={11} /> Test Complete
+                  {allComplete
+                    ? <><CheckCircle size={11} /> Test Complete</>
+                    : <><AlertTriangle size={11} /> Incomplete</>}
                 </span>
                 <h2 className="text-2xl font-bold tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
                   Review your attempt
                 </h2>
                 <p className="text-sm mt-1.5" style={{ color: '#64748B' }}>
-                  All {SECTION_PROGRESSION.length} sections attempted. Submit to receive your full score report.
+                  {allComplete
+                    ? `All ${SECTION_PROGRESSION.length} sections completed. Submit to receive your full score report.`
+                    : `${summaryRows.filter(r => r.attempted && r.answered === r.total).length} of ${SECTION_PROGRESSION.length} sections fully answered. You can still submit — unanswered questions score zero.`}
                 </p>
               </div>
               <div className="text-right shrink-0">
@@ -789,17 +941,23 @@ export default function MockTestPage() {
 
             {/* Numbered section list — same shape as section intro instructions */}
             <ol className="space-y-4 mb-7">
-              {sectionResults.map((result, i) => {
+              {summaryRows.map((result, i) => {
+                // `done` now requires total > 0. It used to be a bare
+                // `answered === total`, which is TRUE for 0 === 0 — so a section
+                // with no recorded questions rendered a green "complete" tick
+                // next to 0%, contradicting itself.
                 const pct  = result.total > 0 ? Math.round((result.answered / result.total) * 100) : 0;
-                const done = result.answered === result.total;
+                const done = result.attempted && result.answered === result.total;
                 return (
-                  <li key={i} className="flex gap-3 text-[15px] leading-relaxed">
+                  <li key={result.index} className="flex gap-3 text-[15px] leading-relaxed">
                     <span className="font-semibold tabular-nums shrink-0 w-5" style={{ color: '#475569' }}>{i + 1}.</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div>
                           <span className="font-bold" style={{ color: '#000' }}>{result.name}:</span>{' '}
-                          <span style={{ color: '#2d2d2d' }}>{result.answered} of {result.total} answered</span>
+                          <span style={{ color: '#2d2d2d' }}>
+                            {result.attempted ? `${result.answered} of ${result.total} answered` : 'not attempted'}
+                          </span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="w-32" aria-hidden>
@@ -813,7 +971,9 @@ export default function MockTestPage() {
                           <span className="text-xs font-bold tabular-nums w-10 text-right" style={{ color: done ? '#15803d' : '#1e3a8a' }}>{pct}%</span>
                           {done
                             ? <CheckCircle size={16} style={{ color: '#22c55e' }} />
-                            : <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider" style={{ background: '#fef3c7', color: '#92400e' }}>Partial</span>
+                            : <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider" style={{ background: '#fef3c7', color: '#92400e' }}>
+                                {result.attempted ? 'Partial' : 'Skipped'}
+                              </span>
                           }
                         </div>
                       </div>
@@ -845,24 +1005,46 @@ export default function MockTestPage() {
             </div>
           </div>
 
-          {/* Completed pills — same shape as section intro */}
-          {sectionResults.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-5">
-              {sectionResults.map((r, i) => (
+          {/* Completed pills — driven by the same summaryRows as the list above so
+              the two can never disagree about a section's status. */}
+          <div className="flex flex-wrap gap-2 mt-5">
+            {summaryRows.map(r => {
+              const done = r.attempted && r.answered === r.total;
+              return (
                 <div
-                  key={i}
+                  key={r.index}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
-                  style={r.answered === r.total
+                  style={done
                     ? { background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }
                     : { background: '#FFFBEB', color: '#B45309', border: '1px solid #FDE68A' }}
                 >
                   {/* Green check only when fully answered; a partial section (e.g. timer
-                      expired at 8/10) shows an amber "partial" pill, never a completed tick. */}
-                  {r.answered === r.total
+                      expired at 8/10) shows an amber pill, never a completed tick. */}
+                  {done
                     ? <><CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}</>
-                    : <><AlertTriangle size={11} /> {r.name}: {r.answered}/{r.total} partial</>}
+                    : <><AlertTriangle size={11} /> {r.name}: {r.attempted ? `${r.answered}/${r.total} partial` : 'skipped'}</>}
                 </div>
-              ))}
+              );
+            })}
+          </div>
+
+          {/* Submission failure. Kept on screen (not just a toast) so the user
+              can see the report was NOT submitted and act on it. */}
+          {finalSubmitError && (
+            <div
+              className="mt-5 rounded-xl px-5 py-4 flex items-start gap-3"
+              style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+              role="alert"
+            >
+              <AlertTriangle size={18} style={{ color: '#dc2626' }} className="shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold mb-0.5" style={{ color: '#991b1b' }}>
+                  Your test was not submitted
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: '#7f1d1d' }}>
+                  {finalSubmitError} Your answers are saved — press Retry Submit to try again.
+                </p>
+              </div>
             </div>
           )}
 
@@ -882,7 +1064,7 @@ export default function MockTestPage() {
               style={{ background: '#1e3a8a', boxShadow: '0 4px 14px -4px rgba(30,58,138,0.35)' }}
             >
               <CheckCircle size={16} />
-              Submit Full Test
+              {finalSubmitError ? 'Retry Submit' : 'Submit Full Test'}
             </button>
           </div>
         </div>
@@ -974,24 +1156,80 @@ export default function MockTestPage() {
             </div>
           </div>
 
+          {/* Proctoring consent. Shown BEFORE the camera prompt so the browser's
+              permission dialog is expected rather than a surprise, and so the
+              user knows what is recorded and why before they commit. */}
+          {!recorder.isRecording && (
+            <div
+              className="mt-5 rounded-xl px-5 py-4 flex items-start gap-3"
+              style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}
+            >
+              <EyeOff size={18} style={{ color: '#1e3a8a' }} className="shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold mb-0.5" style={{ color: '#0F172A' }}>
+                  This test is proctored
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: '#2d2d2d' }}>
+                  Your camera and microphone are recorded for the duration of the test and the
+                  recording is submitted for automated review. Your browser will ask for
+                  permission when you start — the test cannot begin without it.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Why the section could not start. Stays on screen until the next
+              attempt — an out-of-credits 402 needs an action, not a toast. */}
+          {sectionError && (
+            <div
+              className="mt-5 rounded-xl px-5 py-4 flex items-start gap-3 flex-wrap"
+              style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+              role="alert"
+            >
+              <AlertTriangle size={18} style={{ color: '#dc2626' }} className="shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold mb-0.5" style={{ color: '#991b1b' }}>
+                  {sectionError.insufficientCredits ? 'Not enough credits' : `Couldn't start ${sName}`}
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: '#7f1d1d' }}>
+                  {sectionError.message}
+                </p>
+              </div>
+              {sectionError.insufficientCredits && (
+                <button
+                  onClick={() => router.push('/settings/subscription')}
+                  className="px-4 py-2 rounded-lg text-xs font-bold text-white transition hover:opacity-90 shrink-0"
+                  style={{ background: '#dc2626' }}
+                >
+                  Get credits
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Previously completed pills */}
           {sectionResults.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-5">
-              {sectionResults.map((r, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
-                  style={r.answered === r.total
-                    ? { background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }
-                    : { background: '#FFFBEB', color: '#B45309', border: '1px solid #FDE68A' }}
-                >
-                  {/* Green check only when fully answered; a partial section (e.g. timer
-                      expired at 8/10) shows an amber "partial" pill, never a completed tick. */}
-                  {r.answered === r.total
-                    ? <><CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}</>
-                    : <><AlertTriangle size={11} /> {r.name}: {r.answered}/{r.total} partial</>}
-                </div>
-              ))}
+              {sectionResults.map(r => {
+                // total > 0 guard: `answered === total` alone is true for 0 === 0,
+                // so an empty section rendered a green "complete" tick.
+                const done = r.total > 0 && r.answered === r.total;
+                return (
+                  <div
+                    key={r.index}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
+                    style={done
+                      ? { background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }
+                      : { background: '#FFFBEB', color: '#B45309', border: '1px solid #FDE68A' }}
+                  >
+                    {/* Green check only when fully answered; a partial section (e.g. timer
+                        expired at 8/10) shows an amber "partial" pill, never a completed tick. */}
+                    {done
+                      ? <><CheckCircle size={11} /> {r.name}: {r.answered}/{r.total}</>
+                      : <><AlertTriangle size={11} /> {r.name}: {r.answered}/{r.total} partial</>}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -1043,6 +1281,89 @@ export default function MockTestPage() {
   // ── Section Testing ────────────────────────────────────────────────────────
   const isTimerWarning  = timeRemaining > 0 && timeRemaining <= 300;
   const isTimerCritical = timeRemaining > 0 && timeRemaining <= 60;
+
+  // On the final question the Submit action moves from the header down into the
+  // Next slot, so exactly one Submit button is on screen at any time.
+  const isOnLastQuestion = questions.length > 0 && currentQ === questions.length - 1;
+
+  // Single source of truth for palette swatch styling. The desktop rail and the
+  // mobile strip both read this so the two can never drift out of sync.
+  const paletteStyle = (i: number): React.CSSProperties => {
+    const q         = questions[i];
+    const isAns     = q?.selected !== null && q?.selected !== undefined;
+    const isFlagged = !!q?.markedForReview;
+    const isCurrent = i === currentQ;
+    return {
+      background: isCurrent ? '#1e3a8a' : isFlagged ? '#fef3c7' : isAns ? '#dbeafe' : '#f9fafb',
+      color:      isCurrent ? '#ffffff' : isFlagged ? '#92400e' : isAns ? '#1e3a8a' : '#9ca3af',
+      border:     isCurrent ? '2px solid #1e3a8a' : isFlagged ? '1px solid #fde68a' : isAns ? '1px solid #bfdbfe' : '1px solid #f3f4f6',
+      boxShadow:  isCurrent ? '0 0 0 3px #dbeafe' : 'none',
+    };
+  };
+
+  const paletteLabel = (i: number): string => {
+    const q = questions[i];
+    const state = q?.markedForReview ? 'marked for review'
+      : q?.selected != null ? 'answered'
+      : 'not answered';
+    return `Question ${i + 1}, ${state}`;
+  };
+
+  // The answer feedback body is rendered in two places — the desktop side rail
+  // and, below lg where that rail is hidden, inline under the question. Building
+  // it once keeps them identical.
+  const feedbackBody = answerFeedback ? (
+    <div className="flex-1 flex flex-col">
+      <div
+        className="flex items-center gap-2 px-4 py-3"
+        style={{ background: answerFeedback.is_correct ? '#dcfce7' : '#fee2e2', borderBottom: `1px solid ${answerFeedback.is_correct ? '#bbf7d0' : '#fecaca'}` }}
+      >
+        {answerFeedback.is_correct
+          ? <CheckCircle size={15} style={{ color: '#15803d' }} />
+          : <span className="font-bold text-base leading-none" style={{ color: '#991b1b' }}>✗</span>
+        }
+        <span className="font-bold text-xs tracking-widest" style={{ color: answerFeedback.is_correct ? '#15803d' : '#991b1b' }}>
+          {answerFeedback.is_correct ? 'CORRECT' : 'INCORRECT'}
+        </span>
+        {!answerFeedback.is_correct && answerFeedback.correct_answer && (
+          <span className="ml-auto text-xs font-semibold" style={{ color: '#7f1d1d' }}>{answerFeedback.correct_answer}</span>
+        )}
+      </div>
+
+      <div className="p-4 space-y-4 flex-1">
+        {answerFeedback.solution_steps && answerFeedback.solution_steps.length > 0 && (
+          <div>
+            <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#9ca3af' }}>SOLUTION PATH</p>
+            <ol className="space-y-2">
+              {answerFeedback.solution_steps.map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#1f2937' }}>
+                  <span
+                    className="w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
+                    style={{ background: '#dbeafe', color: '#1e3a8a' }}
+                  >{i + 1}</span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+        {answerFeedback.explanation && (
+          <div>
+            <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#9ca3af' }}>EXPLANATION</p>
+            <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: '#1f2937' }}>
+              {answerFeedback.explanation}
+            </p>
+          </div>
+        )}
+        {answerFeedback.feedback && (
+          <div className="p-3 rounded-xl" style={{ background: '#eff6ff', border: '1px solid #dbeafe' }}>
+            <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#1e3a8a' }}>AI PATTERN</p>
+            <p className="text-xs leading-relaxed" style={{ color: '#1f2937' }}>{answerFeedback.feedback}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="w-full min-h-screen flex flex-col" style={{ background: '#F8F9FB' }}>
@@ -1132,77 +1453,115 @@ export default function MockTestPage() {
 
       {/* NXT Wave-style practice header */}
       <div className="bg-white shrink-0">
-        <div className="flex flex-col md:flex-row md:items-stretch md:justify-between gap-3 md:gap-6 px-4 md:px-8 pt-3 md:pt-4 pb-3">
-          {/* Left: back + PRACTICE label + section instructions tab */}
-          <div className="flex flex-col gap-1.5 min-w-0">
+        {/* One row, one vertical centre line. The previous header mixed
+            items-stretch / justify-center / items-end across three columns, so
+            nothing shared a baseline — that was the "ragged" look. */}
+        <div className="flex items-center justify-between gap-3 md:gap-6 px-4 md:px-8 py-3">
+          {/* Left: section identity. No longer a button — a back-chevron that
+              silently abandoned the test was a trap; ending is an explicit
+              action on the right. */}
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-sm font-bold tracking-wide truncate" style={{ color: '#1f2937' }}>
+              {currentSection?.section_name}
+            </span>
+            <span className="text-[11px] font-bold tracking-wider uppercase" style={{ color: '#6b7280' }}>
+              Section {currentSectionProgressionIndex + 1} of {SECTION_PROGRESSION.length}
+            </span>
+          </div>
+
+          {/* Right: timer, progress, actions. The attempted count lives here ONLY —
+              it used to be repeated in a centre badge and again in the footer. */}
+          <div className="flex items-center gap-2 md:gap-3 shrink-0">
+            {/* Recording indicator — the user must be able to see, at any moment,
+                that they are being recorded. */}
+            {recorder.isRecording && (
+              <span
+                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[10px] font-bold tracking-wider uppercase"
+                style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca' }}
+                title="This test is proctored — your camera is recording"
+              >
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#dc2626' }} aria-hidden="true" />
+                <span className="hidden sm:inline">Rec</span>
+              </span>
+            )}
+            <div className="hidden sm:flex flex-col items-end leading-tight">
+              <span className="text-sm font-bold tabular-nums" style={{ color: '#1e3a8a' }}>
+                {answered}/{questions.length}
+              </span>
+              <span className="text-[10px] font-bold tracking-wider uppercase" style={{ color: '#6b7280' }}>
+                Attempted
+              </span>
+            </div>
+
+            <div
+              className={`flex items-center px-2.5 py-1.5 rounded-md text-xs font-bold tabular-nums ${isTimerCritical ? 'animate-pulse' : ''}`}
+              style={{
+                background: isTimerCritical ? '#fee2e2' : isTimerWarning ? '#fef3c7' : '#eff6ff',
+                color: isTimerCritical ? '#991b1b' : isTimerWarning ? '#92400e' : '#1e3a8a',
+                border: `1px solid ${isTimerCritical ? '#fecaca' : isTimerWarning ? '#fde68a' : '#bfdbfe'}`,
+              }}
+            >
+              <span className="font-mono">{formatTime(timeRemaining)}</span>
+            </div>
+
+            {/* Exit. Always visible at every breakpoint — this is the only way out
+                of a fullscreen, locked-down test, so it must be unmistakable.
+                A bare "End" label read as a minor secondary action and was reported
+                as the exit button being missing; it now carries an icon, the word
+                "Exit", and a danger tint so it is recognisable at a glance. */}
             <button
               onClick={() => setShowExitConfirm(true)}
               disabled={sectionSubmitting || exitSubmitting}
-              className="flex items-center gap-2 text-sm font-bold hover:text-blue-900 transition disabled:opacity-40 w-fit"
-              style={{ color: '#1f2937' }}
-              title="Exit test and return to dashboard"
+              className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase px-3 py-2 rounded-md border transition hover:bg-red-50 disabled:opacity-40 whitespace-nowrap"
+              style={{ color: '#b91c1c', borderColor: '#fecaca', background: '#fff' }}
+              title="Exit the test and return to your dashboard"
+              aria-label="Exit test"
             >
-              <ChevronLeft size={16} strokeWidth={2.5} />
-              <span className="tracking-wide">PRACTICE {currentSectionProgressionIndex + 1}</span>
+              <LogOut size={13} aria-hidden="true" />
+              Exit
             </button>
-            <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase" style={{ color: '#1e3a8a' }}>
-              <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ background: '#dbeafe', color: '#1e3a8a' }}>i</span>
-              <span className="truncate">{currentSection?.section_name} Instructions</span>
-            </div>
+            {/* Hidden on the last question, where the Submit action moves down into
+                the Next slot beside the question. Keeping both visible is what put
+                two identical Submit buttons on screen at once. */}
+            <button
+              onClick={handleSectionSubmit}
+              disabled={sectionSubmitting}
+              className={`text-[11px] font-bold tracking-wider uppercase px-3 py-2 rounded-md text-white transition disabled:opacity-60 hover:opacity-90 whitespace-nowrap ${
+                isOnLastQuestion ? 'hidden' : ''
+              }`}
+              style={{ background: isLastSection ? '#059669' : '#1e3a8a' }}
+              title="Keyboard shortcut: press S"
+              aria-keyshortcuts="s"
+            >
+              {/* Same wording as the in-flow submit at the end of the question list —
+                  one action should not have two names. Shortened on narrow screens
+                  only, where the full label would push the header into a wrap. */}
+              {sectionSubmitting ? '…' : (
+                <>
+                  Submit
+                  <span className="hidden sm:inline">{isLastSection ? ' Test' : ' Section'}</span>
+                </>
+              )}
+              <kbd className="hidden md:inline-block ml-1.5 px-1 rounded text-[9px] font-bold align-middle" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>S</kbd>
+            </button>
           </div>
+        </div>
 
-          {/* Center: ATTEMPTED badge. Deliberately NOT "Score" — correctness is only
-              known after the test is submitted and evaluated by the backend. Showing a
-              "score" mid-test (really just the attempted count) misleads the user. */}
-          <div className="flex md:flex-col items-center md:justify-center shrink-0 gap-2 md:gap-0">
-            <div className="flex items-baseline gap-2">
-              <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: '#6b7280' }}>Attempted:</span>
-              <span className="text-2xl md:text-3xl font-bold leading-none tabular-nums" style={{ color: '#1e3a8a' }}>{answered}</span>
-            </div>
-          </div>
-
-          {/* Right: counter + timer + END PRACTICE + SUBMIT SECTION */}
-          <div className="flex flex-col md:items-end gap-1.5 shrink-0">
-            <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-              <div
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold tabular-nums ${isTimerCritical ? 'animate-pulse' : ''}`}
-                style={{
-                  background: isTimerCritical ? '#fee2e2' : isTimerWarning ? '#fef3c7' : '#eff6ff',
-                  color: isTimerCritical ? '#991b1b' : isTimerWarning ? '#92400e' : '#1e3a8a',
-                  border: `1px solid ${isTimerCritical ? '#fecaca' : isTimerWarning ? '#fde68a' : '#bfdbfe'}`,
-                }}
-              >
-                <span className="font-mono">{formatTime(timeRemaining)}</span>
-              </div>
-              <span className="text-[11px] font-bold tracking-wider uppercase" style={{ color: '#6b7280' }}>
-                Questions Attempted: <span style={{ color: '#1f2937' }}>{answered}/{questions.length}</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowExitConfirm(true)}
-                className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase hover:text-blue-950 transition"
-                style={{ color: '#1e3a8a' }}
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <circle cx="12" cy="12" r="9" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l6 6m0-6l-6 6" />
-                </svg>
-                End Practice
-              </button>
-              <button
-                onClick={handleSectionSubmit}
-                disabled={sectionSubmitting}
-                className="text-[11px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-md text-white transition disabled:opacity-60 hover:opacity-90"
-                style={{ background: isLastSection ? '#059669' : '#1e3a8a' }}
-                title="Keyboard shortcut: press S"
-                aria-keyshortcuts="s"
-              >
-                {sectionSubmitting ? '...' : isLastSection ? 'Submit Test' : 'Submit Section'}
-                <kbd className="hidden md:inline-block ml-1.5 px-1 py-0 rounded text-[9px] font-bold align-middle" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>S</kbd>
-              </button>
-            </div>
-          </div>
+        {/* Mobile question palette. Below md the side rail is hidden, which
+            previously left phones with NO way to jump between questions. */}
+        <div className="md:hidden flex gap-1.5 px-4 pb-3 overflow-x-auto" role="group" aria-label="Question navigation">
+          {questions.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrentQ(i)}
+              aria-label={paletteLabel(i)}
+              aria-current={i === currentQ ? 'true' : undefined}
+              className="w-11 h-11 rounded-lg text-xs font-bold flex items-center justify-center transition shrink-0"
+              style={paletteStyle(i)}
+            >
+              {i + 1}
+            </button>
+          ))}
         </div>
 
         {/* Thin purple progress bar */}
@@ -1220,32 +1579,31 @@ export default function MockTestPage() {
       {/* Three-column body */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Left: question palette (light, purple accents) — hidden on mobile */}
-        <div
-          className="hidden md:flex w-14 shrink-0 flex-col items-center py-4 gap-2 overflow-y-auto border-r"
-          style={{ background: '#ffffff', borderColor: '#f3f4f6' }}
+        {/* Left: question palette rail (desktop). A two-up auto-fill grid so a
+            30+ question section stays usable instead of running off the bottom
+            of a single fixed column. */}
+        <nav
+          className="hidden md:grid content-start w-16 lg:w-20 shrink-0 p-3 gap-2 overflow-y-auto border-r"
+          style={{
+            background: '#ffffff',
+            borderColor: '#f3f4f6',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))',
+          }}
+          aria-label="Question navigation"
         >
-          {questions.map((q, i) => {
-            const isAns     = q.selected !== null;
-            const isFlagged = q.markedForReview;
-            const isCurrent = i === currentQ;
-            return (
-              <button
-                key={i}
-                onClick={() => setCurrentQ(i)}
-                className="w-9 h-9 rounded-lg text-xs font-bold flex items-center justify-center transition shrink-0"
-                style={{
-                  background:  isCurrent ? '#1e3a8a' : isFlagged ? '#fef3c7' : isAns ? '#dbeafe' : '#f9fafb',
-                  color:       isCurrent ? '#ffffff' : isFlagged ? '#92400e' : isAns ? '#1e3a8a' : '#9ca3af',
-                  border:      isCurrent ? '2px solid #1e3a8a' : isFlagged ? '1px solid #fde68a' : isAns ? '1px solid #bfdbfe' : '1px solid #f3f4f6',
-                  boxShadow:   isCurrent ? '0 0 0 3px #dbeafe' : 'none',
-                }}
-              >
-                {i + 1}
-              </button>
-            );
-          })}
-        </div>
+          {questions.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrentQ(i)}
+              aria-label={paletteLabel(i)}
+              aria-current={i === currentQ ? 'true' : undefined}
+              className="aspect-square min-h-[36px] rounded-lg text-xs font-bold flex items-center justify-center transition"
+              style={paletteStyle(i)}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </nav>
 
         {/* Center: question area — NXT Wave style (centered, minimal) */}
         <motion.div
@@ -1255,10 +1613,17 @@ export default function MockTestPage() {
           className="flex-1 overflow-y-auto"
           style={{ background: '#ffffff' }}
         >
-          <div className="max-w-3xl mx-auto px-8 pt-8 pb-6 flex flex-col min-h-full">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-8 pt-5 md:pt-8 pb-6 flex flex-col min-h-full">
             {/* Tiny meta row */}
             <div className="flex items-center gap-2 mb-6 text-[11px] font-bold tracking-widest" style={{ color: '#9ca3af' }}>
               <span>QUESTION {String(currentQ + 1).padStart(2, '0')}/{String(questions.length).padStart(2, '0')}</span>
+              {/* Flags the end of the section the moment the candidate lands on it,
+                  rather than leaving them to work it out from the counter. */}
+              {isOnLastQuestion && (
+                <span className="px-2 py-0.5 rounded uppercase" style={{ background: '#fef3c7', color: '#92400e' }}>
+                  Last question
+                </span>
+              )}
               {hasNegMarking && (
                 <span className="px-2 py-0.5 rounded uppercase" style={{ background: '#fee2e2', color: '#991b1b' }}>
                   Neg Mark
@@ -1309,7 +1674,9 @@ export default function MockTestPage() {
                   <label
                     key={idx}
                     aria-label={`Option ${letter}: ${option}`}
-                    className={`flex items-center gap-3.5 py-2.5 transition ${answerSubmitting || isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}${answerSubmitting ? ' opacity-70' : ''}`}
+                    // min-h-[52px] + horizontal padding: the row was py-2.5 only,
+                    // which fell under the 44px minimum tap target on phones.
+                    className={`flex items-center gap-3.5 min-h-[52px] px-3 -mx-3 py-2.5 rounded-lg transition ${answerSubmitting || isLocked ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50'}${answerSubmitting ? ' opacity-70' : ''}`}
                   >
                     <span
                       className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition"
@@ -1341,36 +1708,28 @@ export default function MockTestPage() {
               })}
             </div>
 
-            {/* Centered SHOW ANSWER + SUBMIT row */}
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <button
-                onClick={handleMarkForReview}
-                className="px-7 py-2.5 rounded-md text-xs font-bold tracking-widest uppercase transition hover:bg-blue-50"
-                style={{
-                  border: '2px solid #1e3a8a',
-                  color: '#1e3a8a',
-                  background: currentQuestion?.markedForReview ? '#dbeafe' : 'transparent',
-                }}
+            {/* Inline feedback for < lg, where the right-hand rail is hidden.
+                Without this, every tablet and phone user answered a question and
+                got no explanation at all. */}
+            {feedbackBody && (
+              <div
+                className="lg:hidden rounded-xl overflow-hidden mb-6"
+                style={{ background: '#fafafa', border: '1px solid #f3f4f6' }}
               >
-                {currentQuestion?.markedForReview ? '★ Marked' : 'Show Answer'}
-              </button>
-              <button
-                onClick={handleNext}
-                disabled={!currentQuestion?.selected || currentQ === questions.length - 1}
-                className="px-7 py-2.5 rounded-md text-xs font-bold tracking-widest uppercase text-white transition disabled:opacity-40 hover:opacity-90"
-                style={{ background: '#1e3a8a' }}
-              >
-                Submit
-              </button>
-            </div>
+                {feedbackBody}
+              </div>
+            )}
 
-            {/* Bottom action row: secondary (clear/report) on left, prev/next on right, SKIP on far right */}
-            <div className="flex items-center justify-between gap-3 mt-auto pt-6 border-t" style={{ borderColor: '#f3f4f6' }}>
+            {/* One control bar, one alignment axis. Previously a centre-aligned
+                row sat above a space-between row, and BOTH "Submit" and "Skip"
+                called handleNext while "Show Answer" actually flagged for review —
+                three labels for two actions. Labels now match behaviour. */}
+            <div className="flex items-center justify-between gap-3 flex-wrap mt-auto pt-6 border-t" style={{ borderColor: '#f3f4f6' }}>
               <div className="flex items-center gap-2">
                 {currentQuestion?.selected && !currentQuestion?.locked && (
                   <button
                     onClick={handleClearAnswer}
-                    className="px-3 py-1.5 rounded-md border text-[11px] font-bold tracking-wider uppercase transition"
+                    className="px-3 py-2 rounded-md border text-[11px] font-bold tracking-wider uppercase transition hover:bg-slate-50"
                     style={{ borderColor: '#e5e7eb', color: '#6b7280' }}
                   >
                     Clear
@@ -1378,7 +1737,7 @@ export default function MockTestPage() {
                 )}
                 <button
                   onClick={() => setShowReportModal(true)}
-                  className="px-3 py-1.5 rounded-md border text-[11px] font-bold tracking-wider uppercase transition"
+                  className="px-3 py-2 rounded-md border text-[11px] font-bold tracking-wider uppercase transition hover:bg-orange-50"
                   style={{ borderColor: '#fed7aa', color: '#ea580c' }}
                 >
                   ⚠ Report
@@ -1386,21 +1745,56 @@ export default function MockTestPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={handleMarkForReview}
+                  title="Keyboard shortcut: press F"
+                  aria-keyshortcuts="f"
+                  aria-pressed={!!currentQuestion?.markedForReview}
+                  className="px-3 py-2 rounded-md border text-[11px] font-bold tracking-wider uppercase transition hover:bg-blue-50"
+                  style={{
+                    borderColor: currentQuestion?.markedForReview ? '#fde68a' : '#e5e7eb',
+                    color:       currentQuestion?.markedForReview ? '#92400e' : '#6b7280',
+                    background:  currentQuestion?.markedForReview ? '#fef3c7' : 'transparent',
+                  }}
+                >
+                  {currentQuestion?.markedForReview ? '★ Marked' : 'Mark for review'}
+                </button>
+                <button
                   onClick={handlePrevious}
                   disabled={currentQ === 0}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-bold tracking-wider uppercase transition disabled:opacity-40"
+                  className="flex items-center gap-1 px-3 py-2 rounded-md text-[11px] font-bold tracking-wider uppercase transition disabled:opacity-40 hover:bg-slate-50"
                   style={{ border: '1px solid #e5e7eb', color: '#6b7280' }}
                 >
                   <ChevronLeft size={12} /> Prev
                 </button>
-                <button
-                  onClick={handleNext}
-                  disabled={currentQ === questions.length - 1}
-                  className="flex items-center gap-1 px-4 py-1.5 rounded-md text-[11px] font-bold tracking-wider uppercase text-white transition disabled:opacity-40"
-                  style={{ background: '#1e3a8a' }}
-                >
-                  Skip <ChevronRight size={12} />
-                </button>
+                {/* Last question: the Next slot becomes the Submit action, so the
+                    candidate submits from where they are already looking rather
+                    than hunting for a control. The header Submit is hidden while
+                    this is showing, so there is still only ever ONE submit button
+                    on screen. */}
+                {isOnLastQuestion ? (
+                  <button
+                    onClick={handleSectionSubmit}
+                    disabled={sectionSubmitting}
+                    title="Keyboard shortcut: press S"
+                    aria-keyshortcuts="s"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[11px] font-bold tracking-wider uppercase text-white transition disabled:opacity-60 hover:opacity-90"
+                    style={{
+                      background: isLastSection ? '#059669' : '#1e3a8a',
+                      boxShadow: `0 0 0 3px ${isLastSection ? '#a7f3d0' : '#bfdbfe'}`,
+                    }}
+                  >
+                    <CheckCircle size={12} />
+                    {sectionSubmitting ? 'Submitting…' : isLastSection ? 'Submit Test' : 'Submit Section'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleNext}
+                    className="flex items-center gap-1 px-4 py-2 rounded-md text-[11px] font-bold tracking-wider uppercase text-white transition hover:opacity-90"
+                    style={{ background: '#1e3a8a' }}
+                  >
+                    Next <ChevronRight size={12} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1412,56 +1806,9 @@ export default function MockTestPage() {
           style={{ background: '#fafafa', borderColor: '#f3f4f6' }}
         >
           <AnimatePresence mode="wait">
-            {answerFeedback ? (
+            {feedbackBody ? (
               <motion.div key="feedback" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex-1 flex flex-col">
-                <div
-                  className="flex items-center gap-2 px-4 py-3"
-                  style={{ background: answerFeedback.is_correct ? '#dcfce7' : '#fee2e2', borderBottom: `1px solid ${answerFeedback.is_correct ? '#bbf7d0' : '#fecaca'}` }}
-                >
-                  {answerFeedback.is_correct
-                    ? <CheckCircle size={15} style={{ color: '#15803d' }} />
-                    : <span className="font-bold text-base leading-none" style={{ color: '#991b1b' }}>✗</span>
-                  }
-                  <span className="font-bold text-xs tracking-widest" style={{ color: answerFeedback.is_correct ? '#15803d' : '#991b1b' }}>
-                    {answerFeedback.is_correct ? 'CORRECT' : 'INCORRECT'}
-                  </span>
-                  {!answerFeedback.is_correct && answerFeedback.correct_answer && (
-                    <span className="ml-auto text-xs font-semibold" style={{ color: '#7f1d1d' }}>{answerFeedback.correct_answer}</span>
-                  )}
-                </div>
-
-                <div className="p-4 space-y-4 flex-1">
-                  {answerFeedback.solution_steps && answerFeedback.solution_steps.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#9ca3af' }}>SOLUTION PATH</p>
-                      <ol className="space-y-2">
-                        {answerFeedback.solution_steps.map((step, i) => (
-                          <li key={i} className="flex items-start gap-2 text-xs" style={{ color: '#1f2937' }}>
-                            <span
-                              className="w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
-                              style={{ background: '#dbeafe', color: '#1e3a8a' }}
-                            >{i + 1}</span>
-                            {step}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
-                  {answerFeedback.explanation && (
-                    <div>
-                      <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#9ca3af' }}>EXPLANATION</p>
-                      <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: '#1f2937' }}>
-                        {answerFeedback.explanation}
-                      </p>
-                    </div>
-                  )}
-                  {answerFeedback.feedback && (
-                    <div className="p-3 rounded-xl" style={{ background: '#eff6ff', border: '1px solid #dbeafe' }}>
-                      <p className="text-[10px] font-bold tracking-widest mb-1" style={{ color: '#1e3a8a' }}>AI PATTERN</p>
-                      <p className="text-xs leading-relaxed" style={{ color: '#1f2937' }}>{answerFeedback.feedback}</p>
-                    </div>
-                  )}
-                </div>
+                {feedbackBody}
               </motion.div>
             ) : (
               <motion.div key="placeholder" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4">
@@ -1492,18 +1839,19 @@ export default function MockTestPage() {
         </div>
       </div>
 
-      {/* Bottom: SKIP-with-timer hint + status */}
+      {/* Bottom status bar. Wraps instead of overflowing: this was a single
+          non-wrapping row of eight items and pushed a horizontal scrollbar onto
+          the whole page below ~640px. */}
       <div
-        className="flex items-center justify-between gap-3 px-6 py-2.5 border-t shrink-0 text-[11px]"
+        className="flex items-center justify-between gap-x-4 gap-y-1.5 flex-wrap px-4 md:px-6 py-2.5 border-t shrink-0 text-[11px]"
         style={{ background: '#ffffff', borderColor: '#f3f4f6' }}
       >
-        <div className="flex items-center gap-3" style={{ color: '#9ca3af' }}>
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} aria-hidden="true" />
+        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap" style={{ color: '#9ca3af' }}>
+          <span className="hidden sm:flex items-center gap-1.5">
             <CheckCircle size={10} style={{ color: '#22c55e' }} aria-hidden="true" />
             <span className="font-semibold tracking-wider uppercase">Network OK</span>
           </span>
-          <span style={{ color: '#d1d5db' }}>·</span>
+          <span className="hidden sm:inline" style={{ color: '#d1d5db' }}>·</span>
           <span className="font-semibold tracking-wider uppercase">Autosave</span>
           <span style={{ color: '#d1d5db' }}>·</span>
           <span className="font-semibold tracking-wider uppercase">
@@ -1520,7 +1868,7 @@ export default function MockTestPage() {
             </>
           )}
         </div>
-        <div className="text-[10px] font-medium" style={{ color: '#60a5fa' }}>
+        <div className="hidden md:block text-[10px] font-medium" style={{ color: '#60a5fa' }}>
           You can skip this question anytime — your selection is auto-saved.
         </div>
       </div>

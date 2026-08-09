@@ -100,6 +100,85 @@ const MAX_EXCLUDE_IDS = 50;
 const limitExcludeIds = (ids: string[]): string[] =>
   ids.length <= MAX_EXCLUDE_IDS ? ids : ids.slice(-MAX_EXCLUDE_IDS);
 
+export interface MockTestApiError {
+  /** Human-readable text that is always safe to render directly in the UI. */
+  message: string;
+  /** True when the request was rejected for lack of credits (HTTP 402). */
+  insufficientCredits: boolean;
+  creditsRequired?: number;
+  creditsRemaining?: number;
+}
+
+/**
+ * Normalise an error from any /mock-test endpoint into something renderable.
+ *
+ * The backend wraps every failure as
+ *   { success: false, error: { message, error_code, details } }
+ * so the old `data.detail ?? data.message ?? data.error` fallback chain fell
+ * through to `data.error` — an OBJECT — and rendered as "[object Object]".
+ * That turned a plain out-of-credits 402 into what looked like a generation
+ * failure, which is why "custom test is not generating" was reported.
+ */
+export const parseMockTestError = (err: unknown): MockTestApiError => {
+  interface ErrorDetails {
+    error?: string;
+    message?: string;
+    credits_required?: number;
+    credits_remaining?: number;
+  }
+  interface ErrorEnvelope {
+    message?: string;
+    error_code?: string;
+    details?: ErrorDetails;
+  }
+  interface ErrorBody {
+    error?: ErrorEnvelope | string;
+    detail?: string;
+    message?: string;
+  }
+  const e = err as { response?: { status?: number; data?: ErrorBody }; message?: string };
+  const status = e?.response?.status;
+  const data   = e?.response?.data;
+
+  // `error` is the structured envelope on most routes, but a bare string on a few.
+  const rawError   = data?.error;
+  const structured = rawError && typeof rawError === 'object' ? rawError : null;
+  const details    = structured?.details;
+
+  const insufficientCredits =
+    status === 402 ||
+    structured?.error_code === 'HTTP_402' ||
+    details?.error === 'INSUFFICIENT_CREDITS';
+
+  const creditsRequired  = typeof details?.credits_required  === 'number' ? details.credits_required  : undefined;
+  const creditsRemaining = typeof details?.credits_remaining === 'number' ? details.credits_remaining : undefined;
+
+  if (insufficientCredits) {
+    const balance = creditsRequired != null && creditsRemaining != null
+      ? ` This test needs ${creditsRequired} credits and you have ${creditsRemaining}.`
+      : '';
+    return {
+      message: `Not enough credits to start this test.${balance}`,
+      insufficientCredits: true,
+      creditsRequired,
+      creditsRemaining,
+    };
+  }
+
+  // Only ever accept a STRING as the message — anything else is what produced
+  // "[object Object]" before.
+  const message =
+    (typeof details?.message   === 'string' && details.message)   ||
+    (typeof structured?.message === 'string' && structured.message) ||
+    (typeof rawError            === 'string' && rawError)           ||
+    (typeof data?.detail        === 'string' && data.detail)        ||
+    (typeof data?.message       === 'string' && data.message)       ||
+    e?.message ||
+    'Something went wrong. Please try again.';
+
+  return { message, insufficientCredits: false, creditsRequired, creditsRemaining };
+};
+
 /** The only difficulty values the backend accepts (mock_test schemas.py: VALID_DIFFICULTIES). */
 export type MockTestDifficulty = 'easy' | 'medium' | 'hard';
 
@@ -323,12 +402,65 @@ export const submitTest = async (sessionId: string): Promise<void> => {
   }
 };
 
-export const submitParentSession = async (parentSessionId: string): Promise<void> => {
-  try {
-    await httpClient.post(`/mock-test/parent/${parentSessionId}/submit`, {});
-  } catch (err: any) {
-    throw err;
+/**
+ * Submit the whole test. Idempotent server-side — resubmitting a parent returns
+ * the existing report — so retrying after a network failure is safe.
+ *
+ * The explicit timeout matters: the shared client defaults to 120s, and a stalled
+ * submit left the user on a "Scoring your test" spinner for two full minutes with
+ * no way out, which reads as a dead button. Aggregation is a DB roll-up that
+ * normally answers in well under a second.
+ */
+export const submitParentSession = async (
+  parentSessionId: string,
+  timeoutMs: number = 45000,
+): Promise<void> => {
+  await httpClient.post(`/mock-test/parent/${parentSessionId}/submit`, {}, { timeout: timeoutMs });
+};
+
+/**
+ * Everything needed to locate a failed report in the backend log, carried on the
+ * thrown error. Without this a tester's screenshot said only "Unable to Load
+ * Results", and the error_id / request_id that pinpoint the failure server-side
+ * were discarded at the point of failure.
+ */
+export interface ResultErrorDiagnostics {
+  parentSessionId: string;
+  status?: number | 'network';
+  errorCode?: string;
+  errorId?: string;
+  requestId?: string;
+  backendMessage?: string;
+  attempts: number;
+}
+
+export class MockTestResultError extends Error {
+  diagnostics: ResultErrorDiagnostics;
+  constructor(message: string, diagnostics: ResultErrorDiagnostics) {
+    super(message);
+    this.name = 'MockTestResultError';
+    this.diagnostics = diagnostics;
   }
+}
+
+const buildResultDiagnostics = (
+  err: unknown,
+  parentSessionId: string,
+  attempts: number,
+): ResultErrorDiagnostics => {
+  const e = err as { response?: { status?: number; data?: { error?: Record<string, unknown> } } };
+  const backendError = e?.response?.data?.error;
+  const structured = backendError && typeof backendError === 'object' ? backendError : undefined;
+  const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+  return {
+    parentSessionId,
+    status: e?.response?.status ?? 'network',
+    errorCode: str(structured?.error_code),
+    errorId: str(structured?.error_id),
+    requestId: str(structured?.request_id),
+    backendMessage: str(structured?.message),
+    attempts,
+  };
 };
 
 export const getParentSessionResult = async (parentSessionId: string): Promise<TestResult> => {
@@ -363,13 +495,21 @@ export const getParentSessionResult = async (parentSessionId: string): Promise<T
     } catch (err: any) {
       const status = err?.response?.status;
       const message = err?.message || 'Unknown error';
+      const diagnostics = buildResultDiagnostics(err, parentSessionId, attempt);
 
+      // Prefer the backend's own message — it names the actual cause (e.g.
+      // "No sessions found for parent_session_id '…'") instead of our guess.
       let errorMsg = '';
-      if (status === 404) errorMsg = `Results not found for parent session ${parentSessionId}. Still processing.`;
-      else if (status === 500) errorMsg = 'Server error while fetching results.';
-      else errorMsg = `Error (${status ?? 'network'}): ${message}`;
+      if (status === 404) {
+        errorMsg = diagnostics.backendMessage
+          ?? `No report found for this test yet. It may not have been submitted successfully.`;
+      } else if (status === 500) {
+        errorMsg = diagnostics.backendMessage ?? 'The server failed while building your report.';
+      } else {
+        errorMsg = diagnostics.backendMessage ?? `Error (${status ?? 'network'}): ${message}`;
+      }
 
-      lastError = new Error(errorMsg);
+      lastError = new MockTestResultError(errorMsg, diagnostics);
 
       if (status === 404 && attempt < MAX_ATTEMPTS) {
         await new Promise(resolve => setTimeout(resolve, POLL_DELAY_MS));
@@ -609,6 +749,100 @@ export const reportIssue = async (sessionId: string, questionId: string | number
       description,
     });
   } catch (err: any) {
+    throw err;
+  }
+};
+
+// ─── Video (proctoring) evaluation ───────────────────────────────────────────
+
+/** Mirrors VideoEvaluationResponse in mock_test_service/schemas.py. */
+export interface VideoEvaluation {
+  evaluation_id: string;
+  session_id: string;
+  filename?: string | null;
+  duration_seconds: number;
+  /** AI payload, passed through unchanged so new fields arrive without a release. */
+  result: Record<string, unknown>;
+  created_at?: string | null;
+}
+
+/** Matches MOCK_TEST_VIDEO_MAX_BYTES on the backend (default 1 GB). */
+export const MOCK_TEST_VIDEO_MAX_BYTES = 1024 * 1024 * 1024;
+
+/** Matches VIDEO_ACCEPTED_FORMATS in mock_interview_service/constants.py. */
+export const MOCK_TEST_VIDEO_EXTENSIONS = [
+  '.mp4', '.mov', '.webm', '.avi', '.mkv', '.mpeg', '.mpg', '.wmv', '.m4v', '.flv',
+];
+
+/**
+ * Reject locally what the backend would reject anyway, so an 80-minute recording
+ * isn't uploaded just to come back 413. Returns null when the file is acceptable.
+ */
+export const validateAttemptVideo = (blob: Blob, filename: string): string | null => {
+  if (!blob.size) return 'The recording is empty.';
+  if (blob.size > MOCK_TEST_VIDEO_MAX_BYTES) {
+    const mb = (blob.size / (1024 * 1024)).toFixed(0);
+    const limit = (MOCK_TEST_VIDEO_MAX_BYTES / (1024 * 1024)).toFixed(0);
+    return `Recording is ${mb} MB — the limit is ${limit} MB.`;
+  }
+  const dot = filename.lastIndexOf('.');
+  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : '';
+  if (!MOCK_TEST_VIDEO_EXTENSIONS.includes(ext)) {
+    return `Unsupported video format ${ext || 'unknown'}. Accepted: ${MOCK_TEST_VIDEO_EXTENSIONS.join(', ')}.`;
+  }
+  return null;
+};
+
+/**
+ * POST /mock-test/{session_id}/video-evaluation (multipart).
+ *
+ * `sessionId` may be a child section session OR the parent_session_id — the
+ * backend resolves either (see evaluate_video), so the runner can pass the same
+ * parent id it already uses for submit and results.
+ */
+export const uploadSessionVideo = async (
+  sessionId: string,
+  video: Blob,
+  filename: string = 'attempt.webm',
+  options: { onProgress?: (percent: number) => void; timeoutMs?: number } = {},
+): Promise<VideoEvaluation> => {
+  const localError = validateAttemptVideo(video, filename);
+  if (localError) throw new Error(localError);
+
+  // Strip the codecs parameter: MediaRecorder produces "video/webm;codecs=vp9",
+  // and the AI evaluator matches on the bare container type.
+  const cleanType = (video.type || 'video/webm').split(';')[0];
+  const cleanBlob = video.type === cleanType ? video : new Blob([video], { type: cleanType });
+
+  const formData = new FormData();
+  formData.append('file', cleanBlob, filename);
+
+  const response = await httpClient.post<VideoEvaluation>(
+    `/mock-test/${sessionId}/video-evaluation`,
+    formData,
+    {
+      // Let the browser set the multipart boundary.
+      headers: { 'Content-Type': undefined },
+      // A long recording is a large upload — the shared 120s default would abort it.
+      timeout: options.timeoutMs ?? 15 * 60 * 1000,
+      onUploadProgress: options.onProgress
+        ? (e) => {
+            if (!e.total) return;
+            options.onProgress!(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+          }
+        : undefined,
+    },
+  );
+  return (response.data as { data?: VideoEvaluation })?.data ?? response.data;
+};
+
+/** GET the stored evaluation. Returns null when none exists (404) rather than throwing. */
+export const getSessionVideoEvaluation = async (sessionId: string): Promise<VideoEvaluation | null> => {
+  try {
+    const response = await httpClient.get<VideoEvaluation>(`/mock-test/${sessionId}/video-evaluation`);
+    return (response.data as { data?: VideoEvaluation })?.data ?? response.data;
+  } catch (err: unknown) {
+    if ((err as { response?: { status?: number } })?.response?.status === 404) return null;
     throw err;
   }
 };

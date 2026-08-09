@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Play, AlertCircle, Wand2 } from 'lucide-react';
+import { checkCredits } from '@/api/creditsApi';
 
 // Only the levels the backend accepts (mock_test schemas.py: VALID_DIFFICULTIES).
 // "Mixed" was offered here but the backend rejects it, so it could never start a test.
@@ -35,13 +36,14 @@ export default function CustomTestPage() {
   const [validationError, setValidationError] = useState('');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [outOfCredits, setOutOfCredits] = useState(false);
 
   const toggleCategory = (cat: Category) => {
     setCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
     setValidationError('');
   };
 
-  const handleStartTest = () => {
+  const handleStartTest = async () => {
     if (categories.length === 0) {
       setValidationError('Please select at least one category to continue.');
       return;
@@ -52,11 +54,31 @@ export default function CustomTestPage() {
     }
     setStarting(true);
     setStartError(null);
-    // No pre-flight probe. The previous probe generated a full throwaway test
-    // (60s timeout) just to validate, then discarded it — its timeout/failure
-    // was the cause of "Failed to generate test". The custom-test runner
-    // generates the first section itself (180s timeout + inline error handling),
-    // so we navigate straight there.
+    setOutOfCredits(false);
+
+    // Cheap credits pre-check — NOT the old generation probe. The previous probe
+    // generated a full throwaway test (60s timeout) just to validate and then
+    // discarded it; that is deliberately still gone. This is a single fast
+    // /credits/check call, and it exists because a mock test costs credits: without
+    // it the user only discovers an out-of-credits 402 after being dropped into the
+    // test runner, which reads as "the custom test won't generate".
+    try {
+      const credits = await checkCredits('mock_test');
+      if (!credits.can_proceed) {
+        setOutOfCredits(true);
+        setStartError(
+          `Not enough credits. This test needs ${credits.credit_cost} credits and you have ${credits.credits_remaining}.`
+        );
+        setStarting(false);
+        return;
+      }
+    } catch {
+      // Advisory only — if the pre-check itself fails, continue and let the
+      // runner's own error handling report whatever the real problem is.
+    }
+
+    // The custom-test runner generates the first section itself (180s timeout +
+    // inline error handling), so we navigate straight there.
     const parentSessionId = crypto.randomUUID();
     const params = new URLSearchParams({
       parentSessionId,
@@ -219,9 +241,18 @@ export default function CustomTestPage() {
 
           <div className="flex items-center gap-3 flex-wrap">
             {startError && (
-              <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: '#ef4444' }}>
-                <AlertCircle size={13} /> {startError}
+              <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: '#ef4444' }} role="alert">
+                <AlertCircle size={13} className="shrink-0" /> {startError}
               </p>
+            )}
+            {outOfCredits && (
+              <button
+                onClick={() => router.push('/settings/subscription')}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-white transition hover:opacity-90"
+                style={{ background: '#dc2626' }}
+              >
+                Get credits
+              </button>
             )}
             <button
               disabled={categories.length === 0 || starting}
