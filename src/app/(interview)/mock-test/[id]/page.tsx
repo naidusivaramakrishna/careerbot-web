@@ -894,6 +894,23 @@ export default function MockTestPage() {
     const percentage = totalQuestions > 0 ? Math.round((totalAnswered / totalQuestions) * 100) : 0;
     const allComplete = summaryRows.every(r => r.attempted && r.answered === r.total);
 
+    // Why a section is not at 100%. Reading the code cannot distinguish "the
+    // section timed out with answers missing" from "the section was never
+    // recorded", and both render as a non-100% row — so state it on screen and in
+    // the console. A bug report or screenshot then carries its own diagnosis.
+    const shortfallReason = (row: typeof summaryRows[number]): string => {
+      if (!row.attempted) return 'no result was recorded for this section';
+      if (row.answered < row.total) return `${row.total - row.answered} question(s) left unanswered when the section ended`;
+      return '';
+    };
+    if (!allComplete) {
+      console.warn('[review-submit] sections not at 100%', {
+        recorded: sectionResults,
+        rendered: summaryRows,
+        sectionCount: SECTION_PROGRESSION.length,
+      });
+    }
+
     const now    = new Date();
     const dayStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -969,6 +986,13 @@ export default function MockTestPage() {
                           <span style={{ color: '#2d2d2d' }}>
                             {result.attempted ? `${result.answered} of ${result.total} answered` : 'not attempted'}
                           </span>
+                          {/* Spell out the shortfall rather than leaving the user to
+                              infer it from a percentage. */}
+                          {!done && (
+                            <span className="block text-xs mt-0.5" style={{ color: '#b45309' }}>
+                              {shortfallReason(result)}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="w-32" aria-hidden>
