@@ -177,7 +177,9 @@ export default function CodingProblemDetailPage() {
 
   const navigateTo = (target: CodingProblemSummary) => {
     document.documentElement.requestFullscreen?.().catch(() => {});
-    router.push(`/coding-test/${target.slug}`);
+    const mode = searchParams.get('mode');
+    const url = mode ? `/coding-test/${target.slug}?mode=${mode}` : `/coding-test/${target.slug}`;
+    router.push(url);
   };
 
   /* ── run / submit ── */
@@ -248,8 +250,10 @@ export default function CodingProblemDetailPage() {
   }, []);
 
   /* ── maximize: tracks real browser fullscreen state ── */
-  const [isMaximized, setIsMaximized] = useState(true);
+  const [isMaximized, setIsMaximized] = useState(false);
   useEffect(() => {
+    // Sync with actual fullscreen state (covers direct load, refresh, history nav).
+    setIsMaximized(!!document.fullscreenElement);
     const onFSChange = () => setIsMaximized(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFSChange);
     return () => document.removeEventListener('fullscreenchange', onFSChange);
@@ -380,6 +384,8 @@ export default function CodingProblemDetailPage() {
     // In practice mode skip AI grading entirely — run judge only.
     const judgePromise = submitCode(slug, language, code[language]);
     const gradePromise = isPracticeMode ? null : mockGrade(slug, language, code[language], problem?.title);
+    // Prevent unhandled rejection if judgePromise fails before gradePromise resolves.
+    gradePromise?.catch(() => {});
 
     try {
       const judgeRes = await judgePromise;
@@ -615,7 +621,7 @@ export default function CodingProblemDetailPage() {
               <Keyboard className="h-3.5 w-3.5" aria-hidden />
               <span className="hidden lg:inline">Shortcuts</span>
             </button>
-            <button type="button" onClick={() => setIsMaximized(true)} title="Full screen editor"
+            <button type="button" onClick={() => document.documentElement.requestFullscreen?.().catch(() => {})} title="Full screen editor"
               className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-indigo-600 transition">
               <Maximize2 className="h-3.5 w-3.5" aria-hidden />
               <span className="hidden sm:inline">Full screen</span>

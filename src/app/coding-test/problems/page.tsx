@@ -125,7 +125,11 @@ function CodingProblemsListContent() {
         if (err instanceof GradingApiError && err.status === 401) {
           fetchProblems(filters, controller.signal)
             .then((res) => applyResults(res.problems.map((p) => ({ ...p, user_status: null })), res.total))
-            .catch(() => {});
+            .catch((fallbackErr) => {
+              if (fallbackErr instanceof DOMException && fallbackErr.name === 'AbortError') return;
+              setErrorMessage(fallbackErr instanceof Error ? fallbackErr.message : 'Something went wrong.');
+              setState('error');
+            });
           return;
         }
         setErrorMessage(err instanceof Error ? err.message : 'Something went wrong.');

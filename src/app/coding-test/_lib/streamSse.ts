@@ -54,6 +54,9 @@ export async function* streamSse(
 
       buffer += decoder.decode(value, { stream: true });
 
+      // Normalize CRLF to LF
+      buffer = buffer.replace(/\r\n/g, '\n');
+
       // SSE events are separated by \n\n
       const parts = buffer.split('\n\n');
       buffer = parts.pop() ?? '';
@@ -64,7 +67,7 @@ export async function* streamSse(
       }
     }
   } finally {
-    reader.releaseLock();
+    await reader.cancel().catch(() => {});
   }
 }
 
@@ -76,7 +79,10 @@ function parseSseBlock(block: string): SseEvent | null {
 
   for (const line of block.split('\n')) {
     if (line.startsWith('event: ')) eventType = line.slice(7).trim();
-    else if (line.startsWith('data: ')) data = line.slice(6);
+    else if (line.startsWith('data:')) {
+      const rest = line.slice(5).replace(/^ /, '');
+      data = data ? `${data}\n${rest}` : rest;
+    }
   }
 
   if (!data) return null;

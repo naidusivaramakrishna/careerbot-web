@@ -54,7 +54,7 @@ export default function CodingTestHistoryPage() {
 
     Promise.all([
       fetchProgress(),
-      fetchSubmissions(1, 50),
+      fetchSubmissions(1, 50).catch(() => ({ entries: [] as HistoryEntry[] })),
     ])
       .then(([progressRes, historyRes]) => {
         if (!active) return;

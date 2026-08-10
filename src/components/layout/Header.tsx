@@ -244,7 +244,7 @@ export default function Header() {
 
   const displayName    = userProfile?.username || 'User';
   const displayEmail   = userProfile?.email || '';
-  const displayInitial = (userProfile?.full_name || userProfile?.username || 'U')[0].toUpperCase();
+  const displayInitial = (userProfile?.username || 'U')[0].toUpperCase();
   const creditPct = balance?.credits_total
     ? Math.min(100, Math.max(0, (balance.credits_remaining / balance.credits_total) * 100))
     : 0;

@@ -82,17 +82,9 @@ export default function CodingPracticeHub() {
       if (document.visibilityState === 'visible') loadData();
     };
 
-    // Also re-fetch when the problem page signals an accepted submit via
-    // localStorage (works even if visibilitychange doesn't fire in the same tab).
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'progress_updated') loadData();
-    };
-
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('storage', onStorage);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
