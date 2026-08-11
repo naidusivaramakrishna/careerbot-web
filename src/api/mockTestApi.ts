@@ -100,6 +100,85 @@ const MAX_EXCLUDE_IDS = 50;
 const limitExcludeIds = (ids: string[]): string[] =>
   ids.length <= MAX_EXCLUDE_IDS ? ids : ids.slice(-MAX_EXCLUDE_IDS);
 
+export interface MockTestApiError {
+  /** Human-readable text that is always safe to render directly in the UI. */
+  message: string;
+  /** True when the request was rejected for lack of credits (HTTP 402). */
+  insufficientCredits: boolean;
+  creditsRequired?: number;
+  creditsRemaining?: number;
+}
+
+/**
+ * Normalise an error from any /mock-test endpoint into something renderable.
+ *
+ * The backend wraps every failure as
+ *   { success: false, error: { message, error_code, details } }
+ * so the old `data.detail ?? data.message ?? data.error` fallback chain fell
+ * through to `data.error` — an OBJECT — and rendered as "[object Object]".
+ * That turned a plain out-of-credits 402 into what looked like a generation
+ * failure, which is why "custom test is not generating" was reported.
+ */
+export const parseMockTestError = (err: unknown): MockTestApiError => {
+  interface ErrorDetails {
+    error?: string;
+    message?: string;
+    credits_required?: number;
+    credits_remaining?: number;
+  }
+  interface ErrorEnvelope {
+    message?: string;
+    error_code?: string;
+    details?: ErrorDetails;
+  }
+  interface ErrorBody {
+    error?: ErrorEnvelope | string;
+    detail?: string;
+    message?: string;
+  }
+  const e = err as { response?: { status?: number; data?: ErrorBody }; message?: string };
+  const status = e?.response?.status;
+  const data   = e?.response?.data;
+
+  // `error` is the structured envelope on most routes, but a bare string on a few.
+  const rawError   = data?.error;
+  const structured = rawError && typeof rawError === 'object' ? rawError : null;
+  const details    = structured?.details;
+
+  const insufficientCredits =
+    status === 402 ||
+    structured?.error_code === 'HTTP_402' ||
+    details?.error === 'INSUFFICIENT_CREDITS';
+
+  const creditsRequired  = typeof details?.credits_required  === 'number' ? details.credits_required  : undefined;
+  const creditsRemaining = typeof details?.credits_remaining === 'number' ? details.credits_remaining : undefined;
+
+  if (insufficientCredits) {
+    const balance = creditsRequired != null && creditsRemaining != null
+      ? ` This test needs ${creditsRequired} credits and you have ${creditsRemaining}.`
+      : '';
+    return {
+      message: `Not enough credits to start this test.${balance}`,
+      insufficientCredits: true,
+      creditsRequired,
+      creditsRemaining,
+    };
+  }
+
+  // Only ever accept a STRING as the message — anything else is what produced
+  // "[object Object]" before.
+  const message =
+    (typeof details?.message   === 'string' && details.message)   ||
+    (typeof structured?.message === 'string' && structured.message) ||
+    (typeof rawError            === 'string' && rawError)           ||
+    (typeof data?.detail        === 'string' && data.detail)        ||
+    (typeof data?.message       === 'string' && data.message)       ||
+    e?.message ||
+    'Something went wrong. Please try again.';
+
+  return { message, insufficientCredits: false, creditsRequired, creditsRemaining };
+};
+
 /** The only difficulty values the backend accepts (mock_test schemas.py: VALID_DIFFICULTIES). */
 export type MockTestDifficulty = 'easy' | 'medium' | 'hard';
 
@@ -323,12 +402,65 @@ export const submitTest = async (sessionId: string): Promise<void> => {
   }
 };
 
-export const submitParentSession = async (parentSessionId: string): Promise<void> => {
-  try {
-    await httpClient.post(`/mock-test/parent/${parentSessionId}/submit`, {});
-  } catch (err: any) {
-    throw err;
+/**
+ * Submit the whole test. Idempotent server-side — resubmitting a parent returns
+ * the existing report — so retrying after a network failure is safe.
+ *
+ * The explicit timeout matters: the shared client defaults to 120s, and a stalled
+ * submit left the user on a "Scoring your test" spinner for two full minutes with
+ * no way out, which reads as a dead button. Aggregation is a DB roll-up that
+ * normally answers in well under a second.
+ */
+export const submitParentSession = async (
+  parentSessionId: string,
+  timeoutMs: number = 45000,
+): Promise<void> => {
+  await httpClient.post(`/mock-test/parent/${parentSessionId}/submit`, {}, { timeout: timeoutMs });
+};
+
+/**
+ * Everything needed to locate a failed report in the backend log, carried on the
+ * thrown error. Without this a tester's screenshot said only "Unable to Load
+ * Results", and the error_id / request_id that pinpoint the failure server-side
+ * were discarded at the point of failure.
+ */
+export interface ResultErrorDiagnostics {
+  parentSessionId: string;
+  status?: number | 'network';
+  errorCode?: string;
+  errorId?: string;
+  requestId?: string;
+  backendMessage?: string;
+  attempts: number;
+}
+
+export class MockTestResultError extends Error {
+  diagnostics: ResultErrorDiagnostics;
+  constructor(message: string, diagnostics: ResultErrorDiagnostics) {
+    super(message);
+    this.name = 'MockTestResultError';
+    this.diagnostics = diagnostics;
   }
+}
+
+const buildResultDiagnostics = (
+  err: unknown,
+  parentSessionId: string,
+  attempts: number,
+): ResultErrorDiagnostics => {
+  const e = err as { response?: { status?: number; data?: { error?: Record<string, unknown> } } };
+  const backendError = e?.response?.data?.error;
+  const structured = backendError && typeof backendError === 'object' ? backendError : undefined;
+  const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+  return {
+    parentSessionId,
+    status: e?.response?.status ?? 'network',
+    errorCode: str(structured?.error_code),
+    errorId: str(structured?.error_id),
+    requestId: str(structured?.request_id),
+    backendMessage: str(structured?.message),
+    attempts,
+  };
 };
 
 export const getParentSessionResult = async (parentSessionId: string): Promise<TestResult> => {
@@ -363,13 +495,21 @@ export const getParentSessionResult = async (parentSessionId: string): Promise<T
     } catch (err: any) {
       const status = err?.response?.status;
       const message = err?.message || 'Unknown error';
+      const diagnostics = buildResultDiagnostics(err, parentSessionId, attempt);
 
+      // Prefer the backend's own message — it names the actual cause (e.g.
+      // "No sessions found for parent_session_id '…'") instead of our guess.
       let errorMsg = '';
-      if (status === 404) errorMsg = `Results not found for parent session ${parentSessionId}. Still processing.`;
-      else if (status === 500) errorMsg = 'Server error while fetching results.';
-      else errorMsg = `Error (${status ?? 'network'}): ${message}`;
+      if (status === 404) {
+        errorMsg = diagnostics.backendMessage
+          ?? `No report found for this test yet. It may not have been submitted successfully.`;
+      } else if (status === 500) {
+        errorMsg = diagnostics.backendMessage ?? 'The server failed while building your report.';
+      } else {
+        errorMsg = diagnostics.backendMessage ?? `Error (${status ?? 'network'}): ${message}`;
+      }
 
-      lastError = new Error(errorMsg);
+      lastError = new MockTestResultError(errorMsg, diagnostics);
 
       if (status === 404 && attempt < MAX_ATTEMPTS) {
         await new Promise(resolve => setTimeout(resolve, POLL_DELAY_MS));
@@ -609,6 +749,100 @@ export const reportIssue = async (sessionId: string, questionId: string | number
       description,
     });
   } catch (err: any) {
+    throw err;
+  }
+};
+
+// ─── Video (proctoring) evaluation ───────────────────────────────────────────
+
+/** Mirrors VideoEvaluationResponse in mock_test_service/schemas.py. */
+export interface VideoEvaluation {
+  evaluation_id: string;
+  session_id: string;
+  filename?: string | null;
+  duration_seconds: number;
+  /** AI payload, passed through unchanged so new fields arrive without a release. */
+  result: Record<string, unknown>;
+  created_at?: string | null;
+}
+
+/** Matches MOCK_TEST_VIDEO_MAX_BYTES on the backend (default 1 GB). */
+export const MOCK_TEST_VIDEO_MAX_BYTES = 1024 * 1024 * 1024;
+
+/** Matches VIDEO_ACCEPTED_FORMATS in mock_interview_service/constants.py. */
+export const MOCK_TEST_VIDEO_EXTENSIONS = [
+  '.mp4', '.mov', '.webm', '.avi', '.mkv', '.mpeg', '.mpg', '.wmv', '.m4v', '.flv',
+];
+
+/**
+ * Reject locally what the backend would reject anyway, so an 80-minute recording
+ * isn't uploaded just to come back 413. Returns null when the file is acceptable.
+ */
+export const validateAttemptVideo = (blob: Blob, filename: string): string | null => {
+  if (!blob.size) return 'The recording is empty.';
+  if (blob.size > MOCK_TEST_VIDEO_MAX_BYTES) {
+    const mb = (blob.size / (1024 * 1024)).toFixed(0);
+    const limit = (MOCK_TEST_VIDEO_MAX_BYTES / (1024 * 1024)).toFixed(0);
+    return `Recording is ${mb} MB — the limit is ${limit} MB.`;
+  }
+  const dot = filename.lastIndexOf('.');
+  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : '';
+  if (!MOCK_TEST_VIDEO_EXTENSIONS.includes(ext)) {
+    return `Unsupported video format ${ext || 'unknown'}. Accepted: ${MOCK_TEST_VIDEO_EXTENSIONS.join(', ')}.`;
+  }
+  return null;
+};
+
+/**
+ * POST /mock-test/{session_id}/video-evaluation (multipart).
+ *
+ * `sessionId` may be a child section session OR the parent_session_id — the
+ * backend resolves either (see evaluate_video), so the runner can pass the same
+ * parent id it already uses for submit and results.
+ */
+export const uploadSessionVideo = async (
+  sessionId: string,
+  video: Blob,
+  filename: string = 'attempt.webm',
+  options: { onProgress?: (percent: number) => void; timeoutMs?: number } = {},
+): Promise<VideoEvaluation> => {
+  const localError = validateAttemptVideo(video, filename);
+  if (localError) throw new Error(localError);
+
+  // Strip the codecs parameter: MediaRecorder produces "video/webm;codecs=vp9",
+  // and the AI evaluator matches on the bare container type.
+  const cleanType = (video.type || 'video/webm').split(';')[0];
+  const cleanBlob = video.type === cleanType ? video : new Blob([video], { type: cleanType });
+
+  const formData = new FormData();
+  formData.append('file', cleanBlob, filename);
+
+  const response = await httpClient.post<VideoEvaluation>(
+    `/mock-test/${sessionId}/video-evaluation`,
+    formData,
+    {
+      // Let the browser set the multipart boundary.
+      headers: { 'Content-Type': undefined },
+      // A long recording is a large upload — the shared 120s default would abort it.
+      timeout: options.timeoutMs ?? 15 * 60 * 1000,
+      onUploadProgress: options.onProgress
+        ? (e) => {
+            if (!e.total) return;
+            options.onProgress!(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+          }
+        : undefined,
+    },
+  );
+  return (response.data as { data?: VideoEvaluation })?.data ?? response.data;
+};
+
+/** GET the stored evaluation. Returns null when none exists (404) rather than throwing. */
+export const getSessionVideoEvaluation = async (sessionId: string): Promise<VideoEvaluation | null> => {
+  try {
+    const response = await httpClient.get<VideoEvaluation>(`/mock-test/${sessionId}/video-evaluation`);
+    return (response.data as { data?: VideoEvaluation })?.data ?? response.data;
+  } catch (err: unknown) {
+    if ((err as { response?: { status?: number } })?.response?.status === 404) return null;
     throw err;
   }
 };
@@ -853,16 +1087,21 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
 
     // Pick the best accuracy value from an item regardless of exact field name.
     // Backend may send 0–1 decimal (e.g. 0.10) or 0–100 percentage (e.g. 10).
+    // Read the score from the field the backend actually sends (`score_percent`,
+    // already 0-100 and rounded to 1dp), with narrow fallbacks for older shapes.
+    //
+    // This replaces a scan that fell back to "any non-zero numeric field" — which
+    // would happily report an attempts count or a question total as if it were an
+    // accuracy percentage. Nothing here guesses: an unrecognised payload reads 0
+    // rather than inventing a number.
     const extractAccuracy = (item: any): number => {
-      // Dynamic scan: prefer any numeric field whose key contains "accuracy", then "score"
-      const entries = Object.entries(item as Record<string, unknown>)
-        .filter(([, v]) => typeof v === 'number' && !isNaN(v as number))
-        .map(([k, v]) => ({ k, v: v as number }));
-      const pick = (re: RegExp) => entries.find(e => re.test(e.k) && e.v !== 0);
-      const found = pick(/accuracy/i) ?? pick(/score/i) ?? pick(/rate|pct|percent/i) ?? entries.find(e => e.v !== 0);
-      const raw = found?.v ?? 0;
-      // Normalise: if value is in 0–1 range it's a decimal fraction → multiply by 100
-      return Math.round(raw > 0 && raw <= 1 ? raw * 100 : raw);
+      const candidates = [item?.score_percent, item?.accuracy, item?.accuracy_percentage, item?.score];
+      const raw = candidates.find(v => typeof v === 'number' && !isNaN(v));
+      if (typeof raw !== 'number') return 0;
+      // Some older payloads express accuracy as a 0-1 fraction. Only treat a value
+      // as a fraction when it is strictly below 1 — 1 itself is far more likely to
+      // mean "1%" on a weak-area row than "100%".
+      return Math.round(raw > 0 && raw < 1 ? raw * 100 : raw);
     };
 
     const isWeakItem = (item: any): boolean => {
@@ -906,12 +1145,19 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
       s.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim();
 
     const toWeakArea = (item: any): WeakArea => {
-      // Show the SECTION name (Aptitude / Arithmetic / …), never the raw subcategory
-      // slug. The backend sends `section` plus a `subcategory` slug ("abstract",
-      // "ratios"); reading subcategory first is what surfaced those slugs in the UI.
-      const rawTopic: string =
-        item.section ?? item.section_id ?? item.topic ?? item.category ?? item.name ?? 'Unknown';
-      const topic = humanise(String(rawTopic));
+      // The backend emits TWO kinds of row: a section-level one (subcategory null)
+      // whose score is the section's accuracy, and per-subcategory rows scored on
+      // that topic alone. Labelling both with just the section name made a topic's
+      // score read as the section's score — the reported wrong accuracy.
+      // Section rows keep the plain section name; subcategory rows are qualified
+      // with the topic, so each number is labelled with what it measures.
+      const sectionName = humanise(String(
+        item.section ?? item.section_id ?? item.topic ?? item.category ?? item.name ?? 'Unknown'
+      ));
+      const subcategory = typeof item.subcategory === 'string' ? item.subcategory.trim() : '';
+      const topic = subcategory
+        ? `${sectionName} · ${humanise(subcategory)}`
+        : sectionName;
       const accuracy = extractAccuracy(item);
       const attempts: number = item.attempts ?? item.total_attempts ?? item.count ?? 0;
 
@@ -929,17 +1175,16 @@ export const getWeakAreasAnalytics = async (): Promise<WeakAreasAnalytics> => {
       let weakItems = items.filter(isWeakItem);
       if (weakItems.length === 0) weakItems = items; // show all if nothing flagged
 
-      // The backend emits one row per section AND one row per weak subcategory
-      // within it. Since we now label every row by its section, those collapse
-      // into duplicates — keep only the weakest (lowest accuracy) row per section.
-      const worstBySection = new Map<string, WeakArea>();
+      // Section and subcategory rows are now labelled distinctly, so they are no
+      // longer duplicates to be collapsed. Collapsing them by section and keeping
+      // the LOWEST score is what displayed a subcategory's accuracy under the
+      // section's name. Dedupe only on the final label, which can still repeat if
+      // the backend sends the same row twice.
+      const byLabel = new Map<string, WeakArea>();
       for (const area of weakItems.map(toWeakArea)) {
-        const existing = worstBySection.get(area.topic);
-        if (!existing || area.accuracy < existing.accuracy) {
-          worstBySection.set(area.topic, area);
-        }
+        if (!byLabel.has(area.topic)) byLabel.set(area.topic, area);
       }
-      const weakAreas = [...worstBySection.values()].sort((a, b) => a.accuracy - b.accuracy);
+      const weakAreas = [...byLabel.values()].sort((a, b) => a.accuracy - b.accuracy);
       // Only forward recommendations that the backend actually sent. Removed
       // the previous "Focus on: X, Y, Z" / "Practice weak areas regularly"
       // fabrications — those were frontend boilerplate that looked like real
