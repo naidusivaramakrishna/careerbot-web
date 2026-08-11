@@ -656,10 +656,25 @@ export default function CodingProblemDetailPage() {
           SPLIT PANE
       ════════════════════════════════════════ */}
       {isReady && problem && (
-        <div
-          ref={containerRef}
-          className={`flex ${isMaximized && isDesktop ? 'flex-row flex-1 overflow-hidden' : 'flex-col lg:flex-1 lg:flex-row lg:overflow-hidden'}${isDragging ? ' select-none' : ''}`}
-        >
+        <>
+          {isMaximized && (
+            <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg bg-slate-900/80 backdrop-blur-sm px-3 py-2 text-xs text-slate-100">
+              <span className="hidden sm:inline">Press <kbd className="font-mono font-semibold">Esc</kbd> to exit</span>
+              <button
+                type="button"
+                onClick={() => document.exitFullscreen?.().catch(() => {})}
+                title="Exit full screen"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-slate-700 transition"
+              >
+                <X className="h-4 w-4" aria-hidden />
+                <span className="hidden sm:inline">Exit</span>
+              </button>
+            </div>
+          )}
+          <div
+            ref={containerRef}
+            className={`flex ${isMaximized && isDesktop ? 'flex-row flex-1 overflow-hidden' : 'flex-col lg:flex-1 lg:flex-row lg:overflow-hidden'}${isDragging ? ' select-none' : ''}`}
+          >
 
           {/* ── Left panel: problem statement ── */}
           <section
@@ -981,7 +996,8 @@ export default function CodingProblemDetailPage() {
             </div>
           </section>
 
-        </div>
+          </div>
+        </>
       )}
     </main>
   );

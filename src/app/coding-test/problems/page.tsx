@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Circle, Code2, RotateCw, SearchX, X } from 'lucide-react';
 import { fetchProblems } from '../_lib/api';
-import { fetchProblemsAnnotated, GradingApiError } from '../_lib/gradingApi';
+import { fetchProblemsAnnotated } from '../_lib/gradingApi';
 import type {
   CodingTestDifficulty,
   CodingTestLanguage,
@@ -409,6 +409,7 @@ function CodingProblemsListContent() {
                     <li key={p.slug}>
                       <Link
                         href={language ? `/coding-test/${p.slug}?language=${language}` : `/coding-test/${p.slug}`}
+                        onClick={() => { document.documentElement.requestFullscreen?.().catch(() => {}); }}
                         className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
                       >
                         <div className="flex min-w-0 items-center gap-3">
