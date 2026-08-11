@@ -109,9 +109,9 @@ export const ERROR_MESSAGES: Record<CoverLetterApiErrorReason, string> = {
   rate_limit:
     "You've made too many requests in a short window. Please try again in a moment.",
   upstream_contract:
-    "Something went wrong with generation. Please try again.",
+    "The generation service returned an invalid response. Please try again.",
   upstream_generation:
-    "Something went wrong with generation. Please try again.",
+    "The AI generation service is temporarily unavailable. Please try again.",
   unavailable:
     "Cover letter generation is temporarily unavailable. Please try again later.",
   timeout:
