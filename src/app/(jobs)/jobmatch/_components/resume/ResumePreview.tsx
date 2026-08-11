@@ -17,6 +17,11 @@ interface ResumePreviewProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   editOverrides?: Record<string, any>;
   addedFields?: Record<string, string[]>;
+  /** Missing-skill suggestions not yet added — rendered as red "ghost" chips until added. */
+  pendingSkills?: string[];
+  pendingSoftSkills?: string[];
+  /** Same shape as addedFields, for suggestions (title/summary/bullets) not yet applied — red instead of green. */
+  pendingFields?: Record<string, string[]>;
   onEditSection?: (key: string) => void;
   onDeleteSection?: (key: string) => void;
   deletedSections?: string[];
@@ -39,6 +44,9 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   activeSection,
   editOverrides,
   addedFields,
+  pendingSkills,
+  pendingSoftSkills,
+  pendingFields,
   onEditSection,
   onDeleteSection,
   deletedSections,
@@ -144,7 +152,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           </div>
         )}
         <div ref={scrollContainerRef}>
-          <JobMatchTemplateThree data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} />
+          <JobMatchTemplateThree data={parsedData} activeSection={activeSection} editOverrides={editOverrides} addedFields={addedFields} pendingSkills={pendingSkills} pendingSoftSkills={pendingSoftSkills} pendingFields={pendingFields} onEditSection={onEditSection} onDeleteSection={onDeleteSection} deletedSections={deletedSections} fontFamily={fontFamily} />
         </div>
       </div>
     );

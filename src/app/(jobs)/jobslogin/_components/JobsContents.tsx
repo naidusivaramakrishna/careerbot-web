@@ -7,7 +7,7 @@ import { getSmartMatchedJobs, getJobById } from "@/api/jobsApi";
 import type { MatchedJobItem } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/filterConstants";
 import { toast } from "sonner";
-import { getSavedJobIds, getSavedJobsCount, getApplicationHistory, getApplicationCount, recordJobApplication } from "@/utils/jobTracking";
+import { getSavedJobs, getSavedJobsCount, getApplicationHistory, getApplicationCount, recordJobApplication, removeApplication } from "@/utils/jobTracking";
 import { getJobId } from "@/utils/jobIdHelper";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { Bookmark, Zap, Search, RotateCcw, FileX, MessageCircle, CheckCircle2, Briefcase, X } from "lucide-react";
@@ -349,23 +349,48 @@ export default function JobsContents() {
 
   // ── Fetch full details for saved jobs by id — works regardless of which
   //    tab/page a job was originally saved from, unlike filtering the
-  //    currently-loaded "All Jobs"/"Smart Match" arrays. ──
+  //    currently-loaded "All Jobs"/"Smart Match" arrays. Same placeholder-
+  //    then-enrich pattern as fetchAppliedJobsList: many saved jobs (any
+  //    aggregated/external listing without a real backend id — see
+  //    getJobId's composite-* fallback in jobIdHelper.ts) will never resolve
+  //    through getJobById, since that composite id was never stored
+  //    backend-side. Falling back to null on a failed lookup would silently
+  //    drop those jobs from the list even though they're genuinely saved. ──
   const fetchSavedJobsList = useCallback(async () => {
-    const savedIds = getSavedJobIds(userId);
-    if (savedIds.length === 0) {
+    const saved = getSavedJobs(userId);
+    // Re-derive the badge from the same read so it can never drift from the
+    // list actually shown here, even if some other path missed a save/unsave.
+    setSavedJobsCount(saved.length);
+    if (saved.length === 0) {
       setSavedJobsList([]);
       return;
     }
+
+    const placeholders = saved.map((job) =>
+      normalizeJob({
+        id: job.jobId,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        type: job.type,
+        created_at: job.savedAt,
+      })
+    );
+    setSavedJobsList(placeholders);
+
     setSavedJobsListLoading(true);
     try {
-      const results = await Promise.all(
-        savedIds.map((id) =>
-          getJobById(id)
-            .then((res) => (res.data ? normalizeJob(res.data as unknown as Record<string, unknown>) : null))
-            .catch(() => null)
-        )
+      const enriched = await Promise.all(
+        saved.map(async (job) => {
+          try {
+            const res = await getJobById(job.jobId);
+            return res.data ? normalizeJob(res.data as unknown as Record<string, unknown>) : null;
+          } catch {
+            return null;
+          }
+        })
       );
-      setSavedJobsList(results.filter((j): j is NormalizedJob => j !== null));
+      setSavedJobsList((prev) => prev.map((job, i) => enriched[i] ?? job));
     } finally {
       setSavedJobsListLoading(false);
     }
@@ -441,13 +466,20 @@ export default function JobsContents() {
   }, []);
 
   useEffect(() => {
-    const handleVisibility = () => {
+    const showConfirmationOnReturn = () => {
       if (!document.hidden && pendingApplyJob) {
         setShowApplyConfirm(true);
       }
     };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("visibilitychange", showConfirmationOnReturn);
+    // Chrome does not always mark the original document hidden when a
+    // target=_blank application page opens (for example, when it opens in the
+    // background). Window focus reliably covers the return path in that case.
+    window.addEventListener("focus", showConfirmationOnReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", showConfirmationOnReturn);
+      window.removeEventListener("focus", showConfirmationOnReturn);
+    };
   }, [pendingApplyJob]);
 
   // Covers the case where this component remounts (e.g. a route change)
@@ -472,6 +504,33 @@ export default function JobsContents() {
   //    tab badge is accurate without requiring a visit to the Saved tab. ──
   useEffect(() => {
     setSavedJobsCount(getSavedJobsCount(userId));
+  }, [userId]);
+
+  // ── Save/unsave from any job card (Smart Match, Saved, or Applied tab —
+  //    JobCard is shared across all three) — updates the tab badge and, if
+  //    a job is unsaved while the Saved tab's list is already loaded, drops
+  //    it from that list immediately instead of waiting for the next time
+  //    the Saved tab is (re)activated. ──
+  const handleSaveToggle = useCallback((jobId: string, saved: boolean) => {
+    if (saved) {
+      // localStorage is updated synchronously by JobCard before this callback,
+      // so refresh from the source of truth immediately. This keeps the Saved
+      // list and badge ready even before the user switches tabs.
+      void fetchSavedJobsList();
+    } else {
+      setSavedJobsCount((c) => Math.max(0, c - 1));
+      setSavedJobsList((prev) => prev.filter((job) => job.id !== jobId));
+    }
+  }, [fetchSavedJobsList]);
+
+  // ── Permanently remove an entry from the Applied tab — deletes the
+  //    underlying application record (unlike the Smart Match "Not
+  //    interested" dismiss, which only ever hides a card for the current
+  //    session) so it can't reappear on the next fetch. ──
+  const handleRemoveApplication = useCallback((jobId: string) => {
+    removeApplication(jobId, userId);
+    setAppliedJobsList((prev) => prev.filter((job) => job.id !== jobId));
+    setAppliedJobsCount((c) => Math.max(0, c - 1));
   }, [userId]);
 
   // ── Trigger SmartMatch fetch when tab becomes active — also covers the
@@ -500,9 +559,17 @@ export default function JobsContents() {
     [matchedJobs]
   );
 
-  const handleMatchedPageChange = (page: number) => {
-    fetchSmartMatchedJobs(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const handleMatchedPageChange = async (page: number) => {
+    const jobsScrollPanel = document.getElementById("jobs-main-scroll");
+
+    // The jobs workspace has its own scroll container, so scrolling the
+    // browser window does not move the results list. Reset it immediately
+    // for loading feedback, then once more after the new page has rendered.
+    jobsScrollPanel?.scrollTo({ top: 0, behavior: "smooth" });
+    await fetchSmartMatchedJobs(page);
+    requestAnimationFrame(() => {
+      jobsScrollPanel?.scrollTo({ top: 0, behavior: "auto" });
+    });
   };
 
   // ── Client-side filter / tab logic — searchQuery filters by title/company
@@ -625,15 +692,15 @@ export default function JobsContents() {
     isMatchedTab && !matchedNoResume && matchedJobs.length > 0 && !!(searchQuery || selectedFilters.length > 0);
 
   return (
-    <div className="flex h-full w-full max-w-full min-w-0 items-stretch gap-4 overflow-hidden bg-white">
+    <div className="jobs-workspace flex h-full w-full max-w-full min-w-0 items-stretch gap-4 overflow-hidden bg-white">
       {/* CENTER PANEL — scrolls internally so the right sidebar never moves */}
-      <main id="jobs-main-scroll" className="h-full min-w-0 flex-1 overflow-y-auto border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.06)]">
+      <main id="jobs-main-scroll" className="scrollbar-hide h-full min-w-0 flex-1 overflow-y-auto border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.06)]">
         {/* RESULTS VIEW */}
 
         
         <div>
             {/* TOP BAR */}
-            <div className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="jobs-page-topbar flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5">
@@ -677,7 +744,7 @@ export default function JobsContents() {
                     onFocus={() => inputValue.trim() && setShowSuggestions(suggestions.length > 0)}
                     onKeyDown={(e) => { if (e.key === "Enter") commitSearch(inputValue); }}
                     placeholder="Search by title or company"
-                    className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-10 pr-4 text-[13px] text-slate-700 shadow-sm placeholder:text-slate-400 transition-all focus:border-[#4F46E5]/45 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#4F46E5]/10 lg:w-[min(440px,36vw)]"
+                    className="jobs-search-input w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-10 pr-4 text-[13px] text-slate-700 shadow-sm placeholder:text-slate-400 transition-all focus:border-[#4F46E5]/45 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#4F46E5]/10 lg:w-[min(440px,36vw)]"
                   />
                   {/* Autocomplete dropdown */}
                   {showSuggestions && (
@@ -712,7 +779,7 @@ export default function JobsContents() {
                 <button
                   type="button"
                   onClick={() => commitSearch(inputValue)}
-                  className="flex shrink-0 items-center gap-1.5 rounded-2xl bg-[#4F46E5] px-6 py-3.5 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(79,70,229,0.22)] transition-all hover:bg-[#4338CA] hover:shadow-[0_16px_36px_rgba(79,70,229,0.30)] active:scale-95"
+                  className="jobs-search-button flex shrink-0 items-center gap-1.5 rounded-2xl bg-[#4F46E5] px-6 py-3.5 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(79,70,229,0.22)] transition-all hover:bg-[#4338CA] hover:shadow-[0_16px_36px_rgba(79,70,229,0.30)] active:scale-95"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
@@ -724,7 +791,7 @@ export default function JobsContents() {
 
               <div className="px-5 sm:px-6">
               {/* STICKY FILTER + TABS BAR */}
-              <div className="sticky top-0 z-30 -mx-5 border-b border-slate-200/80 bg-white px-5 pb-0 sm:-mx-6 sm:px-6">
+              <div className="jobs-controls sticky top-0 z-30 -mx-5 border-b border-slate-200/80 bg-white px-5 pb-0 sm:-mx-6 sm:px-6">
                 <JobsFilterSidebar
                   selectedFilters={selectedFilters}
                   onFilterToggle={handleFilterToggle}
@@ -845,6 +912,9 @@ export default function JobsContents() {
                         url: job.url || job.application_url || "",
                       })
                     }
+                    onSaveToggle={handleSaveToggle}
+                    onRemoveApplication={activeTab === "applied" ? handleRemoveApplication : undefined}
+                    allowDismiss={isMatchedTab}
                   />
                 )}
 
@@ -865,7 +935,7 @@ export default function JobsContents() {
 
       {/* RIGHT SIDEBAR — fixed in place; the page itself never scrolls, only
           the job list (above) does, so this column just stays put. */}
-      <aside className="hidden h-full w-[360px] shrink-0 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.07)] xl:flex xl:flex-col 2xl:w-[400px]">
+      <aside className="jobs-intelligence-panel hidden h-full w-[360px] shrink-0 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.07)] xl:flex xl:flex-col 2xl:w-[400px]">
         <JobsRightSidebar
           topPicks={topPickJobs}
           topPicksLoading={matchedLoading && !matchedFetched}

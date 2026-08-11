@@ -1,5 +1,6 @@
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import "./jobs-premium.css";
 
 export default function JobsLoginLayout({
   children,
@@ -7,7 +8,7 @@ export default function JobsLoginLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen overflow-hidden bg-white" style={{ "--header-h": "56px" } as React.CSSProperties}>
+    <div className="jobs-premium-theme flex h-screen overflow-hidden bg-white" style={{ "--header-h": "56px" } as React.CSSProperties}>
       {/* LEFT SIDEBAR */}
       <aside
         className="shrink-0 bg-white transition-[width] duration-300"

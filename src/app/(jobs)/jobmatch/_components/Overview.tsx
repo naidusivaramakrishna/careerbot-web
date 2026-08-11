@@ -82,19 +82,14 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
   });
 
   const [activeTab, setActiveTab] = useState<"upload" | "analysis" | "chat">(() => {
-    // Callers that already ran the match themselves (e.g. "Fix My Resume" from
-    // a job card, which pre-seeds jm_matchResults/jm_parsedResumeData) set this
-    // one-shot flag to skip straight to the results view instead of the normal
-    // "always start with upload page, clear old session data" behavior below.
+    // Restore an existing analysis for the lifetime of this browser tab. The
+    // previous implementation deleted these values on every route remount,
+    // which made ordinary in-app navigation destroy the user's work.
     try {
-      const skipWizard = sessionStorage.getItem("jm_skipWizard") === "true";
       sessionStorage.removeItem("jm_skipWizard");
-      if (skipWizard && sessionStorage.getItem("jm_matchResults")) {
+      if (!sessionId && sessionStorage.getItem("jm_matchResults")) {
         return "analysis";
       }
-      sessionStorage.removeItem("jm_matchResults");
-      sessionStorage.removeItem("jm_parsedResumeData");
-      sessionStorage.removeItem("jm_parsedJDData");
     } catch {}
     return "upload";
   });

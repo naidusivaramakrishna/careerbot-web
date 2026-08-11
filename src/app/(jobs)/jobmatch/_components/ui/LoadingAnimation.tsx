@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 type LoadingStage =
   | "parsing"
   | "extracting"
@@ -15,21 +17,77 @@ const stageLabels: Record<LoadingStage, string> = {
   generating: "Preparing your results",
 };
 
+const loadingMessages = Object.values(stageLabels);
+
 export default function LoadingAnimation({ stage }: { stage: LoadingStage }) {
+  const [messageIndex, setMessageIndex] = useState(() =>
+    loadingMessages.indexOf(stageLabels[stage]),
+  );
+  const [displayedMessage, setDisplayedMessage] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const activeMessage = loadingMessages[messageIndex];
+
+  useEffect(() => {
+    // This isn't wired to real backend progress, so it must never actually
+    // reach 100 — it's a fake progress indicator that holds near the top
+    // until the parent swaps this component out for the real result.
+    // Looping back to 0 (the old behavior) reads as the operation restarting.
+    const progressTimer = window.setInterval(() => {
+      setProgress((current) => (current >= 99 ? 99 : current + 1));
+    }, 90);
+
+    return () => window.clearInterval(progressTimer);
+  }, []);
+
+  useEffect(() => {
+    const messageIsComplete = displayedMessage === activeMessage;
+    const messageIsEmpty = displayedMessage.length === 0;
+    const delay = isDeleting ? 38 : messageIsComplete ? 1200 : 65;
+
+    const timer = window.setTimeout(() => {
+      if (messageIsComplete && !isDeleting) {
+        setIsDeleting(true);
+        return;
+      }
+
+      if (messageIsEmpty && isDeleting) {
+        setIsDeleting(false);
+        setMessageIndex((current) => (current + 1) % loadingMessages.length);
+        return;
+      }
+
+      setDisplayedMessage(
+        activeMessage.slice(0, displayedMessage.length + (isDeleting ? -1 : 1)),
+      );
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [activeMessage, displayedMessage, isDeleting]);
+
   return (
     <main
-      className="flex min-h-[calc(100vh-56px)] items-center justify-center bg-[#f5f7fb] px-5"
+      className="flex min-h-[calc(100vh-56px)] items-center justify-center bg-white px-5"
       aria-live="polite"
-      aria-label={stageLabels[stage]}
+      aria-label={activeMessage}
     >
-      <div className="flex flex-col items-center gap-4">
-        <div
-          className="h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600 motion-reduce:animate-none"
-          role="status"
-        >
-          <span className="sr-only">{stageLabels[stage]}</span>
+      <div className="flex flex-col items-center gap-6">
+        <div className="relative flex h-24 w-24 items-center justify-center" role="status">
+          <div className="absolute inset-0 animate-spin rounded-full border-[7px] border-blue-100 border-r-blue-600 border-t-blue-600" />
+          <span className="text-xl font-bold tabular-nums text-blue-600">
+            {progress}%
+          </span>
+          <span className="sr-only">
+            {activeMessage}, {progress}% complete
+          </span>
         </div>
-        <p className="text-sm font-medium text-slate-600">{stageLabels[stage]}...</p>
+
+        <div className="flex h-8 min-w-80 items-center justify-center" aria-hidden="true">
+          <p className="whitespace-nowrap text-lg font-semibold text-blue-600">
+            {displayedMessage}
+            <span className="ml-0.5 inline-block animate-pulse text-blue-600 motion-reduce:animate-none">|</span>
+          </p>
+        </div>
       </div>
     </main>
   );

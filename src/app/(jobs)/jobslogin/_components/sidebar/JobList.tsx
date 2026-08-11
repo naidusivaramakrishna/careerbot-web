@@ -44,9 +44,22 @@ type JobListProps = {
   jobs: JobItem[];
   onBotClick: (job: JobItem) => void;
   onApplyClick?: (job: JobItem) => void;
+  onSaveToggle?: (jobId: string, saved: boolean) => void;
+  // Permanent removal — only wired up on the Applied tab (see JobsContents),
+  // where it actually deletes the underlying application record, unlike
+  // allowDismiss below which never persists anything.
+  onRemoveApplication?: (jobId: string) => void;
+  // "Not interested" only makes sense for Smart Match recommendations — and
+  // even there it's a transient, session-only hide (see removedIds below),
+  // never persisted. Saved/Applied entries are jobs the user deliberately
+  // saved/applied to; showing the same dismiss control on those tabs let
+  // users "remove" one, only to see it silently reappear the next time this
+  // list re-fetched (every tab revisit), since nothing was ever persisted.
+  // Defaults to false so any other caller doesn't opt into that trap.
+  allowDismiss?: boolean;
 };
 
-export default function JobList({ jobs, onBotClick, onApplyClick }: JobListProps) {
+export default function JobList({ jobs, onBotClick, onApplyClick, onSaveToggle, onRemoveApplication, allowDismiss = false }: JobListProps) {
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   const visibleJobs = jobs.filter((job) => !removedIds.has(job.id));
@@ -58,8 +71,10 @@ export default function JobList({ jobs, onBotClick, onApplyClick }: JobListProps
           key={job.id}
           {...job}
           onBotClick={() => onBotClick(job)}
-          onRemove={() => setRemovedIds((prev) => new Set([...prev, job.id]))}
+          onRemove={allowDismiss ? () => setRemovedIds((prev) => new Set([...prev, job.id])) : undefined}
           onApplyClick={() => onApplyClick?.(job)}
+          onSaveToggle={(saved) => onSaveToggle?.(job.id, saved)}
+          onRemoveApplication={onRemoveApplication ? () => onRemoveApplication(job.id) : undefined}
         />
       ))}
     </div>

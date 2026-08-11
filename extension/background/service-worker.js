@@ -25,10 +25,18 @@ const ALLOWED_JD_HOSTS = [
   'jobs.lever.co',
 ];
 
-function isFromAllowedHost(tab) {
+function isFromAllowedHost(tab, data) {
   if (!tab?.url) return false;
   try {
-    return ALLOWED_JD_HOSTS.includes(new URL(tab.url).hostname);
+    const tabUrl = new URL(tab.url);
+    if (!['http:', 'https:'].includes(tabUrl.protocol)) return false;
+
+    // Dedicated portals remain explicitly recognized. Generic career pages
+    // are also accepted, but their claimed metadata URL must belong to the
+    // page that actually sent the extension message.
+    if (ALLOWED_JD_HOSTS.includes(tabUrl.hostname)) return true;
+    if (!data?.meta?.url) return false;
+    return new URL(data.meta.url).origin === tabUrl.origin;
   } catch {
     return false;
   }
@@ -57,7 +65,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false;
 
   if (message.type === 'JD_DETECTED') {
-    if (!isFromAllowedHost(sender.tab)) return false;
+    if (!isFromAllowedHost(sender.tab, message.data)) return false;
     const payload = sanitizeJDPayload(message.data);
     if (payload) handleJDDetected(payload, sender.tab);
     sendResponse({ ok: Boolean(payload) });
@@ -67,7 +75,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // "Tailor Resume" clicked in banner — open panel immediately (user gesture
   // context is still active), then store the JD asynchronously.
   if (message.type === 'JD_TAILOR_NOW') {
-    if (!isFromAllowedHost(sender.tab)) return false;
+    if (!isFromAllowedHost(sender.tab, message.data)) return false;
     const payload = sanitizeJDPayload(message.data);
     if (payload && sender.tab?.id) {
       chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {});

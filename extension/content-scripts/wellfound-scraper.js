@@ -65,14 +65,18 @@
   }
 
   let lastDetectedJd = null;
+  let staleJdAfterNavigation = null;
+  let mutationTimer = null;
 
   function tryDetect() {
     if (!isJobPage()) return;
     const jd = extractJobDescription();
     if (!jd) return;
+    if (staleJdAfterNavigation && jd === staleJdAfterNavigation) return;
 
     if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
     lastDetectedJd = jd;
+    staleJdAfterNavigation = null;
 
     const meta = extractMeta();
     chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } }).catch(() => {});
@@ -280,10 +284,16 @@
   const urlObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
-      setTimeout(tryDetect, 2000);
+      staleJdAfterNavigation = lastDetectedJd;
+      lastDetectedJd = null;
+      document.getElementById('cb-shadow-host')?.remove();
     }
+
+    // Job panels can also change without a URL transition.
+    clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(tryDetect, 250);
   });
-  urlObserver.observe(document, { subtree: true, childList: true });
+  urlObserver.observe(document.body || document.documentElement, { subtree: true, childList: true });
   window.addEventListener('pagehide', () => urlObserver.disconnect(), { once: true });
 
   // Show the CareerBot brand icon in the banner (static — not the company's logo).

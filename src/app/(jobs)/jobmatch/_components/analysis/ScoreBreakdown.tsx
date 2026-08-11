@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { CheckCircle2, XCircle, ChevronDown, ChevronUp } from "lucide-react";
-
-const IMPORTANCE_STYLES: Record<string, { bg: string; border: string; color: string }> = {
-  required: { bg: "#fff0f0", border: "#fecaca", color: "#dc2626" },
-  important: { bg: "#fffbeb", border: "#fde68a", color: "#d97706" },
-  "nice to have": { bg: "#f8fafc", border: "#e2e8f0", color: "#64748b" },
-};
+import { CheckCircle2, XCircle, ChevronDown, ChevronUp, AlertTriangle, CircleAlert, Info, RotateCw } from "lucide-react";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseScore(raw: any): number {
@@ -24,25 +18,56 @@ interface SectionCardProps {
   score: number;
   passText: string;
   children?: React.ReactNode;
+  missingCount?: number;
+  /** This check crashed server-side — the score is not a real measurement, so render as an error state instead of "0% failed". */
+  errorMessage?: string;
+  onRetry?: () => void;
+  isRetrying?: boolean;
 }
 
-function SectionCard({ label, score, passText, children }: SectionCardProps) {
+function SectionCard({ label, score, passText, children, missingCount, errorMessage, onRetry, isRetrying }: SectionCardProps) {
   const [expanded, setExpanded] = useState(true);
+
+  if (errorMessage) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50/40 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+        <div className="px-5 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500" />
+              <span className="text-[15px] font-bold text-amber-700">{label}</span>
+            </div>
+            <span className="text-[12px] font-extrabold px-2 py-0.5 rounded-full text-amber-700 bg-amber-100 border border-amber-200">
+              Couldn&apos;t check
+            </span>
+          </div>
+          <p className="text-[13px] text-amber-700 leading-relaxed mb-3">{errorMessage}</p>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={isRetrying}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold text-amber-800 bg-amber-100 border border-amber-300 rounded-lg hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${isRetrying ? "animate-spin" : ""}`} />
+              {isRetrying ? "Retrying…" : "Retry"}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const passed = score >= 100;
   const hasDetails = !!children && !passed;
 
-  const barGradient = passed
-    ? "linear-gradient(90deg,#4ade80,#22c55e)"
-    : score >= 60
-    ? "linear-gradient(90deg,#fbbf24,#f59e0b)"
-    : "linear-gradient(90deg,#f87171,#ef4444)";
   const barColor  = passed ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
-  const titleColor = passed ? "#16a34a" : "#dc2626";
+  const titleColor = passed ? "#16a34a" : missingCount === undefined ? "#dc2626" : "#0f172a";
   const iconColor  = passed ? "#22c55e" : "#ef4444";
   const cardBg    = passed ? "linear-gradient(145deg,#f0fdf4,#fff)" : "linear-gradient(145deg,#fff,#fff)";
 
   return (
-    <div className="rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden" style={{ background: cardBg }}>
+    <div className="overflow-hidden rounded-xl border border-[#dce8fb] shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_30px_rgba(37,87,167,0.10)]" style={{ background: cardBg }}>
       <div className="flex">
         <div className="flex-1 px-5 py-4">
           {/* Title row */}
@@ -55,37 +80,40 @@ function SectionCard({ label, score, passText, children }: SectionCardProps) {
               <span className="text-[15px] font-bold" style={{ color: titleColor }}>{label}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className="text-[13px] font-extrabold px-2 py-0.5 rounded-full"
-                style={{
-                  color: barColor,
-                  background: passed ? "#dcfce7" : score >= 60 ? "#fef3c7" : "#fee2e2",
-                  border: `1px solid ${passed ? "#bbf7d0" : score >= 60 ? "#fde68a" : "#fecaca"}`,
-                }}
-              >
-                {score.toFixed(score % 1 === 0 ? 0 : 1)}%
-              </span>
+              {missingCount !== undefined ? (
+                <div className="flex items-center gap-2.5 text-[12px]">
+                  <span className="font-extrabold" style={{ color: barColor }}>
+                    {Math.round(score)}% <span className="font-semibold text-slate-600">matched</span>
+                  </span>
+                  <span className="h-5 w-px bg-slate-200" aria-hidden="true" />
+                  <span className="font-semibold text-slate-600">
+                    <span className="font-extrabold text-slate-900">{missingCount}</span> missing
+                  </span>
+                </div>
+              ) : (
+                <span
+                  className="text-[13px] font-extrabold px-2 py-0.5 rounded-full"
+                  style={{
+                    color: barColor,
+                    background: passed ? "#dcfce7" : score >= 60 ? "#fef3c7" : "#fee2e2",
+                    border: `1px solid ${passed ? "#bbf7d0" : score >= 60 ? "#fde68a" : "#fecaca"}`,
+                  }}
+                >
+                  {score.toFixed(score % 1 === 0 ? 0 : 1)}%
+                </span>
+              )}
               {hasDetails && (
                 <button
+                  type="button"
                   onClick={() => setExpanded(v => !v)}
-                  className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-all"
+                  aria-expanded={expanded}
+                  aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2"
                 >
                   {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: "#f1f5f9" }}>
-            <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{
-                width: `${score}%`,
-                background: barGradient,
-                boxShadow: `0 0 6px ${barColor}55`,
-              }}
-            />
           </div>
 
           {/* Pass message */}
@@ -102,7 +130,7 @@ function SectionCard({ label, score, passText, children }: SectionCardProps) {
 
       {/* Details */}
       {hasDetails && expanded && (
-        <div className="border-t border-gray-100 px-6 py-4">
+        <div className="border-t border-slate-100 bg-slate-50/50 px-6 py-4">
           {children}
         </div>
       )}
@@ -118,23 +146,20 @@ interface ImpactGroupProps {
 
 function ImpactGroup({ label, bolts, children }: ImpactGroupProps) {
   const style = bolts >= 3
-    ? { bg: "#fff3f0", border: "#fecaca", text: "#c2410c", dot: "#ef4444" }
+    ? { bg: "#fff7ed", border: "#fed7aa", text: "#c2410c", Icon: AlertTriangle }
     : bolts === 2
-    ? { bg: "#fffbeb", border: "#fde68a", text: "#b45309", dot: "#f59e0b" }
-    : { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8", dot: "#3b82f6" };
+    ? { bg: "#fffbeb", border: "#fde68a", text: "#a16207", Icon: CircleAlert }
+    : { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8", Icon: Info };
 
   return (
     <div className="space-y-3">
       <div
-        className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 shadow-sm"
+        className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 py-2"
         style={{ background: style.bg, border: `1px solid ${style.border}` }}
       >
-        <span
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ background: style.dot, boxShadow: `0 0 5px ${style.dot}88` }}
-        />
-        <span className="text-[12px] font-bold tracking-wide" style={{ color: style.text }}>
-          {Array.from({ length: bolts }).map(() => "⚡").join("")} {label}
+        <style.Icon className="h-4 w-4 shrink-0" style={{ color: style.text }} aria-hidden="true" />
+        <span className="text-[12px] font-bold" style={{ color: style.text }}>
+          {label}
         </span>
       </div>
       <div className="space-y-3">{children}</div>
@@ -142,8 +167,34 @@ function ImpactGroup({ label, bolts, children }: ImpactGroupProps) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
+function InlineMissingList({ items }: { items: string[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <div>
+      <p className="mb-1.5 text-[12px] font-bold text-red-600">
+        Missing <span className="font-semibold text-red-500">· {items.length}</span>
+      </p>
+      <p className="flex flex-wrap items-center gap-y-1.5 text-[13px] leading-6 text-slate-900">
+        {items.map((item, index) => (
+          <React.Fragment key={`${item}-${index}`}>
+            <span className="font-semibold">{item}</span>
+            {index < items.length - 1 && (
+              <span className="mx-2 text-red-400" aria-hidden="true">•</span>
+            )}
+          </React.Fragment>
+        ))}
+      </p>
+    </div>
+  );
+}
+
+export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMatch }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  matchResult: any;
+  onRetryMatch?: () => void;
+  isRetryingMatch?: boolean;
+}) {
   if (!matchResult) return null;
 
   const tech = matchResult.Technical_Skills ?? {};
@@ -171,7 +222,15 @@ export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
     ...(tech.missing_important_skills ?? []).map((s: { skill: string }) => ({ skill: s.skill, importance: "important" })),
     ...(tech.missing_nice_to_have ?? []).map((s: { skill: string }) => ({ skill: s.skill, importance: "nice to have" })),
   ];
+  const requiredTech = missingTech.filter((item) => item.importance !== "nice to have");
+  const optionalTech = missingTech.filter((item) => item.importance === "nice to have");
   const missingSoft: string[] = soft.missing_skills ?? [];
+  // A crashed check (execution_failed) returns match_score: null, which parseScore
+  // silently reads as 0% — indistinguishable from "genuinely zero soft skills
+  // matched" unless we check execution_failed explicitly and say so.
+  const softError: string | undefined = soft.execution_failed
+    ? "We couldn't score this section this time. Try running the match again."
+    : undefined;
   const missingCap: string[] = (cap.missing_capabilities ?? []).map((c: { capability: string }) => c.capability);
   const weakBullets: { original: string; improved: string }[] = star.weak_bullets ?? [];
   const starSuggestion: string = star.suggestion ?? "";
@@ -185,61 +244,76 @@ export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
       </div>
 
       {/* HIGH IMPACT */}
-      <ImpactGroup label="High Impact" bolts={3}>
-        <SectionCard label="Hard Skills" score={techScore} passText="Your resume includes all of the Hard skills.">
+      <ImpactGroup label="High priority" bolts={3}>
+        <SectionCard
+          label="Hard Skills"
+          score={techScore}
+          passText="Your resume includes all of the Hard skills."
+          missingCount={missingTech.length}
+        >
           {missingTech.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {missingTech.map((s, i) => {
-                const style = IMPORTANCE_STYLES[s.importance] ?? IMPORTANCE_STYLES.required;
-                return (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold"
-                  style={{ background: style.bg, border: `1px solid ${style.border}`, color: style.color }}
-                >
-                  <XCircle className="w-3 h-3 shrink-0" />
-                  {s.skill}
-                  <span className="text-[10px] font-medium opacity-60">· {s.importance}</span>
-                </span>
-                );
-              })}
+            <div className="space-y-4">
+              {requiredTech.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[12px] font-bold text-red-600">
+                    Required <span className="font-semibold text-red-500">· {requiredTech.length}</span>
+                  </p>
+                  <p className="flex flex-wrap items-center gap-y-1.5 text-[13px] leading-6 text-slate-900">
+                    {requiredTech.map((item, index) => (
+                      <React.Fragment key={`${item.skill}-${index}`}>
+                        <span className="font-semibold">{item.skill}</span>
+                        {index < requiredTech.length - 1 && (
+                          <span className="mx-2 text-red-400" aria-hidden="true">•</span>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </p>
+                </div>
+              )}
+
+              {optionalTech.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[12px] font-bold text-slate-500">
+                    Nice to have <span className="font-semibold text-slate-400">· {optionalTech.length}</span>
+                  </p>
+                  <p className="flex flex-wrap items-center gap-y-1.5 text-[13px] leading-6 text-slate-600">
+                    {optionalTech.map((item, index) => (
+                      <React.Fragment key={`${item.skill}-${index}`}>
+                        <span className="font-medium">{item.skill}</span>
+                        {index < optionalTech.length - 1 && (
+                          <span className="mx-2 text-slate-400" aria-hidden="true">•</span>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </SectionCard>
       </ImpactGroup>
 
       {/* MEDIUM IMPACT */}
-      <ImpactGroup label="Medium Impact" bolts={2}>
-        <SectionCard label="Soft Skills" score={softScore} passText="Your resume includes all of the Soft skills.">
-          {missingSoft.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {missingSoft.map((s, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold"
-                  style={{ background: "#fff0f0", border: "1px solid #fecaca", color: "#dc2626" }}
-                >
-                  <XCircle className="w-3 h-3 shrink-0" />{s}
-                </span>
-              ))}
-            </div>
-          )}
+      <ImpactGroup label="Medium priority" bolts={2}>
+        <SectionCard
+          label="Soft Skills"
+          score={softScore}
+          passText="Your resume includes all of the Soft skills."
+          missingCount={softError ? undefined : missingSoft.length}
+          errorMessage={softError}
+          onRetry={softError ? onRetryMatch : undefined}
+          isRetrying={isRetryingMatch}
+        >
+          {missingSoft.length > 0 && <InlineMissingList items={missingSoft} />}
         </SectionCard>
 
-        <SectionCard label="Capabilities" score={capScore} passText="Your resume demonstrates all required capabilities.">
-          {missingCap.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {missingCap.map((c, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold"
-                  style={{ background: "#fff0f0", border: "1px solid #fecaca", color: "#dc2626" }}
-                >
-                  <XCircle className="w-3 h-3 shrink-0" />{c}
-                </span>
-              ))}
-            </div>
-          )}
+        <SectionCard
+          label="Capabilities"
+          score={capScore}
+          passText="Your resume demonstrates all required capabilities."
+          missingCount={missingCap.length}
+        >
+          {missingCap.length > 0 && <InlineMissingList items={missingCap} />}
         </SectionCard>
 
         <SectionCard label="STAR Pattern" score={starScore} passText="Your bullets follow the STAR format with measurable results.">
@@ -281,13 +355,18 @@ export default function ScoreBreakdown({ matchResult }: { matchResult: any }) {
       </ImpactGroup>
 
       {/* LOW IMPACT */}
-      <ImpactGroup label="Low Impact" bolts={1}>
+      <ImpactGroup label="Low priority" bolts={1}>
         <SectionCard label="Job Title Match" score={jobScore} passText="Your job title aligns well with the role.">
           {job.reason && (
-            <p className="text-[13px] text-gray-600 leading-relaxed">
-              The job title <span className="font-bold text-gray-800">{job.matched_title}</span> was not found in your resume.
-              {job.jd_title && <> Suggested: <span className="font-bold text-green-700">{job.jd_title}</span></>}
-            </p>
+            <div className="space-y-1.5">
+              <p className="text-[13px] text-gray-600 leading-relaxed">{job.reason}</p>
+              {(job.matched_title || job.jd_title) && (
+                <p className="text-[12px] text-gray-500">
+                  Your title <span className="font-bold text-gray-800">{job.matched_title || "—"}</span>
+                  {job.jd_title && <> vs. the JD&apos;s <span className="font-bold text-green-700">{job.jd_title}</span></>}
+                </p>
+              )}
+            </div>
           )}
         </SectionCard>
 

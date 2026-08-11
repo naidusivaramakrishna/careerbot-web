@@ -33,12 +33,14 @@
   (document.head || document.documentElement).appendChild(style);
 
   function isJobPage() {
-    return document.querySelector('#jobDescriptionText') !== null ||
+    return document.querySelector('#jobDescriptionText, .react-native-html-content, .simple-job-description-html, [class*="simple-job-description"]') !== null ||
            /viewjob/.test(window.location.href);
   }
 
   function extractJobDescription() {
-    const el = document.querySelector('#jobDescriptionText, [class*="jobDescription"], .jobsearch-jobDescriptionText');
+    const el = document.querySelector(
+      '#jobDescriptionText, [class*="jobDescription"], .jobsearch-jobDescriptionText, .react-native-html-content, .simple-job-description-html, [class*="simple-job-description"]'
+    );
     return el && el.innerText.trim().length > 100 ? el.innerText.trim() : null;
   }
 
@@ -54,14 +56,37 @@
   }
 
   let lastDetectedJd = null;
+  let staleJdAfterNavigation = null;
+  let detectionAttempts = 0;
+  const MAX_ATTEMPTS = 15;
+  const ATTEMPT_INTERVAL = 500;
+  let retryTimer = null;
+  let mutationTimer = null;
+
+  function scheduleRetry() {
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(tryDetect, ATTEMPT_INTERVAL);
+  }
 
   function tryDetect() {
     if (!isJobPage()) return;
     const jd = extractJobDescription();
-    if (!jd) return;
+    // Indeed changes the URL before replacing the job details pane. Do not
+    // publish the previous job under the newly selected job's URL while that
+    // asynchronous replacement is still in progress.
+    if (!jd || (staleJdAfterNavigation && jd === staleJdAfterNavigation)) {
+      detectionAttempts++;
+      if (detectionAttempts < MAX_ATTEMPTS) {
+        scheduleRetry();
+      }
+      return;
+    }
 
     if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
     lastDetectedJd = jd;
+    staleJdAfterNavigation = null;
+    detectionAttempts = 0;
+    clearTimeout(retryTimer);
 
     const meta = extractMeta();
     chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } }).catch(() => {});
@@ -262,7 +287,48 @@
     });
   }
 
-  setTimeout(tryDetect, 2000);
+  // Initial detection attempt
+  tryDetect();
+
+  // Monitor for dynamic content changes (jobs loaded after initial page load)
+  const observer = new MutationObserver(() => {
+    // Indeed can emit many mutations for one job click. Debounce them so they
+    // do not exhaust the retry budget before the description has rendered.
+    clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(tryDetect, 100);
+  });
+
+  // Start observing when DOM is ready
+  const startObserver = () => {
+    // The description node itself is replaced on every result click. Observe
+    // the persistent document body so subsequent replacements are detected.
+    const targetNode = document.body;
+    if (targetNode) {
+      observer.observe(targetNode, {
+        childList: true,
+        subtree: true,
+        characterData: false,
+      });
+    }
+  };
+
+  setTimeout(startObserver, 1000);
+
+  // Detect URL changes for job navigation
+  let lastUrl = window.location.href;
+  setInterval(() => {
+    if (window.location.href !== lastUrl) {
+      lastUrl = window.location.href;
+      // Keep only the JD we actually published as stale. The interval may
+      // notice the URL after Indeed has already rendered the new description;
+      // treating the current DOM text as stale would suppress that valid JD.
+      staleJdAfterNavigation = lastDetectedJd;
+      lastDetectedJd = null;
+      detectionAttempts = 0;
+      document.getElementById('cb-shadow-host')?.remove();
+      tryDetect();
+    }
+  }, 500);
 
   // Show the CareerBot brand icon in the banner (static — not the company's logo).
   function setBrandIcon(iconEl) {

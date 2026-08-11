@@ -98,18 +98,54 @@ export function getApplicationCount(userId?: string | null): number {
   return getApplicationHistory(userId).length;
 }
 
-// ==================== SAVED JOBS TRACKING ====================
-
-export function getSavedJobs(userId?: string | null): SavedJob[] {
-  if (typeof window === "undefined") return [];
+// Removes from both the scoped and unscoped buckets — getApplicationHistory
+// merges the two on read (see above), so a record written before userId had
+// resolved lives in the unscoped bucket and would otherwise survive a
+// scoped-only delete and reappear on the next read.
+export function removeApplication(jobId: string, userId?: string | null): void {
+  if (typeof window === "undefined") return;
 
   try {
-    const stored = localStorage.getItem(scopedKey(SAVED_JOBS_KEY, userId));
+    const scopedK = scopedKey(APPLIED_JOBS_KEY, userId);
+    const scoped = readApplicationsAt(scopedK).filter((app) => app.jobId !== jobId);
+    localStorage.setItem(scopedK, JSON.stringify(scoped));
+
+    if (userId) {
+      const unscoped = readApplicationsAt(APPLIED_JOBS_KEY).filter((app) => app.jobId !== jobId);
+      localStorage.setItem(APPLIED_JOBS_KEY, JSON.stringify(unscoped));
+    }
+  } catch (e) {
+    console.error("removeApplication: Failed to remove application:", e instanceof Error ? e.message : String(e));
+  }
+}
+
+// ==================== SAVED JOBS TRACKING ====================
+
+function readSavedJobsAt(key: string): SavedJob[] {
+  try {
+    const stored = localStorage.getItem(key);
     return stored ? JSON.parse(stored) as SavedJob[] : [];
   } catch (e) {
     console.error("getSavedJobs: Failed to parse stored jobs:", e);
     return [];
   }
+}
+
+export function getSavedJobs(userId?: string | null): SavedJob[] {
+  if (typeof window === "undefined") return [];
+
+  // A user can click Save while useCurrentUserId is still resolving. That
+  // write lands in the unscoped bucket; once the id resolves, reads switch to
+  // the scoped bucket. Merge both so the saved job does not disappear during
+  // that transition. Prefer scoped records and de-duplicate by stable job id.
+  const scoped = readSavedJobsAt(scopedKey(SAVED_JOBS_KEY, userId));
+  if (!userId) return scoped;
+
+  const unscoped = readSavedJobsAt(SAVED_JOBS_KEY);
+  if (unscoped.length === 0) return scoped;
+
+  const seen = new Set(scoped.map((job) => job.jobId));
+  return [...scoped, ...unscoped.filter((job) => !seen.has(job.jobId))];
 }
 
 export function getSavedJobIds(userId?: string | null): string[] {
@@ -138,9 +174,9 @@ export function toggleJobSaved(
     const existingIndex = saved.findIndex((job) => job.jobId === jobId);
 
     if (existingIndex > -1) {
-      // Remove from saved
-      saved.splice(existingIndex, 1);
-      localStorage.setItem(scopedKey(SAVED_JOBS_KEY, userId), JSON.stringify(saved));
+      // getSavedJobs merges scoped and pre-user-id records. Remove from both
+      // buckets or the unscoped copy would make the job reappear immediately.
+      removeSavedJob(jobId, userId);
       return false;
     } else {
       // Add to saved
@@ -171,9 +207,14 @@ export function removeSavedJob(jobId: string, userId?: string | null): void {
   if (typeof window === "undefined") return;
 
   try {
-    let saved = getSavedJobs(userId);
-    saved = saved.filter((job) => job.jobId !== jobId);
-    localStorage.setItem(scopedKey(SAVED_JOBS_KEY, userId), JSON.stringify(saved));
+    const scopedK = scopedKey(SAVED_JOBS_KEY, userId);
+    const scoped = readSavedJobsAt(scopedK).filter((job) => job.jobId !== jobId);
+    localStorage.setItem(scopedK, JSON.stringify(scoped));
+
+    if (userId) {
+      const unscoped = readSavedJobsAt(SAVED_JOBS_KEY).filter((job) => job.jobId !== jobId);
+      localStorage.setItem(SAVED_JOBS_KEY, JSON.stringify(unscoped));
+    }
   } catch (e) {
     console.error("removeSavedJob: Failed to remove saved job:", e instanceof Error ? e.message : String(e));
   }
