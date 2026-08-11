@@ -74,7 +74,7 @@ const ProfileAvatar = ({
 function mapBackendToFrontend(backendProfile: UserProfile): ProfileData {
   return {
     personalInformation: {
-      fullName: backendProfile.full_name || backendProfile.username || '',
+      fullName: backendProfile.full_name || '',
       headline: backendProfile.headline || '',
       location: backendProfile.location || '',
       email: backendProfile.email || '',
@@ -100,9 +100,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
   const handleImageChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => { setSelectedImage(reader.result as string); };
-    reader.readAsDataURL(file);
 
     try {
       const res = await uploadProfilePicture(file);
@@ -121,8 +118,6 @@ const MainSection = ({ initialData }: { initialData?: ProfileData }) => {
     } catch (error) {
       logger.error("Error uploading profile picture:", error);
       toast.error("Failed to upload image");
-    } finally {
-      toast.dismiss();
     }
   }, [setProfilePicUrl]);
 

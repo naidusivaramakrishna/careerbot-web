@@ -91,6 +91,16 @@ function roleAllows(pathname: string, actor: string | undefined): boolean {
     return true;
 }
 
+// x-pathname must ride on the REQUEST headers: `headers()` in a Server
+// Component returns the INCOMING request headers, so setting it on the
+// response (as this previously did) was invisible to (user)/layout.tsx and it
+// always fell back to '/dashboard'. It also leaked the path to the browser.
+function nextWithPathname(request: NextRequest, pathname: string) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-pathname', pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     logger.info(`[${request.method}] ${pathname}`);
@@ -121,8 +131,9 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // For admin paths, prefer admin_access_token to avoid stale user session
-    // cookies causing false 403s when both cookies coexist in the browser.
+    // Token selection is scoped to the route type.
+    // Admin paths: prefer admin cookies, fall back to user cookies.
+    // User paths: prefer user cookies, fall back to admin cookies so admins can access user areas.
     const isAdminPath = pathname.startsWith(ADMIN_PREFIX);
     const token = isAdminPath
         ? (request.cookies.get('admin_access_token')?.value || request.cookies.get('access_token')?.value)
@@ -149,7 +160,7 @@ export async function middleware(request: NextRequest) {
             if (!roleAllows(pathname, payload.actor as string | undefined)) {
                 return NextResponse.redirect(new URL('/403', request.url));
             }
-            return NextResponse.next();
+            return nextWithPathname(request, pathname);
         } catch {
             // Access token present but invalid/expired — fall through to refresh.
         }
@@ -165,7 +176,10 @@ export async function middleware(request: NextRequest) {
     //    signed-in users straight back to login whenever the access token
     //    could not be verified here (JWT_SECRET unset, or token simply expired).
     if (!isProtectedArea) {
-        return (token || refreshToken) ? NextResponse.next() : redirectToLogin(request);
+        if (token || refreshToken) {
+            return nextWithPathname(request, pathname);
+        }
+        return redirectToLogin(request);
     }
 
     // 3) Role-gated area with no verified token (access token missing OR

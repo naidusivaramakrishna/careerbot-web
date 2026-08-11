@@ -209,8 +209,19 @@ export default function Header() {
       const url = e.detail?.profilePicUrl;
       if (url !== undefined) setProfilePicUrl(url);
     };
+    const onProfileUpdate = (e: CustomEvent) => {
+      setUserProfile((prev) => prev ? {
+        ...prev,
+        full_name: e.detail?.full_name ?? prev.full_name,
+        email: e.detail?.email ?? prev.email,
+      } : prev);
+    };
     window.addEventListener('profilePictureUpdated', onPicUpdate as EventListener);
-    return () => window.removeEventListener('profilePictureUpdated', onPicUpdate as EventListener);
+    window.addEventListener('profileUpdated', onProfileUpdate as EventListener);
+    return () => {
+      window.removeEventListener('profilePictureUpdated', onPicUpdate as EventListener);
+      window.removeEventListener('profileUpdated', onProfileUpdate as EventListener);
+    };
   }, []);
 
   const handleLogout = async () => {

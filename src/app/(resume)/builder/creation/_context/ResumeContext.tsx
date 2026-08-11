@@ -5,6 +5,7 @@ import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
 import type { ATSScore, EnhancedSuggestion } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
+import { detectCareerLevel } from "@/utils/careerLevelDetection";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
 import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
@@ -135,6 +136,27 @@ export interface ResumeData {
     languages?: string;
     titlePrefix?: string;
     qualifications?: string;
+    // Government Standard — India-specific
+    fathersName?: string;
+    maritalStatus?: string;
+    gender?: string;
+    permanentAddress?: string;
+    // Healthcare
+    specialisation?: string;
+    medicalRegNo?: string;
+    // Legal
+    barEnrollmentNo?: string;
+    yearOfEnrollment?: string;
+    courtsOfPractise?: string;
+    // Marine
+    rank?: string;
+    cocNumber?: string;
+    stcwCertificates?: string;
+    vesselTypes?: string;
+    // Research Scholar
+    orcidId?: string;
+    googleScholarUrl?: string;
+    hIndex?: string;
   };
   professionalSummary: {
     summary: string;
@@ -241,7 +263,19 @@ export interface ResumeData {
     publicationName: string;
     date: string;
     url: string;
+    doi?: string;
   }[];
+  patents?: {
+    id?: string;
+    title: string;
+    patentNumber: string;
+    status: string;
+    date: string;
+    description?: string;
+  }[];
+  declaration?: string;
+  declarationDate?: string;
+  declarationPlace?: string;
   customSections?: CustomSection[];
 }
 
@@ -387,6 +421,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       interests: [],
       languages: [],
       publications: [],
+      patents: [],
+      declaration: "",
+      declarationDate: "",
+      declarationPlace: "",
       customSections: [],
     };
   }
@@ -480,19 +518,14 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           // Extract career level from template name like "Core Engineering - Fresher"
           let extractedLevel: string | undefined;
 
-          // Canonical precedence: early career → fresher → architect → manager → lead → senior → mid
-          if (templateName.includes('early') && templateName.includes('career')) {
+          // Use shared utility for consistent career level detection
+          const detected = detectCareerLevel(templateName);
+          if (detected) {
+            extractedLevel = detected.toLowerCase();
+          } else if (templateName.includes('early') && templateName.includes('career')) {
             extractedLevel = 'early career';
           } else if (templateName.includes('fresher')) {
             extractedLevel = 'fresher';
-          } else if (templateName.includes('architect')) {
-            extractedLevel = 'architect';
-          } else if (templateName.includes('manager')) {
-            extractedLevel = 'manager';
-          } else if (templateName.includes('lead')) {
-            extractedLevel = 'lead';
-          } else if (templateName.includes('senior')) {
-            extractedLevel = 'senior-level';
           } else if (templateName.includes('mid')) {
             extractedLevel = 'mid-level';
           }
@@ -832,6 +865,27 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             languages: data.personalInfo?.languages || null,
             titlePrefix: data.personalInfo?.titlePrefix || null,
             qualifications: data.personalInfo?.qualifications || null,
+            // Government Standard
+            fathersName: data.personalInfo?.fathersName || null,
+            gender: data.personalInfo?.gender || null,
+            maritalStatus: data.personalInfo?.maritalStatus || null,
+            permanentAddress: data.personalInfo?.permanentAddress || null,
+            // Healthcare
+            specialisation: data.personalInfo?.specialisation || null,
+            medicalRegNo: data.personalInfo?.medicalRegNo || null,
+            // Legal
+            barEnrollmentNo: data.personalInfo?.barEnrollmentNo || null,
+            yearOfEnrollment: data.personalInfo?.yearOfEnrollment || null,
+            courtsOfPractise: data.personalInfo?.courtsOfPractise || null,
+            // Marine
+            rank: data.personalInfo?.rank || null,
+            cocNumber: data.personalInfo?.cocNumber || null,
+            vesselTypes: data.personalInfo?.vesselTypes || null,
+            stcwCertificates: data.personalInfo?.stcwCertificates || null,
+            // Research Scholar
+            orcidId: data.personalInfo?.orcidId || null,
+            hIndex: data.personalInfo?.hIndex || null,
+            googleScholarUrl: data.personalInfo?.googleScholarUrl || null,
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
@@ -881,6 +935,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           interests: normalizeId((data.interests || []) as Record<string, unknown>[]) as ResumeData["interests"],
           languages: normalizeId((data.languages || []) as Record<string, unknown>[]) as ResumeData["languages"],
           publications: normalizeId((data.publications || []) as Record<string, unknown>[]) as ResumeData["publications"],
+          patents: normalizeId((data.patents || []) as Record<string, unknown>[]) as ResumeData["patents"],
+          declaration: (data as Record<string, unknown>).declaration as string | undefined ?? "",
+          declarationDate: (data as Record<string, unknown>).declarationDate as string | undefined ?? "",
+          declarationPlace: (data as Record<string, unknown>).declarationPlace as string | undefined ?? "",
           customSections: data.customSections || [],
         };
 

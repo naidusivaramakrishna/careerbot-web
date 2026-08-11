@@ -21,6 +21,7 @@ export function OAuthSuccessPage({ provider }: Props) {
 
                 if (authenticated) {
                     setStatus('success')
+                    sessionStorage.removeItem('__signing_out')
                     toast.success(`Successfully signed in with ${provider}!`)
 
                     const redirectTo = getStoredAuthRedirect()

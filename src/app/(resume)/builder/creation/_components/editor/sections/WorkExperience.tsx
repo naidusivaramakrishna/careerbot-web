@@ -92,9 +92,25 @@ const WorkExperience: React.FC = () => {
 
   const [showTips, setShowTips] = useState(true);
   const [spellCheckEnabled, setSpellCheckEnabled] = useState(true);
-  const [deletingIndex, setDeletingIndex] = useState<number | null>(null); // ✅ NEW: Track deleting state
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
   const [editingOriginalEntry, setEditingOriginalEntry] = useState<WorkEntry | null>(null);
+  const [bulletWarnings, setBulletWarnings] = useState<Record<number, string>>({});
+
+  const checkBulletQuality = (html: string): string => {
+    // Split on block-level closing tags before stripping so each bullet
+    // becomes its own line (contentEditable uses <li>/<div>, not \n).
+    const withBreaks = html.replace(/<\/(li|div|p)>|<br\s*\/?>/gi, '\n');
+    const plain = withBreaks.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ');
+    const lines = plain.split(/[\n\r]/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (/^I\s+/i.test(line))
+        return 'Avoid starting bullets with "I" — use action verbs instead (e.g., Led, Built, Managed)';
+      if (/^responsible for/i.test(line))
+        return 'Avoid "Responsible for" — state what you achieved instead (e.g., Managed, Delivered, Reduced)';
+    }
+    return '';
+  };
 
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -337,6 +353,8 @@ const WorkExperience: React.FC = () => {
     if (!el) return;
     const content = cleanHtmlContent(el.innerHTML);
     handleChange(idx, "description", content);
+    const warning = checkBulletQuality(content);
+    setBulletWarnings(prev => ({ ...prev, [idx]: warning }));
   };
 
   function startToLabel(val: string): string {
@@ -682,16 +700,31 @@ Spearheaded migration of legacy monolithic application to microservices architec
                           <ToolbarButton onClick={() => toggleSpellCheck(editIndex)} title="Toggle Spellcheck" icon={<FaSpellCheck size={16} />} isActive={spellCheckEnabled} />
                         </div>
 
-                        <div
-                          ref={(el) => { editorRefs.current[editIndex] = el; }}
-                          contentEditable
-                          suppressContentEditableWarning
-                          lang="en"
-                          onInput={() => onEditorInput(editIndex)}
-                          className="w-full px-3 py-2 text-sm text-black min-h-[180px] focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-                          spellCheck={spellCheckEnabled}
-                        />
+                        <div className="relative">
+                          {!work.description?.replace(/<[^>]+>/g, '').trim() && (
+                            <div className="absolute top-2 left-3 text-xs text-gray-400 pointer-events-none leading-5 z-10">
+                              <div>• Start with an action verb: Led, Built, Managed, Reduced...</div>
+                              <div>• Include what you did and the measurable result</div>
+                              <div className="mt-1 italic">e.g. "Led a team of 8 engineers, delivering the project 2 weeks ahead of schedule"</div>
+                            </div>
+                          )}
+                          <div
+                            ref={(el) => { editorRefs.current[editIndex] = el; }}
+                            contentEditable
+                            suppressContentEditableWarning
+                            lang="en"
+                            onInput={() => onEditorInput(editIndex)}
+                            className="w-full px-3 py-2 text-sm text-black min-h-45 focus:outline-none border-b-2 border-transparent focus:border-[#2557a7] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                            spellCheck={spellCheckEnabled}
+                          />
+                        </div>
                       </div>
+                      {bulletWarnings[editIndex] && (
+                        <div className="flex items-start gap-2 mt-1 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-700">
+                          <span className="mt-0.5">⚠</span>
+                          <span>{bulletWarnings[editIndex]}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

@@ -12,15 +12,25 @@ interface ResumeSectionProps {
     setTempProfile: React.Dispatch<React.SetStateAction<ProfileData>>;
 }
 
+const RESUME_FILENAME_KEY = 'uploaded_resume_filename';
+
 const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
     const { profileData, setProfileData } = useProfileContext();
     const { refreshDashboard } = useDashboard();
     const [resumeUrl, setResumeUrl] = useState<string | null>(profileData.resume_url ?? null);
+    const [fileName, setFileName] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [isFetching, setIsFetching] = useState(!profileData.resume_url);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isReplacing, setIsReplacing] = useState(false);
+
+    // Initialize fileName from localStorage safely (client-side only)
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setFileName(localStorage.getItem(RESUME_FILENAME_KEY) || '');
+        }
+    }, []);
 
     // One-way sync: propagates context resume_url into local state when it becomes truthy
     // (e.g. sidebar upload). Does NOT clear local state when resume_url goes null —
@@ -28,6 +38,9 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
     useEffect(() => {
         if (profileData.resume_url && profileData.resume_url !== resumeUrl) {
             setResumeUrl(profileData.resume_url);
+            if (typeof window !== 'undefined') {
+                setFileName(localStorage.getItem('uploaded_resume_filename') || '');
+            }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profileData.resume_url]);
@@ -80,6 +93,8 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
         try {
             const response: ResumeUploadResponse = await uploadResume(file);
             setResumeUrl(response.resume_url);
+            setFileName(file.name);
+            localStorage.setItem(RESUME_FILENAME_KEY, file.name);
             setIsReplacing(false);
             setTempProfile((prev) => ({ ...prev, resume_url: response.resume_url }));
             setProfileData((prev) => ({ ...prev, resume_url: response.resume_url }));
@@ -100,6 +115,8 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
         try {
             const response: ResumeDeleteResponse = await deleteResume();
             setResumeUrl(null);
+            setFileName('');
+            localStorage.removeItem(RESUME_FILENAME_KEY);
             setShowDeleteModal(false);
             setTempProfile((prev) => ({ ...prev, resume_url: undefined }));
             setProfileData((prev) => {
@@ -141,7 +158,7 @@ const ResumeSection = ({ setTempProfile }: ResumeSectionProps) => {
                             </div>
                             <div className="min-w-0">
                                 <p className="text-sm font-medium text-green-800 truncate">
-                                    {`Resume.${resumeUrl.split('.').pop() || 'pdf'}`}
+                                    {fileName || 'Uploaded Resume'}
                                 </p>
                                 <p className="text-xs text-green-600">Uploaded successfully</p>
                             </div>
