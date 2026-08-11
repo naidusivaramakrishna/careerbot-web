@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Circle, Code2, RotateCw, SearchX, X } from 'lucide-react';
 import { fetchProblems } from '../_lib/api';
 import { fetchProblemsAnnotated } from '../_lib/gradingApi';
@@ -82,6 +82,7 @@ export default function CodingProblemsListPage() {
 }
 
 function CodingProblemsListContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const paramLang = searchParams.get('language') as CodingTestLanguage | null;
@@ -100,6 +101,17 @@ function CodingProblemsListContent() {
   const [state, setState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [page, setPage] = useState(1);
+
+  const handleProblemClick = useCallback((slug: string, lang?: CodingTestLanguage) => async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      await document.documentElement.requestFullscreen();
+    } catch {
+      // Fullscreen request failed, continue anyway
+    }
+    const url = lang ? `/coding-test/${slug}?language=${lang}` : `/coding-test/${slug}`;
+    router.push(url);
+  }, [router]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -409,7 +421,7 @@ function CodingProblemsListContent() {
                     <li key={p.slug}>
                       <Link
                         href={language ? `/coding-test/${p.slug}?language=${language}` : `/coding-test/${p.slug}`}
-                        onClick={() => { document.documentElement.requestFullscreen?.().catch(() => {}); }}
+                        onClick={handleProblemClick(p.slug, language || undefined)}
                         className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
                       >
                         <div className="flex min-w-0 items-center gap-3">
