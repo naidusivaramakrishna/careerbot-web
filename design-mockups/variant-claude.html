@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Builder v2 — Claude design</title>
+<meta name="viewport" content="width=1440" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          serif: ['"Source Serif 4"', 'Georgia', 'serif'],
+          sans:  ['Inter', 'Montserrat', 'system-ui', 'sans-serif'],
+        },
+        colors: {
+          /* Claude / Anthropic paper palette */
+          paper: {
+            DEFAULT: '#FAF9F5',  /* warm cream */
+            warm:    '#F4F1EA',  /* deeper cream */
+            edge:    '#EDE9DD',  /* margin tone */
+          },
+          /* User's existing brand — preserved */
+          brand:   { 50:'#f3f7fc',100:'#e3ecf7',200:'#c1d3ec',300:'#93b3dc',400:'#5896d7',500:'#2557a7',600:'#1f4e98',700:'#1a4180',800:'#163566',900:'#11294f' },
+          accent:  { 400:'#5aa3ec',500:'#0275dd',600:'#0261b8' },
+          /* Quiet ink scale */
+          ink:     { 950:'#141413', 900:'#1f1e1d', 800:'#2c2b29', 700:'#403e3a', 600:'#5c5a54', 500:'#7a776f', 400:'#9b988e', 300:'#bcb8ad' },
+          line:    { soft:'#EFEBDE', DEFAULT:'#E6E1D2', strong:'#D4CFBE' },
+          rust:    '#C96442', /* secondary highlight — for AI moments */
+        },
+        boxShadow: {
+          card:  '0 1px 2px rgba(20,20,19,.04), 0 1px 3px rgba(20,20,19,.04)',
+          float: '0 1px 3px rgba(20,20,19,.06), 0 10px 30px -10px rgba(20,20,19,.10)',
+          paper: '0 1px 2px rgba(20,20,19,.04), 0 14px 40px -12px rgba(20,20,19,.12)',
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { background:#FAF9F5; font-family:'Inter','Montserrat',system-ui,sans-serif; color:#2c2b29; }
+  .scrollbar-hide::-webkit-scrollbar{ display:none; } .scrollbar-hide{ scrollbar-width:none; }
+  .font-display { font-family:'Source Serif 4', Georgia, serif; font-feature-settings:"ss01","ss02"; letter-spacing:-0.01em; }
+  /* Inputs feel like writing on paper, not filling a form */
+  .paper-input {
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 1px solid #D4CFBE;
+    border-radius: 0;
+    padding: 8px 0;
+    font-size: 16px;
+    color: #1f1e1d;
+    width: 100%;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .paper-input:hover { border-bottom-color:#7a776f; }
+  .paper-input:focus { outline:none; border-bottom-color:#2557a7; }
+  .quiet-divider { height:1px; background:linear-gradient(to right, transparent, #D4CFBE 25%, #D4CFBE 75%, transparent); }
+</style>
+</head>
+<body class="text-ink-800">
+
+<div class="flex h-[900px] w-[1440px] flex-col bg-paper">
+
+  <!-- ─────────── APP BAR ─────────── -->
+  <header class="border-b border-line-soft bg-paper">
+    <div class="flex h-14 items-center gap-3 px-6">
+      <!-- Back -->
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-500 hover:bg-paper-warm hover:text-ink-900 transition-colors">
+        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+
+      <!-- Wordmark / breadcrumb -->
+      <div class="flex items-center gap-2.5">
+        <div class="flex h-7 w-7 items-center justify-center rounded-md bg-ink-900 text-paper">
+          <span class="font-display text-[13px] font-semibold leading-none">cb</span>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span class="font-display text-[15px] font-semibold text-ink-900">Resume</span>
+          <span class="text-ink-300">/</span>
+          <span class="text-[14px] text-ink-700">Priya Sharma — Senior SDE</span>
+          <button class="ml-1 text-ink-400 hover:text-ink-700">
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="mx-3 h-5 w-px bg-line"></div>
+
+      <!-- Save status — extremely quiet -->
+      <div class="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
+        <span class="h-1.5 w-1.5 rounded-full bg-ink-400"></span>
+        <span>Saved <time class="text-ink-700">12s ago</time></span>
+      </div>
+
+      <div class="flex-1"></div>
+
+      <!-- Score chip — text-first, no bright fills -->
+      <button class="inline-flex items-center gap-2 rounded-full border border-line bg-paper-warm/60 px-3 py-1.5 text-[12.5px] font-medium text-ink-800 hover:bg-paper-warm">
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
+        <span class="text-ink-500">ATS</span>
+        <span class="font-display text-[14px] font-semibold tabular-nums text-ink-900">82</span>
+        <span class="text-[11px] text-emerald-700">+4</span>
+      </button>
+
+      <div class="mx-2 h-5 w-px bg-line"></div>
+
+      <!-- Icon actions -->
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-500 hover:bg-paper-warm hover:text-ink-900">
+        <svg viewBox="0 0 24 24" class="h-[17px] w-[17px]" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+      </button>
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-300 cursor-not-allowed">
+        <svg viewBox="0 0 24 24" class="h-[17px] w-[17px]" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>
+      </button>
+
+      <button class="ml-2 inline-flex h-9 items-center gap-2 rounded-lg bg-ink-900 px-3.5 text-[13px] font-medium text-paper hover:bg-ink-800 transition-colors">
+        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download
+        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 opacity-70" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ─────────── WORKSPACE ─────────── -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- SECTION RAIL — feels like a table of contents -->
+    <aside class="flex w-[256px] shrink-0 flex-col bg-paper">
+      <div class="px-6 pb-3 pt-7">
+        <p class="font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400">Contents</p>
+      </div>
+      <nav class="min-h-0 flex-1 overflow-y-auto scrollbar-hide px-4 pb-3">
+        <ol class="flex flex-col">
+
+          <!-- 1 active -->
+          <li>
+            <button class="group relative flex w-full items-baseline gap-3 rounded-md px-2 py-2 text-left">
+              <span class="font-display text-[12px] font-medium tabular-nums text-ink-900 w-5">01</span>
+              <span class="flex-1 text-[14px] text-ink-900">Personal info</span>
+              <span class="font-display text-[11px] tabular-nums text-ink-500">95</span>
+              <span class="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 bg-ink-900"></span>
+            </button>
+          </li>
+
+          <!-- 2 -->
+          <li>
+            <button class="group flex w-full items-baseline gap-3 rounded-md px-2 py-2 text-left hover:bg-paper-warm/70">
+              <span class="font-display text-[12px] tabular-nums text-ink-400 w-5">02</span>
+              <span class="flex-1 text-[14px] text-ink-700">Professional summary</span>
+              <span class="font-display text-[11px] tabular-nums text-ink-400">80</span>
+            </button>
+          </li>
+
+          <!-- 3 -->
+          <li>
+            <button class="group flex w-full items-baseline gap-3 rounded-md px-2 py-2 text-left hover:bg-paper-warm/70">
+              <span class="font-display text-[12px] tabular-nums text-ink-400 w-5">03</span>
+              <span class="flex-1 text-[14px] text-ink-700">Work experience</span>
+              <span class="font-display text-[11px] tabular-nums text-ink-400">70</span>
+            </button>
+          </li>
+
+          <!-- 4 -->
+          <li>
+            <button class="group flex w-full items-baseline gap-3 rounded-md px-2 py-2 text-left hover:bg-paper-warm/70">
+              <span class="font-display text-[12px] tabular-nums text-ink-400 w-5">04</span>
+              <span class="flex-1 text-[14px] text-ink-700">Projects</span>
+              <span class="font-display text-[11px] tabular-nums text-ink-400">40</span>
+            </button>
+          </li>
+
+          <!-- 5 -->
+          <li>
+            <button class="group flex w-full items-baseline gap-3 rounded-md px-2 py-2 text-left hover:bg-paper-warm/70">
+              <span class="font-display text-[12px] tabular-nums text-ink-400 w-5">05</span>
+              <span class="flex-1 text-[14px] text-ink-700">Education</span>
+              <span class="font-display text-[11px] tabular-nums text-ink-400">60</span>
+            </button>
+          </li>
+
+          <!-- 6 -->
+          <li>
+            <button class="group flex w-full items-baseline gap-3 rounded-md px-2 py-2 text-left hover:bg-paper-warm/70">
+              <span class="font-display text-[12px] tabular-nums text-ink-400 w-5">06</span>
+              <span class="flex-1 text-[14px] text-ink-700">Skills</span>
+              <span class="font-display text-[11px] tabular-nums text-ink-400">30</span>
+            </button>
+          </li>
+
+          <!-- 7 -->
+          <li>
+            <button class="group flex w-full items-baseline gap-3 rounded-md px-2 py-2 text-left hover:bg-paper-warm/70">
+              <span class="font-display text-[12px] tabular-nums text-ink-400 w-5">07</span>
+              <span class="flex-1 text-[14px] text-ink-500">Certifications</span>
+              <span class="font-display text-[11px] tabular-nums text-ink-300">—</span>
+            </button>
+          </li>
+
+          <!-- 8 -->
+          <li>
+            <button class="group flex w-full items-baseline gap-3 rounded-md px-2 py-2 text-left hover:bg-paper-warm/70">
+              <span class="font-display text-[12px] tabular-nums text-ink-400 w-5">08</span>
+              <span class="flex-1 text-[14px] text-ink-500">Internships</span>
+              <span class="font-display text-[11px] tabular-nums text-ink-300">—</span>
+            </button>
+          </li>
+
+          <!-- Add -->
+          <li class="mt-3 px-2">
+            <button class="group inline-flex items-center gap-1.5 text-[13px] text-ink-500 hover:text-ink-900">
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              <span class="underline-offset-4 group-hover:underline">Add a section</span>
+            </button>
+          </li>
+        </ol>
+      </nav>
+
+      <!-- Footer: composed score, not a progress bar -->
+      <div class="px-6 pb-7 pt-4">
+        <div class="quiet-divider mb-4"></div>
+        <div class="flex items-baseline justify-between">
+          <span class="text-[11px] uppercase tracking-[0.14em] text-ink-400">Profile</span>
+          <span class="font-display text-[18px] font-semibold tabular-nums text-ink-900">62<span class="text-ink-400">/100</span></span>
+        </div>
+        <p class="mt-1.5 text-[12px] leading-relaxed text-ink-500">A few more details will lift your ATS score into the green band.</p>
+      </div>
+    </aside>
+
+    <!-- EDITOR CANVAS — feels like writing on paper -->
+    <section class="flex flex-1 min-w-0 flex-col overflow-hidden bg-paper border-l border-line-soft">
+
+      <!-- Body -->
+      <div class="flex-1 overflow-y-auto scrollbar-hide">
+        <div class="mx-auto h-full w-full max-w-[680px] px-8 pb-10 pt-10">
+
+          <!-- Section heading -->
+          <div class="mb-1 flex items-baseline gap-3">
+            <span class="font-display text-[12px] font-medium tabular-nums uppercase tracking-[0.16em] text-ink-400">01 · Section 1 of 8</span>
+          </div>
+          <h1 class="font-display text-[34px] font-semibold leading-tight tracking-tight text-ink-900">Personal info</h1>
+          <p class="mt-2 max-w-prose text-[14.5px] leading-relaxed text-ink-600">
+            The first thing recruiters read. Keep it short — name, role, and how to reach you. Adding a portfolio URL typically lifts ATS score by 4 points.
+          </p>
+
+          <div class="mt-8 grid grid-cols-1 gap-y-7">
+
+            <!-- Full name -->
+            <div>
+              <div class="mb-1 flex items-baseline justify-between">
+                <label class="text-[12.5px] font-medium text-ink-600">Full name</label>
+                <span class="text-[11px] uppercase tracking-wider text-emerald-700">Looks great</span>
+              </div>
+              <input value="Priya Sharma" class="paper-input font-display text-[20px] font-semibold tracking-tight" />
+            </div>
+
+            <!-- Email + phone -->
+            <div class="grid grid-cols-2 gap-x-8">
+              <div>
+                <label class="mb-1 block text-[12.5px] font-medium text-ink-600">Email</label>
+                <input value="priya.sharma@gmail.com" class="paper-input" />
+              </div>
+              <div>
+                <label class="mb-1 block text-[12.5px] font-medium text-ink-600">Phone</label>
+                <div class="flex items-baseline gap-2 border-b border-line-strong">
+                  <span class="pb-2 text-[14px] text-ink-500">🇮🇳 +91</span>
+                  <input value="98765 43210" class="paper-input border-b-0" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Location -->
+            <div>
+              <label class="mb-1 block text-[12.5px] font-medium text-ink-600">Location</label>
+              <input value="Bengaluru, India" class="paper-input" />
+            </div>
+
+            <!-- Headline + AI -->
+            <div>
+              <div class="mb-1 flex items-baseline justify-between">
+                <label class="text-[12.5px] font-medium text-ink-600">Headline</label>
+                <button class="group inline-flex items-baseline gap-1.5 text-[12px] text-ink-500 hover:text-ink-900">
+                  <span class="inline-flex h-1.5 w-1.5 self-center rounded-full bg-rust"></span>
+                  <span class="underline-offset-4 group-hover:underline">Ask Claude to rewrite</span>
+                  <span class="text-[10px] text-ink-400">⌘K</span>
+                </button>
+              </div>
+              <input value="Senior Software Engineer · TypeScript · Distributed Systems" class="paper-input font-display text-[16px]" />
+            </div>
+
+            <!-- Links — quiet row -->
+            <div>
+              <p class="mb-2 text-[12.5px] font-medium text-ink-600">Online</p>
+              <div class="grid grid-cols-3 gap-x-8">
+                <div>
+                  <span class="block text-[11px] uppercase tracking-wider text-ink-400 mb-0.5">LinkedIn</span>
+                  <input value="linkedin.com/in/priyasharma" class="paper-input text-[13.5px]" />
+                </div>
+                <div>
+                  <span class="block text-[11px] uppercase tracking-wider text-ink-400 mb-0.5">GitHub</span>
+                  <input value="github.com/priyasharma" class="paper-input text-[13.5px]" />
+                </div>
+                <div>
+                  <span class="block text-[11px] uppercase tracking-wider text-ink-400 mb-0.5">Portfolio</span>
+                  <input value="priya.dev" class="paper-input text-[13.5px]" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- A subtle AI nudge -->
+          <div class="mt-12 flex items-start gap-3 rounded-xl border border-line bg-paper-warm/50 p-4">
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-paper text-rust shadow-card">
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M12 19v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+            </div>
+            <div class="flex-1">
+              <p class="text-[13.5px] text-ink-800"><span class="font-medium">Suggestion.</span> Your headline is strong, but ATS scanners weight role keywords first. Try moving "Senior Software Engineer" to the front of your professional summary too.</p>
+              <div class="mt-2 flex items-center gap-3 text-[12px]">
+                <button class="text-rust hover:underline underline-offset-4">Apply</button>
+                <button class="text-ink-500 hover:underline underline-offset-4">Show more</button>
+                <button class="ml-auto text-ink-400 hover:text-ink-700">Dismiss</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section nav footer — minimal -->
+      <footer class="border-t border-line-soft px-8 py-4">
+        <div class="mx-auto flex max-w-[680px] items-center justify-between">
+          <button class="inline-flex items-baseline gap-2 text-[13px] text-ink-300 cursor-not-allowed">
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 self-center" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 18l-6-6 6-6"/></svg>
+            <span>Previous</span>
+          </button>
+          <p class="text-[12px] text-ink-500">Changes save automatically</p>
+          <button class="inline-flex items-baseline gap-2 text-[13px] text-ink-900 hover:underline underline-offset-4">
+            <span>Next · <span class="font-display font-semibold">Professional summary</span></span>
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 self-center" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      </footer>
+    </section>
+
+    <!-- PREVIEW — paper on paper -->
+    <section class="flex w-[520px] shrink-0 flex-col overflow-hidden bg-paper-warm border-l border-line-soft">
+      <div class="flex h-12 items-center justify-between px-5">
+        <div class="inline-flex items-baseline gap-2 text-[11px] uppercase tracking-[0.14em] text-ink-500">
+          <span class="self-center h-1 w-1 rounded-full bg-emerald-600"></span>
+          Live preview
+        </div>
+        <div class="inline-flex items-center gap-3 text-[12px] text-ink-500">
+          <button class="hover:text-ink-900">−</button>
+          <span class="font-display tabular-nums text-ink-700">100%</span>
+          <button class="hover:text-ink-900">+</button>
+          <span class="mx-1 h-3 w-px bg-line-strong"></span>
+          <button class="hover:text-ink-900 underline underline-offset-4">Templates</button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto scrollbar-hide px-6 pb-8">
+        <div class="mx-auto w-full max-w-[440px] rounded-sm bg-white shadow-paper">
+          <div class="p-9">
+            <h2 class="font-display text-[24px] font-semibold tracking-tight text-ink-900">Priya Sharma</h2>
+            <p class="mt-0.5 text-[11px] uppercase tracking-[0.14em] text-brand-600">Senior Software Engineer</p>
+            <p class="mt-2 text-[10.5px] text-ink-500">priya.sharma@gmail.com · +91 98765 43210 · Bengaluru, India</p>
+            <p class="text-[10.5px] text-ink-500">linkedin.com/in/priyasharma · github.com/priyasharma · priya.dev</p>
+
+            <div class="mt-5">
+              <h3 class="font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-700">Summary</h3>
+              <div class="mt-1 h-px w-8 bg-brand-500"></div>
+              <p class="mt-2 text-[10.5px] leading-relaxed text-ink-700">
+                Senior full-stack engineer with 6+ years building distributed payment systems at Razorpay and Flipkart. Specialise in TypeScript, Go, and event-driven architecture. Shipped checkout flow handling 8k TPS with 99.99% uptime.
+              </p>
+            </div>
+
+            <div class="mt-5">
+              <h3 class="font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-700">Experience</h3>
+              <div class="mt-1 h-px w-8 bg-brand-500"></div>
+              <div class="mt-2.5">
+                <div class="flex items-baseline justify-between">
+                  <p class="font-display text-[12px] font-semibold text-ink-900">Senior SDE · Razorpay</p>
+                  <p class="text-[10px] text-ink-500">2022 — Now</p>
+                </div>
+                <ul class="ml-3 mt-1 space-y-1 text-[10.5px] leading-relaxed text-ink-700">
+                  <li>— Led migration of checkout from monolith to four services; cut p99 latency 38%.</li>
+                  <li>— Designed idempotency layer handling 8k TPS, $40M daily.</li>
+                </ul>
+              </div>
+              <div class="mt-3">
+                <div class="flex items-baseline justify-between">
+                  <p class="font-display text-[12px] font-semibold text-ink-900">SDE II · Flipkart</p>
+                  <p class="text-[10px] text-ink-500">2019 — 2022</p>
+                </div>
+                <ul class="ml-3 mt-1 space-y-1 text-[10.5px] leading-relaxed text-ink-700">
+                  <li>— Built fraud detection ML pipeline; reduced false-positives 22%.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-5">
+              <h3 class="font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-700">Skills</h3>
+              <div class="mt-1 h-px w-8 bg-brand-500"></div>
+              <p class="mt-2 text-[10.5px] text-ink-700">TypeScript · Go · React · Next.js · PostgreSQL · Kafka · AWS · Docker</p>
+            </div>
+
+            <div class="mt-5">
+              <h3 class="font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-700">Education</h3>
+              <div class="mt-1 h-px w-8 bg-brand-500"></div>
+              <div class="mt-2 flex items-baseline justify-between">
+                <p class="font-display text-[12px] font-semibold text-ink-900">B.Tech, Computer Science · IIT Bombay</p>
+                <p class="text-[10px] text-ink-500">2015 — 2019</p>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-line-soft px-9 py-2 text-right font-display text-[10px] text-ink-400">Page 1 of 2</div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+</body>
+</html>

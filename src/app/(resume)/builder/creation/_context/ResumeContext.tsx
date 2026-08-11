@@ -53,11 +53,59 @@ const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
   marketing_sales: [],
 };
 
+/**
+ * Flatten a nested skill bucket into sibling top-level categories.
+ *
+ * The backend is migrating categorized skills from a flat shape to
+ * `{ customSkills: { databases: [...], tools: [...] } }`.
+ * mapBackendSkillsToCategorized already routes any non-PREDEFINED key through
+ * `custom_categories`, which every template renders -- but the
+ * `!Array.isArray(items)` guard below rejects a nested OBJECT, so the whole
+ * bucket was silently skipped and those skills vanished from the builder and
+ * from every rendered template with no error.
+ *
+ * One level only. A nested sub-category colliding with a top-level one of the
+ * same name is MERGED in either key order -- dropping a side is the silent
+ * skill loss this exists to prevent. Never mutates the input.
+ */
+export function expandNestedSkillBuckets(categories: BackendSkills): BackendSkills {
+  if (!categories || typeof categories !== 'object' || Array.isArray(categories)) {
+    return categories;
+  }
+
+  // Object.create(null), NOT {}: a category name is USER-SUPPLIED, so a custom
+  // category called "constructor" / "toString" / "valueOf" / "hasOwnProperty"
+  // would otherwise resolve the inherited Object.prototype member, make the
+  // `existing ?` test truthy against a FUNCTION, and throw
+  // "existing.concat is not a function" -- taking the whole resume load down.
+  const expanded: BackendSkills = Object.create(null);
+  const merge = (key: string, value: unknown) => {
+    if (!Array.isArray(value)) return;
+    const incoming = value as BackendSkillItem[];
+    const existing = expanded[key];
+    // Copy on first write: extending a caller-owned array on a later collision
+    // would mutate the input payload.
+    expanded[key] = existing ? existing.concat(incoming) : incoming.slice();
+  };
+
+  Object.entries(categories).forEach(([name, value]) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      Object.entries(value as Record<string, unknown>).forEach(
+        ([innerName, innerValue]) => merge(innerName, innerValue),
+      );
+    } else {
+      merge(name, value);
+    }
+  });
+
+  return expanded;
+}
+
 export function mapBackendSkillsToCategorized(backendSkills: unknown): CategorizedSkills {
   if (!backendSkills || typeof backendSkills !== 'object' || Array.isArray(backendSkills)) {
     return { ...EMPTY_CATEGORIZED_SKILLS };
   }
-  const s = backendSkills as BackendSkills;
+  const s = expandNestedSkillBuckets(backendSkills as BackendSkills);
   const extractNames = (arr?: BackendSkillItem[]) =>
     (arr || []).map(i => i.name ?? '').filter(Boolean);
 
