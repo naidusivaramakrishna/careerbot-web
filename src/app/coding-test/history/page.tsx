@@ -206,7 +206,7 @@ export default function CodingTestHistoryPage() {
               {submissions.map((s) => (
                 <li key={s.submission_id}>
                   <Link
-                    href={`/coding-test/${s.problem_slug}`}
+                    href={`/coding-test/${s.problem_slug}?submission=${s.submission_id}`}
                     className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-indigo-300 hover:shadow-sm"
                   >
                     <div className="min-w-0">

@@ -76,16 +76,18 @@ function parseSseBlock(block: string): SseEvent | null {
 
   let eventType = '';
   let data = '';
+  let sawData = false;
 
   for (const line of block.split('\n')) {
     if (line.startsWith('event: ')) eventType = line.slice(7).trim();
     else if (line.startsWith('data:')) {
+      sawData = true;
       const rest = line.slice(5).replace(/^ /, '');
       data = data ? `${data}\n${rest}` : rest;
     }
   }
 
-  if (!data) return null;
+  if (!sawData) return null;
 
   switch (eventType) {
     case 'status': {

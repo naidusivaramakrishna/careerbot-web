@@ -104,7 +104,7 @@ export default function CodingProblemDetailPage() {
   const backHref     = searchParams.get('language')
     ? `/coding-test/problems?language=${searchParams.get('language')}`
     : '/coding-test/problems';
-  const isPracticeMode = searchParams.get('mode') === 'practice';
+  const isPracticeMode = searchParams.get('mode') !== 'assessment';
 
   const { userId } = useCurrentUserId();
 
@@ -176,7 +176,6 @@ export default function CodingProblemDetailPage() {
   const nextProblem  = currentIndex < problemList.length - 1 ? problemList[currentIndex + 1] : null;
 
   const navigateTo = (target: CodingProblemSummary) => {
-    document.documentElement.requestFullscreen?.().catch(() => {});
     const mode = searchParams.get('mode');
     const url = mode ? `/coding-test/${target.slug}?mode=${mode}` : `/coding-test/${target.slug}`;
     router.push(url);
@@ -206,8 +205,10 @@ export default function CodingProblemDetailPage() {
 
   /* ── quota (loaded once on mount; refreshed after each AI grade) ── */
   useEffect(() => {
-    fetchQuota().then(setQuota).catch(() => {});
-  }, []);
+    if (!isPracticeMode) {
+      fetchQuota().then(setQuota).catch(() => {});
+    }
+  }, [isPracticeMode]);
 
   /* ── plain editor ── */
   const [plainEditor, setPlainEditor] = useState(false);
@@ -354,10 +355,11 @@ export default function CodingProblemDetailPage() {
   const isBusy = actionState === 'running' || actionState === 'submitting';
 
   const handleRun = useCallback(async () => {
-    if (isBusy) return;
+    if (isBusy || isGrading) return;
     const src = code[language]?.trim();
     if (!src) { setActionError('Write some code before running.'); return; }
     setActionState('running'); setActionError(''); setJudgeResult(null);
+    setGradingResult(null); setGradingError('');
     setJudgeMode('run');
     setConsoleCollapsed(false);
     setConsoleTab('tests');
@@ -369,7 +371,7 @@ export default function CodingProblemDetailPage() {
       setActionState('idle');
       setActionError(err instanceof RunApiError || err instanceof Error ? err.message : 'Failed to run your code.');
     }
-  }, [isBusy, code, language, slug]);
+  }, [isBusy, isGrading, code, language, slug]);
 
   const handleSubmit = useCallback(async () => {
     if (isBusy) return;
@@ -381,18 +383,13 @@ export default function CodingProblemDetailPage() {
     setConsoleCollapsed(false);
     setConsoleTab('tests');
 
-    // In practice mode skip AI grading entirely — run judge only.
     const judgePromise = submitCode(slug, language, code[language]);
-    const gradePromise = isPracticeMode ? null : mockGrade(slug, language, code[language], problem?.title);
-    // Prevent unhandled rejection if judgePromise fails before gradePromise resolves.
-    gradePromise?.catch(() => {});
 
     try {
       const judgeRes = await judgePromise;
       setJudgeResult(judgeRes);
       setActionState('done');
       if (judgeRes.verdict === 'accepted') {
-        localStorage.setItem('progress_updated', Date.now().toString());
         router.refresh();
       }
     } catch (err) {
@@ -401,12 +398,12 @@ export default function CodingProblemDetailPage() {
       return;
     }
 
-    if (!gradePromise) return;
+    if (isPracticeMode) return;
 
-    // Await the grade (already running in parallel); only switch tab on success.
+    // Only fire AI grading after judge succeeds.
     setIsGrading(true);
     try {
-      const gradeRes = await gradePromise;
+      const gradeRes = await mockGrade(slug, language, code[language], problem?.title);
       setGradingResult(gradeRes);
       setConsoleTab('grade');
       // A credit was consumed — refresh the displayed balance.
@@ -469,7 +466,7 @@ export default function CodingProblemDetailPage() {
         saveCode(language, v, slug);
       }}
       onKeyDown={(e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleRun(); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isGrading) { e.preventDefault(); handleRun(); }
       }}
       spellCheck={false}
       className="h-full w-full resize-none bg-[#1e1e1e] p-3 font-mono text-base text-slate-200 focus:outline-none"
@@ -661,7 +658,7 @@ export default function CodingProblemDetailPage() {
       {isReady && problem && (
         <div
           ref={containerRef}
-          className={`flex ${isMaximized ? 'flex-row flex-1 overflow-hidden' : 'flex-col lg:flex-1 lg:flex-row lg:overflow-hidden'}${isDragging ? ' select-none' : ''}`}
+          className={`flex ${isMaximized && isDesktop ? 'flex-row flex-1 overflow-hidden' : 'flex-col lg:flex-1 lg:flex-row lg:overflow-hidden'}${isDragging ? ' select-none' : ''}`}
         >
 
           {/* ── Left panel: problem statement ── */}
@@ -950,7 +947,7 @@ export default function CodingProblemDetailPage() {
             </div>
 
             {/* ── Low-credit warning ── */}
-            {quota && quota.submissions_remaining > 0 && quota.submissions_remaining <= 5 && (
+            {!isPracticeMode && quota && quota.submissions_remaining > 0 && quota.submissions_remaining <= 5 && (
               <div className="flex shrink-0 items-center gap-2 border-t border-amber-200 bg-amber-50 px-4 py-1.5">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
                 <p className="text-xs text-amber-700">
@@ -977,7 +974,8 @@ export default function CodingProblemDetailPage() {
                 onSubmit={handleSubmit}
                 runState={actionState === 'running' ? 'running' : 'idle'}
                 submitState={actionState === 'submitting' ? 'submitting' : 'idle'}
-                submissionsRemaining={quota?.submissions_remaining ?? null}
+                submissionsRemaining={isPracticeMode ? null : (quota?.submissions_remaining ?? null)}
+                isPracticeMode={isPracticeMode}
                 disabled={isGrading}
               />
             </div>

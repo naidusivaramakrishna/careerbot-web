@@ -40,7 +40,7 @@ export interface CodingProblemListFilters {
 
 // ---- Grading (submit + history) -------------------------------------------
 // Shapes mirror careerbot-ai's GradingResult, passed through by the
-// careerbot-api gateway (POST /api/v1/coding-test/submit).
+// careerbot-api gateway (POST /api/v1/coding-test/mock-grade).
 
 export interface GradingCriterion {
   name: string;
@@ -63,13 +63,6 @@ export interface GradingResult {
   summary: string;
   suggestions: string[];
   grading_model?: string;
-}
-
-export interface SubmitSolutionRequest {
-  problem_slug: string;
-  language: CodingTestLanguage;
-  code: string;
-  problem_title?: string;
 }
 
 export interface SubmitSolutionResponse {

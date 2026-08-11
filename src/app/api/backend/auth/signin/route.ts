@@ -72,16 +72,25 @@ export async function POST(request: NextRequest) {
         body: formData.toString(),
         signal: controller.signal,
       });
-    } finally {
+    } catch (err) {
       clearTimeout(fetchTimeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        return NextResponse.json(
+          { error: 'Authentication service timeout' },
+          { status: 504 }
+        );
+      }
+      throw err;
     }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Authentication failed' }));
+      clearTimeout(fetchTimeout);
       return NextResponse.json(errorData, { status: response.status });
     }
 
     const data = await response.json();
+    clearTimeout(fetchTimeout);
     // Tokens live in the httpOnly cookies forwarded below; never expose them
     // in the JS-readable body (authApi.ts:30 — "never accessible to JavaScript").
     const { access_token, refresh_token, ...safeBody } = data ?? {};

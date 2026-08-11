@@ -52,11 +52,11 @@ function resolveTopicTag(topic: string, availableTags: string[]): string {
   });
   if (plural) return plural;
 
-  // 3. Tag contains topic's first significant word (≥4 chars)
+  // 3. Tag starts with topic or contains topic as a whole word (≥4 chars)
   const words = tLow.split(/\s+/).filter((w) => w.length >= 4);
   const wordMatch = availableTags.find((t) => {
     const d = t.toLowerCase();
-    return words.some((w) => d.includes(w));
+    return words.some((w) => d.startsWith(w) || d.includes(` ${w}`));
   });
   if (wordMatch) return wordMatch;
 
@@ -122,18 +122,13 @@ function CodingProblemsListContent() {
       .then((res) => applyResults(res, res.length))
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        if (err instanceof GradingApiError && err.status === 401) {
-          fetchProblems(filters, controller.signal)
-            .then((res) => applyResults(res.problems.map((p) => ({ ...p, user_status: null })), res.total))
-            .catch((fallbackErr) => {
-              if (fallbackErr instanceof DOMException && fallbackErr.name === 'AbortError') return;
-              setErrorMessage(fallbackErr instanceof Error ? fallbackErr.message : 'Something went wrong.');
-              setState('error');
-            });
-          return;
-        }
-        setErrorMessage(err instanceof Error ? err.message : 'Something went wrong.');
-        setState('error');
+        fetchProblems(filters, controller.signal)
+          .then((res) => applyResults(res.problems.map((p) => ({ ...p, user_status: null })), res.total))
+          .catch((fallbackErr) => {
+            if (fallbackErr instanceof DOMException && fallbackErr.name === 'AbortError') return;
+            setErrorMessage(fallbackErr instanceof Error ? fallbackErr.message : 'Something went wrong.');
+            setState('error');
+          });
       });
     return () => controller.abort();
   }, [language, difficulty, tag, reloadKey]);
@@ -158,8 +153,15 @@ function CodingProblemsListContent() {
   // Maps each popular topic display name → resolved actual database tag.
   const popularTopicTagMap = useMemo(() => {
     const map = new Map<string, string>();
+    const claimedTags = new Set<string>();
     for (const topic of POPULAR_TOPICS) {
-      map.set(topic, resolveTopicTag(topic, baseTagOptions));
+      const resolved = resolveTopicTag(topic, baseTagOptions);
+      if (!claimedTags.has(resolved)) {
+        map.set(topic, resolved);
+        claimedTags.add(resolved);
+      } else {
+        map.set(topic, topic);
+      }
     }
     return map;
   }, [baseTagOptions]);
@@ -406,8 +408,7 @@ function CodingProblemsListContent() {
                   {visibleProblems.map((p) => (
                     <li key={p.slug}>
                       <Link
-                        href={language ? `/coding-test/${p.slug}?language=${language}&mode=practice` : `/coding-test/${p.slug}?mode=practice`}
-                        onClick={() => { document.documentElement.requestFullscreen?.().catch(() => {}); }}
+                        href={language ? `/coding-test/${p.slug}?language=${language}` : `/coding-test/${p.slug}`}
                         className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
                       >
                         <div className="flex min-w-0 items-center gap-3">

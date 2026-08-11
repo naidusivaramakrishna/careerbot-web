@@ -63,6 +63,9 @@ export default function PlaygroundPage() {
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   const handleLanguageChange = (lang: CodingTestLanguage) => {
+    if (code !== STARTER[language]) {
+      if (!confirm('Switching languages will discard your code. Continue?')) return;
+    }
     setLanguage(lang);
     setCode(STARTER[lang]);
   };
@@ -100,6 +103,7 @@ export default function PlaygroundPage() {
     setRunState('running');
     setStatusLabel('Running…');
 
+    let receivedTerminal = false;
     try {
       for await (const event of streamSse(queued.stream_url, controller.signal)) {
         if (controller.signal.aborted) break;
@@ -114,15 +118,21 @@ export default function PlaygroundPage() {
             setOutputLines((prev) => [...prev, { type: 'stderr', text: event.line }]);
             break;
           case 'done':
+            receivedTerminal = true;
             setExitCode(event.exit_code);
             setWallTimeMs(event.wall_time_ms);
             setRunState('done');
             break;
           case 'error':
+            receivedTerminal = true;
             setErrorMessage(event.error);
             setRunState('error');
             break;
         }
+      }
+      if (!controller.signal.aborted && !receivedTerminal) {
+        setErrorMessage('Execution stream ended unexpectedly.');
+        setRunState('error');
       }
     } catch {
       if (!controller.signal.aborted) {
