@@ -3,54 +3,50 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Mic, Brain, MessageSquare, BarChart2, ChevronRight,
+  Mic, Users, MessageSquare, BarChart2, ChevronRight,
   Lightbulb, Sparkles, Loader2, AlertCircle,
 } from "lucide-react";
-import { generateMrTrQuestions } from "@/api/mockInterviewApi";
-
-// ─── Static data ──────────────────────────────────────────────────────────────
+import { generateHrQuestions } from "@/api/mockInterviewApi";
 
 const STATS = [
-  { value: "10",  label: "Questions" },
-  { value: "AI",  label: "Feedback" },
+  { value: "10", label: "Questions" },
+  { value: "AI", label: "Feedback" },
 ];
 
 const HOW_IT_WORKS = [
   {
-    icon: Brain,
-    title: "Questions from your resume",
-    body: "AI asks questions based on the skills and projects on your resume, combined with the most commonly asked technical interview questions.",
+    icon: Users,
+    title: "Questions from your profile",
+    body: "AI asks common HR interview questions tailored to your background — covering strengths, weaknesses, teamwork, and situational scenarios.",
   },
   {
     icon: Mic,
-    title: "Speak or type your answer",
-    body: "Answer out loud to simulate a real interview. Text fallback is available if mic is unavailable.",
+    title: "Speak your answer",
+    body: "Answer out loud to simulate a real interview. Your prepared scripts are shown to guide you in round 1.",
   },
   {
     icon: MessageSquare,
     title: "Get instant feedback",
-    body: "AI reviews your answer for accuracy, clarity, and depth — with specific improvement tips.",
+    body: "AI reviews your answer for content, clarity, and structure — with specific tips to make it more compelling.",
   },
   {
     icon: BarChart2,
-    title: "Track your progress",
-    body: "Scores and feedback are saved after every session so you can see improvement over time.",
+    title: "Two-round practice",
+    body: "Round 1 shows your prepared notes. Round 2 gives keywords only — building recall and confidence.",
   },
 ];
 
 const TIPS = [
-  "Think out loud — interviewers value your reasoning process, not just the final answer.",
-  "Structure answers with a brief approach before diving into details.",
-  "Mention edge cases and trade-offs — it separates good candidates from great ones.",
-  "If you're stuck, say what you do know and work toward the answer — never go silent.",
-  "Aim for 60–120 seconds per answer. Too short = shallow. Too long = unfocused.",
+  "Use the STAR method (Situation, Task, Action, Result) for behavioural questions.",
+  "Be specific — vague answers like \"I'm a team player\" don't stand out. Use real examples.",
+  "Prepare 3–4 strong stories from past experience that can be adapted to multiple questions.",
+  "Show self-awareness when discussing weaknesses — always pair them with how you're improving.",
+  "Aim for 60–120 seconds per answer. Practise until your stories feel natural, not scripted.",
 ];
 
-export const TECH_QUESTIONS_KEY = "tech_generated_questions";
+const HR_QUESTIONS_KEY = "hr_generated_questions";
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-export default function TechnicalPage() {
+export default function HRPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,17 +55,9 @@ export default function TechnicalPage() {
     setLoading(true);
     setError(null);
     try {
-      const resumeId = localStorage.getItem("current_resume_id") ?? undefined;
-      const data = await generateMrTrQuestions({
-        mode: "TR",
-        num_questions: 10,
-        resume_id: resumeId,
-        industry: "General",
-        focus_areas: [],
-        question_bank_gaps: [],
-      });
-      sessionStorage.setItem(TECH_QUESTIONS_KEY, JSON.stringify(data.questions));
-      router.push("/notes/technical/practice");
+      const data = await generateHrQuestions(10);
+      sessionStorage.setItem(HR_QUESTIONS_KEY, JSON.stringify(data.questions));
+      router.push("/notes/hr/practice");
     } catch {
       setError("Could not load questions. Please check your connection and try again.");
     } finally {
@@ -80,19 +68,17 @@ export default function TechnicalPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
-      {/* ── Header ── */}
       <div>
         <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#2557a7]/10 text-[#2557a7] rounded-full text-xs font-semibold mb-3">
-          <Sparkles size={11} /> Technical Practice
+          <Sparkles size={11} /> HR Practice
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1.5">Technical Interview Prep</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1.5">HR Interview Prep</h1>
         <p className="text-sm text-gray-500 leading-relaxed max-w-xl">
-          AI-powered mock Q&amp;A on the topics that matter most in technical interviews.
-          Practice answering out loud, get scored feedback, and build confidence for the real thing.
+          Practise the behavioural and situational questions that HR interviewers rely on.
+          Answer out loud, get AI-scored feedback, and build the confidence to tell your story well.
         </p>
       </div>
 
-      {/* ── Stats strip ── */}
       <div className="grid grid-cols-2 gap-3">
         {STATS.map((s) => (
           <div key={s.label} className="flex flex-col items-center justify-center py-4 bg-white border border-gray-200 rounded-xl shadow-sm">
@@ -102,7 +88,6 @@ export default function TechnicalPage() {
         ))}
       </div>
 
-      {/* ── How it works ── */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">How It Works</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -123,11 +108,10 @@ export default function TechnicalPage() {
         </div>
       </div>
 
-      {/* ── Tips ── */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <Lightbulb size={14} className="text-[#2557a7]" />
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tips for Technical Interviews</p>
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tips for HR Interviews</p>
         </div>
         <ul className="space-y-2.5">
           {TIPS.map((tip, i) => (
@@ -148,7 +132,6 @@ export default function TechnicalPage() {
         </div>
       )}
 
-      {/* ── CTA ── */}
       <button
         onClick={handleStart}
         disabled={loading}
@@ -157,7 +140,7 @@ export default function TechnicalPage() {
         {loading ? (
           <Loader2 size={15} className="animate-spin" />
         ) : (
-          <>Start Technical Practice <ChevronRight size={16} /></>
+          <>Start HR Practice <ChevronRight size={16} /></>
         )}
       </button>
 

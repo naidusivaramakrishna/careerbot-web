@@ -18,7 +18,7 @@ const VALID_EXACT_PATHS = new Set([
   '/mock-interview/history',
   '/notes/generate',
   '/notes/english',
-  '/notes/practice',
+  '/notes/managerial',
   '/notes/technical',
   '/mock-test',
   '/mock-test/history',

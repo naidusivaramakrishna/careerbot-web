@@ -365,7 +365,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     const dataKey = SECTION_DATA_KEY_MAP[removed.name];
     if (dataKey) {
       const emptyValue = dataKey === "categorizedSkills"
-        ? { programming_languages: [], frameworks: [], databases: [], tools: [], cloud_platforms: [], soft_skills: [] }
+        ? { programming_languages: [], frameworks: [], soft_skills: [], project_management: [], marketing_sales: [] }
         : [];
       setResumeData((prev) => ({ ...prev, [dataKey]: emptyValue }));
     }

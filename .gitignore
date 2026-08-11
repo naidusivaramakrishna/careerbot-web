@@ -64,3 +64,6 @@ next-env.d.ts
 # local debug scripts / screenshots (never commit)
 verify-login.mjs
 verify-*.png
+
+# local browser audit captures (chrome profiles, cache, screenshots)
+/audit/

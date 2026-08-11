@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { useResume } from "../../_context/ResumeContext";
 
@@ -52,6 +52,9 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
 }) => {
   const { resumeSource, resumeData, enhancedSuggestions, applyAutoFix, applyManualFix } = useResume();
   const [buttonStates, setButtonStates] = useState<Record<string, ButtonState>>({});
+  // Snapshot section values at the time each suggestion first renders.
+  // Used to detect whether the user has actually edited the field before marking as done.
+  const originalValuesRef = useRef<Record<string, string>>({});
 
   const getSectionValue = (section: string): string => {
     const s = section.toLowerCase();
@@ -165,8 +168,16 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
               const isAuto = s.fix_type === "auto";
               const isLoading = btnState === "loading";
 
+              // Snapshot section value on first render of this suggestion
+              if (!isAuto && !(s.id in originalValuesRef.current)) {
+                originalValuesRef.current[s.id] = getSectionValue(s.section);
+              }
+              const currentValue = isAuto ? "" : getSectionValue(s.section);
+              const isEdited = isAuto || currentValue.trim() !== originalValuesRef.current[s.id]?.trim();
+              const checkDisabled = btnState === "loading" || btnState === "success" || !isEdited;
+
               return isAuto ? (
-                // ── Auto fix: full clickable button (original styling) ──
+                // ── Auto fix: full clickable button ──
                 <button
                   key={s.id}
                   type="button"
@@ -218,12 +229,13 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
                     <div className="relative flex items-center shrink-0">
                       <button
                         type="button"
-                        disabled={btnState === "loading" || btnState === "success"}
-                        onClick={() => handleManualFix(s.id, getSectionValue(s.section))}
+                        disabled={checkDisabled}
+                        onClick={() => handleManualFix(s.id, currentValue)}
                         className={`flex items-center justify-center rounded-full w-6 h-6 transition-all duration-150 peer ${
                           btnState === "loading" ? "text-amber-400 cursor-wait" :
                           btnState === "success" ? "text-green-500 cursor-default" :
                           btnState === "error"   ? "text-red-400 hover:text-red-600 cursor-pointer" :
+                          !isEdited             ? "text-gray-300 cursor-not-allowed" :
                           "text-amber-400 hover:text-green-500 cursor-pointer"
                         }`}
                         aria-label="Mark as done"
@@ -234,6 +246,7 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
                         {btnState === "loading" ? "Marking…" :
                          btnState === "success" ? "Done!" :
                          btnState === "error"   ? "Failed" :
+                         !isEdited             ? "Edit the field first" :
                          "Mark as done"}
                       </span>
                     </div>

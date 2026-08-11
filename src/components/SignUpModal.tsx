@@ -79,7 +79,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             // User can verify email from profile/settings later
             toast.success("Account created! Redirecting...")
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = authRedirectTo }
+            if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = "/onboarding" }
         } catch (err) {
             handleApiError(err)
         } finally {

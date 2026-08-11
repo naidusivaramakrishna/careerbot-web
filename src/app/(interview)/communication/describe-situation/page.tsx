@@ -174,6 +174,11 @@ export default function SituationExplainingPage() {
       sessionStorage.setItem(`q_44_completed`, 'true');
       logger.info('✅ Marked question 44 as completed');
 
+      // Stop the timer as soon as the panel opens — assessment questions are all done
+      const startDate = localStorage.getItem('test_start_date');
+      if (startDate) localStorage.setItem('assessment_start_time', startDate);
+      localStorage.removeItem('test_start_date');
+
       // Open the summary panel
       setIsSubmitting(false);
       setIsPanelOpen(true);
@@ -189,10 +194,6 @@ export default function SituationExplainingPage() {
   // Step 2: Complete session and run evaluations (called from panel)
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
-    // Preserve start time for report page before removing the active-assessment key
-    const startDate = localStorage.getItem('test_start_date');
-    if (startDate) localStorage.setItem('assessment_start_time', startDate);
-    localStorage.removeItem('test_start_date');
 
     try {
       const profile = await getProfile();
@@ -540,7 +541,7 @@ export default function SituationExplainingPage() {
                       Uploading…
                     </>
                   ) : (
-                    'Finish Assessment →'
+                    'Finish →'
                   )}
                 </button>
               </div>

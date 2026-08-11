@@ -445,6 +445,86 @@ export const generateTechnicalQuestions = async (
   return response.data;
 };
 
+// ==================== HR QUESTIONS ====================
+
+export interface HrQuestion {
+  question_id: string;
+  question_text: string;
+  category: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  time_limit_seconds: number;
+}
+
+export interface GenerateHrQuestionsResponse {
+  questions: HrQuestion[];
+}
+
+/**
+ * Generate HR interview questions
+ * POST /api/v1/mock-interview/generate-hr-questions
+ */
+export const generateHrQuestions = async (
+  numQuestions = 10
+): Promise<GenerateHrQuestionsResponse> => {
+  const response = await httpClient.post<GenerateHrQuestionsResponse>(
+    '/mock-interview/generate-hr-questions',
+    { num_questions: numQuestions } as unknown as Record<string, unknown>
+  );
+  return response.data;
+};
+
+// ==================== MR / TR QUESTIONS ====================
+
+export interface MrTrQuestion {
+  question_id: string;
+  question_text: string;
+  category: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  time_limit_seconds: number;
+  evaluation_focus: string[];
+  // TR-only fields
+  skill_tag?: string;
+  question_type?: string;
+  key_points?: string[];
+  // MR-only fields
+  competency?: string;
+}
+
+export interface GenerateMrTrQuestionsRequest {
+  mode: 'TR' | 'MR';
+  num_questions?: number;
+  resume_id?: string;
+  target_role?: string;
+  experience_level?: string;
+  difficulty?: string;
+  years_experience?: number;
+  industry?: string;
+  focus_areas?: string[];
+  question_bank_gaps?: string[];
+}
+
+export interface GenerateMrTrQuestionsResponse {
+  mode: string;
+  questions: MrTrQuestion[];
+  total_questions: number;
+  requested_questions: number;
+  skill_coverage?: Record<string, number>;
+}
+
+/**
+ * Generate Technical Role (TR) or Managerial Role (MR) interview questions
+ * POST /api/v1/mock-interview/generate-mr-tr-questions
+ */
+export const generateMrTrQuestions = async (
+  data: GenerateMrTrQuestionsRequest
+): Promise<GenerateMrTrQuestionsResponse> => {
+  const response = await httpClient.post<GenerateMrTrQuestionsResponse>(
+    '/mock-interview/generate-mr-tr-questions',
+    data as unknown as Record<string, unknown>
+  );
+  return response.data;
+};
+
 // ==================== PHASE 2 — REPORT INTERFACES ====================
 
 export interface ReportAnswer {
@@ -586,6 +666,32 @@ export interface LiveSession {
 }
 
 // ── WS Message types (client → server) ──
+
+export interface LipSyncWord {
+  word: string;
+  start_ms: number;
+  end_ms: number;
+  confidence?: number;
+}
+
+export interface LipSyncViseme {
+  viseme_id?: string;
+  provider_viseme_id?: string | number;
+  start_ms: number;
+  end_ms: number;
+  intensity?: number;
+}
+
+export interface LipSyncPayload {
+  schema_version: string;
+  sync_source: 'provider_viseme' | 'forced_alignment' | 'unavailable' | string;
+  provider?: 'azure_speech' | 'rhubarb' | string;
+  sync_provider?: 'azure_speech' | 'rhubarb' | string;
+  timebase?: 'audio_start_ms' | string;
+  audio_start_offset_ms?: number;
+  words?: LipSyncWord[];
+  visemes?: LipSyncViseme[];
+}
 export type WsClientMessage =
   | { type: 'audio_chunk'; data: string; sequence: number }
   | { type: 'submit_answer'; text: string }
@@ -599,11 +705,11 @@ export type WsClientMessage =
 export type WsServerMessage =
   | { type: 'session_ready'; session_id: string; total_questions: number; estimated_duration_m: number }
   | { type: 'session_resumed'; session_id: string; questions_asked: number; total_questions: number; current_question: string }
-  | { type: 'question_audio'; question_number: number; text: string; audio: string | null; time_limit_s: number; is_follow_up?: boolean }
+  | { type: 'question_audio'; question_number: number; text: string; audio: string | null; time_limit_s: number; is_follow_up?: boolean; audio_format?: string; sample_rate?: number; duration_ms?: number; lip_sync?: LipSyncPayload | null }
   | { type: 'transcript_partial'; text: string; new_word?: string; word_index?: number; timestamp_ms?: number; is_final?: boolean }
   | { type: 'transcript_final'; text: string; is_final: true }
   | { type: 'answer_scored'; question_number: number; score: number; feedback?: string; key_points_hit?: number; key_points_total?: number }
-  | { type: 'follow_up'; text: string; audio: string | null }
+  | { type: 'follow_up'; text: string; audio: string | null; audio_format?: string; sample_rate?: number; duration_ms?: number; time_limit_s?: number; lip_sync?: LipSyncPayload | null }
   | { type: 'question_skipped'; skipped_question_number: number }
   | { type: 'interview_complete'; report_id: string; overall_score: number }
   | { type: 'session_paused'; reason: string; reconnect_token: string | null }

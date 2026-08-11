@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAllResumesUnified, createResumeWithAuth } from "@/api/resumeApi";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import Image from "next/image";
 import {
@@ -190,25 +191,41 @@ function HeroMock() {
 
 export default function ResumeLandingPage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [activeSection, setActiveSection] = useState("overview");
   const [showSignin, setShowSignin] = useState(false);
   const [startingFree, setStartingFree] = useState(false);
   const [buildingResume, setBuildingResume] = useState(false);
 
-  const handleStartFree = useCallback(async () => {
-    setStartingFree(true);
+  // Shared post-auth navigation: check resumes → route accordingly
+  const navigateAfterAuth = useCallback(async () => {
     try {
       const { builder_resumes, enhanced_resumes } = await getAllResumesUnified();
       const hasResumes = builder_resumes.length > 0 || enhanced_resumes.length > 0;
       router.push(hasResumes ? "/builder/start/list" : "/builder/start");
     } catch {
       router.push("/builder/start");
-    } finally {
-      setStartingFree(false);
     }
   }, [router]);
 
+  const handleStartFree = useCallback(async () => {
+    if (!isAuthenticated) {
+      setShowSignin(true);
+      return;
+    }
+    setStartingFree(true);
+    try {
+      await navigateAfterAuth();
+    } finally {
+      setStartingFree(false);
+    }
+  }, [isAuthenticated, navigateAfterAuth]);
+
   const handleBuildNewResume = useCallback(async () => {
+    if (!isAuthenticated) {
+      setShowSignin(true);
+      return;
+    }
     setBuildingResume(true);
     try {
       const newResume = await createResumeWithAuth();
@@ -220,10 +237,7 @@ export default function ResumeLandingPage() {
       const status = error.response?.status;
       const detail = (error.response?.data?.detail || error.message || "").toLowerCase();
 
-      if (status === 401 || (status === 403 && (detail.includes("auth") || detail.includes("sign")))) {
-        // Not authenticated — prompt sign in
-        setShowSignin(true);
-      } else if (
+      if (
         status === 409 ||
         detail.includes("already") ||
         detail.includes("limit") ||
@@ -231,19 +245,15 @@ export default function ResumeLandingPage() {
         detail.includes("one resume") ||
         detail.includes("exists")
       ) {
-        // Free plan: only one resume allowed
         toast.error("You have already created a resume. Free access allows only one resume — your existing resume is in the list.", { duration: 6000 });
         router.push("/builder/start/list");
-      } else if (status === 403) {
-        toast.error("You don't have permission to create a resume. Please sign in and try again.");
-        setShowSignin(true);
       } else {
         toast.error(error.response?.data?.detail || "Failed to create resume. Please try again.");
       }
     } finally {
       setBuildingResume(false);
     }
-  }, [router]);
+  }, [router, isAuthenticated]);
 
   useEffect(() => {
     const sections = navItems
@@ -322,7 +332,7 @@ export default function ResumeLandingPage() {
             </button>
             <button
               onClick={handleStartFree}
-              disabled={startingFree}
+              disabled={startingFree || authLoading}
               className="inline-flex items-center gap-2 rounded-full bg-[#2557a7] px-4 py-2 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] active:scale-95 disabled:opacity-70"
             >
               {startingFree ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={14} />}
@@ -374,7 +384,7 @@ export default function ResumeLandingPage() {
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <button
                   onClick={handleStartFree}
-                  disabled={startingFree}
+                  disabled={startingFree || authLoading}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:bg-[#1e4a94] disabled:opacity-70"
                 >
                   {startingFree ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={16} />}
@@ -452,7 +462,7 @@ export default function ResumeLandingPage() {
                     {path.action === "build" ? (
                       <button
                         onClick={handleBuildNewResume}
-                        disabled={buildingResume}
+                        disabled={buildingResume || authLoading}
                         className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-[#2557a7] disabled:opacity-70"
                       >
                         {buildingResume
@@ -568,7 +578,7 @@ export default function ResumeLandingPage() {
             </p>
             <button
               onClick={handleStartFree}
-              disabled={startingFree}
+              disabled={startingFree || authLoading}
               className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-white px-10 py-4 text-base font-bold text-[#2557a7] shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-70"
             >
               {startingFree ? <span className="w-4 h-4 border-2 border-[#2557a7] border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={17} />}
@@ -584,7 +594,12 @@ export default function ResumeLandingPage() {
 
       <LandingFooter />
     </main>
-    <SignUpModal open={showSignin} onClose={() => setShowSignin(false)} initialFormType="signin" />
+    <SignUpModal
+      open={showSignin}
+      onClose={() => setShowSignin(false)}
+      initialFormType="signin"
+      onSuccess={navigateAfterAuth}
+    />
     </>
   );
 }

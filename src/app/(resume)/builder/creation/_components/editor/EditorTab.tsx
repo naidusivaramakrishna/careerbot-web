@@ -523,7 +523,10 @@ const EditorTab: React.FC<Props> = ({
 
     sectionFields.forEach((key) => {
       const value = formData[key] || "";
-      if (isRequiredField(key)) {
+      // location is globally optional (Work Experience etc.) but required for Personal Info
+      const isRequired = isRequiredField(key) ||
+        (openModalSection === "Personal Info" && key.toLowerCase() === "location");
+      if (isRequired) {
         if (!value || value.trim() === "") {
           newErrors[key] = "This field is required";
           hasEmptyRequiredFields = true;
@@ -590,10 +593,9 @@ const EditorTab: React.FC<Props> = ({
         return {
           programming_languages: toNameObjs(anyCats.programming_languages),
           frameworks: toNameObjs(anyCats.frameworks),
-          databases: toNameObjs(anyCats.databases),
-          tools: toNameObjs(anyCats.tools),
-          cloud_platforms: toNameObjs(anyCats.cloud_platforms),
           soft_skills: toNameObjs(anyCats.soft_skills),
+          project_management: toNameObjs(anyCats.project_management),
+          marketing_sales: toNameObjs(anyCats.marketing_sales),
         };
       }
       return {};

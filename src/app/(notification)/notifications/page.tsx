@@ -5,6 +5,8 @@ import {
   AlertCircle,
   ArrowUpRight,
   CheckCheck,
+  ChevronLeft,
+  ChevronRight,
   Filter,
   Inbox,
   Loader2,
@@ -192,7 +194,7 @@ const isToday = (timestamp: string): boolean => new Date(timestamp).toDateString
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const { notifications, unreadCount, loading, error, refetch } = useNotificationsList(1, 50);
+  const { notifications, unreadCount, pagination, currentPage, loading, error, refetch, goToPage, nextPage, prevPage } = useNotificationsList(1, 50);
   const [activeTab, setActiveTab] = React.useState<FilterTab>("all");
   const [query, setQuery] = React.useState("");
 
@@ -246,6 +248,21 @@ export default function NotificationsPage() {
     ],
     [totalCount, unreadCount, readCount, notifications]
   );
+
+  const visiblePageNumbers = useMemo(() => {
+    const totalPages = pagination.total_pages;
+    if (totalPages <= 1) return [];
+
+    const maxButtons = 5;
+    let start = Math.max(1, currentPage - 2);
+    const end = Math.min(totalPages, start + maxButtons - 1);
+    start = Math.max(1, end - maxButtons + 1);
+
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [pagination.total_pages, currentPage]);
+
+  const paginationStart = notifications.length > 0 ? (pagination.page - 1) * pagination.limit + 1 : 0;
+  const paginationEnd = notifications.length > 0 ? paginationStart + notifications.length - 1 : 0;
 
   const handleMarkAsRead = async (id: string) => {
     try {
@@ -523,6 +540,60 @@ export default function NotificationsPage() {
                 </div>
               );
             })}
+          </section>
+        )}
+
+        {pagination.total_pages > 1 && (
+          <section className="rounded-3xl border border-gray-200 bg-white px-4 py-3 shadow-sm md:px-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-xs font-semibold text-gray-500">
+                Showing{" "}
+                <span className="font-black text-gray-900">
+                  {paginationStart}-{paginationEnd}
+                </span>{" "}
+                on page <span className="font-black text-gray-900">{pagination.page}</span>
+                <span className="mx-1 text-gray-300">/</span>
+                <span className="font-black text-gray-900">{pagination.total_pages}</span>
+              </p>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  onClick={prevPage}
+                  disabled={!pagination.has_prev}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-gray-700 transition hover:border-[#2557a7]/30 hover:bg-[#2557a7]/5 hover:text-[#2557a7] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft size={14} />
+                  Prev
+                </button>
+
+                {visiblePageNumbers.map((page) => {
+                  const isActive = page === currentPage;
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      disabled={isActive}
+                      className={`flex h-9 min-w-9 items-center justify-center rounded-xl border px-3 text-xs font-black transition ${
+                        isActive
+                          ? "border-transparent bg-[#2557a7] text-white shadow-sm"
+                          : "border-gray-200 bg-white text-gray-600 hover:border-[#2557a7]/30 hover:bg-[#2557a7]/5 hover:text-[#2557a7]"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+
+                <button
+                  onClick={nextPage}
+                  disabled={!pagination.has_next}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-gray-700 transition hover:border-[#2557a7]/30 hover:bg-[#2557a7]/5 hover:text-[#2557a7] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
           </section>
         )}
       </div>
