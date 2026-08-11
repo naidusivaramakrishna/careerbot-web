@@ -76,22 +76,38 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
   // camelCase key AND a display-name form so Skills.tsx lookup always finds the ID.
   const PREDEFINED = new Set(['programmingLanguages', 'frameworks', 'softSkills', 'projectManagement', 'marketingSales']);
   const customCategories: CustomCategory[] = [];
-  Object.entries(s).forEach(([camelKey, items]) => {
-    if (PREDEFINED.has(camelKey) || !Array.isArray(items)) return;
-    const typedItems = items as BackendSkillItem[];
-    // Derive a human-readable display name: "databaseTools" → "Database Tools"
-    const displayName = camelKey
+
+  // Convert camelCase or snake_case key to "Human Readable Name"
+  const toDisplayName = (key: string) =>
+    key
+      .replace(/_/g, ' ')
       .replace(/([A-Z])/g, ' $1')
+      .replace(/\s+/g, ' ')
       .replace(/^./, c => c.toUpperCase())
       .trim();
-    // Store under both keys so whichever form custom.name takes, the lookup hits
-    buildIdMap(camelKey, typedItems);
-    buildIdMap(displayName, typedItems);
+
+  const addCustomCategory = (key: string, items: BackendSkillItem[]) => {
+    const displayName = toDisplayName(key);
+    buildIdMap(key, items);
+    buildIdMap(displayName, items);
     customCategories.push({
-      id: `custom_backend_${camelKey}`,
+      id: `custom_backend_${key}`,
       name: displayName,
-      skills: extractNames(typedItems),
+      skills: extractNames(items),
     });
+  };
+
+  Object.entries(s).forEach(([camelKey, items]) => {
+    if (PREDEFINED.has(camelKey)) return;
+    // Nested container: customSkills: { "dev_ops_tools": [{id, name}] }
+    if (!Array.isArray(items) && typeof items === 'object' && items !== null) {
+      Object.entries(items as Record<string, BackendSkillItem[]>).forEach(([subKey, subItems]) => {
+        if (Array.isArray(subItems)) addCustomCategory(subKey, subItems);
+      });
+      return;
+    }
+    if (!Array.isArray(items)) return;
+    addCustomCategory(camelKey, items as BackendSkillItem[]);
   });
 
   return {
@@ -725,7 +741,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             }
           })(),
           (async () => {
-            if (data) return data; // Use cached data if available
+            // For enhanced resumes, always fetch from API — cached data is flat
+            // (no enhanced_data / ats_score) and would break the score tab on first load.
+            if (data && source !== "enhanced") return data;
             if (source === "enhanced") {
               return await getEnhancedResume(resumeId);
             } else {

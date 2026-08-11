@@ -10,6 +10,7 @@ import {
   addSkillAutoFill,
   addCertificationAutoFill,
   addProjectAutoFill,
+  uploadResume,
 } from "@/api/userApi";
 
 export type FillStep = "idle" | "parsing" | "saving" | "done" | "error";
@@ -25,31 +26,38 @@ export interface FillResult {
 
 const RESUME_ID_KEY = "dashboard_resume_id";
 
-export function useResumeProfileFill() {
+export function useResumeProfileFill(userId?: string) {
+  const storageKey = userId ? `${RESUME_ID_KEY}_${userId}` : null;
+
   const [step, setStep] = useState<FillStep>("idle");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FillResult | null>(null);
   const [resumeId, setResumeId] = useState<string | null>(null);
 
-  // Read from localStorage on client mount (SSR-safe)
+  // Read from localStorage on client mount — keyed by userId so it never
+  // leaks between accounts sharing the same browser.
   useEffect(() => {
-    const stored = localStorage.getItem(RESUME_ID_KEY);
+    if (!storageKey) return;
+    const stored = localStorage.getItem(storageKey);
     if (stored) setResumeId(stored);
-  }, []);
+  }, [storageKey]);
 
   const fill = async (file: File) => {
     setError(null);
     setResult(null);
 
     try {
-      // ── Step 1: Parse resume ──────────────────────────────
+      // ── Step 1: Parse resume + store file in profile concurrently ───
       setStep("parsing");
-      const parsed = await extractResume(file);
+      const [parsed] = await Promise.all([
+        extractResume(file),
+        uploadResume(file).catch(() => { /* non-fatal — profile tab will be missing but parse continues */ }),
+      ]);
 
-      // Persist resume_id for the ATS scan step
+      // Persist resume_id for the ATS scan step (user-scoped key)
       if (parsed.resume_id) {
         setResumeId(parsed.resume_id);
-        localStorage.setItem(RESUME_ID_KEY, parsed.resume_id);
+        if (storageKey) localStorage.setItem(storageKey, parsed.resume_id);
       }
       const profileData = mapResumeToProfile(parsed);
 

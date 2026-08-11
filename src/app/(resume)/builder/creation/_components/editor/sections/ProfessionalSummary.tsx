@@ -250,7 +250,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
             <div ref={summaryRef} className="flex flex-col gap-1 relative">
               <div className="flex justify-between items-center">
                 <label className="text-sm font-semibold text-gray-700">
-                  Professional Summary
+                  Professional Summary <span className="text-red-500">*</span>
                 </label>
                 <button
                   type="button"

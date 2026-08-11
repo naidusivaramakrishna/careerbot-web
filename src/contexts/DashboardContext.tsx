@@ -59,13 +59,19 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const hasDataRef = useRef(false);
+
   /* ── Fetch ── */
   const fetchDashboard = useCallback(async () => {
     try {
-      setLoading(true);
+      // Only show the loading skeleton on the very first fetch — subsequent
+      // refreshes update data silently so child components stay mounted and
+      // don't lose their local state (e.g. optimistic step flags).
+      if (!hasDataRef.current) setLoading(true);
       setError(null);
       const summary = await getDashboardSummary({ skipAuthRedirect: true });
       if (!mountedRef.current) return;
+      hasDataRef.current = true;
       setData(summary);
       setCreditsRemaining(summary.plan.credits_remaining);
       logger.info('DashboardContext: data loaded');

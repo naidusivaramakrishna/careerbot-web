@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const maxDuration = 60; // auth can be slow on cold backend starts
+
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 /**

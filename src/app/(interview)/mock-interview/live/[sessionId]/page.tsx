@@ -10,6 +10,7 @@ import {
   WsClientMessage,
   LiveCreateResponse,
 } from "@/api/mockInterviewApi";
+import type { LipSyncPayload, LipSyncViseme, LipSyncWord } from "@/api/mockInterviewApi";
 import { CodingTransition } from "@/components/interview/CodingTransition";
 import { CodingStep } from "@/components/interview/CodingStep";
 import type { SubmitSolutionResponse } from "@/app/coding-test/_lib/types";
@@ -56,6 +57,148 @@ interface Question {
   isFollowUp?: boolean;
 }
 
+interface MouthCue {
+  level: number;
+  visemeId: string;
+  intensity: number;
+  widthScale: number;
+  heightScale: number;
+  yOffset: number;
+  borderRadius: string;
+}
+
+const CLOSED_MOUTH_CUE: MouthCue = {
+  level: 0,
+  visemeId: "sil",
+  intensity: 0,
+  widthScale: 0.72,
+  heightScale: 0.12,
+  yOffset: 0,
+  borderRadius: "999px",
+};
+
+const VISEME_PROFILES: Record<string, Omit<MouthCue, "visemeId" | "intensity">> = {
+  sil: { level: 0, widthScale: 0.72, heightScale: 0.12, yOffset: 0, borderRadius: "999px" },
+  PP: { level: 0.16, widthScale: 0.58, heightScale: 0.14, yOffset: 0, borderRadius: "999px" },
+  FF: { level: 0.24, widthScale: 0.86, heightScale: 0.18, yOffset: 0, borderRadius: "999px" },
+  TH: { level: 0.34, widthScale: 0.95, heightScale: 0.28, yOffset: 0.5, borderRadius: "999px" },
+  DD: { level: 0.3, widthScale: 0.82, heightScale: 0.22, yOffset: -0.5, borderRadius: "999px" },
+  KK: { level: 0.42, widthScale: 0.78, heightScale: 0.36, yOffset: 0, borderRadius: "999px" },
+  CH: { level: 0.48, widthScale: 0.7, heightScale: 0.46, yOffset: 0.5, borderRadius: "999px" },
+  SS: { level: 0.22, widthScale: 1.05, heightScale: 0.16, yOffset: -0.5, borderRadius: "999px" },
+  NN: { level: 0.28, widthScale: 0.84, heightScale: 0.2, yOffset: -0.5, borderRadius: "999px" },
+  RR: { level: 0.46, widthScale: 0.74, heightScale: 0.42, yOffset: 0, borderRadius: "999px" },
+  AA: { level: 0.92, widthScale: 1.0, heightScale: 0.86, yOffset: 1, borderRadius: "45%" },
+  E: { level: 0.5, widthScale: 1.18, heightScale: 0.34, yOffset: -0.5, borderRadius: "999px" },
+  I: { level: 0.46, widthScale: 1.28, heightScale: 0.28, yOffset: -0.5, borderRadius: "999px" },
+  O: { level: 0.82, widthScale: 0.72, heightScale: 0.84, yOffset: 1, borderRadius: "50%" },
+  U: { level: 0.74, widthScale: 0.58, heightScale: 0.72, yOffset: 1, borderRadius: "50%" },
+};
+
+const AZURE_VISEME_TO_NORMALIZED: Record<string, string> = {
+  "0": "sil",
+  "1": "AA",
+  "2": "AA",
+  "3": "O",
+  "4": "E",
+  "5": "RR",
+  "6": "I",
+  "7": "U",
+  "8": "O",
+  "9": "AA",
+  "10": "O",
+  "11": "I",
+  "12": "KK",
+  "13": "RR",
+  "14": "NN",
+  "15": "SS",
+  "16": "CH",
+  "17": "TH",
+  "18": "FF",
+  "19": "DD",
+  "20": "KK",
+  "21": "PP",
+};
+
+const RHUBARB_VISEME_TO_NORMALIZED: Record<string, string> = {
+  A: "PP",
+  B: "SS",
+  C: "E",
+  D: "AA",
+  E: "O",
+  F: "U",
+  G: "FF",
+  H: "DD",
+  X: "sil",
+};
+
+function clamp(value: number, min = 0, max = 1) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function isRhubarbLipSync(lipSync: LipSyncPayload | null | undefined, visemeId: string) {
+  const provider = (lipSync?.provider ?? lipSync?.sync_provider ?? "").toLowerCase();
+  return provider.includes("rhubarb") || (lipSync?.sync_source === "forced_alignment" && /^[A-HX]$/i.test(visemeId));
+}
+
+function normalizeVisemeId(viseme: LipSyncViseme | undefined, lipSync?: LipSyncPayload | null): string {
+  const raw = viseme?.viseme_id ?? viseme?.provider_viseme_id ?? "sil";
+  const id = String(raw).trim();
+  if (!id) return "sil";
+  const upper = id.toUpperCase();
+
+  if (isRhubarbLipSync(lipSync, upper)) {
+    return RHUBARB_VISEME_TO_NORMALIZED[upper] ?? "sil";
+  }
+
+  const numeric = AZURE_VISEME_TO_NORMALIZED[id];
+  if (numeric) return numeric;
+  return VISEME_PROFILES[upper] ? upper : "sil";
+}
+
+function hasUsableWordTiming(lipSync: LipSyncPayload | null | undefined): lipSync is LipSyncPayload & { words: LipSyncWord[] } {
+  return lipSync?.sync_source !== "unavailable" && Array.isArray(lipSync?.words) && lipSync.words.some((word) => word.end_ms > word.start_ms);
+}
+
+function hasUsableVisemeTiming(lipSync: LipSyncPayload | null | undefined): lipSync is LipSyncPayload & { visemes: LipSyncViseme[] } {
+  return lipSync?.sync_source !== "unavailable" && Array.isArray(lipSync?.visemes) && lipSync.visemes.some((viseme) => viseme.end_ms > viseme.start_ms);
+}
+
+function mouthCueFromViseme(viseme: LipSyncViseme | undefined, lipSync?: LipSyncPayload | null): MouthCue {
+  if (!viseme) return CLOSED_MOUTH_CUE;
+
+  const visemeId = normalizeVisemeId(viseme, lipSync);
+  const profile = VISEME_PROFILES[visemeId] ?? VISEME_PROFILES.sil;
+  const intensity = clamp(typeof viseme.intensity === "number" ? viseme.intensity : 1);
+  return {
+    ...profile,
+    visemeId,
+    intensity,
+    level: clamp(profile.level * intensity),
+  };
+}
+
+function activeVisemeAt(lipSync: LipSyncPayload, currentMs: number) {
+  const visemes = lipSync.visemes ?? [];
+  return visemes.find((viseme) => currentMs >= viseme.start_ms && currentMs < viseme.end_ms);
+}
+
+function visibleQuestionAt(words: LipSyncWord[], fullText: string, currentMs: number) {
+  const visibleCount = words.filter((word) => currentMs >= word.start_ms).length;
+  if (visibleCount <= 0) return "";
+
+  const originalTokens = fullText.match(/\S+\s*/g) ?? [fullText];
+  if (originalTokens.length >= visibleCount) {
+    return originalTokens.slice(0, visibleCount).join("");
+  }
+
+  return words.slice(0, visibleCount).map((word) => word.word).join(" ");
+}
+
+function lipSyncTimelineMs(audio: HTMLAudioElement, lipSync: LipSyncPayload) {
+  const offset = typeof lipSync.audio_start_offset_ms === "number" ? lipSync.audio_start_offset_ms : 0;
+  return Math.max(0, audio.currentTime * 1000 - offset);
+}
 interface ScoreToast {
   questionNumber: number;
   score: number;
@@ -388,7 +531,10 @@ function playTtsAudio(
   mutedRef: React.RefObject<boolean>,
   audioRef: React.RefObject<HTMLAudioElement | null>,
   visualizerCleanupRef: React.MutableRefObject<(() => void) | null>,
-  onMouthLevel: (level: number) => void,
+  lipSync: LipSyncPayload | null | undefined,
+  questionText: string,
+  onMouthCue: (cue: MouthCue) => void,
+  onVisibleQuestionText: (text: string) => void,
   onEnd: () => void,
 ) {
   if (visualizerCleanupRef.current) {
@@ -400,7 +546,7 @@ function playTtsAudio(
     audioRef.current.pause();
     audioRef.current = null;
   }
-  onMouthLevel(0);
+  onMouthCue(CLOSED_MOUTH_CUE);
 
   if (!base64Audio || mutedRef.current) {
     setTimeout(onEnd, 1500);
@@ -431,39 +577,64 @@ function playTtsAudio(
 
     let audioContext: AudioContext | null = null;
     let rafId: number | null = null;
+    const useTimedWords = hasUsableWordTiming(lipSync);
+    const useTimedVisemes = hasUsableVisemeTiming(lipSync);
+
     const stopVisualizer = () => {
       if (rafId !== null) window.cancelAnimationFrame(rafId);
       rafId = null;
-      onMouthLevel(0);
+      onMouthCue(CLOSED_MOUTH_CUE);
       if (audioContext?.state !== "closed") {
         audioContext?.close().catch(() => {});
       }
     };
 
     try {
-      const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (AudioContextCtor) {
-        audioContext = new AudioContextCtor();
-        const source = audioContext.createMediaElementSource(audio);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.68;
-        source.connect(analyser);
-        analyser.connect(audioContext.destination);
-        const samples = new Uint8Array(analyser.frequencyBinCount);
-
+      if (useTimedWords || useTimedVisemes) {
         const tick = () => {
-          analyser.getByteFrequencyData(samples);
-          const speechEnergy = samples.slice(2, 32).reduce((sum, value) => sum + value, 0) / 30;
-          onMouthLevel(Math.min(1, speechEnergy / 105));
+          const currentMs = lipSyncTimelineMs(audio, lipSync);
+          if (useTimedVisemes) {
+            onMouthCue(mouthCueFromViseme(activeVisemeAt(lipSync, currentMs), lipSync));
+          }
+          if (useTimedWords) {
+            onVisibleQuestionText(visibleQuestionAt(lipSync.words, questionText, currentMs));
+          }
           rafId = window.requestAnimationFrame(tick);
         };
 
         visualizerCleanupRef.current = stopVisualizer;
-        if (audioContext.state === "suspended") {
-          audioContext.resume().catch(() => {});
-        }
         tick();
+      } else {
+        const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioContextCtor) {
+          audioContext = new AudioContextCtor();
+          const source = audioContext.createMediaElementSource(audio);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 256;
+          analyser.smoothingTimeConstant = 0.68;
+          source.connect(analyser);
+          analyser.connect(audioContext.destination);
+          const samples = new Uint8Array(analyser.frequencyBinCount);
+
+          const tick = () => {
+            analyser.getByteFrequencyData(samples);
+            const speechEnergy = samples.slice(2, 32).reduce((sum, value) => sum + value, 0) / 30;
+            const level = Math.min(1, speechEnergy / 105);
+            onMouthCue({
+              ...VISEME_PROFILES.AA,
+              visemeId: "audio-energy",
+              intensity: level,
+              level,
+            });
+            rafId = window.requestAnimationFrame(tick);
+          };
+
+          visualizerCleanupRef.current = stopVisualizer;
+          if (audioContext.state === "suspended") {
+            audioContext.resume().catch(() => {});
+          }
+          tick();
+        }
       }
     } catch {
       visualizerCleanupRef.current = null;
@@ -477,6 +648,7 @@ function playTtsAudio(
     };
 
     audio.onended = () => {
+      if (useTimedWords) onVisibleQuestionText(questionText);
       cleanupAudio();
       onEnd();
     };
@@ -518,7 +690,8 @@ export default function LiveInterviewSessionPage() {
   const [micRetryKey, setMicRetryKey] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
   const [completedReportId, setCompletedReportId] = useState<string | null>(null);
-  const [interviewerMouthLevel, setInterviewerMouthLevel] = useState(0);
+  const [interviewerMouthCue, setInterviewerMouthCue] = useState<MouthCue>(CLOSED_MOUTH_CUE);
+  const [useLipSyncQuestionReveal, setUseLipSyncQuestionReveal] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   // Keep ref in sync with state so toggles mid-playback take effect
@@ -540,7 +713,8 @@ export default function LiveInterviewSessionPage() {
 
   useEffect(() => {
     if (phase !== "ai-talking" && phase !== "follow-up") {
-      setInterviewerMouthLevel(0);
+      setInterviewerMouthCue(CLOSED_MOUTH_CUE);
+      setUseLipSyncQuestionReveal(false);
     }
   }, [phase]);
 
@@ -558,6 +732,10 @@ export default function LiveInterviewSessionPage() {
       return;
     }
 
+    if (useLipSyncQuestionReveal) {
+      return;
+    }
+
     const words = questionText.match(/\S+\s*/g) ?? [questionText];
     let wordIndex = 0;
     setVisibleQuestionText("");
@@ -572,7 +750,7 @@ export default function LiveInterviewSessionPage() {
     }, 115);
 
     return () => window.clearInterval(revealTimer);
-  }, [currentQuestion?.text, phase]);
+  }, [currentQuestion?.text, phase, useLipSyncQuestionReveal]);
 
   // ─── Camera self-view + fullscreen ─────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -861,23 +1039,30 @@ export default function LiveInterviewSessionPage() {
         setShowReconnectModal(false);
         break;
       case "question_audio": {
+        const lipSync = msg.lip_sync ?? null;
+        const usesTimedReveal = Boolean(msg.audio && !isAudioMutedRef.current && hasUsableWordTiming(lipSync));
         setCurrentQuestion({ number: msg.question_number, text: msg.text });
         setServerError(null);
         setQuestionNumber(msg.question_number);
         setTranscript("");
         setPartialTranscript("");
+        setUseLipSyncQuestionReveal(usesTimedReveal);
         setPhase(msg.is_follow_up ? "follow-up" : "ai-talking");
         // Use server's time_limit_s; fall back to 120 only when server sends 0 or omits it
         const limit = msg.time_limit_s || 120;
-        const afterAudio = () => { setPhase("listening"); setTimeLimitTotal(limit); startTimer(limit); };
-        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, setInterviewerMouthLevel, afterAudio);
+        const afterAudio = () => { setUseLipSyncQuestionReveal(false); setPhase("listening"); setTimeLimitTotal(limit); startTimer(limit); };
+        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, lipSync, msg.text, setInterviewerMouthCue, setVisibleQuestionText, afterAudio);
         break;
       }
       case "follow_up": {
+        const lipSync = msg.lip_sync ?? null;
+        const usesTimedReveal = Boolean(msg.audio && !isAudioMutedRef.current && hasUsableWordTiming(lipSync));
         setCurrentQuestion((q) => q ? { ...q, text: msg.text, isFollowUp: true } : null);
+        setUseLipSyncQuestionReveal(usesTimedReveal);
         setPhase("follow-up");
-        const afterFollowUp = () => { setPhase("listening"); startTimer(120); };
-        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, setInterviewerMouthLevel, afterFollowUp);
+        const limit = msg.time_limit_s || 120;
+        const afterFollowUp = () => { setUseLipSyncQuestionReveal(false); setPhase("listening"); startTimer(limit); };
+        playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, lipSync, msg.text, setInterviewerMouthCue, setVisibleQuestionText, afterFollowUp);
         break;
       }
       case "transcript_partial":
@@ -1021,6 +1206,8 @@ export default function LiveInterviewSessionPage() {
       ? visibleQuestionText
       : currentQuestion.text
     : "Your interviewer is preparing the first question.";
+
+  const interviewerMouthLevel = interviewerMouthCue.level;
 
   const handleCodingSubmitted = useCallback((result: SubmitSolutionResponse) => {
     wsSend({
@@ -1253,23 +1440,25 @@ export default function LiveInterviewSessionPage() {
                 {isQuestionBeingSpoken && (
                   <div
                     className="pointer-events-none absolute left-1/2 top-[43.5%] z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center mix-blend-multiply"
+                    data-testid="interviewer-mouth-cue"
+                    data-viseme={interviewerMouthCue.visemeId}
                     style={{
-                      opacity: 0.14 + interviewerMouthLevel * 0.28,
-                      transform: `translate(-50%, -50%) scaleX(${0.82 + interviewerMouthLevel * 0.34})`,
+                      opacity: 0.12 + interviewerMouthLevel * 0.32,
+                      transform: `translate(-50%, calc(-50% + ${interviewerMouthCue.yOffset}px)) scaleX(${interviewerMouthCue.widthScale}) scaleY(${interviewerMouthCue.heightScale})`,
                     }}
                     aria-hidden="true"
                   >
                     <span
-                      className="block rounded-full bg-black/70 shadow-[0_0_10px_rgba(0,0,0,0.22)]"
+                      className="block bg-black/75 shadow-[0_0_10px_rgba(0,0,0,0.24)] transition-[width,height,border-radius,filter] duration-75 ease-linear motion-reduce:transition-none"
                       style={{
-                        width: `${18 + interviewerMouthLevel * 18}px`,
-                        height: `${2 + interviewerMouthLevel * 9}px`,
-                        filter: `blur(${0.15 + interviewerMouthLevel * 0.35}px)`,
+                        width: `${28 + interviewerMouthLevel * 14}px`,
+                        height: `${14 + interviewerMouthLevel * 10}px`,
+                        borderRadius: interviewerMouthCue.borderRadius,
+                        filter: `blur(${0.12 + interviewerMouthLevel * 0.28}px)`,
                       }}
                     />
                   </div>
                 )}
-
                 <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
                   <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-400" : "bg-white/50"}`} />
                   {wsConnected ? "Live interview room" : "Connecting room"}

@@ -358,8 +358,11 @@ export default function Sidebar() {
     return (
       <>
       <button
-        onClick={handleToggle}
-        title="Expand sidebar"
+      onClick={handleToggle}
+      title="Expand sidebar"
+      aria-label="Expand sidebar navigation"
+      aria-expanded={isExpanded}
+      aria-controls="dashboard-sidebar"
         style={{ position: "fixed", top: 58, left: 50, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
       >
         {/* Expand icon: filled strip on the right */}
@@ -369,8 +372,9 @@ export default function Sidebar() {
         </svg>
       </button>
       <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-16 bg-white flex flex-col z-30 overflow-visible"
+        id="dashboard-sidebar"
         style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
-        <nav className="flex-1 min-h-0 overflow-visible py-1 px-2">
+        <nav className="flex-1 min-h-0 overflow-visible py-1 px-2" aria-label="Primary navigation collapsed" role="navigation">
           {VISIBLE_NAV_GROUPS.map((group, gi) => (
             <div key={group.label}>
               {gi > 0 && <div className="mx-1 my-1.5 border-t border-gray-300" />}
@@ -396,8 +400,8 @@ export default function Sidebar() {
                     <button
                       key={item.id}
                       onClick={() => handleNavigation(item)}
-                      title={item.label}
                       aria-label={item.label}
+                      title={item.label}
                       className="w-full flex items-center justify-center py-px group"
                     >
                       <div
@@ -516,6 +520,9 @@ export default function Sidebar() {
     <button
       onClick={handleToggle}
       title="Collapse sidebar"
+      aria-label="Collapse sidebar navigation"
+      aria-expanded={isExpanded}
+      aria-controls="dashboard-sidebar"
       style={{ position: "fixed", top: 58, left: 226, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
     >
       {/* Collapse icon: filled strip on the left */}
@@ -525,9 +532,10 @@ export default function Sidebar() {
       </svg>
     </button>
     <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-60 bg-white flex flex-col z-30 overflow-hidden"
+      id="dashboard-sidebar"
       style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1.5 pb-1 space-y-1">
+      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1.5 pb-1 space-y-1" aria-label="Primary navigation" role="navigation">
         {VISIBLE_NAV_GROUPS.map((group) => (
           <div key={group.label}>
             {/* Section label with trailing line */}
@@ -553,3 +561,13 @@ export default function Sidebar() {
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+

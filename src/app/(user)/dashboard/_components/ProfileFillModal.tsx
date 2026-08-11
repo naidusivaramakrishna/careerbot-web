@@ -35,6 +35,8 @@ const SAVING_MESSAGES = [
   "Saving certifications & projects…",
 ];
 
+const FOCUSABLE_SELECTOR = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]";
+
 export default function ProfileFillModal({
   isOpen,
   onClose,
@@ -47,7 +49,7 @@ export default function ProfileFillModal({
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cycle saving messages while saving
-  React.useEffect(() => {
+    React.useEffect(() => {
     if (step === "saving") {
       timerRef.current = setInterval(() => {
         setSavingMsgIdx(i => (i + 1) % SAVING_MESSAGES.length);
@@ -59,9 +61,56 @@ export default function ProfileFillModal({
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [step]);
 
-  if (!isOpen) return null;
-
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
   const isProcessing = step === "parsing" || step === "saving";
+
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!isProcessing && event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (event.key !== "Tab" || !dialogRef.current) return;
+
+    const focusables = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => {
+      return el.tabIndex !== -1 && !el.hasAttribute("disabled");
+    });
+
+    if (focusables.length === 0) return;
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement as HTMLElement;
+
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    previousActiveElementRef.current = (document.activeElement as HTMLElement) || null;
+    if (document.body) document.body.style.overflow = "hidden";
+
+    const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+    const firstFocusable = focusables && focusables[0] ? focusables[0] : null;
+    (firstFocusable ?? dialogRef.current)?.focus();
+
+    return () => {
+      if (document.body) document.body.style.overflow = "";
+      previousActiveElementRef.current?.focus?.();
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   const handleSuccess = () => {
     onSuccess?.();
@@ -86,7 +135,15 @@ export default function ProfileFillModal({
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+      <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="profile-fill-title"
+      aria-describedby="profile-fill-subtitle"
+      tabIndex={-1}
+      onKeyDown={handleDialogKeyDown}
+      className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
 
         {/* Header */}
         <div
@@ -98,13 +155,14 @@ export default function ProfileFillModal({
               <FileText size={15} className="text-white" />
             </div>
             <div>
-              <p className="text-[10px] text-white/60 font-medium uppercase tracking-wider leading-none mb-0.5">Auto-fill</p>
-              <p className="text-sm font-bold text-white leading-none">Fill Profile from Resume</p>
+              <p id="profile-fill-subtitle" className="text-[10px] text-white/60 font-medium uppercase tracking-wider leading-none mb-0.5">Auto-fill</p>
+              <p id="profile-fill-title" className="text-sm font-bold text-white leading-none">Fill Profile from Resume</p>
             </div>
           </div>
           {!isProcessing && (
             <button
               onClick={onClose}
+              aria-label="Close profile fill dialog"
               className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
             >
               <X size={14} className="text-white" />
@@ -248,8 +306,9 @@ export default function ProfileFillModal({
                 <p className="text-[11px] text-gray-400 leading-relaxed">{error || "Failed to process your resume. Please try again."}</p>
               </div>
               <button
-                onClick={onClose}
-                className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all hover:opacity-90"
+              onClick={onClose}
+              aria-label="Try again"
+              className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all hover:opacity-90"
                 style={{ background: "linear-gradient(135deg, #2557a7, #1f4e98)" }}
               >
                 Try Again
@@ -261,3 +320,10 @@ export default function ProfileFillModal({
     </div>
   );
 }
+
+
+
+
+
+
+

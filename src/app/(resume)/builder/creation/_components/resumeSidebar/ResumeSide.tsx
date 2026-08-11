@@ -407,8 +407,18 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     } else {
       const dataKey = SECTION_DATA_KEY_MAP[removed.name];
       if (dataKey) {
+        // UNION of both branches' key sets. #42 dropped databases/tools/
+        // cloud_platforms (they move into custom_skills post-migration) and
+        // added project_management/marketing_sales; #40 kept the legacy trio.
+        // Clearing a section should blank EVERY key a stored resume might
+        // carry, so a half-migrated document does not keep stale skills in
+        // whichever keys this omitted.
         const emptyValue = dataKey === "categorizedSkills"
-          ? { programming_languages: [], frameworks: [], databases: [], tools: [], cloud_platforms: [], soft_skills: [] }
+          ? {
+              programming_languages: [], frameworks: [],
+              databases: [], tools: [], cloud_platforms: [],
+              soft_skills: [], project_management: [], marketing_sales: [],
+            }
           : [];
         setResumeData((prev) => ({ ...prev, [dataKey]: emptyValue }));
       }

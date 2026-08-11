@@ -308,7 +308,7 @@ const TemplateTwo: React.FC<Props> = ({ data, onPageCountChange }) => {
         
         {data.categorizedSkills ? (
           <div className="space-y-0">
-            {(["programming_languages","frameworks","databases","tools","cloud_platforms","soft_skills"] as const).map((key) => {
+            {(["programming_languages","frameworks","soft_skills","project_management","marketing_sales"] as const).map((key) => {
               const categorySkills = data.categorizedSkills![key];
               if (!categorySkills || categorySkills.length === 0) return null;
               const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
