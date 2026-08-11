@@ -242,9 +242,9 @@ export default function Header() {
     refetchUnreadCount();
   };
 
-  const displayName    = userProfile?.full_name || userProfile?.username || 'User';
+  const displayName    = userProfile?.username || userProfile?.full_name || 'User';
   const displayEmail   = userProfile?.email || '';
-  const displayInitial = (userProfile?.full_name || userProfile?.username || 'U')[0].toUpperCase();
+  const displayInitial = (userProfile?.username || userProfile?.full_name || 'U')[0].toUpperCase();
   const creditPct = balance?.credits_total
     ? Math.min(100, Math.max(0, (balance.credits_remaining / balance.credits_total) * 100))
     : 0;
@@ -515,6 +515,12 @@ export default function Header() {
               <div className="absolute right-0 top-10 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
+                  {/* Only when it ADDS information: displayName already falls back
+                      to full_name when username is absent, so an unguarded render
+                      printed the same name twice for every pre-username account. */}
+                  {userProfile?.full_name && userProfile.full_name !== displayName && (
+                    <p className="text-[12px] text-gray-600 truncate">{userProfile.full_name}</p>
+                  )}
                   {displayEmail && (
                     <p className="text-[13px] text-gray-500 truncate mt-0.5">{displayEmail}</p>
                   )}

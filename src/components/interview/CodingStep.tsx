@@ -12,7 +12,7 @@ import type {
   CodingProblemDetail,
 } from "@/app/coding-test/_lib/types";
 import { fetchProblem } from "@/app/coding-test/_lib/api";
-import { submitSolution } from "@/app/coding-test/_lib/gradingApi";
+import { mockGrade } from "@/app/coding-test/_lib/gradingApi";
 import { runCode } from "@/app/coding-test/_lib/runApi";
 
 const CodeEditor = dynamic(
@@ -123,7 +123,7 @@ export function CodingStep({ problemSlug, timeLimitS, onSubmitted, onTimeExpired
     setOutputTab("grade");
     setOutputOpen(true);
     try {
-      const r = await submitSolution({ problem_slug: problemSlug, problem_title: problem?.title, language, code });
+      const r = await mockGrade(problemSlug, language, code, problem?.title);
       setGradingResult(r);
       hasSubmittedRef.current = true;
       onSubmitted(r);

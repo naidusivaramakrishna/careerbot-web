@@ -58,22 +58,39 @@ export async function POST(request: NextRequest) {
     formData.append('username', username);
     formData.append('password', password);
 
-    const response = await fetch(`${BACKEND_URL}/api/v1/auth/signin`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'accept': 'application/json',
-        'X-Tenant-Id': tenantId,
-      },
-      body: formData.toString(),
-    });
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 85000);
+    let response: Response;
+    try {
+      response = await fetch(`${BACKEND_URL}/api/v1/auth/signin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'accept': 'application/json',
+          'X-Tenant-Id': tenantId,
+        },
+        body: formData.toString(),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(fetchTimeout);
+      if (err instanceof Error && err.name === 'AbortError') {
+        return NextResponse.json(
+          { error: 'Authentication service timeout' },
+          { status: 504 }
+        );
+      }
+      throw err;
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Authentication failed' }));
+      clearTimeout(fetchTimeout);
       return NextResponse.json(errorData, { status: response.status });
     }
 
     const data = await response.json();
+    clearTimeout(fetchTimeout);
     // Tokens live in the httpOnly cookies forwarded below; never expose them
     // in the JS-readable body (authApi.ts:30 — "never accessible to JavaScript").
     const { access_token, refresh_token, ...safeBody } = data ?? {};
