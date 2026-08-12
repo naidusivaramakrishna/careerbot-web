@@ -16,7 +16,8 @@ interface PublicationEntry {
   publicationName: string;
   date: string;
   url: string;
-  id?: string; // ✅ NEW: Add item ID for backend tracking
+  doi?: string;
+  id?: string;
 }
 
 const emptyPublication = (): PublicationEntry => ({
@@ -25,6 +26,7 @@ const emptyPublication = (): PublicationEntry => ({
   publicationName: "",
   date: "",
   url: "",
+  doi: "",
 });
 
 const Publications: React.FC = () => {
@@ -55,6 +57,40 @@ const Publications: React.FC = () => {
     }
     return [];
   });
+
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  // Sets field-level errors (red borders) synchronously so the save can be blocked.
+  useEffect(() => {
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Publications") return;
+      let allValid = true;
+      editingEntries.forEach((publication, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("publication", globalIndex, {
+          title: publication.title,
+          publicationName: publication.publicationName,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Publications") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) {
+        editEntry(idx);
+      }
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
 
   useEffect(() => {
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
@@ -379,6 +415,18 @@ const Publications: React.FC = () => {
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
                         />
                       </div>
+                    </div>
+
+                    {/* DOI */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-sm font-semibold text-[#3b3b3b]">DOI <span className="text-gray-400 font-normal">(optional)</span></label>
+                      <input
+                        type="text"
+                        value={publication.doi || ""}
+                        placeholder="e.g., 10.1000/xyz123"
+                        onChange={(e) => handleChange(editIndex, "doi", e.target.value)}
+                        className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500"
+                      />
                     </div>
                   </div>
                 );

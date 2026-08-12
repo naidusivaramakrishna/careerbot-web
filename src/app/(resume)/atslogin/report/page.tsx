@@ -72,7 +72,6 @@ interface IssueCard {
   section: string;
   description: string;
   suggestion: string;
-  impactPoints?: number;
   estimatedSeconds?: number;
 }
 
@@ -380,7 +379,7 @@ function readIssueNumber(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function readIssueMetadata(raw: unknown): Pick<IssueCard, "priority" | "impactPoints" | "estimatedSeconds"> & { priorityProvided: boolean } {
+function readIssueMetadata(raw: unknown): Pick<IssueCard, "priority" | "estimatedSeconds"> & { priorityProvided: boolean } {
   const item = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const priorityValue = String(item.priority ?? item.severity ?? item.impact_level ?? "").toLowerCase();
   const priority: IssueCard["priority"] = priorityValue.includes("critical") || priorityValue.includes("high")
@@ -388,9 +387,8 @@ function readIssueMetadata(raw: unknown): Pick<IssueCard, "priority" | "impactPo
     : priorityValue.includes("urgent") || priorityValue.includes("medium")
       ? "urgent"
       : "optional";
-  const impactPoints = readIssueNumber(item.impact_points ?? item.ats_points ?? item.score_impact ?? item.points ?? item.impact);
   const estimatedSeconds = readIssueNumber(item.estimated_seconds ?? item.fix_time_seconds ?? item.time_seconds ?? item.estimated_time_seconds ?? item.fix_time);
-  return { priority, impactPoints, estimatedSeconds, priorityProvided: Boolean(priorityValue) };
+  return { priority, estimatedSeconds, priorityProvided: Boolean(priorityValue) };
 }
 
 function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
@@ -436,7 +434,6 @@ function extractIssues(breakdown: ResumeScoreData["Breakdown"]): IssueCard[] {
         section:     display,
         description: dStr,
         suggestion:  getSuggestion(display, dStr),
-        impactPoints: metadata.impactPoints,
         estimatedSeconds: metadata.estimatedSeconds,
       });
     });
@@ -532,24 +529,14 @@ function WhyTooltip({ text }: { text: string }) {
 
 /* ─── ISSUE CARD ──────────────────────────────────────── */
 function IssueCard({
-  issue, Icon, onDismiss, onFix,
+  issue, Icon, onFix,
 }: {
-  issue: IssueCard; Icon: React.ElementType; onDismiss: () => void; onFix: () => void;
+  issue: IssueCard; Icon: React.ElementType; onFix: () => void;
 }) {
-  const SECTION_IMPACT: Record<string, number> = {
-    Keywords: 20, Skills: 18, Experience: 16, Summary: 14,
-    ContentQuality: 12, ATSCompatibility: 10, Formatting: 9,
-    Education: 8, Certifications: 7, Projects: 7,
-    Contact: 6, Internships: 5, General: 4,
-  };
-
   const isCritical = issue.priority === "critical";
   const isUrgent   = issue.priority === "urgent";
   const fixBtnColor = "#3465BC";
-
-  const rawPts    = SECTION_IMPACT[issue.section] ?? 5;
-  const fallbackImpactPts = isCritical ? rawPts : isUrgent ? Math.floor(rawPts * 0.65) : Math.floor(rawPts * 0.35);
-  const impactPts = issue.impactPoints ?? fallbackImpactPts;
+  const impactLabel = isCritical ? "High impact" : isUrgent ? "Medium impact" : "Low impact";
 
   const raw   = issue.description;
   const cut   = raw.search(/[.!?]\s/);
@@ -589,7 +576,7 @@ function IssueCard({
             </div>
           </div>
           <div style={{ minWidth: 74, textAlign: "right" }}>
-            <p style={{ fontSize: 9, fontWeight: 800, color: "#16a34a", whiteSpace: "nowrap" }}>+{impactPts} ATS Point{impactPts === 1 ? "" : "s"}</p>
+            <p title="Relative priority; only the total projected gain is a point estimate" style={{ fontSize: 9, fontWeight: 800, color: isCritical ? "#dc2626" : isUrgent ? "#d97706" : "#3465BC", whiteSpace: "nowrap" }}>{impactLabel}</p>
             <p style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 3, marginTop: 5, fontSize: 9, color: "#64748b", whiteSpace: "nowrap" }}><Clock3 style={{ width: 11, height: 11 }} />{fixTime}</p>
           </div>
           <button onClick={onFix} style={{ display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", border: "1px solid #c7d7f7", borderRadius: 6, background: "#fff", color: "#2563eb", padding: "7px 9px", fontSize: 9, fontWeight: 800 }}>View &amp; Fix <ArrowRight style={{ width: 12, height: 12 }} /></button>
@@ -607,7 +594,7 @@ function IssueCard({
           <p className="text-[14px] font-bold text-gray-900 leading-snug flex-1">{title}</p>
           <span className="shrink-0 text-[11.5px] font-black whitespace-nowrap px-2.5 py-1 rounded-full"
             style={{ background: "rgba(52,101,188,0.08)", color: "#3465BC", border: "1px solid rgba(52,101,188,0.15)" }}>
-            +{impactPts} pts
+            {impactLabel}
           </span>
         </div>
 
@@ -635,16 +622,6 @@ function IssueCard({
         </button>
       </div>
 
-      {/* Dismiss on hover */}
-      <button
-        onClick={onDismiss}
-        className="absolute top-2 right-2 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all"
-        title="Dismiss"
-      >
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
     </div>
   );
 }
@@ -652,11 +629,10 @@ function IssueCard({
 /* ─── PRIORITY GROUP ──────────────────────────────────── */
 function PriorityGroup({
   title, subtitle, accent, accentBg, issues, sectionIcons,
-  onDismiss, onFix, tooltip,
+  onFix, tooltip,
 }: {
   title: string; subtitle: string; accent: string; accentBg: string;
   issues: IssueCard[]; sectionIcons: Record<string, React.ElementType>;
-  onDismiss: (id: string) => void;
   onFix: (section: string) => void; tooltip: string;
 }) {
   const [open, setOpen] = useState(true);
@@ -731,7 +707,6 @@ function PriorityGroup({
                         key={issue.id}
                         issue={issue}
                         Icon={SectionIcon}
-                        onDismiss={() => onDismiss(issue.id)}
                         onFix={() => onFix(issue.section)}
                       />
                     ))}
@@ -791,7 +766,6 @@ function ATSLoginReport() {
   const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [isFixing,  setIsFixing]  = useState(false);
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [filter,       setFilter       ] = useState<"all" | "critical" | "urgent" | "optional">("all");
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -823,10 +797,10 @@ function ATSLoginReport() {
   const issues = useMemo(() => scoreData ? extractIssues(scoreData.Breakdown) : [], [scoreData]);
 
   const grouped = useMemo(() => ({
-      critical: issues.filter(i => i.priority === "critical" && !dismissedIds.has(i.id)),
-      urgent:   issues.filter(i => i.priority === "urgent"   && !dismissedIds.has(i.id)),
-      optional: issues.filter(i => i.priority === "optional" && !dismissedIds.has(i.id)),
-  }), [issues, dismissedIds]);
+      critical: issues.filter(i => i.priority === "critical"),
+      urgent:   issues.filter(i => i.priority === "urgent"),
+      optional: issues.filter(i => i.priority === "optional"),
+  }), [issues]);
 
   const roadmapItems = useMemo(() => {
     const sectionInfo = new Map<string, { count: number; priority: IssueCard["priority"] }>();
@@ -888,7 +862,8 @@ function ATSLoginReport() {
   // number of issues because issue cards may not contain complete or unique
   // impact metadata.
   const estimatedPct = scoreData?.EstimatedScore ?? pct;
-  const estimatedGain = Math.max(0, estimatedPct - pct);
+  const estimatedPctRounded = Math.round(estimatedPct);
+  const estimatedGain = estimatedPctRounded - pct;
   const estimatedFixMinutes = Math.max(1, Math.ceil(issues.reduce((sum, issue) => sum + (issue.estimatedSeconds ?? 25), 0) / 60));
   const estimatedGrade = estimatedPct >= 85 ? "Excellent" : estimatedPct >= 70 ? "Good" : estimatedPct >= 50 ? "Average" : "Needs Work";
 
@@ -1012,7 +987,6 @@ function ATSLoginReport() {
   const scoreColor  = pct >= 70 ? "#00A63E" : pct >= 40 ? "#F59E0B" : "#dc2626";
   const scoreLight  = pct >= 70 ? "#ECFDF5" : pct >= 40 ? "#FEF3C7" : "#fef2f2";
   const scoreBorder = pct >= 70 ? "#6EE7A0" : pct >= 40 ? "#FDE68A" : "#fca5a5";
-  const ptsDiff     = Math.max(0, 90 - pct);
 
   const SECTION_ICONS: Record<string, React.ElementType> = {
     Contact: User, Headline: Tag, Education: GraduationCap, Experience: Briefcase,
@@ -1088,9 +1062,6 @@ function ATSLoginReport() {
       <div className="px-4 md:px-10 py-5 md:py-6 border-b border-[#dce8fb]" style={{ background: "#EFF6FF" }}>
         <div style={{ maxWidth: 1520, margin: "0 auto" }} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <button onClick={() => router.push("/dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: "#5b75ad", fontSize: 11, padding: 0, marginBottom: 14, cursor: "pointer" }}>
-              <span>‹</span> Back to Dashboard
-            </button>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <div style={{ width: 4, height: 18, borderRadius: 99, background: "linear-gradient(180deg,#3465BC,#4f8ef7)" }} />
               <p style={{ fontSize: 10, fontWeight: 800, color: "#3465BC", letterSpacing: "0.2em", textTransform: "uppercase" as const, fontFamily: "monospace", margin: 0 }}>
@@ -1107,7 +1078,7 @@ function ATSLoginReport() {
               <span>Scanned resume</span><span>•</span><span>ATS analysis complete</span>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
             <button onClick={() => window.print()} style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 9, background: "#fff", border: "1px solid #dbe5f5", color: "#172554", fontSize: 12, fontWeight: 700, cursor: "pointer" }}><Download style={{ width: 14, height: 14 }} /> Print / Save Report</button>
             <button onClick={async () => {
               const shareData = { title: "ATS Resume Report", text: "My ATS resume report", url: window.location.href };
@@ -1119,7 +1090,15 @@ function ATSLoginReport() {
                 } else toast.error("Sharing is not available in this browser");
               } catch { /* cancelled share dialogs should not surface as errors */ }
             }} style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 9, background: "#fff", border: "1px solid #dbe5f5", color: "#172554", fontSize: 12, fontWeight: 700, cursor: "pointer" }}><Share2 style={{ width: 14, height: 14 }} /> Share Report</button>
-            <button onClick={handleFixNow} disabled={isFixing} style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 18px", borderRadius: 9, background: "#2453e6", border: "none", color: "#fff", fontSize: 12, fontWeight: 800, cursor: isFixing ? "not-allowed" : "pointer", opacity: isFixing ? 0.7 : 1 }}>Continue to Enhancer <ArrowRight style={{ width: 14, height: 14 }} /></button>
+            <button
+              type="button"
+              onClick={() => router.push("/atslogin")}
+              aria-label="Scan another resume"
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 9, background: "#fff", border: "1px solid #9db7e5", color: "#2557a7", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}
+            >
+              <RefreshCw style={{ width: 14, height: 14 }} /> Scan Another Resume
+            </button>
+            <button onClick={() => handleFixNow()} disabled={isFixing} style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 18px", borderRadius: 9, background: "#2453e6", border: "none", color: "#fff", fontSize: 12, fontWeight: 800, cursor: isFixing ? "not-allowed" : "pointer", opacity: isFixing ? 0.7 : 1 }}>Continue to Enhancer <ArrowRight style={{ width: 14, height: 14 }} /></button>
             <div style={{ display: "none", textAlign: "right" }}>
               <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 4 }}>Your Score</p>
               <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
@@ -1137,7 +1116,7 @@ function ATSLoginReport() {
 
       {/* ── MAIN GRID ── */}
       <div style={{ maxWidth: 1520, margin: "0 auto" }} className="px-4 md:px-10 py-6 md:py-8 pb-16">
-        <div className="relative grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)] gap-5 items-start">
+        <div className="relative grid grid-cols-1 lg:grid-cols-[290px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] gap-5 items-start">
 
           {/* ── LEFT (4 cols sticky) ── */}
           <div className="self-start space-y-5">
@@ -1208,9 +1187,9 @@ function ATSLoginReport() {
                     }}>
                       Resume Strength
                     </span>
-                    {ptsDiff > 0 && (
+                    {estimatedGain > 0 && (
                       <p style={{ fontSize: 12, color: "#6b7280", marginTop: 10, lineHeight: 1.4 }}>
-                        Fix issues to gain <span style={{ color: "#3465BC", fontWeight: 800 }}>+{ptsDiff} pts</span>
+                        Fix issues to gain <span style={{ color: "#3465BC", fontWeight: 800 }}>+{estimatedGain} pts</span>
                       </p>
                     )}
                   </div>
@@ -1218,11 +1197,11 @@ function ATSLoginReport() {
 
                 <div style={{ textAlign: "center", marginTop: 8, paddingTop: 14, borderTop: "1px solid #f1f5f9" }}>
                   <p style={{ fontSize: 11, color: "#5b6f9e", marginBottom: 4 }}>Estimated score after AI fixes</p>
-                  <p style={{ fontSize: 17, fontWeight: 800, color: "#16a34a" }}>{estimatedPct}/100 <span style={{ fontSize: 12 }}>↗</span></p>
+                  <p style={{ fontSize: 17, fontWeight: 800, color: "#16a34a" }}>{estimatedPctRounded}/100 <span style={{ fontSize: 12 }}>↗</span></p>
                 </div>
 
                 {/* Legacy actions retained for flow compatibility but replaced by the reference CTA */}
-                <button className="hidden" onClick={handleFixNow} disabled={isFixing}
+                <button className="hidden" onClick={() => handleFixNow()} disabled={isFixing}
                   style={{ width: "100%", padding: "14px 20px", borderRadius: 12, background: "linear-gradient(135deg,#2557a7,#1a3a8f)", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: isFixing ? "not-allowed" : "pointer", marginBottom: 10, transition: "opacity 0.15s", boxShadow: "0 4px 16px rgba(37,87,167,0.3)", opacity: isFixing ? 0.7 : 1 }}
                   onMouseEnter={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"; }}
                   onMouseLeave={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}>
@@ -1348,10 +1327,10 @@ function ATSLoginReport() {
             )}
 
             {/* Issues Card */}
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(280px,0.9fr)] gap-5 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(260px,0.85fr)] gap-5 items-start">
             <div className="min-w-0" style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #e5eaf2", boxShadow: "0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)" }}>
               {/* Header */}
-              <div style={{ background: "linear-gradient(135deg, #3465BC 0%, #4a7fd4 55%, #5e94e8 100%)", padding: "28px 28px 0", position: "relative", overflow: "hidden" }}>
+              <div style={{ background: "linear-gradient(135deg, #3465BC 0%, #4a7fd4 55%, #5e94e8 100%)", padding: "24px 18px 0", position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: -40, right: -40, width: 220, height: 220, borderRadius: "50%", background: "rgba(88,150,215,0.12)", filter: "blur(40px)", pointerEvents: "none" }} />
                 <div style={{ position: "absolute", bottom: 0, left: -20, width: 160, height: 160, borderRadius: "50%", background: "rgba(52,101,188,0.1)", filter: "blur(30px)", pointerEvents: "none" }} />
                 <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
@@ -1365,7 +1344,7 @@ function ATSLoginReport() {
                     </p>
                   </div>
                   {issues.length > 0 && (
-                    <button onClick={handleFixNow} disabled={isFixing}
+                    <button onClick={() => handleFixNow()} disabled={isFixing}
                       style={{ padding: "10px 22px", borderRadius: 10, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: isFixing ? "not-allowed" : "pointer", flexShrink: 0, backdropFilter: "blur(4px)", transition: "background 0.15s", opacity: isFixing ? 0.7 : 1 }}
                       onMouseEnter={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.22)"; }}
                       onMouseLeave={e => { if (!isFixing) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.12)"; }}>
@@ -1375,7 +1354,7 @@ function ATSLoginReport() {
                 </div>
                 {/* Tabs */}
                 {issues.length > 0 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 3, width: "100%", overflow: "visible", boxSizing: "border-box" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(max-content, 1fr))", gap: 3, width: "100%", overflow: "visible", boxSizing: "border-box" }}>
                     {TAB_CONFIG.map(tab => {
                       const isActive = filter === tab.key;
                       const dotColor = "color" in tab ? tab.color : undefined;
@@ -1383,16 +1362,16 @@ function ATSLoginReport() {
                         <button key={tab.key} onClick={() => setFilter(tab.key)}
                           style={{
                             display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                            width: "100%", minWidth: 0, boxSizing: "border-box", padding: "10px 6px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" as const,
+                            width: "100%", boxSizing: "border-box", padding: "0 8px", height: 38, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" as const,
                             background: isActive ? "#fff" : "transparent",
                             color: isActive ? "#0f172a" : "rgba(255,255,255,0.6)",
                             borderRadius: isActive ? "10px 10px 0 0" : "8px 8px 0 0",
                             border: "none", cursor: "pointer", transition: "all 0.15s",
                           }}>
-                          {dotColor && <span style={{ width: 8, height: 8, borderRadius: "50%", background: isActive ? dotColor : "rgba(255,255,255,0.3)", flexShrink: 0 }} />}
-                          {tab.label}
+                          {dotColor && <span style={{ width: 7, height: 7, borderRadius: "50%", background: isActive ? dotColor : "rgba(255,255,255,0.3)", flexShrink: 0 }} />}
+                          <span>{tab.label}</span>
                           {tab.count > 0 && (
-                            <span style={{ width: 22, height: 22, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, lineHeight: 1, fontWeight: 800, padding: 0, borderRadius: "50%", background: isActive ? "#0f172a" : "rgba(255,255,255,0.15)", color: isActive ? "#fff" : "rgba(255,255,255,0.7)" }}>
+                            <span style={{ width: 20, height: 20, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, lineHeight: 1, fontWeight: 800, padding: 0, borderRadius: "50%", background: isActive ? "#0f172a" : "rgba(255,255,255,0.15)", color: isActive ? "#fff" : "rgba(255,255,255,0.7)" }}>
                               {tab.count}
                             </span>
                           )}
@@ -1418,17 +1397,17 @@ function ATSLoginReport() {
                     {(filter === "all" || filter === "critical") && (
                       <PriorityGroup title="Fix First" subtitle="Blocking your ATS pass rate" accent="#dc2626" accentBg="#fef2f2"
                         issues={grouped.critical} sectionIcons={SECTION_ICONS} tooltip={WHY_TEXT.General}
-                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
+                        onFix={s => handleFixNow(s)} />
                     )}
                     {(filter === "all" || filter === "urgent") && (
                       <PriorityGroup title="High Impact" subtitle="Significant score improvements" accent="#F59E0B" accentBg="#FEF3C7"
                         issues={grouped.urgent} sectionIcons={SECTION_ICONS} tooltip="These issues cost meaningful ATS points. Fixing them moves your score into the competitive range."
-                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
+                        onFix={s => handleFixNow(s)} />
                     )}
                     {(filter === "all" || filter === "optional") && (
                       <PriorityGroup title="Nice to Improve" subtitle="Polish that separates good from great" accent="#3465BC" accentBg="#EFF6FF"
                         issues={grouped.optional} sectionIcons={SECTION_ICONS} tooltip="Low-severity polish items. Address after fixing critical and urgent issues for maximum ROI."
-                        onDismiss={id => setDismissedIds(prev => new Set([...prev, id]))} onFix={s => handleFixNow(s)} />
+                        onFix={s => handleFixNow(s)} />
                     )}
                     {((filter === "critical" && !grouped.critical.length) || (filter === "urgent" && !grouped.urgent.length) || (filter === "optional" && !grouped.optional.length)) && (
                       <div style={{ padding: "48px 0", textAlign: "center", borderRadius: 14, background: "#ECFDF5", border: "1px solid #6EE7A0" }}>
@@ -1463,7 +1442,7 @@ function ATSLoginReport() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
                   <div style={{ position: "relative", width: 112, height: 112 }}>
                     <svg viewBox="0 0 120 120" width="112" height="112"><circle cx="60" cy="60" r="49" fill="none" stroke="#e6edf0" strokeWidth="9" /><circle cx="60" cy="60" r="49" fill="none" stroke="#42b883" strokeWidth="9" strokeLinecap="round" strokeDasharray={`${2 * Math.PI * 49 * estimatedPct / 100} ${2 * Math.PI * 49}`} transform="rotate(-90 60 60)" /></svg>
-                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}><strong style={{ fontSize: 29, color: "#172554" }}>{estimatedPct}</strong><span style={{ fontSize: 10, color: "#64748b" }}>/100</span></div>
+                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}><strong style={{ fontSize: 24, lineHeight: 1, color: "#172554" }}>{estimatedPctRounded}</strong><span style={{ fontSize: 10, color: "#64748b" }}>/100</span></div>
                   </div>
                   <div><p style={{ fontSize: 15, fontWeight: 800, color: "#16a34a" }}>{estimatedGrade}</p><p style={{ fontSize: 16, fontWeight: 800, color: "#172554", marginTop: 7 }}>+{estimatedGain} Points</p><p style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Improvement</p></div>
                 </div>
@@ -1481,7 +1460,7 @@ function ATSLoginReport() {
             <div style={{ width: 38, height: 38, borderRadius: 12, background: "#eef4ff", display: "flex", alignItems: "center", justifyContent: "center" }}><Sparkles style={{ width: 18, height: 18, color: "#2563eb" }} /></div>
             <div><p style={{ fontSize: 14, fontWeight: 800, color: "#172554" }}>Let AI optimize your resume</p><p style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>Enhance your content and improve your chances of getting hired.</p></div>
           </div>
-          <button onClick={handleFixNow} disabled={isFixing} style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 18px", borderRadius: 9, border: "none", background: "#2453e6", color: "#fff", fontSize: 12, fontWeight: 800, cursor: isFixing ? "not-allowed" : "pointer", opacity: isFixing ? 0.7 : 1 }}>Continue to Resume Enhancer <ArrowRight style={{ width: 14, height: 14 }} /></button>
+          <button onClick={() => handleFixNow()} disabled={isFixing} style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 18px", borderRadius: 9, border: "none", background: "#2453e6", color: "#fff", fontSize: 12, fontWeight: 800, cursor: isFixing ? "not-allowed" : "pointer", opacity: isFixing ? 0.7 : 1 }}>Continue to Resume Enhancer <ArrowRight style={{ width: 14, height: 14 }} /></button>
         </div>
       </div>
 

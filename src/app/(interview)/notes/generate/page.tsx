@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { generateNotes, getNotes, updateNotes } from "@/api/mockInterviewApi";
 import { getAllResumesUnified } from "@/api/resumeApi";
+import { parseResumeForEnhancer } from "@/api/enhancerApi";
 import type { ResumeResponse } from "@/api/resumeApi";
 import type { EnhancedResumeSummary } from "@/types/api.types";
 import { useMockInterview } from "@/app/(interview)/mock-interview/_context/MockInterviewContext";
@@ -24,6 +25,7 @@ import {
   Loader2,
   AlertCircle,
   Sparkles,
+  Upload,
 } from "lucide-react";
 import { escapeHtml } from "@/lib/sanitizeHtml";
 
@@ -165,7 +167,6 @@ function toResumeOption(r: ResumeResponse): ResumeOption {
 const TABS = [
   { id: "intro", label: "Self-Intro", icon: FileText },
   { id: "projects", label: "Projects", icon: Briefcase },
-  { id: "hr", label: "HR Answers", icon: MessageSquare },
   { id: "additional", label: "Additional Notes", icon: MoreHorizontal },
 ];
 
@@ -362,6 +363,8 @@ export default function NotesPage() {
   const [targetRole, setTargetRole] = useState("");
   const [resumeId, setResumeId] = useState<string>("");
   const [availableResumes, setAvailableResumes] = useState<ResumeOption[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (progressLoading) return;
@@ -423,6 +426,46 @@ export default function NotesPage() {
       })
       .finally(() => setNotesLoading(false));
   }
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validTypes = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (!validTypes.includes(file.type)) {
+      setUploadError("Please upload a PDF or DOCX file.");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("File must be under 10 MB.");
+      e.target.value = "";
+      return;
+    }
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const parsed = await parseResumeForEnhancer(file);
+      const newId = parsed.resume_id;
+      if (!newId) throw new Error("No resume_id returned");
+      const name = parsed.file_name || file.name;
+      const newOption: ResumeOption = { id: newId, name, role: "" };
+      setAvailableResumes((prev) => {
+        const without = prev.filter((r) => r.id !== newId);
+        return [newOption, ...without];
+      });
+      setResumeId(newId);
+      localStorage.setItem("current_resume_id", newId);
+    } catch {
+      setUploadError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
 
   const handleGenerate = async () => {
     if (!resumeId) {
@@ -518,7 +561,7 @@ export default function NotesPage() {
     return (
       <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
         <button
-          onClick={() => router.push("/mock-interview/live")}
+          onClick={() => router.back()}
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
         >
           <ChevronLeft size={14} /> Back
@@ -536,16 +579,24 @@ export default function NotesPage() {
             </p>
 
             {availableResumes.length === 0 ? (
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <FileText size={13} className="text-gray-400" />
-                </div>
-                <div>
+              <div>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                    <FileText size={13} className="text-gray-400" />
+                  </div>
                   <p className="text-sm font-medium text-gray-700">No resume found</p>
-                  <a href="/builder/start" className="text-[11px] text-[#2557a7] hover:underline">
-                    Create or upload a resume first →
-                  </a>
                 </div>
+                <label className={`flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-lg border-2 border-dashed cursor-pointer transition-all ${uploading ? "border-[#2557a7]/30 bg-[#2557a7]/5" : "border-gray-200 hover:border-[#2557a7]/40 hover:bg-[#2557a7]/5"}`}>
+                  {uploading ? (
+                    <><Loader2 size={14} className="text-[#2557a7] animate-spin" /><span className="text-xs text-[#2557a7] font-medium">Uploading &amp; parsing…</span></>
+                  ) : (
+                    <><Upload size={14} className="text-[#2557a7]" /><span className="text-xs text-[#2557a7] font-medium">Upload Resume (PDF / DOCX)</span></>
+                  )}
+                  <input type="file" accept=".pdf,.doc,.docx" className="hidden" disabled={uploading} onChange={handleResumeUpload} />
+                </label>
+                {uploadError && (
+                  <p className="mt-1.5 text-[11px] text-red-500 flex items-center gap-1"><AlertCircle size={11} />{uploadError}</p>
+                )}
               </div>
             ) : availableResumes.length === 1 ? (
               <div className="flex items-center gap-2.5">
@@ -575,7 +626,10 @@ export default function NotesPage() {
                       name="resume_select"
                       value={r.id}
                       checked={resumeId === r.id}
-                      onChange={() => setResumeId(r.id)}
+                      onChange={() => {
+                        setResumeId(r.id);
+                        localStorage.setItem("current_resume_id", r.id);
+                      }}
                       className="accent-[#2557a7] shrink-0"
                     />
                     <div className="flex-1 min-w-0">
@@ -670,7 +724,7 @@ export default function NotesPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <button
-            onClick={() => router.push("/mock-interview/live")}
+            onClick={() => router.back()}
             className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-2 transition-colors"
           >
             <ChevronLeft size={14} /> Back

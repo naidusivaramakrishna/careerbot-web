@@ -18,7 +18,7 @@ import {
   WeakAreasAnalytics,
   HistoryRecord,
 } from '@/api/mockTestApi';
-import { resolveCompanyInfo } from '@/lib/mockTestConstants';
+import { resolveCompanyInfo, resolveCompanyId } from '@/lib/mockTestConstants';
 
 function formatRelTime(iso?: string): string {
   if (!iso) return '';
@@ -139,7 +139,12 @@ export default function MockTestPage() {
             : ['ARITH', 'APT', 'REAS', 'TECH'];
           const info = resolveCompanyInfo(id);
           return {
-            id, company: name,
+            id,
+            // Prefer our canonical label for companies we recognise. A stale row
+            // stored as company_name "TCS" and the seeded "TCS NQT" are the same
+            // company, and showing both backend spellings is what made the list
+            // look like it held different companies.
+            company: info.logoPath ? info.name : name,
             logoPath: info.logoPath, initials: info.initials, color: info.color,
             categories: cats,
             questions: 40,
@@ -155,7 +160,27 @@ export default function MockTestPage() {
             tier: TIER_MAP[id] ?? 1,
           };
         });
-        if (mapped.length > 0) setTests(mapped);
+        // Collapse rows that are the same company under different ids. Some
+        // environments carry legacy short-slug templates (tcs alongside tcs_nqt,
+        // wipro alongside wipro_nlth, …) that the old seeder never cleaned up,
+        // which listed 10 companies instead of 6. resolveCompanyId maps both
+        // spellings onto one backend id, so that is the identity to dedupe on.
+        // The backend seeder now retires those rows too; this keeps the list
+        // correct on any environment that hasn't restarted yet.
+        const byCanonicalId = new Map<string, MockTest>();
+        for (const test of mapped) {
+          const key = resolveCompanyId(test.id);
+          const existing = byCanonicalId.get(key);
+          // Keep whichever row has real usage behind it; ties keep the first.
+          if (!existing || test.attempts > existing.attempts) {
+            byCanonicalId.set(key, existing ? { ...test, attempts: Math.max(test.attempts, existing.attempts) } : test);
+          }
+        }
+        const unique = [...byCanonicalId.values()];
+        if (unique.length !== mapped.length) {
+          console.warn(`[mock-test] collapsed ${mapped.length} company rows to ${unique.length} unique companies`);
+        }
+        if (unique.length > 0) setTests(unique);
       })
       .catch(() => {});
 

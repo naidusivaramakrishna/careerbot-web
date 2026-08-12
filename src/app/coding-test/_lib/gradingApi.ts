@@ -12,7 +12,11 @@ import { isAxiosError } from 'axios';
 
 import { httpClient } from '@/lib/http';
 import type {
-  SubmitSolutionRequest,
+  CodingProblemListFilters,
+  CodingTestLanguage,
+  HistoryResponse,
+  ProblemWithStatus,
+  QuotaResponse,
   SubmitSolutionResponse,
   UserProgressResponse,
 } from './types';
@@ -61,18 +65,26 @@ function toGradingError(err: unknown, fallback: string): GradingApiError {
   return new GradingApiError(fallback);
 }
 
-export async function submitSolution(
-  payload: SubmitSolutionRequest,
-): Promise<SubmitSolutionResponse> {
+export async function fetchProblemsAnnotated(
+  filters?: CodingProblemListFilters,
+  signal?: AbortSignal,
+): Promise<ProblemWithStatus[]> {
   try {
-    const { data } = await httpClient.post<SubmitSolutionResponse>(
-      `${BASE}/submit`,
-      payload,
-      INLINE_AUTH_CONFIG,
+    const { data } = await httpClient.get<ProblemWithStatus[]>(
+      `${BASE}/problems/annotated`,
+      {
+        ...INLINE_AUTH_CONFIG,
+        params: {
+          ...(filters?.language ? { language: filters.language } : {}),
+          ...(filters?.difficulty ? { difficulty: filters.difficulty } : {}),
+          ...(filters?.tag ? { tag: filters.tag } : {}),
+        },
+        signal,
+      },
     );
     return data;
   } catch (err) {
-    throw toGradingError(err, 'Failed to submit your solution.');
+    throw toGradingError(err, 'Failed to load annotated problems.');
   }
 }
 
@@ -85,5 +97,55 @@ export async function fetchProgress(): Promise<UserProgressResponse> {
     return data;
   } catch (err) {
     throw toGradingError(err, 'Failed to load your progress.');
+  }
+}
+
+export async function mockGrade(
+  problemSlug: string,
+  language: CodingTestLanguage,
+  code: string,
+  problemTitle?: string,
+): Promise<SubmitSolutionResponse> {
+  try {
+    const { data } = await httpClient.post<SubmitSolutionResponse>(
+      `${BASE}/mock-grade`,
+      {
+        problem_slug: problemSlug,
+        language,
+        code,
+        ...(problemTitle ? { problem_title: problemTitle } : {}),
+      },
+      INLINE_AUTH_CONFIG,
+    );
+    return data;
+  } catch (err) {
+    throw toGradingError(err, 'Failed to get AI grading.');
+  }
+}
+
+export async function fetchQuota(): Promise<QuotaResponse> {
+  try {
+    const { data } = await httpClient.get<QuotaResponse>(
+      `${BASE}/quota`,
+      INLINE_AUTH_CONFIG,
+    );
+    return data;
+  } catch (err) {
+    throw toGradingError(err, 'Failed to load quota.');
+  }
+}
+
+export async function fetchSubmissions(
+  page = 1,
+  pageSize = 20,
+): Promise<HistoryResponse> {
+  try {
+    const { data } = await httpClient.get<HistoryResponse>(
+      `${BASE}/submissions`,
+      { ...INLINE_AUTH_CONFIG, params: { page, page_size: pageSize } },
+    );
+    return data;
+  } catch (err) {
+    throw toGradingError(err, 'Failed to load submission history.');
   }
 }

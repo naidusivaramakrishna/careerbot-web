@@ -64,9 +64,13 @@ export type ResumeSchemaVersion = "2.0" | "2.1" | "2.5";
 // ── request types ──────────────────────────────────────────────
 export interface ApplicationContext {
   company_name?: string | null;
+  company_location?: string | null;
   role_title?: string | null;
+  experience_level?: string | null;
   hiring_manager_name?: string | null;
   candidate_signature_name?: string | null;
+  why_company?: string | null;
+  highlight_achievement?: string | null;
   include_contact_details?: boolean; // default false (server side)
   source?: AppContextSource; // default 'unknown'
 }
@@ -97,6 +101,10 @@ export interface CoverLetterGenerateRequest {
   jd_id: string;
   application_context?: ApplicationContext | null;
   options?: GenerateOptions;
+  /** Bypass any backend generation cache and force a fresh AI call. Default false. */
+  force_refresh?: boolean;
+  /** Client-supplied correlation id for request tracing. Optional. */
+  trace_id?: string;
 }
 
 export interface CoverLetterFormSubmit {
@@ -192,6 +200,8 @@ export interface JdMatchSummary {
 
 export interface SafeKeywordSuggestion {
   keyword: string;
+  type?: string;
+  title?: string | null;
   message: string;
 }
 

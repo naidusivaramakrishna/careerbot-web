@@ -7,6 +7,7 @@ import AuthModal from "@/components/SignUpModal"
 import { getAllResumes, createResumeWithAuth, getTemplatesByCategory } from "@/api/resumeApi"
 import { getProfile } from "@/api/userApi"
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder"
+import { detectCareerLevel } from "@/utils/careerLevelDetection"
 import { logger } from "@/lib/logger"
 import { toast } from "sonner"
 import { resolveTemplateImageUrl } from "@/lib/imageUtils"
@@ -22,23 +23,27 @@ import {
 // Returns null if the name doesn't match any known level keyword.
 function getCareerLevelLabel(name: string): string | null {
   const n = name.toLowerCase()
+  // Use shared utility for consistent detection
+  const detected = detectCareerLevel(n)
+  if (detected) {
+    // Capitalize each word for display
+    return detected.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  }
+  // Fallback for compound labels not in the utility
   if (n.includes('early') && n.includes('career')) return 'Early Career'
-  if (n.includes('senior')) return 'Senior-Level'
-  if (n.includes('mid'))    return 'Mid-Level'
-  if (n.includes('manager')) return 'Manager'
-  if (n.includes('lead'))   return 'Lead'
-  if (n.includes('fresher')) return 'Fresher'
+  if (n.includes('mid'))       return 'Mid-Level'
   return null
 }
 
 // Canonical sort order so career levels always appear from entry-level to senior.
 const LEVEL_ORDER: Record<string, number> = {
   'Fresher': 0, 'Early Career': 1, 'Mid-Level': 2,
-  'Senior-Level': 3, 'Lead': 3, 'Manager': 4,
+  'Senior-Level': 3, 'Lead': 4, 'Architect': 5, 'Manager': 6,
+  'Director': 7, 'Vice President': 8,
 }
 
 interface AvailableLevel {
-  label: string       // "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Manager"
+  label: string       // "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" | "Director" | "Vice President"
   id: string          // real backend template ID
   name: string        // original template name from API
   previewUrl: string  // resolved image URL for this career level
@@ -105,13 +110,17 @@ export default function TemplateDetailPage({ params }: PageProps) {
         // Not authenticated or API unavailable — use static per-level URLs from constants.
         const staticUrls = FAMILY_TEMPLATES[family]?.previewUrls ?? {}
         const familyFallback = resolveTemplateImageUrl(FAMILY_TEMPLATES[family]?.previewUrl) || FAMILY_TEMPLATES[family]?.image || FALLBACK_IMAGE
-        const levels: AvailableLevel[] = CAREER_LEVELS.map(label => ({
-          label, id: '', name: label,
-          previewUrl: resolveTemplateImageUrl(staticUrls[label]) || familyFallback,
-        }))
+        const levels: AvailableLevel[] = CAREER_LEVELS
+          .filter(label => staticUrls[label])
+          .map(label => ({
+            label, id: '', name: label,
+            previewUrl: resolveTemplateImageUrl(staticUrls[label]) || familyFallback,
+          }))
         setAvailableLevels(levels)
-        setSelectedLevel(levels[0].label)
-        setImgSrc(levels[0].previewUrl)
+        if (levels.length > 0) {
+          setSelectedLevel(levels[0].label)
+          setImgSrc(levels[0].previewUrl)
+        }
       })
   }, [family])
 
@@ -422,7 +431,7 @@ export default function TemplateDetailPage({ params }: PageProps) {
 
                 {/* Stat badges — same style as browse-templates trust badges */}
                 <div className="flex flex-wrap items-center gap-5">
-                  {["100% ATS Friendly", "5 Career Levels", "Instant Setup"].map((label) => (
+                  {["100% ATS Friendly", `${availableLevels.length || Object.keys(FAMILY_TEMPLATES[family]?.previewUrls ?? {}).length} Career Levels`, "Instant Setup"].map((label) => (
                     <div key={label} className="flex items-center gap-2 text-sm text-slate-500">
                       <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
                         <div className="w-2 h-2 rounded-full bg-emerald-500" />

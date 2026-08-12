@@ -139,6 +139,17 @@ export interface ResumeResponse {
   builder_score?: {
     score?: number;
   };
+  patents?: Array<{
+    id?: string;
+    title: string;
+    patentNumber: string;
+    status: string;
+    date: string;
+    description?: string;
+  }>;
+  declaration?: string | { text: string };
+  declarationDate?: string;
+  declarationPlace?: string;
   updatedAt: string;
   createdAt: string;
   customSections?: CustomSection[];

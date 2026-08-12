@@ -121,6 +121,40 @@ const Internships: React.FC = () => {
     return [];
   });
 
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  // Sets field-level errors (red borders) synchronously so the save can be blocked.
+  useEffect(() => {
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Internships") return;
+      let allValid = true;
+      editingEntries.forEach((internship, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("internship", globalIndex, {
+          company: internship.company,
+          role: internship.role,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Internships") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) {
+        editEntry(idx);
+      }
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
+
   useEffect(() => {
     const allEntries = [...savedEntries, ...editingEntries.filter(hasValidData)];
     setResumeData(prev => {
@@ -253,21 +287,6 @@ const Internships: React.FC = () => {
     updatedSaved.splice(index, 1);
     setSavedEntries(updatedSaved);
     setEditingEntries([entryToEdit]);
-
-    setTimeout(() => {
-      const el = editorRefs.current[0];
-      if (el) {
-        el.focus();
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (el.childNodes.length > 0) {
-          range.selectNodeContents(el);
-          range.collapse(false);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
-        }
-      }
-    }, 0);
   };
 
   const cancelEdit = () => {

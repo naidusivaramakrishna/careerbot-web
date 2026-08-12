@@ -1,9 +1,20 @@
 name: Security Scan
 
 on:
-  push:
-    branches: [master, develop2, feature/**]
+  # Run on EVERY pull request, whatever it targets and whatever the source
+  # branch is called. Previously this was `branches: [master, develop2]`, and
+  # since every PR targets an integration branch such as
+  # feature/all-updated-features, NO pull_request run ever matched. Checks only
+  # appeared via the `push` trigger below, which matched `feature/**` — so a
+  # branch named fix/*, chore/* or hotfix/* got NO lint, NO build and NO
+  # security scan, and its PR showed a single green ai-review tick that looked
+  # like a full pass.
   pull_request:
+    branches: ['**']
+  # Direct pushes to the long-lived branches only. Feature branches are covered
+  # by the pull_request trigger above; keeping `feature/**` here as well would
+  # run every check TWICE per PR, and this repo has 2 self-hosted runners.
+  push:
     branches: [master, develop2]
 
 permissions:

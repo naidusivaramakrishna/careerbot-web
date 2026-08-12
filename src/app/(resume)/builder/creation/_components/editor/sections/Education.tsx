@@ -76,6 +76,39 @@ const Education: React.FC = () => {
     return [];
   });
 
+  // Validate all editing entries when the Save button in EditorTab fires the event.
+  useEffect(() => {
+    type ValidateEvent = CustomEvent<{ section: string; resultRef: { valid: boolean } }>;
+    const handleValidateSave = (e: ValidateEvent) => {
+      if (e.detail.section !== "Education") return;
+      let allValid = true;
+      editingEntries.forEach((edu, editIndex) => {
+        const globalIndex = savedEntries.length + editIndex;
+        const isValid = validateRequired("education", globalIndex, {
+          school: edu.school,
+          degree: edu.degree,
+        });
+        if (!isValid) allValid = false;
+      });
+      e.detail.resultRef.valid = allValid;
+    };
+    window.addEventListener("resume-validate-section", handleValidateSave as EventListener);
+    return () => window.removeEventListener("resume-validate-section", handleValidateSave as EventListener);
+  }, [editingEntries, savedEntries, validateRequired]);
+
+  useEffect(() => {
+    type OpenEntryEvent = CustomEvent<{ section: string; entryIndex: number }>;
+    const handleOpenEntry = (e: OpenEntryEvent) => {
+      if (e.detail.section !== "Education") return;
+      const idx = e.detail.entryIndex;
+      if (idx >= 0 && idx < savedEntries.length) {
+        editEntry(idx);
+      }
+    };
+    window.addEventListener("resume-open-entry", handleOpenEntry as EventListener);
+    return () => window.removeEventListener("resume-open-entry", handleOpenEntry as EventListener);
+  }, [savedEntries]);
+
   useEffect(() => {
     const validEntries = [
       ...savedEntries,
@@ -84,7 +117,7 @@ const Education: React.FC = () => {
     setResumeData(prev => {
       const prevItems = (prev.education ?? []) as Array<Record<string, unknown>>;
       const merged = validEntries.map((entry, idx) => {
-        if ((entry as Record<string, unknown>).id) return entry;
+        if ((entry as unknown as Record<string, unknown>).id) return entry;
         const prevId = prevItems[idx]?.id as string | undefined;
         return prevId ? { ...entry, id: prevId } : entry;
       });

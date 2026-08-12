@@ -11,7 +11,9 @@ interface ProblemCardProps {
 }
 
 export default function ProblemCard({ problem, language }: ProblemCardProps) {
-  const href = `/coding-test/${problem.slug}${language ? `?language=${language}` : ''}`;
+  const params = new URLSearchParams();
+  if (language) params.append('language', language);
+  const href = `/coding-test/${problem.slug}${params.toString() ? `?${params.toString()}` : ''}`;
   return (
     <Link
       href={href}

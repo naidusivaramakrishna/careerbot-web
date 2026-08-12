@@ -24,6 +24,7 @@ import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
 import { CoverLetterTemplatePreview } from "./CoverLetterTemplatePreview";
 import CoverLetterStatusPill from "./CoverLetterStatusPill";
 import WarningBanner from "./WarningBanner";
+import { getMatchBand, getMatchLabel, getMatchLabelTone, type MatchBand } from "../_utils/matchLabel";
 
 export interface CoverLetterViewProps {
   letter: CoverLetterResponse;
@@ -582,10 +583,10 @@ function InsightsPanel({
       <div className="rounded-lg border border-[#dfe6f5] bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] 2xl:p-5">
         <h2 className="text-lg font-black text-[#070b33]">Insights</h2>
         <div className="mt-4 flex items-center gap-3 2xl:mt-5 2xl:gap-4">
-          <ScoreRing value={overallScore} tone="green" />
+          <ScoreRing value={overallScore} tone={getRingTone(overallScore)} />
           <div>
             <p className="text-xl font-black text-[#070b33] 2xl:text-2xl">{overallScore}%</p>
-            <p className="text-sm font-bold text-emerald-700">{overallScore >= 85 ? "Excellent Match" : "Good Match"}</p>
+            <p className={`text-sm font-bold ${getMatchLabelTone(overallScore)}`}>{getMatchLabel(overallScore)}</p>
           </div>
         </div>
         <div className="mt-5 space-y-3">
@@ -610,8 +611,24 @@ function InsightsPanel({
   );
 }
 
-function ScoreRing({ value, tone }: { value: number; tone: "green" | "blue" | "purple" }) {
-  const color = tone === "green" ? "#22c55e" : tone === "blue" ? "#2557a7" : "#7c3aed";
+// Keyed on the FULL MatchBand union, not a subset. getMatchBand returns
+// "excellent" for scores >= 85 (matchLabel.ts:20); a partial Record left that
+// key missing, so RING_TONE_COLOR[tone] was undefined and the ring rendered
+// conic-gradient(undefined ...) on exactly the best-scoring cover letters.
+const RING_TONE_COLOR: Record<MatchBand, string> = {
+  excellent: "#16a34a",
+  good: "#22c55e",
+  moderate: "#d97706",
+  low: "#ea580c",
+  "very-low": "#b91c1c",
+};
+
+function getRingTone(score: number): MatchBand {
+  return getMatchBand(score);
+}
+
+function ScoreRing({ value, tone }: { value: number; tone: MatchBand }) {
+  const color = RING_TONE_COLOR[tone];
   return (
     <div
       className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-lg font-black text-[#070b33] 2xl:h-20 2xl:w-20 2xl:text-xl"
@@ -839,7 +856,7 @@ function LetterPreviewPaper({
           </div>
           <div className="mt-8 space-y-2">
             <p className="text-sm font-black leading-5 text-white">{header.name}</p>
-            <p className="text-xs font-semibold leading-5 text-white/75">{header.contact}</p>
+            {header.contact && <p className="text-xs font-semibold leading-5 text-white/75">{header.contact}</p>}
             <p className="text-xs font-semibold leading-5 text-white/65">Cover letter</p>
           </div>
           <div className="mt-10 space-y-2">
@@ -860,7 +877,7 @@ function LetterPreviewPaper({
       <div className="mx-auto max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_28px_70px_-22px_rgba(15,23,42,0.35),0_8px_18px_rgba(15,23,42,0.08)]">
         <div className={["px-6 py-4 text-white 2xl:px-7 2xl:py-5", template.accent].join(" ")}>
           <p className="text-lg font-black leading-tight">{header.name}</p>
-          <p className="mt-2 max-w-xl text-sm font-semibold leading-6 text-white/75">{header.contact}</p>
+          {header.contact && <p className="mt-2 max-w-xl text-sm font-semibold leading-6 text-white/75">{header.contact}</p>}
         </div>
         <div className="px-6 py-7 2xl:px-8 2xl:py-9">{body}</div>
       </div>
@@ -873,7 +890,7 @@ function LetterPreviewPaper({
         <div className="mb-5 flex items-start justify-between gap-6 border-b border-blue-100 pb-4">
           <div>
             <p className="text-base font-black leading-tight text-slate-950">{header.name}</p>
-            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{header.contact}</p>
+            {header.contact && <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{header.contact}</p>}
           </div>
           <p className="text-right text-xs font-bold uppercase tracking-wide text-slate-400">Cover letter</p>
         </div>
@@ -898,7 +915,7 @@ function LetterPreviewPaper({
         <div className="mb-7 flex items-start justify-between gap-4">
           <div>
             <p className="text-lg font-black leading-tight text-slate-950">{header.name}</p>
-            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>
+            {header.contact && <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>}
           </div>
           <div className={["flex h-14 w-14 items-center justify-center rounded-full text-sm font-black text-white", template.accent].join(" ")}>
             {header.initials}
@@ -918,7 +935,7 @@ function LetterPreviewPaper({
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <p className="text-lg font-black leading-tight text-slate-950">{header.name}</p>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>
+          {header.contact && <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{header.contact}</p>}
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 text-xs font-black text-slate-700">
           {header.initials}
@@ -941,7 +958,7 @@ function getLetterPreviewHeader(
     .filter(Boolean);
   const signature = coverLetter?.signature?.replace(/^(sincerely|regards|best regards),?\s*/i, "").trim();
   const firstPlainName = lines.find((line) => !/^dear\s+/i.test(line) && !line.includes("@") && line.length <= 80);
-  const contact = lines.find((line) => line.includes("@") || /\d{6,}/.test(line)) ?? "Cover letter ready for review";
+  const contact = lines.find((line) => line.includes("@") || /\d{6,}/.test(line)) ?? "";
   const name = signature || firstPlainName || "Candidate";
   const initials = name
     .split(/\s+/)

@@ -573,7 +573,7 @@ export default function ReportPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">{q.score.toFixed(1)}/10</span>
                   <button
-                    onClick={() => router.push("/notes/practice")}
+                    onClick={() => router.push("/notes/managerial")}
                     className="text-[10px] font-bold px-2.5 py-1.5 bg-[#2557a7] text-white rounded-lg hover:bg-[#1e4a8f] transition-all whitespace-nowrap"
                   >
                     Practice This
@@ -678,7 +678,7 @@ export default function ReportPage() {
           Take Another Mock Interview
         </button>
         <button
-          onClick={() => router.push("/notes/practice")}
+          onClick={() => router.push("/notes/managerial")}
           className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 shadow-sm transition-all"
         >
           Practice Weak Questions

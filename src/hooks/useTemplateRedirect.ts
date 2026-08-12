@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation'
 import { getAllResumes, createResumeWithAuth, getTemplatesByCategory, TemplateResponse } from '@/api/resumeApi'
 import { getProfile } from '@/api/userApi'
 import { getSectionOrderByDomainAndCareer } from '@/app/(resume)/templates/_utils/domainSectionOrder'
+import { detectCareerLevel } from '@/utils/careerLevelDetection'
 import { logger } from '@/lib/logger'
 
 // Map family codes to display names
@@ -73,7 +74,7 @@ export function useTemplateRedirect() {
 
           // Sort by career level
           const sortedTemplates = careerTemplates.sort((a, b) => {
-            const careerLevels = ['fresher', 'early career', 'mid-level', 'senior-level', 'manager']
+            const careerLevels = ['fresher', 'early career', 'mid-level', 'senior-level', 'lead', 'architect', 'manager', 'director', 'vice president']
             const aName = (a.name || '').toLowerCase()
             const bName = (b.name || '').toLowerCase()
 
@@ -91,7 +92,7 @@ export function useTemplateRedirect() {
             name: t.name,
             preview_url: t.preview_url || '/assets/templates/template-1.jpg',
             description: t.description || 'Professional resume template',
-            ats_friendly: t.ats_friendly || true,
+            ats_friendly: t.ats_friendly ?? true,
             subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
             domain_family: pendingTemplateFamily,
             domain_display_name: FAMILY_TO_DISPLAY_NAME[pendingTemplateFamily] || pendingTemplateFamily,
@@ -110,16 +111,15 @@ export function useTemplateRedirect() {
           // Store section order based on domain family and first career level
           const templateName = sortedTemplates[0]?.name?.toLowerCase() || ''
           let careerLevel: string | undefined
-          if (templateName.includes('early') && templateName.includes('career')) {
+          const detected = detectCareerLevel(templateName)
+          if (detected) {
+            careerLevel = detected.toLowerCase()
+          } else if (templateName.includes('early') && templateName.includes('career')) {
             careerLevel = 'early career'
-          } else if (templateName.includes('senior')) {
-            careerLevel = 'senior-level'
-          } else if (templateName.includes('mid')) {
-            careerLevel = 'mid-level'
           } else if (templateName.includes('fresher')) {
             careerLevel = 'fresher'
-          } else if (templateName.includes('manager')) {
-            careerLevel = 'manager'
+          } else if (templateName.includes('mid')) {
+            careerLevel = 'mid-level'
           }
 
           const sectionOrder = getSectionOrderByDomainAndCareer(pendingTemplateFamily, careerLevel)

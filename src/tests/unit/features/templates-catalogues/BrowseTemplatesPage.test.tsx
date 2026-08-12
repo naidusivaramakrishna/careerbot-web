@@ -92,7 +92,7 @@ vi.mock('@/app/browse-templates/_data/constants', () => ({
     doctor_physician:     'Doctor / Physician',
     clinical_nurse:       'Clinical Nurse',
   },
-  CAREER_LEVELS: ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Manager'],
+  CAREER_LEVELS: ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager'],
   FALLBACK_IMAGE: '/assets/fallback.jpg',
 }));
 

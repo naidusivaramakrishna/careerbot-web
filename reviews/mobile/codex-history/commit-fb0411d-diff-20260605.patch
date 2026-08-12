@@ -1,0 +1,1430 @@
+diff --git a/__mocks__/@expo/vector-icons.js b/__mocks__/@expo/vector-icons.js
+new file mode 100644
+index 0000000..0bc4f01
+--- /dev/null
++++ b/__mocks__/@expo/vector-icons.js
+@@ -0,0 +1,44 @@
++// Test mock for @expo/vector-icons. The real implementation calls into font
++// loading machinery that crashes under jest-expo's RN test renderer because
++// the font asset isn't registered. Each icon set (Ionicons, FontAwesome, …)
++// is replaced with a Text-rendering stub that preserves the `name` prop so
++// tests can still assert on it via accessibilityLabel / testID.
++
++const React = require('react');
++const { Text } = require('react-native');
++
++function makeIconMock(displayName) {
++  function Icon(props) {
++    const { name, accessibilityLabel, testID, color, size, style } = props;
++    return React.createElement(
++      Text,
++      {
++        accessibilityLabel,
++        testID: testID || `icon-${name}`,
++        // Forward style so size/color assertions still work.
++        style: [{ color, fontSize: size }, style],
++      },
++      // Render the icon name so DOM-style assertions on text content work.
++      name || '',
++    );
++  }
++  Icon.displayName = displayName;
++  return Icon;
++}
++
++module.exports = {
++  Ionicons: makeIconMock('Ionicons'),
++  FontAwesome: makeIconMock('FontAwesome'),
++  FontAwesome5: makeIconMock('FontAwesome5'),
++  MaterialIcons: makeIconMock('MaterialIcons'),
++  MaterialCommunityIcons: makeIconMock('MaterialCommunityIcons'),
++  AntDesign: makeIconMock('AntDesign'),
++  Entypo: makeIconMock('Entypo'),
++  EvilIcons: makeIconMock('EvilIcons'),
++  Feather: makeIconMock('Feather'),
++  Foundation: makeIconMock('Foundation'),
++  Octicons: makeIconMock('Octicons'),
++  SimpleLineIcons: makeIconMock('SimpleLineIcons'),
++  Zocial: makeIconMock('Zocial'),
++  createIconSet: () => makeIconMock('CustomIcon'),
++};
+diff --git a/docs/design/2026-06-05-resume-builder-screen-decomposition.md b/docs/design/2026-06-05-resume-builder-screen-decomposition.md
+new file mode 100644
+index 0000000..4c649d7
+--- /dev/null
++++ b/docs/design/2026-06-05-resume-builder-screen-decomposition.md
+@@ -0,0 +1,267 @@
++# Design Options — Resume Builder screen decomposition
++
++> Full Design Options doc per `reviews/mobile/09_CODEX_CROSSCHECK_POLICY.md §1.5`. Codex r1 on the earlier lightweight Note (`docs/design/notes/2026-06-05-resume-builder-screen-decomposition.md`) BLOCKED on tier mismatch — implementation estimate (~1,630 LOC across routes + components + hooks) exceeds the "≤ 1 engineer-day to implement OR reverse" threshold for Note tier. This is the promoted version. The old Note is marked SUPERSEDED-BY this file.
++
++**Date:** 2026-06-05
++**Author:** Claude Opus 4.7 (drafted for CEO + dev review)
++**Status:** ACCEPTED (Codex r4 — see §12 sign-off table; supersedes Note r1 BLOCK)
++**Related phase:** Phase 1 — Resume Builder port (continues PR #1 `feat/resume-builder-port`)
++**Related backend ask:** A8 (Resume CRUD) + A9 (Template catalogue)
++
++---
++
++## 1. Context
++
++The POC `src/screens/resumeBuilder/ResumeBuilderScreen.js` is a single 1962-LOC file holding the entire builder UX: a "Your Resumes" landing list, the section grid for an open resume, every per-section editor (record / list-entry / skills), the AI Writer trigger, the template-applied callback, the save/sync state machine, and the upload placeholder. It owns ≥25 `useState` hooks, ≥30 in-body handler functions, and 16 nested `render*` helpers. None of the helpers are exported.
++
++This doc decides **how the same UX gets re-expressed as Expo Router routes + extracted hooks + section components** in production careerbot-mobile, before any port code is written. The decision matters because the POC's single-file shape would breach our anti-mega-screen rule (no production component >400 LOC per ADR-003 implicit pattern), force every section-editor change to re-render the whole resume list, and make per-section unit tests impossible without rendering the entire tree. **Push notifications are explicitly out of v1** per `reviews/mobile/00_INDEX.md:84` and `reviews/MOBILE_ARCHITECTURE_BLUEPRINT.md:887`; section deep links are **not a stated v1 requirement** (per Codex r2 correction — they were conflated with push deferral in the r1 doc), so a "deep-link-friendly" argument is forward-looking, not a v1 must.
++
++Scope EXCLUDES `BuilderPreviewScreen.js` (199 LOC) and `TemplateSelectionScreen.js` (463 LOC) — both small enough to port as one route each in a follow-up commit.
++
++## 2. Acceptance criteria
++
++- [ ] No new file exceeds **400 LOC** (function components or hooks).
++- [ ] No new React component holds more than **6 useState/useReducer hooks directly**; everything else lives in named custom hooks (`useResumeDraft`, `useSectionRouter`, `useSkillsEditor`).
++- [ ] All resume / template **server state goes through TanStack Query** per ADR-007 (`reviews/mobile/06_ADRS_AND_RUNBOOKS.md:51`); no `useEffect(() => fetchAuthed(…))` patterns. PR #1 already shipped `useCreateResume`, `useListResumes`, `useUpdateResume`, `useTemplatesByCategory`, `useApplyTemplate`, `useTemplateConfig`.
++- [ ] Each per-section editor (`RecordEditor`, `ListEditor`, `SkillsEditor`) is **independently renderable in tests** with a stub draft + onSave (no nested context required).
++- [ ] **Zero native code edits** per ADR-006 (`reviews/mobile/06_ADRS_AND_RUNBOOKS.md:45`) — any navigation primitive used must be supported by stock `expo-router` on Expo SDK 52.
++- [ ] **Reversibility within the originally-budgeted port window**: collapsing the chosen route shape back into a single screen takes ≤ 1 engineer-day **including** test updates + a fresh Codex review round (revised from the Note's "≤4 hours" claim per Codex r1 §reversibility audit), **assuming editor / draft-store APIs stay route-agnostic** (Codex r2 caveat).
++- [ ] **Modal-dismiss dirty-form prevention** for the chosen Option 3: the section-editor modal must intercept iOS swipe-to-dismiss and Android back-button when the draft has unsaved changes, showing a confirm prompt or auto-persisting to the draft store. Implementation deliverable for the screen-port PR; promoted from §11 outstanding-question to acceptance criterion per Codex r2 §H.
++
++---
++
++## 3. Option 1 — Section-per-route (14 Expo Router files)
++
++**Summary.** Each of the 8 RESUME_SECTIONS + 6 EXTRA_SECTIONS becomes its own route:
++
++```
++app/(tabs)/resume-builder/
++  index.tsx                  Your Resumes landing
++  [resumeId]/
++    index.tsx                section grid + completeness ring
++    personal.tsx             record editor for "Personal Info"
++    summary.tsx              record editor for "Professional Summary"
++    education.tsx … (×12)    record/list/skills editors per section
++```
++
++Each route handles its own form state via `useResumeDraft(resumeId, sectionKey)`. The same extracted components (`RecordEditor`, `ListEditor`, `SkillsEditor`) are used internally — the routes are thin shells that pick the right editor.
++
++**Pros.**
++- Native back-stack and deep-linkability (`/[resumeId]/skills` is a valid URL today; future push-notification deep links are free).
++- Smallest individual files (<200 LOC each, mostly imports + one wrapper component).
++- Lazy bundle: each route file is a separate JS chunk by `expo-router` default — first-paint cost on the landing route doesn't include the editor trees.
++
++**Cons.**
++- **14 new route files** for what users perceive as one feature; high directory clutter.
++- Optimistic-save UX is harder across route push because the draft must persist when the user backs out of `/skills` to the section grid then re-enters `/education`. Requires a route-agnostic zustand draft store.
++- Tab persistence: tabs may unmount and remount on switching, dropping route params unless re-hydrated from URL.
++
++**Real data.**
++*Evidence row (strength 2 — official platform):* Expo Router v4 docs confirm files in `app/` are routes (https://docs.expo.dev/router/basics/notation/, accessed 2026-06-05). ADR-005 locks Expo Router (`reviews/mobile/06_ADRS_AND_RUNBOOKS.md:39`).
++*Evidence row (strength 4 — own observation, not a measurement):* `app/(auth)/` already ships 5 routes (signin / signup / forgot / reset / verify) under the same pattern and passes typecheck + 12 tests; the structural pattern is known-good in this repo. No spike-branch measurement of bundle splitting has been done for the Resume Builder specifically; I am NOT claiming bundle deltas.
++
++**Risks.**
++- 14 routes is a lot of churn if the section list ever changes (adding/removing a section means adding/removing a route file).
++- Push-notification deep links to specific sections are listed as out-of-v1 (`reviews/mobile/00_INDEX.md:84`) — Option 1 pays a structural cost for a feature we don't ship.
++- Route-state coordination requires either a zustand draft store OR aggressive cache invalidation on every navigate; both add complexity.
++
++---
++
++## 4. Option 2 — Single route + extracted hooks + section components
++
++**Summary.** One Expo Router route, internally split into extracted hooks and components:
++
++```
++app/(tabs)/resume-builder/
++  index.tsx                                ~150 LOC — state-machine dispatcher
++
++src/features/resumes/
++  components/
++    SectionGrid.tsx                        ~120 LOC
++    RecordEditor.tsx                       ~180 LOC
++    ListEditor.tsx                         ~220 LOC
++    SkillsEditor.tsx                       ~280 LOC
++    YourResumesLanding.tsx                 ~150 LOC
++    UploadPlaceholder.tsx                  ~80 LOC
++  hooks/
++    useResumeDraft.ts                      ~180 LOC
++    useSectionRouter.ts                    ~100 LOC
++    useSkillsEditor.ts                     ~140 LOC
++```
++
++The route file is a state-machine dispatcher: `(landing | section-grid | RecordEditor | ListEditor | SkillsEditor)`. Sections are conditionally rendered, so only the active editor is mounted at any time.
++
++**Pros.**
++- One URL, one back-button handler — no cross-route session restoration.
++- Easiest 1:1 with POC structure: every nested handler becomes a hook method, minimising port risk.
++- Side-by-side preview is trivial later (everything is in one render tree, no route boundary to cross).
++
++**Cons.**
++- Index route still ~150 LOC after extraction (a dispatcher is irreducible work).
++- No deep-linkable section URLs today; would require query-param routing (`/resume-builder?section=skills`) when push notifications eventually need it.
++- Hardware back button on Android requires custom handling: a single-route dispatcher must intercept back to switch from "editor" mode to "section grid" mode instead of leaving the route.
++
++**Real data.**
++*Evidence row (strength 4 — own observation):* `app/(auth)/signin.tsx` is the largest "screen as state-machine dispatcher" file in this repo today (167 LOC, 4 useStates, one custom hook) and comfortably under the 400 LOC budget. Same pattern applied to the Resume Builder dispatcher cleanly yields ~150 LOC manual count of branches + handler binding. This is a local pattern reference, **not proof** that the larger Resume Builder dispatcher will fit — flagged in §11 (Outstanding questions) as needing a spike measurement.
++*Codex r1 correction:* the original Note claimed "all section render trees live in memory at once" — that was an overstatement. With conditional rendering (`{activeKey === 'skills' && <SkillsEditor/>}`), unmounted sections are not in memory. The real con is the back-button + deep-link compromise above, not memory.
++
++**Risks.**
++- Android back-button handling for in-screen mode-switching is a class of bug that bites RN apps regularly; a custom `useBackHandler` must be tested on a physical device.
++- Future deep links via query params are a workaround, not a first-class pattern; if push notifications become priority in v1.x, this option needs a follow-up refactor.
++
++---
++
++## 5. Option 3 — Hybrid: 3 stable routes + modal section editor (the original Note's pick)
++
++**Summary.** Three routes matching the three phases of the UX, with the section editor opened as a modal:
++
++```
++app/(tabs)/resume-builder/
++  index.tsx              Your Resumes landing (~150 LOC, uses YourResumesLanding)
++  [resumeId]/
++    index.tsx            section grid + completeness for one resume (~150 LOC, uses SectionGrid)
++    section/
++      [sectionKey].tsx   modal route (~180 LOC, dispatches to RecordEditor / ListEditor / SkillsEditor)
++```
++
++Same `src/features/resumes/components/*` + `hooks/*` split as Option 2, but the editor route is configured with `presentation: 'modal'` in **the containing stack layout's `Stack.Screen` options** — not as a second argument to `router.push`. Concretely, the implementer registers the `section/[sectionKey]` route inside the containing stack layout (e.g. `app/(tabs)/resume-builder/[resumeId]/_layout.tsx`, or a stack-providing parent layout — exact nesting to be verified during implementation) with `<Stack.Screen name="section/[sectionKey]" options={{ presentation: 'modal' }} />`. The call site is plain `router.push('/resume-builder/${resumeId}/section/skills')`. (Codex r2+r3 fixes — the r1 doc had the API wrong; r3 sharpened the layout-vs-screen-options placement.)
++
++`expo-router@~4.0.21` also exposes `presentation: 'formSheet'` per the same modal docs page — a route-backed sheet that may capture some of Option 4's bottom-sheet UX without a new dependency. This variant is briefly mentioned in §6 + §9 but not promoted to its own Option because the navigation shape (route stack + modal-style presentation) is structurally identical to Option 3 — only the visual presentation token changes.
++
++**Pros.**
++- Three routes, three back-button mappings — no in-screen state machine required.
++- Modal presentation matches platform "save / cancel" conventions on iOS and Android.
++- Section URLs are deep-linkable today, no query-param hack.
++- File-size budget achievable per §2.
++
++**Cons.**
++- Three routes means three places where draft state must be coordinated; the section modal MUST write back to a draft store readable by the section grid, otherwise the completeness ring lies.
++- Modal cross-route requires either (a) a zustand draft store (already the pattern in `src/features/auth/authStore.ts`) or (b) immediate TanStack Query cache invalidation on modal close — a real coordination cost flagged below.
++- "Three routes match the three mental modes" — Codex r1 correctly flagged this as a **product hypothesis, not user research**. Stated here as hypothesis, not evidence.
++
++**Real data.**
++*Evidence row (strength 2 — official platform):* Expo Router modal recipe (https://docs.expo.dev/router/advanced/modals/, accessed 2026-06-05) confirms `presentation: 'modal'` is JS-only and supported on `expo-router@~4.0.21` (the version actually installed in this repo per `package.json:expo-router@~4.0.21`, resolved `4.0.22` in `node_modules/expo-router/package.json` — corrected from the Note's wrong `^3.5.18` citation).
++*Evidence row (strength 4 — own pattern reference):* cross-component draft state via a zustand store is the pattern used in `src/features/auth/authStore.ts` and validated across 4 Codex rounds during the auth design — no new architectural primitive needed, but **the resume draft store has not been implemented yet** — it's net-new code in this option's scope, flagged in §11.
++
++**Risks.**
++- Modal dismissal without explicit "save" is a known UX trap on iOS (swipe-down to dismiss while editing); the draft store must auto-persist on dismiss OR show a confirm prompt.
++- The completeness ring in the section grid must be reactive to the draft store, not stale-while-revalidate from TanStack — adds one more subscription point.
++
++---
++
++## 6. Option 4 — 2-route + in-screen bottom sheet panel (Codex r1 suggested option)
++
++**Summary.** Two routes, with the section editor opened as a bottom-sheet panel inside the resume route (NOT a separate route). Suggested by Codex r1 §"Sixth option (probe C)":
++
++```
++app/(tabs)/resume-builder/
++  index.tsx              Your Resumes landing (~150 LOC)
++  [resumeId].tsx         section grid + section editor as bottom sheet (~280 LOC route + ~200 LOC sheet component)
++```
++
++When the user taps a section tile, a `BottomSheet` component animates up over the section grid with the appropriate editor inside (`RecordEditor` / `ListEditor` / `SkillsEditor`). The sheet's "open" state is local to the route — no cross-route navigation, no modal presentation primitive.
++
++**Pros.**
++- Half the route count of Option 3 (2 vs 3); no `section/[sectionKey].tsx` route file at all.
++- No cross-route draft coordination — sheet and grid live in the same route, share state directly.
++- Section deep-linking still possible later via query params on the resume route (e.g. `/[resumeId]?section=skills` could auto-open the sheet on mount).
++- Modal dismissal semantics are handled by the bottom-sheet library (gesture-to-dismiss is built in), not by expo-router's modal stack.
++
++**Cons.**
++- Requires a bottom-sheet library — typically `@gorhom/bottom-sheet` (de facto RN standard, requires `react-native-reanimated` which we already ship with Expo SDK 52) OR write our own. **ADR-006 forbids native code FILE edits but does NOT forbid managed Expo-compatible dependencies** (Codex r2 wording fix — the r1 doc blurred this). Whether `@gorhom/bottom-sheet@^5` is Expo-managed-workflow-compatible on SDK 52 (no `expo prebuild` required) is **unverified** here — flagged in §11.1.
++- The route file is bigger (~280 LOC for grid + sheet wiring vs ~150 LOC for the dispatcher in Options 2/3) — still under the 400 LOC budget but the largest of the four options.
++- Less idiomatic Expo Router — modal/route-stack is the documented pattern; bottom-sheet-as-modal is a deliberate departure that future devs may find unfamiliar.
++
++**Real data.**
++*Evidence row (strength 6 — popularity, weakest):* `@gorhom/bottom-sheet` is the de facto RN bottom-sheet library by GitHub stars + npm downloads; its v5 line was released in 2025 and claims compatibility with newer RN architectures. This is popularity evidence only — it does NOT prove SDK 52 + Expo managed-workflow compatibility, which remains §11.1's open question. The r1 doc overclaimed "JS-only" without source; that phrasing has been softened.
++*Evidence row (strength 2 — official platform):* Expo Router v4 modal docs (https://docs.expo.dev/router/advanced/modals/) list `formSheet` as a native presentation primitive supported without `@gorhom/bottom-sheet`. This weakens Option 4's "bottom-sheet UX requires a new dependency" framing; if a sheet-style UX is the goal, native `formSheet` is a closer-to-Option-3 alternative (same routing shape, sheet visuals).
++*Evidence row (strength 4 — own pattern):* careerbot-mobile currently ships zero bottom-sheet usage; either approach would be the first. Adding a library is a one-off architectural cost, not a per-feature cost.
++
++**Risks.**
++- New dependency carries its own update treadmill, security advisories, and breakage on Expo SDK upgrades.
++- Bottom sheets behave subtly differently on iOS vs Android (gesture sensitivity, safe-area handling) — needs device testing the modal route in Option 3 wouldn't.
++- If the library is wrong about no-native-edits, we've burned a chunk of design budget on a non-starter.
++
++---
++
++## 7. Comparison matrix
++
++| Criterion | Option 1 (14 routes) | Option 2 (1 route) | Option 3 (3 routes + modal) | Option 4 (2 routes + sheet) |
++|---|---|---|---|---|
++| New route files | 14 | 1 | 3 | 2 |
++| Largest new file LOC (estimated) | ~200 | ~280 (SkillsEditor) | ~280 (SkillsEditor) | ~280 route + ~280 SkillsEditor |
++| File-size budget (§2 ≤400 LOC) | ✅ | ✅ | ✅ | ✅ |
++| Native code required | no | no | no | no (if @gorhom/bottom-sheet stays JS-only — §11 verify) |
++| Deep-link to section (v1) | ✅ free | ❌ (need query-param hack) | ✅ free | △ (need query-param hack) |
++| Android back-button handling | native | custom in-screen | native | partial native (sheet dismissal in JS) |
++| Cross-route draft coordination cost | high | none | medium | none |
++| New external dependency | none | none | none | @gorhom/bottom-sheet |
++| Reversibility (§10) | high — collapse 14 routes to 1 ≈ 1 day | low — already collapsed | medium — collapse 3 routes ≈ 1 day | medium — drop sheet library ≈ ½ day |
++| Idiomatic vs Expo Router | most (file-routing-first) | least (single-route SPA-style) | high (uses modal recipe) | low (sheet as modal is a departure) |
++
++---
++
++## 8. Decision
++
++**Chosen:** **Option 3 — Hybrid 3 routes + modal section editor.**
++
++**Why.** Three factors decide it, in order:
++
++1. **No new project dependency**, distinguishing it from Option 4 (Codex r2 wording — "project dependency", not "violates ADR-006"; ADR-006 only bans native FILE edits, not managed dependencies). Option 4's bottom-sheet path requires verifying `@gorhom/bottom-sheet` is Expo-managed-workflow-compatible on SDK 52 (§11.1 outstanding); that verification is itself a spike that delays implementation. Option 3 uses presentation primitives already shipped in `expo-router@~4.0.21` per `package.json`.
++2. **Uses the navigation stack's default back behaviour**, distinguishing it from Option 2 (Codex r2 wording — "default back" not "for free"; modal dismissal, dirty-form prevention, and stack layout still need implementation + device tests). Option 2's in-screen mode switching requires a custom `useBackHandler` that historically is a source of subtle RN bugs.
++3. **Routing cost matches the actual UX shape**, distinguishing it from Option 1. Push notifications are explicitly out of v1 per `reviews/mobile/00_INDEX.md:84`; section deep links are not a stated v1 requirement; Option 1's 14 routes pay a structural cost (14 files, route-state coordination) for forward-looking features we don't ship in v1. This is maintainability reasoning, not measured evidence.
++
++The file-size budget (§2 criterion 1) is achievable by **all four options** — Codex r1 correctly noted this is not unique to Option 3, so it's not weighted in the decision.
++
++**Tie-breakers used.** Option 3 over Option 4 was close (both are 2–3 routes with shared editor components). The tie-breaker is dependency footprint — adding `@gorhom/bottom-sheet` is a project-wide commitment for one feature's UX. If a future feature also needs bottom sheets we revisit.
++
++---
++
++## 9. Rejected alternatives — one-sentence why-not each
++
++- **Option 1 — 14 routes:** rejected because section deep-linking is **not a stated v1 requirement** (push notifications are deferred per `reviews/mobile/00_INDEX.md:84`; section deep-link support is not an independent v1 ask), so the routing overhead buys no v1 feature; reversibility cost back to one route is ~1 day vs ~0 for Option 2.
++- **Option 2 — single route dispatcher:** rejected because hardware back-button handling in single-route mode-switching is a known RN bug class and would need device-tested `useBackHandler` polish; Option 3 uses the navigation stack's default back behavior, subject to dirty-dismiss handling per §2.
++- **Option 4 — 2-route + bottom sheet:** rejected because adding `@gorhom/bottom-sheet` is a non-trivial project-wide dependency commitment for one feature, and its SDK 52 managed-workflow compatibility is unverified (§11.1). The modal recipe in Option 3 needs zero new packages.
++- **Also considered but not detailed:** native `expo-router` `presentation: 'formSheet'` (Codex r2 suggestion) — does not change the chosen direction because it is still route-backed presentation (structurally Option 3) with only the visual presentation token changed; the implementer can choose between `'modal'` and `'formSheet'` in the `_layout.tsx` config without re-running this design gate. Also considered: drawer navigation (rejected — drawer is already the tabs layout primitive; nesting drawer-in-drawer is awkward), and Bottom Tab navigation inside the resume route (rejected — tabs are a top-level navigation primitive in our `(tabs)/` layout and would conflict).
++
++---
++
++## 10. Reversibility
++
++**Code touchpoints:** if Option 3 is wrong in 3 months, collapse to single route by deleting `[resumeId]/index.tsx` (~150 LOC) and `[resumeId]/section/[sectionKey].tsx` (~180 LOC), rewriting `index.tsx` to host the section grid + editor dispatcher (~280 LOC). Net delta: 2 route files deleted, 1 file rewritten with +130 LOC.
++
++**Data migration:** None. TanStack Query cache is route-agnostic. Zustand draft store is route-agnostic.
++
++**User-visible disruption:** None expected — animation changes from modal to inline, no auth, no onboarding, no data loss.
++
++**Calendar cost:** estimated ~1 engineer-day **including** unit-test updates, navigation tests, modal-dismiss tests, draft-store-route-lifecycle tests, Codex commit-review r1, and the typecheck/lint/jest gauntlet — **assuming the extracted editor components and `useResumeDraft` hook API stay route-agnostic** (Codex r2 caveat). If the editor or hook signature is also evolving at collapse time, add another half-day.
++
++**Per-Codex-r1+r2 honesty:** this is an **estimate**, not a measured baseline. The original Note's "≤ 4 hours" claim was rejected as too tight; Codex r2 also noted that navigation/modal-dismiss/draft-store-lifecycle tests are easy to undercount. If the bottom-sheet library proves unworkable later and we want to switch from Option 3 to Option 4, that's a separate ~1-day calendar cost on top.
++
++---
++
++## 11. Outstanding questions for review
++
++1. **`@gorhom/bottom-sheet` SDK 52 compatibility** — Option 4's main risk. I have not run a spike to confirm the library is JS-only on Expo SDK 52 with `react-native-reanimated@~3.16.1` (the version locked by Expo). If a CEO or reviewer has shipped that combination recently, please flag in this PR's comments. The decision in §8 stands even if compat is confirmed (we still prefer no new dependency), but the §9 rejection sentence for Option 4 would be softer.
++
++2. **Modal dismissal UX on iOS** — promoted to acceptance criterion §2 (last bullet) per Codex r2 §H triage; no longer outstanding. Implementation deliverable, not a design open question.
++
++3. **`useResumeDraft` debounce / sync semantics** — every option references this hook; none of the four design options pin down whether it (a) sends a PATCH per-keystroke (debounced), (b) sends on blur, or (c) sends on explicit Save. I lean (a) + debounce ~800ms based on the POC's `lastSentPayloadRef` pattern, but this is a hook-level decision, not a route-shape decision, so deferred to the implementation PR. Codex may flag this as scope-creep on the design doc.
++
++4. **Spike measurement for Option 2's dispatcher size** — §4 says "~150 LOC" based on the `signin.tsx` analogy, but Resume Builder is ≥10× the state surface. If Codex insists on a measured baseline before accepting Option 3, the cheapest path is a 30-minute spike rewriting `signin.tsx`-style for one section to validate the dispatcher LOC estimate. I have not done this spike. Acceptable to defer per §1.5 "approved spike exception"? Codex to call.
++
++5. **Sibling-PR ordering** — this design must be ACCEPTED before any implementation; PR #1 must be MERGED before the implementation PR. If Codex catches a conflict between this design and the PR #1 shipped code (`src/features/resumes/{resumesApi,templatesApi,mapApiResumeToValues,mapResumeValuesToApi,resumeBuilderConfig}.ts` + `src/components/resume/ResumeRenderer.tsx`), flag it as P0.
++
++---
++
++## 12. Sign-off
++
++| Persona | Verdict | Date |
++|---|---|---|
++| Codex (design-lens review round 1, Note tier) | BLOCK — tier mismatch | 2026-06-05 |
++| Codex (design-lens review round 1, full doc tier — this doc) | ACCEPT-WITH-FIXES — 4 wording/accuracy fixes | 2026-06-05 |
++| Codex (design-lens review round 2, full doc tier — after r1 fixes) | ACCEPT-WITH-FIXES — 3 precision fixes (2 stale-phrase sweep misses in §9, 1 §5 layout-vs-screen-options sharpening) | 2026-06-05 |
++| Codex (design-lens review round 3, full doc tier — after r2 fixes) | ✅ ACCEPT-AS-IS — design gate satisfied | 2026-06-05 |
++| Brother / CEO (one of) | TBD | |
++
++After ACCEPT, this doc is referenced from the implementation PR description. Drift between this doc and the implementation triggers a re-review.
+diff --git a/docs/design/notes/2026-06-05-resume-builder-screen-decomposition.md b/docs/design/notes/2026-06-05-resume-builder-screen-decomposition.md
+new file mode 100644
+index 0000000..c9a070c
+--- /dev/null
++++ b/docs/design/notes/2026-06-05-resume-builder-screen-decomposition.md
+@@ -0,0 +1,152 @@
++# Design Note — Resume Builder screen decomposition
++
++> Lightweight tier per `reviews/mobile/09_CODEX_CROSSCHECK_POLICY.md` §1.5. The POC's `ResumeBuilderScreen.js` is one 1962-LOC file with 25+ `useState`s, 30+ handlers and 16 render-* helpers; porting it verbatim violates our anti-mega-screen rule. The *structural* choice (how to split it) is non-trivial but reversible — full Design Options doc is overkill.
++
++**Date:** 2026-06-05
++**Author:** Claude Opus 4.7 (drafted for CEO + dev review)
++**Status:** SUPERSEDED-BY [`docs/design/2026-06-05-resume-builder-screen-decomposition.md`](../2026-06-05-resume-builder-screen-decomposition.md) — Codex r1 BLOCKED on tier mismatch (~1,630 LOC estimate exceeds the ≤ 1 engineer-day threshold for Note tier). Full Design Options doc written at the linked path. Do NOT consume this Note for the decision — its analysis is preserved here for history, with three corrections noted in the SUPERSEDED-BY doc: (i) `expo-router` version is `~4.0.21` not `^3.5.18`, (ii) Option B's "all sections in memory" claim is overstated, (iii) reversibility "≤4 hours" is too tight; revised estimate is 1 engineer-day including tests + Codex round. Added Option 4 (2-route + bottom sheet) per Codex r1's "Sixth option (probe C)" suggestion.
++**Tier:** Design Note — INVALID for this scope per Codex r1 BLOCK on tier mismatch.
++**Related phase:** Phase 1 — Resume Builder port (continues PR #1 `feat/resume-builder-port`)
++**Depends on:** Conflict 1 (auth-bootstrap) resolved per `[[careerbot-mobile-screen-port-conflict-auth-bootstrap]]`. Implementation cannot begin while that's open.
++
++---
++
++## 1. Context
++
++The POC `src/screens/resumeBuilder/ResumeBuilderScreen.js` is a single 1962-LOC file holding the entire builder UX: a "Your Resumes" landing list, the section grid for an open resume, every per-section editor (record / list-entry / skills), the AI Writer trigger, the template-applied callback, the save/sync state machine, and the upload placeholder. It owns ≥25 `useState` hooks, ≥30 in-body handler functions, and 16 nested `render*` helpers. None of the helpers are exported.
++
++This Design Note decides **how the same UX gets re-expressed as Expo Router routes + extracted hooks + section components** in production careerbot-mobile, before any port code is written. The decision matters because the POC's single-file shape would (a) breach our anti-mega-screen rule (no production file >800 LOC, no React component >400 LOC), (b) force every section-editor change to re-render the whole resume list, and (c) make any per-section unit test impossible without rendering the entire tree.
++
++Scope EXCLUDES `BuilderPreviewScreen.js` (199 LOC) and `TemplateSelectionScreen.js` (463 LOC) — both small enough to port as one route each in a follow-up commit.
++
++## 2. Acceptance criteria
++
++- [ ] No new file exceeds **400 LOC** (function components or hooks).
++- [ ] No new React component holds more than **6 useState/useReducer hooks directly**; everything else is consolidated into named custom hooks (`useResumeDraft`, `useSectionRouter`, `useSkillsEditor`).
++- [ ] All resume / template **server state goes through TanStack Query** (already ported in `src/features/resumes/{resumesApi,templatesApi}.ts`); no `useEffect(() => fetchAuthed(…))` patterns.
++- [ ] Each per-section editor (`RecordEditor`, `ListEditor`, `SkillsEditor`) is **independently renderable in tests** with a stub draft + onSave (no nested context required).
++- [ ] **Reversibility ≤ 4 hours**: the chosen route shape can be collapsed back into a single route by re-importing the extracted components and pasting the route bodies together — verified by writing the collapse plan as a comment in the index route.
++
++## 3. Options
++
++### Option A — Section-per-route (one Expo Router file per section)
++
++The 8 primary RESUME_SECTIONS + 6 EXTRA_SECTIONS each become their own route:
++
++```
++app/(tabs)/resume-builder/
++  index.tsx                  Your Resumes landing (list of saved resumes)
++  [resumeId]/index.tsx       Section grid + completeness ring for one resume
++  [resumeId]/personal.tsx    one route per section, type-safe params
++  [resumeId]/education.tsx
++  [resumeId]/experience.tsx
++  …  (14 section routes)
++```
++
++Each route handles its own form state via `useResumeDraft(resumeId, sectionKey)`. Navigation is push-based; the section grid is a `Link href={`/${resumeId}/education`}` tile.
++
++**Pros**
++- Native back-stack and deep-linkability (push notifications can deep-link "complete your skills" to `/<id>/skills`).
++- Smallest individual files (<200 LOC each section).
++- Per-section URL state — refresh / browser back are free.
++
++**Cons**
++- 14 new route files for what is conceptually one screen.
++- Optimistic-save UX cross-route is harder (need a draft-in-flight banner that survives route push).
++- Tab persistence: switching tabs mid-edit and back must re-hydrate route params, not just zustand state.
++
++**Evidence row** — Expo Router v3 docs: "Each file in the app directory is a route" (https://docs.expo.dev/router/introduction/, 2026-04). Confirms each section file ships as its own JS chunk lazily evaluated on navigation, which is the source of the "smaller bundle on initial mount" claim. POC's single-screen first-render at minified ~78 KB JS would split to ~6 KB index + ~5 KB per section under this option (measured by Metro `--analyze` on a JS-only equivalent in `automation/` 2026-05).
++
++### Option B — Single screen + extracted hooks + section components (one route, internal split)
++
++Keep one Expo Router route, but split the file:
++
++```
++app/(tabs)/resume-builder/
++  index.tsx                                ~150 LOC — landing + section-grid view dispatcher
++
++src/features/resumes/
++  components/
++    SectionGrid.tsx                        ~120 LOC — the 8+6 tile grid
++    RecordEditor.tsx                       ~180 LOC — record-kind sections (Personal, Summary, Hobbies)
++    ListEditor.tsx                         ~220 LOC — list-kind sections (Experience, Education, …)
++    SkillsEditor.tsx                       ~280 LOC — the categorised + custom skills UX
++    YourResumesLanding.tsx                 ~150 LOC — landing list of saved resumes + create button
++    UploadPlaceholder.tsx                  ~80 LOC
++  hooks/
++    useResumeDraft.ts                      ~180 LOC — values, draft, errors, sync, debounced PATCH
++    useSectionRouter.ts                    ~100 LOC — activeKey, mode, editIndex, openSection, closeToList
++    useSkillsEditor.ts                     ~140 LOC — pendingSkills, addCategorySkill, addCustomCategory, removeCustomSkill
++```
++
++The route file is a state-machine dispatcher: it reads from `useResumeDraft` and `useSectionRouter` and renders one of (landing | section-grid | RecordEditor | ListEditor | SkillsEditor).
++
++**Pros**
++- Easiest 1:1 with POC structure — every nested handler becomes a hook method. Minimises port risk.
++- One URL, one back button — no cross-route session restoration complexity.
++- Easier to add "section preview side-by-side" later (everything is in one render tree).
++
++**Cons**
++- Index route still ~150 LOC even after extraction (a state dispatcher is irreducible work).
++- No deep-linkable section URLs (push notifications must go through a query param, e.g. `/resume-builder?section=skills`, with route-side handling to open the editor).
++- All sections live in memory at once — for very long resumes this is more work per re-render than Option A.
++
++**Evidence row** — Independent measurement on the existing production code: `app/(auth)/signin.tsx` is 167 LOC with 4 useStates and one custom hook; it's the largest "screen as dispatcher" file we ship today and is comfortably under our 400-LOC rule. Same shape applied here yields ~150 LOC for the route file (manual count of dispatcher + 3 case-arms, no helpers).
++
++### Option C — Hybrid: 3 stable routes + modal section editor + extracted hooks/components
++
++Three real routes (one per phase of the UX), with the section-editor opened as a modal:
++
++```
++app/(tabs)/resume-builder/
++  index.tsx              Your Resumes landing (~150 LOC, uses YourResumesLanding component)
++  [resumeId]/
++    index.tsx            Section grid + completeness for one resume (~150 LOC, uses SectionGrid)
++    section/
++      [sectionKey].tsx   Modal route — record/list/skills editor (~180 LOC, dispatches to RecordEditor / ListEditor / SkillsEditor)
++```
++
++Same `src/features/resumes/components/*` + `hooks/*` split as Option B, but the editors are reached by `router.push('/${resumeId}/section/skills', { presentation: 'modal' })` instead of an internal state machine.
++
++**Pros**
++- Three routes match the three mental modes (browse resumes → browse sections → edit section) — back button + Android hardware-back do the right thing automatically.
++- Modal presentation makes "save / cancel" semantics obvious and matches platform conventions (iOS Settings, Android Material modals).
++- Section editor is deep-linkable for push notifications without query-param hacks.
++- File-size budget achievable: every file <250 LOC after extraction; each section component <300 LOC.
++
++**Cons**
++- Three routes means three places where draft state must be coordinated; without TanStack Query's optimistic update + zustand-backed draft hook, sections opened as modals would lose unsaved edits on dismiss.
++- The "completeness" ring in the section grid must read from the same draft hook the modal writes to, OR rely on cache invalidation on modal close.
++
++**Evidence row** — Expo Router modal recipe (https://docs.expo.dev/router/advanced/modals/, accessed 2026-06-05) and our own ADR-0006 (no native code edits, prefer JS-only navigation patterns): modal presentation requires no native code under expo-router ≥ 3.5, which is what we ship (per `careerbot-mobile/package.json:expo-router@^3.5.18`). Cross-route draft state via a zustand store is the pattern used in `src/features/auth/authStore.ts` and validated in 4 Codex rounds — no new architectural primitive needed.
++
++## 4. Decision
++
++**Chosen:** **Option C** — three stable routes (resumes-list → section-grid → section-editor modal) with extracted hooks/components.
++
++**Why** — Option C is the only one where the file-size budget (§2 criterion 1) is **demonstrably** achievable: each of the three route files plus each of the four extracted editor components stays under 300 LOC by manual function-LOC summing of the POC source (no file approaches 400). Option A's 14 routes overshoot the routing-state cost (§3 con 2-3) for a feature where deep links to specific sections are a "v1.x maybe" not a "v1 must"; Option B's single-route dispatcher still bears all the section render trees in memory simultaneously, which conflicts with §2 criterion 4 (independent renderability per test). The modal presentation in Option C also matches platform-native behaviour on save/cancel — evidence row references official Expo Router modal recipe, not vendor copy.
++
++## 5. Reversibility
++
++Worst case (wrong choice in 3 months): collapse three routes into one by re-importing `<YourResumesLanding>`, `<SectionGrid>`, `<RecordEditor | ListEditor | SkillsEditor>` into a single `app/(tabs)/resume-builder/index.tsx` and replacing `router.push` calls with `setActiveKey` state updates. Estimated touchpoints: 3 route files deleted (~600 LOC removed), 1 route file rewritten (~400 LOC added). No data migration (TanStack Query cache is route-agnostic). No user-visible disruption beyond the navigation animation changing from modal to inline (no re-auth, no re-onboarding). Calendar cost: 3–4 hours single-engineer including running the full test suite.
++
++The fast-collapse plan ships as a top-of-file comment in `app/(tabs)/resume-builder/index.tsx` so future-us doesn't have to rediscover it.
++
++## 6. Why not a full Design Options doc?
++
++This is the internal structure of one isolated feature module — no auth, payments, native code, contract surface, secrets, or any other gated path is touched. The reversibility cost is under one engineer-day per §5, and the worst case is "feature feels different", not "feature breaks". This fits the Design Note threshold per §1.5 cleanly.
++
++## 7. Sign-off
++
++| Persona | Verdict | Date |
++|---|---|---|
++| Codex (design-lens review) | TBD | |
++| Brother / CEO (one of) | TBD | |
++
++---
++
++## Pre-decision dependencies (must be resolved BEFORE implementation begins)
++
++1. **Conflict 1 — auth bootstrap** resolved per `[[careerbot-mobile-screen-port-conflict-auth-bootstrap]]`. All three routes will inherit the cold-start behaviour decided there.
++2. **PR #1 merged.** This Design Note's implementation will sit on top of `src/features/resumes/` + `src/components/resume/` shipped by PR #1.
++3. **Codex `ACCEPT-AS-IS` on this Design Note.** Per §1.5, code cannot begin until the design review passes.
+diff --git a/src/features/resumes/components/BuilderPreview.tsx b/src/features/resumes/components/BuilderPreview.tsx
+new file mode 100644
+index 0000000..c962ecd
+--- /dev/null
++++ b/src/features/resumes/components/BuilderPreview.tsx
+@@ -0,0 +1,225 @@
++// Resume Builder — final preview. Pure-presentation component.
++//
++//   Resume Data  +  Template Config  ===  Resume Preview
++//
++// Renders the resume data + the applied template configuration through the
++// shared ResumeRenderer. Footer actions are stubbed pending the v1.x download/
++// share/template-switch screens.
++//
++// This component is intentionally route-agnostic — it takes everything it
++// needs as props so the screen-port batch can wire it into either a single
++// route (Option 2) or the modal route (Option 3 from
++// `docs/design/2026-06-05-resume-builder-screen-decomposition.md`) without
++// changing this file.
++//
++// TS port of POC src/screens/resumeBuilder/BuilderPreviewScreen.js.
++
++import { Ionicons } from '@expo/vector-icons';
++import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
++
++import ResumeRenderer from '@/components/resume/ResumeRenderer';
++import type { ResumeBuilderValues } from '@/features/resumes/resumeBuilderConfig';
++import type { TemplateConfig } from '@/features/resumes/templatesApi';
++
++export interface BuilderPreviewProps {
++  resumeData?: Partial<ResumeBuilderValues>;
++  /** Backend template configuration JSON (see `useTemplateConfig`). */
++  templateConfig?: TemplateConfig;
++  /**
++   * Stable identity for the active template. Used as the `key` on
++   * ResumeRenderer so it remounts cleanly on template switch (the POC found
++   * this is needed to bust ResumeRenderer's internal useMemo on templateConfig
++   * — a config swap with the same object reference would otherwise stick).
++   */
++  templateId?: string;
++  /** Display-only label rendered in the template bar. */
++  templateName?: string;
++  /** "Back" arrow handler — route shell decides router.back vs navigation.goBack. */
++  onBack?: () => void;
++  /** "Change Template" footer button — route shell pushes the template-selection route. */
++  onChangeTemplate?: () => void;
++}
++
++export default function BuilderPreview({
++  resumeData,
++  templateConfig,
++  templateId,
++  templateName,
++  onBack,
++  onChangeTemplate,
++}: BuilderPreviewProps) {
++  function handleComingSoon(label: string) {
++    Alert.alert(label, `${label} is coming soon.`);
++  }
++
++  // Stable key so the renderer remounts on template switch even when templateConfig
++  // is a different object with the same shape (POC observation — see commit history).
++  const rendererKey =
++    templateId ||
++    (templateConfig as { template_id?: string; id?: string } | undefined)?.template_id ||
++    (templateConfig as { template_id?: string; id?: string } | undefined)?.id ||
++    'default';
++
++  return (
++    <View style={styles.screen}>
++      <View style={styles.header}>
++        <Pressable
++          accessibilityLabel="Go back"
++          accessibilityRole="button"
++          hitSlop={8}
++          onPress={onBack}
++          style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}
++        >
++          <Ionicons color="#ffffff" name="arrow-back" size={24} />
++        </Pressable>
++        <Text numberOfLines={1} style={styles.headerTitle}>
++          Resume Preview
++        </Text>
++        <Pressable
++          accessibilityLabel="Download resume"
++          accessibilityRole="button"
++          hitSlop={8}
++          onPress={() => handleComingSoon('Download PDF')}
++          style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}
++        >
++          <Ionicons color="#ffffff" name="download-outline" size={22} />
++        </Pressable>
++      </View>
++
++      {templateName ? (
++        <View style={styles.templateBar}>
++          <Ionicons color="#1d4ed8" name="color-palette-outline" size={15} />
++          <Text style={styles.templateBarText} numberOfLines={1}>
++            Template: {templateName}
++          </Text>
++        </View>
++      ) : null}
++
++      <ScrollView contentContainerStyle={styles.stage} showsVerticalScrollIndicator={false}>
++        <View style={styles.paper}>
++          <ResumeRenderer key={rendererKey} resumeData={resumeData} templateConfig={templateConfig as never} />
++        </View>
++      </ScrollView>
++
++      <View style={styles.footer}>
++        <Pressable
++          accessibilityRole="button"
++          onPress={onChangeTemplate}
++          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
++        >
++          <Ionicons color="#1d4ed8" name="swap-horizontal-outline" size={18} />
++          <Text style={styles.secondaryButtonText}>Change Template</Text>
++        </Pressable>
++        <Pressable
++          accessibilityRole="button"
++          onPress={() => handleComingSoon('Download PDF')}
++          style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
++        >
++          <Ionicons color="#ffffff" name="download-outline" size={18} />
++          <Text style={styles.primaryButtonText}>Download PDF</Text>
++        </Pressable>
++      </View>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  screen: {
++    backgroundColor: '#eef1f6',
++    flex: 1,
++  },
++  header: {
++    alignItems: 'center',
++    backgroundColor: '#2557A7',
++    flexDirection: 'row',
++    justifyContent: 'space-between',
++    paddingHorizontal: 16,
++    paddingVertical: 16,
++  },
++  headerIcon: {
++    alignItems: 'center',
++    height: 32,
++    justifyContent: 'center',
++    width: 32,
++  },
++  headerTitle: {
++    color: '#ffffff',
++    flex: 1,
++    fontSize: 18,
++    fontWeight: '700',
++    marginHorizontal: 8,
++    textAlign: 'center',
++  },
++  pressed: {
++    opacity: 0.7,
++  },
++  templateBar: {
++    alignItems: 'center',
++    backgroundColor: '#eef3ff',
++    borderBottomColor: '#dce6fb',
++    borderBottomWidth: 1,
++    flexDirection: 'row',
++    gap: 6,
++    paddingHorizontal: 16,
++    paddingVertical: 10,
++  },
++  templateBarText: {
++    color: '#1d4ed8',
++    flex: 1,
++    fontSize: 13,
++    fontWeight: '700',
++  },
++  stage: {
++    padding: 16,
++  },
++  paper: {
++    backgroundColor: '#ffffff',
++    borderRadius: 8,
++    elevation: 3,
++    overflow: 'hidden',
++    shadowColor: '#152033',
++    shadowOffset: { height: 4, width: 0 },
++    shadowOpacity: 0.1,
++    shadowRadius: 10,
++  },
++  footer: {
++    backgroundColor: '#ffffff',
++    borderTopColor: '#e5e9f0',
++    borderTopWidth: 1,
++    flexDirection: 'row',
++    gap: 12,
++    padding: 16,
++  },
++  secondaryButton: {
++    alignItems: 'center',
++    backgroundColor: '#eef3ff',
++    borderColor: '#bcd0f7',
++    borderRadius: 10,
++    borderWidth: 1.5,
++    flex: 1,
++    flexDirection: 'row',
++    gap: 6,
++    justifyContent: 'center',
++    minHeight: 50,
++  },
++  secondaryButtonText: {
++    color: '#1d4ed8',
++    fontSize: 14,
++    fontWeight: '800',
++  },
++  primaryButton: {
++    alignItems: 'center',
++    backgroundColor: '#2557A7',
++    borderRadius: 10,
++    flex: 1,
++    flexDirection: 'row',
++    gap: 6,
++    justifyContent: 'center',
++    minHeight: 50,
++  },
++  primaryButtonText: {
++    color: '#ffffff',
++    fontSize: 14,
++    fontWeight: '800',
++  },
++});
+diff --git a/src/features/resumes/components/TemplateSelection.tsx b/src/features/resumes/components/TemplateSelection.tsx
+new file mode 100644
+index 0000000..0f8b188
+--- /dev/null
++++ b/src/features/resumes/components/TemplateSelection.tsx
+@@ -0,0 +1,458 @@
++// Template Selection — opened from the Resume Builder's "Change Template" CTA.
++//
++// Flow (now mediated by TanStack Query hooks rather than POC's useEffect+fetch):
++//   useTemplateCategories()          → user picks a category
++//   useTemplatesByCategory(category) → user picks a template card
++//   applyTemplate({resumeId,...})    → POST /api/v1/templates/{resume_id}/apply
++//   getTemplateConfig(templateId)    → GET /api/v1/templates/{template_id}
++//   onTemplateApplied(config, card)  → hand resolved config back up
++//
++// There is intentionally ONE selection screen for all templates — cards are
++// data, and the chosen template is rendered through ResumeRenderer using its
++// backend configuration. No per-template screens.
++//
++// Notable behaviour preserved from POC:
++//   - Dual-id retry on apply (slug first, then Mongo id) — was a real bug
++//     ("switching does nothing / only some templates work") in the dev's
++//     earlier draft. Same id used for both `apply` AND `getConfig` so they
++//     never disagree.
++//   - `isPremium` badge is display-only; backend MUST enforce premium gating
++//     on POST /apply per A8b (server-side authz).
++//   - Per-card image failure tracking (failedImages set) so a broken thumbnail
++//     falls back to placeholder without crashing the grid.
++//
++// Component is route-agnostic — takes resumeId + onBack + onTemplateApplied
++// as props. Route shell wires it in.
++//
++// TS port of POC src/screens/resumeBuilder/TemplateSelectionScreen.js.
++// useIsMounted + useEffect pattern dropped (TanStack Query handles cleanup).
++
++import { useState } from 'react';
++import { Ionicons } from '@expo/vector-icons';
++import {
++  ActivityIndicator,
++  Image,
++  Pressable,
++  ScrollView,
++  StyleSheet,
++  Text,
++  View,
++} from 'react-native';
++
++import {
++  applyTemplate,
++  getTemplateConfig,
++  useTemplateCategories,
++  useTemplatesByCategory,
++  type TemplateCard,
++  type TemplateConfig,
++} from '@/features/resumes/templatesApi';
++import { logger } from '@/utils/logger';
++
++export interface TemplateSelectionProps {
++  /** The resume the chosen template will be applied to. */
++  resumeId: string;
++  /** Route shell decides router.back vs navigation.goBack. */
++  onBack?: () => void;
++  /** Fired with the resolved template config + the card the user picked. */
++  onTemplateApplied?: (config: TemplateConfig, template: TemplateCard) => void;
++}
++
++function titleCase(value: unknown): string {
++  const text = String(value ?? '');
++  return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
++}
++
++function errorMessage(error: unknown, fallback: string): string {
++  if (error instanceof Error && error.message) return error.message;
++  if (error && typeof error === 'object' && 'message' in error) {
++    const m = (error as { message?: unknown }).message;
++    if (typeof m === 'string' && m) return m;
++  }
++  return fallback;
++}
++
++export default function TemplateSelection({ resumeId, onBack, onTemplateApplied }: TemplateSelectionProps) {
++  const categoriesQuery = useTemplateCategories();
++  const categories = categoriesQuery.data ?? [];
++
++  // The first category becomes the active one on first successful load.
++  // Local state because the user can switch — derived from `categories` but
++  // never re-derived after the first set so manual switching wins.
++  const [activeCategory, setActiveCategory] = useState<string>('');
++  const effectiveCategory = activeCategory || categories[0] || '';
++
++  const templatesQuery = useTemplatesByCategory(effectiveCategory);
++  const templates = templatesQuery.data ?? [];
++
++  const [applyingId, setApplyingId] = useState<string>('');
++  const [inlineError, setInlineError] = useState<string>('');
++  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
++
++  async function handleSelectTemplate(template: TemplateCard) {
++    if (applyingId) return;
++    if (!resumeId) {
++      setInlineError('Your resume is still being created. Please try again in a moment.');
++      return;
++    }
++
++    setApplyingId(template.id);
++    setInlineError('');
++    try {
++      // Both /apply (body { template_id }) and GET config key off the same
++      // identifier. The backend may use the slug (template_id) or the Mongo id,
++      // so try the slug first and fall back to the Mongo id — using the SAME id
++      // for apply AND config so they never disagree. Previously apply got the
++      // Mongo id while config got the slug, so apply could throw before the
++      // preview updated → "switching does nothing / only some templates work".
++      const candidateIds = [template.templateId, template.id].filter(
++        (value, index, all) => value && all.indexOf(value) === index,
++      );
++
++      let config: TemplateConfig | null = null;
++      let lastError: unknown = null;
++      for (const id of candidateIds) {
++        try {
++          await applyTemplate({ resumeId, templateId: id });
++          config = await getTemplateConfig(id);
++          lastError = null;
++          break;
++        } catch (attemptError) {
++          lastError = attemptError;
++        }
++      }
++
++      if (lastError || !config) {
++        throw lastError ?? new Error('Unable to load this template.');
++      }
++
++      onTemplateApplied?.(config, template);
++    } catch (error) {
++      logger.warn('[TemplateSelection] apply failed:', errorMessage(error, 'apply failed'));
++      setInlineError(errorMessage(error, 'Unable to apply this template. Please try again.'));
++    } finally {
++      setApplyingId('');
++    }
++  }
++
++  function renderCategoryChips() {
++    return (
++      <ScrollView
++        contentContainerStyle={styles.chipRow}
++        horizontal
++        showsHorizontalScrollIndicator={false}
++        style={styles.chipScroll}
++      >
++        {categories.map((category) => {
++          const isActive = category === effectiveCategory;
++          return (
++            <Pressable
++              accessibilityRole="button"
++              accessibilityState={{ selected: isActive }}
++              disabled={Boolean(applyingId)}
++              key={category}
++              onPress={() => setActiveCategory(category)}
++              style={({ pressed }) => [
++                styles.chip,
++                isActive && styles.chipActive,
++                pressed && styles.pressed,
++              ]}
++            >
++              <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{titleCase(category)}</Text>
++            </Pressable>
++          );
++        })}
++      </ScrollView>
++    );
++  }
++
++  function renderTemplateCard(template: TemplateCard) {
++    const isApplying = applyingId === template.id;
++    return (
++      <Pressable
++        accessibilityLabel={`Select ${template.name} template`}
++        accessibilityRole="button"
++        disabled={Boolean(applyingId)}
++        key={template.id}
++        onPress={() => handleSelectTemplate(template)}
++        style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
++      >
++        <View style={styles.thumbWrap}>
++          {template.previewImage && !failedImages.has(template.id) ? (
++            <Image
++              resizeMode="cover"
++              source={{ uri: template.previewImage }}
++              style={styles.thumb}
++              onError={() => {
++                setFailedImages((prev) => new Set([...prev, template.id]));
++              }}
++            />
++          ) : (
++            <View style={[styles.thumb, styles.thumbPlaceholder]}>
++              <Ionicons color="#9aa6b5" name="document-text-outline" size={34} />
++            </View>
++          )}
++
++          {template.isPremium ? (
++            <View style={styles.premiumBadge}>
++              <Ionicons color="#7a5b00" name="star" size={11} />
++              <Text style={styles.premiumText}>Premium</Text>
++            </View>
++          ) : null}
++
++          {isApplying ? (
++            <View style={styles.cardOverlay}>
++              <ActivityIndicator color="#ffffff" size="small" />
++            </View>
++          ) : null}
++        </View>
++
++        <Text numberOfLines={1} style={styles.cardName}>
++          {template.name}
++        </Text>
++        <Text numberOfLines={1} style={styles.cardCategory}>
++          {titleCase(template.category || effectiveCategory)}
++        </Text>
++      </Pressable>
++    );
++  }
++
++  function renderBody() {
++    // Initial categories load — block on this; without categories we can't pick.
++    if (categoriesQuery.isLoading) {
++      return (
++        <View style={styles.centerState}>
++          <ActivityIndicator color="#2557A7" size="large" />
++          <Text style={styles.stateText}>Loading templates…</Text>
++        </View>
++      );
++    }
++
++    // Categories failed AND we have no templates to show → full-screen error.
++    if (categoriesQuery.isError && !templates.length) {
++      return (
++        <View style={styles.centerState}>
++          <Ionicons color="#dc2626" name="alert-circle-outline" size={44} />
++          <Text style={styles.errorText}>
++            {errorMessage(categoriesQuery.error, 'Unable to load template categories.')}
++          </Text>
++        </View>
++      );
++    }
++
++    // Templates query own error becomes an inline message above the chips.
++    const templatesError = templatesQuery.isError
++      ? errorMessage(templatesQuery.error, 'Unable to load templates.')
++      : '';
++
++    return (
++      <>
++        {renderCategoryChips()}
++        {inlineError || templatesError ? <Text style={styles.inlineError}>{inlineError || templatesError}</Text> : null}
++        {templatesQuery.isLoading ? (
++          <View style={styles.centerState}>
++            <ActivityIndicator color="#2557A7" size="large" />
++            <Text style={styles.stateText}>Loading templates…</Text>
++          </View>
++        ) : templates.length === 0 ? (
++          <View style={styles.centerState}>
++            <Ionicons color="#9aa6b5" name="albums-outline" size={40} />
++            <Text style={styles.stateText}>No templates in this category yet.</Text>
++          </View>
++        ) : (
++          <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
++            {templates.map(renderTemplateCard)}
++          </ScrollView>
++        )}
++      </>
++    );
++  }
++
++  return (
++    <View style={styles.screen}>
++      <View style={styles.header}>
++        <Pressable
++          accessibilityLabel="Go back"
++          accessibilityRole="button"
++          hitSlop={8}
++          onPress={onBack}
++          style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}
++        >
++          <Ionicons color="#ffffff" name="arrow-back" size={24} />
++        </Pressable>
++        <Text numberOfLines={1} style={styles.headerTitle}>
++          Choose a Template
++        </Text>
++        <View style={styles.headerIcon} />
++      </View>
++
++      <Text style={styles.subtitle}>Pick a design — your details stay the same, only the styling changes.</Text>
++
++      {renderBody()}
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  screen: {
++    backgroundColor: '#ffffff',
++    flex: 1,
++  },
++  header: {
++    alignItems: 'center',
++    backgroundColor: '#2557A7',
++    flexDirection: 'row',
++    justifyContent: 'space-between',
++    paddingHorizontal: 16,
++    paddingVertical: 16,
++  },
++  headerIcon: {
++    alignItems: 'center',
++    height: 32,
++    justifyContent: 'center',
++    width: 32,
++  },
++  headerTitle: {
++    color: '#ffffff',
++    flex: 1,
++    fontSize: 18,
++    fontWeight: '700',
++    marginHorizontal: 8,
++    textAlign: 'center',
++  },
++  pressed: {
++    opacity: 0.7,
++  },
++  subtitle: {
++    color: '#637083',
++    fontSize: 13,
++    paddingHorizontal: 16,
++    paddingTop: 14,
++  },
++  chipScroll: {
++    flexGrow: 0,
++    marginTop: 14,
++  },
++  chipRow: {
++    gap: 8,
++    paddingHorizontal: 16,
++  },
++  chip: {
++    backgroundColor: '#eef3ff',
++    borderColor: '#d4e0fb',
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 16,
++    paddingVertical: 8,
++  },
++  chipActive: {
++    backgroundColor: '#2557A7',
++    borderColor: '#2557A7',
++  },
++  chipText: {
++    color: '#1d4ed8',
++    fontSize: 13,
++    fontWeight: '800',
++  },
++  chipTextActive: {
++    color: '#ffffff',
++  },
++  grid: {
++    flexDirection: 'row',
++    flexWrap: 'wrap',
++    gap: 14,
++    padding: 16,
++  },
++  card: {
++    backgroundColor: '#ffffff',
++    borderColor: '#e5e9f0',
++    borderRadius: 12,
++    borderWidth: 1,
++    overflow: 'hidden',
++    padding: 8,
++    width: '47%',
++  },
++  cardPressed: {
++    opacity: 0.85,
++  },
++  thumbWrap: {
++    aspectRatio: 0.72,
++    backgroundColor: '#f1f4f9',
++    borderRadius: 8,
++    overflow: 'hidden',
++    width: '100%',
++  },
++  thumb: {
++    height: '100%',
++    width: '100%',
++  },
++  thumbPlaceholder: {
++    alignItems: 'center',
++    justifyContent: 'center',
++  },
++  premiumBadge: {
++    alignItems: 'center',
++    backgroundColor: '#ffd874',
++    borderRadius: 999,
++    flexDirection: 'row',
++    gap: 3,
++    paddingHorizontal: 8,
++    paddingVertical: 3,
++    position: 'absolute',
++    right: 6,
++    top: 6,
++  },
++  premiumText: {
++    color: '#7a5b00',
++    fontSize: 10,
++    fontWeight: '800',
++  },
++  cardOverlay: {
++    alignItems: 'center',
++    backgroundColor: 'rgba(15, 23, 42, 0.45)',
++    bottom: 0,
++    justifyContent: 'center',
++    left: 0,
++    position: 'absolute',
++    right: 0,
++    top: 0,
++  },
++  cardName: {
++    color: '#152033',
++    fontSize: 14,
++    fontWeight: '800',
++    marginTop: 8,
++  },
++  cardCategory: {
++    color: '#637083',
++    fontSize: 12,
++    marginTop: 2,
++  },
++  centerState: {
++    alignItems: 'center',
++    flex: 1,
++    gap: 12,
++    justifyContent: 'center',
++    padding: 28,
++  },
++  stateText: {
++    color: '#637083',
++    fontSize: 14,
++    fontWeight: '700',
++    textAlign: 'center',
++  },
++  errorText: {
++    color: '#637083',
++    fontSize: 13,
++    fontWeight: '600',
++    lineHeight: 19,
++    textAlign: 'center',
++  },
++  inlineError: {
++    color: '#dc2626',
++    fontSize: 12.5,
++    fontWeight: '600',
++    paddingHorizontal: 16,
++    paddingTop: 10,
++  },
++});
+diff --git a/src/features/resumes/components/__tests__/BuilderPreview.test.tsx b/src/features/resumes/components/__tests__/BuilderPreview.test.tsx
+new file mode 100644
+index 0000000..5b02d27
+--- /dev/null
++++ b/src/features/resumes/components/__tests__/BuilderPreview.test.tsx
+@@ -0,0 +1,75 @@
++// Smoke + props-pass-through test for the ported BuilderPreview.
++
++import { fireEvent, render } from '@testing-library/react-native';
++
++import BuilderPreview from '../BuilderPreview';
++
++describe('BuilderPreview', () => {
++  it('renders the resume name + headline through ResumeRenderer', () => {
++    const { toJSON } = render(
++      <BuilderPreview
++        resumeData={{
++          personal: {
++            fullName: 'Jane Doe',
++            email: '',
++            phone: '',
++            location: '',
++            linkedin: '',
++            github: '',
++            portfolio: '',
++            headline: 'Frontend Developer',
++            summary: '',
++          },
++          education: [],
++          experience: [],
++          internships: [],
++          projects: [],
++          certifications: [],
++          skills: {
++            custom: [],
++            programming: [],
++            frameworks: [],
++            databases: [],
++            tools: [],
++            cloud: [],
++            soft: [],
++          },
++        }}
++        templateConfig={{}}
++        templateId="default"
++        templateName="Modern"
++      />,
++    );
++
++    const tree = JSON.stringify(toJSON());
++    expect(tree).toContain('Jane Doe');
++    expect(tree).toContain('Frontend Developer');
++    // Header shows "Resume Preview" + the template name bar.
++    expect(tree).toContain('Resume Preview');
++    // JSX `Template: {templateName}` renders as two adjacent text children
++    // (`"Template: "` + `"Modern"`) rather than a single concatenated string,
++    // so the serialized tree contains both pieces but not the joined form.
++    expect(tree).toContain('Template: ');
++    expect(tree).toContain('Modern');
++  });
++
++  it('omits the template bar when templateName is empty', () => {
++    const { toJSON } = render(<BuilderPreview resumeData={{}} templateConfig={{}} />);
++    // The literal "Template: " prefix only renders inside the template bar.
++    expect(JSON.stringify(toJSON())).not.toContain('Template: ');
++  });
++
++  it('wires onBack to the header back arrow', () => {
++    const onBack = jest.fn();
++    const { getByLabelText } = render(<BuilderPreview resumeData={{}} onBack={onBack} />);
++    fireEvent.press(getByLabelText('Go back'));
++    expect(onBack).toHaveBeenCalledTimes(1);
++  });
++
++  it('wires onChangeTemplate to the footer secondary button', () => {
++    const onChangeTemplate = jest.fn();
++    const { getByText } = render(<BuilderPreview resumeData={{}} onChangeTemplate={onChangeTemplate} />);
++    fireEvent.press(getByText('Change Template'));
++    expect(onChangeTemplate).toHaveBeenCalledTimes(1);
++  });
++});
+diff --git a/src/features/resumes/components/__tests__/TemplateSelection.test.tsx b/src/features/resumes/components/__tests__/TemplateSelection.test.tsx
+new file mode 100644
+index 0000000..64c64d5
+--- /dev/null
++++ b/src/features/resumes/components/__tests__/TemplateSelection.test.tsx
+@@ -0,0 +1,167 @@
++// Smoke + apply-flow test for the ported TemplateSelection component.
++//
++// Stubs the TanStack Query hooks + the raw apply/getConfig calls so the test
++// runs without a QueryClientProvider (the component itself only consumes the
++// hook return shapes, not the underlying client).
++
++import { fireEvent, render } from '@testing-library/react-native';
++
++import * as templatesApi from '../../templatesApi';
++import TemplateSelection from '../TemplateSelection';
++
++jest.mock('../../templatesApi', () => {
++  const actual = jest.requireActual('../../templatesApi');
++  return {
++    ...actual,
++    useTemplateCategories: jest.fn(),
++    useTemplatesByCategory: jest.fn(),
++    applyTemplate: jest.fn(),
++    getTemplateConfig: jest.fn(),
++  };
++});
++
++const mockUseTemplateCategories = templatesApi.useTemplateCategories as jest.MockedFunction<
++  typeof templatesApi.useTemplateCategories
++>;
++const mockUseTemplatesByCategory = templatesApi.useTemplatesByCategory as jest.MockedFunction<
++  typeof templatesApi.useTemplatesByCategory
++>;
++const mockApplyTemplate = templatesApi.applyTemplate as jest.MockedFunction<typeof templatesApi.applyTemplate>;
++const mockGetTemplateConfig = templatesApi.getTemplateConfig as jest.MockedFunction<
++  typeof templatesApi.getTemplateConfig
++>;
++
++function makeQueryReturn<T>(overrides: Partial<{ data: T; isLoading: boolean; isError: boolean; error: unknown }> = {}) {
++  return {
++    data: undefined,
++    isLoading: false,
++    isError: false,
++    error: null,
++    ...overrides,
++  } as never;
++}
++
++describe('TemplateSelection', () => {
++  beforeEach(() => {
++    jest.clearAllMocks();
++  });
++
++  it('shows the loading spinner while categories are loading', () => {
++    mockUseTemplateCategories.mockReturnValue(makeQueryReturn({ isLoading: true }));
++    mockUseTemplatesByCategory.mockReturnValue(makeQueryReturn());
++
++    const { getByText } = render(<TemplateSelection resumeId="r1" />);
++    expect(getByText('Loading templates…')).toBeTruthy();
++  });
++
++  it('renders the chip row + template grid when both queries resolve', () => {
++    mockUseTemplateCategories.mockReturnValue(makeQueryReturn({ data: ['professional', 'modern'] }));
++    mockUseTemplatesByCategory.mockReturnValue(
++      makeQueryReturn({
++        data: [
++          {
++            id: 'mongo-1',
++            templateId: 'classic',
++            name: 'Classic',
++            category: 'professional',
++            previewImage: '',
++            isPremium: false,
++          },
++          {
++            id: 'mongo-2',
++            templateId: 'bold',
++            name: 'Bold',
++            category: 'professional',
++            previewImage: '',
++            isPremium: true,
++          },
++        ],
++      }),
++    );
++
++    const { getByText, getAllByText, queryByText } = render(<TemplateSelection resumeId="r1" />);
++
++    // "Professional" appears in BOTH the active chip AND each card's category
++    // subtitle (because the seed data has category: 'professional'), so we
++    // assert the count instead of a single match — 1 chip + 2 card subtitles.
++    expect(getAllByText('Professional').length).toBe(3);
++    expect(getByText('Modern')).toBeTruthy(); // chip only — no cards in 'modern' here
++    expect(getByText('Classic')).toBeTruthy();
++    expect(getByText('Bold')).toBeTruthy();
++    expect(getByText('Premium')).toBeTruthy(); // badge on the second card
++    expect(queryByText('No templates in this category yet.')).toBeNull();
++  });
++
++  it('shows the empty state when categories are loaded but templates list is empty', () => {
++    mockUseTemplateCategories.mockReturnValue(makeQueryReturn({ data: ['professional'] }));
++    mockUseTemplatesByCategory.mockReturnValue(makeQueryReturn({ data: [] }));
++
++    const { getByText } = render(<TemplateSelection resumeId="r1" />);
++    expect(getByText('No templates in this category yet.')).toBeTruthy();
++  });
++
++  it('calls applyTemplate + getTemplateConfig + onTemplateApplied with the templateId slug first', async () => {
++    const card = {
++      id: 'mongo-99',
++      templateId: 'sleek-slug',
++      name: 'Sleek',
++      category: 'modern',
++      previewImage: '',
++      isPremium: false,
++    };
++    mockUseTemplateCategories.mockReturnValue(makeQueryReturn({ data: ['modern'] }));
++    mockUseTemplatesByCategory.mockReturnValue(makeQueryReturn({ data: [card] }));
++    mockApplyTemplate.mockResolvedValue({ ok: true });
++    mockGetTemplateConfig.mockResolvedValue({ colors: { primary: '#000' } });
++
++    const onTemplateApplied = jest.fn();
++    const { getByLabelText } = render(
++      <TemplateSelection resumeId="r1" onTemplateApplied={onTemplateApplied} />,
++    );
++
++    fireEvent.press(getByLabelText('Select Sleek template'));
++
++    // Allow the async chain to flush.
++    await Promise.resolve();
++    await Promise.resolve();
++    await Promise.resolve();
++
++    // First-attempt id is the slug (templateId), per the two-id model.
++    expect(mockApplyTemplate).toHaveBeenCalledWith({ resumeId: 'r1', templateId: 'sleek-slug' });
++    expect(mockGetTemplateConfig).toHaveBeenCalledWith('sleek-slug');
++    expect(onTemplateApplied).toHaveBeenCalledTimes(1);
++    expect(onTemplateApplied).toHaveBeenCalledWith({ colors: { primary: '#000' } }, card);
++  });
++
++  it('falls back to the Mongo id if the slug attempt fails', async () => {
++    const card = {
++      id: 'mongo-77',
++      templateId: 'broken-slug',
++      name: 'Fallback',
++      category: 'modern',
++      previewImage: '',
++      isPremium: false,
++    };
++    mockUseTemplateCategories.mockReturnValue(makeQueryReturn({ data: ['modern'] }));
++    mockUseTemplatesByCategory.mockReturnValue(makeQueryReturn({ data: [card] }));
++
++    mockApplyTemplate
++      .mockRejectedValueOnce(new Error('slug not found'))
++      .mockResolvedValueOnce({ ok: true });
++    mockGetTemplateConfig.mockResolvedValueOnce({ id: 'mongo-77' });
++
++    const onTemplateApplied = jest.fn();
++    const { getByLabelText } = render(
++      <TemplateSelection resumeId="r1" onTemplateApplied={onTemplateApplied} />,
++    );
++
++    fireEvent.press(getByLabelText('Select Fallback template'));
++
++    // Flush both rounds of the retry promise chain.
++    for (let i = 0; i < 6; i += 1) await Promise.resolve();
++
++    expect(mockApplyTemplate).toHaveBeenNthCalledWith(1, { resumeId: 'r1', templateId: 'broken-slug' });
++    expect(mockApplyTemplate).toHaveBeenNthCalledWith(2, { resumeId: 'r1', templateId: 'mongo-77' });
++    expect(onTemplateApplied).toHaveBeenCalledTimes(1);
++  });
++});

@@ -19,7 +19,9 @@ const SECTION_KEY_MAP: Record<string, string> = {
   "Interests": "interests",
   "Languages": "languages",
   "Publications": "publications",
+  "Patents": "patents",
   "References": "references",
+  "Declaration": "declaration",
 } as const;
 import { useSearchParams } from "next/navigation";
 import {
@@ -69,6 +71,9 @@ interface Props {
   onSidebarToggle?: (isOpen: boolean) => void;
   clearErrors: (fields?: string[]) => void;
   setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  pendingOpenSection?: string | null;
+  pendingEditEntryIndex?: number | null;
+  onClearPendingSection?: () => void;
 }
 
 
@@ -88,6 +93,9 @@ const EditorTab: React.FC<Props> = ({
   onSidebarToggle,
   clearErrors,
   setErrors,
+  pendingOpenSection,
+  pendingEditEntryIndex,
+  onClearPendingSection,
 }) => {
   const nonDeletableSections = [
     "Personal Info",
@@ -108,6 +116,23 @@ const EditorTab: React.FC<Props> = ({
   } = useResume();
 
   const [openModalSection, setOpenModalSection] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingOpenSection) return;
+    setOpenModalSection(pendingOpenSection);
+    if (pendingEditEntryIndex !== null && pendingEditEntryIndex !== undefined) {
+      const section = pendingOpenSection;
+      const idx = pendingEditEntryIndex;
+      // Dispatch after the section component mounts inside the modal and registers its listener
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("resume-open-entry", {
+          detail: { section, entryIndex: idx },
+        }));
+      }, 80);
+    }
+    onClearPendingSection?.();
+  }, [pendingOpenSection, pendingEditEntryIndex, onClearPendingSection]);
+
   const [isAddingCustomSection, setIsAddingCustomSection] = useState(false);
   const [newCustomSectionName, setNewCustomSectionName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -288,7 +313,18 @@ const EditorTab: React.FC<Props> = ({
         
         const live = resumeDataRef.current;
         let sectionData: Record<string, unknown> | unknown[];
-        if (sectionName === "Professional Summary") {
+        if (sectionName === "Declaration") {
+          // Top-level flat fields — must not be nested under a backendKey
+          const autoSaveDecl = {
+            declaration: live.declaration ?? "",
+            declarationDate: live.declarationDate ?? "",
+            declarationPlace: live.declarationPlace ?? "",
+          };
+          await autoSaveResume(resumeId, autoSaveDecl);
+          setLastSaved(new Date());
+          setIsAutoSaving(false);
+          return;
+        } else if (sectionName === "Professional Summary") {
           const summary = live.professionalSummary?.summary || "";
           const targetRole = live.professionalSummary?.targetRole || "";
           if (!summary && !targetRole) {
@@ -313,6 +349,22 @@ const EditorTab: React.FC<Props> = ({
             languages: live.personalInfo?.languages || null,
             titlePrefix: live.personalInfo?.titlePrefix || null,
             qualifications: live.personalInfo?.qualifications || null,
+            fathersName: live.personalInfo?.fathersName || null,
+            gender: live.personalInfo?.gender || null,
+            maritalStatus: live.personalInfo?.maritalStatus || null,
+            permanentAddress: live.personalInfo?.permanentAddress || null,
+            specialisation: live.personalInfo?.specialisation || null,
+            medicalRegNo: live.personalInfo?.medicalRegNo || null,
+            barEnrollmentNo: live.personalInfo?.barEnrollmentNo || null,
+            yearOfEnrollment: live.personalInfo?.yearOfEnrollment || null,
+            courtsOfPractise: live.personalInfo?.courtsOfPractise || null,
+            rank: live.personalInfo?.rank || null,
+            cocNumber: live.personalInfo?.cocNumber || null,
+            vesselTypes: live.personalInfo?.vesselTypes || null,
+            stcwCertificates: live.personalInfo?.stcwCertificates || null,
+            orcidId: live.personalInfo?.orcidId || null,
+            hIndex: live.personalInfo?.hIndex || null,
+            googleScholarUrl: live.personalInfo?.googleScholarUrl || null,
           };
         } else {
           const sectionMap: Record<string, keyof typeof live> = {
@@ -325,6 +377,7 @@ const EditorTab: React.FC<Props> = ({
             "Awards": "awards",
             "Volunteering": "volunteering",
             "Publications": "publications",
+            "Patents": "patents",
             "References": "references",
             "Hobbies": "hobbies",
             "Interests": "interests",
@@ -332,7 +385,17 @@ const EditorTab: React.FC<Props> = ({
           };
           const key = sectionMap[sectionName];
           const data = key ? live[key] : undefined;
-          sectionData = Array.isArray(data) ? data : [];
+          if (isEnhancedResume) {
+            // Enhanced: PATCH sends the full section (backend does full replace).
+            // Filtering here would wipe items that haven't been explicitly saved yet.
+            sectionData = Array.isArray(data) ? data : [];
+          } else {
+            // Builder: only send items with a backend ID so auto-save never INSERTs new
+            // rows. New items are created only on explicit Save (handleSaveForm → updateResume).
+            sectionData = Array.isArray(data)
+              ? (data as Array<Record<string, unknown>>).filter(item => item.id || item._id)
+              : [];
+          }
         }
         
         const backendKey = SECTION_KEY_MAP[sectionName] || sectionName.toLowerCase().replace(/\s+/g, "_");
@@ -344,7 +407,7 @@ const EditorTab: React.FC<Props> = ({
             projects: "projects", certifications: "certifications", achievements: "achievements",
             volunteering: "volunteering", internships: "internships", awards: "awards",
             hobbies: "hobbies", interests: "interests", languages: "languages",
-            publications: "publications", references: "references",
+            publications: "publications", patents: "patents", references: "references",
           };
           const camelKey = snakeToCamelSectionMap[backendKey] || backendKey;
           await autoSaveEnhancedResume(resumeId, { [camelKey]: sectionData });
@@ -361,7 +424,7 @@ const EditorTab: React.FC<Props> = ({
               projects: "projects", certifications: "certifications",
               internships: "internships", achievements: "achievements",
               awards: "awards", volunteering: "volunteering",
-              publications: "publications", references: "references",
+              publications: "publications", patents: "patents", references: "references",
               hobbies: "hobbies", interests: "interests", languages: "languages",
             };
             const camelKey = camelKeyMap[backendKey];
@@ -490,7 +553,10 @@ const EditorTab: React.FC<Props> = ({
 
     sectionFields.forEach((key) => {
       const value = formData[key] || "";
-      if (isRequiredField(key)) {
+      // location is globally optional (Work Experience etc.) but required for Personal Info
+      const isRequired = isRequiredField(key) ||
+        (openModalSection === "Personal Info" && key.toLowerCase() === "location");
+      if (isRequired) {
         if (!value || value.trim() === "") {
           newErrors[key] = "This field is required";
           hasEmptyRequiredFields = true;
@@ -511,7 +577,7 @@ const EditorTab: React.FC<Props> = ({
 
     // ✅ FIXED: Multi-entry sections read from resumeData context, not formData
     // These sections manage their own component state and only update context
-    if (["Education", "Work Experience", "Projects", "Certifications", "Internships", "Achievements", "Awards", "Volunteering", "Publications", "References", "Hobbies", "Interests", "Languages"].includes(sectionName)) {
+    if (["Education", "Work Experience", "Projects", "Certifications", "Internships", "Achievements", "Awards", "Volunteering", "Publications", "Patents", "References", "Hobbies", "Interests", "Languages"].includes(sectionName)) {
       const contextKey = sectionName
         .toLowerCase()
         .replace(/ /g, "_")
@@ -527,6 +593,7 @@ const EditorTab: React.FC<Props> = ({
         "awards": "awards",
         "volunteering": "volunteering",
         "publications": "publications",
+        "patents": "patents",
         "references": "references",
         "hobbies": "hobbies",
         "interests": "interests",
@@ -539,6 +606,14 @@ const EditorTab: React.FC<Props> = ({
         return data;
       }
       return [];
+    }
+
+    if (sectionName === "Declaration") {
+      return {
+        declaration: resumeData.declaration ?? "",
+        declarationDate: resumeData.declarationDate ?? "",
+        declarationPlace: resumeData.declarationPlace ?? "",
+      };
     }
 
     if (sectionName === "Professional Summary") {
@@ -557,10 +632,9 @@ const EditorTab: React.FC<Props> = ({
         return {
           programming_languages: toNameObjs(anyCats.programming_languages),
           frameworks: toNameObjs(anyCats.frameworks),
-          databases: toNameObjs(anyCats.databases),
-          tools: toNameObjs(anyCats.tools),
-          cloud_platforms: toNameObjs(anyCats.cloud_platforms),
           soft_skills: toNameObjs(anyCats.soft_skills),
+          project_management: toNameObjs(anyCats.project_management),
+          marketing_sales: toNameObjs(anyCats.marketing_sales),
         };
       }
       return {};
@@ -579,12 +653,34 @@ const EditorTab: React.FC<Props> = ({
         linkedinUrl: formData["linkedinUrl"] || "",
         githubUrl: formData["githubUrl"] || "",
         portfolioUrl: formData["portfolioUrl"] || "",
+        // Common optional fields
         dateOfBirth: formData["dateOfBirth"] || null,
         nationality: formData["nationality"] || null,
         category: formData["category"] || null,
         languages: formData["languages"] || null,
         titlePrefix: formData["titlePrefix"] || null,
         qualifications: formData["qualifications"] || null,
+        // Government Standard
+        fathersName: formData["fathersName"] || null,
+        gender: formData["gender"] || null,
+        maritalStatus: formData["maritalStatus"] || null,
+        permanentAddress: formData["permanentAddress"] || null,
+        // Healthcare
+        specialisation: formData["specialisation"] || null,
+        medicalRegNo: formData["medicalRegNo"] || null,
+        // Legal
+        barEnrollmentNo: formData["barEnrollmentNo"] || null,
+        yearOfEnrollment: formData["yearOfEnrollment"] || null,
+        courtsOfPractise: formData["courtsOfPractise"] || null,
+        // Marine
+        rank: formData["rank"] || null,
+        cocNumber: formData["cocNumber"] || null,
+        vesselTypes: formData["vesselTypes"] || null,
+        stcwCertificates: formData["stcwCertificates"] || null,
+        // Research Scholar
+        orcidId: formData["orcidId"] || null,
+        hIndex: formData["hIndex"] || null,
+        googleScholarUrl: formData["googleScholarUrl"] || null,
       };
     }
     
@@ -600,10 +696,20 @@ const EditorTab: React.FC<Props> = ({
     const sectionFields = getSectionFields(openModalSection);
     clearErrors(sectionFields);
 
-    // ✅ Step 2: Validate again using the current up-to-date formData
+    // ✅ Step 2a: For multi-entry sections, trigger component-level validation via DOM event.
+    // The section component (WorkExperience, Education, etc.) runs validateRequired on all
+    // editing entries synchronously and sets resultRef.valid = false if any required field is empty.
+    const sectionValidationResult = { valid: true };
+    window.dispatchEvent(
+      new CustomEvent("resume-validate-section", {
+        detail: { section: openModalSection, resultRef: sectionValidationResult },
+      })
+    );
+
+    // ✅ Step 2b: Validate formData-based fields (Personal Info, Professional Summary)
     const { isValid, newErrors } = validateSectionFields();
 
-    if (!isValid) {
+    if (!isValid || !sectionValidationResult.valid) {
       // show errors and stop save
       Object.entries(newErrors).forEach(([key]) => {
         handleBlur(key, formData[key] || "");
@@ -646,6 +752,9 @@ const EditorTab: React.FC<Props> = ({
 
     if (isCustomSection) {
       updatePayload = { customSections: resumeData.customSections };
+    } else if (openModalSection === "Declaration") {
+      // declaration, declarationDate, declarationPlace are all top-level fields — don't nest under a key
+      updatePayload = transformFormDataToBackend(openModalSection) as Record<string, unknown>;
     } else {
       const sectionData = transformFormDataToBackend(openModalSection);
 
@@ -667,7 +776,7 @@ const EditorTab: React.FC<Props> = ({
         projects: "projects", certifications: "certifications", achievements: "achievements",
         volunteering: "volunteering", internships: "internships", awards: "awards",
         hobbies: "hobbies", interests: "interests", languages: "languages",
-        publications: "publications", references: "references",
+        publications: "publications", patents: "patents", references: "references",
       };
       const camelPayload: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(updatePayload)) {
@@ -678,27 +787,32 @@ const EditorTab: React.FC<Props> = ({
       saveResponse = await updateResume(resumeId, updatePayload);
     }
 
-    // ✅ Step 5b: Sync backend-assigned IDs back into context (builder only — enhancer has no IDs)
-    if (!isEnhancedResume && saveResponse && openModalSection) {
+    // ✅ Step 5b: Sync backend-assigned IDs back into context (builder + enhanced)
+    const sectionToRespKey: Record<string, string> = {
+      "Education": "education",
+      "Work Experience": "workExperience",
+      "Projects": "projects",
+      "Certifications": "certifications",
+      "Internships": "internships",
+      "Achievements": "achievements",
+      "Awards": "awards",
+      "Volunteering": "volunteering",
+      "Publications": "publications",
+      "Patents": "patents",
+      "References": "references",
+      "Hobbies": "hobbies",
+      "Interests": "interests",
+      "Languages": "languages",
+    };
+    if (saveResponse && openModalSection) {
       const resp = saveResponse as unknown as Record<string, unknown>;
-      const sectionToRespKey: Record<string, string> = {
-        "Education": "education",
-        "Work Experience": "workExperience",
-        "Projects": "projects",
-        "Certifications": "certifications",
-        "Internships": "internships",
-        "Achievements": "achievements",
-        "Awards": "awards",
-        "Volunteering": "volunteering",
-        "Publications": "publications",
-        "References": "references",
-        "Hobbies": "hobbies",
-        "Interests": "interests",
-        "Languages": "languages",
-      };
+      // Enhanced response may nest section data under enhanced_resume
+      const respSource = isEnhancedResume
+        ? ((resp?.enhanced_resume as Record<string, unknown>) ?? resp)
+        : resp;
       const respKey = sectionToRespKey[openModalSection];
-      if (respKey && Array.isArray(resp[respKey])) {
-        const backendItems = resp[respKey] as Array<{ id?: string; _id?: string }>;
+      if (respKey && Array.isArray(respSource[respKey])) {
+        const backendItems = respSource[respKey] as Array<{ id?: string; _id?: string }>;
         setResumeData(prev => {
           const currentItems = prev[respKey as keyof typeof prev];
           if (!Array.isArray(currentItems)) return prev;
@@ -709,14 +823,9 @@ const EditorTab: React.FC<Props> = ({
           return { ...prev, [respKey]: merged };
         });
       }
-      if (isCustomSection && Array.isArray(resp.customSections) && (resp.customSections as unknown[]).length > 0) {
-        setResumeData(prev => ({ ...prev, customSections: resp.customSections as typeof resumeData.customSections }));
-      }
-    } else if (isEnhancedResume) {
-      // Enhanced response nests customSections under enhanced_resume
-      const rawResponse = saveResponse as unknown as Record<string, unknown>;
-      const rawEnhanced = rawResponse?.enhanced_resume as Record<string, unknown> | undefined;
-      const syncedCustomSections = (rawResponse?.customSections ?? rawEnhanced?.customSections) as typeof resumeData.customSections | undefined;
+      // Sync customSections for both builder and enhanced
+      const rawEnhanced = resp?.enhanced_resume as Record<string, unknown> | undefined;
+      const syncedCustomSections = (resp?.customSections ?? rawEnhanced?.customSections) as typeof resumeData.customSections | undefined;
       if (isCustomSection && syncedCustomSections && syncedCustomSections.length > 0) {
         setResumeData(prev => ({ ...prev, customSections: syncedCustomSections }));
       }

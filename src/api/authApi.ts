@@ -70,11 +70,25 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     setTenantForEmail(data.email, response.data.tenant_id);
   }
 
+  // Clear the signout guard so future 401s can redirect to login normally.
+  sessionStorage.removeItem('__signing_out');
+
+  // Clear user-scoped session data from previous login
+  sessionStorage.removeItem('uploaded_resume_filename');
+
   return response.data;
 };
 
 export const signOut = async () => {
-  await httpClient.post("/auth/signout").catch(() => {});
+  // Signal to the axios interceptor that signout is in progress so that any
+  // concurrent 401s don't trigger a /?showLogin=true redirect that races with
+  // our own navigation to /. Store timestamp for self-expiring flag (5 seconds).
+  sessionStorage.setItem('__signing_out', Date.now().toString());
+
+  // Use native fetch (not httpClient) so the axios interceptor cannot intercept
+  // a pre-expired token and navigate away before the Set-Cookie clear headers land.
+  // The Next.js proxy route clears cookies on the correct origin (localhost:3000).
+  await fetch("/api/backend/auth/signout", { method: "POST", credentials: "include", headers: { 'X-Tenant-Id': getTenantId() } }).catch(() => {});
 
   // ✅ KEEP tenant_id in localStorage
   // User belongs to this tenant across sessions (per backend Option C)
@@ -91,7 +105,10 @@ export const signOut = async () => {
   }
   codingKeys.forEach((k) => localStorage.removeItem(k));
 
-  ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText'].forEach(
+  localStorage.removeItem('token_last_refreshed_at');
+  localStorage.removeItem('uploaded_resume_filename');
+
+  ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText', 'last_resume_path', 'builder_fresh_start'].forEach(
     (key) => sessionStorage.removeItem(key)
   );
   window.location.href = "/";

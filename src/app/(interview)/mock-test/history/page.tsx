@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, ChevronDown, ChevronRight, Eye, RotateCcw, MoreVertical, TrendingUp, TrendingDown, Minus, History as HistoryIcon } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, Eye, RotateCcw, MoreVertical, TrendingUp, TrendingDown, Minus, History as HistoryIcon, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getMockTestHistory, getProgressAnalytics, HistoryRecord, ProgressAnalytics } from '@/api/mockTestApi';
 import LoadingScreen from '../_components/LoadingScreen';
@@ -447,6 +447,18 @@ export default function MockTestHistoryPage() {
                               >
                                 <Eye size={14} style={{ color: '#94A3B8' }} />
                                 View result
+                              </button>
+                              {/* Straight to the questions, answers and explanations.
+                                  "View result" lands on the score summary, so the
+                                  per-question review — the part a candidate actually
+                                  learns from — was two clicks further in. */}
+                              <button
+                                onClick={() => { router.push(`/mock-test/results/${test.id}${test.sessionId ? `?parentSession=${test.sessionId}&tab=review` : ''}`); setOpenMenu(null); }}
+                                className="flex items-center gap-2.5 w-full px-3.5 py-2 text-sm text-left hover:bg-slate-50"
+                                style={{ color: '#475569' }}
+                              >
+                                <BookOpen size={14} style={{ color: '#94A3B8' }} />
+                                Review answers
                               </button>
                               <button
                                 onClick={() => { router.push(`/mock-test/${test.id}`); setOpenMenu(null); }}

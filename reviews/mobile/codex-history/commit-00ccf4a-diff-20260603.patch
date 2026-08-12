@@ -1,0 +1,30 @@
+diff --git a/package.json b/package.json
+index a6899cf..3612eb1 100644
+--- a/package.json
++++ b/package.json
+@@ -12,7 +12,7 @@
+     "format": "prettier --write .",
+     "test": "jest",
+     "test:watch": "jest --watch",
+-    "prepare": "husky install"
++    "prepare": "husky"
+   },
+   "dependencies": {
+     "expo": "~52.0.49",
+diff --git a/src/utils/logger.ts b/src/utils/logger.ts
+index b6940b7..38f1140 100644
+--- a/src/utils/logger.ts
++++ b/src/utils/logger.ts
+@@ -40,7 +40,12 @@ export interface Logger {
+ }
+ 
+ export const logger: Logger = {
++  // logger is the OFFICIAL wrapper for console — these direct console calls
++  // are deliberate (dev-only via isDebugEnabled gate, with JWT redaction).
++  // The no-console rule blocks console.* everywhere else.
++  // eslint-disable-next-line no-console
+   log: isDebugEnabled ? makeLogger(console.log.bind(console)) : noop,
++  // eslint-disable-next-line no-console
+   info: isDebugEnabled ? makeLogger(console.info.bind(console)) : noop,
+   warn: isDebugEnabled ? makeLogger(console.warn.bind(console)) : noop,
+   error: isDebugEnabled ? makeLogger(console.error.bind(console)) : noop,

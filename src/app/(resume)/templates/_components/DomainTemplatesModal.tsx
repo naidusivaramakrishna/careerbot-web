@@ -8,6 +8,7 @@ import { type TemplateResponse, getAllResumes, createResumeWithAuth } from '@/ap
 import { getProfile } from '@/api/userApi';
 import logger from '@/lib/logger';
 import { getSectionOrderByDomainAndCareer } from '../_utils/domainSectionOrder';
+import { detectCareerLevel as detectCareerLevelUtil } from '@/utils/careerLevelDetection';
 import { Button } from '@/components/ui/Button';
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from '../_constants/templateImages';
 import { resolveTemplateImageUrl } from '@/lib/imageUtils';
@@ -21,39 +22,21 @@ interface DomainTemplatesModalProps {
   source?: string;
 }
 
-const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Manager'];
+const CAREER_LEVELS = ['Fresher', 'Early Career', 'Mid-Level', 'Senior-Level', 'Lead', 'Architect', 'Manager', 'Director', 'Vice President'];
 
-
-// Map domain names to domain_family codes (handles both lowercase and title case)
-const DOMAIN_NAME_MAP: Record<string, string> = {
-  'healthcare': 'healthcare',
-  'Healthcare': 'healthcare',
-  'education': 'education',
-  'Education': 'education',
-  'software_engineering': 'software_engineering',
-  'Software Engineering': 'software_engineering',
-  'core_engineering': 'core_engineering',
-  'Core Engineering': 'core_engineering',
-  'finance': 'finance',
-  'Finance': 'finance',
-  'cybersecurity': 'cybersecurity',
-  'Cybersecurity': 'cybersecurity',
-  'electronics_and_vlsi': 'electronics_and_vlsi',
-  'Electronics & VLSI': 'electronics_and_vlsi',
-  'government_standard': 'government_standard',
-  'Government Standard': 'government_standard',
-  'legal': 'legal',
-  'Legal': 'legal',
-  'logistics_warehouse_operations': 'logistics_warehouse_operations',
-  'Logistics & Warehouse Operations': 'logistics_warehouse_operations',
-  'marine_merchant_navy': 'marine_merchant_navy',
-  'Marine & Merchant Navy': 'marine_merchant_navy',
-  'modern_minimal_template': 'modern_minimal_template',
-  'Modern Minimal': 'modern_minimal_template',
-  'research_scholar': 'research_scholar',
-  'Research Scholar': 'research_scholar',
-  'sales_business_development': 'sales_business_development',
-  'Sales & Business Development': 'sales_business_development',
+// Canonical career-level detection — use shared utility for consistency
+const detectCareerLevel = (name: string): string | undefined => {
+  const n = (name || '').toLowerCase();
+  // Use shared utility for most common levels
+  const detected = detectCareerLevelUtil(n);
+  if (detected) {
+    // Capitalize for display
+    return detected.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
+  // Fallback for compound labels
+  if (n.includes('early') && n.includes('career')) return 'Early Career';
+  if (n.includes('mid')) return 'Mid-Level';
+  return undefined;
 };
 
 export default function DomainTemplatesModal({
@@ -70,16 +53,12 @@ export default function DomainTemplatesModal({
   // Sort templates by career level
   const sortedTemplates = useMemo(() => {
     return [...templates].sort((a, b) => {
-      const aName = (a.name || '').toLowerCase();
-      const bName = (b.name || '').toLowerCase();
+      const aLevel = detectCareerLevel(a.name || '');
+      const bLevel = detectCareerLevel(b.name || '');
+      const aLevelIndex = aLevel ? CAREER_LEVELS.indexOf(aLevel) : -1;
+      const bLevelIndex = bLevel ? CAREER_LEVELS.indexOf(bLevel) : -1;
 
-      const aLevelIndex = CAREER_LEVELS.findIndex((level) =>
-        aName.includes(level.toLowerCase())
-      );
-      const bLevelIndex = CAREER_LEVELS.findIndex((level) =>
-        bName.includes(level.toLowerCase())
-      );
-
+      if (aLevelIndex === -1 && bLevelIndex === -1) return 0; // both unknown → stable order
       if (aLevelIndex === -1) return 1;
       if (bLevelIndex === -1) return -1;
       return aLevelIndex - bLevelIndex;
@@ -92,11 +71,7 @@ export default function DomainTemplatesModal({
   const selectedTemplate = sortedTemplates[selectedTemplateIndex];
 
   const getCareerLevel = (templateName: string) => {
-    return (
-      CAREER_LEVELS.find((level) =>
-        templateName.toLowerCase().includes(level.toLowerCase())
-      ) || 'Custom'
-    );
+    return detectCareerLevel(templateName) || 'Custom';
   };
 
   const handleSelectTemplate = (index: number) => {
@@ -142,7 +117,7 @@ export default function DomainTemplatesModal({
           name: t.name,
           preview_url: t.preview_url || FALLBACK_TEMPLATE_IMAGE,
           description: t.description || 'Professional resume template',
-          ats_friendly: t.ats_friendly || true,
+          ats_friendly: t.ats_friendly ?? true,
           subtitle: t.name?.split('-')?.[1]?.trim() || 'Template',
           domain_family: ((t as unknown) as Record<string, unknown>).domain_family as string || correctDomainFamily,
           domain_display_name: domainName,
@@ -157,18 +132,22 @@ export default function DomainTemplatesModal({
         const nameStr = templateName.toLowerCase();
         if (nameStr.includes('early') && nameStr.includes('career')) {
           careerLevel = 'early career';
+        } else if (nameStr.includes('fresher')) {
+          careerLevel = 'fresher';
+        } else if (nameStr.includes('architect')) {
+          careerLevel = 'architect';
+        } else if (nameStr.includes('manager')) {
+          careerLevel = 'manager';
+        } else if (nameStr.includes('lead')) {
+          careerLevel = 'lead';
         } else if (nameStr.includes('senior')) {
           careerLevel = 'senior-level';
         } else if (nameStr.includes('mid')) {
           careerLevel = 'mid-level';
-        } else if (nameStr.includes('fresher')) {
-          careerLevel = 'fresher';
-        } else if (nameStr.includes('manager')) {
-          careerLevel = 'manager';
         }
         const newDomainOrder = getSectionOrderByDomainAndCareer(correctDomainFamily, careerLevel);
         // Preserve extra sections the user had added before opening this modal
-        const addableExtras = new Set(['Achievements', 'Publications', 'Volunteering', 'Awards', 'Hobbies', 'Interests', 'Languages', 'References']);
+        const addableExtras = new Set(['Achievements', 'Publications', 'Patents', 'Volunteering', 'Awards', 'Hobbies', 'Interests', 'Languages', 'References']);
         const existingOrderStr = localStorage.getItem(sectionOrderKey);
         const existingOrder: string[] = existingOrderStr ? (() => { try { return JSON.parse(existingOrderStr) } catch { return [] } })() : [];
         const newOrderSet = new Set(newDomainOrder);
@@ -314,14 +293,18 @@ export default function DomainTemplatesModal({
                       let careerLevel = '';
                       if (nameStr.includes('early') && nameStr.includes('career')) {
                         careerLevel = 'Early Career';
+                      } else if (nameStr.includes('fresher')) {
+                        careerLevel = 'Fresher';
+                      } else if (nameStr.includes('architect')) {
+                        careerLevel = 'Architect';
+                      } else if (nameStr.includes('manager')) {
+                        careerLevel = 'Manager';
+                      } else if (nameStr.includes('lead')) {
+                        careerLevel = 'Lead';
                       } else if (nameStr.includes('senior')) {
                         careerLevel = 'Senior-Level';
                       } else if (nameStr.includes('mid')) {
                         careerLevel = 'Mid-Level';
-                      } else if (nameStr.includes('fresher')) {
-                        careerLevel = 'Fresher';
-                      } else if (nameStr.includes('manager')) {
-                        careerLevel = 'Manager';
                       }
 
                       if (careerLevel) {
