@@ -632,6 +632,21 @@ input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; po
 .ats-check { width: 16px; height: 16px; border-radius: 50%; background: var(--green-bg); border: 1px solid var(--green-bd); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--green); }
 .results-footer { gap: 6px; }
 
+.skills-empty-note {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--bg); border: 1px dashed var(--border);
+  border-radius: var(--r-lg); padding: 10px 12px;
+  font-size: 11.5px; line-height: 1.5; color: var(--text-3);
+}
+.skills-empty-note svg { flex-shrink: 0; margin-top: 1px; color: var(--text-4); }
+
+/* When there's no skill data to show, the results body's content is short —
+   center it instead of leaving it top-aligned with a dead gap below before
+   the footer buttons. */
+#state-results.is-compact .results-body {
+  justify-content: center;
+}
+
 /* ══════════════════════════════════════════
    RIGHT SIDEBAR RAIL
 ══════════════════════════════════════════ */

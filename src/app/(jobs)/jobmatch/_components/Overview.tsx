@@ -443,6 +443,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
           setWizardStep(prev => (prev + 1) as 1 | 2 | 3);
         }}
         continueDisabled={stepContinueDisabled()}
+        onAnalyzeClick={analyzeMatch}
       >
         {wizardStep === 1 && (
           <WizardStepResume
@@ -470,7 +471,6 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
             jdFile={jdFile}
             jdText={jdText}
             error={error}
-            onAnalyze={analyzeMatch}
           />
         )}
       </WizardModalShell>

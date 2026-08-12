@@ -576,7 +576,12 @@ export default function JobCard(props: JobCardProps) {
         },
         {
           icon: CheckCircle, label: "Already Applied",
-          action: () => { setIsApplied(true); setShowMenu(false); toast.success("Marked as applied"); },
+          action: () => {
+            setIsApplied(true);
+            setShowMenu(false);
+            recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId);
+            toast.success("Marked as applied");
+          },
         },
         {
           icon: Share2, label: "Share",
@@ -947,9 +952,12 @@ export default function JobCard(props: JobCardProps) {
                 <div className="px-5 pt-2.5 pb-2">
                   <div className="flex flex-wrap gap-1.5">
                     {props.location && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600">
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-slate-50 px-2.5 py-0.5 text-[11.5px] font-medium text-slate-600"
+                        title={props.location}
+                      >
                         <MapPin size={11} className="text-gray-400 shrink-0" />
-                        <span className="truncate max-w-[110px]">{props.location}</span>
+                        <span className="truncate max-w-[110px]">{props.location.split(",")[0].trim()}</span>
                       </span>
                     )}
                     {props.type && (
@@ -1122,18 +1130,13 @@ export default function JobCard(props: JobCardProps) {
               <button
                 type="button"
                 onClick={() => setShowMatchModal(true)}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-all hover:scale-[1.03] active:scale-[0.97]"
-                style={{
-                  background: "linear-gradient(135deg, #5896d7, #4338CA)",
-                  color: "white",
-                  boxShadow: "0 2px 8px rgba(79,70,229,0.3)",
-                }}
-                title="Open full match report — free basic breakdown or premium deep-dive"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#4F46E5]/15 bg-white px-3 py-1.5 text-[11px] font-bold text-[#4F46E5] shadow-sm transition-all hover:border-[#4F46E5]/30 hover:bg-[#eef3ff] hover:shadow-md active:scale-[0.97]"
+                title="Open match report — free basic breakdown or premium deep-dive"
               >
                 <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Full Report
+                Match Report
               </button>
             )}
           </div>
@@ -1358,7 +1361,12 @@ export default function JobCard(props: JobCardProps) {
           },
           {
             icon: CheckCircle, label: "Already Applied",
-            action: () => { setIsApplied(true); setShowMenu(false); toast.success("Marked as applied"); },
+            action: () => {
+              setIsApplied(true);
+              setShowMenu(false);
+              recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId);
+              toast.success("Marked as applied");
+            },
           },
           {
             icon: Share2, label: "Share",

@@ -117,3 +117,29 @@ export const getPremiumActionStatus = async (
   );
   return response.data;
 };
+
+// ── Premium AI Consent ─────────────────────────────────────────────────────────
+// Premium actions process the user's profile/resume and job details with AI.
+// Backend requires explicit consent first — 428 CONSENT_REQUIRED if missing.
+
+export interface PremiumConsentResponse {
+  consent_given: boolean;
+  consented_at?: string | null;
+}
+
+export const getPremiumConsent = async (): Promise<PremiumConsentResponse> => {
+  const response = await httpClient.get<PremiumConsentResponse>(
+    '/profile/consent/premium'
+  );
+  return response.data;
+};
+
+export const setPremiumConsent = async (
+  consent_given: boolean
+): Promise<PremiumConsentResponse> => {
+  const response = await httpClient.post<PremiumConsentResponse>(
+    '/profile/consent/premium',
+    { consent_given }
+  );
+  return response.data;
+};

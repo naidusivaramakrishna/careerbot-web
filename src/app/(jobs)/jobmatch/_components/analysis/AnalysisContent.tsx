@@ -444,10 +444,23 @@ export default function AnalysisContent({
     } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       // The AI deliberately leaves a metric blank ("...deployment of n+
       // features") rather than invent a number — the backend refuses to
-      // apply until the real value is supplied (409 "needs_value"). Prompt
-      // for it and retry once instead of failing outright.
-      if (err?.response?.status === 409 && err?.response?.data?.error === "needs_value") {
-        const blankText: string | undefined = err.response.data?.text?.[0];
+      // apply until the real value is supplied ("needs_value"). Prompt for
+      // it and retry once instead of failing outright.
+      //
+      // Backend error envelope nests the real code at error.details.error
+      // (same shape as the premium-consent 428 flow) — err.response.data.error
+      // is the whole { message, error_code, details, ... } object, not a
+      // string, so comparing it directly to "needs_value" never matched and
+      // this prompt silently never fired. Falls back to the flat shape too,
+      // in case a different status/shape is used here.
+      const errPayload = err?.response?.data;
+      const errCode = errPayload?.error?.details?.error ?? errPayload?.error;
+      const isNeedsValue =
+        (err?.response?.status === 409 || err?.response?.status === 422) &&
+        errCode === "needs_value";
+      if (isNeedsValue) {
+        const blankText: string | undefined =
+          errPayload?.error?.details?.text?.[0] ?? errPayload?.text?.[0];
         const answer = await askForNumber(blankText);
         const numeric = answer?.trim().replace(/,/g, "");
         if (!numeric || !/^\d+(\.\d+)?$/.test(numeric)) {
@@ -853,9 +866,14 @@ export default function AnalysisContent({
         {/* CENTER — Resume Preview (always visible) */}
         <div className="min-w-0 flex-1 space-y-5 bg-[#f3f6fa] px-4 py-4 sm:px-6 lg:px-7">
           <div>
-          <div className="mt-0 mb-6 flex items-center gap-2.5">
-            <div className="w-1.5 h-6 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
-            <h1 className="text-2xl font-bold uppercase text-[#2557a7]">Tailor Your Resume</h1>
+          <div className="mt-0 mb-4">
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+              AI-Powered Resume Tailoring
+            </p>
+            <h1 className="text-[22px] sm:text-[24px] font-extrabold uppercase tracking-tight text-slate-900 leading-none">
+              Tailor Your Resume
+            </h1>
+            <div className="mt-2 border-t border-slate-200" />
           </div>
           <div className="bg-white rounded-xl border border-[#dce8fb] shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_30px_rgba(37,87,167,0.10)] flex flex-col overflow-hidden">
             {/* Toolbar */}

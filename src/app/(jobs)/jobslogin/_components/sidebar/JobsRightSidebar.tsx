@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Brain, MessageCircle, X } from "lucide-react";
+import { Sparkles, MessageCircle, X } from "lucide-react";
 import TopPickCard from "./TopPickCard";
 import TrendingSkillsCard from "./TrendingSkillsCard";
 
@@ -38,16 +38,16 @@ export default function JobsRightSidebar({
           <div className="flex items-center gap-3">
             <div
               className="flex h-10 w-10 items-center justify-center rounded-2xl text-white"
-              style={{ background: "linear-gradient(135deg, #5896d7, #4338CA)", boxShadow: "0 6px 16px rgba(79,70,229,0.28)" }}
+              style={{ background: "linear-gradient(135deg, #5896d7, #4338CA)", boxShadow: "0 4px 10px rgba(79,70,229,0.18)" }}
             >
-              <Brain size={18} />
+              <Sparkles size={18} />
             </div>
             <div>
               <h2 className="text-[15px] font-extrabold leading-tight text-slate-950">Career intelligence</h2>
               <p className="mt-0.5 text-[11px] font-medium text-slate-500">Live recommendations from your job graph</p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Live
           </span>

@@ -99,7 +99,7 @@ function unlockRail(unlock) {
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
-const API_TIMEOUT_MS = 20000;
+const API_TIMEOUT_MS = 60000;
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -413,6 +413,10 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
 
   const hasAny = allTechMissing.length || allTechMatched.length || allSoftMissing.length || allSoftMatched.length;
   section.style.display = hasAny ? 'flex' : 'none';
+
+  const emptyNoteEl = document.getElementById('skills-empty-note');
+  if (emptyNoteEl) emptyNoteEl.style.display = hasAny ? 'none' : 'flex';
+  document.getElementById('state-results')?.classList.toggle('is-compact', !hasAny);
 
   // ── ATS Improvements ───────────────────────────────────────────────────────
   const improvements = [];

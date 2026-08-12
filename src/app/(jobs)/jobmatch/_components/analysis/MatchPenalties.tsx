@@ -51,7 +51,10 @@ const CATEGORY_SECTION_ALIASES: Record<string, string> = {
   formatting: "contact",
 };
 
-function categoryToSectionKey(category: string): string | undefined {
+function categoryToSectionKey(category: string, target?: string): string | undefined {
+  // "formatting" bundles fields that live in different resume sections — email/phone/
+  // location are contact fields, but a missing "technical_skills" field belongs in Skills.
+  if (category === "formatting" && target === "technical_skills") return "skills";
   if (KNOWN_SECTION_IDS.has(category)) return category;
   return CATEGORY_SECTION_ALIASES[category];
 }
@@ -346,7 +349,7 @@ function CategoryGroup({
                   const isLoading = loadingIds.has(p.suggestion_id);
                   const canApplyTextFix = !!onApplyFix && isPenaltyApplyable(p);
                   const suggestionType = isSkillActionable ? "skill" : canApplyTextFix ? "fix" : "manual";
-                  const manualSectionKey = suggestionType === "manual" ? categoryToSectionKey(p.category) : undefined;
+                  const manualSectionKey = suggestionType === "manual" ? categoryToSectionKey(p.category, p.target) : undefined;
                   const typeMeta = SUGGESTION_TYPE_META[suggestionType];
                   const TypeIcon = suggestionType === "manual" ? Lightbulb : suggestionType === "fix" ? Wrench : Plus;
                   return (
@@ -406,11 +409,13 @@ function CategoryGroup({
 
                       {/* Actions */}
                       <div className="flex shrink-0 flex-col items-end gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="whitespace-nowrap text-[11px] font-semibold text-slate-500">
-                            Estimated <span className="font-bold text-green-700">+{Math.abs(p.penalty).toFixed(1)} pts</span>
-                          </span>
-                        </div>
+                        {p.penalty !== 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="whitespace-nowrap text-[11px] font-semibold text-slate-500">
+                              Estimated <span className="font-bold text-green-700">+{Math.abs(p.penalty).toFixed(1)} pts</span>
+                            </span>
+                          </div>
+                        )}
 
                         {!readOnly && (isSkillActionable ? !!p.target : canApplyTextFix) && (
                           <div className="flex gap-1.5">
@@ -461,7 +466,31 @@ function CategoryGroup({
 }
 
 export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill, onApplyFix, onOpenSection, readOnly }: MatchPenaltiesProps) {
-  const penalties: Penalty[] = matchResult?.Match_Penalties?.penalties ?? [];
+  const backendPenalties: Penalty[] = matchResult?.Match_Penalties?.penalties ?? [];
+
+  // The backend flags a missing "technical_skills" field in Formatting_Check but,
+  // unlike email/phone/location, never ships a suggest_add_contact_technical_skills
+  // penalty for it. Synthesize one so it gets the same actionable "Edit Skills" card
+  // as the other formatting gaps instead of sitting unfixable in Score Breakdown's reason text.
+  const missingFormattingFields: string[] = matchResult?.Formatting_Check?.missing_fields ?? [];
+  const hasTechnicalSkillsFix = backendPenalties.some(
+    (p) => p.category === "formatting" && p.target === "technical_skills"
+  );
+  const penalties: Penalty[] = missingFormattingFields.includes("technical_skills") && !hasTechnicalSkillsFix
+    ? [
+        ...backendPenalties,
+        {
+          suggestion_id: "suggest_add_technical_skills_section",
+          category: "formatting",
+          severity: "nice_to_have",
+          fix_type: "manual",
+          penalty: 0,
+          message: "Your resume is missing a dedicated Technical Skills section — add one so ATS parsers and recruiters can find your skills.",
+          target: "technical_skills",
+        },
+      ]
+    : backendPenalties;
+
   if (!penalties.length) return null;
 
   const totalPenalty = Math.abs(matchResult?.Match_Penalties?.total_penalty ?? 0);
@@ -481,11 +510,7 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill,
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4 text-amber-500" />
-          <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Improvement Suggestions</h3>
-        </div>
+      <div className="flex items-center justify-end px-1">
         <span className="text-[12px] font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1 rounded-full">
           Recover up to +{totalPenalty.toFixed(1)} pts
         </span>
