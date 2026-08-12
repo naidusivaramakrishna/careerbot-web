@@ -40,6 +40,13 @@ export interface DashboardSummary {
     ats_score?: number; // 0-100
     job_match_score?: number; // 0-100
     interview_score?: number; // 0-100
+    mock_test_accuracy?: number; // 0-100, avg accuracy across tests
+  };
+  mock_test_stats?: {
+    total_tests: number;
+    average_accuracy: number; // 0-100
+    best_score: number; // 0-100
+    latest_score?: number; // 0-100
   };
   recent_activity: Activity[];
   trending_roles: TrendingRole[];

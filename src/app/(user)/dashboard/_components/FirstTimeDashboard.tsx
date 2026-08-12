@@ -721,9 +721,11 @@ const DashboardContent: React.FC<{ data: DashboardSummary }> = ({ data }) => {
               : "Not yet scanned"}
           />
           <StatCard
-            icon={Activity} label="Career Step"
-            value={`${currentStep}/4`}
-            sub={STEP_LABELS[currentStep - 1]}
+            icon={Activity} label={data.mock_test_stats?.total_tests ? "Avg Accuracy" : "Career Step"}
+            value={data.mock_test_stats?.total_tests ? `${Math.round(data.mock_test_stats.average_accuracy)}%` : `${currentStep}/4`}
+            sub={data.mock_test_stats?.total_tests
+              ? `${data.mock_test_stats.total_tests} test${data.mock_test_stats.total_tests !== 1 ? 's' : ''} taken`
+              : STEP_LABELS[currentStep - 1]}
           />
         </div>
 
