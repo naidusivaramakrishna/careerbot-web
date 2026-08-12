@@ -159,6 +159,29 @@ function replaceBulletText(
   return { sections: next, changed };
 }
 
+// The AI leaves an unfilled metric as a literal standalone "n" in both the
+// before/after suggestion text (e.g. "...with n+ successful integrations")
+// rather than invent a number. When the backend reports the blank (via
+// details.text) and the user supplies its value, substitute it ONLY at the
+// specific "n<suffix>" token the backend described (e.g. "n+", "n%", "n-tier")
+// — not every standalone "n" in the text — since one bullet can carry more
+// than one such placeholder with unrelated meanings, e.g. "Built n-tier
+// architecture serving n+ users" has two independent blanks. A blanket
+// replace-all would stamp the same number into both.
+function fillManualBlank(
+  rawAfter: string | undefined,
+  blankText: string | undefined,
+  manualValue: string
+): string | undefined {
+  if (!rawAfter) return rawAfter;
+  const suffixMatch = blankText?.match(/\bn([+%-]?)/);
+  const suffix = suffixMatch?.[1] ?? "";
+  const escapedSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // No /g flag — replaces only the first (and, per the above, only intended) match.
+  const pattern = suffix ? new RegExp(`\\bn${escapedSuffix}`) : /\bn\b/;
+  return pattern.test(rawAfter) ? rawAfter.replace(pattern, manualValue + suffix) : rawAfter;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function hasData(val: any): boolean {
   if (!val) return false;
@@ -284,8 +307,34 @@ export default function AnalysisContent({
   // preview contexts, which would make this fail with zero feedback (exactly
   // what "apply all fixes" looked like before: no error, just never applies).
   const [numberPromptState, setNumberPromptState] = React.useState<{ blankText?: string; resolve: (v: string | null) => void } | null>(null);
+  // Kept in sync with numberPromptState on every render so the unmount
+  // cleanup below can resolve whatever prompt is current, not whatever was
+  // current when that effect first ran.
+  const numberPromptStateRef = React.useRef(numberPromptState);
+  numberPromptStateRef.current = numberPromptState;
+
   const askForNumber = React.useCallback((blankText?: string): Promise<string | null> => {
-    return new Promise((resolve) => setNumberPromptState({ blankText, resolve }));
+    return new Promise((resolve) => {
+      setNumberPromptState((prev) => {
+        // Only one prompt slot exists. Two suggestions that both come back
+        // needs_value (e.g. Apply clicked on two STAR bullets in quick
+        // succession — runSerially only serializes the network calls, not
+        // this prompt) would otherwise have the second call's state replace
+        // the first's, orphaning its resolve — that row's applyTextFix
+        // promise never settles and its "Apply fix" spinner never clears.
+        // Resolve the outgoing prompt with null (as if cancelled) first.
+        prev?.resolve(null);
+        return { blankText, resolve };
+      });
+    });
+  }, []);
+
+  // Same leak if the user navigates away (unmounts this component) with the
+  // prompt still open — nothing would ever call its resolve otherwise.
+  React.useEffect(() => {
+    return () => {
+      numberPromptStateRef.current?.resolve(null);
+    };
   }, []);
 
   // Track which skills were added (for green highlight in resume template)
@@ -443,6 +492,7 @@ export default function AnalysisContent({
     // used to patch the cached suggestion text before mirroring it into the
     // preview (see the comment near its use further down).
     let manualValue: string | undefined;
+    let blankText: string | undefined;
     try {
       res = await runSerially(() => matcherEnhanceApply(matchId, suggestion_id));
     } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -463,8 +513,7 @@ export default function AnalysisContent({
         (err?.response?.status === 409 || err?.response?.status === 422) &&
         errCode === "needs_value";
       if (isNeedsValue) {
-        const blankText: string | undefined =
-          errPayload?.error?.details?.text?.[0] ?? errPayload?.text?.[0];
+        blankText = errPayload?.error?.details?.text?.[0] ?? errPayload?.text?.[0];
         const answer = await askForNumber(blankText);
         const numeric = answer?.trim().replace(/,/g, "");
         if (!numeric || !/^\d+(\.\d+)?$/.test(numeric)) {
@@ -533,22 +582,33 @@ export default function AnalysisContent({
       // match-analysis call and may still carry the unfilled "n" metric
       // placeholder (e.g. "...with n+ successful integrations") — the
       // backend resolves it server-side once a manual value is supplied,
-      // but this cached copy doesn't know that. Substitute it locally so
-      // the preview matches what the backend actually saved (and what the
-      // downloaded resume already shows correctly).
+      // but this cached copy doesn't know that. Substitute it locally (see
+      // fillManualBlank — anchored to the specific blank the backend
+      // reported, not every standalone "n") so the preview matches what the
+      // backend actually saved (and what the downloaded resume already
+      // shows correctly).
       const rawAfter = weak?.improved || penalty?.after_example;
-      const after = manualValue ? rawAfter?.replace(/\bn\b/g, manualValue) : rawAfter;
+      const after = manualValue ? fillManualBlank(rawAfter, blankText, manualValue) : rawAfter;
       if (before && after && before !== after) {
-        const result = replaceBulletText(resumeSections, before, after);
-        if (result.changed.length) {
-          setResumeSections(result.sections);
-          result.changed.forEach((c) => markHighlighted(c.section, String(c.idx)));
-        }
+        // Functional form — resumeSections is captured at render time, but
+        // runSerially only serializes the network call, not the render
+        // cycle. Two quick "Apply fix" clicks (bullet 1, then bullet 2
+        // before the first resolves) would otherwise give both callbacks the
+        // same stale snapshot, and fix 2's write would silently erase fix
+        // 1's rewrite from the preview even though the server kept both.
+        setResumeSections((prev) => {
+          const result = replaceBulletText(prev, before, after);
+          if (result.changed.length) {
+            result.changed.forEach((c) => markHighlighted(c.section, String(c.idx)));
+            return result.sections;
+          }
+          return prev;
+        });
       }
     }
 
     return true;
-  }, [matchId, matchResult, jobTitle, starCheck, resumeSections, markHighlighted, runSerially, askForNumber]);
+  }, [matchId, matchResult, jobTitle, starCheck, markHighlighted, runSerially, askForNumber]);
 
   // Remove a skill: enhance/remove updates the match score AND removes the
   // skill from the resume document server-side (see job_matcher.py

@@ -123,6 +123,15 @@ function CategoryGroup({
 }) {
   const [open, setOpen] = useState(true);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  // A bulk-parent apply rewrites all of a group's bullets server-side from
+  // one call, but the frontend can only ever mirror a before/after pair keyed
+  // to that SAME parent id into the live preview — it has no way to know
+  // which (if any) specific child bullet that corresponds to. These ids are
+  // still added to addedIds (so the button disables and it isn't re-applied),
+  // but tracked separately so their row can say "applied, not yet confirmed
+  // in preview" honestly instead of claiming the same verified "Added" state
+  // an individually-applied fix gets.
+  const [bulkAppliedIds, setBulkAppliedIds] = useState<Set<string>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [bulkLoadingKey, setBulkLoadingKey] = useState<string | null>(null);
 
@@ -196,6 +205,11 @@ function CategoryGroup({
         const applied = await onApplyFix!(parent.suggestion_id, category);
         if (applied) {
           setAddedIds(prev => {
+            const n = new Set(prev);
+            groupItems.forEach(p => n.add(p.suggestion_id));
+            return n;
+          });
+          setBulkAppliedIds(prev => {
             const n = new Set(prev);
             groupItems.forEach(p => n.add(p.suggestion_id));
             return n;
@@ -342,6 +356,7 @@ function CategoryGroup({
                 {sg.items.map(p => {
                   const sev = SEVERITY_META[p.severity] ?? SEVERITY_META.important;
                   const isAdded = addedIds.has(p.suggestion_id);
+                  const isBulkUnverified = isAdded && bulkAppliedIds.has(p.suggestion_id);
                   // Missing skills always preview red regardless of severity tier —
                   // "nice to have" used sev.color (#16a34a, green) even before being
                   // added, which read as already-done next to the real added=green state.
@@ -401,8 +416,9 @@ function CategoryGroup({
                           </div>
                         )}
                         {isAdded && (
-                          <p className="text-[12px] text-green-600 font-semibold mt-1 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Added to resume
+                          <p className={`text-[12px] font-semibold mt-1 flex items-center gap-1 ${isBulkUnverified ? "text-amber-600" : "text-green-600"}`}>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {isBulkUnverified ? "Applied — refresh to confirm in preview" : "Added to resume"}
                           </p>
                         )}
                       </div>
@@ -426,7 +442,7 @@ function CategoryGroup({
                               style={{ background: isAdded ? "#22c55e" : meta.color }}
                             >
                               {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> :
-                               isAdded ? <><CheckCircle2 className="w-3 h-3" /> Added</> :
+                               isAdded ? <><CheckCircle2 className="w-3 h-3" /> {isBulkUnverified ? "Applied" : "Added"}</> :
                                <><Plus className="w-3 h-3" /> {suggestionType === "skill" ? "Add skill" : "Apply fix"}</>}
                             </button>
                             {isSkillActionable && onRemoveSkill && isAdded && (

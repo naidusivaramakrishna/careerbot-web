@@ -148,10 +148,6 @@ export function getSavedJobs(userId?: string | null): SavedJob[] {
   return [...scoped, ...unscoped.filter((job) => !seen.has(job.jobId))];
 }
 
-export function getSavedJobIds(userId?: string | null): string[] {
-  return getSavedJobs(userId).map((job) => job.jobId);
-}
-
 export function isJobSaved(jobId: string, userId?: string | null): boolean {
   const saved = getSavedJobs(userId);
   return saved.some((job) => job.jobId === jobId);

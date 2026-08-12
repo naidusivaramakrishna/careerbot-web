@@ -67,10 +67,16 @@ const states = {
   coverLetter: document.getElementById('state-cover-letter'),
 };
 
+// Timestamp of the most recent entry into 'processing' — lets tabs.onActivated
+// tell a genuinely stuck flow apart from one that's still legitimately running
+// (see the guard below).
+let processingSince = 0;
+
 function showState(name) {
   Object.values(states).forEach(el => el.classList.add('hidden'));
   if (states[name]) states[name].classList.remove('hidden');
   document.getElementById('app')?.setAttribute('data-state', name);
+  if (name === 'processing') processingSince = Date.now();
   if (['idle', 'jdDetected', 'processing', 'results', 'coverLetter'].includes(name)) {
     setNavActive('sb-analyze');
   }
@@ -683,8 +689,15 @@ chrome.tabs.onActivated.addListener(() => {
   const activeStateName = Object.keys(states).find(
     (name) => !states[name]?.classList.contains('hidden')
   );
-  // Don't yank the user out of an in-progress flow just because they alt-tabbed.
-  if (['processing', 'results', 'coverLetter'].includes(activeStateName)) return;
+  // Don't yank the user out of an in-progress flow just because they alt-tabbed —
+  // unless 'processing' has been showing far longer than any of its calls are
+  // allowed to take (API_TIMEOUT_MS). That only happens when a flow got stuck
+  // without ever reaching 'idle'/'results' (e.g. window.close() is a no-op in a
+  // side panel, so a completed flow can otherwise be left parked here forever) —
+  // in which case this is the only thing left that can bring the panel back.
+  const isStaleProcessing =
+    activeStateName === 'processing' && Date.now() - processingSince > API_TIMEOUT_MS + 5000;
+  if (['processing', 'results', 'coverLetter'].includes(activeStateName) && !isStaleProcessing) return;
   applyStoredJD();
 });
 
@@ -924,8 +937,12 @@ async function doTailor(jdText, jobMeta, resumeId) {
 
     const payload = {
       job_description: jdText,
-      job_title:       jobMeta?.title   || 'Untitled Position',
-      company:         jobMeta?.company || 'Not specified',
+      // Keep null on the wire when genuinely absent — 'Untitled Position'/
+      // 'Not specified' are display-only placeholders, not real values, and
+      // persisting them server-side would make them indistinguishable from
+      // an actual job title/company in match history and analytics.
+      job_title:       jobMeta?.title   || null,
+      company:         jobMeta?.company || null,
       job_url:         jobMeta?.url     || null,
       resume_id:       resumeId,
       jd_id:           cachedJdId       || null,
@@ -951,7 +968,10 @@ async function doTailor(jdText, jobMeta, resumeId) {
     setStep('Done!', 100);
     await chrome.storage.local.remove('detectedJD');
     chrome.action.setBadgeText({ text: '' });
-    setTimeout(() => window.close(), 600);
+    // window.close() is a no-op for Chrome side panels (unlike a classic popup,
+    // nothing closes it here) — so this flow must hand the UI back to idle
+    // itself, or the panel is left parked on "Done!" indefinitely.
+    setTimeout(() => { clearIdleDetectedJob(); showState('idle'); }, 600);
 
   } catch (err) {
     showState('idle');

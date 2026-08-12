@@ -680,8 +680,17 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // prepare can be re-invoked while an earlier call is still in flight — its
+  // useCallback depends on jobId, so a jobId change recreates it and reruns
+  // the effect below, and handleGrantConsent can also call it directly.
+  // mountedRef only guards against unmount; it doesn't stop a superseded but
+  // still-running invocation from landing setPending/setPhase for the wrong
+  // job once it finally resolves. A monotonic run token catches that too.
+  const runRef = useRef(0);
+
   // Step 1 — resolve resume_id + jd_id → create pending action
   const prepare = useCallback(async () => {
+    const run = ++runRef.current;
     if (!isValidBackendJobId(jobId)) {
       setErrorMsg("This listing hasn't finished syncing yet, so premium analysis isn't available for it. Please refresh the job list and try again.");
       setPhase("error");
@@ -695,7 +704,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
         parseJdByJob(jobId),
       ]);
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || runRef.current !== run) return;
 
       const action = await createPremiumAction({
         action_type: "resume_tailor",
@@ -704,11 +713,11 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
         options: { resume_id: profileRes.resume_id, jd_id: jdRes.jd_id },
       });
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || runRef.current !== run) return;
       setPending(action);
       setPhase("confirming");
     } catch (err: unknown) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || runRef.current !== run) return;
 
       if (isConsentRequiredError(err)) {
         setConsentRetry("prepare");
@@ -911,7 +920,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
             </div>
 
             <p className="text-[12px] text-gray-600 leading-relaxed">
-              Premium analysis sends your resume and this job&apos;s description to our AI provider to generate tailored suggestions. This only happens for premium actions you explicitly run, and you can withdraw consent anytime in Settings → Privacy.
+              Premium analysis sends your resume and this job&apos;s description to our AI provider to generate tailored suggestions. This only happens for premium actions you explicitly run, and you can withdraw consent anytime by contacting support.
             </p>
 
             {consentError && (

@@ -10,6 +10,7 @@ import WizardStepResume from "./wizard/WizardStepResume";
 import WizardStepJobDescription from "./wizard/WizardStepJobDescription";
 import WizardStepConfirm from "./wizard/WizardStepConfirm";
 import { WIZARD_OVERVIEW_STYLES } from "./wizard/wizardOverviewStyles";
+import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
 
 import {
   parseResume,
@@ -86,7 +87,6 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
     // previous implementation deleted these values on every route remount,
     // which made ordinary in-app navigation destroy the user's work.
     try {
-      sessionStorage.removeItem("jm_skipWizard");
       if (!sessionId && sessionStorage.getItem("jm_matchResults")) {
         return "analysis";
       }
@@ -309,10 +309,12 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       setParsedJDData(jdParsed);
 
       try {
-        sessionStorage.setItem("jm_matchResults", JSON.stringify(newMatchResults));
-        sessionStorage.setItem("jm_parsedResumeData", JSON.stringify(fullResumeData));
-        sessionStorage.setItem("jm_parsedJDData", JSON.stringify(jdParsed));
-        sessionStorage.setItem("jm_jdText", resolvedJdText);
+        writeJobmatchSessionSnapshot({
+          matchResults: newMatchResults,
+          parsedResumeData: fullResumeData,
+          parsedJDData: jdParsed,
+          jdText: resolvedJdText,
+        });
       } catch {}
 
       setTimeout(() => {

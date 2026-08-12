@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { isJobSaved, toggleJobSaved, recordJobApplication } from "@/utils/jobTracking";
+import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
 import ApplicationModal, { ApplicationData } from "./ApplicationModal";
 import MatchAnalysisModal from "./MatchAnalysisModal";
 import JobPreviewModal from "./JobPreviewModal";
@@ -344,9 +345,8 @@ export default function JobCard(props: JobCardProps) {
 
   // Runs the same free match pipeline the jobmatch page itself runs when a
   // resume_id + jd_id are already known, then seeds its sessionStorage in the
-  // exact shape Overview.tsx expects (see its analyzeMatch()) plus a one-shot
-  // jm_skipWizard flag so it renders results (with resume preview) directly
-  // instead of the upload wizard.
+  // exact shape Overview.tsx expects (see its analyzeMatch()) so it renders
+  // results (with resume preview) directly instead of the upload wizard.
   const handleFixResume = async () => {
     if (isPreparingResumeFix) return;
     persistSkipIfChecked();
@@ -415,11 +415,12 @@ export default function JobCard(props: JobCardProps) {
         duplicate: matchResp?.duplicate,
       };
 
-      sessionStorage.setItem("jm_matchResults", JSON.stringify(newMatchResults));
-      sessionStorage.setItem("jm_parsedResumeData", JSON.stringify(fullResumeData));
-      sessionStorage.setItem("jm_parsedJDData", JSON.stringify(null));
-      sessionStorage.setItem("jm_jdText", props.description || `${props.title} at ${props.company}`);
-      sessionStorage.setItem("jm_skipWizard", "true");
+      writeJobmatchSessionSnapshot({
+        matchResults: newMatchResults,
+        parsedResumeData: fullResumeData,
+        parsedJDData: null,
+        jdText: props.description || `${props.title} at ${props.company}`,
+      });
 
       // Hard navigation, not router.push(): if /jobmatch/app was already
       // visited earlier this session, Next's client-side route cache can

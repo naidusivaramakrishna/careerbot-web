@@ -58,11 +58,28 @@
       if (el && el.innerText.trim().length > 100) return el.innerText.trim();
     }
 
-    // Last resort: find any element with substantial text near "job-details" or "description"
+    // LinkedIn labels this section "About the job" on every layout (standalone
+    // /jobs/view/ page and the /jobs/search-results/ split-pane preview alike),
+    // even when the surrounding CSS class names differ between them — anchoring
+    // on that heading text survives LinkedIn's frequent class renames better
+    // than any fixed selector list.
+    const heading = Array.from(document.querySelectorAll('h1, h2, h3, h4, strong, span, div'))
+      .find(el => el.children.length === 0 && /^about the job$/i.test(el.innerText?.trim() || ''));
+    if (heading) {
+      const container = (heading.parentElement || heading).closest('section, article, div');
+      const text = container?.innerText?.trim();
+      if (text && text.length > 100) return text;
+    }
+
+    // Last resort: find any element with substantial text near "job-details" or
+    // "description". Only reject a candidate if it IS nav/header chrome itself —
+    // not merely because it contains an unrelated nested <nav>/<header> somewhere
+    // deep inside (LinkedIn's card components use those tags for unrelated
+    // sub-widgets, which previously disqualified otherwise-valid candidates).
     const candidates = document.querySelectorAll('article, section, div[id*="job"], div[class*="description"]');
     for (const el of candidates) {
       const text = el.innerText?.trim();
-      if (text && text.length > 200 && !el.querySelector('nav') && !el.querySelector('header')) {
+      if (text && text.length > 200 && el.tagName !== 'NAV' && el.tagName !== 'HEADER') {
         return text;
       }
     }

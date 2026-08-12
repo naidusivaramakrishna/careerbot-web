@@ -17,16 +17,22 @@ const stageLabels: Record<LoadingStage, string> = {
   generating: "Preparing your results",
 };
 
-const loadingMessages = Object.values(stageLabels);
-
 export default function LoadingAnimation({ stage }: { stage: LoadingStage }) {
-  const [messageIndex, setMessageIndex] = useState(() =>
-    loadingMessages.indexOf(stageLabels[stage]),
-  );
+  const activeMessage = stageLabels[stage];
   const [displayedMessage, setDisplayedMessage] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const activeMessage = loadingMessages[messageIndex];
+
+  // stage is authoritative — the caller (Overview.analyzeMatch) advances it
+  // at real milestones (parsing/extracting/matching/scoring/generating). On
+  // a real transition, drop whatever partial text/deletion state was
+  // mid-flight so the typewriter below retypes the new stage's label
+  // cleanly instead of splicing it onto leftover characters from the
+  // previous one.
+  useEffect(() => {
+    setDisplayedMessage("");
+    setIsDeleting(false);
+  }, [stage]);
 
   useEffect(() => {
     // This isn't wired to real backend progress, so it must never actually
@@ -52,8 +58,11 @@ export default function LoadingAnimation({ stage }: { stage: LoadingStage }) {
       }
 
       if (messageIsEmpty && isDeleting) {
+        // Same stage, no new label yet — retype the same message instead of
+        // advancing to an unrelated one. Cycling through every stage's label
+        // regardless of the real stage is what made this decorative instead
+        // of reflecting actual progress.
         setIsDeleting(false);
-        setMessageIndex((current) => (current + 1) % loadingMessages.length);
         return;
       }
 

@@ -186,6 +186,10 @@ export default function JobsContents() {
   // ── Saved tab — fetched by id so it works regardless of which tab/page a job was saved from ──
   const [savedJobsList, setSavedJobsList] = useState<NormalizedJob[]>([]);
   const [savedJobsListLoading, setSavedJobsListLoading] = useState(false);
+  // Bumped on every fetchSavedJobsList call so a superseded fetch (e.g. the
+  // user unsaves/re-saves while enrichment is still in flight) can tell its
+  // own result is stale and discard it instead of merging into the wrong rows.
+  const savedJobsFetchTokenRef = useRef(0);
 
   // ── Applied tab — same fetch-by-id pattern as Saved, backed by the local application history ──
   const [appliedJobsList, setAppliedJobsList] = useState<NormalizedJob[]>([]);
@@ -357,6 +361,7 @@ export default function JobsContents() {
   //    backend-side. Falling back to null on a failed lookup would silently
   //    drop those jobs from the list even though they're genuinely saved. ──
   const fetchSavedJobsList = useCallback(async () => {
+    const token = ++savedJobsFetchTokenRef.current;
     const saved = getSavedJobs(userId);
     // Re-derive the badge from the same read so it can never drift from the
     // list actually shown here, even if some other path missed a save/unsave.
@@ -390,9 +395,18 @@ export default function JobsContents() {
           }
         })
       );
-      setSavedJobsList((prev) => prev.map((job, i) => enriched[i] ?? job));
+      // A concurrent unsave/re-save (handleSaveToggle) or another
+      // fetchSavedJobsList call can change the saved list's contents/length
+      // while these awaits are in flight. Bail if a newer fetch has since
+      // superseded this one, and key the merge by id rather than index —
+      // otherwise a mid-flight unsave shifts prev's rows out from under this
+      // array and enriched[i] lands on the wrong job (e.g. B receiving A's
+      // title/company after A was unsaved).
+      if (savedJobsFetchTokenRef.current !== token) return;
+      const byId = new Map(saved.map((job, i) => [job.jobId, enriched[i]]));
+      setSavedJobsList((prev) => prev.map((job) => byId.get(job.id) ?? job));
     } finally {
-      setSavedJobsListLoading(false);
+      if (savedJobsFetchTokenRef.current === token) setSavedJobsListLoading(false);
     }
   }, [userId]);
 
@@ -514,14 +528,43 @@ export default function JobsContents() {
   const handleSaveToggle = useCallback((jobId: string, saved: boolean) => {
     if (saved) {
       // localStorage is updated synchronously by JobCard before this callback,
-      // so refresh from the source of truth immediately. This keeps the Saved
-      // list and badge ready even before the user switches tabs.
-      void fetchSavedJobsList();
+      // so read the new record straight from the source of truth. Append just
+      // this one placeholder and enrich only this one id — calling the full
+      // fetchSavedJobsList() here would re-run getJobById for every already-
+      // saved job (potentially dozens) just to add one, including while the
+      // Saved tab isn't even the active/rendered tab. The full fetch still
+      // runs when the Saved tab is actually (re)activated, below.
+      const savedRecord = getSavedJobs(userId).find((job) => job.jobId === jobId);
+      setSavedJobsCount((c) => c + 1);
+      if (!savedRecord) return;
+
+      const placeholder = normalizeJob({
+        id: savedRecord.jobId,
+        title: savedRecord.title,
+        company: savedRecord.company,
+        location: savedRecord.location,
+        type: savedRecord.type,
+        created_at: savedRecord.savedAt,
+      });
+      setSavedJobsList((prev) => (prev.some((job) => job.id === jobId) ? prev : [...prev, placeholder]));
+
+      (async () => {
+        try {
+          const res = await getJobById(jobId);
+          if (res.data) {
+            const full = normalizeJob(res.data as unknown as Record<string, unknown>);
+            setSavedJobsList((prev) => prev.map((job) => (job.id === jobId ? full : job)));
+          }
+        } catch {
+          // Keep the placeholder — same reasoning as fetchSavedJobsList: a
+          // failed lookup shouldn't drop a job that's genuinely saved.
+        }
+      })();
     } else {
       setSavedJobsCount((c) => Math.max(0, c - 1));
       setSavedJobsList((prev) => prev.filter((job) => job.id !== jobId));
     }
-  }, [fetchSavedJobsList]);
+  }, [userId]);
 
   // ── Permanently remove an entry from the Applied tab — deletes the
   //    underlying application record (unlike the Smart Match "Not
