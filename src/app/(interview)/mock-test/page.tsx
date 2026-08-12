@@ -443,64 +443,62 @@ export default function MockTestPage() {
             )}
 
             {/* Your stats */}
-            {analytics && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-                className="bg-white rounded-2xl p-5"
-                style={{ border: '1px solid rgba(15,23,42,0.07)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] mb-4" style={{ color: '#64748B' }}>Your stats</p>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Tests</p>
-                    <p className="text-[22px] font-bold tabular-nums mt-0.5 tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
-                      {analytics.total_tests ?? '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Avg accuracy</p>
-                    <p
-                      className="text-[22px] font-bold tabular-nums mt-0.5 tracking-tight"
-                      style={{
-                        background: BRAND_BLUE,
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                        backgroundClip: 'text',
-                        letterSpacing: '-0.02em',
-                      }}
-                    >
-                      {avgPct}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Best score</p>
-                    <p className="text-[22px] font-bold tabular-nums mt-0.5 tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
-                      {analytics.best_score ?? '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Trend</p>
-                    <p
-                      className="text-[18px] font-bold mt-0.5 flex items-center gap-1.5 tracking-tight"
-                      style={{
-                        color: analytics.improvement_trend === 'improving'
-                          ? '#10B981'
-                          : analytics.improvement_trend === 'declining'
-                            ? '#DC2626'
-                            : '#475569',
-                        letterSpacing: '-0.02em',
-                      }}
-                    >
-                      {analytics.improvement_trend === 'improving' && (<><TrendingUp size={16} /> Up</>)}
-                      {analytics.improvement_trend === 'declining' && (<><TrendingDown size={16} /> Down</>)}
-                      {(!analytics.improvement_trend || analytics.improvement_trend === 'stable') && 'Stable'}
-                    </p>
-                  </div>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="bg-white rounded-2xl p-5"
+              style={{ border: '1px solid rgba(15,23,42,0.07)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] mb-4" style={{ color: '#64748B' }}>Your stats</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Tests</p>
+                  <p className="text-[22px] font-bold tabular-nums mt-0.5 tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
+                    {analytics?.total_tests ?? '—'}
+                  </p>
                 </div>
-              </motion.div>
-            )}
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Avg accuracy</p>
+                  <p
+                    className="text-[22px] font-bold tabular-nums mt-0.5 tracking-tight"
+                    style={{
+                      background: BRAND_BLUE,
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      letterSpacing: '-0.02em',
+                    }}
+                  >
+                    {avgPct}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Best score</p>
+                  <p className="text-[22px] font-bold tabular-nums mt-0.5 tracking-tight" style={{ color: '#0F172A', letterSpacing: '-0.02em' }}>
+                    {analytics?.best_score ?? '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#94A3B8' }}>Trend</p>
+                  <p
+                    className="text-[18px] font-bold mt-0.5 flex items-center gap-1.5 tracking-tight"
+                    style={{
+                      color: analytics?.improvement_trend === 'improving'
+                        ? '#10B981'
+                        : analytics?.improvement_trend === 'declining'
+                          ? '#DC2626'
+                          : '#475569',
+                      letterSpacing: '-0.02em',
+                    }}
+                  >
+                    {analytics?.improvement_trend === 'improving' && (<><TrendingUp size={16} /> Up</>)}
+                    {analytics?.improvement_trend === 'declining' && (<><TrendingDown size={16} /> Down</>)}
+                    {(!analytics?.improvement_trend || analytics?.improvement_trend === 'stable') && 'Stable'}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
 
             {/* Leaderboard */}
             <motion.div
