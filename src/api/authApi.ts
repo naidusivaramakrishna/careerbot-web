@@ -108,9 +108,24 @@ export const signOut = async () => {
   localStorage.removeItem('token_last_refreshed_at');
   localStorage.removeItem('uploaded_resume_filename');
 
-  ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText', 'last_resume_path', 'builder_fresh_start'].forEach(
-    (key) => sessionStorage.removeItem(key)
-  );
+  ['last_resume_path', 'builder_fresh_start'].forEach((key) => sessionStorage.removeItem(key));
+
+  // Job Match session state: sweep by PREFIX, not by allow-list.
+  //
+  // This used to name each jm_* key explicitly, which meant a newly added key
+  // was RETAINED BY DEFAULT. jm_analysisDraft was added with the analysis-draft
+  // feature and never registered here, so an analysis draft built from one
+  // user's resume and JD survived sign-out and was restored on mount for the
+  // next user signing in to the SAME TAB (AnalysisContent.tsx reads it on
+  // mount). sessionStorage is per-tab but explicitly survives logout -> login.
+  //
+  // A prefix sweep cannot drift the way the list did. Every jm_* key is Job
+  // Match session state and none of them may outlive the session.
+  // Iterate backwards: removeItem() re-indexes the store as it goes.
+  for (let i = sessionStorage.length - 1; i >= 0; i--) {
+    const k = sessionStorage.key(i);
+    if (k?.startsWith('jm_')) sessionStorage.removeItem(k);
+  }
   window.location.href = "/";
 };
 
