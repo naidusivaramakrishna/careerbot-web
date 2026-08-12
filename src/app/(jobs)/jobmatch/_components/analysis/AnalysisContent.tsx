@@ -439,6 +439,10 @@ export default function AnalysisContent({
     if (!matchId || !suggestion_id) return false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let res: any;
+    // Set below when the needs_value flow prompts the user for a number —
+    // used to patch the cached suggestion text before mirroring it into the
+    // preview (see the comment near its use further down).
+    let manualValue: string | undefined;
     try {
       res = await runSerially(() => matcherEnhanceApply(matchId, suggestion_id));
     } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -467,6 +471,7 @@ export default function AnalysisContent({
           if (answer !== null) toast.error("Please enter a plain number, e.g. 20.");
           return false;
         }
+        manualValue = numeric;
         try {
           res = await runSerially(() => matcherEnhanceApply(matchId, suggestion_id, "manual", numeric));
         } catch {
@@ -524,7 +529,15 @@ export default function AnalysisContent({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const weak = (starCheck?.weak_bullets ?? []).find((w: any) => w.suggestion_id === suggestion_id);
       const before = weak?.original || penalty?.before_example;
-      const after = weak?.improved || penalty?.after_example;
+      // weak.improved/penalty.after_example are cached from the original
+      // match-analysis call and may still carry the unfilled "n" metric
+      // placeholder (e.g. "...with n+ successful integrations") — the
+      // backend resolves it server-side once a manual value is supplied,
+      // but this cached copy doesn't know that. Substitute it locally so
+      // the preview matches what the backend actually saved (and what the
+      // downloaded resume already shows correctly).
+      const rawAfter = weak?.improved || penalty?.after_example;
+      const after = manualValue ? rawAfter?.replace(/\bn\b/g, manualValue) : rawAfter;
       if (before && after && before !== after) {
         const result = replaceBulletText(resumeSections, before, after);
         if (result.changed.length) {
