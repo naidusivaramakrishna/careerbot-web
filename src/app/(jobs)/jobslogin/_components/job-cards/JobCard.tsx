@@ -325,17 +325,16 @@ export default function JobCard(props: JobCardProps) {
   const sourceLabel = props.source && props.source !== "portal" ? props.source : "";
   const hasMatchScore = !!props.matchScore && Math.round(props.matchScore) > 0;
 
-  // Smart Match jobs with a weak, fixable match get a "customize your resume
-  // first?" gate before applying — reuses the match/skill-gap data already on
-  // the card (no extra API call). Jobs without match data skip straight to
-  // the normal Apply Now flow.
+  // Smart Match jobs below an 80% match get a "customize your resume first?"
+  // gate before applying — reuses the match/skill-gap data already on the
+  // card (no extra API call). Jobs without match data, or a match already at
+  // 80%+, skip straight to the normal Apply Now flow.
   const missingSkillsForPrompt = props.missing_skills ?? [];
   const shouldPromptResumeCustomize =
     hasMatchScore &&
     !!externalUrl &&
     !skipResumePrompt &&
-    (props.match_band === "low" || props.match_band === "partial") &&
-    missingSkillsForPrompt.length > 0;
+    Math.round(props.matchScore ?? 0) < 80;
 
   const persistSkipIfChecked = () => {
     if (!dontRemindAgain) return;

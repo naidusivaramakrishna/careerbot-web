@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { getSmartMatchedJobs, getJobById } from "@/api/jobsApi";
 import type { MatchedJobItem } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/filterConstants";
+import { WORK_MODELS, JOB_TYPES, DATE_PRESETS } from "./filters/filterConstants";
 import { toast } from "sonner";
 import { getSavedJobs, getSavedJobsCount, getApplicationHistory, getApplicationCount, recordJobApplication, removeApplication } from "@/utils/jobTracking";
 import { getJobId } from "@/utils/jobIdHelper";
@@ -276,6 +277,36 @@ export default function JobsContents() {
   const [selectedJob, setSelectedJob] = useState<NormalizedJob | null>(null);
 
   // ── Smart match ──
+  // The subset of active filters that map onto /jobs/scored's own query
+  // params — only pushed server-side when unambiguous (the backend takes a
+  // single string per field, not a list) and semantically identical to what
+  // the filter means here. Experience/years is deliberately excluded: the
+  // frontend's filter means "jobs requiring this many years," but the
+  // backend's experience_years param means "the candidate's own years —
+  // return jobs they qualify for," a different axis entirely. Salary,
+  // Education, and Source have no server-side equivalent on this endpoint.
+  // Everything here still gets re-applied client-side afterward via
+  // matchesJobFilters, same as before, so this can only narrow the search
+  // further (to the whole pool) — never behave worse than today.
+  const matchedServerFilters = useMemo(() => {
+    const workModels = WORK_MODELS.filter((m) => selectedFilters.includes(m));
+    const jobTypes = JOB_TYPES.filter((t) => selectedFilters.includes(t));
+    const locations = selectedFilters
+      .filter((f) => f.startsWith("location:"))
+      .map((f) => f.replace("location:", ""));
+    const dateLabel = selectedFilters.find((f) => f.startsWith("date:"))?.replace("date:", "");
+    const datePreset = DATE_PRESETS.find((p) => p.label === dateLabel);
+
+    const params: { mode?: string; job_type?: string; location?: string; posted_within_days?: number; query?: string } = {};
+    if (workModels.length === 1) params.mode = workModels[0].toLowerCase();
+    if (jobTypes.length === 1) params.job_type = jobTypes[0].toLowerCase();
+    if (locations.length === 1) params.location = locations[0];
+    if (datePreset?.days) params.posted_within_days = datePreset.days;
+    if (searchQuery.trim()) params.query = searchQuery.trim();
+    return params;
+  }, [selectedFilters, searchQuery]);
+  const matchedServerFiltersKey = JSON.stringify(matchedServerFilters);
+
   const [matchedJobs, setMatchedJobs] = useState<NormalizedJob[]>([]);
   const [matchedTotal, setMatchedTotal] = useState(0);
   const [matchedPage, setMatchedPage] = useState(1);
@@ -314,6 +345,7 @@ export default function JobsContents() {
       const data = await getSmartMatchedJobs({
         limit: MATCHED_PER_PAGE,
         skip: (page - 1) * MATCHED_PER_PAGE,
+        ...matchedServerFilters,
         ...(force && { force_refresh: true }),
       });
       // A malformed/unexpected response shape (e.g. the backend contract
@@ -349,7 +381,7 @@ export default function JobsContents() {
     } finally {
       setMatchedLoading(false);
     }
-  }, [matchedFetched, matchedPage]);
+  }, [matchedFetched, matchedPage, matchedServerFilters]);
 
   // ── Fetch full details for saved jobs by id — works regardless of which
   //    tab/page a job was originally saved from, unlike filtering the
@@ -595,6 +627,27 @@ export default function JobsContents() {
       fetchAppliedJobsList();
     }
   }, [activeTab, matchedFetched, fetchSmartMatchedJobs, fetchSavedJobsList, fetchAppliedJobsList]);
+
+  // ── Re-fetch from the server when a server-mappable filter changes (Work
+  //    Model, Job Type, Location, Date Posted, or the search box) — without
+  //    this, filtering only ever narrowed whichever page was already loaded,
+  //    missing matches sitting on unfetched pages. Skipped on mount (the
+  //    effect above owns the first fetch) and only while Smart Match is the
+  //    active tab. ──
+  const matchedFilterMountRef = useRef(true);
+  useEffect(() => {
+    if (matchedFilterMountRef.current) {
+      matchedFilterMountRef.current = false;
+      return;
+    }
+    if (activeTab !== "matched" || !matchedFetched) return;
+    fetchSmartMatchedJobs(1, true);
+    // matchedServerFiltersKey (a stable serialization of matchedServerFilters)
+    // is the real change signal — fetchSmartMatchedJobs is intentionally
+    // omitted so it recreating for an unrelated reason (e.g. matchedPage
+    // changing while paginating) doesn't also trigger a refetch here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedServerFiltersKey]);
 
   // ── Top Picks — real recommendations, sorted by match score ──
   const topPickJobs = useMemo(
