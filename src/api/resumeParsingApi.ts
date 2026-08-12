@@ -397,6 +397,7 @@ export interface ResumeExtractResponse {
         declaration?: string[];
         personal_details?: string[];
         strengths?: string[];
+        professional_strengths?: string[];
         hobbies_and_interests?: string[];
         volunteering?: string[];
         workshops?: string[];

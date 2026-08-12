@@ -12,7 +12,7 @@ export default function CoverLetterEmpty({ hasLetters = false }: { hasLetters?: 
           <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7] 2xl:mt-6 2xl:text-xs">
             Preview mode
           </p>
-          <h2 className="mt-2 text-[24px] font-black tracking-tight text-slate-950 2xl:text-3xl">Select a cover letter</h2>
+          <h2 className="mt-2 text-[24px] font-bold tracking-tight text-slate-950 2xl:text-3xl">Select a cover letter</h2>
           <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-600 2xl:text-base 2xl:leading-7">
             Choose a saved letter from the library to preview the draft, export it, or continue review.
           </p>
@@ -31,7 +31,7 @@ export default function CoverLetterEmpty({ hasLetters = false }: { hasLetters?: 
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7] 2xl:text-xs">
             No saved letters
           </p>
-          <h2 className="mt-2 text-[24px] font-black tracking-tight text-slate-950 2xl:text-3xl">
+          <h2 className="mt-2 text-[24px] font-bold tracking-tight text-slate-950 2xl:text-3xl">
             Create your first cover letter
           </h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">

@@ -187,7 +187,6 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             if (mapped?.personalInformation) {
                 const personalPayload = {
                     full_name: mapped.personalInformation.fullName,
-                    email: mapped.personalInformation.email,
                     phone_number: mapped.personalInformation.phone,
                     headline: mapped.personalInformation.headline || "Software developer",
                     location: mapped.personalInformation.location,
@@ -336,13 +335,22 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 certifications: updatedCertifications || [],
             }));
 
+            if (mapped?.personalInformation?.fullName && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('profileUpdated', {
+                    detail: { full_name: mapped.personalInformation.fullName },
+                }));
+            }
+
             toast.success("Resume imported successfully!", { id: "resume-upload" });
 
             // Store the file after the full import succeeds (intentional trade-off:
             // if any profile-save step above throws, resume_url is not persisted —
             // this is preferred over storing a file whose data was never applied).
             uploadResume(file)
-                .then((res) => { if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url })); })
+                .then((res) => {
+                    if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url }));
+                    localStorage.setItem('uploaded_resume_filename', file.name);
+                })
                 .catch((err) => {
                     logger.warn("Resume file storage failed:", err);
                     toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
@@ -430,7 +438,6 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             if (mapped?.personalInformation) {
                 await updateProfile({
                     full_name: mapped.personalInformation.fullName,
-                    email: mapped.personalInformation.email,
                     phone_number: mapped.personalInformation.phone,
                     location: mapped.personalInformation.location,
                     headline: "Software Developer",
@@ -529,6 +536,12 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     project_link: p?.project_link || '',
                 })),
             }));
+
+            if (mapped?.personalInformation?.fullName && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('profileUpdated', {
+                    detail: { full_name: mapped.personalInformation.fullName },
+                }));
+            }
 
             toast.success("LinkedIn imported successfully!", { id: "linkedin-import" });
 

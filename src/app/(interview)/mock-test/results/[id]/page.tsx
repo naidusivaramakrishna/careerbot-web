@@ -4,7 +4,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { Brain, BookOpen, Calculator, BarChart3, ChevronRight, RotateCcw, CheckCircle, LogOut } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState, useEffect, useMemo } from 'react';
-import { getParentSessionResult, getSessionById, TestResult, SessionMetadata } from '@/api/mockTestApi';
+import { getParentSessionResult, getSessionById, getSessionVideoEvaluation, TestResult, SessionMetadata, MockTestResultError, ResultErrorDiagnostics, VideoEvaluation } from '@/api/mockTestApi';
 import { resolveCompanyInfo, resolveCompanyId } from '@/lib/mockTestConstants';
 
 const sectionIconMap: Record<string, React.ElementType> = {
@@ -13,7 +13,44 @@ const sectionIconMap: Record<string, React.ElementType> = {
   'Aptitude':          Calculator,
 };
 
-type TabId = 'analysis' | 'review';
+type TabId = 'analysis' | 'review' | 'proctoring';
+
+/**
+ * Resolve a stored answer to the full option text.
+ *
+ * The runner submits the candidate's choice as a bare letter ("B"), while the
+ * options and correct_answer carry the full label ("B. 20%"). A plain equality
+ * check therefore never matched the candidate's pick, so their selected option
+ * was never highlighted and "Your answer" showed a lone letter. Handles: exact
+ * text, bare letter, "B." / "B)" prefixes, and case-insensitive text.
+ */
+function resolveOptionText(value: string | undefined | null, options: string[]): string | null {
+  if (!value) return null;
+  const v = String(value).trim();
+  if (!v) return null;
+
+  const exact = options.find(o => o === v);
+  if (exact) return exact;
+
+  const byLetter = (letter: string): string | null => {
+    const idx = letter.toUpperCase().charCodeAt(0) - 65;
+    return idx >= 0 && idx < options.length ? options[idx] : null;
+  };
+
+  if (/^[A-Za-z]$/.test(v)) {
+    const hit = byLetter(v);
+    if (hit) return hit;
+  }
+
+  const prefixed = v.match(/^([A-Za-z])\s*[.)]\s*/);
+  if (prefixed) {
+    const hit = byLetter(prefixed[1]);
+    if (hit) return hit;
+  }
+
+  const ci = options.find(o => o.trim().toLowerCase() === v.toLowerCase());
+  return ci ?? null;
+}
 
 export default function MockTestResultsPage() {
   const router = useRouter();
@@ -32,9 +69,16 @@ export default function MockTestResultsPage() {
   const testInfo = resolveCompanyInfo(testId);
 
   const [result, setResult] = useState<TestResult | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('analysis');
+  // Deep-linkable tab, so History can send a candidate straight to their answers
+  // and explanations instead of landing them on the score summary.
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<TabId>(
+    tabParam === 'review' ? 'review' : tabParam === 'proctoring' ? 'proctoring' : 'analysis',
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorInfo, setErrorInfo] = useState<ResultErrorDiagnostics | null>(null);
+  const [videoEvaluation, setVideoEvaluation] = useState<VideoEvaluation | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [sessionMetadata, setSessionMetadata] = useState<SessionMetadata | null>(null);
 
@@ -53,6 +97,10 @@ export default function MockTestResultsPage() {
         setError(null);
       } catch (err: unknown) {
         setError((err as { message?: string })?.message || 'Failed to load test results');
+        // Keep the server-side identifiers so a failure can be traced in the
+        // backend log from a screenshot alone.
+        setErrorInfo((err as MockTestResultError)?.diagnostics ?? null);
+        console.error('[results] failed to load report:', err);
       } finally {
         setLoading(false);
       }
@@ -66,11 +114,49 @@ export default function MockTestResultsPage() {
     fetchMeta();
   }, [sessionId]);
 
+  // Proctoring evaluation. Keyed off the parent session — the same id the runner
+  // uploads under. Absent (null) simply means this attempt had no recording, which
+  // is not an error worth surfacing.
+  useEffect(() => {
+    if (!parentSessionId) return;
+    let cancelled = false;
+
+    // The recording uploads in the background after submit and the AI evaluator
+    // can take a while, so it is normally NOT ready when this page first loads.
+    // Poll for a few minutes so the Proctoring tab appears on its own instead of
+    // requiring a manual refresh. Gives up quietly — a missing evaluation is not
+    // an error worth showing.
+    const POLL_DELAY_MS = 20_000;
+    const MAX_ATTEMPTS = 9;
+
+    (async () => {
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS && !cancelled; attempt++) {
+        try {
+          const evaluation = await getSessionVideoEvaluation(parentSessionId);
+          if (cancelled) return;
+          if (evaluation) { setVideoEvaluation(evaluation); return; }
+        } catch (err) {
+          console.error('[results] video evaluation fetch failed:', err);
+          return;
+        }
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(resolve => setTimeout(resolve, POLL_DELAY_MS));
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [parentSessionId, refreshKey]);
+
   const totalScore     = result?.total_score ?? 0;
   const totalQuestions = result?.total_questions ?? 0;
   const accuracy       = totalQuestions > 0 ? Math.round((totalScore / totalQuestions) * 100) : 0;
 
   const sections = result?.sections ?? [];
+
+  // The proctoring panel only exists once an evaluation has been stored, so a
+  // deep link to it before the upload lands would otherwise render a blank body.
+  const effectiveTab: TabId = activeTab === 'proctoring' && !videoEvaluation ? 'analysis' : activeTab;
 
   const resultDate = sessionMetadata?.created_at
     ? new Date(sessionMetadata.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()
@@ -94,11 +180,47 @@ export default function MockTestResultsPage() {
         <div className="w-16 h-16 rounded-full bg-red-100 border border-red-200 flex items-center justify-center">
           <span className="text-3xl">⚠️</span>
         </div>
-        <div className="text-center max-w-md">
+        <div className="text-center max-w-lg w-full">
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Unable to Load Results</h2>
-          <p className="text-slate-500 mb-8">{error}</p>
+          <p className="text-slate-500 mb-5">{error}</p>
+
+          {/* Server-side identifiers. Printed on screen so a bug report or
+              screenshot is enough to find the exact failure in the backend log —
+              previously this panel showed only the generic headline. */}
+          {errorInfo && (
+            <div className="mb-6 text-left rounded-xl border p-4" style={{ background: '#F8FAFC', borderColor: '#E2E8F0' }}>
+              <p className="text-[10px] font-bold tracking-widest uppercase mb-2" style={{ color: '#94A3B8' }}>
+                Diagnostics — include this when reporting
+              </p>
+              <dl className="text-xs font-mono space-y-1" style={{ color: '#475569' }}>
+                {([
+                  ['status',     String(errorInfo.status ?? '—')],
+                  ['error_code', errorInfo.errorCode],
+                  ['error_id',   errorInfo.errorId],
+                  ['request_id', errorInfo.requestId],
+                  ['parent',     errorInfo.parentSessionId],
+                  ['attempts',   String(errorInfo.attempts)],
+                ] as [string, string | undefined][])
+                  .filter(([, v]) => v)
+                  .map(([k, v]) => (
+                    <div key={k} className="flex gap-2">
+                      <dt className="shrink-0" style={{ color: '#94A3B8' }}>{k}:</dt>
+                      <dd className="break-all">{v}</dd>
+                    </div>
+                  ))}
+              </dl>
+              <button
+                onClick={() => navigator.clipboard?.writeText(JSON.stringify({ message: error, ...errorInfo }, null, 2))}
+                className="mt-3 text-[11px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-md border transition hover:bg-white"
+                style={{ borderColor: '#CBD5E1', color: '#475569' }}
+              >
+                Copy details
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3">
-            <button onClick={() => window.location.reload()} className="px-6 py-3 bg-[#1e3a8a] text-white font-semibold rounded-xl hover:bg-[#172554] transition">Retry</button>
+            <button onClick={() => { setError(null); setErrorInfo(null); setLoading(true); setRefreshKey(k => k + 1); }} className="px-6 py-3 bg-[#1e3a8a] text-white font-semibold rounded-xl hover:bg-[#172554] transition">Retry</button>
             <button onClick={() => router.push('/mock-test')} className="px-6 py-3 border border-slate-300 text-slate-600 font-semibold rounded-xl hover:bg-white transition">← Back to Mock Tests</button>
           </div>
         </div>
@@ -155,8 +277,11 @@ export default function MockTestResultsPage() {
           {([
             { id: 'analysis',    label: 'Section scores',  badge: null },
             { id: 'review',      label: 'Question review', badge: result?.questions?.length ?? null },
+            // Only offered when a recording was actually evaluated — an empty tab
+            // on every non-proctored attempt would be noise.
+            ...(videoEvaluation ? [{ id: 'proctoring' as TabId, label: 'Proctoring', badge: null }] : []),
           ] as { id: TabId; label: string; badge: string | number | null }[]).map(item => {
-            const active = activeTab === item.id;
+            const active = effectiveTab === item.id;
             return (
               <button
                 key={item.id}
@@ -316,7 +441,7 @@ export default function MockTestResultsPage() {
           >
 
             {/* ANALYSIS — Section breakdown table */}
-            {activeTab === 'analysis' && (
+            {effectiveTab === 'analysis' && (
               <div className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
                 <div className="flex items-center justify-between px-8 py-5 border-b border-slate-100">
                   <div>
@@ -410,7 +535,7 @@ export default function MockTestResultsPage() {
             )}
 
             {/* QUESTION REVIEW */}
-            {activeTab === 'review' && (
+            {effectiveTab === 'review' && (
               <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                 <h3 className="font-bold text-slate-900 mb-1">Question Review</h3>
                 <p className="text-slate-400 text-sm mb-6">
@@ -420,15 +545,24 @@ export default function MockTestResultsPage() {
                 </p>
                 {result?.questions && result.questions.length > 0 ? (
                   <div className="space-y-4">
-                    {result.questions.map((q, idx) => (
-                      <div key={`${q.question_id}-${idx}`} className={`rounded-xl border-2 overflow-hidden ${q.is_correct ? 'border-emerald-300' : 'border-red-300'}`}>
-                        <div className={`flex items-center justify-between px-5 py-3 ${q.is_correct ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                    {result.questions.map((q, idx) => {
+                      const opts        = q.options ?? [];
+                      const chosenText  = resolveOptionText(q.user_answer, opts);
+                      const correctText = resolveOptionText(q.correct_answer, opts) ?? q.correct_answer;
+                      return (
+                      <div key={`${q.question_id}-${idx}`} className={`rounded-xl border-2 overflow-hidden ${q.is_correct ? 'border-emerald-300' : !q.user_answer ? 'border-amber-300' : 'border-red-300'}`}>
+                        <div className={`flex items-center justify-between px-5 py-3 ${q.is_correct ? 'bg-emerald-50' : !q.user_answer ? 'bg-amber-50' : 'bg-red-50'}`}>
                           <div className="flex items-center gap-2">
+                            {/* Skipped questions now reach the report too, and calling
+                                them "Incorrect" would misrepresent them — the user
+                                never answered, they didn't get it wrong. */}
                             {q.is_correct
                               ? <CheckCircle size={16} className="text-emerald-600" />
-                              : <span className="text-red-500 font-bold text-base leading-none">✗</span>}
-                            <span className={`text-sm font-bold ${q.is_correct ? 'text-emerald-700' : 'text-red-600'}`}>
-                              Q{idx + 1} — {q.is_correct ? 'Correct' : 'Incorrect'}
+                              : !q.user_answer
+                                ? <span className="text-amber-500 font-bold text-base leading-none">–</span>
+                                : <span className="text-red-500 font-bold text-base leading-none">✗</span>}
+                            <span className={`text-sm font-bold ${q.is_correct ? 'text-emerald-700' : !q.user_answer ? 'text-amber-600' : 'text-red-600'}`}>
+                              Q{idx + 1} — {q.is_correct ? 'Correct' : !q.user_answer ? 'Not answered' : 'Incorrect'}
                             </span>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-slate-400">
@@ -445,14 +579,28 @@ export default function MockTestResultsPage() {
                           {q.options.length > 0 && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                               {q.options.map((opt, oi) => {
-                                const isCorrect   = opt === q.correct_answer;
-                                const isUserWrong = opt === q.user_answer && !q.is_correct;
+                                // Resolved, so a letter-coded answer still matches its option.
+                                const isCorrect  = opt === correctText;
+                                const isUserPick = opt === chosenText;
+                                const isUserWrong = isUserPick && !q.is_correct;
                                 return (
                                   <div key={oi} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm ${isCorrect ? 'border-emerald-400 bg-emerald-50 text-emerald-800 font-semibold' : isUserWrong ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-100 bg-slate-50 text-slate-600'}`}>
                                     {isCorrect   && <CheckCircle size={13} className="text-emerald-600 shrink-0" />}
                                     {isUserWrong && <span className="text-red-500 font-bold shrink-0">✗</span>}
                                     {!isCorrect && !isUserWrong && <span className="w-3.5 shrink-0" />}
-                                    {opt}
+                                    <span className="flex-1">{opt}</span>
+                                    {/* Label the candidate's pick explicitly — colour alone
+                                        does not say "this is what they chose". */}
+                                    {isUserPick && (
+                                      <span
+                                        className="text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded shrink-0"
+                                        style={isCorrect
+                                          ? { background: '#d1fae5', color: '#065f46' }
+                                          : { background: '#fee2e2', color: '#991b1b' }}
+                                      >
+                                        Chosen
+                                      </span>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -460,13 +608,17 @@ export default function MockTestResultsPage() {
                           )}
                           <div className="flex flex-wrap gap-4 text-xs">
                             <div>
-                              <span className="text-slate-400 font-semibold uppercase tracking-wide">Your answer: </span>
-                              <span className={`font-bold ${q.is_correct ? 'text-emerald-600' : 'text-red-500'}`}>{q.user_answer || '(not answered)'}</span>
+                              <span className="text-slate-400 font-semibold uppercase tracking-wide">Candidate answered: </span>
+                              {/* Full option text, not the stored letter — "B" alone
+                                  tells a reviewer nothing about what was chosen. */}
+                              <span className={`font-bold ${q.is_correct ? 'text-emerald-600' : !q.user_answer ? 'text-amber-600' : 'text-red-500'}`}>
+                                {chosenText ?? (q.user_answer || 'Not answered')}
+                              </span>
                             </div>
                             {!q.is_correct && (
                               <div>
                                 <span className="text-slate-400 font-semibold uppercase tracking-wide">Correct: </span>
-                                <span className="font-bold text-emerald-600">{q.correct_answer}</span>
+                                <span className="font-bold text-emerald-600">{correctText}</span>
                               </div>
                             )}
                           </div>
@@ -504,7 +656,8 @@ export default function MockTestResultsPage() {
                           )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -532,6 +685,65 @@ export default function MockTestResultsPage() {
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* PROCTORING — AI evaluation of the recorded attempt */}
+            {effectiveTab === 'proctoring' && videoEvaluation && (
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <h3 className="font-bold text-slate-900 mb-1">Proctoring Review</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Automated review of the recording captured during this attempt.
+                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+                  {[
+                    { label: 'Duration', value: videoEvaluation.duration_seconds
+                        ? `${Math.floor(videoEvaluation.duration_seconds / 60)}m ${Math.round(videoEvaluation.duration_seconds % 60)}s`
+                        : '—' },
+                    { label: 'Recorded', value: videoEvaluation.created_at
+                        ? new Date(videoEvaluation.created_at).toLocaleString()
+                        : '—' },
+                    { label: 'File', value: videoEvaluation.filename || '—' },
+                  ].map(stat => (
+                    <div key={stat.label} className="rounded-xl p-3" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                      <p className="text-[10px] font-bold tracking-widest uppercase mb-1" style={{ color: '#94A3B8' }}>{stat.label}</p>
+                      <p className="text-sm font-semibold break-all" style={{ color: '#0F172A' }}>{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* `result` is passed through from the AI service unchanged so new
+                    fields reach the UI without a release — render whatever scalar
+                    fields it carries rather than hardcoding a shape that may drift. */}
+                {(() => {
+                  const rows = Object.entries(videoEvaluation.result ?? {}).filter(
+                    ([k, v]) =>
+                      !['evaluation_id', 'test_id', 'filename', 'duration_seconds', 'timestamp'].includes(k) &&
+                      (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'),
+                  );
+                  if (rows.length === 0) {
+                    return (
+                      <div className="rounded-xl px-5 py-4" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                        <p className="text-sm" style={{ color: '#475569' }}>
+                          The recording was uploaded and accepted. No detailed findings were returned for this attempt.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <dl className="space-y-2">
+                      {rows.map(([key, value]) => (
+                        <div key={key} className="flex items-start justify-between gap-4 py-2 border-b" style={{ borderColor: '#F1F5F9' }}>
+                          <dt className="text-sm font-semibold capitalize" style={{ color: '#475569' }}>
+                            {key.replace(/[_-]+/g, ' ')}
+                          </dt>
+                          <dd className="text-sm text-right break-words" style={{ color: '#0F172A' }}>{String(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  );
+                })()}
               </div>
             )}
 

@@ -252,10 +252,12 @@ client.interceptors.response.use(
       if (isSessionFresh() || skipLoginRedirect) {
         return Promise.reject(error);
       }
+      const signingOutTimestamp = sessionStorage.getItem('__signing_out');
+      const isSigningOut = signingOutTimestamp && Date.now() - parseInt(signingOutTimestamp, 10) < 5000;
       clearAllTokens();
       if (isAdmin) {
         window.location.href = '/admin/login';
-      } else {
+      } else if (!isSigningOut) {
         window.location.href = getUserLoginHref();
       }
       return Promise.reject(error);
@@ -317,10 +319,12 @@ client.interceptors.response.use(
       }
 
       processQueue(refreshError, null, isAdmin);
+      const signingOutTimestamp = sessionStorage.getItem('__signing_out');
+      const isSigningOut = signingOutTimestamp && Date.now() - parseInt(signingOutTimestamp, 10) < 5000;
       clearAllTokens();
       if (isAdmin) {
         window.location.href = '/admin/login';
-      } else {
+      } else if (!isSigningOut) {
         window.location.href = getUserLoginHref();
       }
       return Promise.reject(refreshError);

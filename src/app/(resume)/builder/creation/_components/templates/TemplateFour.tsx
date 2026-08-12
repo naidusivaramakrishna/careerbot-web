@@ -372,7 +372,7 @@ const TemplateFour: React.FC<Props> = ({ data, onPageCountChange }) => {
               {/* comma_separated: each category on its own line as "Label: item1, item2" */}
               {data.categorizedSkills ? (
                 <div style={baseTextStyle}>
-                  {(["programming_languages","frameworks","databases","tools","cloud_platforms","soft_skills"] as const).map((key) => {
+                  {(["programming_languages","frameworks","soft_skills","project_management","marketing_sales"] as const).map((key) => {
                     const categorySkills = data.categorizedSkills![key];
                     if (!categorySkills || categorySkills.length === 0) return null;
                     const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");

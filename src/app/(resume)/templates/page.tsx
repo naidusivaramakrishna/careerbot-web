@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP } from '@/app/(resume)/builder/creation/_utils/templateStyles';
 import type { HeaderLayout } from '@/app/(resume)/builder/creation/_utils/templateStyles';
 import CatalogueThumbnail, { CATALOGUE_PALETTES, CODE_THUMBNAIL_CATALOGUES } from '@/app/browse-templates/_components/CatalogueThumbnail';
+import { DOMAIN_DISPLAY_NAMES } from '@/app/browse-templates/_data/constants';
 import Template1 from '@/app/(resume)/templates/Template1';
 import { type ResumeData, type ResumeStyle } from '@/app/(resume)/builder/creation/_context/ResumeContext';
 
@@ -37,141 +38,6 @@ import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from './_constants/temp
 import { resolveTemplateImageUrl } from '@/lib/imageUtils';
 
 const TRUST_BADGES = ['100% ATS Friendly', '14+ Industries', '100+ Templates'];
-
-const DOMAIN_DISPLAY_NAMES: Record<string, string> = {
-  // Engineering domains
-  aerospace_engineering: 'Aerospace Engineer',
-  automotive_engineering: 'Automotive Engineer',
-  chemical_engineering: 'Chemical Engineer',
-  civil_engineering: 'Civil Engineer',
-  construction_engineering: 'Construction Engineer',
-  devops_engineering: 'DevOps Engineer',
-  embedded_systems: 'Embedded Systems Engineer',
-  marine_engineering: 'Marine Engineer',
-  mechanical_engineering: 'Mechanical Engineer',
-  naval_architecture: 'Naval Architect',
-  semiconductor: 'Semiconductor Engineer',
-  vlsi_design: 'VLSI Design Engineer',
-  robotics: 'Robotics Engineer',
-  plc_scada: 'PLC/SCADA Engineer',
-
-  // Education domains
-  professor: 'Professor',
-  associate_professor: 'Associate Professor',
-  assistant_professor: 'Assistant Professor',
-  senior_lecturer: 'Senior Lecturer',
-  lecturer: 'Lecturer',
-  senior_teacher: 'Senior Teacher',
-  principal_teacher: 'Principal Teacher',
-  teacher: 'Teacher',
-  visiting_faculty: 'Visiting Faculty',
-  academic_dean: 'Academic Dean',
-  academic_researcher: 'Academic Researcher',
-  education_director: 'Education Director',
-  education_coordinator: 'Education Coordinator',
-  department_head: 'Department Head',
-
-  // Healthcare domains
-  doctor_physician: 'Doctor/Physician',
-  surgeon: 'Surgeon',
-  clinical_nurse: 'Clinical Nurse',
-  pharmacist: 'Pharmacist',
-  physiotherapist: 'Physiotherapist',
-  radiologist: 'Radiologist',
-  medical_lab_scientist: 'Medical Lab Scientist',
-  healthcare_administrator: 'Healthcare Administrator',
-  clinical_trials: 'Clinical Trials Specialist',
-  life_sciences: 'Life Sciences Professional',
-
-  // IT & Technology domains
-  software_engineering: 'Software Engineer',
-  data_science: 'Data Scientist',
-  cloud_computing: 'Cloud Computing Specialist',
-  cybersecurity: 'Cybersecurity Specialist',
-  application_security: 'Application Security Engineer',
-  security_engineers: 'Security Engineer',
-  incident_response: 'Incident Response Specialist',
-  penetration_testers: 'Penetration Tester',
-  soc_analysts: 'SOC Analyst',
-  digital_forensics: 'Digital Forensics Specialist',
-  information_technology: 'IT Professional',
-  computer_science_engineering: 'Computer Science Engineer',
-  computer_applications: 'Computer Applications Specialist',
-  iot: 'IOT Engineer',
-  ux_ui_design: 'UX/UI Designer',
-  web_development: 'Web Development',
-  full_stack_development: "Full Stack Developer",
-  mobile_development: "Mobile Developer",
-  cloud_engineering: 'Cloud Engineer',
-  devops: 'DevOps Engineer',
-  machine_learning: 'Machine Learning',
-
-  // Finance domains
-  accounting: 'Accountant',
-  financial_planning: 'Financial Planner',
-  financial_analysis: 'Financial Analyst',
-  investment_banking: 'Investment Banker',
-  corporate_finance: 'Corporate Finance Professional',
-  banking: 'Banking Professional',
-  audit: 'Audit Professional',
-  risk_management: 'Risk Manager',
-  mba_general_management: 'MBA General Management',
-
-  // Legal domains
-  ip_attorneys: 'IP Attorney',
-  law_firms: 'Lawyer/Law Firm Professional',
-  legal_operations: 'Legal Operations Specialist',
-  paralegals: 'Paralegal',
-
-  // HR & Business domains
-  hr: 'HR Professional',
-  account_management: 'Account Manager',
-  sales: 'Sales Professional',
-  marketing: 'Marketing Professional',
-  business_development: 'Business Development Executive',
-  product_management: 'Product Manager',
-  growth: 'Growth Specialist',
-  startups: 'Startup Professional',
-
-  // Operations & Logistics domains
-  operations: 'Operations Manager',
-  procurement: 'Procurement Specialist',
-  scm: 'Supply Chain Manager',
-  demand_planning: 'Demand Planner',
-  inventory_management: 'Inventory Manager',
-  distribution: 'Distribution Manager',
-  freight: 'Freight Specialist',
-  shipping: 'Shipping Specialist',
-  warehousing: 'Warehouse Manager',
-  port_operations: 'Port Operations Specialist',
-
-  // Government & Defense domains
-  civil_services: 'Civil Services Officer',
-  defense: 'Defense Professional',
-  drdo: 'DRDO Scientist',
-  isro: 'ISRO Scientist',
-  psu: 'PSU Professional',
-  ias: 'IAS Officer',
-  railways: 'Railways Professional',
-  ciso: 'CISO',
-  compliance_officers: 'Compliance Officer',
-  grc: 'GRC Specialist',
-
-  // Merchant Navy & Shipping
-  merchant_navy: 'Merchant Navy Officer',
-  offshore: 'Offshore Professional',
-
-  // Other domains
-  biotech: 'Biotech Professional',
-  pharma: 'Pharmaceutical Professional',
-  hospitality_management: 'Hospitality Manager',
-  insurance: 'Insurance Professional',
-  regulatory_affairs: 'Regulatory Affairs Specialist',
-  'R&D': 'R&D Professional',
-  management_consulting: 'Management Consultant',
-  design: 'Designer',
-  automation: 'Automation Specialist',
-};
 
 interface DomainModal {
   domainFamily: string;

@@ -11,6 +11,7 @@ import CatalogueTab from "./CatalogueTab";
 import { getProfile } from "@/api/userApi";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder";
+import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from "@/app/(resume)/templates/_constants/templateImages";
 import { resolveTemplateImageUrl } from "@/lib/imageUtils";
 
@@ -622,14 +623,11 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                   // Match by template name AND ID for safety
                   const isSelected = (appliedTemplateId === careerTpl.id || appliedTemplateId === String(careerTpl.id)) && careerTpl.name;
                   const _n = (careerTpl.name || '').toLowerCase();
-                  const careerLevel =
-                    (_n.includes('early') && _n.includes('career')) ? 'Early Career' :
-                    _n.includes('fresher')   ? 'Fresher'      :
-                    _n.includes('architect') ? 'Architect'    :
-                    _n.includes('manager')   ? 'Manager'      :
-                    _n.includes('lead')      ? 'Lead'         :
-                    _n.includes('senior')    ? 'Senior-Level' :
-                    _n.includes('mid')       ? 'Mid-Level'    : 'Custom';
+                  const detected = detectCareerLevelUtil(_n);
+                  const careerLevel = detected
+                    ? detected.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+                    : ((_n.includes('early') && _n.includes('career'))    ? 'Early Career'    :
+                       _n.includes('mid')                                 ? 'Mid-Level'       : 'Custom');
                   const familyImage = DOMAIN_FAMILY_IMAGES[careerTpl.domain_family || ''] || FALLBACK_TEMPLATE_IMAGE;
                   const cardImgSrc = !careerImgErrors[careerTpl.id] && careerTpl.preview_url
                     ? resolveTemplateImageUrl(careerTpl.preview_url)
@@ -716,19 +714,13 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({ onTemplateSelect, resumeId 
                             const nameStr = templateName.toLowerCase();
 
                             let careerLevel = '';
-                            if (nameStr.includes('early') && nameStr.includes('career')) {
+                            const nameStrLower = nameStr.toLowerCase();
+                            const detectedLevel = detectCareerLevelUtil(nameStrLower);
+                            if (detectedLevel) {
+                              careerLevel = detectedLevel.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                            } else if (nameStrLower.includes('early') && nameStrLower.includes('career')) {
                               careerLevel = 'Early Career';
-                            } else if (nameStr.includes('fresher')) {
-                              careerLevel = 'Fresher';
-                            } else if (nameStr.includes('architect')) {
-                              careerLevel = 'Architect';
-                            } else if (nameStr.includes('manager')) {
-                              careerLevel = 'Manager';
-                            } else if (nameStr.includes('lead')) {
-                              careerLevel = 'Lead';
-                            } else if (nameStr.includes('senior')) {
-                              careerLevel = 'Senior-Level';
-                            } else if (nameStr.includes('mid')) {
+                            } else if (nameStrLower.includes('mid')) {
                               careerLevel = 'Mid-Level';
                             }
 

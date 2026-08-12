@@ -24,6 +24,7 @@ import jsPDF from "jspdf";
 import { downloadResume } from "../../../../../api/resumeApi";
 import { downloadEnhancedResume } from "../../../../../api/enhancerApi";
 import { getProfile } from "@/api/userApi";
+import { detectCareerLevel as detectCareerLevelUtil } from "@/utils/careerLevelDetection";
 import logger from "@/lib/logger";
 import { STYLE_CATALOGUES, CATALOGUE_LAYOUT_MAP, HeaderLayout } from "../_utils/templateStyles";
 interface PreviewPanelProps {
@@ -280,7 +281,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
 
     // Extract career level from localStorage appliedTemplateId
-    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" => {
+    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" | "Director" | "Vice President" => {
       try {
         const careerLevelStorage = localStorage.getItem(careerLevelKey);
         const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
@@ -291,13 +292,13 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
           if (applied) {
             const name = applied.name.toLowerCase();
+            const detected = detectCareerLevelUtil(name);
+            if (detected) {
+              return detected;
+            }
+            // Fallback for compound labels not in utility
             if (name.includes('early') && name.includes('career')) return 'Early Career';
-            if (name.includes('fresher'))   return 'Fresher';
-            if (name.includes('architect')) return 'Architect';
-            if (name.includes('manager'))   return 'Manager';
-            if (name.includes('lead'))      return 'Lead';
-            if (name.includes('senior'))    return 'Senior-Level';
-            if (name.includes('mid'))       return 'Mid-Level';
+            if (name.includes('mid'))            return 'Mid-Level';
           }
         }
       } catch (err) {

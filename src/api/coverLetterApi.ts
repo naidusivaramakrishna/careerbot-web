@@ -58,6 +58,12 @@ export class CoverLetterApiError extends Error {
   /** Number of seconds the caller can retry after (parsed from
    *  Retry-After header on 429; undefined otherwise). */
   readonly retryAfterSeconds?: number;
+  /** Backend-issued diagnostic identifiers (`error.error_id` /
+   *  `error.request_id`). Safe to surface as a support reference for unrecoverable
+   *  failures (upstream service issues, timeouts, contract errors). For
+   *  recoverable errors (validation, not-found), kept in console logs only. */
+  readonly errorId?: string;
+  readonly requestId?: string;
 
   constructor(args: {
     reason: CoverLetterApiErrorReason;
@@ -66,6 +72,8 @@ export class CoverLetterApiError extends Error {
     validationErrors?: Array<{ field: string; message: string }>;
     backendErrorCode?: string;
     retryAfterSeconds?: number;
+    errorId?: string;
+    requestId?: string;
   }) {
     super(args.message ?? args.reason);
     this.name = "CoverLetterApiError";
@@ -74,6 +82,8 @@ export class CoverLetterApiError extends Error {
     this.validationErrors = args.validationErrors;
     this.backendErrorCode = args.backendErrorCode;
     this.retryAfterSeconds = args.retryAfterSeconds;
+    this.errorId = args.errorId;
+    this.requestId = args.requestId;
   }
 }
 
@@ -87,6 +97,8 @@ function mapError(err: unknown): CoverLetterApiError {
           error?: {
             message?: string;
             error_code?: string;
+            error_id?: string;
+            request_id?: string;
             details?: {
               validation_errors?: Array<{
                 field?: string;
@@ -102,6 +114,8 @@ function mapError(err: unknown): CoverLetterApiError {
         }
       | undefined;
     const backendErrorCode = data?.error?.error_code;
+    const errorId = data?.error?.error_id;
+    const requestId = data?.error?.request_id;
     const detailMessage = typeof data?.detail === "string" ? data.detail : undefined;
     const message = data?.error?.message ?? detailMessage ?? err.message;
 
@@ -185,6 +199,8 @@ function mapError(err: unknown): CoverLetterApiError {
         status,
         message,
         backendErrorCode,
+        errorId,
+        requestId,
       });
     }
     if (status === 503) {
@@ -209,6 +225,8 @@ function mapError(err: unknown): CoverLetterApiError {
       status,
       message,
       backendErrorCode,
+      errorId,
+      requestId,
     });
   }
 

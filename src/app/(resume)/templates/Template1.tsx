@@ -1,12 +1,13 @@
 "use client";
 import React from "react";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
+import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
 
 interface Props {
   data: ResumeData;
   style: ResumeStyle;
-  careerLevel?: "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager";
+  careerLevel?: "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" | "Director" | "Vice President";
   domainFamily?: string;
   sectionOrder?: string[];
   onPageCountChange?: (count: number) => void;
@@ -31,23 +32,27 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     hobbies,
     interests,
     publications,
+    patents,
     customSections,
+    declaration,
   } = data;
 
   const getSectionTitle = (section: string): string => {
     if (section === "Professional Summary") {
       if (careerLevel === "Fresher") return "OBJECTIVE";
-      if (careerLevel === "Architect" || careerLevel === "Manager") return "EXECUTIVE SUMMARY";
+      if (careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President") return "EXECUTIVE SUMMARY";
       return "PROFESSIONAL SUMMARY";
     }
     if (section === "Skills") {
-      return (careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager") ? "CORE COMPETENCIES" : "SKILLS";
+      return (careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President") ? "CORE COMPETENCIES" : "SKILLS";
     }
     if (section === "Projects") {
       return domainFamily === "core_engineering" ? "KEY PROJECTS" : "PROJECTS";
     }
     if (section === "Work Experience") {
-      return domainFamily === "education" ? "TEACHING EXPERIENCE" : "PROFESSIONAL EXPERIENCE";
+      if (domainFamily === "marine_merchant_navy") return "SEA SERVICE RECORD";
+      if (domainFamily === "education") return "TEACHING EXPERIENCE";
+      return "PROFESSIONAL EXPERIENCE";
     }
     if (section === "Publications") {
       if (domainFamily === "education") return "PUBLICATIONS AND RESEARCH";
@@ -55,7 +60,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       return "PUBLICATIONS";
     }
     if (section === "Certifications") {
-      return domainFamily === "cybersecurity" ? "CERTIFICATES AND CLEARANCES" : "CERTIFICATIONS";
+      if (domainFamily === "healthcare") return "LICENSES AND CREDENTIALS";
+      if (domainFamily === "marine_merchant_navy") return "CERTIFICATES AND LICENSES";
+      if (domainFamily === "cybersecurity") return "CERTIFICATES AND CLEARANCES";
+      if (domainFamily === "government_standard") return "CERTIFICATIONS AND TRAINING";
+      return "CERTIFICATIONS";
     }
     if (section === "Achievements") {
       return domainFamily === "sales_business_development" ? "KEY ACHIEVEMENTS" : "ACHIEVEMENTS";
@@ -65,12 +74,15 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
 
   const formatDate = (dateString?: string): string => {
     if (!dateString) return "";
-    if (/^[A-Za-z]{3}\s\d{2}$/.test(dateString)) return dateString;
+    if (/^[A-Za-z]{3}\s\d{2}$/.test(dateString)) {
+      const [mon, yr] = dateString.split(' ');
+      return `${mon} ${parseInt(yr) < 50 ? '20' : '19'}${yr}`;
+    }
     if (/^\d{4}-\d{2}$/.test(dateString)) {
       const [year, month] = dateString.split("-");
       const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const monthIndex = parseInt(month, 10) - 1;
-      return `${monthNames[monthIndex]} ${year.slice(-2)}`;
+      return `${monthNames[monthIndex]} ${year}`;
     }
     return dateString;
   };
@@ -118,18 +130,71 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     marginBottom: "4px",
   };
 
-  const extractTextFromHTML = (html: string): string => {
-    // Replace closing block tags with a space to separate text
-    const text = html
-      .replace(/<\/div>/g, ' ')
-      .replace(/<\/p>/g, ' ')
-      .replace(/<\/li>/g, ' ')
-      .replace(/<br\s*\/?>/g, ' ');
+  const renderHTMLToReact = (html: string) => {
+    if (!html) return null;
 
-    // Parse inertly — DOMParser does NOT execute scripts or load resources,
-    // so a malicious <img onerror> in resume HTML cannot fire here.
-    const doc = new DOMParser().parseFromString(text, 'text/html');
-    return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+    // Handle escaped newlines (\n as two characters) by converting to actual newlines
+    const processedHtml = html.replace(/\\n/g, '\n');
+
+    // Check if this is plain text with newlines (no HTML tags)
+    if (!processedHtml.includes('<')) {
+      // Split by newlines and render as bullets
+      const lines = processedHtml.split('\n').filter(line => line.trim());
+      return lines.map((line, idx) => (
+        <div key={idx} style={{ ...baseTextStyle, color: style.bodyColor, margin: "4px 0", fontSize: "12px" }}>
+          • {line.trim()}
+        </div>
+      ));
+    }
+
+    // Otherwise, parse as HTML
+    const doc = new DOMParser().parseFromString(processedHtml, 'text/html');
+    const elements: React.ReactNode[] = [];
+
+    const processNode = (node: Node, key: number): React.ReactNode => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent?.trim();
+        return text ? <span key={key}>{text}</span> : null;
+      }
+
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const elem = node as HTMLElement;
+        const children = Array.from(elem.childNodes).map((child, idx) => processNode(child, idx)).filter(Boolean);
+
+        if (elem.tagName === 'B' || elem.tagName === 'STRONG') {
+          return <strong key={key}>{children}</strong>;
+        }
+        if (elem.tagName === 'I' || elem.tagName === 'EM') {
+          return <em key={key}>{children}</em>;
+        }
+        if (elem.tagName === 'U') {
+          return <u key={key}>{children}</u>;
+        }
+        if (elem.tagName === 'LI') {
+          return (
+            <div key={key} style={{ ...baseTextStyle, color: style.bodyColor, margin: "4px 0", fontSize: "12px" }}>
+              • {children}
+            </div>
+          );
+        }
+        if (elem.tagName === 'UL' || elem.tagName === 'OL') {
+          return <div key={key}>{children}</div>;
+        }
+        if (['DIV', 'P'].includes(elem.tagName)) {
+          const text = elem.textContent?.trim();
+          return text ? (
+            <div key={key} style={{ ...baseTextStyle, color: style.bodyColor, margin: "4px 0", fontSize: "12px" }}>
+              • {children}
+            </div>
+          ) : null;
+        }
+        return children;
+      }
+
+      return null;
+    };
+
+    return Array.from(doc.body.childNodes).map((node, idx) => processNode(node, idx)).filter(Boolean);
   };
 
   const renderSection = (sectionName: string) => {
@@ -158,7 +223,14 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {renderSectionHeading(getSectionTitle("Skills"))}
             <div style={sectionBorderStyle("12px")} />
             <div style={{ ...baseTextStyle }}>
-              {data.categorizedSkills && Object.keys(data.categorizedSkills).length > 0 ? (
+              {(careerLevel === 'Director' || careerLevel === 'Vice President') && data.categorizedSkills ? (() => {
+                const allSkills: string[] = [];
+                Object.entries(data.categorizedSkills!)
+                  .filter(([cat]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(cat))
+                  .forEach(([, arr]) => { if (Array.isArray(arr)) allSkills.push(...(arr as string[]).filter(s => typeof s === 'string')); });
+                (data.categorizedSkills!.custom_categories || []).forEach(cat => { if (cat.skills) allSkills.push(...cat.skills); });
+                return allSkills.length > 0 ? <div style={{ ...baseTextStyle, fontSize: '11px', lineHeight: '1.7' }}>{allSkills.join(' | ')}</div> : null;
+              })() : data.categorizedSkills && Object.keys(data.categorizedSkills).length > 0 ? (
                 <>
                   {Object.entries(data.categorizedSkills)
                     .filter(([category]) => category !== 'custom_categories')
@@ -284,11 +356,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 )}
                 {exp.description && (
                   <div style={{ paddingLeft: "20px", marginTop: "4px" }}>
-                    {extractTextFromHTML(exp.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
-                      <div key={lineIdx} style={{ ...baseTextStyle, color: style.bodyColor, margin: "4px 0", fontSize: "12px" }}>
-                        • {line.trim()}
-                      </div>
-                    ))}
+                    {renderHTMLToReact(exp.description)}
                   </div>
                 )}
               </div>
@@ -301,7 +369,21 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           <div style={{ marginBottom: "16px" }}>
             {renderSectionHeading("EDUCATION")}
             <div style={sectionBorderStyle("12px")} />
-            {education.map((edu, idx) => (
+            {domainFamily === 'government_standard' ? (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', ...baseTextStyle, fontSize: '11px', fontWeight: 600, borderBottom: `1px solid ${style.headingColor}`, paddingBottom: '4px', marginBottom: '4px' }}>
+                  <span>Degree / Course</span><span>Institution</span><span>Year</span><span>Score</span>
+                </div>
+                {education.map((edu, idx) => (
+                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', ...baseTextStyle, fontSize: '11px', padding: '3px 0', borderBottom: '1px solid #e5e5e5' }}>
+                    <span>{edu.degree}</span>
+                    <span>{edu.school}</span>
+                    <span>{edu.endDate ? formatDate(edu.endDate) : (edu.startDate ? formatDate(edu.startDate) : '')}</span>
+                    <span>{edu.scoreValue ? `${edu.scoreValue}${edu.scoreType === 'Percentage' ? '%' : (edu.scoreType ? ` ${edu.scoreType}` : '')}` : ''}</span>
+                  </div>
+                ))}
+              </div>
+            ) : education.map((edu, idx) => (
               <div key={idx} style={{ marginBottom: "8px" }}>
                 {layoutVariant === "executive" ? (
                   <>
@@ -483,11 +565,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 )}
                 {intern.description && (
                   <div style={{ paddingLeft: "20px", marginTop: "4px" }}>
-                    {extractTextFromHTML(intern.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
-                      <div key={lineIdx} style={{ ...baseTextStyle, margin: "4px 0", fontSize: "12px" }}>
-                        • {line.trim()}
-                      </div>
-                    ))}
+                    {renderHTMLToReact(intern.description)}
                   </div>
                 )}
               </div>
@@ -523,11 +601,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 )}
                 {proj.description && (
                   <div style={{ paddingLeft: "20px", marginTop: "4px", marginBottom: "4px", fontSize: "12px" }}>
-                    {extractTextFromHTML(proj.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
-                      <div key={lineIdx} style={{ ...baseTextStyle, margin: "4px 0", fontSize: "12px" }}>
-                        • {line.trim()}
-                      </div>
-                    ))}
+                    {renderHTMLToReact(proj.description)}
                   </div>
                 )}
               </div>
@@ -588,11 +662,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 {
                   achievement.description && (
                     <div style={{ paddingLeft: "20px", marginTop: "4px" }}>
-                      {extractTextFromHTML(achievement.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
-                        <div key={lineIdx} style={{ ...baseTextStyle, margin: "4px 0", fontSize: "12px" }}>
-                          • {line.trim()}
-                        </div>
-                      ))}
+                      {renderHTMLToReact(achievement.description)}
                     </div>
                   )
                 }
@@ -628,6 +698,47 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                     <a href={pub.url} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>{pub.url}</a>
                   </p>
                 )}
+                {pub.doi && (
+                  <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
+                    <span style={{ fontWeight: "600" }}>DOI:</span>{" "}
+                    <a href={`https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>{pub.doi}</a>
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null;
+
+      case "Patents":
+        return patents && patents.length > 0 ? (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("PATENTS")}
+            <div style={sectionBorderStyle("12px")} />
+            {patents.map((pat, idx) => (
+              <div key={idx} style={{ marginBottom: "12px" }}>
+                <h3 style={{ ...titleStyle, margin: "0 0 4px 0", fontSize: "12px" }}>
+                  {pat.title}
+                </h3>
+                {pat.patentNumber && (
+                  <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
+                    <span style={{ ...titleStyle, fontSize: "12px", fontWeight: "600" }}>Patent No:</span> {pat.patentNumber}
+                  </p>
+                )}
+                {pat.status && (
+                  <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>
+                    <span style={{ ...titleStyle, fontSize: "12px", fontWeight: "600" }}>Status:</span> {pat.status}
+                  </p>
+                )}
+                {pat.date && (
+                  <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0", color: accent }}>
+                    <span style={{ ...titleStyle, fontSize: "12px", fontWeight: "600" }}>Date:</span> {formatDate(pat.date)}
+                  </p>
+                )}
+                {pat.description && (
+                  <div style={{ paddingLeft: "12px", marginTop: "4px" }}>
+                    {renderHTMLToReact(pat.description)}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -648,11 +759,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 </div>
                 {hobby.description && (
                   <div style={{ paddingLeft: "20px" }}>
-                    {extractTextFromHTML(hobby.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
-                      <div key={lineIdx} style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>
-                        • {line.trim()}
-                      </div>
-                    ))}
+                    {renderHTMLToReact(hobby.description)}
                   </div>
                 )}
               </div>
@@ -675,11 +782,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 </div>
                 {interest.description && (
                   <div style={{ marginTop: "4px", paddingLeft: "20px" }}>
-                    {extractTextFromHTML(interest.description).split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
-                      <div key={lineIdx} style={{ ...baseTextStyle, margin: "2px 0", fontSize: "11px" }}>
-                        • {line.trim()}
-                      </div>
-                    ))}
+                    {renderHTMLToReact(interest.description)}
                   </div>
                 )}
               </div>
@@ -724,6 +827,26 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             ))}
           </div>
         ) : null;
+
+      case "Declaration":
+        return (
+          <div style={{ marginBottom: "16px" }}>
+            {renderSectionHeading("DECLARATION")}
+            <div style={sectionBorderStyle("12px")} />
+            <p style={{ ...baseTextStyle, fontSize: "12px", margin: "0 0 12px 0" }}>
+              {declaration || DEFAULT_DECLARATION}
+            </p>
+            <div style={{ display: "flex", gap: "40px", marginTop: "8px" }}>
+              <span style={{ ...baseTextStyle, fontSize: "12px" }}>
+                <strong>Date:</strong> {data.declarationDate || "_______________"}
+              </span>
+              <span style={{ ...baseTextStyle, fontSize: "12px" }}>
+                <strong>Place:</strong> {data.declarationPlace || "_______________"}
+              </span>
+              <span style={{ ...baseTextStyle, fontSize: "12px" }}><strong>Signature:</strong> _______________</span>
+            </div>
+          </div>
+        );
 
       default:
         return null;
@@ -777,12 +900,51 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     return <h2 style={sectionHeadingStyle}>{title}</h2>;
   };
 
+  const renderDomainPersonalInfo = () => {
+    const fields: { label: string; value?: string; isUrl?: boolean }[] = [];
+    if (domainFamily === 'healthcare') {
+      // specialisation and medicalRegNo are shown in the header line
+    } else if (domainFamily === 'legal') {
+      if (personalInfo.barEnrollmentNo) fields.push({ label: 'Bar Enrollment No.', value: personalInfo.barEnrollmentNo });
+      if (personalInfo.yearOfEnrollment) fields.push({ label: 'Year of Enrollment', value: personalInfo.yearOfEnrollment });
+      if (personalInfo.courtsOfPractise) fields.push({ label: 'Courts Practised In', value: personalInfo.courtsOfPractise });
+    } else if (domainFamily === 'marine_merchant_navy') {
+      if (personalInfo.rank) fields.push({ label: 'Rank', value: personalInfo.rank });
+      if (personalInfo.cocNumber) fields.push({ label: 'CoC Number', value: personalInfo.cocNumber });
+      if (personalInfo.vesselTypes) fields.push({ label: 'Vessel Types', value: personalInfo.vesselTypes });
+      if (personalInfo.stcwCertificates) fields.push({ label: 'STCW Certificates', value: personalInfo.stcwCertificates });
+    } else if (domainFamily === 'research_scholar') {
+      if (personalInfo.orcidId) fields.push({ label: 'ORCID', value: personalInfo.orcidId });
+      if (personalInfo.hIndex) fields.push({ label: 'h-index', value: personalInfo.hIndex });
+      if (personalInfo.googleScholarUrl) fields.push({ label: 'Google Scholar', value: personalInfo.googleScholarUrl, isUrl: true });
+    }
+    if (fields.length === 0) return null;
+    const _hdrDivider = ['ember', 'classic-formal', 'classic', 'pillar', 'left-right', 'left-stacked'].includes(layoutVariant || '');
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px', marginBottom: '12px', padding: '8px 0', borderTop: _hdrDivider ? 'none' : `1px solid ${style.headingColor}`, borderBottom: `1px solid ${style.headingColor}` }}>
+        {fields.map(({ label, value, isUrl }) => (
+          <div key={label} style={{ ...baseTextStyle, fontSize: '11px', display: 'flex', gap: '4px' }}>
+            <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{label}:</span>
+            {isUrl
+              ? <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: 'blue', textDecoration: 'underline', wordBreak: 'break-all' }}>{value}</a>
+              : <span style={{ wordBreak: 'break-word' }}>{value}</span>}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderHeader = () => {
     if (layoutVariant === "classic-formal") {
       return (
         <div style={{ textAlign: "center", marginBottom: "4px" }}>
           <h1 style={{ ...nameStyle, textAlign: "center" }}>{displayName}</h1>
           {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0" }}>{professionalSummary.targetRole}</p>}
+          {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+            <p style={{ ...baseTextStyle, fontSize: "11px", margin: "2px 0", fontWeight: "500", textAlign: "center" }}>
+              {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+            </p>
+          )}
           {personalInfo.location && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "2px 0" }}>{personalInfo.location}</p>}
           <div style={{ display: "flex", justifyContent: "center", gap: "24px", margin: "6px 0" }}>
             {personalInfo.email && <span style={{ ...baseTextStyle, fontSize: "11px" }}>{personalInfo.email}</span>}
@@ -804,6 +966,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         <div style={{ textAlign: "center", marginBottom: "4px" }}>
           <h1 style={{ ...nameStyle, textAlign: "center", fontSize: "26px", marginBottom: "4px", textTransform: "none" }}>{displayName}</h1>
           {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0" }}>{professionalSummary.targetRole}</p>}
+          {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+            <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0", fontWeight: "500", textAlign: "center" }}>
+              {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+            </p>
+          )}
           <hr style={{ border: "none", borderTop: `3px solid ${style.accentColor}`, margin: "6px 0" }} />
           <p style={{ ...baseTextStyle, fontSize: "10px", margin: "6px 0 16px 0" }}>
             {contactParts.join(" • ")}
@@ -819,6 +986,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         <div style={{ textAlign: "center", marginBottom: "4px" }}>
           <h1 style={{ ...nameStyle, textAlign: "center", fontSize: "26px", marginBottom: "6px" }}>{displayName}</h1>
           {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px 0" }}>{professionalSummary.targetRole}</p>}
+          {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+            <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px 0", fontWeight: "500", textAlign: "center" }}>
+              {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+            </p>
+          )}
           {personalInfo.location && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "2px 0" }}>{personalInfo.location}</p>}
           <div style={{ display: "flex", justifyContent: "center", gap: "20px", margin: "4px 0", ...baseTextStyle, fontSize: "11px" }}>
             {personalInfo.email && <span>{personalInfo.email}</span>}
@@ -842,6 +1014,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {displayName}
           </h1>
           {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px 0", fontWeight: "500" }}>{professionalSummary.targetRole}</p>}
+          {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+            <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px 0", fontWeight: "500" }}>
+              {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+            </p>
+          )}
           {contactParts.length > 0 && (
             <p style={{ ...baseTextStyle, fontSize: "10px", margin: "0 0 2px 0" }}>
               {contactParts.join(" | ")}
@@ -865,6 +1042,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               {displayName}
             </h1>
             {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0", fontWeight: "500" }}>{professionalSummary.targetRole}</p>}
+            {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+              <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0", fontWeight: "500" }}>
+                {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+              </p>
+            )}
             {personalInfo.email && (
               <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
                 {personalInfo.email}
@@ -908,6 +1090,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               {displayName}
             </h1>
             {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0", fontWeight: "500" }}>{professionalSummary.targetRole}</p>}
+            {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+              <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px 0", fontWeight: "500", textAlign: "right" }}>
+                {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+              </p>
+            )}
             {personalInfo.email && (
               <p style={{ ...baseTextStyle, fontSize: "10px", margin: "1px 0" }}>
                 {personalInfo.email}
@@ -948,6 +1135,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
         <div style={{ marginBottom: "16px" }}>
           <h1 style={{ ...nameStyle, textAlign: "left", fontSize: "24px", marginBottom: "2px", textTransform: "none" }}>{displayName}</h1>
           {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: "0 0 4px 0" }}>{professionalSummary.targetRole}</p>}
+          {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+            <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px 0", fontWeight: "500" }}>
+              {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+            </p>
+          )}
           {(personalInfo.location || personalInfo.phone || personalInfo.linkedinUrl || personalInfo.portfolioUrl || personalInfo.githubUrl || personalInfo.email) && (
             <div style={{ display: "flex", justifyContent: "space-between", ...baseTextStyle, fontSize: "11px" }}>
               <div style={{ display: "flex", gap: "16px" }}>
@@ -970,6 +1162,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             <div>
               <h1 className="text-4xl font-bold uppercase" style={{ ...nameStyle, textAlign: "left" }}>{displayName}</h1>
               {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: 0, fontWeight: "500" }}>{professionalSummary.targetRole}</p>}
+              {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+                <p style={{ ...baseTextStyle, fontSize: "11px", margin: "2px 0 0", fontWeight: "500" }}>
+                  {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+                </p>
+              )}
             </div>
             <div style={{ textAlign: "right", ...baseTextStyle, fontSize: "10px" }}>
               {personalInfo.email && <div>{personalInfo.email}</div>}
@@ -990,6 +1187,11 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
           <div style={{ marginBottom: "12px" }}>
             <h1 className="text-4xl font-bold uppercase" style={{ ...nameStyle, textAlign: "left" }}>{displayName}</h1>
             {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: "2px 0 6px", fontWeight: "500" }}>{professionalSummary.targetRole}</p>}
+            {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+              <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 6px", fontWeight: "500" }}>
+                {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+              </p>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px", ...baseTextStyle, fontSize: "10px" }}>
               <div>
                 {personalInfo.email && <div>{personalInfo.email}</div>}
@@ -1010,7 +1212,12 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     return (
       <div style={{ marginBottom: "16px" }}>
         <h1 className="text-4xl font-bold uppercase" style={nameStyle}>{displayName}</h1>
-        {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: 0, textAlign: "center", fontWeight: "500", marginBottom: "8px" }}>{professionalSummary.targetRole}</p>}
+        {professionalSummary?.targetRole && <p style={{ ...baseTextStyle, fontSize: "12px", margin: 0, textAlign: "center", fontWeight: "500", marginBottom: "4px" }}>{professionalSummary.targetRole}</p>}
+        {domainFamily === 'healthcare' && (personalInfo.specialisation || personalInfo.medicalRegNo) && (
+          <p style={{ ...baseTextStyle, fontSize: "11px", margin: "0 0 4px", textAlign: "center", fontWeight: "500" }}>
+            {[personalInfo.specialisation, personalInfo.medicalRegNo ? `Reg. No. ${personalInfo.medicalRegNo}` : ''].filter(Boolean).join(' | ')}
+          </p>
+        )}
         <p style={{ ...baseTextStyle, fontSize: "10px", margin: 0, textAlign: "center" }}>
           {[personalInfo.email, personalInfo.location, personalInfo.phone ? `${personalInfo.countryCode}${personalInfo.phone}` : ""].filter(Boolean).join(" | ")}
           {personalInfo.linkedinUrl && <>{(personalInfo.location || personalInfo.email || personalInfo.phone) ? " | " : ""}<a href={personalInfo.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "blue", textDecoration: "underline" }}>LinkedIn</a></>}
@@ -1025,6 +1232,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     <div style={{ ...baseTextStyle, padding: "32px", maxWidth: "900px", minHeight: "100vh", width: "100%" }}>
       {/* Header */}
       {renderHeader()}
+      {renderDomainPersonalInfo()}
 
       {/* Render sections in order */}
       {sectionOrder && sectionOrder.length > 0 ? (() => {
@@ -1086,11 +1294,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                       </ul>
                     ) : (
                       <div style={{ paddingLeft: "20px" }}>
-                        {extractTextFromHTML(field.value?.toString() || '').split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(line => line.trim()).map((line, lineIdx) => (
-                          <div key={lineIdx} style={{ ...baseTextStyle, margin: "2px 0", fontSize: "12px" }}>
-                            • {line.trim()}
-                          </div>
-                        ))}
+                        {renderHTMLToReact(field.value?.toString() || '')}
                       </div>
                     )}
                   </div>

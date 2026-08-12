@@ -229,6 +229,12 @@ export default function CodingProblemDetailPage() {
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
   const tabSwitchRef = useRef(0);
+  // Identity guard for in-flight AI grading: `slug` can change (Previous/Next)
+  // while mockGrade is awaiting, and a late response must not populate the
+  // problem the user has since navigated to.
+  const gradeRequestRef = useRef(0);
+  const slugRef = useRef(slug);
+  useEffect(() => { slugRef.current = slug; }, [slug]);
   useEffect(() => {
     const onVis  = () => {
       if (document.visibilityState === 'hidden') {
@@ -401,14 +407,22 @@ export default function CodingProblemDetailPage() {
     if (isPracticeMode) return;
 
     // Only fire AI grading after judge succeeds.
+    // Identity-guard the grade request. mockGrade is slow, and Previous/Next
+    // swaps `slug` while it is in flight — without this, the previous problem's
+    // grade lands in the new problem's UI. Compare on resolve and discard a
+    // superseded response instead of writing it to state.
+    const gradeToken = ++gradeRequestRef.current;
+    const gradedSlug = slug;
     setIsGrading(true);
     try {
       const gradeRes = await mockGrade(slug, language, code[language], problem?.title);
+      if (gradeToken !== gradeRequestRef.current || gradedSlug !== slugRef.current) return;
       setGradingResult(gradeRes);
       setConsoleTab('grade');
       // A credit was consumed — refresh the displayed balance.
       fetchQuota().then(setQuota).catch(() => {});
     } catch (gradeErr) {
+      if (gradeToken !== gradeRequestRef.current || gradedSlug !== slugRef.current) return;
       if (gradeErr instanceof GradingApiError && gradeErr.status === 402) {
         setGradingError('No grading credits remaining. Upgrade your plan to see AI feedback.');
       } else if (gradeErr instanceof GradingApiError && (gradeErr.status === 502 || gradeErr.status === 503)) {
@@ -417,7 +431,7 @@ export default function CodingProblemDetailPage() {
         setGradingError(gradeErr instanceof Error ? gradeErr.message : 'AI grading unavailable.');
       }
     } finally {
-      setIsGrading(false);
+      if (gradeToken === gradeRequestRef.current) setIsGrading(false);
     }
   }, [isBusy, code, language, slug, router, problem, isPracticeMode]);
 

@@ -5,6 +5,7 @@ import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
 import type { ATSScore, EnhancedSuggestion } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
+import { detectCareerLevel } from "@/utils/careerLevelDetection";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
 import { getSectionOrder } from "../../../templates/_utils/sectionOrder";
@@ -52,11 +53,59 @@ const EMPTY_CATEGORIZED_SKILLS: CategorizedSkills = {
   marketing_sales: [],
 };
 
+/**
+ * Flatten a nested skill bucket into sibling top-level categories.
+ *
+ * The backend is migrating categorized skills from a flat shape to
+ * `{ customSkills: { databases: [...], tools: [...] } }`.
+ * mapBackendSkillsToCategorized already routes any non-PREDEFINED key through
+ * `custom_categories`, which every template renders -- but the
+ * `!Array.isArray(items)` guard below rejects a nested OBJECT, so the whole
+ * bucket was silently skipped and those skills vanished from the builder and
+ * from every rendered template with no error.
+ *
+ * One level only. A nested sub-category colliding with a top-level one of the
+ * same name is MERGED in either key order -- dropping a side is the silent
+ * skill loss this exists to prevent. Never mutates the input.
+ */
+export function expandNestedSkillBuckets(categories: BackendSkills): BackendSkills {
+  if (!categories || typeof categories !== 'object' || Array.isArray(categories)) {
+    return categories;
+  }
+
+  // Object.create(null), NOT {}: a category name is USER-SUPPLIED, so a custom
+  // category called "constructor" / "toString" / "valueOf" / "hasOwnProperty"
+  // would otherwise resolve the inherited Object.prototype member, make the
+  // `existing ?` test truthy against a FUNCTION, and throw
+  // "existing.concat is not a function" -- taking the whole resume load down.
+  const expanded: BackendSkills = Object.create(null);
+  const merge = (key: string, value: unknown) => {
+    if (!Array.isArray(value)) return;
+    const incoming = value as BackendSkillItem[];
+    const existing = expanded[key];
+    // Copy on first write: extending a caller-owned array on a later collision
+    // would mutate the input payload.
+    expanded[key] = existing ? existing.concat(incoming) : incoming.slice();
+  };
+
+  Object.entries(categories).forEach(([name, value]) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      Object.entries(value as Record<string, unknown>).forEach(
+        ([innerName, innerValue]) => merge(innerName, innerValue),
+      );
+    } else {
+      merge(name, value);
+    }
+  });
+
+  return expanded;
+}
+
 export function mapBackendSkillsToCategorized(backendSkills: unknown): CategorizedSkills {
   if (!backendSkills || typeof backendSkills !== 'object' || Array.isArray(backendSkills)) {
     return { ...EMPTY_CATEGORIZED_SKILLS };
   }
-  const s = backendSkills as BackendSkills;
+  const s = expandNestedSkillBuckets(backendSkills as BackendSkills);
   const extractNames = (arr?: BackendSkillItem[]) =>
     (arr || []).map(i => i.name ?? '').filter(Boolean);
 
@@ -75,22 +124,38 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
   // camelCase key AND a display-name form so Skills.tsx lookup always finds the ID.
   const PREDEFINED = new Set(['programmingLanguages', 'frameworks', 'softSkills', 'projectManagement', 'marketingSales']);
   const customCategories: CustomCategory[] = [];
-  Object.entries(s).forEach(([camelKey, items]) => {
-    if (PREDEFINED.has(camelKey) || !Array.isArray(items)) return;
-    const typedItems = items as BackendSkillItem[];
-    // Derive a human-readable display name: "databaseTools" → "Database Tools"
-    const displayName = camelKey
+
+  // Convert camelCase or snake_case key to "Human Readable Name"
+  const toDisplayName = (key: string) =>
+    key
+      .replace(/_/g, ' ')
       .replace(/([A-Z])/g, ' $1')
+      .replace(/\s+/g, ' ')
       .replace(/^./, c => c.toUpperCase())
       .trim();
-    // Store under both keys so whichever form custom.name takes, the lookup hits
-    buildIdMap(camelKey, typedItems);
-    buildIdMap(displayName, typedItems);
+
+  const addCustomCategory = (key: string, items: BackendSkillItem[]) => {
+    const displayName = toDisplayName(key);
+    buildIdMap(key, items);
+    buildIdMap(displayName, items);
     customCategories.push({
-      id: `custom_backend_${camelKey}`,
+      id: `custom_backend_${key}`,
       name: displayName,
-      skills: extractNames(typedItems),
+      skills: extractNames(items),
     });
+  };
+
+  Object.entries(s).forEach(([camelKey, items]) => {
+    if (PREDEFINED.has(camelKey)) return;
+    // Nested container: customSkills: { "dev_ops_tools": [{id, name}] }
+    if (!Array.isArray(items) && typeof items === 'object' && items !== null) {
+      Object.entries(items as Record<string, BackendSkillItem[]>).forEach(([subKey, subItems]) => {
+        if (Array.isArray(subItems)) addCustomCategory(subKey, subItems);
+      });
+      return;
+    }
+    if (!Array.isArray(items)) return;
+    addCustomCategory(camelKey, items as BackendSkillItem[]);
   });
 
   return {
@@ -135,6 +200,27 @@ export interface ResumeData {
     languages?: string;
     titlePrefix?: string;
     qualifications?: string;
+    // Government Standard — India-specific
+    fathersName?: string;
+    maritalStatus?: string;
+    gender?: string;
+    permanentAddress?: string;
+    // Healthcare
+    specialisation?: string;
+    medicalRegNo?: string;
+    // Legal
+    barEnrollmentNo?: string;
+    yearOfEnrollment?: string;
+    courtsOfPractise?: string;
+    // Marine
+    rank?: string;
+    cocNumber?: string;
+    stcwCertificates?: string;
+    vesselTypes?: string;
+    // Research Scholar
+    orcidId?: string;
+    googleScholarUrl?: string;
+    hIndex?: string;
   };
   professionalSummary: {
     summary: string;
@@ -241,7 +327,19 @@ export interface ResumeData {
     publicationName: string;
     date: string;
     url: string;
+    doi?: string;
   }[];
+  patents?: {
+    id?: string;
+    title: string;
+    patentNumber: string;
+    status: string;
+    date: string;
+    description?: string;
+  }[];
+  declaration?: string;
+  declarationDate?: string;
+  declarationPlace?: string;
   customSections?: CustomSection[];
 }
 
@@ -387,6 +485,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       interests: [],
       languages: [],
       publications: [],
+      patents: [],
+      declaration: "",
+      declarationDate: "",
+      declarationPlace: "",
       customSections: [],
     };
   }
@@ -480,19 +582,14 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           // Extract career level from template name like "Core Engineering - Fresher"
           let extractedLevel: string | undefined;
 
-          // Canonical precedence: early career → fresher → architect → manager → lead → senior → mid
-          if (templateName.includes('early') && templateName.includes('career')) {
+          // Use shared utility for consistent career level detection
+          const detected = detectCareerLevel(templateName);
+          if (detected) {
+            extractedLevel = detected.toLowerCase();
+          } else if (templateName.includes('early') && templateName.includes('career')) {
             extractedLevel = 'early career';
           } else if (templateName.includes('fresher')) {
             extractedLevel = 'fresher';
-          } else if (templateName.includes('architect')) {
-            extractedLevel = 'architect';
-          } else if (templateName.includes('manager')) {
-            extractedLevel = 'manager';
-          } else if (templateName.includes('lead')) {
-            extractedLevel = 'lead';
-          } else if (templateName.includes('senior')) {
-            extractedLevel = 'senior-level';
           } else if (templateName.includes('mid')) {
             extractedLevel = 'mid-level';
           }
@@ -692,7 +789,9 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             }
           })(),
           (async () => {
-            if (data) return data; // Use cached data if available
+            // For enhanced resumes, always fetch from API — cached data is flat
+            // (no enhanced_data / ats_score) and would break the score tab on first load.
+            if (data && source !== "enhanced") return data;
             if (source === "enhanced") {
               return await getEnhancedResume(resumeId);
             } else {
@@ -832,6 +931,27 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             languages: data.personalInfo?.languages || null,
             titlePrefix: data.personalInfo?.titlePrefix || null,
             qualifications: data.personalInfo?.qualifications || null,
+            // Government Standard
+            fathersName: data.personalInfo?.fathersName || null,
+            gender: data.personalInfo?.gender || null,
+            maritalStatus: data.personalInfo?.maritalStatus || null,
+            permanentAddress: data.personalInfo?.permanentAddress || null,
+            // Healthcare
+            specialisation: data.personalInfo?.specialisation || null,
+            medicalRegNo: data.personalInfo?.medicalRegNo || null,
+            // Legal
+            barEnrollmentNo: data.personalInfo?.barEnrollmentNo || null,
+            yearOfEnrollment: data.personalInfo?.yearOfEnrollment || null,
+            courtsOfPractise: data.personalInfo?.courtsOfPractise || null,
+            // Marine
+            rank: data.personalInfo?.rank || null,
+            cocNumber: data.personalInfo?.cocNumber || null,
+            vesselTypes: data.personalInfo?.vesselTypes || null,
+            stcwCertificates: data.personalInfo?.stcwCertificates || null,
+            // Research Scholar
+            orcidId: data.personalInfo?.orcidId || null,
+            hIndex: data.personalInfo?.hIndex || null,
+            googleScholarUrl: data.personalInfo?.googleScholarUrl || null,
           },
           professionalSummary: typeof data.professionalSummary === 'string'
             ? { summary: data.professionalSummary, targetRole: "" }
@@ -881,6 +1001,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           interests: normalizeId((data.interests || []) as Record<string, unknown>[]) as ResumeData["interests"],
           languages: normalizeId((data.languages || []) as Record<string, unknown>[]) as ResumeData["languages"],
           publications: normalizeId((data.publications || []) as Record<string, unknown>[]) as ResumeData["publications"],
+          patents: normalizeId((data.patents || []) as Record<string, unknown>[]) as ResumeData["patents"],
+          declaration: (data as Record<string, unknown>).declaration as string | undefined ?? "",
+          declarationDate: (data as Record<string, unknown>).declarationDate as string | undefined ?? "",
+          declarationPlace: (data as Record<string, unknown>).declarationPlace as string | undefined ?? "",
           customSections: data.customSections || [],
         };
 

@@ -7,7 +7,7 @@ export default function CoverLetterTopBar() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Cover letters</p>
-          <h1 className="mt-2 text-[26px] font-black leading-tight tracking-tight text-slate-950 2xl:text-[32px]">History library</h1>
+          <h1 className="mt-2 text-[22px] font-bold leading-tight tracking-tight text-slate-950">History library</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 2xl:text-base 2xl:leading-7">
             Review saved drafts, open any letter for export, or start step 1 for a new role.
           </p>

@@ -8,6 +8,7 @@ import {
   getMockTestCompanyById,
   generateMockTest,
   getProgressAnalytics,
+  parseMockTestError,
   ProgressAnalytics,
   MockTestDifficulty,
   MOCK_TEST_DIFFICULTIES,
@@ -124,6 +125,7 @@ export default function CompanyDetailPage() {
   const [loading, setLoading]         = useState(true);
   const [company, setCompany]         = useState<any>(null);
   const [startError, setStartError]   = useState<string | null>(null);
+  const [outOfCredits, setOutOfCredits] = useState(false);
   const [starting, setStarting]       = useState(false);
   const [analytics, setAnalytics]     = useState<ProgressAnalytics | null>(null);
   const [rulesOpen, setRulesOpen]     = useState(false);
@@ -173,6 +175,7 @@ export default function CompanyDetailPage() {
 
   const handleBeginExam = async () => {
     setStartError(null);
+    setOutOfCredits(false);
     if (!difficulty) {
       setStartError('Please select a difficulty level to begin.');
       return;
@@ -188,15 +191,21 @@ export default function CompanyDetailPage() {
       const session = await generateMockTest(backendCompanyId, ['arithmetic'], [sub], difficulty, undefined, 180000);
       // Forward the level so the runner generates every later section at it too.
       router.push(`/mock-test/${companyId}?sessionId=${session.session_id}&difficulty=${difficulty}`);
-    } catch (err: any) {
-      const data = err?.response?.data;
-      const backendError = data?.error;
-      const is402 = err?.response?.status === 402 || backendError?.error_code === 'HTTP_402' || backendError?.details?.error === 'INSUFFICIENT_CREDITS';
-      if (is402) { setStartError('Not enough credits.'); return; }
+    } catch (err: unknown) {
+      const backendError = (err as { response?: { data?: { error?: { error_code?: string } } } })?.response?.data?.error;
+      // Shared parser so this page, the custom builder and the test runner all
+      // report the same thing — and so a 402 reads as a credits problem with the
+      // actual balance rather than a bare "Failed to start".
+      const parsed = parseMockTestError(err);
+      if (parsed.insufficientCredits) {
+        setOutOfCredits(true);
+        setStartError(parsed.message);
+        return;
+      }
       if (backendError?.error_code === 'AI_SERVICE_UNAVAILABLE') {
         setStartError('AI service temporarily unavailable.');
       } else {
-        setStartError(backendError?.message || 'Failed to start. Please try again.');
+        setStartError(parsed.message);
       }
     } finally {
       setStarting(false);
@@ -448,9 +457,18 @@ export default function CompanyDetailPage() {
 
           <div className="flex items-center gap-3 flex-wrap">
             {startError && (
-              <p className="text-xs font-semibold flex items-center gap-1" style={{ color: '#ef4444' }}>
-                <AlertTriangle size={12} /> {startError}
+              <p className="text-xs font-semibold flex items-center gap-1" style={{ color: '#ef4444' }} role="alert">
+                <AlertTriangle size={12} className="shrink-0" /> {startError}
               </p>
+            )}
+            {outOfCredits && (
+              <button
+                onClick={() => router.push('/settings/subscription')}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-white transition hover:opacity-90"
+                style={{ background: '#dc2626' }}
+              >
+                Get credits
+              </button>
             )}
             <button
               disabled={starting}

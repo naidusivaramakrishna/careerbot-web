@@ -19,7 +19,9 @@ const SECTION_KEY_MAP: Record<string, string> = {
   "Interests": "interests",
   "Languages": "languages",
   "Publications": "publications",
+  "Patents": "patents",
   "References": "references",
+  "Declaration": "declaration",
 } as const;
 import { useSearchParams } from "next/navigation";
 import {
@@ -311,7 +313,18 @@ const EditorTab: React.FC<Props> = ({
         
         const live = resumeDataRef.current;
         let sectionData: Record<string, unknown> | unknown[];
-        if (sectionName === "Professional Summary") {
+        if (sectionName === "Declaration") {
+          // Top-level flat fields — must not be nested under a backendKey
+          const autoSaveDecl = {
+            declaration: live.declaration ?? "",
+            declarationDate: live.declarationDate ?? "",
+            declarationPlace: live.declarationPlace ?? "",
+          };
+          await autoSaveResume(resumeId, autoSaveDecl);
+          setLastSaved(new Date());
+          setIsAutoSaving(false);
+          return;
+        } else if (sectionName === "Professional Summary") {
           const summary = live.professionalSummary?.summary || "";
           const targetRole = live.professionalSummary?.targetRole || "";
           if (!summary && !targetRole) {
@@ -336,6 +349,22 @@ const EditorTab: React.FC<Props> = ({
             languages: live.personalInfo?.languages || null,
             titlePrefix: live.personalInfo?.titlePrefix || null,
             qualifications: live.personalInfo?.qualifications || null,
+            fathersName: live.personalInfo?.fathersName || null,
+            gender: live.personalInfo?.gender || null,
+            maritalStatus: live.personalInfo?.maritalStatus || null,
+            permanentAddress: live.personalInfo?.permanentAddress || null,
+            specialisation: live.personalInfo?.specialisation || null,
+            medicalRegNo: live.personalInfo?.medicalRegNo || null,
+            barEnrollmentNo: live.personalInfo?.barEnrollmentNo || null,
+            yearOfEnrollment: live.personalInfo?.yearOfEnrollment || null,
+            courtsOfPractise: live.personalInfo?.courtsOfPractise || null,
+            rank: live.personalInfo?.rank || null,
+            cocNumber: live.personalInfo?.cocNumber || null,
+            vesselTypes: live.personalInfo?.vesselTypes || null,
+            stcwCertificates: live.personalInfo?.stcwCertificates || null,
+            orcidId: live.personalInfo?.orcidId || null,
+            hIndex: live.personalInfo?.hIndex || null,
+            googleScholarUrl: live.personalInfo?.googleScholarUrl || null,
           };
         } else {
           const sectionMap: Record<string, keyof typeof live> = {
@@ -348,6 +377,7 @@ const EditorTab: React.FC<Props> = ({
             "Awards": "awards",
             "Volunteering": "volunteering",
             "Publications": "publications",
+            "Patents": "patents",
             "References": "references",
             "Hobbies": "hobbies",
             "Interests": "interests",
@@ -377,7 +407,7 @@ const EditorTab: React.FC<Props> = ({
             projects: "projects", certifications: "certifications", achievements: "achievements",
             volunteering: "volunteering", internships: "internships", awards: "awards",
             hobbies: "hobbies", interests: "interests", languages: "languages",
-            publications: "publications", references: "references",
+            publications: "publications", patents: "patents", references: "references",
           };
           const camelKey = snakeToCamelSectionMap[backendKey] || backendKey;
           await autoSaveEnhancedResume(resumeId, { [camelKey]: sectionData });
@@ -394,7 +424,7 @@ const EditorTab: React.FC<Props> = ({
               projects: "projects", certifications: "certifications",
               internships: "internships", achievements: "achievements",
               awards: "awards", volunteering: "volunteering",
-              publications: "publications", references: "references",
+              publications: "publications", patents: "patents", references: "references",
               hobbies: "hobbies", interests: "interests", languages: "languages",
             };
             const camelKey = camelKeyMap[backendKey];
@@ -523,7 +553,10 @@ const EditorTab: React.FC<Props> = ({
 
     sectionFields.forEach((key) => {
       const value = formData[key] || "";
-      if (isRequiredField(key)) {
+      // location is globally optional (Work Experience etc.) but required for Personal Info
+      const isRequired = isRequiredField(key) ||
+        (openModalSection === "Personal Info" && key.toLowerCase() === "location");
+      if (isRequired) {
         if (!value || value.trim() === "") {
           newErrors[key] = "This field is required";
           hasEmptyRequiredFields = true;
@@ -544,7 +577,7 @@ const EditorTab: React.FC<Props> = ({
 
     // ✅ FIXED: Multi-entry sections read from resumeData context, not formData
     // These sections manage their own component state and only update context
-    if (["Education", "Work Experience", "Projects", "Certifications", "Internships", "Achievements", "Awards", "Volunteering", "Publications", "References", "Hobbies", "Interests", "Languages"].includes(sectionName)) {
+    if (["Education", "Work Experience", "Projects", "Certifications", "Internships", "Achievements", "Awards", "Volunteering", "Publications", "Patents", "References", "Hobbies", "Interests", "Languages"].includes(sectionName)) {
       const contextKey = sectionName
         .toLowerCase()
         .replace(/ /g, "_")
@@ -560,6 +593,7 @@ const EditorTab: React.FC<Props> = ({
         "awards": "awards",
         "volunteering": "volunteering",
         "publications": "publications",
+        "patents": "patents",
         "references": "references",
         "hobbies": "hobbies",
         "interests": "interests",
@@ -572,6 +606,14 @@ const EditorTab: React.FC<Props> = ({
         return data;
       }
       return [];
+    }
+
+    if (sectionName === "Declaration") {
+      return {
+        declaration: resumeData.declaration ?? "",
+        declarationDate: resumeData.declarationDate ?? "",
+        declarationPlace: resumeData.declarationPlace ?? "",
+      };
     }
 
     if (sectionName === "Professional Summary") {
@@ -590,10 +632,9 @@ const EditorTab: React.FC<Props> = ({
         return {
           programming_languages: toNameObjs(anyCats.programming_languages),
           frameworks: toNameObjs(anyCats.frameworks),
-          databases: toNameObjs(anyCats.databases),
-          tools: toNameObjs(anyCats.tools),
-          cloud_platforms: toNameObjs(anyCats.cloud_platforms),
           soft_skills: toNameObjs(anyCats.soft_skills),
+          project_management: toNameObjs(anyCats.project_management),
+          marketing_sales: toNameObjs(anyCats.marketing_sales),
         };
       }
       return {};
@@ -612,12 +653,34 @@ const EditorTab: React.FC<Props> = ({
         linkedinUrl: formData["linkedinUrl"] || "",
         githubUrl: formData["githubUrl"] || "",
         portfolioUrl: formData["portfolioUrl"] || "",
+        // Common optional fields
         dateOfBirth: formData["dateOfBirth"] || null,
         nationality: formData["nationality"] || null,
         category: formData["category"] || null,
         languages: formData["languages"] || null,
         titlePrefix: formData["titlePrefix"] || null,
         qualifications: formData["qualifications"] || null,
+        // Government Standard
+        fathersName: formData["fathersName"] || null,
+        gender: formData["gender"] || null,
+        maritalStatus: formData["maritalStatus"] || null,
+        permanentAddress: formData["permanentAddress"] || null,
+        // Healthcare
+        specialisation: formData["specialisation"] || null,
+        medicalRegNo: formData["medicalRegNo"] || null,
+        // Legal
+        barEnrollmentNo: formData["barEnrollmentNo"] || null,
+        yearOfEnrollment: formData["yearOfEnrollment"] || null,
+        courtsOfPractise: formData["courtsOfPractise"] || null,
+        // Marine
+        rank: formData["rank"] || null,
+        cocNumber: formData["cocNumber"] || null,
+        vesselTypes: formData["vesselTypes"] || null,
+        stcwCertificates: formData["stcwCertificates"] || null,
+        // Research Scholar
+        orcidId: formData["orcidId"] || null,
+        hIndex: formData["hIndex"] || null,
+        googleScholarUrl: formData["googleScholarUrl"] || null,
       };
     }
     
@@ -689,6 +752,9 @@ const EditorTab: React.FC<Props> = ({
 
     if (isCustomSection) {
       updatePayload = { customSections: resumeData.customSections };
+    } else if (openModalSection === "Declaration") {
+      // declaration, declarationDate, declarationPlace are all top-level fields — don't nest under a key
+      updatePayload = transformFormDataToBackend(openModalSection) as Record<string, unknown>;
     } else {
       const sectionData = transformFormDataToBackend(openModalSection);
 
@@ -710,7 +776,7 @@ const EditorTab: React.FC<Props> = ({
         projects: "projects", certifications: "certifications", achievements: "achievements",
         volunteering: "volunteering", internships: "internships", awards: "awards",
         hobbies: "hobbies", interests: "interests", languages: "languages",
-        publications: "publications", references: "references",
+        publications: "publications", patents: "patents", references: "references",
       };
       const camelPayload: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(updatePayload)) {
@@ -732,6 +798,7 @@ const EditorTab: React.FC<Props> = ({
       "Awards": "awards",
       "Volunteering": "volunteering",
       "Publications": "publications",
+      "Patents": "patents",
       "References": "references",
       "Hobbies": "hobbies",
       "Interests": "interests",
