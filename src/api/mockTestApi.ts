@@ -817,23 +817,39 @@ export const uploadSessionVideo = async (
   const formData = new FormData();
   formData.append('file', cleanBlob, filename);
 
-  const response = await httpClient.post<VideoEvaluation>(
-    `/mock-test/${sessionId}/video-evaluation`,
-    formData,
-    {
-      // Let the browser set the multipart boundary.
-      headers: { 'Content-Type': undefined },
-      // A long recording is a large upload — the shared 120s default would abort it.
-      timeout: options.timeoutMs ?? 15 * 60 * 1000,
-      onUploadProgress: options.onProgress
-        ? (e) => {
-            if (!e.total) return;
-            options.onProgress!(Math.min(100, Math.round((e.loaded / e.total) * 100)));
-          }
-        : undefined,
-    },
-  );
-  return (response.data as { data?: VideoEvaluation })?.data ?? response.data;
+  try {
+    const response = await httpClient.post<VideoEvaluation>(
+      `/mock-test/${sessionId}/video-evaluation`,
+      formData,
+      {
+        // Let the browser set the multipart boundary.
+        headers: { 'Content-Type': undefined },
+        // A long recording is a large upload — the shared 120s default would abort it.
+        timeout: options.timeoutMs ?? 15 * 60 * 1000,
+        onUploadProgress: options.onProgress
+          ? (e) => {
+              if (!e.total) return;
+              options.onProgress!(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+            }
+          : undefined,
+      },
+    );
+    return (response.data as { data?: VideoEvaluation })?.data ?? response.data;
+  } catch (error: unknown) {
+    const status = (error as { response?: { status?: number } })?.response?.status;
+    const message = (error as { message?: string })?.message || 'Video upload failed';
+
+    if (status === 500) {
+      throw new Error('The video evaluation service is currently unavailable. Please try again in a moment.');
+    }
+    if (status === 413) {
+      throw new Error('Video file is too large. Maximum size is 1 GB.');
+    }
+    if (status === 408 || status === 504) {
+      throw new Error('Video upload timed out. Please try with a shorter recording or better internet connection.');
+    }
+    throw error;
+  }
 };
 
 /** GET the stored evaluation. Returns null when none exists (404) rather than throwing. */
