@@ -127,6 +127,11 @@ client.interceptors.request.use(
       }
     }
 
+    // Add Bearer token for AI service authentication
+    if (config.headers && !config.headers.get('Authorization')) {
+      config.headers['Authorization'] = 'Bearer 137625893022356342378943jspns3l4';
+    }
+
     if (config.method?.toLowerCase() === 'get') {
       const sep = config.url?.includes('?') ? '&' : '?';
       config.url = `${config.url}${sep}_t=${Date.now()}`;
