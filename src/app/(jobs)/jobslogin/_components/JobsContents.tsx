@@ -355,7 +355,7 @@ export default function JobsContents() {
     setMatchedNoResume(false);
     setMatchedError(false);
     try {
-      const data = await getSmartMatchedJobs({
+      let data = await getSmartMatchedJobs({
         limit: MATCHED_PER_PAGE,
         skip: (page - 1) * MATCHED_PER_PAGE,
         ...matchedServerFilters,
@@ -367,6 +367,24 @@ export default function JobsContents() {
       // of surfacing the failure.
       if (!Array.isArray(data.jobs)) {
         throw new Error("Unexpected Smart Match response shape");
+      }
+      // The filter values are UI labels lowercased onto the wire (see
+      // matchedServerFilters). If /jobs/scored expects a different vocabulary
+      // for any of them, it answers 0 rows and the tab would render empty —
+      // strictly worse than the client-side narrowing this replaced. Retry
+      // once without the filters and let matchesJobFilters narrow the result
+      // instead, so an enum mismatch degrades to the old behaviour rather
+      // than an empty tab.
+      const usedServerFilters = Object.keys(matchedServerFilters).length > 0;
+      if (data.jobs.length === 0 && usedServerFilters) {
+        data = await getSmartMatchedJobs({
+          limit: MATCHED_PER_PAGE,
+          skip: (page - 1) * MATCHED_PER_PAGE,
+          ...(forceRefresh && { force_refresh: true }),
+        });
+        if (!Array.isArray(data.jobs)) {
+          throw new Error("Unexpected Smart Match response shape");
+        }
       }
       const normalized = data.jobs.map((item) =>
         normalizeJob(item.job, item.match.score, item.match)
@@ -611,8 +629,15 @@ export default function JobsContents() {
         }
       })();
     } else {
-      setSavedJobsCount((c) => Math.max(0, c - 1));
-      setSavedJobsList((prev) => prev.filter((job) => job.id !== jobId));
+      // Symmetric with the save branch above: toggleJobSaved swallows write
+      // failures and returns false either way, so an unconditional decrement
+      // would drop the badge for a job still persisted in storage — which
+      // then reappears on the next tab activation. Read the real list back.
+      const stillSaved = getSavedJobs(userId);
+      setSavedJobsCount(stillSaved.length);
+      if (!stillSaved.some((job) => job.jobId === jobId)) {
+        setSavedJobsList((prev) => prev.filter((job) => job.id !== jobId));
+      }
     }
   }, [userId]);
 

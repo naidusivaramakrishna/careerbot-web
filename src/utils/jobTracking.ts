@@ -55,6 +55,18 @@ function mustDiscardUnscoped(key: string, userId?: string | null): boolean {
   return !userId && !unscopedWriteThisLoad[key];
 }
 
+// Drops an unscoped bucket that this load did not write. Called from the read
+// paths once a real user id has resolved: such a bucket belongs to a session
+// that ended without signing out (tab closed, token expiry), so no account can
+// claim it — and clearUnscopedJobTrackingData only runs from signOut(), which
+// that session never reached. Without this the records (job titles, companies,
+// locations) would sit in shared localStorage indefinitely.
+function discardLeftoverUnscoped(key: string): void {
+  try {
+    if (localStorage.getItem(key) !== null) localStorage.removeItem(key);
+  } catch { /* storage unavailable — nothing to clean up */ }
+}
+
 // ==================== APPLICATION TRACKING ====================
 
 function readApplicationsAt(key: string): JobApplication[] {
@@ -82,7 +94,14 @@ export function getApplicationHistory(userId?: string | null): JobApplication[] 
   const scoped = readApplicationsAt(scopedK);
   if (!userId) return scoped;
 
-  const unscoped = unscopedWriteThisLoad[APPLIED_JOBS_KEY] ? readApplicationsAt(APPLIED_JOBS_KEY) : [];
+  if (!unscopedWriteThisLoad[APPLIED_JOBS_KEY]) {
+    // See getSavedJobs — refuse to migrate a leftover bucket, and drop it so
+    // it doesn't sit in shared storage past the session that wrote it.
+    discardLeftoverUnscoped(APPLIED_JOBS_KEY);
+    return scoped;
+  }
+
+  const unscoped = readApplicationsAt(APPLIED_JOBS_KEY);
   if (unscoped.length === 0) return scoped;
 
   const seen = new Set(scoped.map((app) => app.jobId));
@@ -191,7 +210,16 @@ export function getSavedJobs(userId?: string | null): SavedJob[] {
   const scoped = readSavedJobsAt(scopedK);
   if (!userId) return scoped;
 
-  const unscoped = unscopedWriteThisLoad[SAVED_JOBS_KEY] ? readSavedJobsAt(SAVED_JOBS_KEY) : [];
+  if (!unscopedWriteThisLoad[SAVED_JOBS_KEY]) {
+    // A bucket left behind by a session that never signed out (tab closed,
+    // token expiry) can't be attributed to this account — but it must not sit
+    // in shared storage indefinitely either, readable by any later account.
+    // Refuse to migrate it AND drop it, now that a real user id has resolved.
+    discardLeftoverUnscoped(SAVED_JOBS_KEY);
+    return scoped;
+  }
+
+  const unscoped = readSavedJobsAt(SAVED_JOBS_KEY);
   if (unscoped.length === 0) return scoped;
 
   const seen = new Set(scoped.map((job) => job.jobId));

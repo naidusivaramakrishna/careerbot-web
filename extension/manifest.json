@@ -141,9 +141,6 @@
   "host_permissions": [
     "http://localhost:8000/*",
     "http://localhost:3000/*",
-    "https://autocomplete.clearbit.com/*",
-    "https://logo.clearbit.com/*",
-    "https://www.google.com/s2/favicons*",
     "https://www.linkedin.com/*",
     "https://www.naukri.com/*",
     "https://www.indeed.co.in/*",

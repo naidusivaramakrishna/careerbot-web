@@ -71,6 +71,10 @@ describe("saved job tracking", () => {
 
     expect(getSavedJobs("user-B")).toEqual([]);
 
+    // And it is dropped rather than left sitting in shared storage — the
+    // session that wrote it never signed out, so signOut's cleanup never ran.
+    expect(localStorage.getItem("savedJobs")).toBeNull();
+
     // User B saving their own job must not persist the foreign record into
     // savedJobs:user-B either.
     toggleJobSaved("job-2", "Designer", "Acme", "Remote", "Full-time", "user-B");

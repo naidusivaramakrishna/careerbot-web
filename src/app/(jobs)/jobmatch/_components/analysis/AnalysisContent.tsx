@@ -174,11 +174,14 @@ function fillManualBlank(
   manualValue: string
 ): string | undefined {
   if (!rawAfter) return rawAfter;
-  const suffixMatch = blankText?.match(/\bn([+%-]?)/);
+  // Case-insensitive: a blank reported as "N+" would otherwise yield an empty
+  // suffix and fall through to the unanchored /\bn\b/ this function exists to
+  // avoid.
+  const suffixMatch = blankText?.match(/\bn([+%-]?)/i);
   const suffix = suffixMatch?.[1] ?? "";
   const escapedSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // No /g flag — replaces only the first (and, per the above, only intended) match.
-  const pattern = suffix ? new RegExp(`\\bn${escapedSuffix}`) : /\bn\b/;
+  const pattern = suffix ? new RegExp(`\\bn${escapedSuffix}`, "i") : /\bn\b/i;
   return pattern.test(rawAfter) ? rawAfter.replace(pattern, manualValue + suffix) : rawAfter;
 }
 
@@ -307,11 +310,14 @@ export default function AnalysisContent({
   // preview contexts, which would make this fail with zero feedback (exactly
   // what "apply all fixes" looked like before: no error, just never applies).
   const [numberPromptState, setNumberPromptState] = React.useState<{ blankText?: string; resolve: (v: string | null) => void } | null>(null);
-  // Kept in sync with numberPromptState on every render so the unmount
-  // cleanup below can resolve whatever prompt is current, not whatever was
-  // current when that effect first ran.
+  // Kept in sync with numberPromptState so the unmount cleanup below can
+  // resolve whatever prompt is current, not whatever was current when that
+  // effect first ran. Synced in an effect, not the render body: a render that
+  // React discards (concurrent rendering, StrictMode double-invoke) must not
+  // advance the ref, and only the unmount cleanup reads it — so commit-time
+  // is soon enough. Same convention as resumeSectionsRef below.
   const numberPromptStateRef = React.useRef(numberPromptState);
-  numberPromptStateRef.current = numberPromptState;
+  React.useEffect(() => { numberPromptStateRef.current = numberPromptState; }, [numberPromptState]);
 
   const askForNumber = React.useCallback((blankText?: string): Promise<string | null> => {
     return new Promise((resolve) => {

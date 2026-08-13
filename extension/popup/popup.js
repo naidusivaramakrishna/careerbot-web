@@ -105,6 +105,9 @@ function unlockRail(unlock) {
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 const API_TIMEOUT_MS = 60000;
+// Sequential fetchWithTimeout calls in the longest flow (doTailor: upload →
+// parse JD → match → tailor). Used to budget the stuck-flow detection below.
+const MAX_FLOW_CALLS = 4;
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -248,15 +251,13 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
   jdText = clampJdText(jdText);
   showState('processing');
   const stepEl = document.getElementById('processing-step');
-  const fillEl = document.getElementById('progress-fill');
-  const setStep = (text, pct) => {
+  const setStep = (text) => {
     if (stepEl) stepEl.textContent = text;
-    if (fillEl)  fillEl.style.width = `${pct}%`;
   };
 
   try {
     // Step 1: Resolve resume
-    setStep('Parsing resume…', 20);
+    setStep('Parsing resume…');
     let resumeId = selectedId || null;
     if (file) {
       try { resumeId = await uploadResume(file); }
@@ -265,12 +266,12 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
     if (!resumeId) throw new Error('Please select or upload a resume.');
 
     // Step 2: Parse JD
-    setStep('Analyzing job description…', 50);
+    setStep('Analyzing job description…');
     const jdResult = await parseJDInExtension(jdText);
     if (!jdResult.jd_id) throw new Error('Could not parse job description.');
 
     // Step 3: Match
-    setStep('Calculating match score…', 80);
+    setStep('Calculating match score…');
     const matchRes = await fetchWithTimeout(`${BASE_URL}/matcher/match`, {
       method: 'POST',
       credentials: 'include',
@@ -311,7 +312,7 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
     cachedJobMeta  = jobMeta;
     cachedJdId     = jdResult.jd_id;
 
-    setStep('Done!', 100);
+    setStep('Done!');
     setupResultsState();
     showResultsState(score, jobMeta, structuredSkills);
 
@@ -673,13 +674,20 @@ chrome.tabs.onActivated.addListener(() => {
     (name) => !states[name]?.classList.contains('hidden')
   );
   // Don't yank the user out of an in-progress flow just because they alt-tabbed —
-  // unless 'processing' has been showing far longer than any of its calls are
-  // allowed to take (API_TIMEOUT_MS). That only happens when a flow got stuck
-  // without ever reaching 'idle'/'results' (e.g. window.close() is a no-op in a
-  // side panel, so a completed flow can otherwise be left parked here forever) —
-  // in which case this is the only thing left that can bring the panel back.
+  // unless 'processing' has been showing far longer than the WHOLE flow can
+  // legitimately take. That only happens when a flow got stuck without ever
+  // reaching 'idle'/'results' (e.g. window.close() is a no-op in a side panel,
+  // so a completed flow can otherwise be left parked here forever) — in which
+  // case this is the only thing left that can bring the panel back.
+  //
+  // Budget the longest flow, not one call: doTailor issues four sequential
+  // fetchWithTimeout calls and analyzeScore three, each allowed the full
+  // API_TIMEOUT_MS. Using a single call's timeout here reset a genuinely
+  // running analysis (large upload + cold parse) the moment the user switched
+  // tabs, discarding the in-flight results.
   const isStaleProcessing =
-    activeStateName === 'processing' && Date.now() - processingSince > API_TIMEOUT_MS + 5000;
+    activeStateName === 'processing' &&
+    Date.now() - processingSince > MAX_FLOW_CALLS * API_TIMEOUT_MS + 5000;
   if (['processing', 'results', 'coverLetter'].includes(activeStateName) && !isStaleProcessing) return;
   applyStoredJD();
 });
@@ -782,7 +790,13 @@ function setupIdleState() {
     const jdText = document.getElementById('manual-jd-input')?.value?.trim();
     if (!jdText) { alert('Please paste a job description.'); return; }
     const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-    await analyzeScore(jdText, detectedJD?.meta || null, selectedFile, null);
+    // Only attach the stored detection's metadata when this JD text actually
+    // IS that detection. A stored JD survives a tab switch (applyStoredJD
+    // clears the banner and textarea but deliberately keeps storage, so
+    // switching back restores it) — without this gate a JD pasted by hand on
+    // another tab would be persisted server-side under the previous job's
+    // title/company/url.
+    await analyzeScore(jdText, jdIsDetected ? (detectedJD?.meta ?? null) : null, selectedFile, null);
   });
 
   document.getElementById('btn-cover-letter-idle')?.addEventListener('click', generateCoverLetter);
@@ -841,15 +855,13 @@ async function doTailor(jdText, jobMeta, resumeId) {
   jdText = clampJdText(jdText);
   showState('processing');
   const stepEl = document.getElementById('processing-step');
-  const fillEl = document.getElementById('progress-fill');
 
-  const setStep = (text, pct) => {
+  const setStep = (text) => {
     if (stepEl) stepEl.textContent = text;
-    if (fillEl)  fillEl.style.width = `${pct}%`;
   };
 
   try {
-    setStep('Creating session…', 30);
+    setStep('Creating session…');
 
     const payload = {
       job_description: jdText,
@@ -869,7 +881,7 @@ async function doTailor(jdText, jobMeta, resumeId) {
       body: JSON.stringify(payload),
     });
 
-    setStep('Opening portal…', 80);
+    setStep('Opening portal…');
 
     const portalUrl = `${PORTAL_URL}/jobmatch/app?session=${session.session_id}`;
 
@@ -881,7 +893,7 @@ async function doTailor(jdText, jobMeta, resumeId) {
       await chrome.tabs.create({ url: portalUrl });
     }
 
-    setStep('Done!', 100);
+    setStep('Done!');
     await chrome.storage.local.remove('detectedJD');
     chrome.action.setBadgeText({ text: '' });
     // window.close() is a no-op for Chrome side panels (unlike a classic popup,
@@ -1066,8 +1078,13 @@ let clLetterId = null;
 
 async function generateCoverLetter() {
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-  const jdText  = clampJdText(document.getElementById('manual-jd-input')?.value?.trim() || detectedJD?.jd || '');
-  const jobMeta = detectedJD?.meta || {};
+  const typedJd = document.getElementById('manual-jd-input')?.value?.trim();
+  const jdText  = clampJdText(typedJd || detectedJD?.jd || '');
+  // Same gate as the Analyze path: the stored metadata only describes the
+  // stored JD. It applies when the text came from storage (empty textarea) or
+  // when the textarea still holds that untouched detection — never to a JD
+  // the user pasted themselves.
+  const jobMeta = (!typedJd || jdIsDetected) ? (detectedJD?.meta || {}) : {};
 
   if (!jdText) {
     alert('No job description found. Please paste a job description first.');

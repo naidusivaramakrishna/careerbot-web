@@ -207,14 +207,6 @@ body {
   gap: 9px;
   margin-bottom: 36px;
 }
-.login-logo-mark {
-  width: 32px; height: 32px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 3px 10px rgba(79,70,229,0.28);
-  flex-shrink: 0;
-}
 .login-brand-text {
   font-size: 16px; font-weight: 800;
   color: #111827; letter-spacing: -0.4px;

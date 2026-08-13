@@ -30,12 +30,14 @@ function arcPath(from: number, to: number) {
   return `M ${start.x} ${start.y} A ${RADIUS} ${RADIUS} 0 0 1 ${end.x} ${end.y}`;
 }
 
+// Derived from SEGMENTS so the caption and the aria-label can never disagree
+// with the arc the needle is sitting in. They previously used independent
+// bands (30/50/70/85 vs 20/40/60/80) and a label — "Strong match" — that no
+// segment carried, so e.g. a score of 82 rendered inside the green
+// "Excellent match · 80–100%" arc while the caption read "Strong match".
 function getScoreLabel(score: number) {
-  if (score >= 85) return "Excellent match";
-  if (score >= 70) return "Strong match";
-  if (score >= 50) return "Good match";
-  if (score >= 30) return "Fair match";
-  return "Needs improvement";
+  const segment = SEGMENTS.find((s) => score >= s.from && score < s.to);
+  return (segment ?? SEGMENTS[SEGMENTS.length - 1]).label;
 }
 
 export default function JobMatchScoreGauge({ value }: { value: number }) {
