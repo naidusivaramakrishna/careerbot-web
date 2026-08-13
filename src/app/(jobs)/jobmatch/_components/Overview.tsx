@@ -11,6 +11,7 @@ import WizardStepJobDescription from "./wizard/WizardStepJobDescription";
 import WizardStepConfirm from "./wizard/WizardStepConfirm";
 import { WIZARD_OVERVIEW_STYLES } from "./wizard/wizardOverviewStyles";
 import { writeJobmatchSessionSnapshot } from "@/utils/jobmatchSession";
+import { toast } from "sonner";
 
 import {
   parseResume,
@@ -309,12 +310,21 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       setParsedJDData(jdParsed);
 
       try {
-        writeJobmatchSessionSnapshot({
+        const snapshotWritten = writeJobmatchSessionSnapshot({
           matchResults: newMatchResults,
           parsedResumeData: fullResumeData,
           parsedJDData: jdParsed,
           jdText: resolvedJdText,
         });
+        // The in-memory state set above is still correct for THIS render — a
+        // failed write only matters the next time this component mounts
+        // (e.g. navigating away and back), since writeJobmatchSessionSnapshot
+        // rolls back to the previous run's session data on failure rather
+        // than this one. Warn now, while there's still context, instead of
+        // letting that remount silently show stale results with no explanation.
+        if (!snapshotWritten) {
+          toast.warning("Your results are shown below, but couldn't be saved for this browser tab — they may not survive a page refresh.");
+        }
       } catch {}
 
       setTimeout(() => {

@@ -316,7 +316,7 @@
 
   // Detect URL changes for job navigation
   let lastUrl = window.location.href;
-  setInterval(() => {
+  const urlPollInterval = setInterval(() => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
       // Keep only the JD we actually published as stale. The interval may
@@ -329,6 +329,15 @@
       tryDetect();
     }
   }, 500);
+
+  // Neither the interval nor the MutationObserver above stop on their own —
+  // without this, both keep running on a bfcache-restored or long-lived
+  // Indeed tab (see linkedin-scraper.js / wellfound-scraper.js, which already
+  // tear down their equivalents this way).
+  window.addEventListener('pagehide', () => {
+    clearInterval(urlPollInterval);
+    observer.disconnect();
+  }, { once: true });
 
   // Show the CareerBot brand icon in the banner (static — not the company's logo).
   function setBrandIcon(iconEl) {

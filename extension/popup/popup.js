@@ -60,7 +60,6 @@ openBtn.addEventListener('click', () => {
 const states = {
   login:       document.getElementById('state-login'),
   loading:     document.getElementById('state-loading'),
-  jdDetected:  document.getElementById('state-jd-detected'),
   idle:        document.getElementById('state-idle'),
   processing:  document.getElementById('state-processing'),
   results:     document.getElementById('state-results'),
@@ -77,7 +76,7 @@ function showState(name) {
   if (states[name]) states[name].classList.remove('hidden');
   document.getElementById('app')?.setAttribute('data-state', name);
   if (name === 'processing') processingSince = Date.now();
-  if (['idle', 'jdDetected', 'processing', 'results', 'coverLetter'].includes(name)) {
+  if (['idle', 'processing', 'results', 'coverLetter'].includes(name)) {
     setNavActive('sb-analyze');
   }
   // Stop polling as soon as we leave the login state
@@ -567,20 +566,6 @@ function setupJDToggles() {
       syncIdleActions();
     });
   }
-
-  // JD detected state expand
-  const previewToggle    = document.getElementById('jd-preview-toggle');
-  const expandDetected   = document.getElementById('jd-expand-area-detected');
-  const previewEditBtn   = document.getElementById('jd-preview-edit');
-  let detectedExpanded = false;
-  if (previewToggle && expandDetected) {
-    const detectedClickHandler = () => {
-      detectedExpanded = !detectedExpanded;
-      expandDetected.classList.toggle('hidden', !detectedExpanded);
-      if (previewEditBtn) previewEditBtn.textContent = detectedExpanded ? 'Collapse ↑' : 'Edit ↓';
-    };
-    previewToggle.addEventListener('click', detectedClickHandler);
-  }
 }
 
 // ─── Poll for login while login state is visible ──────────────────────────────
@@ -750,56 +735,6 @@ async function applyStoredJD(_user) {
   return false;
 }
 
-// ─── Show company logo in detected banner ────────────────────────────────────
-function setCompanyLogo(meta) {
-  const imgEl      = document.getElementById('jd-company-logo');
-  const fallbackEl = document.getElementById('jd-fallback-icon');
-  const initialsEl = document.getElementById('jd-company-initials');
-  if (!imgEl) return;
-
-  const company = meta?.company;
-  if (!company) return;
-
-  const showInitials = () => {
-    if (!initialsEl) return;
-    const words    = company.trim().split(/\s+/).filter(Boolean);
-    const initials = words.length >= 2
-      ? (words[0][0] || '') + (words[1][0] || '')
-      : (words[0] || '?').slice(0, 2);
-    initialsEl.textContent   = (initials || '?').toUpperCase();
-    initialsEl.style.display = 'flex';
-    if (fallbackEl) fallbackEl.style.display = 'none';
-  };
-
-  // Guess company domain from name — clamp length to keep the logo-provider
-  // request well-formed even if `company` is unexpectedly long.
-  const domain = company
-    .toLowerCase()
-    .slice(0, 100)
-    .replace(/\b(ltd|limited|inc|corp|corporation|pvt|private|technologies|technology|solutions|services|group|global|india|infotech|infosystems|motors|healthcare)\b/g, '')
-    .replace(/[^a-z0-9]/g, '')
-    .trim()
-    .slice(0, 63) + '.com';
-
-  const sources = [
-    `https://logo.clearbit.com/${domain}`,
-    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-  ];
-  let attempt = 0;
-
-  const tryNext = () => {
-    if (attempt >= sources.length) { showInitials(); return; }
-    imgEl.src     = sources[attempt++];
-    imgEl.onload  = () => {
-      imgEl.style.display = 'block';
-      if (fallbackEl)  fallbackEl.style.display = 'none';
-      if (initialsEl)  initialsEl.style.display  = 'none';
-    };
-    imgEl.onerror = tryNext;
-  };
-  tryNext();
-}
-
 // ─── Fill JD into the detected state (safe to call multiple times) ────────────
 function applyJDContent(detectedJD) {
   setupIdleState();
@@ -875,33 +810,6 @@ function setupIdleState() {
     e.preventDefault();
     chrome.tabs.create({ url: 'https://www.linkedin.com/jobs/' });
   });
-}
-
-// ─── JD Detected state — set up once ──────────────────────────────────────────
-let _jdSetup = false;
-function setupJDState() {
-  if (_jdSetup) return;
-  _jdSetup = true;
-
-  bindFileInput('resume-file-input-jd', 'file-name-display-jd', 'jd');
-
-  document.getElementById('btn-tailor').addEventListener('click', async () => {
-    const jdText = document.getElementById('jd-textarea-main')?.value?.trim();
-    if (!jdText) { alert('Job description is empty.'); return; }
-    const { detectedJD } = await chrome.storage.local.get('detectedJD');
-    await analyzeScore(jdText, detectedJD?.meta || null, selectedFileJD, null);
-  });
-
-  document.getElementById('btn-dismiss').addEventListener('click', async () => {
-    await chrome.storage.local.remove('detectedJD');
-    chrome.action.setBadgeText({ text: '' });
-    showState('idle');
-  });
-}
-
-// ─── showJDState: show the JD detected panel ──────────────────────────────────
-function showJDState(detectedJD) {
-  applyJDContent(detectedJD);
 }
 
 // ─── Resolve resume ID (upload file or use selected) ─────────────────────────
@@ -1253,7 +1161,6 @@ async function generateCoverLetter() {
   }
 }
 
-document.getElementById('btn-cover-letter')?.addEventListener('click', generateCoverLetter);
 document.getElementById('btn-cl-regenerate')?.addEventListener('click', generateCoverLetter);
 
 document.getElementById('btn-cl-back')?.addEventListener('click', async () => {

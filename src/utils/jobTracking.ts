@@ -29,6 +29,19 @@ function scopedKey(base: string, userId?: string | null): string {
   return userId ? `${base}:${userId}` : base;
 }
 
+// In-memory only (NOT persisted) — tracks whether THIS page load itself has
+// written to the unscoped bucket (the pre-userId-resolution race, see
+// getSavedJobs/getApplicationHistory below). The migration those functions
+// do is only safe to run when the current load produced the unscoped write;
+// a leftover unscoped bucket with no write this load can't be attributed to
+// whichever account happens to resolve next; it may be an earlier account's
+// abandoned data. Resets on every reload, so it can't be spoofed by data
+// left over from a previous session.
+const unscopedWriteThisLoad: Record<string, boolean> = {
+  [APPLIED_JOBS_KEY]: false,
+  [SAVED_JOBS_KEY]: false,
+};
+
 // ==================== APPLICATION TRACKING ====================
 
 function readApplicationsAt(key: string): JobApplication[] {
@@ -50,11 +63,13 @@ export function getApplicationHistory(userId?: string | null): JobApplication[] 
   // migration, not a permanent union — the unscoped bucket is shared across
   // every account on this browser, so it must be folded in and cleared here
   // rather than merged on every read, or it would leak into other accounts.
+  // Gated on unscopedWriteThisLoad: only migrate data THIS load actually
+  // wrote, never a leftover bucket that might belong to a different account.
   const scopedK = scopedKey(APPLIED_JOBS_KEY, userId);
   const scoped = readApplicationsAt(scopedK);
   if (!userId) return scoped;
 
-  const unscoped = readApplicationsAt(APPLIED_JOBS_KEY);
+  const unscoped = unscopedWriteThisLoad[APPLIED_JOBS_KEY] ? readApplicationsAt(APPLIED_JOBS_KEY) : [];
   if (unscoped.length === 0) return scoped;
 
   const seen = new Set(scoped.map((app) => app.jobId));
@@ -100,6 +115,7 @@ export function recordJobApplication(
 
     history.push(newApplication);
     localStorage.setItem(scopedKey(APPLIED_JOBS_KEY, userId), JSON.stringify(history));
+    if (!userId) unscopedWriteThisLoad[APPLIED_JOBS_KEY] = true;
   } catch (e) {
     console.error("recordJobApplication: Failed to save application:", e instanceof Error ? e.message : String(e));
   }
@@ -152,11 +168,13 @@ export function getSavedJobs(userId?: string | null): SavedJob[] {
   // the unscoped bucket is shared across every account on this browser, so
   // it must be folded into the scoped bucket and cleared here, or it would
   // leak into every other account that reads on this browser afterward.
+  // Gated on unscopedWriteThisLoad: only migrate data THIS load actually
+  // wrote, never a leftover bucket that might belong to a different account.
   const scopedK = scopedKey(SAVED_JOBS_KEY, userId);
   const scoped = readSavedJobsAt(scopedK);
   if (!userId) return scoped;
 
-  const unscoped = readSavedJobsAt(SAVED_JOBS_KEY);
+  const unscoped = unscopedWriteThisLoad[SAVED_JOBS_KEY] ? readSavedJobsAt(SAVED_JOBS_KEY) : [];
   if (unscoped.length === 0) return scoped;
 
   const seen = new Set(scoped.map((job) => job.jobId));
@@ -209,6 +227,7 @@ export function toggleJobSaved(
 
       saved.push(newSavedJob);
       localStorage.setItem(scopedKey(SAVED_JOBS_KEY, userId), JSON.stringify(saved));
+      if (!userId) unscopedWriteThisLoad[SAVED_JOBS_KEY] = true;
       return true;
     }
   } catch (e) {
@@ -239,6 +258,20 @@ export function removeSavedJob(jobId: string, userId?: string | null): void {
 }
 
 // ==================== CLEANUP UTILITIES ====================
+
+// Called from signOut() — the unscoped bucket is shared across every account
+// on this browser (see scopedKey above), so it must never survive a sign-out
+// or a leftover record could get folded into whichever account signs in next.
+export function clearUnscopedJobTrackingData(): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    localStorage.removeItem(SAVED_JOBS_KEY);
+    localStorage.removeItem(APPLIED_JOBS_KEY);
+  } catch (e) {
+    console.error("clearUnscopedJobTrackingData: Failed to clear:", e instanceof Error ? e.message : String(e));
+  }
+}
 
 export function clearAllApplications(userId?: string | null): void {
   if (typeof window === "undefined") return;

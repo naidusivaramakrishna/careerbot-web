@@ -280,7 +280,13 @@ function CategoryGroup({
           </span>
           {!readOnly && bulkParents.length === 1 && canAct && (
             <button
-              onClick={e => { e.stopPropagation(); handleGroupBulkAdd(individuals, bulkParents[0]); }}
+              // subgroups[0].items, not individuals — individuals spans every
+              // severity in this category, but the single bulk parent above
+              // only resolves its own severity's items server-side (mirrors
+              // the per-subgroup button below). Passing all individuals marked
+              // mismatched-severity rows as "Applied" even though only the
+              // matching-severity ones were actually sent to the backend.
+              onClick={e => { e.stopPropagation(); handleGroupBulkAdd(subgroups[0].items, bulkParents[0]); }}
               disabled={bulkLoadingKey !== null || allAdded}
               className="flex min-h-9 items-center gap-1.5 rounded-lg px-3.5 py-2 text-[11px] font-bold text-white shadow-sm transition-all hover:opacity-90 disabled:opacity-70"
               style={{ background: allAdded ? "#22c55e" : meta.color }}

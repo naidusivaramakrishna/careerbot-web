@@ -336,8 +336,17 @@ export default function JobsContents() {
   const handleFilterChange = useCallback((_filters: FilterParams) => {}, []);
 
   // ── Fetch SmartMatch jobs (lazy — only when tab first activated; paginated) ──
-  const fetchSmartMatchedJobs = useCallback(async (page = 1, force = false) => {
-    if (matchedFetched && page === matchedPage && !force) return;
+  // bypassGuard and forceRefresh are deliberately separate: bypassGuard only
+  // skips the "already fetched this exact page" no-op check below (needed
+  // whenever the underlying query changed but page/matchedPage didn't, e.g.
+  // a filter change while still on page 1) — it must NOT imply force_refresh,
+  // which bypasses the backend's own scored-results cache and is reserved
+  // for the explicit "Retry Smart Match" button. Filter/search changes hit a
+  // different cache entry on the backend already (keyed by the query itself)
+  // so they never need to pay for an uncached re-score.
+  const fetchSmartMatchedJobs = useCallback(async (page = 1, options?: { bypassGuard?: boolean; forceRefresh?: boolean }) => {
+    const { bypassGuard = false, forceRefresh = false } = options ?? {};
+    if (matchedFetched && page === matchedPage && !bypassGuard) return;
     setMatchedLoading(true);
     setMatchedNoResume(false);
     setMatchedError(false);
@@ -346,7 +355,7 @@ export default function JobsContents() {
         limit: MATCHED_PER_PAGE,
         skip: (page - 1) * MATCHED_PER_PAGE,
         ...matchedServerFilters,
-        ...(force && { force_refresh: true }),
+        ...(forceRefresh && { force_refresh: true }),
       });
       // A malformed/unexpected response shape (e.g. the backend contract
       // for this endpoint drifts) must not be silently treated the same as
@@ -604,8 +613,13 @@ export default function JobsContents() {
   //    tab's list is already loaded, append a placeholder immediately instead
   //    of waiting for the next time the Applied tab is (re)activated. ──
   const handleAppliedToggle = useCallback((jobId: string) => {
-    const record = getApplicationHistory(userId).find((app) => app.jobId === jobId);
-    setAppliedJobsCount((c) => c + 1);
+    // recordJobApplication de-dupes (a repeat "Already Applied" click on a
+    // job that's already recorded is a no-op there), so derive the count
+    // from the actual history length rather than unconditionally incrementing
+    // — an unconditional bump would overcount on a repeat click.
+    const history = getApplicationHistory(userId);
+    setAppliedJobsCount(history.length);
+    const record = history.find((app) => app.jobId === jobId);
     if (!record) return;
 
     const placeholder = normalizeJob({
@@ -675,7 +689,7 @@ export default function JobsContents() {
       return;
     }
     if (activeTab !== "matched" || !matchedFetched) return;
-    fetchSmartMatchedJobs(1, true);
+    fetchSmartMatchedJobs(1, { bypassGuard: true });
     // matchedServerFiltersKey (a stable serialization of matchedServerFilters)
     // is the real change signal — fetchSmartMatchedJobs is intentionally
     // omitted so it recreating for an unrelated reason (e.g. matchedPage
@@ -1005,7 +1019,7 @@ export default function JobsContents() {
                     {isMatchedTab && !matchedNoResume && (matchedFetched || matchedError) && !matchedSearchNarrowed && (
                       <button
                         type="button"
-                        onClick={() => fetchSmartMatchedJobs(matchedPage, true)}
+                        onClick={() => fetchSmartMatchedJobs(matchedPage, { bypassGuard: true, forceRefresh: true })}
                         className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#4F46E5] text-white text-sm font-semibold rounded-full hover:bg-[#4338CA] transition-colors"
                       >
                         <RotateCcw size={13} />

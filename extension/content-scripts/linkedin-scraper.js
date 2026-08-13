@@ -63,8 +63,14 @@
     // even when the surrounding CSS class names differ between them — anchoring
     // on that heading text survives LinkedIn's frequent class renames better
     // than any fixed selector list.
+    // textContent, not innerText — innerText forces a synchronous layout on
+    // every call, and this scan runs across every leaf element in the page
+    // each time the mutation observer below fires (LinkedIn mutates the DOM
+    // constantly). For a leaf node's exact-string test, textContent is
+    // equivalent; innerText is only needed (and only used) on the final
+    // matched container below, where layout-aware visibility actually matters.
     const heading = Array.from(document.querySelectorAll('h1, h2, h3, h4, strong, span, div'))
-      .find(el => el.children.length === 0 && /^about the job$/i.test(el.innerText?.trim() || ''));
+      .find(el => el.children.length === 0 && /^about the job$/i.test(el.textContent?.trim() || ''));
     if (heading) {
       const container = (heading.parentElement || heading).closest('section, article, div');
       const text = container?.innerText?.trim();
@@ -72,14 +78,20 @@
     }
 
     // Last resort: find any element with substantial text near "job-details" or
-    // "description". Only reject a candidate if it IS nav/header chrome itself —
-    // not merely because it contains an unrelated nested <nav>/<header> somewhere
-    // deep inside (LinkedIn's card components use those tags for unrelated
-    // sub-widgets, which previously disqualified otherwise-valid candidates).
+    // "description". Reject a candidate that IS nav/header chrome itself, or
+    // that contains a nav/header descendant with enough links to be real site
+    // navigation (a proxy for "this wraps the whole page" — e.g. the global
+    // nav plus the signed-in user's profile card) — but not on ANY nested
+    // <nav>/<header>, since LinkedIn's small card sub-widgets use those tags
+    // too and over-rejecting on that previously disqualified otherwise-valid
+    // candidates.
     const candidates = document.querySelectorAll('article, section, div[id*="job"], div[class*="description"]');
     for (const el of candidates) {
+      if (el.tagName === 'NAV' || el.tagName === 'HEADER') continue;
+      const chromeLinkCount = el.querySelectorAll('nav a, header a').length;
+      if (chromeLinkCount > 5) continue;
       const text = el.innerText?.trim();
-      if (text && text.length > 200 && el.tagName !== 'NAV' && el.tagName !== 'HEADER') {
+      if (text && text.length > 200) {
         return text;
       }
     }

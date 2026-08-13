@@ -1,5 +1,6 @@
 import { httpClient } from "@/lib/http";
 import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
+import { clearUnscopedJobTrackingData } from '@/utils/jobTracking';
 
 export interface LoginRequest {
   email: string;
@@ -107,6 +108,13 @@ export const signOut = async () => {
 
   localStorage.removeItem('token_last_refreshed_at');
   localStorage.removeItem('uploaded_resume_filename');
+
+  // Job tracking's unscoped savedJobs/appliedJobs buckets are shared across
+  // every account on this browser (see jobTracking.ts's scopedKey) — must be
+  // cleared here or a leftover record can get folded into the next account
+  // that signs in, since the scoped buckets (savedJobs:<userId>) are per-user
+  // and correctly left alone.
+  clearUnscopedJobTrackingData();
 
   ['last_resume_path', 'builder_fresh_start'].forEach((key) => sessionStorage.removeItem(key));
 

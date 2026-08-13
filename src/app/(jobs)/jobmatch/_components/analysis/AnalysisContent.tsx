@@ -554,6 +554,16 @@ export default function AnalysisContent({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const penalty = penalties.find((p: any) => p.suggestion_id === suggestion_id);
 
+    // Tracks whether the LOCAL preview mirror actually changed something —
+    // stays true for job_title/summary (which don't have a before/after
+    // match step to fail) and is only ever flipped to false below, when a
+    // bullet rewrite's before text can't be found in resumeSections (e.g.
+    // whitespace/normalization drift) despite the backend applying the fix
+    // successfully. The caller (MatchPenalties) uses this return value to
+    // decide the confident "Added to resume" state, so it must reflect the
+    // mirror, not just whether the network call itself succeeded.
+    let mirrored = true;
+
     if (category === "job_title") {
       const newTitle = penalty?.target || jobTitle?.jd_title;
       if (newTitle) {
@@ -602,12 +612,13 @@ export default function AnalysisContent({
             result.changed.forEach((c) => markHighlighted(c.section, String(c.idx)));
             return result.sections;
           }
+          mirrored = false;
           return prev;
         });
       }
     }
 
-    return true;
+    return mirrored;
   }, [matchId, matchResult, jobTitle, starCheck, markHighlighted, runSerially, askForNumber]);
 
   // Remove a skill: enhance/remove updates the match score AND removes the
