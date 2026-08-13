@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type * as JobTracking from "@/utils/jobTracking";
 
 describe("saved job tracking", () => {
@@ -76,5 +77,42 @@ describe("saved job tracking", () => {
     const persisted = JSON.parse(localStorage.getItem("savedJobs:user-B") || "[]");
     expect(persisted).toHaveLength(1);
     expect(persisted[0].jobId).toBe("job-2");
+  });
+
+  it("does not carry a leftover unscoped record forward when saving before the user id resolves", () => {
+    const { getSavedJobs, toggleJobSaved } = jobTracking;
+    // Account A saved before its id resolved and never signed out, so the
+    // shared bucket survived into this load. Account B now saves before ITS
+    // id resolves — the write must not seed from A's records, or B's own
+    // pre-id write would launder them into B's scoped bucket on migration.
+    localStorage.setItem(
+      "savedJobs",
+      JSON.stringify([{ jobId: "job-A", title: "Engineer", company: "Acme", location: "Remote", type: "Full-time", savedAt: "2026-01-01" }])
+    );
+
+    toggleJobSaved("job-B", "Designer", "Globex", "Onsite", "Full-time", null);
+
+    const shared = JSON.parse(localStorage.getItem("savedJobs") || "[]");
+    expect(shared).toHaveLength(1);
+    expect(shared[0].jobId).toBe("job-B");
+
+    // And once B's id resolves, only B's own job migrates across.
+    expect(getSavedJobs("user-B")).toEqual([
+      expect.objectContaining({ jobId: "job-B" }),
+    ]);
+  });
+
+  it("does not carry a leftover unscoped application forward when recording before the user id resolves", () => {
+    const { getApplicationHistory, recordJobApplication } = jobTracking;
+    localStorage.setItem(
+      "appliedJobs",
+      JSON.stringify([{ jobId: "job-A", title: "Engineer", company: "Acme", url: "", appliedAt: "2026-01-01" }])
+    );
+
+    recordJobApplication("job-B", "Designer", "Globex", "", null);
+
+    expect(getApplicationHistory("user-B")).toEqual([
+      expect.objectContaining({ jobId: "job-B" }),
+    ]);
   });
 });

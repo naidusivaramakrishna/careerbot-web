@@ -42,6 +42,19 @@ const unscopedWriteThisLoad: Record<string, boolean> = {
   [SAVED_JOBS_KEY]: false,
 };
 
+// True when a write with an unresolved userId must NOT seed from what's
+// already in the shared bucket. The read-side gate above is not enough on its
+// own: an unscoped write seeds its array from the current bucket contents and
+// writes the whole array back, so without this an account saving before its
+// id resolves would copy a previous account's leftover records forward as its
+// own — and the read-side gate, now legitimately set, would migrate all of
+// them into the new account's scoped bucket. Starting from [] drops the
+// orphaned records instead, which is the correct trade: they belong to a
+// session that never completed, and no account can claim them.
+function mustDiscardUnscoped(key: string, userId?: string | null): boolean {
+  return !userId && !unscopedWriteThisLoad[key];
+}
+
 // ==================== APPLICATION TRACKING ====================
 
 function readApplicationsAt(key: string): JobApplication[] {
@@ -98,7 +111,7 @@ export function recordJobApplication(
   if (typeof window === "undefined") return;
 
   try {
-    const history = getApplicationHistory(userId);
+    const history = mustDiscardUnscoped(APPLIED_JOBS_KEY, userId) ? [] : getApplicationHistory(userId);
 
     // Avoid duplicates
     if (history.some((app) => app.jobId === jobId)) {
@@ -208,7 +221,7 @@ export function toggleJobSaved(
   if (typeof window === "undefined") return false;
 
   try {
-    const saved = getSavedJobs(userId);
+    const saved = mustDiscardUnscoped(SAVED_JOBS_KEY, userId) ? [] : getSavedJobs(userId);
 
     // Check if already saved
     const existingIndex = saved.findIndex((job) => job.jobId === jobId);

@@ -83,14 +83,16 @@ export default function LoadingAnimation({ stage }: { stage: LoadingStage }) {
       <div className="flex flex-col items-center gap-6">
         <div className="relative flex h-24 w-24 items-center justify-center" role="status">
           <div className="absolute inset-0 animate-spin rounded-full border-[7px] border-blue-100 border-r-blue-600 border-t-blue-600" />
-          <span className="text-xl font-bold tabular-nums text-blue-600">
+          {/* aria-hidden is load-bearing: this span sits inside TWO polite
+              live regions (the <main> above and the implicit one from
+              role="status" on its parent) and reticks every 90ms, which
+              queued ~99 separate announcements per analysis and drowned out
+              everything else on the page for a screen reader. Sighted users
+              still get the counter; the stage label below carries the
+              meaningful milestones. */}
+          <span className="text-xl font-bold tabular-nums text-blue-600" aria-hidden="true">
             {progress}%
           </span>
-          {/* Stage label only — the percentage ticks every 90ms, and inside
-              this aria-live region that queued ~99 separate announcements per
-              analysis, drowning out everything else on the page for a screen
-              reader. The visible counter above still conveys it sighted; the
-              stage changes are the meaningful milestones to announce. */}
           <span className="sr-only">{activeMessage}</span>
         </div>
 

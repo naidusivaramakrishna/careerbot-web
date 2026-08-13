@@ -541,7 +541,12 @@ export default function AnalysisContent({
         (err?.response?.status === 409 || err?.response?.status === 422) &&
         errCode === "needs_value";
       if (isNeedsValue) {
-        blankText = errPayload?.error?.details?.text?.[0] ?? errPayload?.text?.[0];
+        // `text` may arrive as an array of blanks or as a bare string —
+        // indexing [0] on a string yields its first character, which would
+        // make fillManualBlank fall back to the unanchored /\bn\b/ form it
+        // exists to avoid. Normalise both shapes.
+        const rawBlank = errPayload?.error?.details?.text ?? errPayload?.text;
+        blankText = Array.isArray(rawBlank) ? rawBlank[0] : (typeof rawBlank === "string" ? rawBlank : undefined);
         const answer = await askForNumber(blankText);
         const numeric = answer?.trim().replace(/,/g, "");
         if (!numeric || !/^\d+(\.\d+)?$/.test(numeric)) {
@@ -666,7 +671,19 @@ export default function AnalysisContent({
       return { ...prev, skills: existing.filter((x) => x !== s) };
     });
     const resolvedSuggestionId = suggestion_id ?? findSkillSuggestionId(s);
-    if (!matchId || !resolvedSuggestionId) return true;
+    // Mirror of directAddSkill's guard above: without a suggestion id there
+    // is no server-side route to remove the skill from the resume document,
+    // so nothing is persisted. Restore the optimistic removal and report
+    // failure rather than returning true — otherwise the chip clears while
+    // the downloaded resume still contains the skill.
+    if (!matchId || !resolvedSuggestionId) {
+      if (wasHighlighted) setAddedSkillFields((prev) => prev.includes(s) ? prev : [...prev, s]);
+      setResumeSections((prev: Record<string, unknown>) => {
+        const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+        return existing.includes(s) ? prev : { ...prev, skills: [...existing, s] };
+      });
+      return false;
+    }
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const res = await runSerially(() => matcherEnhanceRemove(matchId, resolvedSuggestionId)) as any;

@@ -151,7 +151,6 @@ function CategoryGroup({
   const categoryBulkActionable = !!onApplyFix && TEXT_ACTIONABLE_CATEGORIES.has(category);
   const canAct = isSkillActionable || categoryBulkActionable;
   const hideGroupHeader = category === "all";
-  const allAdded = individuals.length > 0 && individuals.every(p => addedIds.has(p.suggestion_id));
   const totalPts = Math.abs(individuals.reduce((a, p) => a + Math.abs(p.penalty), 0))
     || Math.abs(bulkParents.reduce((a, p) => a + Math.abs(p.penalty), 0));
   const pending = individuals.length - addedIds.size;
@@ -166,6 +165,12 @@ function CategoryGroup({
   const leftover = individuals.filter(p => !consumed.has(p.suggestion_id));
   if (leftover.length || subgroups.length === 0) subgroups.push({ items: leftover });
   const multiBulk = bulkParents.length > 1;
+  // What the single-bulk-parent header button actually applies (subgroup 0).
+  // It used to be gated on every individual in the category regardless of
+  // severity, which left it enabled after its own subgroup was already done —
+  // the next click then no-op'd inside handleGroupBulkAdd, a dead click.
+  const headerGroupAllAdded =
+    subgroups[0]?.items.length > 0 && subgroups[0].items.every(p => addedIds.has(p.suggestion_id));
 
   // `silent` skips the per-item error toast — used during "Fix All" so a run
   // of rate-limited calls doesn't spam one toast per skill; the bulk loop
@@ -287,12 +292,12 @@ function CategoryGroup({
               // mismatched-severity rows as "Applied" even though only the
               // matching-severity ones were actually sent to the backend.
               onClick={e => { e.stopPropagation(); handleGroupBulkAdd(subgroups[0].items, bulkParents[0]); }}
-              disabled={bulkLoadingKey !== null || allAdded}
+              disabled={bulkLoadingKey !== null || headerGroupAllAdded}
               className="flex min-h-9 items-center gap-1.5 rounded-lg px-3.5 py-2 text-[11px] font-bold text-white shadow-sm transition-all hover:opacity-90 disabled:opacity-70"
-              style={{ background: allAdded ? "#22c55e" : meta.color }}
+              style={{ background: headerGroupAllAdded ? "#22c55e" : meta.color }}
             >
               {bulkLoadingKey === bulkParents[0].suggestion_id ? <Loader2 className="w-3 h-3 animate-spin" /> :
-               allAdded ? <><CheckCircle2 className="w-3 h-3" /> All Added</> :
+               headerGroupAllAdded ? <><CheckCircle2 className="w-3 h-3" /> All Added</> :
                <><Plus className="w-3 h-3" /> {bulkActionLabel}</>}
             </button>
           )}

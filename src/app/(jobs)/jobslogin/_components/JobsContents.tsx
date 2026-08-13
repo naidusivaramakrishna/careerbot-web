@@ -288,7 +288,7 @@ export default function JobsContents() {
   // Everything here still gets re-applied client-side afterward via
   // matchesJobFilters, same as before, so this can only narrow the search
   // further (to the whole pool) — never behave worse than today.
-  const matchedServerFilters = useMemo(() => {
+  const matchedServerFiltersMemo = useMemo(() => {
     const workModels = WORK_MODELS.filter((m) => selectedFilters.includes(m));
     const jobTypes = JOB_TYPES.filter((t) => selectedFilters.includes(t));
     const locations = selectedFilters
@@ -303,9 +303,13 @@ export default function JobsContents() {
     if (locations.length === 1) params.location = locations[0];
     if (datePreset?.days) params.posted_within_days = datePreset.days;
     if (searchQuery.trim()) params.query = searchQuery.trim();
-    return params;
+    // Serialized here rather than at the use site: this component re-renders
+    // on every keystroke in the search box, and the key is only ever read as
+    // an effect dependency, so re-stringifying per render is pure waste.
+    return { params, key: JSON.stringify(params) };
   }, [selectedFilters, searchQuery]);
-  const matchedServerFiltersKey = JSON.stringify(matchedServerFilters);
+  const matchedServerFilters = matchedServerFiltersMemo.params;
+  const matchedServerFiltersKey = matchedServerFiltersMemo.key;
 
   const [matchedJobs, setMatchedJobs] = useState<NormalizedJob[]>([]);
   const [matchedTotal, setMatchedTotal] = useState(0);
