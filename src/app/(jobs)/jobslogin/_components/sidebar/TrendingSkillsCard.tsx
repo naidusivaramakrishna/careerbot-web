@@ -28,6 +28,24 @@ const PCT_COLOR = (pct: number) => {
   return "text-gray-500";
 };
 
+// Pill background to match — same tiering as PCT_COLOR, so the number and
+// its chip always agree, and both intensify at the same threshold as the bar.
+const PCT_BG = (pct: number) => {
+  if (pct >= 40) return "bg-indigo-50";
+  if (pct >= 25) return "bg-cyan-50";
+  return "bg-slate-100";
+};
+
+// Rank badge — mirrors TopPickCard's medal-style circles for the top 3 so
+// both cards in the panel read as one system; ranks beyond 3 (this list can
+// show up to 10) fall back to a neutral badge rather than losing the shape.
+const RANK_BADGE_STYLE = (idx: number) => {
+  if (idx === 0) return "bg-amber-50 text-amber-500 border-amber-200";
+  if (idx === 1) return "bg-gray-50 text-gray-400 border-gray-200";
+  if (idx === 2) return "bg-orange-50 text-orange-400 border-orange-200";
+  return "bg-slate-50 text-slate-400 border-slate-200";
+};
+
 function TrendingSkillsCard() {
   const [skills, setSkills]   = useState<TrendingSkillItem[]>([]);
   const [period, setPeriod]   = useState<string>("");
@@ -49,8 +67,6 @@ function TrendingSkillsCard() {
   };
 
   useEffect(() => { fetch(); }, []);
-
-  const maxDemand = skills.length > 0 ? Math.max(...skills.map((s) => s.demand_pct)) : 100;
 
   return (
     <div>
@@ -102,18 +118,21 @@ function TrendingSkillsCard() {
         ) : (
           <div className="space-y-3.5">
             {skills.map((item, idx) => {
-              const barWidth = Math.max(6, Math.round((item.demand_pct / maxDemand) * 100));
+              // Scaled directly against the true 0-100% domain — not against
+              // this list's own max — so bar length always matches what the
+              // percentage label says, instead of overstating lower items.
+              const barWidth = Math.max(6, Math.round(item.demand_pct));
               return (
                 <div key={item.skill} className="group flex items-center gap-3">
-                  {/* Rank */}
-                  <span className="text-[10px] font-bold text-gray-300 w-3 shrink-0 text-right tabular-nums">
+                  {/* Rank — same medal-circle treatment as Top Picks */}
+                  <span className={`w-5 h-5 rounded-full border text-[9px] font-black flex items-center justify-center shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${RANK_BADGE_STYLE(idx)}`}>
                     {idx + 1}
                   </span>
 
                   {/* Skill name */}
                   <span
                     className="text-[11.5px] font-medium text-gray-700 shrink-0"
-                    style={{ width: 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    style={{ width: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                     title={item.skill}
                   >
                     {item.skill}
@@ -127,8 +146,8 @@ function TrendingSkillsCard() {
                     />
                   </div>
 
-                  {/* Percentage */}
-                  <span className={`text-[11px] font-bold tabular-nums shrink-0 w-9 text-right ${PCT_COLOR(item.demand_pct)}`}>
+                  {/* Percentage — pill treatment matching Top Picks' match-score chip */}
+                  <span className={`inline-flex shrink-0 w-9 items-center justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${PCT_COLOR(item.demand_pct)} ${PCT_BG(item.demand_pct)}`}>
                     {Math.round(item.demand_pct)}%
                   </span>
                 </div>

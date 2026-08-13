@@ -58,11 +58,40 @@
       if (el && el.innerText.trim().length > 100) return el.innerText.trim();
     }
 
-    // Last resort: find any element with substantial text near "job-details" or "description"
+    // LinkedIn labels this section "About the job" on every layout (standalone
+    // /jobs/view/ page and the /jobs/search-results/ split-pane preview alike),
+    // even when the surrounding CSS class names differ between them — anchoring
+    // on that heading text survives LinkedIn's frequent class renames better
+    // than any fixed selector list.
+    // textContent, not innerText — innerText forces a synchronous layout on
+    // every call, and this scan runs across every leaf element in the page
+    // each time the mutation observer below fires (LinkedIn mutates the DOM
+    // constantly). For a leaf node's exact-string test, textContent is
+    // equivalent; innerText is only needed (and only used) on the final
+    // matched container below, where layout-aware visibility actually matters.
+    const heading = Array.from(document.querySelectorAll('h1, h2, h3, h4, strong, span, div'))
+      .find(el => el.children.length === 0 && /^about the job$/i.test(el.textContent?.trim() || ''));
+    if (heading) {
+      const container = (heading.parentElement || heading).closest('section, article, div');
+      const text = container?.innerText?.trim();
+      if (text && text.length > 100) return text;
+    }
+
+    // Last resort: find any element with substantial text near "job-details" or
+    // "description". Reject a candidate that IS nav/header chrome itself, or
+    // that contains a nav/header descendant with enough links to be real site
+    // navigation (a proxy for "this wraps the whole page" — e.g. the global
+    // nav plus the signed-in user's profile card) — but not on ANY nested
+    // <nav>/<header>, since LinkedIn's small card sub-widgets use those tags
+    // too and over-rejecting on that previously disqualified otherwise-valid
+    // candidates.
     const candidates = document.querySelectorAll('article, section, div[id*="job"], div[class*="description"]');
     for (const el of candidates) {
+      if (el.tagName === 'NAV' || el.tagName === 'HEADER') continue;
+      const chromeLinkCount = el.querySelectorAll('nav a, header a').length;
+      if (chromeLinkCount > 5) continue;
       const text = el.innerText?.trim();
-      if (text && text.length > 200 && !el.querySelector('nav') && !el.querySelector('header')) {
+      if (text && text.length > 200) {
         return text;
       }
     }
@@ -85,16 +114,20 @@
   }
 
   let lastDetectedJd = null;
+  let staleJdAfterNavigation = null;
+  let mutationTimer = null;
 
   function tryDetect() {
     if (!isJobPage()) return;
     const jd = extractJobDescription();
     if (!jd) return;
+    if (staleJdAfterNavigation && jd === staleJdAfterNavigation) return;
 
     // Avoid re-sending the same JD / re-injecting the banner on repeated
     // retries or rapid SPA navigation callbacks.
     if (jd === lastDetectedJd && document.getElementById('cb-shadow-host')) return;
     lastDetectedJd = jd;
+    staleJdAfterNavigation = null;
 
     const meta = extractMeta();
     chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } }).catch(() => {});
@@ -300,16 +333,21 @@
   setTimeout(tryDetect, 3000);
   setTimeout(tryDetect, 5000);
 
-  // Re-run on URL change (SPA navigation)
+  // Re-run for both URL changes and in-place job-panel replacements. LinkedIn
+  // can update the selected job without replacing the whole page.
   let lastUrl = location.href;
   const urlObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
-      setTimeout(tryDetect, 1500);
-      setTimeout(tryDetect, 3000);
+      staleJdAfterNavigation = lastDetectedJd;
+      lastDetectedJd = null;
+      document.getElementById('cb-shadow-host')?.remove();
     }
+
+    clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(tryDetect, 250);
   });
-  urlObserver.observe(document, { subtree: true, childList: true });
+  urlObserver.observe(document.body || document.documentElement, { subtree: true, childList: true });
   window.addEventListener('pagehide', () => urlObserver.disconnect(), { once: true });
 
   // Show the CareerBot brand icon in the banner (static — not the company's logo).

@@ -6,8 +6,9 @@ import { useSearchParams } from "next/navigation";
 import { getSmartMatchedJobs, getJobById } from "@/api/jobsApi";
 import type { MatchedJobItem } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/filterConstants";
+import { WORK_MODELS, JOB_TYPES, DATE_PRESETS } from "./filters/filterConstants";
 import { toast } from "sonner";
-import { getSavedJobIds, getSavedJobsCount, getApplicationHistory, getApplicationCount, recordJobApplication } from "@/utils/jobTracking";
+import { getSavedJobs, getSavedJobsCount, getApplicationHistory, getApplicationCount, recordJobApplication, removeApplication } from "@/utils/jobTracking";
 import { getJobId } from "@/utils/jobIdHelper";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { Bookmark, Zap, Search, RotateCcw, FileX, MessageCircle, CheckCircle2, Briefcase, X } from "lucide-react";
@@ -186,6 +187,10 @@ export default function JobsContents() {
   // ── Saved tab — fetched by id so it works regardless of which tab/page a job was saved from ──
   const [savedJobsList, setSavedJobsList] = useState<NormalizedJob[]>([]);
   const [savedJobsListLoading, setSavedJobsListLoading] = useState(false);
+  // Bumped on every fetchSavedJobsList call so a superseded fetch (e.g. the
+  // user unsaves/re-saves while enrichment is still in flight) can tell its
+  // own result is stale and discard it instead of merging into the wrong rows.
+  const savedJobsFetchTokenRef = useRef(0);
 
   // ── Applied tab — same fetch-by-id pattern as Saved, backed by the local application history ──
   const [appliedJobsList, setAppliedJobsList] = useState<NormalizedJob[]>([]);
@@ -272,6 +277,40 @@ export default function JobsContents() {
   const [selectedJob, setSelectedJob] = useState<NormalizedJob | null>(null);
 
   // ── Smart match ──
+  // The subset of active filters that map onto /jobs/scored's own query
+  // params — only pushed server-side when unambiguous (the backend takes a
+  // single string per field, not a list) and semantically identical to what
+  // the filter means here. Experience/years is deliberately excluded: the
+  // frontend's filter means "jobs requiring this many years," but the
+  // backend's experience_years param means "the candidate's own years —
+  // return jobs they qualify for," a different axis entirely. Salary,
+  // Education, and Source have no server-side equivalent on this endpoint.
+  // Everything here still gets re-applied client-side afterward via
+  // matchesJobFilters, same as before, so this can only narrow the search
+  // further (to the whole pool) — never behave worse than today.
+  const matchedServerFiltersMemo = useMemo(() => {
+    const workModels = WORK_MODELS.filter((m) => selectedFilters.includes(m));
+    const jobTypes = JOB_TYPES.filter((t) => selectedFilters.includes(t));
+    const locations = selectedFilters
+      .filter((f) => f.startsWith("location:"))
+      .map((f) => f.replace("location:", ""));
+    const dateLabel = selectedFilters.find((f) => f.startsWith("date:"))?.replace("date:", "");
+    const datePreset = DATE_PRESETS.find((p) => p.label === dateLabel);
+
+    const params: { mode?: string; job_type?: string; location?: string; posted_within_days?: number; query?: string } = {};
+    if (workModels.length === 1) params.mode = workModels[0].toLowerCase();
+    if (jobTypes.length === 1) params.job_type = jobTypes[0].toLowerCase();
+    if (locations.length === 1) params.location = locations[0];
+    if (datePreset?.days) params.posted_within_days = datePreset.days;
+    if (searchQuery.trim()) params.query = searchQuery.trim();
+    // Serialized here rather than at the use site: this component re-renders
+    // on every keystroke in the search box, and the key is only ever read as
+    // an effect dependency, so re-stringifying per render is pure waste.
+    return { params, key: JSON.stringify(params) };
+  }, [selectedFilters, searchQuery]);
+  const matchedServerFilters = matchedServerFiltersMemo.params;
+  const matchedServerFiltersKey = matchedServerFiltersMemo.key;
+
   const [matchedJobs, setMatchedJobs] = useState<NormalizedJob[]>([]);
   const [matchedTotal, setMatchedTotal] = useState(0);
   const [matchedPage, setMatchedPage] = useState(1);
@@ -280,6 +319,8 @@ export default function JobsContents() {
   const [matchedNoResume, setMatchedNoResume] = useState(false);
   const [matchedError, setMatchedError] = useState(false);
   const [matchBandFilter] = useState<"all" | "strong" | "good" | "partial" | "low">("all");
+  // Discards superseded Smart Match responses — see fetchSmartMatchedJobs.
+  const matchedFetchTokenRef = useRef(0);
 
   // ── Sort helper ──
   const sortJobs = useCallback((list: NormalizedJob[], sort: FilterSort): NormalizedJob[] => {
@@ -301,16 +342,32 @@ export default function JobsContents() {
   const handleFilterChange = useCallback((_filters: FilterParams) => {}, []);
 
   // ── Fetch SmartMatch jobs (lazy — only when tab first activated; paginated) ──
-  const fetchSmartMatchedJobs = useCallback(async (page = 1, force = false) => {
-    if (matchedFetched && page === matchedPage && !force) return;
+  // bypassGuard and forceRefresh are deliberately separate: bypassGuard only
+  // skips the "already fetched this exact page" no-op check below (needed
+  // whenever the underlying query changed but page/matchedPage didn't, e.g.
+  // a filter change while still on page 1) — it must NOT imply force_refresh,
+  // which bypasses the backend's own scored-results cache and is reserved
+  // for the explicit "Retry Smart Match" button. Filter/search changes hit a
+  // different cache entry on the backend already (keyed by the query itself)
+  // so they never need to pay for an uncached re-score.
+  const fetchSmartMatchedJobs = useCallback(async (page = 1, options?: { bypassGuard?: boolean; forceRefresh?: boolean }) => {
+    const { bypassGuard = false, forceRefresh = false } = options ?? {};
+    if (matchedFetched && page === matchedPage && !bypassGuard) return;
+    // Monotonic run token — same pattern as savedJobsFetchTokenRef above.
+    // Filter changes now dispatch a fetch each time (see the effect below), so
+    // two in quick succession can resolve out of order and let the slower,
+    // older response overwrite the newer one. Nothing self-corrects afterward,
+    // because the filters-key ref is already advanced.
+    const token = ++matchedFetchTokenRef.current;
     setMatchedLoading(true);
     setMatchedNoResume(false);
     setMatchedError(false);
     try {
-      const data = await getSmartMatchedJobs({
+      let data = await getSmartMatchedJobs({
         limit: MATCHED_PER_PAGE,
         skip: (page - 1) * MATCHED_PER_PAGE,
-        ...(force && { force_refresh: true }),
+        ...matchedServerFilters,
+        ...(forceRefresh && { force_refresh: true }),
       });
       // A malformed/unexpected response shape (e.g. the backend contract
       // for this endpoint drifts) must not be silently treated the same as
@@ -319,15 +376,41 @@ export default function JobsContents() {
       if (!Array.isArray(data.jobs)) {
         throw new Error("Unexpected Smart Match response shape");
       }
+      // The filter values are UI labels lowercased onto the wire (see
+      // matchedServerFilters). If /jobs/scored expects a different vocabulary
+      // for any of them, it answers 0 rows and the tab would render empty —
+      // strictly worse than the client-side narrowing this replaced. Retry
+      // once without the filters and let matchesJobFilters narrow the result
+      // instead, so an enum mismatch degrades to the old behaviour rather
+      // than an empty tab.
+      const usedServerFilters = Object.keys(matchedServerFilters).length > 0;
+      let fellBackToUnfiltered = false;
+      if (data.jobs.length === 0 && usedServerFilters) {
+        data = await getSmartMatchedJobs({
+          limit: MATCHED_PER_PAGE,
+          skip: (page - 1) * MATCHED_PER_PAGE,
+          ...(forceRefresh && { force_refresh: true }),
+        });
+        if (!Array.isArray(data.jobs)) {
+          throw new Error("Unexpected Smart Match response shape");
+        }
+        fellBackToUnfiltered = true;
+      }
+      if (matchedFetchTokenRef.current !== token) return;
       const normalized = data.jobs.map((item) =>
         normalizeJob(item.job, item.match.score, item.match)
       );
       setMatchedJobs(normalized);
-      setMatchedTotal(data.total ?? normalized.length);
+      // After a fallback, data.total counts the WHOLE unfiltered pool while
+      // the list rendered is this page narrowed client-side — driving the
+      // pager off it would advertise pages that are empty once narrowed.
+      // Size it to what's actually on this page instead.
+      setMatchedTotal(fellBackToUnfiltered ? normalized.length : (data.total ?? normalized.length));
       setMatchedPage(page);
       setMatchedFetched(true);
       setMatchedNoResume(false);
     } catch (err: unknown) {
+      if (matchedFetchTokenRef.current !== token) return;
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 404) {
         // No resume on file is a terminal state — cache it so we don't refetch.
@@ -343,31 +426,68 @@ export default function JobsContents() {
         toast.error("Could not load Smart Match jobs. Please try again later.");
       }
     } finally {
-      setMatchedLoading(false);
+      // Only the newest run owns the spinner — a superseded one clearing it
+      // would hide the fact that a fresher fetch is still in flight.
+      if (matchedFetchTokenRef.current === token) setMatchedLoading(false);
     }
-  }, [matchedFetched, matchedPage]);
+  }, [matchedFetched, matchedPage, matchedServerFilters]);
 
   // ── Fetch full details for saved jobs by id — works regardless of which
   //    tab/page a job was originally saved from, unlike filtering the
-  //    currently-loaded "All Jobs"/"Smart Match" arrays. ──
+  //    currently-loaded "All Jobs"/"Smart Match" arrays. Same placeholder-
+  //    then-enrich pattern as fetchAppliedJobsList: many saved jobs (any
+  //    aggregated/external listing without a real backend id — see
+  //    getJobId's composite-* fallback in jobIdHelper.ts) will never resolve
+  //    through getJobById, since that composite id was never stored
+  //    backend-side. Falling back to null on a failed lookup would silently
+  //    drop those jobs from the list even though they're genuinely saved. ──
   const fetchSavedJobsList = useCallback(async () => {
-    const savedIds = getSavedJobIds(userId);
-    if (savedIds.length === 0) {
+    const token = ++savedJobsFetchTokenRef.current;
+    const saved = getSavedJobs(userId);
+    // Re-derive the badge from the same read so it can never drift from the
+    // list actually shown here, even if some other path missed a save/unsave.
+    setSavedJobsCount(saved.length);
+    if (saved.length === 0) {
       setSavedJobsList([]);
       return;
     }
+
+    const placeholders = saved.map((job) =>
+      normalizeJob({
+        id: job.jobId,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        type: job.type,
+        created_at: job.savedAt,
+      })
+    );
+    setSavedJobsList(placeholders);
+
     setSavedJobsListLoading(true);
     try {
-      const results = await Promise.all(
-        savedIds.map((id) =>
-          getJobById(id)
-            .then((res) => (res.data ? normalizeJob(res.data as unknown as Record<string, unknown>) : null))
-            .catch(() => null)
-        )
+      const enriched = await Promise.all(
+        saved.map(async (job) => {
+          try {
+            const res = await getJobById(job.jobId);
+            return res.data ? normalizeJob(res.data as unknown as Record<string, unknown>) : null;
+          } catch {
+            return null;
+          }
+        })
       );
-      setSavedJobsList(results.filter((j): j is NormalizedJob => j !== null));
+      // A concurrent unsave/re-save (handleSaveToggle) or another
+      // fetchSavedJobsList call can change the saved list's contents/length
+      // while these awaits are in flight. Bail if a newer fetch has since
+      // superseded this one, and key the merge by id rather than index —
+      // otherwise a mid-flight unsave shifts prev's rows out from under this
+      // array and enriched[i] lands on the wrong job (e.g. B receiving A's
+      // title/company after A was unsaved).
+      if (savedJobsFetchTokenRef.current !== token) return;
+      const byId = new Map(saved.map((job, i) => [job.jobId, enriched[i]]));
+      setSavedJobsList((prev) => prev.map((job) => byId.get(job.id) ?? job));
     } finally {
-      setSavedJobsListLoading(false);
+      if (savedJobsFetchTokenRef.current === token) setSavedJobsListLoading(false);
     }
   }, [userId]);
 
@@ -441,13 +561,20 @@ export default function JobsContents() {
   }, []);
 
   useEffect(() => {
-    const handleVisibility = () => {
+    const showConfirmationOnReturn = () => {
       if (!document.hidden && pendingApplyJob) {
         setShowApplyConfirm(true);
       }
     };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("visibilitychange", showConfirmationOnReturn);
+    // Chrome does not always mark the original document hidden when a
+    // target=_blank application page opens (for example, when it opens in the
+    // background). Window focus reliably covers the return path in that case.
+    window.addEventListener("focus", showConfirmationOnReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", showConfirmationOnReturn);
+      window.removeEventListener("focus", showConfirmationOnReturn);
+    };
   }, [pendingApplyJob]);
 
   // Covers the case where this component remounts (e.g. a route change)
@@ -474,6 +601,120 @@ export default function JobsContents() {
     setSavedJobsCount(getSavedJobsCount(userId));
   }, [userId]);
 
+  // ── Save/unsave from any job card (Smart Match, Saved, or Applied tab —
+  //    JobCard is shared across all three) — updates the tab badge and, if
+  //    a job is unsaved while the Saved tab's list is already loaded, drops
+  //    it from that list immediately instead of waiting for the next time
+  //    the Saved tab is (re)activated. ──
+  const handleSaveToggle = useCallback((jobId: string, saved: boolean) => {
+    if (saved) {
+      // localStorage is updated synchronously by JobCard before this callback,
+      // so read the new record straight from the source of truth. Append just
+      // this one placeholder and enrich only this one id — calling the full
+      // fetchSavedJobsList() here would re-run getJobById for every already-
+      // saved job (potentially dozens) just to add one, including while the
+      // Saved tab isn't even the active/rendered tab. The full fetch still
+      // runs when the Saved tab is actually (re)activated, below.
+      // Count is derived from the persisted list, and only after confirming
+      // the record is actually there — toggleJobSaved swallows write failures
+      // (quota, private mode), so an unconditional increment would leave the
+      // badge counting a job that was never saved.
+      const savedList = getSavedJobs(userId);
+      const savedRecord = savedList.find((job) => job.jobId === jobId);
+      if (!savedRecord) return;
+      setSavedJobsCount(savedList.length);
+
+      const placeholder = normalizeJob({
+        id: savedRecord.jobId,
+        title: savedRecord.title,
+        company: savedRecord.company,
+        location: savedRecord.location,
+        type: savedRecord.type,
+        created_at: savedRecord.savedAt,
+      });
+      setSavedJobsList((prev) => (prev.some((job) => job.id === jobId) ? prev : [...prev, placeholder]));
+
+      (async () => {
+        try {
+          const res = await getJobById(jobId);
+          if (res.data) {
+            const full = normalizeJob(res.data as unknown as Record<string, unknown>);
+            setSavedJobsList((prev) => prev.map((job) => (job.id === jobId ? full : job)));
+          }
+        } catch {
+          // Keep the placeholder — same reasoning as fetchSavedJobsList: a
+          // failed lookup shouldn't drop a job that's genuinely saved.
+        }
+      })();
+    } else {
+      // Symmetric with the save branch above: toggleJobSaved swallows write
+      // failures and returns false either way, so an unconditional decrement
+      // would drop the badge for a job still persisted in storage — which
+      // then reappears on the next tab activation. Read the real list back.
+      const stillSaved = getSavedJobs(userId);
+      setSavedJobsCount(stillSaved.length);
+      if (!stillSaved.some((job) => job.jobId === jobId)) {
+        setSavedJobsList((prev) => prev.filter((job) => job.id !== jobId));
+      }
+    }
+  }, [userId]);
+
+  // ── "Already Applied" quick-mark from any job card's menu (JobCard already
+  //    wrote the record via recordJobApplication before calling this) — same
+  //    reasoning as handleSaveToggle: bump the badge and, if the Applied
+  //    tab's list is already loaded, append a placeholder immediately instead
+  //    of waiting for the next time the Applied tab is (re)activated. ──
+  const handleAppliedToggle = useCallback((jobId: string) => {
+    // recordJobApplication de-dupes (a repeat "Already Applied" click on a
+    // job that's already recorded is a no-op there), so derive the count
+    // from the actual history length rather than unconditionally incrementing
+    // — an unconditional bump would overcount on a repeat click.
+    const history = getApplicationHistory(userId);
+    setAppliedJobsCount(history.length);
+    const record = history.find((app) => app.jobId === jobId);
+    if (!record) return;
+
+    const placeholder = normalizeJob({
+      id: record.jobId,
+      title: record.title,
+      company: record.company,
+      url: record.url,
+      created_at: record.appliedAt,
+      is_applied: true,
+    });
+    setAppliedJobsList((prev) => (prev.some((job) => job.id === jobId) ? prev : [...prev, placeholder]));
+
+    (async () => {
+      try {
+        const res = await getJobById(jobId);
+        if (res.data) {
+          const full = normalizeJob(res.data as unknown as Record<string, unknown>);
+          setAppliedJobsList((prev) => prev.map((job) => (job.id === jobId ? full : job)));
+        }
+      } catch {
+        // Keep the placeholder — same reasoning as fetchAppliedJobsList: a
+        // failed lookup shouldn't drop a job that's genuinely applied.
+      }
+    })();
+  }, [userId]);
+
+  // ── Permanently remove an entry from the Applied tab — deletes the
+  //    underlying application record (unlike the Smart Match "Not
+  //    interested" dismiss, which only ever hides a card for the current
+  //    session) so it can't reappear on the next fetch. ──
+  const handleRemoveApplication = useCallback((jobId: string) => {
+    removeApplication(jobId, userId);
+    // Derived from storage, not decremented — removeApplication swallows its
+    // write failures exactly like toggleJobSaved does, so a blind decrement
+    // would drop the badge for a record still on disk (which then reappears
+    // on the next Applied-tab activation). Same as the two sibling handlers.
+    const remaining = getApplicationHistory(userId);
+    setAppliedJobsCount(remaining.length);
+    if (!remaining.some((app) => app.jobId === jobId)) {
+      setAppliedJobsList((prev) => prev.filter((job) => job.id !== jobId));
+    }
+  }, [userId]);
+
   // ── Trigger SmartMatch fetch when tab becomes active — also covers the
   //    initial mount fetch (for the sidebar's "Top Picks") since "matched"
   //    is the default active tab. ──
@@ -494,15 +735,55 @@ export default function JobsContents() {
     }
   }, [activeTab, matchedFetched, fetchSmartMatchedJobs, fetchSavedJobsList, fetchAppliedJobsList]);
 
+  // ── Re-fetch from the server when a server-mappable filter changes (Work
+  //    Model, Job Type, Location, Date Posted, or the search box) — without
+  //    this, filtering only ever narrowed whichever page was already loaded,
+  //    missing matches sitting on unfetched pages. Skipped on mount (the
+  //    effect above owns the first fetch). ──
+  const matchedFilterMountRef = useRef(true);
+  // The filter set the currently-loaded results were actually fetched with.
+  // Compared (rather than just reacting to a filter change) so a filter
+  // changed while another tab was active still reaches the server on the way
+  // back: the tab-activation effect above only fetches when !matchedFetched,
+  // so without this the request would be skipped entirely and filtering would
+  // silently fall back to client-side-only narrowing of the loaded page.
+  const lastFetchedFiltersKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (matchedFilterMountRef.current) {
+      matchedFilterMountRef.current = false;
+      lastFetchedFiltersKeyRef.current = matchedServerFiltersKey;
+      return;
+    }
+    if (activeTab !== "matched" || !matchedFetched) return;
+    if (lastFetchedFiltersKeyRef.current === matchedServerFiltersKey) return;
+    lastFetchedFiltersKeyRef.current = matchedServerFiltersKey;
+    fetchSmartMatchedJobs(1, { bypassGuard: true });
+    // matchedServerFiltersKey (a stable serialization of matchedServerFilters)
+    // is the real change signal — fetchSmartMatchedJobs is intentionally
+    // omitted so it recreating for an unrelated reason (e.g. matchedPage
+    // changing while paginating) doesn't also trigger a refetch here. The
+    // key comparison above is what prevents a duplicate fetch when both this
+    // and the tab-activation effect run in the same pass.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedServerFiltersKey, activeTab, matchedFetched]);
+
   // ── Top Picks — real recommendations, sorted by match score ──
   const topPickJobs = useMemo(
     () => [...matchedJobs].sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0)).slice(0, 3),
     [matchedJobs]
   );
 
-  const handleMatchedPageChange = (page: number) => {
-    fetchSmartMatchedJobs(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const handleMatchedPageChange = async (page: number) => {
+    const jobsScrollPanel = document.getElementById("jobs-main-scroll");
+
+    // The jobs workspace has its own scroll container, so scrolling the
+    // browser window does not move the results list. Reset it immediately
+    // for loading feedback, then once more after the new page has rendered.
+    jobsScrollPanel?.scrollTo({ top: 0, behavior: "smooth" });
+    await fetchSmartMatchedJobs(page);
+    requestAnimationFrame(() => {
+      jobsScrollPanel?.scrollTo({ top: 0, behavior: "auto" });
+    });
   };
 
   // ── Client-side filter / tab logic — searchQuery filters by title/company
@@ -625,15 +906,15 @@ export default function JobsContents() {
     isMatchedTab && !matchedNoResume && matchedJobs.length > 0 && !!(searchQuery || selectedFilters.length > 0);
 
   return (
-    <div className="flex h-full w-full max-w-full min-w-0 items-stretch gap-4 overflow-hidden bg-white">
+    <div className="jobs-workspace flex h-full w-full max-w-full min-w-0 items-stretch gap-4 overflow-hidden bg-white">
       {/* CENTER PANEL — scrolls internally so the right sidebar never moves */}
-      <main id="jobs-main-scroll" className="h-full min-w-0 flex-1 overflow-y-auto border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.06)]">
+      <main id="jobs-main-scroll" className="scrollbar-hide h-full min-w-0 flex-1 overflow-y-auto border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.06)]">
         {/* RESULTS VIEW */}
 
         
         <div>
             {/* TOP BAR */}
-            <div className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="jobs-page-topbar flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5">
@@ -677,7 +958,7 @@ export default function JobsContents() {
                     onFocus={() => inputValue.trim() && setShowSuggestions(suggestions.length > 0)}
                     onKeyDown={(e) => { if (e.key === "Enter") commitSearch(inputValue); }}
                     placeholder="Search by title or company"
-                    className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-10 pr-4 text-[13px] text-slate-700 shadow-sm placeholder:text-slate-400 transition-all focus:border-[#4F46E5]/45 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#4F46E5]/10 lg:w-[min(440px,36vw)]"
+                    className="jobs-search-input w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-10 pr-4 text-[13px] text-slate-700 shadow-sm placeholder:text-slate-400 transition-all focus:border-[#4F46E5]/45 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#4F46E5]/10 lg:w-[min(440px,36vw)]"
                   />
                   {/* Autocomplete dropdown */}
                   {showSuggestions && (
@@ -712,7 +993,7 @@ export default function JobsContents() {
                 <button
                   type="button"
                   onClick={() => commitSearch(inputValue)}
-                  className="flex shrink-0 items-center gap-1.5 rounded-2xl bg-[#4F46E5] px-6 py-3.5 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(79,70,229,0.22)] transition-all hover:bg-[#4338CA] hover:shadow-[0_16px_36px_rgba(79,70,229,0.30)] active:scale-95"
+                  className="jobs-search-button flex shrink-0 items-center gap-1.5 rounded-2xl bg-[#4F46E5] px-6 py-3.5 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(79,70,229,0.22)] transition-all hover:bg-[#4338CA] hover:shadow-[0_16px_36px_rgba(79,70,229,0.30)] active:scale-95"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
@@ -724,7 +1005,7 @@ export default function JobsContents() {
 
               <div className="px-5 sm:px-6">
               {/* STICKY FILTER + TABS BAR */}
-              <div className="sticky top-0 z-30 -mx-5 border-b border-slate-200/80 bg-white px-5 pb-0 sm:-mx-6 sm:px-6">
+              <div className="jobs-controls sticky top-0 z-30 -mx-5 border-b border-slate-200/80 bg-white px-5 pb-0 sm:-mx-6 sm:px-6">
                 <JobsFilterSidebar
                   selectedFilters={selectedFilters}
                   onFilterToggle={handleFilterToggle}
@@ -808,7 +1089,7 @@ export default function JobsContents() {
                     {isMatchedTab && !matchedNoResume && (matchedFetched || matchedError) && !matchedSearchNarrowed && (
                       <button
                         type="button"
-                        onClick={() => fetchSmartMatchedJobs(matchedPage, true)}
+                        onClick={() => fetchSmartMatchedJobs(matchedPage, { bypassGuard: true, forceRefresh: true })}
                         className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-[#4F46E5] text-white text-sm font-semibold rounded-full hover:bg-[#4338CA] transition-colors"
                       >
                         <RotateCcw size={13} />
@@ -845,6 +1126,10 @@ export default function JobsContents() {
                         url: job.url || job.application_url || "",
                       })
                     }
+                    onSaveToggle={handleSaveToggle}
+                    onRemoveApplication={activeTab === "applied" ? handleRemoveApplication : undefined}
+                    onAppliedToggle={handleAppliedToggle}
+                    allowDismiss={isMatchedTab}
                   />
                 )}
 
@@ -865,7 +1150,7 @@ export default function JobsContents() {
 
       {/* RIGHT SIDEBAR — fixed in place; the page itself never scrolls, only
           the job list (above) does, so this column just stays put. */}
-      <aside className="hidden h-full w-[360px] shrink-0 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.07)] xl:flex xl:flex-col 2xl:w-[400px]">
+      <aside className="jobs-intelligence-panel hidden h-full w-[360px] shrink-0 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.07)] xl:flex xl:flex-col 2xl:w-[400px]">
         <JobsRightSidebar
           topPicks={topPickJobs}
           topPicksLoading={matchedLoading && !matchedFetched}

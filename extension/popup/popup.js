@@ -60,16 +60,25 @@ openBtn.addEventListener('click', () => {
 const states = {
   login:       document.getElementById('state-login'),
   loading:     document.getElementById('state-loading'),
-  jdDetected:  document.getElementById('state-jd-detected'),
   idle:        document.getElementById('state-idle'),
   processing:  document.getElementById('state-processing'),
   results:     document.getElementById('state-results'),
   coverLetter: document.getElementById('state-cover-letter'),
 };
 
+// Timestamp of the most recent entry into 'processing' — lets tabs.onActivated
+// tell a genuinely stuck flow apart from one that's still legitimately running
+// (see the guard below).
+let processingSince = 0;
+
 function showState(name) {
   Object.values(states).forEach(el => el.classList.add('hidden'));
   if (states[name]) states[name].classList.remove('hidden');
+  document.getElementById('app')?.setAttribute('data-state', name);
+  if (name === 'processing') processingSince = Date.now();
+  if (['idle', 'processing', 'results', 'coverLetter'].includes(name)) {
+    setNavActive('sb-analyze');
+  }
   // Stop polling as soon as we leave the login state
   if (name !== 'login') stopLoginPoll();
 }
@@ -95,7 +104,10 @@ function unlockRail(unlock) {
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
-const API_TIMEOUT_MS = 20000;
+const API_TIMEOUT_MS = 60000;
+// Sequential fetchWithTimeout calls in the longest flow (doTailor: upload →
+// parse JD → match → tailor). Used to budget the stuck-flow detection below.
+const MAX_FLOW_CALLS = 4;
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -239,15 +251,13 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
   jdText = clampJdText(jdText);
   showState('processing');
   const stepEl = document.getElementById('processing-step');
-  const fillEl = document.getElementById('progress-fill');
-  const setStep = (text, pct) => {
+  const setStep = (text) => {
     if (stepEl) stepEl.textContent = text;
-    if (fillEl)  fillEl.style.width = `${pct}%`;
   };
 
   try {
     // Step 1: Resolve resume
-    setStep('Parsing resume…', 20);
+    setStep('Parsing resume…');
     let resumeId = selectedId || null;
     if (file) {
       try { resumeId = await uploadResume(file); }
@@ -256,12 +266,12 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
     if (!resumeId) throw new Error('Please select or upload a resume.');
 
     // Step 2: Parse JD
-    setStep('Analyzing job description…', 50);
+    setStep('Analyzing job description…');
     const jdResult = await parseJDInExtension(jdText);
     if (!jdResult.jd_id) throw new Error('Could not parse job description.');
 
     // Step 3: Match
-    setStep('Calculating match score…', 80);
+    setStep('Calculating match score…');
     const matchRes = await fetchWithTimeout(`${BASE_URL}/matcher/match`, {
       method: 'POST',
       credentials: 'include',
@@ -302,14 +312,15 @@ async function analyzeScore(jdText, jobMeta, file, selectedId) {
     cachedJobMeta  = jobMeta;
     cachedJdId     = jdResult.jd_id;
 
-    setStep('Done!', 100);
+    setStep('Done!');
     setupResultsState();
     showResultsState(score, jobMeta, structuredSkills);
 
   } catch (err) {
     // Restore previous state
     const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-    showState(detectedJD ? 'jdDetected' : 'idle');
+    if (detectedJD) applyJDContent(detectedJD);
+    else showState('idle');
     alert(`Analysis failed: ${err.message}. Make sure you are logged in to CareerBot.`);
   }
 }
@@ -379,23 +390,25 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
     return chip;
   };
 
-  const fillGroup = (groupId, chipsId, countId, chips) => {
+  const fillGroup = (groupId, chipsId, countId, chips, trueCount) => {
     const group = document.getElementById(groupId);
     const chipsEl = document.getElementById(chipsId);
     const countEl = document.getElementById(countId);
     if (!group || !chipsEl || !chips.length) { if (group) group.style.display = 'none'; return; }
     group.style.display = 'block';
     chipsEl.replaceChildren(...chips);
-    if (countEl) countEl.textContent = chips.length;
+    if (countEl) countEl.textContent = trueCount ?? chips.length;
   };
 
-  // Matched skills
+  // Matched skills — only the first 8 chips render (popup space is limited),
+  // but the count badge must reflect the true total or it reads as a lower
+  // match than the full jobmatch page reports for the same result.
   fillGroup('matched-group', 'matched-chips', 'matched-count',
-    allTechMatched.slice(0, 8).map(s => makeChip(s, 'matched')));
+    allTechMatched.slice(0, 8).map(s => makeChip(s, 'matched')), allTechMatched.length);
 
-  // Missing skills
+  // Missing skills — same true-total-vs-rendered-chips split as above.
   fillGroup('missing-group', 'missing-chips', 'missing-count',
-    allTechMissing.slice(0, 8).map(s => makeChip(s, 'missing')));
+    allTechMissing.slice(0, 8).map(s => makeChip(s, 'missing')), allTechMissing.length);
 
   // Soft skills
   const softChips = [
@@ -406,6 +419,10 @@ function showResultsState(score, jobMeta, structuredSkills = {}) {
 
   const hasAny = allTechMissing.length || allTechMatched.length || allSoftMissing.length || allSoftMatched.length;
   section.style.display = hasAny ? 'flex' : 'none';
+
+  const emptyNoteEl = document.getElementById('skills-empty-note');
+  if (emptyNoteEl) emptyNoteEl.style.display = hasAny ? 'none' : 'flex';
+  document.getElementById('state-results')?.classList.toggle('is-compact', !hasAny);
 
   // ── ATS Improvements ───────────────────────────────────────────────────────
   const improvements = [];
@@ -441,7 +458,7 @@ function setupResultsState() {
   document.getElementById('btn-improve-resume').addEventListener('click', async () => {
     if (!cachedResumeId || !cachedJdText) {
       alert('Session expired. Please analyze again.');
-      showState('jdDetected');
+      await applyStoredJD();
       return;
     }
     await doTailor(cachedJdText, cachedJobMeta, cachedResumeId);
@@ -449,16 +466,41 @@ function setupResultsState() {
 
   document.getElementById('btn-result-try-again').addEventListener('click', async () => {
     const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-    showState(detectedJD ? 'jdDetected' : 'idle');
+    if (detectedJD) applyJDContent(detectedJD);
+    else showState('idle');
   });
 
 }
 
 // ─── File input handlers ──────────────────────────────────────────────────────
 let selectedFile = null;
-let selectedFileJD = null;
+let jdIsDetected = false;
 
-function bindFileInput(inputId, displayId, fileVar) {
+function syncIdleActions() {
+  const hasResume = Boolean(selectedFile);
+  const hasJobDescription = Boolean(document.getElementById('manual-jd-input')?.value?.trim());
+  const ready = hasResume && hasJobDescription;
+  ['btn-manual-tailor', 'btn-cover-letter-idle'].forEach((id) => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = !ready;
+  });
+  const status = document.querySelector('#state-idle .jdt-label');
+  if (status) status.textContent = hasJobDescription ? 'Job description added' : 'No job description added';
+
+  const helpEl = document.getElementById('idle-actions-help');
+  if (helpEl) {
+    helpEl.hidden = ready;
+    if (!ready) {
+      helpEl.textContent = !hasResume && !hasJobDescription
+        ? 'Add a resume and job description to continue'
+        : !hasResume
+        ? 'Add a resume to continue'
+        : 'Add a job description to continue';
+    }
+  }
+}
+
+function bindFileInput(inputId, displayId) {
   const input   = document.getElementById(inputId);
   const display = document.getElementById(displayId);
   if (!input || !display) return;
@@ -470,24 +512,16 @@ function bindFileInput(inputId, displayId, fileVar) {
     if (validationError) {
       alert(validationError);
       input.value = '';
-      if (fileVar === 'idle') selectedFile = null; else selectedFileJD = null;
+      selectedFile = null;
       display.textContent = 'No file selected';
-      if (fileVar === 'idle') {
-        const btn = document.getElementById('btn-manual-tailor');
-        if (btn) btn.disabled = true;
-      }
+      syncIdleActions();
       return;
     }
 
-    if (fileVar === 'idle') selectedFile = file;
-    else selectedFileJD = file;
+    selectedFile = file;
     display.textContent = file.name;
     // Enable analyze button only when both file and JD text are present
-    if (fileVar === 'idle') {
-      const btn = document.getElementById('btn-manual-tailor');
-      const jdText = document.getElementById('manual-jd-input')?.value?.trim();
-      if (btn) btn.disabled = !jdText;
-    }
+    syncIdleActions();
   });
 }
 
@@ -505,30 +539,27 @@ function setupJDToggles() {
       expanded = !expanded;
       expandArea.classList.toggle('hidden', !expanded);
       if (toggleIcon) toggleIcon.style.transform = expanded ? 'rotate(180deg)' : '';
+      if (expanded) {
+        requestAnimationFrame(() => {
+          expandArea.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+      }
     };
     toggleBtn.addEventListener('click', clickHandler);
-    if (row) row.addEventListener('click', (e) => { if (e.target !== toggleBtn) clickHandler(); });
+    if (row) {
+      row.addEventListener('click', (e) => {
+        if (!toggleBtn.contains(e.target)) clickHandler();
+      });
+    }
   }
   // Enable analyze only when both JD text and a resume file are present
   if (jdInput) {
     jdInput.addEventListener('input', () => {
-      const btn = document.getElementById('btn-manual-tailor');
-      if (btn) btn.disabled = !(jdInput.value.trim() && selectedFile);
+      // Once the user edits detected text, it is their draft and must survive
+      // tab changes or removal/expiry of the stored auto-detection.
+      jdIsDetected = false;
+      syncIdleActions();
     });
-  }
-
-  // JD detected state expand
-  const previewToggle    = document.getElementById('jd-preview-toggle');
-  const expandDetected   = document.getElementById('jd-expand-area-detected');
-  const previewEditBtn   = document.getElementById('jd-preview-edit');
-  let detectedExpanded = false;
-  if (previewToggle && expandDetected) {
-    const detectedClickHandler = () => {
-      detectedExpanded = !detectedExpanded;
-      expandDetected.classList.toggle('hidden', !detectedExpanded);
-      if (previewEditBtn) previewEditBtn.textContent = detectedExpanded ? 'Collapse ↑' : 'Edit ↓';
-    };
-    previewToggle.addEventListener('click', detectedClickHandler);
   }
 }
 
@@ -606,6 +637,7 @@ async function init() {
     if (changes.detectedJD?.newValue) {
       applyJDContent(changes.detectedJD.newValue);
     } else if (changes.detectedJD && !changes.detectedJD.newValue) {
+      clearIdleDetectedJob();
       // JD was cleared — go back to idle
       showState('idle');
     }
@@ -628,6 +660,42 @@ async function init() {
     applyStoredJD(user);
   });
 }
+
+// Re-sync when the active tab changes. The side panel is a single persistent
+// instance per window — it does NOT reload on tab switches — so without this,
+// switching away (e.g. to sign in on a new tab, opened by either the initial
+// `init()` login-screen path or the separate login-poll success path) and back
+// leaves it stuck on whatever state it last computed instead of re-showing the
+// detected JD. Registered at top level (not inside init()) so it's active no
+// matter which auth path the user takes.
+chrome.tabs.onActivated.addListener(() => {
+  if (!states.login?.classList.contains('hidden')) return; // still signing in
+  const activeStateName = Object.keys(states).find(
+    (name) => !states[name]?.classList.contains('hidden')
+  );
+  // Don't yank the user out of an in-progress flow just because they alt-tabbed —
+  // unless 'processing' has been showing far longer than the WHOLE flow can
+  // legitimately take. That only happens when a flow got stuck without ever
+  // reaching 'idle'/'results' (e.g. window.close() is a no-op in a side panel,
+  // so a completed flow can otherwise be left parked here forever) — in which
+  // case this is the only thing left that can bring the panel back.
+  //
+  // Budget the longest flow, not one call: doTailor issues four sequential
+  // fetchWithTimeout calls and analyzeScore three, each allowed the full
+  // API_TIMEOUT_MS. Using a single call's timeout here reset a genuinely
+  // running analysis (large upload + cold parse) the moment the user switched
+  // tabs, discarding the in-flight results.
+  const isStaleProcessing =
+    activeStateName === 'processing' &&
+    Date.now() - processingSince > MAX_FLOW_CALLS * API_TIMEOUT_MS + 5000;
+  // 'loading' bails out too: init() shows it while verifyExtensionUser() is in
+  // flight, and it hides state-login — so the sign-in guard above passes. A tab
+  // switch inside that round-trip would otherwise fall through to the full idle
+  // UI for a user who isn't authenticated yet (unlockRail(true) never having
+  // run), then snap back to the login state when the request rejects.
+  if (['loading', 'processing', 'results', 'coverLetter'].includes(activeStateName) && !isStaleProcessing) return;
+  applyStoredJD();
+});
 
 // ─── Get the currently active browser tab (not popup/extension pages) ────────
 async function getActiveBrowserTab() {
@@ -652,6 +720,7 @@ async function applyStoredJD(_user) {
     const age = Date.now() - (detectedJD.timestamp || 0);
     if (age > 10 * 60 * 1000) {
       await chrome.storage.local.remove('detectedJD');
+      clearIdleDetectedJob();
       showState('idle');
       return false;
     }
@@ -660,6 +729,7 @@ async function applyStoredJD(_user) {
     // Prevents showing Naukri JD when user switches to a Glassdoor tab.
     const activeTab = await getActiveBrowserTab();
     if (activeTab && detectedJD.tabId && detectedJD.tabId !== activeTab.id) {
+      clearIdleDetectedJob();
       showState('idle');
       return false;
     }
@@ -667,75 +737,49 @@ async function applyStoredJD(_user) {
     applyJDContent(detectedJD);
     return true;
   }
+  clearIdleDetectedJob();
   showState('idle');
   return false;
 }
 
-// ─── Show company logo in detected banner ────────────────────────────────────
-function setCompanyLogo(meta) {
-  const imgEl      = document.getElementById('jd-company-logo');
-  const fallbackEl = document.getElementById('jd-fallback-icon');
-  const initialsEl = document.getElementById('jd-company-initials');
-  if (!imgEl) return;
-
-  const company = meta?.company;
-  if (!company) return;
-
-  const showInitials = () => {
-    if (!initialsEl) return;
-    const words    = company.trim().split(/\s+/).filter(Boolean);
-    const initials = words.length >= 2
-      ? (words[0][0] || '') + (words[1][0] || '')
-      : (words[0] || '?').slice(0, 2);
-    initialsEl.textContent   = (initials || '?').toUpperCase();
-    initialsEl.style.display = 'flex';
-    if (fallbackEl) fallbackEl.style.display = 'none';
-  };
-
-  // Guess company domain from name — clamp length to keep the logo-provider
-  // request well-formed even if `company` is unexpectedly long.
-  const domain = company
-    .toLowerCase()
-    .slice(0, 100)
-    .replace(/\b(ltd|limited|inc|corp|corporation|pvt|private|technologies|technology|solutions|services|group|global|india|infotech|infosystems|motors|healthcare)\b/g, '')
-    .replace(/[^a-z0-9]/g, '')
-    .trim()
-    .slice(0, 63) + '.com';
-
-  const sources = [
-    `https://logo.clearbit.com/${domain}`,
-    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-  ];
-  let attempt = 0;
-
-  const tryNext = () => {
-    if (attempt >= sources.length) { showInitials(); return; }
-    imgEl.src     = sources[attempt++];
-    imgEl.onload  = () => {
-      imgEl.style.display = 'block';
-      if (fallbackEl)  fallbackEl.style.display = 'none';
-      if (initialsEl)  initialsEl.style.display  = 'none';
-    };
-    imgEl.onerror = tryNext;
-  };
-  tryNext();
-}
-
 // ─── Fill JD into the detected state (safe to call multiple times) ────────────
 function applyJDContent(detectedJD) {
-  setupJDState(); // wire up buttons & file input (idempotent — runs only once)
-  showState('jdDetected');
+  setupIdleState();
+  showState('idle');
 
-  const jdTextarea = document.getElementById('jd-textarea-main');
-  if (jdTextarea) jdTextarea.value = detectedJD.jd || '';
+  const jdTextarea = document.getElementById('manual-jd-input');
+  // A stored detection may be re-applied on focus/tab activation. Never let it
+  // overwrite a non-empty draft that the user pasted or edited in the panel.
+  if (jdTextarea?.value?.trim() && !jdIsDetected) {
+    syncIdleActions();
+    return;
+  }
+  if (jdTextarea) {
+    jdTextarea.value = detectedJD.jd || '';
+    jdIsDetected = true;
+  }
 
-  const titleEl   = document.getElementById('jd-job-title');
-  const companyEl = document.getElementById('jd-company');
-  if (titleEl)   titleEl.textContent   = detectedJD.meta?.title   || '';
+  const bannerEl  = document.getElementById('idle-detected-job');
+  const titleEl   = document.getElementById('idle-detected-title');
+  const companyEl = document.getElementById('idle-detected-company');
+  const actionEl  = document.getElementById('idle-jd-action-label');
+  bannerEl?.classList.remove('hidden');
+  if (titleEl) titleEl.textContent = detectedJD.meta?.title || 'Detected job';
   if (companyEl) companyEl.textContent = detectedJD.meta?.company || '';
+  if (actionEl) actionEl.textContent = 'Edit';
 
-  setCompanyLogo(detectedJD.meta);
+  syncIdleActions();
   updateDetectPill(true, detectedJD.meta?.company, detectedJD.meta?.title);
+}
+
+function clearIdleDetectedJob() {
+  document.getElementById('idle-detected-job')?.classList.add('hidden');
+  const jdTextarea = document.getElementById('manual-jd-input');
+  const actionEl = document.getElementById('idle-jd-action-label');
+  if (jdTextarea && jdIsDetected) jdTextarea.value = '';
+  jdIsDetected = false;
+  if (actionEl) actionEl.textContent = jdTextarea?.value?.trim() ? 'Edit' : 'Paste';
+  syncIdleActions();
 }
 
 // ─── Idle state — set up once ─────────────────────────────────────────────────
@@ -744,47 +788,41 @@ function setupIdleState() {
   if (_idleSetup) return;
   _idleSetup = true;
 
-  bindFileInput('resume-file-input', 'idle-resume-name', 'idle');
+  bindFileInput('resume-file-input', 'idle-resume-name');
   setupJDToggles();
 
   document.getElementById('btn-manual-tailor').addEventListener('click', async () => {
     const jdText = document.getElementById('manual-jd-input')?.value?.trim();
     if (!jdText) { alert('Please paste a job description.'); return; }
-    await analyzeScore(jdText, null, selectedFile, null);
+    const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
+    // Only attach the stored detection's metadata when this JD text actually
+    // IS that detection. A stored JD survives a tab switch (applyStoredJD
+    // clears the banner and textarea but deliberately keeps storage, so
+    // switching back restores it) — without this gate a JD pasted by hand on
+    // another tab would be persisted server-side under the previous job's
+    // title/company/url.
+    await analyzeScore(jdText, jdIsDetected ? (detectedJD?.meta ?? null) : null, selectedFile, null);
+  });
+
+  document.getElementById('btn-cover-letter-idle')?.addEventListener('click', generateCoverLetter);
+  document.getElementById('idle-paste-action')?.addEventListener('click', () => {
+    const expandArea = document.getElementById('jd-expand-area');
+    if (expandArea?.classList.contains('hidden')) {
+      document.getElementById('jd-toggle-btn')?.click();
+    }
+    requestAnimationFrame(() => document.getElementById('manual-jd-input')?.focus());
+  });
+
+  document.getElementById('idle-detected-dismiss')?.addEventListener('click', async () => {
+    await chrome.storage.local.remove('detectedJD');
+    chrome.action.setBadgeText({ text: '' });
+    clearIdleDetectedJob();
   });
 
   document.getElementById('njn-try-link')?.addEventListener('click', (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: 'https://www.linkedin.com/jobs/' });
   });
-}
-
-// ─── JD Detected state — set up once ──────────────────────────────────────────
-let _jdSetup = false;
-function setupJDState() {
-  if (_jdSetup) return;
-  _jdSetup = true;
-
-  bindFileInput('resume-file-input-jd', 'file-name-display-jd', 'jd');
-
-  document.getElementById('btn-tailor').addEventListener('click', async () => {
-    const jdText = document.getElementById('jd-textarea-main')?.value?.trim();
-    if (!jdText) { alert('Job description is empty.'); return; }
-    const { detectedJD } = await chrome.storage.local.get('detectedJD');
-    await analyzeScore(jdText, detectedJD?.meta || null, selectedFileJD, null);
-  });
-
-  document.getElementById('btn-dismiss').addEventListener('click', async () => {
-    await chrome.storage.local.remove('detectedJD');
-    chrome.action.setBadgeText({ text: '' });
-    showState('idle');
-  });
-}
-
-// ─── showJDState: show the JD detected panel ──────────────────────────────────
-function showJDState(detectedJD) {
-  setupJDState();
-  applyJDContent(detectedJD);
 }
 
 // ─── Resolve resume ID (upload file or use selected) ─────────────────────────
@@ -822,18 +860,20 @@ async function doTailor(jdText, jobMeta, resumeId) {
   jdText = clampJdText(jdText);
   showState('processing');
   const stepEl = document.getElementById('processing-step');
-  const fillEl = document.getElementById('progress-fill');
 
-  const setStep = (text, pct) => {
+  const setStep = (text) => {
     if (stepEl) stepEl.textContent = text;
-    if (fillEl)  fillEl.style.width = `${pct}%`;
   };
 
   try {
-    setStep('Creating session…', 30);
+    setStep('Creating session…');
 
     const payload = {
       job_description: jdText,
+      // Keep null on the wire when genuinely absent — 'Untitled Position'/
+      // 'Not specified' are display-only placeholders, not real values, and
+      // persisting them server-side would make them indistinguishable from
+      // an actual job title/company in match history and analytics.
       job_title:       jobMeta?.title   || null,
       company:         jobMeta?.company || null,
       job_url:         jobMeta?.url     || null,
@@ -846,9 +886,9 @@ async function doTailor(jdText, jobMeta, resumeId) {
       body: JSON.stringify(payload),
     });
 
-    setStep('Opening portal…', 80);
+    setStep('Opening portal…');
 
-    const portalUrl = `${PORTAL_URL}/jobmatch?session=${session.session_id}`;
+    const portalUrl = `${PORTAL_URL}/jobmatch/app?session=${session.session_id}`;
 
     const existingTabs = await chrome.tabs.query({ url: `${PORTAL_URL}/*` });
     if (existingTabs.length > 0) {
@@ -858,10 +898,13 @@ async function doTailor(jdText, jobMeta, resumeId) {
       await chrome.tabs.create({ url: portalUrl });
     }
 
-    setStep('Done!', 100);
+    setStep('Done!');
     await chrome.storage.local.remove('detectedJD');
     chrome.action.setBadgeText({ text: '' });
-    setTimeout(() => window.close(), 600);
+    // window.close() is a no-op for Chrome side panels (unlike a classic popup,
+    // nothing closes it here) — so this flow must hand the UI back to idle
+    // itself, or the panel is left parked on "Done!" indefinitely.
+    setTimeout(() => { clearIdleDetectedJob(); showState('idle'); }, 600);
 
   } catch (err) {
     showState('idle');
@@ -894,7 +937,8 @@ document.getElementById('sb-analyze')?.addEventListener('click', async () => {
   if (!states.login?.classList.contains('hidden')) return;
   setNavActive('sb-analyze');
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-  showState(detectedJD ? 'jdDetected' : 'idle');
+  if (detectedJD) applyJDContent(detectedJD);
+  else showState('idle');
 });
 
 document.getElementById('sb-dashboard')?.addEventListener('click', () => {
@@ -1039,8 +1083,13 @@ let clLetterId = null;
 
 async function generateCoverLetter() {
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-  const jdText  = clampJdText(detectedJD?.jd  || document.getElementById('jd-textarea-main')?.value?.trim() || '');
-  const jobMeta = detectedJD?.meta || {};
+  const typedJd = document.getElementById('manual-jd-input')?.value?.trim();
+  const jdText  = clampJdText(typedJd || detectedJD?.jd || '');
+  // Same gate as the Analyze path: the stored metadata only describes the
+  // stored JD. It applies when the text came from storage (empty textarea) or
+  // when the textarea still holds that untouched detection — never to a JD
+  // the user pasted themselves.
+  const jobMeta = (!typedJd || jdIsDetected) ? (detectedJD?.meta || {}) : {};
 
   if (!jdText) {
     alert('No job description found. Please paste a job description first.');
@@ -1064,13 +1113,10 @@ async function generateCoverLetter() {
 
   try {
     // Step 1: resolve parsed_resume_id.
-    // Priority: cachedResumeId (set after Analyze) → upload selectedFileJD → upload selectedFile
+    // Priority: cachedResumeId (set after Analyze) → upload selectedFile
     let parsedResumeId = cachedResumeId || null;
-    if (!parsedResumeId) {
-      const fileToUpload = selectedFileJD || selectedFile || null;
-      if (fileToUpload) {
-        parsedResumeId = await uploadResume(fileToUpload);
-      }
+    if (!parsedResumeId && selectedFile) {
+      parsedResumeId = await uploadResume(selectedFile);
     }
     if (!parsedResumeId) throw new Error('No resume found. Please upload a resume first.');
 
@@ -1128,12 +1174,12 @@ async function generateCoverLetter() {
   }
 }
 
-document.getElementById('btn-cover-letter')?.addEventListener('click', generateCoverLetter);
 document.getElementById('btn-cl-regenerate')?.addEventListener('click', generateCoverLetter);
 
 document.getElementById('btn-cl-back')?.addEventListener('click', async () => {
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-  showState(detectedJD ? 'jdDetected' : 'idle');
+  if (detectedJD) applyJDContent(detectedJD);
+  else showState('idle');
 });
 
 document.getElementById('btn-cl-copy')?.addEventListener('click', () => {

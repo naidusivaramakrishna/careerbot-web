@@ -29,6 +29,41 @@ function scopedKey(base: string, userId?: string | null): string {
   return userId ? `${base}:${userId}` : base;
 }
 
+// In-memory only (NOT persisted) — tracks whether THIS page load itself has
+// written to the unscoped bucket (the pre-userId-resolution race, see
+// getSavedJobs/getApplicationHistory below). The migration those functions
+// do is only safe to run when the current load produced the unscoped write;
+// a leftover unscoped bucket with no write this load can't be attributed to
+// whichever account happens to resolve next; it may be an earlier account's
+// abandoned data. Resets on every reload, so it can't be spoofed by data
+// left over from a previous session.
+const unscopedWriteThisLoad: Record<string, boolean> = {
+  [APPLIED_JOBS_KEY]: false,
+  [SAVED_JOBS_KEY]: false,
+};
+
+// True when a write with an unresolved userId must NOT seed from what's
+// already in the shared bucket. The read-side gate above is not enough on its
+// own: an unscoped write seeds its array from the current bucket contents and
+// writes the whole array back, so without this an account saving before its
+// id resolves would copy a previous account's leftover records forward as its
+// own — and the read-side gate, now legitimately set, would migrate all of
+// them into the new account's scoped bucket. Starting from [] drops the
+// orphaned records instead, which is the correct trade: they belong to a
+// session that never completed, and no account can claim them.
+function mustDiscardUnscoped(key: string, userId?: string | null): boolean {
+  return !userId && !unscopedWriteThisLoad[key];
+}
+
+// NOTE: deliberately NOT auto-deleting a leftover unscoped bucket here.
+// An earlier attempt did (to stop orphaned records sitting in shared storage
+// past the session that wrote them) and it could destroy the CURRENT user's
+// own save: unscopedWriteThisLoad resets on every page load, including the
+// hard navigation to /jobmatch/app that JobCard does, so a save made before
+// the id resolved looked like a foreign orphan on the very next load.
+// Refusing to MIGRATE the bucket is what closes the cross-account leak;
+// deleting it is a separate concern and is handled by signOut() only.
+
 // ==================== APPLICATION TRACKING ====================
 
 function readApplicationsAt(key: string): JobApplication[] {
@@ -46,15 +81,33 @@ export function getApplicationHistory(userId?: string | null): JobApplication[] 
 
   // Merge the scoped (per-user) and unscoped bucket so an application
   // recorded before the user id had resolved (unscoped write) still shows
-  // up once reads start using the resolved, scoped key.
-  const scoped = readApplicationsAt(scopedKey(APPLIED_JOBS_KEY, userId));
+  // up once reads start using the resolved, scoped key. This is a one-shot
+  // migration, not a permanent union — the unscoped bucket is shared across
+  // every account on this browser, so it must be folded in and cleared here
+  // rather than merged on every read, or it would leak into other accounts.
+  // Gated on unscopedWriteThisLoad: only migrate data THIS load actually
+  // wrote, never a leftover bucket that might belong to a different account.
+  const scopedK = scopedKey(APPLIED_JOBS_KEY, userId);
+  const scoped = readApplicationsAt(scopedK);
   if (!userId) return scoped;
+
+  // Refuse to migrate a bucket this load did not write — it cannot be
+  // attributed to whichever account resolves next. Left in place, not
+  // deleted (see the note near discardLeftoverUnscoped's removal above).
+  if (!unscopedWriteThisLoad[APPLIED_JOBS_KEY]) return scoped;
 
   const unscoped = readApplicationsAt(APPLIED_JOBS_KEY);
   if (unscoped.length === 0) return scoped;
 
   const seen = new Set(scoped.map((app) => app.jobId));
-  return [...scoped, ...unscoped.filter((app) => !seen.has(app.jobId))];
+  const migrated = [...scoped, ...unscoped.filter((app) => !seen.has(app.jobId))];
+  try {
+    localStorage.setItem(scopedK, JSON.stringify(migrated));
+    localStorage.removeItem(APPLIED_JOBS_KEY);
+  } catch (e) {
+    console.error("getApplicationHistory: Failed to migrate unscoped applications:", e instanceof Error ? e.message : String(e));
+  }
+  return migrated;
 }
 
 export function isJobApplied(jobId: string, userId?: string | null): boolean {
@@ -72,7 +125,7 @@ export function recordJobApplication(
   if (typeof window === "undefined") return;
 
   try {
-    const history = getApplicationHistory(userId);
+    const history = mustDiscardUnscoped(APPLIED_JOBS_KEY, userId) ? [] : getApplicationHistory(userId);
 
     // Avoid duplicates
     if (history.some((app) => app.jobId === jobId)) {
@@ -89,6 +142,7 @@ export function recordJobApplication(
 
     history.push(newApplication);
     localStorage.setItem(scopedKey(APPLIED_JOBS_KEY, userId), JSON.stringify(history));
+    if (!userId) unscopedWriteThisLoad[APPLIED_JOBS_KEY] = true;
   } catch (e) {
     console.error("recordJobApplication: Failed to save application:", e instanceof Error ? e.message : String(e));
   }
@@ -98,13 +152,36 @@ export function getApplicationCount(userId?: string | null): number {
   return getApplicationHistory(userId).length;
 }
 
-// ==================== SAVED JOBS TRACKING ====================
-
-export function getSavedJobs(userId?: string | null): SavedJob[] {
-  if (typeof window === "undefined") return [];
+// Removes from both the scoped and unscoped buckets — getApplicationHistory
+// merges the two on read (see above), so a record written before userId had
+// resolved lives in the unscoped bucket and would otherwise survive a
+// scoped-only delete and reappear on the next read.
+export function removeApplication(jobId: string, userId?: string | null): void {
+  if (typeof window === "undefined") return;
 
   try {
-    const stored = localStorage.getItem(scopedKey(SAVED_JOBS_KEY, userId));
+    const scopedK = scopedKey(APPLIED_JOBS_KEY, userId);
+    const scoped = readApplicationsAt(scopedK).filter((app) => app.jobId !== jobId);
+    localStorage.setItem(scopedK, JSON.stringify(scoped));
+
+    // Only rewrite the unscoped bucket if it actually exists — an
+    // unconditional write would recreate the shared key (as "[]") right after
+    // clearUnscopedJobTrackingData removed it, working against the invariant
+    // that it must never outlive the session that wrote it.
+    if (userId && localStorage.getItem(APPLIED_JOBS_KEY) !== null) {
+      const unscoped = readApplicationsAt(APPLIED_JOBS_KEY).filter((app) => app.jobId !== jobId);
+      localStorage.setItem(APPLIED_JOBS_KEY, JSON.stringify(unscoped));
+    }
+  } catch (e) {
+    console.error("removeApplication: Failed to remove application:", e instanceof Error ? e.message : String(e));
+  }
+}
+
+// ==================== SAVED JOBS TRACKING ====================
+
+function readSavedJobsAt(key: string): SavedJob[] {
+  try {
+    const stored = localStorage.getItem(key);
     return stored ? JSON.parse(stored) as SavedJob[] : [];
   } catch (e) {
     console.error("getSavedJobs: Failed to parse stored jobs:", e);
@@ -112,8 +189,39 @@ export function getSavedJobs(userId?: string | null): SavedJob[] {
   }
 }
 
-export function getSavedJobIds(userId?: string | null): string[] {
-  return getSavedJobs(userId).map((job) => job.jobId);
+export function getSavedJobs(userId?: string | null): SavedJob[] {
+  if (typeof window === "undefined") return [];
+
+  // A user can click Save while useCurrentUserId is still resolving. That
+  // write lands in the unscoped bucket; once the id resolves, reads switch to
+  // the scoped bucket. Merge both so the saved job does not disappear during
+  // that transition. This is a one-shot migration, not a permanent union —
+  // the unscoped bucket is shared across every account on this browser, so
+  // it must be folded into the scoped bucket and cleared here, or it would
+  // leak into every other account that reads on this browser afterward.
+  // Gated on unscopedWriteThisLoad: only migrate data THIS load actually
+  // wrote, never a leftover bucket that might belong to a different account.
+  const scopedK = scopedKey(SAVED_JOBS_KEY, userId);
+  const scoped = readSavedJobsAt(scopedK);
+  if (!userId) return scoped;
+
+  // Refuse to migrate a bucket this load did not write — it cannot be
+  // attributed to whichever account resolves next. Left in place, not
+  // deleted (see the note near discardLeftoverUnscoped's removal above).
+  if (!unscopedWriteThisLoad[SAVED_JOBS_KEY]) return scoped;
+
+  const unscoped = readSavedJobsAt(SAVED_JOBS_KEY);
+  if (unscoped.length === 0) return scoped;
+
+  const seen = new Set(scoped.map((job) => job.jobId));
+  const migrated = [...scoped, ...unscoped.filter((job) => !seen.has(job.jobId))];
+  try {
+    localStorage.setItem(scopedK, JSON.stringify(migrated));
+    localStorage.removeItem(SAVED_JOBS_KEY);
+  } catch (e) {
+    console.error("getSavedJobs: Failed to migrate unscoped saved jobs:", e instanceof Error ? e.message : String(e));
+  }
+  return migrated;
 }
 
 export function isJobSaved(jobId: string, userId?: string | null): boolean {
@@ -132,15 +240,15 @@ export function toggleJobSaved(
   if (typeof window === "undefined") return false;
 
   try {
-    const saved = getSavedJobs(userId);
+    const saved = mustDiscardUnscoped(SAVED_JOBS_KEY, userId) ? [] : getSavedJobs(userId);
 
     // Check if already saved
     const existingIndex = saved.findIndex((job) => job.jobId === jobId);
 
     if (existingIndex > -1) {
-      // Remove from saved
-      saved.splice(existingIndex, 1);
-      localStorage.setItem(scopedKey(SAVED_JOBS_KEY, userId), JSON.stringify(saved));
+      // getSavedJobs merges scoped and pre-user-id records. Remove from both
+      // buckets or the unscoped copy would make the job reappear immediately.
+      removeSavedJob(jobId, userId);
       return false;
     } else {
       // Add to saved
@@ -155,6 +263,7 @@ export function toggleJobSaved(
 
       saved.push(newSavedJob);
       localStorage.setItem(scopedKey(SAVED_JOBS_KEY, userId), JSON.stringify(saved));
+      if (!userId) unscopedWriteThisLoad[SAVED_JOBS_KEY] = true;
       return true;
     }
   } catch (e) {
@@ -171,9 +280,16 @@ export function removeSavedJob(jobId: string, userId?: string | null): void {
   if (typeof window === "undefined") return;
 
   try {
-    let saved = getSavedJobs(userId);
-    saved = saved.filter((job) => job.jobId !== jobId);
-    localStorage.setItem(scopedKey(SAVED_JOBS_KEY, userId), JSON.stringify(saved));
+    const scopedK = scopedKey(SAVED_JOBS_KEY, userId);
+    const scoped = readSavedJobsAt(scopedK).filter((job) => job.jobId !== jobId);
+    localStorage.setItem(scopedK, JSON.stringify(scoped));
+
+    // Only rewrite the unscoped bucket if it actually exists — see the same
+    // guard in removeApplication above.
+    if (userId && localStorage.getItem(SAVED_JOBS_KEY) !== null) {
+      const unscoped = readSavedJobsAt(SAVED_JOBS_KEY).filter((job) => job.jobId !== jobId);
+      localStorage.setItem(SAVED_JOBS_KEY, JSON.stringify(unscoped));
+    }
   } catch (e) {
     console.error("removeSavedJob: Failed to remove saved job:", e instanceof Error ? e.message : String(e));
   }
@@ -181,11 +297,28 @@ export function removeSavedJob(jobId: string, userId?: string | null): void {
 
 // ==================== CLEANUP UTILITIES ====================
 
+// Called from signOut() — the unscoped bucket is shared across every account
+// on this browser (see scopedKey above), so it must never survive a sign-out
+// or a leftover record could get folded into whichever account signs in next.
+export function clearUnscopedJobTrackingData(): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    localStorage.removeItem(SAVED_JOBS_KEY);
+    localStorage.removeItem(APPLIED_JOBS_KEY);
+  } catch (e) {
+    console.error("clearUnscopedJobTrackingData: Failed to clear:", e instanceof Error ? e.message : String(e));
+  }
+}
+
 export function clearAllApplications(userId?: string | null): void {
   if (typeof window === "undefined") return;
 
   try {
     localStorage.removeItem(scopedKey(APPLIED_JOBS_KEY, userId));
+    // getApplicationHistory merges the scoped and unscoped buckets on read —
+    // clear both or the unscoped copy makes cleared applications reappear.
+    if (userId) localStorage.removeItem(APPLIED_JOBS_KEY);
   } catch (e) {
     console.error("clearAllApplications: Failed to clear:", e instanceof Error ? e.message : String(e));
   }
@@ -196,6 +329,9 @@ export function clearAllSavedJobs(userId?: string | null): void {
 
   try {
     localStorage.removeItem(scopedKey(SAVED_JOBS_KEY, userId));
+    // getSavedJobs merges the scoped and unscoped buckets on read — clear
+    // both or the unscoped copy makes cleared saved jobs reappear.
+    if (userId) localStorage.removeItem(SAVED_JOBS_KEY);
   } catch (e) {
     console.error("clearAllSavedJobs: Failed to clear:", e instanceof Error ? e.message : String(e));
   }
