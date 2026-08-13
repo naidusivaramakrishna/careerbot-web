@@ -214,6 +214,7 @@ function CollapsedSubItem({
       <button
         aria-label={item.label}
         className="group/icon"
+        onClick={() => popPos ? setPopPos(null) : open()}
       >
         <div
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
@@ -295,12 +296,12 @@ export default function Sidebar() {
         if (item.id === "cover_letter" && pathname.startsWith("/cover-letter/")) {
           return item.id;
         }
-        if (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path))) {
+        if (item.path && (pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path)))) {
           return item.id;
         }
       }
     }
-    if (pathname.startsWith("/notes"))                                          return "notes";
+    if (pathname.startsWith("/notes"))                                          return "interview_notes";
     if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
     if (pathname.startsWith("/mock-test") || pathname.startsWith("/communication")) return "mock_test";
     if (pathname.startsWith("/settings"))                                       return "settings";

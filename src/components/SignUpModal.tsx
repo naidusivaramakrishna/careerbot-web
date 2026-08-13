@@ -8,7 +8,7 @@ import { signUp, signIn } from "@/api/authApi"
 import { SignUpForm as ISignUpForm, LoginForm, ErrorState, LoadingState, FormType } from "@/types/authTypes"
 import SocialLoginButtons from "./SocialLoginButtons"
 import { mapAuthError, AUTH_ERROR_MESSAGES } from "@/lib/authMessages"
-import { sanitizeAuthRedirect } from "@/lib/authRedirect"
+import { sanitizeAuthRedirect, DEFAULT_AUTH_REDIRECT } from "@/lib/authRedirect"
 
 interface Props {
     open: boolean
@@ -79,7 +79,7 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             // User can verify email from profile/settings later
             toast.success("Account created! Redirecting...")
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
-            if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = "/onboarding" }
+            if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = authRedirectTo !== DEFAULT_AUTH_REDIRECT ? `/onboarding?next=${encodeURIComponent(authRedirectTo)}` : "/onboarding" }
         } catch (err) {
             handleApiError(err)
         } finally {

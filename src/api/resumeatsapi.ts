@@ -243,6 +243,49 @@ export const processResumeComplete = async (file: File) => {
 };
 
 /* ------------------------------------------------------
+   Dashboard ATS step — enhance only (resume already parsed in step 1)
+   Returns the final ATS score as a number and caches the result so
+   /atslogin/report can reuse it without a second enhance call.
+------------------------------------------------------ */
+export const runAtsScan = async (resumeId: string): Promise<number> => {
+  const enhanceResult = await enhanceResume({ resume_id: resumeId });
+  const atsBreakdown = enhanceResult.enhancer_state?.ats_breakdown ?? {};
+  const atsDisplay = enhanceResult.ats_display;
+  const atsBreakdownRec = atsBreakdown as Record<string, unknown>;
+
+  const finalScore: number = Number(
+    atsDisplay?.score ??
+    atsBreakdownRec.FinalScore ??
+    atsBreakdownRec.Percentage ??
+    atsBreakdownRec.overall_score ??
+    atsBreakdownRec.final_score ??
+    atsBreakdownRec.percentage ??
+    atsBreakdownRec.score ??
+    atsBreakdownRec.TotalScore ??
+    0
+  );
+
+  const payload = {
+    resume_id: resumeId,
+    enhanced_resume_id: enhanceResult.enhanced_resume_id ?? null,
+    ats_breakdown_id: null,
+    parsed_data: {},
+    resume_data: null,
+    enhanced_resume: enhanceResult.enhanced_resume || enhanceResult.enhancer_state?.resume || null,
+    ats_score: atsBreakdown,
+    ats_display: atsDisplay || null,
+    finalWeightedScore: finalScore,
+    missingFields: [],
+    scanned_pdf: false,
+  };
+
+  localStorage.setItem(`atsAnalysis_${resumeId}`, JSON.stringify(payload));
+  localStorage.setItem("atsAnalysisData", JSON.stringify(payload));
+
+  return finalScore;
+};
+
+/* ------------------------------------------------------
    Additional resume utilities used by dashboard and preview
 ------------------------------------------------------ */
 export interface ResumeResponse {

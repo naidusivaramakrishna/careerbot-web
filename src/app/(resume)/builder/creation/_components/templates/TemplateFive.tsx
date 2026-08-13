@@ -310,8 +310,8 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
                   <span className="mr-2" style={baseTextStyle}>–</span>
                   <div style={baseTextStyle}>
                     <span className="font-semibold" style={titleStyle}>{cert.name}</span>
-                    {cert.issuer && <span> — {cert.issuer}</span>}
-                    {cert.issueDate && <span> ({cert.issueDate})</span>}
+                    {(cert.issuedBy || cert.issuer) && <span> — {cert.issuedBy || cert.issuer}</span>}
+                    {(cert.year || cert.issueDate) && <span> ({cert.year || cert.issueDate})</span>}
                   </div>
                 </div>
               ))}

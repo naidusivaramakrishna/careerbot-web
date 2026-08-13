@@ -2,46 +2,46 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Mic, Users, MessageSquare, BarChart2, ChevronRight,
-  Lightbulb, Sparkles, Loader2, AlertCircle,
-} from "lucide-react";
+import { BarChart2, Mic, MessageSquare, Users } from "lucide-react";
 import { generateHrQuestions } from "@/api/mockInterviewApi";
+import PracticeLandingPage from "../_components/PracticeLandingPage";
 
 const STATS = [
-  { value: "10", label: "Questions" },
-  { value: "AI", label: "Feedback" },
+  { value: "10", label: "questions" },
+  { value: "2", label: "rounds" },
+  { value: "AI", label: "feedback" },
+  { value: "FIT", label: "focus" },
 ];
 
 const HOW_IT_WORKS = [
   {
     icon: Users,
-    title: "Questions from your profile",
-    body: "AI asks common HR interview questions tailored to your background — covering strengths, weaknesses, teamwork, and situational scenarios.",
+    title: "Fit-first questions",
+    body: "Prepare for strengths, weaknesses, motivation, teamwork, culture fit, salary readiness, and common situational prompts.",
   },
   {
     icon: Mic,
-    title: "Speak your answer",
-    body: "Answer out loud to simulate a real interview. Your prepared scripts are shown to guide you in round 1.",
+    title: "Speak naturally",
+    body: "Practice answers aloud so your delivery feels confident, not memorized or overly rehearsed.",
   },
   {
     icon: MessageSquare,
-    title: "Get instant feedback",
-    body: "AI reviews your answer for content, clarity, and structure — with specific tips to make it more compelling.",
+    title: "Tone and clarity review",
+    body: "Get feedback on whether your response sounds honest, concise, self-aware, and recruiter-friendly.",
   },
   {
     icon: BarChart2,
-    title: "Two-round practice",
-    body: "Round 1 shows your prepared notes. Round 2 gives keywords only — building recall and confidence.",
+    title: "Round-based recall",
+    body: "Start with your prepared notes, then move to keywords only for interview-like recall.",
   },
 ];
 
 const TIPS = [
-  "Use the STAR method (Situation, Task, Action, Result) for behavioural questions.",
-  "Be specific — vague answers like \"I'm a team player\" don't stand out. Use real examples.",
-  "Prepare 3–4 strong stories from past experience that can be adapted to multiple questions.",
-  "Show self-awareness when discussing weaknesses — always pair them with how you're improving.",
-  "Aim for 60–120 seconds per answer. Practise until your stories feel natural, not scripted.",
+  "Keep HR answers warm, specific, and easy to believe.",
+  "Pair every weakness with a concrete improvement habit.",
+  "Avoid generic claims unless you can attach a real example.",
+  "Show motivation for the role, not only interest in the company.",
+  "Close answers with what the interviewer should remember about you.",
 ];
 
 const HR_QUESTIONS_KEY = "hr_generated_questions";
@@ -56,94 +56,33 @@ export default function HRPage() {
     setError(null);
     try {
       const data = await generateHrQuestions(10);
-      sessionStorage.setItem(HR_QUESTIONS_KEY, JSON.stringify(data.questions));
+      sessionStorage.setItem(HR_QUESTIONS_KEY, JSON.stringify(data));
       router.push("/notes/hr/practice");
     } catch {
-      setError("Could not load questions. Please check your connection and try again.");
+      setError("Could not prepare HR questions. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-
-      <div>
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#2557a7]/10 text-[#2557a7] rounded-full text-xs font-semibold mb-3">
-          <Sparkles size={11} /> HR Practice
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1.5">HR Interview Prep</h1>
-        <p className="text-sm text-gray-500 leading-relaxed max-w-xl">
-          Practise the behavioural and situational questions that HR interviewers rely on.
-          Answer out loud, get AI-scored feedback, and build the confidence to tell your story well.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        {STATS.map((s) => (
-          <div key={s.label} className="flex flex-col items-center justify-center py-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <p className="text-xl font-black text-[#2557a7]">{s.value}</p>
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">How It Works</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {HOW_IT_WORKS.map((step, i) => {
-            const Icon = step.icon;
-            return (
-              <div key={i} className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#2557a7]/8 flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon size={15} className="text-[#2557a7]" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800 mb-0.5">{step.title}</p>
-                  <p className="text-xs text-gray-500 leading-relaxed">{step.body}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Lightbulb size={14} className="text-[#2557a7]" />
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tips for HR Interviews</p>
-        </div>
-        <ul className="space-y-2.5">
-          {TIPS.map((tip, i) => (
-            <li key={i} className="flex items-start gap-2.5">
-              <span className="w-4 h-4 rounded-full bg-[#2557a7]/10 text-[#2557a7] text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">
-                {i + 1}
-              </span>
-              <p className="text-xs text-gray-600 leading-relaxed">{tip}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
-          <AlertCircle size={13} className="shrink-0 text-red-500" />
-          {error}
-        </div>
-      )}
-
-      <button
-        onClick={handleStart}
-        disabled={loading}
-        className="w-full py-3.5 bg-[#2557a7] text-white rounded-xl font-bold text-sm hover:bg-[#1e4a8f] transition-all shadow-md flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
-      >
-        {loading ? (
-          <Loader2 size={15} className="animate-spin" />
-        ) : (
-          <>Start HR Practice <ChevronRight size={16} /></>
-        )}
-      </button>
-
-    </div>
+    <PracticeLandingPage
+      accent="hr"
+      eyebrow="HR practice"
+      title="Sound confident, self-aware, and easy to hire."
+      subtitle="Prepare polished answers for HR screens and final-fit conversations without sounding scripted or generic."
+      stats={STATS}
+      steps={HOW_IT_WORKS}
+      tips={TIPS}
+      outcomes={[
+        "Cleaner personal positioning",
+        "More believable examples",
+        "Calmer recruiter conversations",
+      ]}
+      ctaLabel="Start HR Practice"
+      loading={loading}
+      error={error}
+      onStart={handleStart}
+    />
   );
 }

@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useRe
 import { getResumeById } from "@/api/resumeApi";
 import { httpClient } from "@/lib/http";
 import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
-import type { ATSScore, EnhancedSuggestion } from "@/types/api.types";
+import type { ATSScore, ATSSectionScore, EnhancedSuggestion } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
 import { countryCodes } from "../_utils/sectionsConfig";
@@ -746,7 +746,17 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             return null;
           })();
           if (resolvedAtsScore) {
-            setEnhancedAtsScore(resolvedAtsScore);
+            // Prefer ats_display.score (the headline figure shown on the ATS report page)
+            // to avoid a 1-point rounding discrepancy between ats_breakdown.final_score
+            // and the ats_display score that the backend computes separately.
+            const atsDisplayScore: number | undefined =
+              (resumeData.ats_display as { score?: number } | undefined)?.score ??
+              (resumeData.enhancer_state as { ats_display?: { score?: number } } | undefined)?.ats_display?.score;
+            setEnhancedAtsScore(
+              atsDisplayScore != null
+                ? { ...resolvedAtsScore, final_score: atsDisplayScore, Percentage: atsDisplayScore }
+                : resolvedAtsScore
+            );
           }
           // Convert section_breakdown deductions into EnhancedSuggestion[] (after_example is the suggestion text)
           const derivedSuggestions: EnhancedSuggestion[] = [];
@@ -1016,6 +1026,61 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     }));
   };
 
+  // Converts a top-level ats_display block (returned by apply_fix when ats_breakdown is absent)
+  // into an ATSScore object compatible with enhancedAtsScore state.
+  const buildScoreFromAtsDisplay = (
+    atsDisplay: { score?: number; sections?: unknown[] } | undefined,
+    current: ATSScore | null,
+  ): ATSScore | null => {
+    if (!atsDisplay) return current;
+    type AtsSection = {
+      name: string; score_pct: number; weighted_pts: number; max_pts: number;
+      deductions?: Array<{ id: string; penalty_pts?: number; after_example?: string; before_example?: string }>;
+    };
+    const sections = (atsDisplay.sections ?? []) as AtsSection[];
+    const sectionBreakdown: Record<string, ATSSectionScore> = {};
+    for (const sec of sections) {
+      sectionBreakdown[sec.name] = {
+        raw_score: sec.weighted_pts,
+        max_raw_score: sec.max_pts,
+        percentage: sec.score_pct,
+        weight: sec.max_pts,
+        weighted_contribution: sec.weighted_pts,
+        deductions: (sec.deductions ?? []).map(d => ({
+          id: d.id,
+          penalty: d.penalty_pts ?? 0,
+          after_example: d.after_example,
+          before_example: d.before_example,
+        })),
+      };
+    }
+    return {
+      ...(current ?? {}),
+      final_score: atsDisplay.score,
+      Percentage: atsDisplay.score,
+      section_breakdown: Object.keys(sectionBreakdown).length > 0 ? sectionBreakdown : current?.section_breakdown,
+    };
+  };
+
+  // Rebuilds EnhancedSuggestion[] from the deductions in a fresh ats_display response.
+  const buildSuggestionsFromAtsDisplay = (
+    atsDisplay: { sections?: unknown[] } | undefined,
+  ): EnhancedSuggestion[] => {
+    if (!atsDisplay?.sections) return [];
+    type AtsSection = {
+      name: string;
+      deductions?: Array<{ id: string; after_example?: string; message?: string }>;
+    };
+    const result: EnhancedSuggestion[] = [];
+    for (const sec of (atsDisplay.sections as AtsSection[])) {
+      for (const d of (sec.deductions ?? [])) {
+        const text = d.after_example || d.message;
+        if (text) result.push({ id: d.id, section: sec.name, message: text, fix_type: "manual" });
+      }
+    }
+    return result;
+  };
+
   const applyAutoFix = async (suggestionId: string): Promise<void> => {
     if (!resumeIdProp) return;
     const requestId = ++latestFixRequestRef.current;
@@ -1056,12 +1121,27 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           qualifications: mapped.personalInfo?.qualifications || prev.personalInfo.qualifications || '',
         },
       }));
+      // Update ATS score: prefer ats_breakdown from enhancer_state;
+      // fall back to top-level ats_display (apply_fix responses omit ats_breakdown).
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
       if (response.enhancer_state.ats_breakdown) {
-        setEnhancedAtsScore(response.enhancer_state.ats_breakdown as unknown as ATSScore);
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
       }
-      // Delay removal so the "Applied!" button state is visible to the user before it disappears
+      // Rebuild suggestions from the fresh ats_display deductions so resolved items disappear
+      // and any still-failing ones (e.g. backend rejected the value) remain visible.
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
       setTimeout(() => {
-        setEnhancedSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+        setEnhancedSuggestions(
+          freshSuggestions.length > 0
+            ? freshSuggestions
+            : prev => prev.filter(s => s.id !== suggestionId)
+        );
       }, 1200);
     }
   };
@@ -1077,12 +1157,24 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     });
     // Drop a response superseded by a newer apply-fix click (out-of-order guard).
     if (requestId !== latestFixRequestRef.current) return;
-    if (response.success && response.enhancer_state) {
-      if (response.enhancer_state.ats_breakdown) {
-        setEnhancedAtsScore(response.enhancer_state.ats_breakdown as unknown as ATSScore);
+    if (response.success) {
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
+      if (response.enhancer_state?.ats_breakdown) {
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
       }
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
       setTimeout(() => {
-        setEnhancedSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+        setEnhancedSuggestions(
+          freshSuggestions.length > 0
+            ? freshSuggestions
+            : prev => prev.filter(s => s.id !== suggestionId)
+        );
       }, 1200);
     }
   };

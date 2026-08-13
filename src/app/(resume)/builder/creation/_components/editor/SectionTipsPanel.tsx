@@ -56,13 +56,22 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
   // Used to detect whether the user has actually edited the field before marking as done.
   const originalValuesRef = useRef<Record<string, string>>({});
 
-  const getSectionValue = (section: string): string => {
+  const getSectionValue = (section: string, suggestion?: { message: string }): string => {
     const s = section.toLowerCase();
     if (["summary", "formatting", "content"].includes(s)) {
       return resumeData.professionalSummary?.summary ?? "";
     }
     if (s === "contact") {
       const p = resumeData.personalInfo ?? {};
+      if (suggestion) {
+        const msg = suggestion.message.toLowerCase();
+        if (msg.includes("github")) return p.githubUrl ?? "";
+        if (msg.includes("linkedin")) return p.linkedinUrl ?? "";
+        if (msg.includes("portfolio")) return p.portfolioUrl ?? "";
+        if (msg.includes("email")) return p.email ?? "";
+        if (msg.includes("phone")) return p.phone ?? "";
+        if (msg.includes("location")) return p.location ?? "";
+      }
       return [p.fullname, p.email, p.phone, p.location, p.linkedinUrl, p.githubUrl, p.portfolioUrl]
         .filter(Boolean).join(", ");
     }
@@ -170,9 +179,9 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
 
               // Snapshot section value on first render of this suggestion
               if (!isAuto && !(s.id in originalValuesRef.current)) {
-                originalValuesRef.current[s.id] = getSectionValue(s.section);
+                originalValuesRef.current[s.id] = getSectionValue(s.section, s);
               }
-              const currentValue = isAuto ? "" : getSectionValue(s.section);
+              const currentValue = isAuto ? "" : getSectionValue(s.section, s);
               const isEdited = isAuto || currentValue.trim() !== originalValuesRef.current[s.id]?.trim();
               const checkDisabled = btnState === "loading" || btnState === "success" || !isEdited;
 
