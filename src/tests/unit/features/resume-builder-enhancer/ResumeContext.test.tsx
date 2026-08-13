@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {
+  expandNestedSkillBuckets,
   mapBackendSkillsToCategorized,
   ResumeProvider,
   useResume,
@@ -419,5 +420,95 @@ describe('ResumeContext', () => {
 
     expect(await screen.findByText('Loading: false')).toBeInTheDocument();
     expect(mockToast.error).toHaveBeenCalledWith('Failed to load resume data');
+  });
+});
+
+/**
+ * PHASE 1b — the frontend half of the custom_skills migration.
+ *
+ * The backend is moving categorized skills from a flat shape to a nested one:
+ *
+ *     { databases: [...], tools: [...] }
+ *  -> { customSkills: { databases: [...], tools: [...] } }
+ *
+ * mapBackendSkillsToCategorized already routes any non-PREDEFINED key into
+ * `custom_categories`, and all five templates render those. The break is the
+ * `!Array.isArray(items)` guard: a nested OBJECT fails it and the whole bucket
+ * is silently skipped, so those skills vanish from the builder and from every
+ * template with no error.
+ */
+describe('mapBackendSkillsToCategorized — nested customSkills bucket', () => {
+  const FLAT = {
+    programmingLanguages: [{ id: 'p1', name: 'TypeScript' }],
+    databases: [{ id: 'd1', name: 'PostgreSQL' }],
+    tools: [{ id: 't1', name: 'Git' }],
+  };
+  const NESTED = {
+    programmingLanguages: [{ id: 'p1', name: 'TypeScript' }],
+    customSkills: {
+      databases: [{ id: 'd1', name: 'PostgreSQL' }],
+      tools: [{ id: 't1', name: 'Git' }],
+    },
+  };
+
+  const customNames = (r: ReturnType<typeof mapBackendSkillsToCategorized>) =>
+    (r.custom_categories || []).flatMap(c => c.skills);
+
+  it('surfaces nested skills exactly as the flat shape does', () => {
+    const flat = mapBackendSkillsToCategorized(FLAT);
+    const nested = mapBackendSkillsToCategorized(NESTED);
+
+    expect(customNames(nested).sort()).toEqual(['Git', 'PostgreSQL']);
+    expect(customNames(nested).sort()).toEqual(customNames(flat).sort());
+    expect(nested.programming_languages).toEqual(['TypeScript']);
+  });
+
+  it('keeps the skill_id_map populated for nested skills', () => {
+    // Without the id map, Skills.tsx cannot resolve a delete call.
+    const nested = mapBackendSkillsToCategorized(NESTED);
+
+    expect(nested.skill_id_map?.['databases:PostgreSQL']).toBe('d1');
+    expect(nested.skill_id_map?.['Databases:PostgreSQL']).toBe('d1');
+  });
+
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__'])(
+    'survives a user-named category that collides with Object.prototype (%s)',
+    (key) => {
+      // Category names are user-supplied. With a `{}` accumulator, expanded[key]
+      // resolves to the INHERITED prototype member, the `existing ?` test is
+      // truthy against a function, and .concat throws -- crashing the whole
+      // resume load, not just that one category.
+      const out = expandNestedSkillBuckets({ customSkills: { [key]: [{ id: '1', name: 'X' }] } });
+
+      expect(out[key]).toEqual([{ id: '1', name: 'X' }]);
+    },
+  );
+
+  it('is a no-op on the flat shape', () => {
+    expect(expandNestedSkillBuckets(FLAT)).toEqual(FLAT);
+  });
+
+  it('never mutates the caller payload', () => {
+    const original = [{ id: 'd1', name: 'PostgreSQL' }];
+    const payload = { databases: original, customSkills: { databases: [{ id: 'd2', name: 'MySQL' }] } };
+
+    expandNestedSkillBuckets(payload);
+
+    expect(original).toHaveLength(1);
+  });
+
+  it('merges a nested sub-category colliding with a flat one, in both key orders', () => {
+    const nestedFirst = expandNestedSkillBuckets({
+      customSkills: { databases: [{ id: 'd2', name: 'MySQL' }] },
+      databases: [{ id: 'd1', name: 'PostgreSQL' }],
+    });
+    const flatFirst = expandNestedSkillBuckets({
+      databases: [{ id: 'd1', name: 'PostgreSQL' }],
+      customSkills: { databases: [{ id: 'd2', name: 'MySQL' }] },
+    });
+
+    for (const out of [nestedFirst, flatFirst]) {
+      expect(out.databases.map(d => d.name).sort()).toEqual(['MySQL', 'PostgreSQL']);
+    }
   });
 });

@@ -466,6 +466,17 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       str(pub.venue),
     date: str(pub.date) || str(pub.year),
     url: str(pub.url) || str(pub.link),
+    doi: str(pub.doi),
+  }));
+
+  /* ── Patents ── */
+  const patents = arr<AnyRecord>(llm.patents || p.patents).map((pat) => ({
+    ...(pat.id ? { id: str(pat.id) } : {}),
+    title: str(pat.title),
+    patentNumber: str(pat.patent_number) || str(pat.patentNumber),
+    status: str(pat.status),
+    date: str(pat.date) || str(pat.year),
+    description: str(pat.description),
   }));
 
   /* ── References ── */
@@ -505,7 +516,11 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
     hobbies,
     interests,
     publications,
+    patents,
     references,
+    declaration: typeof p.declaration === 'string' ? str(p.declaration) : (typeof p.declaration === 'object' && p.declaration !== null && 'text' in p.declaration ? str((p.declaration as Record<string, unknown>).text) : str(llm.declaration)),
+    declarationDate: str(p.declarationDate || p.declaration_date || llm.declarationDate || llm.declaration_date),
+    declarationPlace: str(p.declarationPlace || p.declaration_place || llm.declarationPlace || llm.declaration_place),
     customSections: buildCustomSections(p),
   };
 }
@@ -525,7 +540,9 @@ const STANDARD_MAPPED_KEYS = new Set([
   "hobbies", "hobbies_and_interests", "interests",
   "languages", "languages_known",
   "publications",
+  "patents",
   "references",
+  "declaration", "declaration_date", "declaration_place",
   "contact", "personal_info", "social_links",
 ]);
 
@@ -533,7 +550,7 @@ const STANDARD_MAPPED_KEYS = new Set([
 const SKIP_KEYS = new Set([
   "llm_data", "section_metadata", "format_analysis", "contact_signals",
   "summary_analysis", "enhancer_state", "image_warning", "image_message",
-  "headline", "declaration", "personal_details", "tokens_used",
+  "headline", "personal_details", "tokens_used",
   "strategy_used", "user_id", "correlation_id", "trace_id",
 ]);
 

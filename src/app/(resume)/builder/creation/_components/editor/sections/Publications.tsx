@@ -16,7 +16,8 @@ interface PublicationEntry {
   publicationName: string;
   date: string;
   url: string;
-  id?: string; // ✅ NEW: Add item ID for backend tracking
+  doi?: string;
+  id?: string;
 }
 
 const emptyPublication = (): PublicationEntry => ({
@@ -25,6 +26,7 @@ const emptyPublication = (): PublicationEntry => ({
   publicationName: "",
   date: "",
   url: "",
+  doi: "",
 });
 
 const Publications: React.FC = () => {
@@ -413,6 +415,18 @@ const Publications: React.FC = () => {
                           className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500`}
                         />
                       </div>
+                    </div>
+
+                    {/* DOI */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-sm font-semibold text-[#3b3b3b]">DOI <span className="text-gray-400 font-normal">(optional)</span></label>
+                      <input
+                        type="text"
+                        value={publication.doi || ""}
+                        placeholder="e.g., 10.1000/xyz123"
+                        onChange={(e) => handleChange(editIndex, "doi", e.target.value)}
+                        className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-blue-500"
+                      />
                     </div>
                   </div>
                 );

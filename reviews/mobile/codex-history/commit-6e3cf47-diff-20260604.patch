@@ -1,0 +1,44 @@
+diff --git a/app/(auth)/verify.tsx b/app/(auth)/verify.tsx
+index 3ad2ccb..b739bcd 100644
+--- a/app/(auth)/verify.tsx
++++ b/app/(auth)/verify.tsx
+@@ -2,7 +2,7 @@
+ // supports manual paste + resend.
+ 
+ import { router, useLocalSearchParams } from 'expo-router';
+-import { useEffect, useRef, useState } from 'react';
++import { useState } from 'react';
+ import { Pressable, ScrollView, Text, View } from 'react-native';
+ 
+ import AuthInput from '@/components/forms/AuthInput';
+@@ -27,18 +27,18 @@ export default function VerifyEmailScreen() {
+   const verifyMutation = useVerifyEmail();
+   const resendMutation = useResendVerificationEmail();
+ 
+-  // Auto-submit when token arrives from a deep link.
+-  const autoSubmittedRef = useRef(false);
+-  useEffect(() => {
+-    if (tokenFromLink && !autoSubmittedRef.current) {
+-      autoSubmittedRef.current = true;
+-      void verifyMutation
+-        .mutateAsync({ token: tokenFromLink })
+-        .then(() => setDone(true))
+-        .catch((e) => setError(getApiErrorMessage(e, 'Verification failed.')));
+-    }
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [tokenFromLink]);
++  // SECURITY: do NOT auto-submit the deep-link token.
++  //
++  // Codex commit-review of 94b1a73 round 2 flagged that auto-consuming a token
++  // from useLocalSearchParams() means ANY careerbot:// link can trigger a
++  // verifyMutation call. Until the Day 10 deep-link allow-list handler exists
++  // to validate the link's host/path (e.g. via Universal Links / App Links
++  // verified domains), we pre-fill the token field but require the user to
++  // tap "Verify email" explicitly. This converts auto-consume to manual confirm.
++  //
++  // When Day 10 ships:
++  //   - useTrustedAuthLinkToken('verify') hook becomes the source of truth.
++  //   - Auto-submit can resume IF and only if isTrustedDeepLink === true.
+ 
+   async function onSubmit() {
+     setError(undefined);

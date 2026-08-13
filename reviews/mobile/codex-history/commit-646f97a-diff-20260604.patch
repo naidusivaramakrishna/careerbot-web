@@ -1,0 +1,14 @@
+diff --git a/src/api/client/http.ts b/src/api/client/http.ts
+index 7a7f7bd..6ca119a 100644
+--- a/src/api/client/http.ts
++++ b/src/api/client/http.ts
+@@ -162,7 +162,8 @@ httpClient.interceptors.response.use(
+       status === 401 &&
+       !original._retry &&
+       !original.url?.includes('/auth/refresh') &&
+-      !original.url?.includes('/auth/signin')
++      !original.url?.includes('/auth/signin') &&
++      !original.url?.includes('/auth/signout')
+     ) {
+       original._retry = true;
+       const newToken = await refreshSession();

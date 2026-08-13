@@ -1,0 +1,593 @@
+diff --git a/src/api/client/http.ts b/src/api/client/http.ts
+index e7467c7..7a7f7bd 100644
+--- a/src/api/client/http.ts
++++ b/src/api/client/http.ts
+@@ -1,23 +1,27 @@
+-// Axios HTTP client + production HTTPS guard + 401-refresh interceptor.
++// Axios HTTP client + production HTTPS guard + 401-refresh-via-shared-module + onSignOut hook.
+ //
+-// Ported from POC:
+-//   src/API/http/httpClient.js (axios instance + setAuthToken)
+-//   src/uri/uri.js             (the production HTTPS guard — top-1% defensive code)
++// CHANGES vs original (per auth-lifecycle Note round 6-7 fixes):
++//   - REMOVED local `inFlightRefresh` + `registerRefreshHandler`.
++//     Single-flight refresh now lives in @/features/auth/refreshSession.
++//   - ADDED `registerSignOutHandler` hook. On 401 + failed refresh, the
++//     interceptor calls onSignOut() to trigger canonical sign-out. This makes
++//     the "next 401 triggers canonical sign-out" policy mechanically enforced.
+ //
+-// NEW vs POC:
+-//   - Response interceptor handles 401 → refresh → retry (single-flight).
+-//     The POC handled refresh at the screen layer via App.js's useEffect.
+-//     Centralising in the http layer means every call benefits without
+-//     screens explicitly knowing about refresh.
++// PRESERVED:
++//   - HTTPS-only production guard (top-1% defensive code from POC).
++//   - Dev-server host resolution (Android emulator → 10.0.2.2).
++//   - Tenant header.
+ //
+-// SECURITY GUARD (from POC uri.js): in production builds refuse to send
+-// credentials over plaintext HTTP. A forgotten EXPO_PUBLIC_API_BASE_URL must
+-// fail loudly, not silently leak tokens.
++// Ported from:
++//   carerbot POC: src/API/http/httpClient.js + src/uri/uri.js HTTPS guard.
++// Reference:
++//   docs/design/notes/2026-06-03-auth-lifecycle-orchestration.md §5.b + §3 Option D.
+ 
+ import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+ import Constants from 'expo-constants';
+ import { NativeModules, Platform } from 'react-native';
+ 
++import { refreshSession } from '@/features/auth/refreshSession';
+ import { logger } from '@/utils/logger';
+ 
+ // ── base URL resolution ─────────────────────────────────────────────────────
+@@ -115,18 +119,22 @@ export function setAuthToken(accessToken: string | null, tokenType: string = 'be
+   httpClient.defaults.headers.common.Authorization = `${normalized} ${accessToken}`;
+ }
+ 
+-// ── single-flight 401 → refresh → retry interceptor ─────────────────────────
++// ── 401-refresh-via-shared-module + onSignOut hook ──────────────────────────
+ //
+-// onUnauthorized is wired in by the auth bootstrap (sessionRestore.ts) so the
+-// http layer does not import auth code directly (avoids a cycle).
+-
+-type RefreshFn = () => Promise<string | null>;
+-
+-let refreshFn: RefreshFn | null = null;
+-let inFlightRefresh: Promise<string | null> | null = null;
+-
+-export function registerRefreshHandler(fn: RefreshFn | null): void {
+-  refreshFn = fn;
++// Round-6 fix: on refresh failure, invoke onSignOut() to trigger canonical
++// sign-out via the registered handler. Eliminates the contract gap where the
++// doc said "next 401 triggers canonical sign-out" but the code only rejected.
++
++let onSignOut: (() => Promise<void>) | null = null;
++
++/**
++ * Wired ONCE at app bootstrap from app/_layout.tsx, after authActions.signOut
++ * exists. Best practice: pass the actual signOut function from
++ * '@/features/auth/authActions' so the interceptor and the signOut composition
++ * are guaranteed to use the same canonical path.
++ */
++export function registerSignOutHandler(fn: (() => Promise<void>) | null): void {
++  onSignOut = fn;
+ }
+ 
+ interface RetryConfig extends InternalAxiosRequestConfig {
+@@ -147,27 +155,37 @@ httpClient.interceptors.response.use(
+       logger.error('[HttpClient] Network error:', error.code ?? error.message);
+     }
+ 
+-    // Refresh-on-401 (skip if no handler, already retried, or refresh call itself).
++    // Refresh-on-401 via shared single-flight module. Skip self-recursive
++    // paths (refresh itself + signin which authenticates without an existing
++    // session).
+     if (
+       status === 401 &&
+-      refreshFn &&
+       !original._retry &&
+       !original.url?.includes('/auth/refresh') &&
+       !original.url?.includes('/auth/signin')
+     ) {
+       original._retry = true;
+-      inFlightRefresh = inFlightRefresh ?? refreshFn();
+-      try {
+-        const newToken = await inFlightRefresh;
+-        if (newToken) {
+-          original.headers = original.headers ?? {};
+-          original.headers['Authorization'] = `Bearer ${newToken}`;
+-          return httpClient(original);
++      const newToken = await refreshSession();
++      if (newToken) {
++        // Retry the original request with the fresh token explicitly attached
++        // (axios default header is also updated by refreshSession's commit,
++        // but we set it on the retry to be safe).
++        original.headers = original.headers ?? {};
++        original.headers['Authorization'] = `Bearer ${newToken}`;
++        return httpClient(original);
++      }
++
++      // Refresh failed → canonical sign-out. The interceptor closes the loop
++      // that the scheduler/AppState handlers leave open (they log + wait for
++      // the next 401, which is this).
++      if (onSignOut) {
++        try {
++          await onSignOut();
++        } catch (signOutError) {
++          logger.error('[HttpClient] onSignOut handler threw:', signOutError);
++          // Best-effort — proceed to reject. Local state might be inconsistent
++          // but the user will be forced to sign in again on the next app open.
+         }
+-      } catch {
+-        // fall through to reject below
+-      } finally {
+-        inFlightRefresh = null;
+       }
+     }
+ 
+diff --git a/src/features/auth/authActions.ts b/src/features/auth/authActions.ts
+new file mode 100644
+index 0000000..bd672b8
+--- /dev/null
++++ b/src/features/auth/authActions.ts
+@@ -0,0 +1,80 @@
++// Composed signOut() — ordered best-effort teardown across all auth surfaces.
++//
++// Per auth-lifecycle Note (ACCEPT-AS-IS round 7) §4 / §3 sign-out block.
++//
++// NOT atomic — SecureStore writes are async and can fail. try/finally ensures
++// in-memory cleanup AND navigation happen even on SecureStore failure.
++//
++// Ordering (DO NOT REORDER — Codex round 4-6 caught bugs in earlier versions):
++//   1. queryClient.cancelQueries()    — cancel in-flight protected requests
++//   2. queryClient.clear()            — drop server cache (no stale-data flash)
++//   3. authLifecycle.stop()           — cancel timer, drop AppState listener
++//   4. useAuthStore.getState().reset() — clear token state in memory
++//   5. setAuthToken(null)             — clear axios default Authorization header
++//   6. try { clearAuthSession() }     — clear SecureStore (async, may fail)
++//   7. finally { router.replace('/(auth)/signin') } — navigate regardless
++//
++// If POST /auth/signout (backend signout) is reachable, call it BEFORE step 1
++// to invalidate the refresh token server-side. If unreachable (offline), local
++// teardown still proceeds — backend blacklisting catches up on next refresh.
++
++import { router } from 'expo-router';
++
++import { httpClient, setAuthToken } from '@/api/client/http';
++import { logger } from '@/utils/logger';
++
++import { authLifecycle } from './authLifecycle';
++import { useAuthStore } from './authStore';
++import { clearAuthSession } from './tokenStorage';
++import type { QueryClient } from '@tanstack/react-query';
++
++export interface SignOutDeps {
++  queryClient: QueryClient;
++}
++
++let deps: SignOutDeps | null = null;
++
++/**
++ * Wire the QueryClient (and any future deps) at app bootstrap, before any
++ * signOut() call can happen.
++ */
++export function configureAuthActions(d: SignOutDeps): void {
++  deps = d;
++}
++
++export async function signOut(): Promise<void> {
++  if (!deps) {
++    logger.warn('[authActions] signOut called before configureAuthActions; proceeding without QueryClient teardown');
++  }
++
++  // 0. (Best-effort) tell backend to blacklist the refresh token.
++  //    Catch + swallow — we sign out locally regardless.
++  try {
++    await httpClient.post('/api/v1/auth/signout');
++  } catch {
++    // Network/offline/backend-down: skip. Local teardown still proceeds.
++  }
++
++  // 1-2. Query teardown — cancel in-flight + clear cache.
++  if (deps?.queryClient) {
++    await deps.queryClient.cancelQueries();
++    deps.queryClient.clear();
++  }
++
++  // 3. Lifecycle service — cancel timer + AppState listener + drop refresh promise.
++  authLifecycle.stop();
++
++  // 4. Auth store — clear token state in memory.
++  useAuthStore.getState().reset();
++
++  // 5. Axios default header — clear so subsequent requests aren't authenticated.
++  setAuthToken(null);
++
++  // 6-7. SecureStore + navigate. SecureStore is wrapped in try/finally so
++  //      navigation happens even if SecureStore write fails.
++  try {
++    await clearAuthSession();
++  } finally {
++    router.replace('/(auth)/signin');
++  }
++}
+diff --git a/src/features/auth/authLifecycle.ts b/src/features/auth/authLifecycle.ts
+new file mode 100644
+index 0000000..d47592b
+--- /dev/null
++++ b/src/features/auth/authLifecycle.ts
+@@ -0,0 +1,140 @@
++// Explicit bootstrap lifecycle service for auth.
++//
++// Per auth-lifecycle Note (ACCEPT-AS-IS round 7) §3 Option D.
++//
++// Called once from app/_layout.tsx AFTER restoreSession() resolves:
++//
++//   await restoreSession();
++//   registerSignOutHandler(signOut);                          // wire http.ts
++//   configureAuthActions({ queryClient });                    // wire authActions
++//   await authLifecycle.start({ queryClient, signOut });      // <-- this file
++//   // Only NOW release the protected UI gate.
++//
++// Behavior:
++//   - start() performs IMMEDIATE SNAPSHOT RECONCILIATION (read current
++//     useAuthStore.expiresAt, schedule from it) BEFORE subscribing for future
++//     changes. This closes the round-3 bug where naïve subscribe-only missed
++//     the restore-time expiresAt.
++//   - On launch with a near-expired token, awaits refreshSession() before
++//     returning. On refresh-failure at launch, calls deps.signOut() and
++//     returns WITHOUT releasing the UI gate.
++//   - Scheduler timer + AppState 'active' listener both call refreshSession()
++//     (the shared single-flight). On their failure: log + wait for next 401.
++//   - stop() is idempotent and tears down ALL three subscriptions/timers.
++
++import { AppState, type NativeEventSubscription } from 'react-native';
++import type { QueryClient } from '@tanstack/react-query';
++
++import { logger } from '@/utils/logger';
++
++import { useAuthStore } from './authStore';
++import { refreshSession } from './refreshSession';
++
++export interface StartDeps {
++  queryClient: QueryClient;
++  signOut: () => Promise<void>;
++}
++
++type ReconcileOutcome = 'ok' | 'refresh-failed';
++
++const REFRESH_LEAD_TIME_MS = 60_000;
++
++let timer: ReturnType<typeof setTimeout> | null = null;
++let appStateSub: NativeEventSubscription | null = null;
++let storeUnsubscribe: (() => void) | null = null;
++let started = false;
++
++async function reconcileFromExpiresAt(expiresAt: number | null): Promise<ReconcileOutcome> {
++  if (timer) {
++    clearTimeout(timer);
++    timer = null;
++  }
++
++  if (!expiresAt) return 'ok';
++
++  const now = Date.now();
++
++  // Already expired or near-expired at the snapshot moment.
++  if (expiresAt - now < REFRESH_LEAD_TIME_MS) {
++    const newToken = await refreshSession();
++    return newToken ? 'ok' : 'refresh-failed';
++  }
++
++  // Schedule for REFRESH_LEAD_TIME_MS before expiry.
++  const delay = expiresAt - now - REFRESH_LEAD_TIME_MS;
++  timer = setTimeout(async () => {
++    const newToken = await refreshSession();
++    if (!newToken) {
++      // Scheduled mid-session refresh failed. Don't force sign-out — let the
++      // next API call's 401 trigger the canonical sign-out path via the
++      // interceptor's onSignOut hook (registered separately at bootstrap).
++      logger.warn(
++        '[authLifecycle] scheduled refresh failed; awaiting next 401 to trigger sign-out',
++      );
++    }
++  }, delay);
++
++  return 'ok';
++}
++
++async function start(deps: StartDeps): Promise<void> {
++  if (started) return;
++  started = true;
++
++  // STEP 1: snapshot reconciliation — read current state BEFORE subscribing.
++  const { expiresAt, accessToken } = useAuthStore.getState();
++  if (accessToken) {
++    const outcome = await reconcileFromExpiresAt(expiresAt);
++    if (outcome === 'refresh-failed') {
++      // Launch-time refresh failed. Sign out fully BEFORE the UI gate releases.
++      // Reset `started` so a re-start after re-auth works.
++      started = false;
++      await deps.signOut();
++      return;
++    }
++  }
++
++  // STEP 2: subscribe to FUTURE expiresAt changes (e.g. after refresh, sign-in).
++  // subscribeWithSelector returns an unsubscribe function.
++  storeUnsubscribe = useAuthStore.subscribe(
++    (state) => state.expiresAt,
++    (newExpiresAt) => {
++      void reconcileFromExpiresAt(newExpiresAt);
++    },
++  );
++
++  // STEP 3: AppState listener — on resume, proactively refresh if near-expired.
++  appStateSub = AppState.addEventListener('change', async (next) => {
++    if (next !== 'active') return;
++    const currentExpiresAt = useAuthStore.getState().expiresAt;
++    if (!currentExpiresAt || currentExpiresAt - Date.now() >= REFRESH_LEAD_TIME_MS) {
++      return;
++    }
++    const newToken = await refreshSession();
++    if (!newToken) {
++      // Proactive refresh on resume failed. Same policy as scheduler — log
++      // + wait for next 401. UX: brief stale UI; canonical sign-out fires
++      // via the interceptor's onSignOut.
++      logger.warn(
++        '[authLifecycle] AppState-active proactive refresh failed; awaiting next 401',
++      );
++    }
++  });
++}
++
++function stop(): void {
++  if (timer) {
++    clearTimeout(timer);
++    timer = null;
++  }
++  storeUnsubscribe?.();
++  storeUnsubscribe = null;
++  appStateSub?.remove();
++  appStateSub = null;
++  started = false;
++}
++
++export const authLifecycle = {
++  start,
++  stop,
++};
+diff --git a/src/features/auth/authStore.ts b/src/features/auth/authStore.ts
+index f28a955..dcaf169 100644
+--- a/src/features/auth/authStore.ts
++++ b/src/features/auth/authStore.ts
+@@ -1 +1,78 @@
+-// Zustand store — { status, user, tokens }
++// Zustand store for auth/session client state.
++//
++// Per auth-lifecycle Note (ACCEPT-AS-IS round 7) Option D + ADR-007:
++//   - This store holds TOKENS + SESSION LIFECYCLE state only.
++//   - User identity / profile / plan tier lives in TanStack Query (server cache).
++//   - Side effects (refresh timer, AppState listener) live in authLifecycle.ts,
++//     NOT here. Store actions stay pure state transitions.
++//
++// Reference: docs/design/notes/2026-06-03-auth-lifecycle-orchestration.md §3 Option D.
++
++import { create } from 'zustand';
++import { subscribeWithSelector } from 'zustand/middleware';
++
++import type { AuthSession } from './tokenStorage';
++
++export interface AuthState {
++  accessToken: string | null;
++  refreshToken: string | null;
++  tokenType: string;
++  expiresAt: number | null;
++  username: string;
++
++  /** True when SecureStore restore has resolved (regardless of session presence). */
++  isHydrated: boolean;
++
++  /** Derived: is the user signed in (token present)? */
++  isSignedIn: boolean;
++}
++
++interface AuthActions {
++  /** Replace the session in-memory (called by signin, refresh, restore). */
++  setSession: (session: AuthSession) => void;
++
++  /** Mark hydration complete (called by sessionRestore once on launch). */
++  markHydrated: () => void;
++
++  /** Clear all auth state in-memory (called by signOut). */
++  reset: () => void;
++}
++
++const initialState: AuthState = {
++  accessToken: null,
++  refreshToken: null,
++  tokenType: 'bearer',
++  expiresAt: null,
++  username: '',
++  isHydrated: false,
++  isSignedIn: false,
++};
++
++export const useAuthStore = create<AuthState & AuthActions>()(
++  subscribeWithSelector((set) => ({
++    ...initialState,
++
++    setSession: (session) =>
++      set({
++        accessToken: session.accessToken,
++        refreshToken: session.refreshToken,
++        tokenType: session.tokenType,
++        expiresAt: session.expiresAt,
++        username: session.username,
++        isSignedIn: Boolean(session.accessToken),
++      }),
++
++    markHydrated: () => set({ isHydrated: true }),
++
++    reset: () =>
++      set({
++        accessToken: null,
++        refreshToken: null,
++        tokenType: 'bearer',
++        expiresAt: null,
++        username: '',
++        isSignedIn: false,
++        // NOTE: isHydrated stays true — once hydrated, we don't un-hydrate.
++      }),
++  })),
++);
+diff --git a/src/features/auth/refreshSession.ts b/src/features/auth/refreshSession.ts
+new file mode 100644
+index 0000000..9bfa004
+--- /dev/null
++++ b/src/features/auth/refreshSession.ts
+@@ -0,0 +1,92 @@
++// Single source of truth for refresh-token rotation.
++//
++// Per auth-lifecycle Note §5.b (ACCEPT-AS-IS round 7).
++//
++// Called by:
++//   - http.ts 401 interceptor                (reactive — on 401 from any non-/auth/* request)
++//   - authLifecycle scheduler timer          (proactive — ~60s before expiresAt)
++//   - authLifecycle AppState 'active' handler (proactive — on app resume if near-expired)
++//   - authLifecycle.start() snapshot-reconcile (on launch if restored token near-expired)
++//
++// All four paths await the SAME module-local `inFlight` promise. Single-flight guaranteed.
++//
++// On success: the rotated session is committed to ALL four auth surfaces via
++// ordered awaits (NOT literally atomic — these are sequential JS operations):
++//   1. SecureStore via saveAuthSession()
++//   2. useAuthStore via setSession()  (triggers the scheduler subscriber automatically)
++//   3. axios.defaults.headers.common.Authorization via setAuthToken()
++//   4. resolves with the new accessToken (for the interceptor's immediate retry)
++//
++// Partial-failure semantics (per Note §5.b round 5/6):
++//   - If step 1 (SecureStore) throws → entire refresh fails; in-memory stays on old session.
++//     Caller sees null and applies its per-caller policy.
++//   - If step 2 or 3 throws AFTER step 1 succeeded → SecureStore is ahead of memory.
++//     On next session restore the new tokens hydrate correctly. Mid-session, the
++//     next 401 retriggers refresh. No security regression — old token is invalid
++//     server-side anyway, so stale-default-header requests just get 401 and retry.
++
++import axios from 'axios';
++
++import { httpClient, setAuthToken } from '@/api/client/http';
++
++import { useAuthStore } from './authStore';
++import { getAuthSession, saveAuthSession, type AuthSession } from './tokenStorage';
++
++let inFlight: Promise<string | null> | null = null;
++
++export async function refreshSession(): Promise<string | null> {
++  if (inFlight) return inFlight;
++  inFlight = doRefresh().finally(() => {
++    inFlight = null;
++  });
++  return inFlight;
++}
++
++interface RefreshResponse {
++  access_token: string;
++  refresh_token: string;
++  expires_in: number;
++  token_type: string;
++}
++
++async function doRefresh(): Promise<string | null> {
++  const session = await getAuthSession();
++  if (!session?.refreshToken) return null;
++
++  try {
++    // Direct axios call, bypassing the httpClient interceptor by design
++    // (the interceptor skips /auth/refresh URLs, but we use raw axios so
++    // we can't even accidentally re-enter the interceptor).
++    const response = await axios.post<RefreshResponse>(
++      `${httpClient.defaults.baseURL}/api/v1/auth/refresh`,
++      { refresh_token: session.refreshToken },
++      {
++        headers: {
++          'X-Tenant-Id': httpClient.defaults.headers.common['X-Tenant-Id'] as string,
++        },
++      },
++    );
++
++    const { access_token, refresh_token, expires_in, token_type } = response.data;
++    const expiresAt = Date.now() + expires_in * 1000;
++
++    const newSession: AuthSession = {
++      ...session,
++      accessToken: access_token,
++      refreshToken: refresh_token,
++      expiresAt,
++      tokenType: token_type,
++    };
++
++    // Commit to ALL four surfaces, in order. See Note §5.b round-4 fix.
++    await saveAuthSession(newSession);                      // 1. SecureStore (await — async)
++    useAuthStore.getState().setSession(newSession);         // 2. Zustand     (triggers scheduler)
++    setAuthToken(access_token, token_type);                 // 3. axios default header
++    return access_token;                                    // 4. interceptor retry token
++  } catch {
++    // Caller MUST handle null return per the per-caller policy documented
++    // at the top of this file. Do not log refresh failures here — callers
++    // log with their own context.
++    return null;
++  }
++}
+diff --git a/src/features/auth/sessionRestore.ts b/src/features/auth/sessionRestore.ts
+index a174c67..b126348 100644
+--- a/src/features/auth/sessionRestore.ts
++++ b/src/features/auth/sessionRestore.ts
+@@ -1 +1,30 @@
+-// On launch — read tokens + verify + refresh if needed
++// Hydrate the in-memory auth store from SecureStore on app launch.
++//
++// Per auth-lifecycle Note (ACCEPT-AS-IS round 7).
++//
++// Called exactly ONCE from app/_layout.tsx before authLifecycle.start().
++// Idempotent — calling again after the first call is a no-op.
++
++import { setAuthToken } from '@/api/client/http';
++
++import { useAuthStore } from './authStore';
++import { getAuthSession } from './tokenStorage';
++
++let restored = false;
++
++export async function restoreSession(): Promise<void> {
++  if (restored) return;
++  restored = true;
++
++  try {
++    const session = await getAuthSession();
++    if (session?.accessToken && session.refreshToken) {
++      useAuthStore.getState().setSession(session);
++      setAuthToken(session.accessToken, session.tokenType);
++    }
++  } finally {
++    // ALWAYS mark hydrated, even if SecureStore read failed.
++    // Otherwise the UI gate never releases.
++    useAuthStore.getState().markHydrated();
++  }
++}
+diff --git a/src/features/auth/signOut.ts b/src/features/auth/signOut.ts
+deleted file mode 100644
+index 44fc185..0000000
+--- a/src/features/auth/signOut.ts
++++ /dev/null
+@@ -1 +0,0 @@
+-// Clear tokens; cancel refresh timer; reset stores; navigate to auth
+diff --git a/src/features/auth/tokenRefresh.ts b/src/features/auth/tokenRefresh.ts
+deleted file mode 100644
+index ef5bdba..0000000
+--- a/src/features/auth/tokenRefresh.ts
++++ /dev/null
+@@ -1 +0,0 @@
+-// Schedule refresh 60s before expiry; cancel on sign-out

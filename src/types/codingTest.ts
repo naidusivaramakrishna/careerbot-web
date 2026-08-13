@@ -9,7 +9,6 @@ export type {
   GradingCriterion,
   ScoreBreakdown,
   GradingResult,
-  SubmitSolutionRequest,
   SubmitSolutionResponse,
   HistoryEntry,
   HistoryResponse,

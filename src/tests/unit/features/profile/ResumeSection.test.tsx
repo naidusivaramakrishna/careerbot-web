@@ -77,18 +77,6 @@ describe('ResumeSection — no resume uploaded', () => {
 describe('ResumeSection — resume exists', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('shows the resume filename derived from the URL', async () => {
-    mockGetResume.mockResolvedValueOnce({
-      resume_url: 'https://storage.example.com/resumes/user-resume.pdf',
-    });
-
-    render(<ResumeSection {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Resume.pdf')).toBeInTheDocument();
-    });
-  });
-
   it('shows Delete and Replace buttons when resume exists', async () => {
     mockGetResume.mockResolvedValueOnce({
       resume_url: 'https://storage.example.com/resumes/resume.docx',
@@ -102,17 +90,6 @@ describe('ResumeSection — resume exists', () => {
     });
   });
 
-  it('derives extension from resume URL for the filename', async () => {
-    mockGetResume.mockResolvedValueOnce({
-      resume_url: 'https://storage.example.com/resumes/cv.docx',
-    });
-
-    render(<ResumeSection {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Resume.docx')).toBeInTheDocument();
-    });
-  });
 });
 
 describe('ResumeSection — delete flow', () => {
@@ -251,5 +228,67 @@ describe('ResumeSection — upload validation', () => {
 
     expect(mockToast.error).toHaveBeenCalledWith('File size must be less than 10MB');
     expect(mockUploadResume).not.toHaveBeenCalled();
+  });
+});
+
+describe('ResumeSection — localStorage fileName behavior', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('reads fileName from localStorage on mount when available', async () => {
+    const storedFileName = 'my-resume.pdf';
+    localStorage.setItem('uploaded_resume_filename', storedFileName);
+
+    mockGetResume.mockResolvedValueOnce({
+      resume_url: 'https://storage.example.com/resumes/resume.pdf',
+    });
+
+    render(<ResumeSection {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(storedFileName)).toBeInTheDocument();
+    });
+  });
+
+  it('shows "Uploaded Resume" fallback when localStorage key is absent', async () => {
+    // Ensure localStorage is empty
+    localStorage.removeItem('uploaded_resume_filename');
+
+    mockGetResume.mockResolvedValueOnce({
+      resume_url: 'https://storage.example.com/resumes/resume.pdf',
+    });
+
+    render(<ResumeSection {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Uploaded Resume')).toBeInTheDocument();
+    });
+  });
+
+  it('clears fileName from localStorage when delete is confirmed', async () => {
+    const storedFileName = 'my-resume.pdf';
+    localStorage.setItem('uploaded_resume_filename', storedFileName);
+
+    mockGetResume.mockResolvedValueOnce({
+      resume_url: 'https://storage.example.com/resumes/resume.pdf',
+    });
+    mockDeleteResume.mockResolvedValueOnce({ message: 'Resume deleted successfully' });
+
+    render(<ResumeSection {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument();
+    });
+
+    // Open the confirmation modal and delete
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+    const [, modalDeleteBtn] = screen.getAllByRole('button', { name: /^delete$/i });
+    fireEvent.click(modalDeleteBtn);
+
+    await waitFor(() => {
+      expect(localStorage.getItem('uploaded_resume_filename')).toBeNull();
+    });
   });
 });

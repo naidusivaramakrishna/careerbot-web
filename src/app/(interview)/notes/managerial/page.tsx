@@ -18,23 +18,23 @@ const STATS = [
 const HOW_IT_WORKS = [
   {
     icon: Users,
-    title: "Role-aware prompts",
-    body: "Practice leadership, ownership, conflict, ambiguity, and decision-making questions tailored to your background.",
+    title: "Leadership scenarios",
+    body: "Prepare for stakeholder conflict, team ownership, decision-making under pressure, and cross-functional influence questions.",
   },
   {
     icon: Mic,
-    title: "Answer out loud",
-    body: "Simulate the pressure of a panel interview while keeping your prepared scripts nearby in round one.",
+    title: "Speak the STAR frame",
+    body: "Practice structuring answers aloud so situation, task, action, and result flow naturally without sounding rehearsed.",
   },
   {
     icon: MessageSquare,
-    title: "Feedback that is specific",
-    body: "Get concrete coaching on clarity, evidence, structure, and whether your example sounds senior enough.",
+    title: "Conciseness coaching",
+    body: "AI feedback highlights when answers run too long or lack a clear outcome — keeping you within the 60–120 second sweet spot.",
   },
   {
     icon: BarChart2,
-    title: "Reduce the safety net",
-    body: "Round two moves from full notes to key cues so your best stories become natural and recallable.",
+    title: "Round-based recall",
+    body: "Start with full notes, then advance to keywords-only to build interview-level recall under realistic conditions.",
   },
 ];
 

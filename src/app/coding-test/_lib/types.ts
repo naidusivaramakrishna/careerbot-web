@@ -40,7 +40,7 @@ export interface CodingProblemListFilters {
 
 // ---- Grading (submit + history) -------------------------------------------
 // Shapes mirror careerbot-ai's GradingResult, passed through by the
-// careerbot-api gateway (POST /api/v1/coding-test/submit).
+// careerbot-api gateway (POST /api/v1/coding-test/mock-grade).
 
 export interface GradingCriterion {
   name: string;
@@ -63,13 +63,6 @@ export interface GradingResult {
   summary: string;
   suggestions: string[];
   grading_model?: string;
-}
-
-export interface SubmitSolutionRequest {
-  problem_slug: string;
-  language: CodingTestLanguage;
-  code: string;
-  problem_title?: string;
 }
 
 export interface SubmitSolutionResponse {
@@ -115,6 +108,14 @@ export interface QuotaResponse {
   cost_per_submission: number;
   submissions_remaining: number;
   plan: string;
+}
+
+// ---- Annotated problem list (GET /coding-test/problems/annotated) ----------
+
+export type UserProblemStatusAnnotated = 'attempted' | 'accepted';
+
+export interface ProblemWithStatus extends CodingProblemSummary {
+  user_status: UserProblemStatusAnnotated | null;
 }
 
 // ---- Per-user progress (GET /coding-test/progress) -------------------------
@@ -171,6 +172,15 @@ export interface JudgeResponse {
   passed: number;
   total: number;
   results: JudgeTestCaseResult[];
+}
+
+// ---- Async code execution (POST /execute → queue + stream) -----------------
+
+export interface ExecuteJobQueued {
+  job_id: string;
+  status: 'queued';
+  poll_url: string;
+  stream_url: string;
 }
 
 // ---- Code execution (legacy — kept for reference) ---------------------------

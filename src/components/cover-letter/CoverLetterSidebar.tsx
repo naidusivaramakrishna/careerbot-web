@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
-import { FileText, Plus, Search, Sparkles } from "lucide-react";
+import { FileText, Search, Sparkles } from "lucide-react";
 import type { CoverLetterListItem as ApiListItem } from "@/types/coverLetter";
 import CoverLetterListItem from "./CoverLetterListItem";
 
@@ -51,20 +50,12 @@ export default function CoverLetterSidebar({
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#2557a7]">Letter library</p>
-          <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Cover letters</h2>
+          <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-950">Cover letters</h2>
         </div>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#2557a7]">
           <FileText className="h-5 w-5" />
         </div>
       </div>
-
-      <Link
-        href="/cover-letter/new"
-        className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#2557a7] to-[#1e4a94] px-4 text-sm font-bold text-white shadow-lg shadow-blue-200/60 transition hover:from-[#1e4a94] hover:to-[#1a3f80] hover:shadow-blue-300/40"
-      >
-        <Plus className="h-4 w-4" />
-        New Cover Letter
-      </Link>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <MetricTile label="Total" value={items.length.toString()} />

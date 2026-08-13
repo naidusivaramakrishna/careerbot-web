@@ -27,21 +27,11 @@ const HOW_IT_WORKS = [
   {
     icon: MessageSquare,
     title: "Tone and clarity review",
-    body: "Get feedback on whether your response sounds honest, concise, self-aware, and recruiter-friendly.",
   },
   {
     icon: BarChart2,
     title: "Round-based recall",
     body: "Start with your prepared notes, then move to keywords only for interview-like recall.",
-  },
-];
-
-const TIPS = [
-  "Keep HR answers warm, specific, and easy to believe.",
-  "Pair every weakness with a concrete improvement habit.",
-  "Avoid generic claims unless you can attach a real example.",
-  "Show motivation for the role, not only interest in the company.",
-  "Close answers with what the interviewer should remember about you.",
 ];
 
 const HR_QUESTIONS_KEY = "hr_generated_questions";
@@ -80,7 +70,6 @@ export default function HRPage() {
         "Calmer recruiter conversations",
       ]}
       ctaLabel="Start HR Practice"
-      loading={loading}
       error={error}
       onStart={handleStart}
     />

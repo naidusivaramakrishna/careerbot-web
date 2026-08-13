@@ -8,7 +8,7 @@ import logger from "@/lib/logger";
 
 interface Field {
   field: string;
-  key: "fullname" | "email" | "phone" | "countryCode" | "location" | "linkedinUrl" | "githubUrl" | "portfolioUrl" | "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications";
+  key: "fullname" | "email" | "phone" | "countryCode" | "location" | "linkedinUrl" | "githubUrl" | "portfolioUrl" | "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications" | "fathersName" | "maritalStatus" | "gender" | "permanentAddress" | "specialisation" | "medicalRegNo" | "barEnrollmentNo" | "yearOfEnrollment" | "courtsOfPractise" | "rank" | "cocNumber" | "stcwCertificates" | "vesselTypes" | "orcidId" | "googleScholarUrl" | "hIndex";
   required: boolean;
   type?: string;
   maxLength?: number;
@@ -31,6 +31,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
   const [isHealthcareTemplate, setIsHealthcareTemplate] = useState(false);
   const [isLegalTemplate, setIsLegalTemplate] = useState(false);
   const [isResearchScholarTemplate, setIsResearchScholarTemplate] = useState(false);
+  const [isMarineTemplate, setIsMarineTemplate] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Get domain from localStorage to check if it's government_standard or healthcare
@@ -58,6 +59,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
       setIsHealthcareTemplate(domainFamily === 'healthcare');
       setIsLegalTemplate(domainFamily === 'legal');
       setIsResearchScholarTemplate(domainFamily === 'research_scholar');
+      setIsMarineTemplate(domainFamily === 'marine_merchant_navy');
       logger.info('Active template domain_family:', domainFamily);
     } catch (err) {
       logger.warn('Error checking template domain:', err);
@@ -84,7 +86,9 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
     { field: "Portfolio URL", key: "portfolioUrl", required: false, type: "url" },
   ];
 
-  const handleChange = (field: Field["key"] | "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications", value: string) => {
+  type DomainFieldKey = "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications" | "fathersName" | "maritalStatus" | "gender" | "permanentAddress" | "specialisation" | "medicalRegNo" | "barEnrollmentNo" | "yearOfEnrollment" | "courtsOfPractise" | "rank" | "cocNumber" | "stcwCertificates" | "vesselTypes" | "orcidId" | "googleScholarUrl" | "hIndex";
+
+  const handleChange = (field: Field["key"] | DomainFieldKey, value: string) => {
     // ✅ Update context for preview
     // Store phone and countryCode separately — templates handle combining them for display
     setResumeData({
@@ -128,7 +132,7 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
     return yyyymmdd;
   };
 
-  const renderGovField = (fieldName: "dateOfBirth" | "nationality" | "category" | "languages" | "titlePrefix" | "qualifications", label: string, placeholder?: string, type: string = "text", maxLength?: number) => {
+  const renderGovField = (fieldName: DomainFieldKey, label: string, placeholder?: string, type: string = "text", maxLength?: number) => {
     if (fieldName === "dateOfBirth") {
       return (
         <div className="flex flex-col gap-1 w-full">
@@ -287,22 +291,23 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         {/* Government Standard Template Fields */}
         {isGovernmentTemplate && (
           <>
-            {/* Divider */}
             <div className="my-2 border-t border-gray-300 w-full"></div>
-
-            {/* Government-Specific Section Label */}
-            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Government Standard - Additional Information</p>
-
-            {/* Row 5: Date of Birth + Nationality */}
+            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Government Standard — Additional Information</p>
             <div className="flex gap-10">
               {renderGovField("dateOfBirth", "Date of Birth", "", "date")}
-              {renderGovField("nationality", "Nationality", "e.g., Indian", "text", 60)}
+              {renderGovField("gender", "Gender", "e.g., Male, Female, Other", "text", 20)}
             </div>
-
-            {/* Row 6: Category + Languages */}
             <div className="flex gap-10">
-              {renderGovField("category", "Category", "e.g., General, SC, ST, OBC", "text", 80)}
+              {renderGovField("fathersName", "Father's / Guardian's Name", "e.g., Ramesh Kumar", "text", 100)}
+              {renderGovField("maritalStatus", "Marital Status", "e.g., Single, Married", "text", 30)}
+            </div>
+            <div className="flex gap-10">
+              {renderGovField("nationality", "Nationality", "e.g., Indian", "text", 60)}
+              {renderGovField("category", "Category", "e.g., General, SC, ST, OBC, EWS", "text", 80)}
+            </div>
+            <div className="flex gap-10">
               {renderGovField("languages", "Languages Known", "e.g., English, Hindi, Tamil", "text", 150)}
+              {renderGovField("permanentAddress", "Permanent Address", "e.g., 12, Gandhi Nagar, Delhi - 110001", "text", 200)}
             </div>
           </>
         )}
@@ -311,10 +316,14 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         {isHealthcareTemplate && (
           <>
             <div className="my-2 border-t border-gray-300 w-full"></div>
-            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Healthcare - Professional Details</p>
+            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Healthcare — Professional Details</p>
             <div className="flex gap-10">
-              {renderGovField("titlePrefix", "Title/Prefix", "e.g., DR., PROF., MR.", "text", 20)}
+              {renderGovField("titlePrefix", "Title/Prefix", "e.g., Dr., Prof.", "text", 20)}
               {renderGovField("qualifications", "Qualifications", "e.g., MBBS, MD, DM, MS", "text", 100)}
+            </div>
+            <div className="flex gap-10">
+              {renderGovField("specialisation", "Specialisation", "e.g., Cardiology, Neurology", "text", 100)}
+              {renderGovField("medicalRegNo", "Medical Council Reg. No.", "e.g., MCI/2019/12345", "text", 80)}
             </div>
           </>
         )}
@@ -323,10 +332,30 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         {isLegalTemplate && (
           <>
             <div className="my-2 border-t border-gray-300 w-full"></div>
-            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Legal - Professional Details</p>
+            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Legal — Professional Details</p>
             <div className="flex gap-10">
               {renderGovField("qualifications", "Qualifications", "e.g., LLB, LLD, BA LLB", "text", 100)}
-              <div className="w-full" />
+              {renderGovField("barEnrollmentNo", "Bar Council Enrollment No.", "e.g., D/1234/2018", "text", 80)}
+            </div>
+            <div className="flex gap-10">
+              {renderGovField("yearOfEnrollment", "Year of Enrollment", "e.g., 2018", "text", 10)}
+              {renderGovField("courtsOfPractise", "Courts Practised In", "e.g., Delhi HC, Supreme Court", "text", 150)}
+            </div>
+          </>
+        )}
+
+        {/* Marine Template Fields */}
+        {isMarineTemplate && (
+          <>
+            <div className="my-2 border-t border-gray-300 w-full"></div>
+            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Marine / Merchant Navy — Professional Details</p>
+            <div className="flex gap-10">
+              {renderGovField("rank", "Rank", "e.g., Chief Officer, Second Engineer", "text", 80)}
+              {renderGovField("cocNumber", "CoC Number", "e.g., IND/COC/2019/12345", "text", 80)}
+            </div>
+            <div className="flex gap-10">
+              {renderGovField("vesselTypes", "Vessel Types", "e.g., Bulk Carrier, VLCC, Container", "text", 150)}
+              {renderGovField("stcwCertificates", "STCW Certificates", "e.g., STCW-95, GMDSS, ECDIS", "text", 200)}
             </div>
           </>
         )}
@@ -335,10 +364,14 @@ const PersonalInfo: React.FC<PersonalInfoProps> = ({ formData, errors, onChange,
         {isResearchScholarTemplate && (
           <>
             <div className="my-2 border-t border-gray-300 w-full"></div>
-            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Research Scholar - Academic Details</p>
+            <p className="text-xs font-semibold text-gray-600 mt-4 mb-2">Research Scholar — Academic Details</p>
             <div className="flex gap-10">
               {renderGovField("qualifications", "Qualifications", "e.g., PhD, M.Phil, MSc", "text", 100)}
-              <div className="w-full" />
+              {renderGovField("hIndex", "h-index", "e.g., 12", "text", 10)}
+            </div>
+            <div className="flex gap-10">
+              {renderGovField("orcidId", "ORCID ID", "e.g., 0000-0001-2345-6789", "text", 30)}
+              {renderGovField("googleScholarUrl", "Google Scholar URL", "e.g., scholar.google.com/...", "url", 300)}
             </div>
           </>
         )}

@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Builder v2 — Desktop default</title>
+<meta name="viewport" content="width=1440" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Montserrat', 'system-ui', 'sans-serif'] },
+        colors: {
+          brand:   { 50:'#f3f7fc',100:'#e3ecf7',200:'#c1d3ec',300:'#93b3dc',400:'#5896d7',500:'#2557a7',600:'#1f4e98',700:'#1a4180',800:'#163566',900:'#11294f' },
+          accent:  { 400:'#5aa3ec',500:'#0275dd',600:'#0261b8' },
+          surface: { DEFAULT:'#ffffff', muted:'#faf9f8', sunken:'#f3f2f1' },
+          ink:     { 400:'#9ca3af',500:'#6b7280',600:'#595959',700:'#3b3b3b',800:'#2d2d2d',900:'#1a1a1a' },
+          line:    { soft:'#f1f1f1', DEFAULT:'#e5e5e5', strong:'#d1d5db' },
+        },
+        boxShadow: {
+          card:  '0 1px 3px rgba(15,23,42,.06), 0 6px 14px -6px rgba(15,23,42,.08)',
+          pop:   '0 12px 32px -12px rgba(15,23,42,.18), 0 4px 10px -6px rgba(15,23,42,.08)',
+          paper: '0 8px 30px -12px rgba(15,23,42,.18), 0 0 0 1px rgba(15,23,42,.04)',
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { background:#faf9f8; font-family:'Montserrat', system-ui, sans-serif; }
+  .scrollbar-hide::-webkit-scrollbar{ display:none; }
+  .scrollbar-hide{ scrollbar-width:none; }
+  @keyframes pulseDot { 0%,100%{ transform:scale(1);opacity:1 } 50%{ transform:scale(1.4);opacity:.55 } }
+  .animate-pulseDot { animation: pulseDot 1.8s ease-in-out infinite; }
+</style>
+</head>
+<body class="text-ink-800">
+
+<!-- App container scaled to 1440 x 900 -->
+<div class="flex h-[900px] w-[1440px] flex-col bg-surface-muted shadow-paper">
+
+  <!-- ─────────────────────────────────────── APP BAR ─────────────────────────────────────── -->
+  <header class="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
+    <div class="flex h-14 items-center gap-2 px-5">
+      <!-- Back -->
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-600 hover:bg-surface-sunken hover:text-ink-800 transition-colors">
+        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <div class="h-6 w-px bg-line"></div>
+      <!-- Brand mark + title -->
+      <div class="flex items-center gap-1.5">
+        <div class="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm">
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>
+        </div>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-ink-500">Builder</span>
+      </div>
+      <button class="group ml-1 inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[15px] font-semibold text-ink-900 hover:bg-surface-sunken">
+        Priya Sharma — Senior SDE
+        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-ink-400 opacity-0 group-hover:opacity-100" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+
+      <div class="mx-3 h-6 w-px bg-line"></div>
+      <!-- Save status -->
+      <div class="inline-flex items-center gap-2 text-[12px] font-medium text-ink-600">
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+        Saved 12s ago
+      </div>
+
+      <div class="flex-1"></div>
+
+      <!-- Score chip -->
+      <button class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:scale-[1.02] transition-all">
+        <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+        ATS 82
+        <span class="text-[10px] font-bold text-emerald-600">▲ 4</span>
+      </button>
+
+      <div class="mx-1 h-6 w-px bg-line"></div>
+
+      <!-- Undo / Redo -->
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-600 hover:bg-surface-sunken hover:text-ink-800">
+        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+      </button>
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-400 cursor-not-allowed">
+        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>
+      </button>
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-600 hover:bg-surface-sunken hover:text-ink-800">
+        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3zM15 3v18"/></svg>
+      </button>
+
+      <!-- Download -->
+      <button class="ml-1 inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-500 px-3 text-[13px] font-semibold text-white shadow-sm hover:bg-brand-600">
+        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download
+        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 opacity-80" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+
+      <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-600 hover:bg-surface-sunken hover:text-ink-800">
+        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ─────────────────────────────────────── WORKSPACE ─────────────────────────────────────── -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- ── SECTION RAIL ── -->
+    <aside class="flex w-[244px] shrink-0 flex-col border-r border-line bg-white">
+      <div class="px-4 pb-2 pt-4">
+        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Sections</p>
+      </div>
+      <nav class="min-h-0 flex-1 overflow-y-auto scrollbar-hide px-2 pb-3">
+        <ul class="flex flex-col gap-0.5">
+
+          <!-- Personal Info (complete) -->
+          <li>
+            <button class="group relative flex w-full items-center gap-2.5 rounded-lg bg-brand-50 px-2.5 py-2 text-left text-[13px] font-semibold text-brand-700">
+              <span class="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500"></span>
+              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100">
+                <svg class="absolute inset-0 m-auto h-2 w-2 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </span>
+              <svg class="h-3.5 w-3.5 text-brand-600" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z"/></svg>
+              <span class="flex-1 truncate">Personal Info</span>
+              <span class="text-[11px] font-semibold tabular-nums text-brand-600">95%</span>
+            </button>
+          </li>
+
+          <!-- Summary -->
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 hover:bg-surface-sunken">
+              <span class="h-2.5 w-2.5 rounded-full bg-brand-400 ring-4 ring-brand-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg>
+              <span class="flex-1 truncate">Professional Summary</span>
+              <span class="text-[11px] font-semibold tabular-nums text-ink-400">80%</span>
+            </button>
+          </li>
+
+          <!-- Work exp -->
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 hover:bg-surface-sunken">
+              <span class="h-2.5 w-2.5 rounded-full bg-brand-400 ring-4 ring-brand-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              <span class="flex-1 truncate">Work Experience</span>
+              <span class="text-[11px] font-semibold tabular-nums text-ink-400">70%</span>
+            </button>
+          </li>
+
+          <!-- Projects -->
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 hover:bg-surface-sunken">
+              <span class="h-2.5 w-2.5 rounded-full bg-amber-400 ring-4 ring-amber-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span class="flex-1 truncate">Projects</span>
+              <span class="text-[11px] font-semibold tabular-nums text-ink-400">40%</span>
+            </button>
+          </li>
+
+          <!-- Education -->
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 hover:bg-surface-sunken">
+              <span class="h-2.5 w-2.5 rounded-full bg-brand-400 ring-4 ring-brand-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+              <span class="flex-1 truncate">Education</span>
+              <span class="text-[11px] font-semibold tabular-nums text-ink-400">60%</span>
+            </button>
+          </li>
+
+          <!-- Skills -->
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 hover:bg-surface-sunken">
+              <span class="h-2.5 w-2.5 rounded-full bg-red-400 ring-4 ring-red-100"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
+              <span class="flex-1 truncate">Skills</span>
+              <span class="text-[11px] font-semibold tabular-nums text-ink-400">30%</span>
+            </button>
+          </li>
+
+          <!-- Certifications -->
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 hover:bg-surface-sunken">
+              <span class="h-2.5 w-2.5 rounded-full bg-line-strong ring-4 ring-line-soft"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M9 13.5L7 22l5-3 5 3-2-8.5"/></svg>
+              <span class="flex-1 truncate">Certifications</span>
+              <span class="text-[11px] font-semibold tabular-nums text-ink-400">0%</span>
+            </button>
+          </li>
+
+          <!-- Internships -->
+          <li>
+            <button class="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 hover:bg-surface-sunken">
+              <span class="h-2.5 w-2.5 rounded-full bg-line-strong ring-4 ring-line-soft"></span>
+              <svg class="h-3.5 w-3.5 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h1M9 13h1M9 17h1M14 9h1M14 13h1M14 17h1"/></svg>
+              <span class="flex-1 truncate">Internships</span>
+              <span class="text-[11px] font-semibold tabular-nums text-ink-400">0%</span>
+            </button>
+          </li>
+
+          <!-- Add section -->
+          <li class="mt-2 px-1">
+            <button class="group flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-2.5 py-2 text-[12px] font-semibold text-ink-500 hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-600">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              Add section
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Footer -->
+      <div class="border-t border-line bg-surface-muted/60 p-4">
+        <div class="mb-1.5 flex items-center justify-between">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Profile complete</span>
+          <span class="text-[12px] font-bold tabular-nums text-ink-800">62%</span>
+        </div>
+        <div class="h-1.5 w-full overflow-hidden rounded-full bg-line">
+          <div class="h-full rounded-full bg-amber-500" style="width:62%"></div>
+        </div>
+        <p class="mt-2 text-[11px] text-ink-500">ATS score <span class="font-semibold text-ink-700">82</span> · updates on save</p>
+      </div>
+    </aside>
+
+    <!-- ── EDITOR CANVAS ── -->
+    <section class="flex flex-1 min-w-0 flex-col overflow-hidden bg-surface-muted">
+
+      <!-- Section header -->
+      <header class="border-b border-line bg-white px-6 py-3.5">
+        <div class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+            <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Section 1 of 8</p>
+            <h1 class="text-[16px] font-bold text-ink-900">Personal Info</h1>
+          </div>
+
+          <!-- Completion ring -->
+          <div class="relative h-9 w-9 shrink-0">
+            <svg viewBox="0 0 36 36" class="h-full w-full -rotate-90">
+              <circle cx="18" cy="18" r="14" fill="none" stroke="#e5e5e5" stroke-width="3.5"/>
+              <circle cx="18" cy="18" r="14" fill="none" stroke="#16a34a" stroke-width="3.5" stroke-dasharray="88" stroke-dashoffset="4.4" stroke-linecap="round"/>
+            </svg>
+            <span class="absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums text-ink-700">95%</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Body -->
+      <div class="flex-1 overflow-y-auto scrollbar-hide">
+        <div class="mx-auto h-full w-full max-w-[720px] px-6 py-6">
+
+          <!-- Hint card -->
+          <div class="mb-6 flex items-start gap-3 rounded-2xl border border-brand-100 bg-brand-50/50 p-4">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-brand-600 shadow-sm">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L9 9H2l5.5 5L5 22l7-5 7 5-2.5-8L22 9h-7z"/></svg>
+            </div>
+            <div class="flex-1">
+              <p class="text-[13px] font-bold text-brand-700">Your contact info is what recruiters see first</p>
+              <p class="mt-0.5 text-[12px] text-ink-600">Keep email and phone visible. Adding a portfolio URL boosts ATS score by 4 points on average.</p>
+            </div>
+            <button class="text-ink-400 hover:text-ink-600">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <!-- Field: Full name -->
+          <div class="mb-4">
+            <label class="mb-1.5 flex items-center justify-between">
+              <span class="text-[12px] font-bold text-ink-700">Full name</span>
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Looks great</span>
+            </label>
+            <div class="relative">
+              <input value="Priya Sharma" class="block h-11 w-full rounded-lg border border-line bg-white px-3.5 text-[14px] font-medium text-ink-900 outline-none transition-all hover:border-line-strong focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
+            </div>
+          </div>
+
+          <!-- 2-col row -->
+          <div class="mb-4 grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1.5 block text-[12px] font-bold text-ink-700">Email</label>
+              <input value="priya.sharma@gmail.com" class="block h-11 w-full rounded-lg border border-line bg-white px-3.5 text-[14px] text-ink-900 outline-none hover:border-line-strong focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
+            </div>
+            <div>
+              <label class="mb-1.5 block text-[12px] font-bold text-ink-700">Phone</label>
+              <div class="flex h-11 w-full overflow-hidden rounded-lg border border-line bg-white">
+                <div class="flex items-center gap-1 border-r border-line bg-surface-muted px-3 text-[13px] font-semibold text-ink-700">
+                  🇮🇳 +91
+                </div>
+                <input value="98765 43210" class="block flex-1 px-3 text-[14px] text-ink-900 outline-none" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Location -->
+          <div class="mb-4">
+            <label class="mb-1.5 block text-[12px] font-bold text-ink-700">Location</label>
+            <input value="Bengaluru, IN" class="block h-11 w-full rounded-lg border border-line bg-white px-3.5 text-[14px] text-ink-900 outline-none hover:border-line-strong focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
+          </div>
+
+          <!-- Headline with AI chip -->
+          <div class="mb-4">
+            <label class="mb-1.5 flex items-center justify-between">
+              <span class="text-[12px] font-bold text-ink-700">Headline</span>
+              <button class="inline-flex items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-2 py-0.5 text-[11px] font-bold text-brand-700 hover:bg-brand-100">
+                <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                AI suggest
+              </button>
+            </label>
+            <input value="Senior Software Engineer · TypeScript · Distributed Systems" class="block h-11 w-full rounded-lg border border-line bg-white px-3.5 text-[14px] text-ink-900 outline-none hover:border-line-strong focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
+          </div>
+
+          <!-- Links row -->
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="mb-1.5 flex items-center gap-1 text-[12px] font-bold text-ink-700">
+                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8.34 18.34H5.67V9.67h2.67v8.67zM7 8.34a1.55 1.55 0 1 1 0-3.1 1.55 1.55 0 0 1 0 3.1zm11.34 10H15.67v-4.5c0-1.07-.02-2.45-1.5-2.45-1.5 0-1.73 1.17-1.73 2.37v4.58H9.78V9.67h2.55v1.18h.04c.35-.67 1.22-1.38 2.51-1.38 2.68 0 3.18 1.77 3.18 4.07v4.8z"/></svg>
+                LinkedIn
+              </label>
+              <input value="linkedin.com/in/priyasharma" class="block h-10 w-full rounded-lg border border-line bg-white px-3 text-[12px] text-ink-700 outline-none focus:border-brand-400" />
+            </div>
+            <div>
+              <label class="mb-1.5 flex items-center gap-1 text-[12px] font-bold text-ink-700">
+                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.9.58.1.79-.25.79-.55v-2.13c-3.2.7-3.87-1.36-3.87-1.36-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.75 1.18 1.75 1.18 1.02 1.74 2.68 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.19-1.49 3.15-1.18 3.15-1.18.62 1.58.23 2.75.11 3.04.73.8 1.18 1.82 1.18 3.08 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.07.78 2.15v3.18c0 .3.21.66.8.55C20.22 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+                GitHub
+              </label>
+              <input value="github.com/priyasharma" class="block h-10 w-full rounded-lg border border-line bg-white px-3 text-[12px] text-ink-700 outline-none focus:border-brand-400" />
+            </div>
+            <div>
+              <label class="mb-1.5 flex items-center gap-1 text-[12px] font-bold text-ink-700">
+                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2c2.5 3 4 7 4 10s-1.5 7-4 10c-2.5-3-4-7-4-10s1.5-7 4-10z"/></svg>
+                Portfolio
+              </label>
+              <input value="priya.dev" class="block h-10 w-full rounded-lg border border-line bg-white px-3 text-[12px] text-ink-700 outline-none focus:border-brand-400" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section nav footer -->
+      <footer class="border-t border-line bg-white px-6 py-3">
+        <div class="mx-auto flex max-w-[720px] items-center justify-between">
+          <button class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-ink-300 cursor-not-allowed">
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+            <span class="flex flex-col items-start text-left">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-ink-400">Previous</span>
+              <span class="-mt-0.5">—</span>
+            </span>
+          </button>
+          <p class="text-[11px] text-ink-500">Changes save automatically</p>
+          <button class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-[12px] font-bold text-white shadow-sm hover:bg-brand-600">
+            <span class="flex flex-col items-end text-right">
+              <span class="text-[10px] font-bold uppercase tracking-wider opacity-80">Next</span>
+              <span class="-mt-0.5">Professional Summary</span>
+            </span>
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      </footer>
+    </section>
+
+    <!-- ── PREVIEW SHELL ── -->
+    <section class="flex w-[520px] shrink-0 flex-col overflow-hidden border-l border-line bg-surface-sunken">
+      <div class="flex h-12 items-center justify-between border-b border-line bg-white/80 px-4 backdrop-blur">
+        <div class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-500">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulseDot"></span>
+          Live preview
+        </div>
+        <!-- Zoom -->
+        <div class="inline-flex items-center gap-1 rounded-lg border border-line bg-white p-0.5 shadow-sm">
+          <button class="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-600 hover:bg-surface-sunken">
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+          </button>
+          <span class="min-w-[44px] text-center text-[11px] font-bold tabular-nums text-ink-700">100%</span>
+          <button class="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-600 hover:bg-surface-sunken">
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <span class="mx-0.5 h-4 w-px bg-line"></span>
+          <button class="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-600 hover:bg-surface-sunken">
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+          </button>
+        </div>
+        <button class="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-[12px] font-semibold text-ink-700 shadow-sm hover:border-brand-300 hover:text-brand-700">
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M14 10l7-7M9 21H3v-6M10 14l-7 7"/></svg>
+          Templates
+        </button>
+      </div>
+
+      <!-- Document -->
+      <div class="flex-1 overflow-y-auto scrollbar-hide p-6">
+        <div class="mx-auto w-full max-w-[420px] rounded-md bg-white shadow-paper">
+          <div class="p-7">
+            <h2 class="text-[20px] font-black text-ink-900">Priya Sharma</h2>
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-brand-600">Senior Software Engineer</p>
+            <p class="mt-1 text-[10px] text-ink-500">priya.sharma@gmail.com · +91 98765 43210 · Bengaluru, IN</p>
+            <p class="text-[10px] text-ink-500">linkedin.com/in/priyasharma · github.com/priyasharma · priya.dev</p>
+
+            <div class="mt-4 border-t-2 border-brand-600 pt-2.5">
+              <h3 class="text-[10px] font-bold uppercase tracking-wider text-brand-700">Summary</h3>
+              <p class="mt-1 text-[10px] leading-relaxed text-ink-700">
+                Senior full-stack engineer with 6+ years building distributed payment systems at Razorpay and Flipkart. Specialise in TypeScript, Go, and event-driven architecture. Shipped checkout flow handling 8k TPS with 99.99% uptime.
+              </p>
+            </div>
+
+            <div class="mt-3 border-t-2 border-brand-600 pt-2.5">
+              <h3 class="text-[10px] font-bold uppercase tracking-wider text-brand-700">Experience</h3>
+              <div class="mt-1.5">
+                <div class="flex items-baseline justify-between">
+                  <p class="text-[11px] font-bold text-ink-900">Senior SDE · Razorpay</p>
+                  <p class="text-[9px] text-ink-500">2022 — Now</p>
+                </div>
+                <ul class="ml-3 mt-1 space-y-0.5 text-[10px] text-ink-700">
+                  <li>• Led migration of checkout from monolith to 4 services; cut p99 latency 38%.</li>
+                  <li>• Designed idempotency layer handling 8k TPS, $40M daily.</li>
+                </ul>
+              </div>
+              <div class="mt-2">
+                <div class="flex items-baseline justify-between">
+                  <p class="text-[11px] font-bold text-ink-900">SDE II · Flipkart</p>
+                  <p class="text-[9px] text-ink-500">2019 — 2022</p>
+                </div>
+                <ul class="ml-3 mt-1 space-y-0.5 text-[10px] text-ink-700">
+                  <li>• Built fraud detection ML pipeline; reduced false-positives 22%.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-3 border-t-2 border-brand-600 pt-2.5">
+              <h3 class="text-[10px] font-bold uppercase tracking-wider text-brand-700">Skills</h3>
+              <p class="mt-1 text-[10px] text-ink-700">TypeScript · Go · React · Next.js · PostgreSQL · Kafka · AWS · Docker</p>
+            </div>
+
+            <div class="mt-3 border-t-2 border-brand-600 pt-2.5">
+              <h3 class="text-[10px] font-bold uppercase tracking-wider text-brand-700">Education</h3>
+              <div class="mt-1 flex items-baseline justify-between">
+                <p class="text-[11px] font-bold text-ink-900">B.Tech, Computer Science · IIT Bombay</p>
+                <p class="text-[9px] text-ink-500">2015 — 2019</p>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-line px-7 py-2 text-right text-[9px] text-ink-400">Page 1 of 2</div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+</body>
+</html>

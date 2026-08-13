@@ -7,6 +7,7 @@ import AuthModal from "@/components/SignUpModal"
 import { getAllResumes, createResumeWithAuth, getTemplatesByCategory } from "@/api/resumeApi"
 import { getProfile } from "@/api/userApi"
 import { getSectionOrderByDomainAndCareer } from "@/app/(resume)/templates/_utils/domainSectionOrder"
+import { detectCareerLevel } from "@/utils/careerLevelDetection"
 import { logger } from "@/lib/logger"
 import { toast } from "sonner"
 import { resolveTemplateImageUrl } from "@/lib/imageUtils"
@@ -22,12 +23,14 @@ import {
 // Returns null if the name doesn't match any known level keyword.
 function getCareerLevelLabel(name: string): string | null {
   const n = name.toLowerCase()
+  // Use shared utility for consistent detection
+  const detected = detectCareerLevel(n)
+  if (detected) {
+    // Capitalize each word for display
+    return detected.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  }
+  // Fallback for compound labels not in the utility
   if (n.includes('early') && n.includes('career')) return 'Early Career'
-  if (n.includes('fresher'))   return 'Fresher'
-  if (n.includes('architect')) return 'Architect'
-  if (n.includes('manager'))   return 'Manager'
-  if (n.includes('lead'))      return 'Lead'
-  if (n.includes('senior'))    return 'Senior-Level'
   if (n.includes('mid'))       return 'Mid-Level'
   return null
 }
@@ -36,10 +39,11 @@ function getCareerLevelLabel(name: string): string | null {
 const LEVEL_ORDER: Record<string, number> = {
   'Fresher': 0, 'Early Career': 1, 'Mid-Level': 2,
   'Senior-Level': 3, 'Lead': 4, 'Architect': 5, 'Manager': 6,
+  'Director': 7, 'Vice President': 8,
 }
 
 interface AvailableLevel {
-  label: string       // "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager"
+  label: string       // "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" | "Director" | "Vice President"
   id: string          // real backend template ID
   name: string        // original template name from API
   previewUrl: string  // resolved image URL for this career level

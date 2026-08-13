@@ -24,9 +24,11 @@ import Awards from "../editor/sections/Awards";
 
 import { initialSections } from "../../_utils/sectionsConfig";
 import Publications from "../editor/sections/Publications";
+import Patents from "../editor/sections/Patents";
 import Interests from "../editor/sections/Interests";
 import Hobbies from "../editor/sections/Hobbies";
 import Languages from "../editor/sections/Languages";
+import Declaration from "../editor/sections/Declaration";
 
 interface SectionProps {
   formData: Record<string, string>;
@@ -49,9 +51,11 @@ const sectionComponents: Record<string, React.FC<SectionProps>> = {
   Internships,
   Awards,
   Publications,
+  Patents,
   Interests,
   Hobbies,
   Languages,
+  Declaration,
 };
 
 // Maps ATS report section names → builder section names
@@ -95,8 +99,8 @@ interface ResumeSideProps {
 const standardSectionNames = new Set([
   "Personal Info", "Professional Summary", "Education", "Skills",
   "Work Experience", "Projects", "Certifications", "Internships",
-  "Achievements", "Publications", "Volunteering", "Awards",
-  "Hobbies", "Interests", "Languages", "References",
+  "Achievements", "Publications", "Patents", "Volunteering", "Awards",
+  "Hobbies", "Interests", "Languages", "References", "Declaration",
 ]);
 
 const ResumeSide: React.FC<ResumeSideProps> = ({
@@ -121,6 +125,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   const defaultExtraSections: { name: string; ai: boolean }[] = [
     { name: "Achievements", ai: true },
     { name: "Publications", ai: false },
+    { name: "Patents", ai: false },
     { name: "Volunteering", ai: false },
     { name: "Awards", ai: false },
     { name: "Hobbies", ai: true },
@@ -141,7 +146,9 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     if (hasSavedOrder) {
       // localStorage sectionOrder = exact main list (core + any extras the user added).
       // Use the full known-sections map so restored extra sections resolve correctly.
-      const allKnownSections = [...initialSections, ...defaultExtraSections];
+      // Only include Declaration if the backend sent it (domain-specific for government_standard).
+      const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+      const allKnownSections = [...initialSections, ...defaultExtraSections, ...declarationSection];
       const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
       return sectionOrder
         .filter(name => sectionMap.has(name))
@@ -149,9 +156,10 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
         .filter(Boolean);
     }
 
-    // No saved order: sectionOrder comes from getSectionOrder() which lists ALL sections.
-    // Only pick initialSections from it — extras stay in "Add New Sections".
-    const sectionMap = new Map(initialSections.map(s => [s.name, s]));
+    // No saved order: sectionOrder comes from getSectionOrderByDomainAndCareer() which lists ALL sections.
+    // Only include Declaration if the backend sent it (domain-specific for government_standard).
+    const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+    const sectionMap = new Map([...initialSections, ...declarationSection].map(s => [s.name, s]));
     const reordered = sectionOrder
       .filter(name => sectionMap.has(name))
       .map(name => sectionMap.get(name)!)
@@ -243,10 +251,32 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       newFormData["nationality"] = resumeData.personalInfo?.nationality || "";
       newFormData["category"] = resumeData.personalInfo?.category || "";
       newFormData["languages"] = resumeData.personalInfo?.languages || "";
+      newFormData["fathersName"] = resumeData.personalInfo?.fathersName || "";
+      newFormData["gender"] = resumeData.personalInfo?.gender || "";
+      newFormData["maritalStatus"] = resumeData.personalInfo?.maritalStatus || "";
+      newFormData["permanentAddress"] = resumeData.personalInfo?.permanentAddress || "";
 
       // Healthcare Fields
       newFormData["titlePrefix"] = resumeData.personalInfo?.titlePrefix || "";
       newFormData["qualifications"] = resumeData.personalInfo?.qualifications || "";
+      newFormData["specialisation"] = resumeData.personalInfo?.specialisation || "";
+      newFormData["medicalRegNo"] = resumeData.personalInfo?.medicalRegNo || "";
+
+      // Legal Fields
+      newFormData["barEnrollmentNo"] = resumeData.personalInfo?.barEnrollmentNo || "";
+      newFormData["yearOfEnrollment"] = resumeData.personalInfo?.yearOfEnrollment || "";
+      newFormData["courtsOfPractise"] = resumeData.personalInfo?.courtsOfPractise || "";
+
+      // Marine Fields
+      newFormData["rank"] = resumeData.personalInfo?.rank || "";
+      newFormData["cocNumber"] = resumeData.personalInfo?.cocNumber || "";
+      newFormData["vesselTypes"] = resumeData.personalInfo?.vesselTypes || "";
+      newFormData["stcwCertificates"] = resumeData.personalInfo?.stcwCertificates || "";
+
+      // Research Scholar Fields
+      newFormData["orcidId"] = resumeData.personalInfo?.orcidId || "";
+      newFormData["hIndex"] = resumeData.personalInfo?.hIndex || "";
+      newFormData["googleScholarUrl"] = resumeData.personalInfo?.googleScholarUrl || "";
       
       // Professional Summary
       newFormData["professionalSummary"] = resumeData.professionalSummary.summary || "";
@@ -292,14 +322,17 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   useEffect(() => {
     if (!sectionOrder || sectionOrder.length === 0) return;
 
-    const allKnownSections = [...initialSections, ...defaultExtraSections];
+    // Only include Declaration if the backend sent it (domain-specific for government_standard).
+    const declarationSection = sectionOrder.includes('Declaration') ? [{ name: "Declaration", ai: false }] : [];
+    const allKnownSections = [...initialSections, ...defaultExtraSections, ...declarationSection];
     const sectionMap = new Map(allKnownSections.map(s => [s.name, s]));
 
     setSections(prev => {
       const prevMap = new Map(prev.map(s => [s.name, s]));
+      const initialNames = new Set(initialSections.map(s => s.name));
       const newSections = sectionOrder
         .map(name => sectionMap.get(name) || prevMap.get(name))
-        .filter((s): s is { name: string; ai: boolean } => !!s);
+        .filter((s): s is { name: string; ai: boolean } => !!s && (initialNames.has(s.name) || prevMap.has(s.name)));
 
       const prevNames = prev.map(s => s.name).join(',');
       const newNames = newSections.map(s => s.name).join(',');
@@ -345,6 +378,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     "Awards": "awards",
     "Volunteering": "volunteering",
     "Publications": "publications",
+    "Patents": "patents",
     "References": "references",
     "Hobbies": "hobbies",
     "Interests": "interests",
@@ -522,6 +556,8 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
         (lang) => isFilled(lang.language)),
       Publications: resumeData.publications.some(
         (pub) => isFilled(pub.title)),
+      Patents: (resumeData.patents ?? []).some(
+        (pat) => isFilled(pat.title)),
     };
     
     // ✅ Update context completion status (used for progress circle)

@@ -209,8 +209,19 @@ export default function Header() {
       const url = e.detail?.profilePicUrl;
       if (url !== undefined) setProfilePicUrl(url);
     };
+    const onProfileUpdate = (e: CustomEvent) => {
+      setUserProfile((prev) => prev ? {
+        ...prev,
+        full_name: e.detail?.full_name ?? prev.full_name,
+        email: e.detail?.email ?? prev.email,
+      } : prev);
+    };
     window.addEventListener('profilePictureUpdated', onPicUpdate as EventListener);
-    return () => window.removeEventListener('profilePictureUpdated', onPicUpdate as EventListener);
+    window.addEventListener('profileUpdated', onProfileUpdate as EventListener);
+    return () => {
+      window.removeEventListener('profilePictureUpdated', onPicUpdate as EventListener);
+      window.removeEventListener('profileUpdated', onProfileUpdate as EventListener);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -515,6 +526,12 @@ export default function Header() {
               <div className="absolute right-0 top-10 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
+                  {/* Only when it ADDS information: displayName already falls back
+                      to full_name when username is absent, so an unguarded render
+                      printed the same name twice for every pre-username account. */}
+                  {userProfile?.full_name && userProfile.full_name !== displayName && (
+                    <p className="text-[12px] text-gray-600 truncate">{userProfile.full_name}</p>
+                  )}
                   {displayEmail && (
                     <p className="text-[13px] text-gray-500 truncate mt-0.5">{displayEmail}</p>
                   )}

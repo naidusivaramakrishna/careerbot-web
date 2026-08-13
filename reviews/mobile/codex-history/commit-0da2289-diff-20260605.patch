@@ -1,0 +1,184 @@
+diff --git a/src/api/client/__tests__/correlationId.test.ts b/src/api/client/__tests__/correlationId.test.ts
+new file mode 100644
+index 0000000..14d6581
+--- /dev/null
++++ b/src/api/client/__tests__/correlationId.test.ts
+@@ -0,0 +1,104 @@
++// Regression test for the X-Correlation-Id request interceptor in http.ts.
++//
++// Mocks the axios adapter so requests resolve without hitting the network;
++// asserts the interceptor injects a `mob-` prefixed UUID header on each
++// outbound request and preserves any caller-supplied X-Correlation-Id.
++
++// jest-expo's preset mocks expo-crypto.randomUUID() to return a constant
++// (because the real implementation needs the native module wiring). Stub it
++// here to return distinct values per call so the "unique id per request"
++// test actually exercises the interceptor's per-call generation path.
++jest.mock('expo-crypto', () => {
++  let counter = 0;
++  return {
++    randomUUID: jest.fn(() => {
++      counter += 1;
++      return `00000000-0000-4000-8000-${counter.toString(16).padStart(12, '0')}`;
++    }),
++  };
++});
++
++import { httpClient } from '@/api/client/http';
++
++// We mock the axios adapter to capture the final config (after all
++// interceptors) without making a real HTTP call.
++function installCapturingAdapter() {
++  const captured: { headers: Record<string, unknown>[] } = { headers: [] };
++  // axios v1 adapter signature: (config) => Promise<AxiosResponse>
++  httpClient.defaults.adapter = (config) => {
++    // Headers can be an AxiosHeaders instance OR a plain object — flatten both
++    // shapes via toJSON if available.
++    const raw = config.headers;
++    const flat =
++      raw && typeof (raw as { toJSON?: () => Record<string, unknown> }).toJSON === 'function'
++        ? (raw as { toJSON: () => Record<string, unknown> }).toJSON()
++        : { ...(raw as Record<string, unknown>) };
++    captured.headers.push(flat);
++    return Promise.resolve({
++      data: {},
++      status: 200,
++      statusText: 'OK',
++      headers: {},
++      config,
++    } as never);
++  };
++  return captured;
++}
++
++describe('httpClient — X-Correlation-Id request interceptor', () => {
++  it('injects a `mob-` prefixed correlation id on every outbound request', async () => {
++    const captured = installCapturingAdapter();
++
++    await httpClient.get('/api/v1/some-endpoint');
++    await httpClient.post('/api/v1/some-endpoint', { foo: 'bar' });
++
++    expect(captured.headers).toHaveLength(2);
++
++    for (const headers of captured.headers) {
++      const value = (headers['X-Correlation-Id'] ?? headers['x-correlation-id']) as string | undefined;
++      expect(value).toBeDefined();
++      expect(typeof value).toBe('string');
++      // Either `mob-<uuid>` (expo-crypto path) or `mob-fallback-<ts>-<rand>` (fallback path).
++      expect(value).toMatch(/^mob-/);
++    }
++  });
++
++  it('generates a UNIQUE id per request', async () => {
++    const captured = installCapturingAdapter();
++
++    await httpClient.get('/api/v1/req-1');
++    await httpClient.get('/api/v1/req-2');
++    await httpClient.get('/api/v1/req-3');
++
++    const ids = captured.headers.map(
++      (h) => (h['X-Correlation-Id'] ?? h['x-correlation-id']) as string,
++    );
++    expect(ids).toHaveLength(3);
++    expect(new Set(ids).size).toBe(3); // all distinct
++  });
++
++  it('preserves a caller-supplied X-Correlation-Id header (distributed trace continuation)', async () => {
++    const captured = installCapturingAdapter();
++
++    await httpClient.get('/api/v1/traced', {
++      headers: { 'X-Correlation-Id': 'web-existing-trace-id-12345' },
++    });
++
++    const value = (captured.headers[0]['X-Correlation-Id'] ??
++      captured.headers[0]['x-correlation-id']) as string;
++    expect(value).toBe('web-existing-trace-id-12345');
++  });
++
++  it('preserves a caller-supplied lowercase x-correlation-id header', async () => {
++    const captured = installCapturingAdapter();
++
++    await httpClient.get('/api/v1/traced-lower', {
++      headers: { 'x-correlation-id': 'lowercase-id-67890' },
++    });
++
++    // Either case is fine — what matters is that we didn't overwrite the value.
++    const value = (captured.headers[0]['X-Correlation-Id'] ??
++      captured.headers[0]['x-correlation-id']) as string;
++    expect(value).toBe('lowercase-id-67890');
++  });
++});
+diff --git a/src/api/client/http.ts b/src/api/client/http.ts
+index 5bf8cc1..c3d6aee 100644
+--- a/src/api/client/http.ts
++++ b/src/api/client/http.ts
+@@ -17,8 +17,9 @@
+ // Reference:
+ //   docs/design/notes/2026-06-03-auth-lifecycle-orchestration.md §5.b + §3 Option D.
+ 
+-import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
++import axios, { AxiosError, AxiosHeaders, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+ import Constants from 'expo-constants';
++import * as Crypto from 'expo-crypto';
+ import { NativeModules, Platform } from 'react-native';
+ 
+ import { refreshSession } from '@/features/auth/refreshSession';
+@@ -108,6 +109,58 @@ export const httpClient: AxiosInstance = axios.create({
+   timeout: REQUEST_TIMEOUT,
+ });
+ 
++// ── X-Correlation-Id request interceptor ────────────────────────────────────
++//
++// Injects a unique X-Correlation-Id header on every outbound request so a
++// single user action can be traced across the mobile axios layer → backend
++// logs → CloudWatch/DataDog → support ticket. Carried over from the POC's
++// per-call createCorrelationId() pattern (src/API/profile/_shared.js:40) but
++// promoted to the http layer so EVERY API call gets one, not just profile.
++//
++// Format: `mob-<rfc4122-uuid>` — the `mob-` prefix is a quick visual filter
++// for "request originated from mobile" in shared log views with web traffic.
++//
++// Deliberately non-cryptographic — this is purely a log/debug aid. We use
++// expo-crypto.randomUUID() (which is RFC 4122 v4) only because it's already
++// in deps and slightly nicer than Math.random() collisions on a busy app.
++//
++// Callers that need to continue a distributed trace (e.g. a server-initiated
++// retry) can set `X-Correlation-Id` on their request config; we never
++// overwrite an existing header value.
++
++function generateCorrelationId(): string {
++  try {
++    return `mob-${Crypto.randomUUID()}`;
++  } catch {
++    // expo-crypto.randomUUID() can throw on very old runtimes. Fall back to a
++    // collision-resistant-enough string for log debugging — NOT a UUID, just
++    // tag it as such so we can tell apart cleanly from real UUIDs.
++    const r1 = Math.random().toString(36).slice(2, 10);
++    const r2 = Math.random().toString(36).slice(2, 10);
++    return `mob-fallback-${Date.now()}-${r1}${r2}`;
++  }
++}
++
++httpClient.interceptors.request.use((config) => {
++  // Normalise to an AxiosHeaders instance. By the time a request interceptor
++  // runs, axios v1 has typically already wrapped the headers, but defensively
++  // wrap them ourselves when the test adapter or a caller passes a plain
++  // object — AxiosHeaders.from() accepts both and yields a real
++  // AxiosRequestHeaders, which is what InternalAxiosRequestConfig requires.
++  const headers = AxiosHeaders.from(config.headers as never);
++
++  // Preserve caller-supplied X-Correlation-Id (distributed trace
++  // continuation) — never overwrite it. AxiosHeaders.get is case-insensitive.
++  if (headers.get('X-Correlation-Id')) {
++    config.headers = headers;
++    return config;
++  }
++
++  headers.set('X-Correlation-Id', generateCorrelationId());
++  config.headers = headers;
++  return config;
++});
++
+ export function setAuthToken(accessToken: string | null, tokenType: string = 'bearer'): void {
+   if (!accessToken) {
+     delete httpClient.defaults.headers.common.Authorization;

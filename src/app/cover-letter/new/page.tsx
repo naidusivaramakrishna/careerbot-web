@@ -37,6 +37,8 @@ import { useGenerateCoverLetter } from "@/hooks/useGenerateCoverLetter";
 import { useHasParsedResume } from "@/hooks/useHasParsedResume";
 import { useLatestParsedResume } from "@/hooks/useLatestParsedResume";
 import { mintIdempotencyKey } from "@/lib/idempotencyKey";
+import { getCorrelationId } from "@/lib/correlationId";
+import { logger } from "@/lib/logger";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
 import { getCoverLetterParsedResumeId, getCoverLetterResumeSource } from "@/lib/coverLetterResume";
 import type { CoverLetterFormSubmit, CoverLetterResumeOption, CoverLetterTemplateId } from "@/types/coverLetter";
@@ -167,6 +169,20 @@ const locationSuggestions = [
   "Kochi, India",
   "Coimbatore, India",
   "Ahmedabad, India",
+  "Vijayawada, India",
+  "Visakhapatnam, India",
+  "Kolkata, India",
+  "Jaipur, India",
+  "Lucknow, India",
+  "Chandigarh, India",
+  "Indore, India",
+  "Nagpur, India",
+  "Bhubaneswar, India",
+  "Thiruvananthapuram, India",
+  "Vadodara, India",
+  "Mysuru, India",
+  "Surat, India",
+  "Patna, India",
   "New York, NY",
   "San Francisco, CA",
   "Austin, TX",
@@ -288,6 +304,9 @@ export default function CoverLetterNewPage() {
   const [hiringManagerName, setHiringManagerName] = useState("");
   const [candidateSignatureName, setCandidateSignatureName] = useState("");
   const [includeContactDetails, setIncludeContactDetails] = useState(false);
+  const [experienceLevel, setExperienceLevel] = useState("");
+  const [whyCompany, setWhyCompany] = useState("");
+  const [highlightAchievement, setHighlightAchievement] = useState("");
   const [tone, setTone] = useState<ToneChoice>("professional");
   // "auto" (default/recommended) omits min_words/max_words entirely so the
   // AI service applies its own candidate-level-aware word-count range
@@ -432,11 +451,23 @@ export default function CoverLetterNewPage() {
     },
     onError: (err) => {
       setGeneratedLetterId(null);
-      const message = err.validationErrors?.length
+      if (err.reason === "upstream_contract" || err.reason === "upstream_generation" || err.reason === "unknown") {
+        logger.error("[cover-letter/generate] upstream failure", {
+          reason: err.reason,
+          status: err.status,
+          backendErrorCode: err.backendErrorCode,
+          errorId: err.errorId,
+          requestId: err.requestId,
+          correlationId: getCorrelationId(),
+        });
+      }
+      const baseMessage = err.validationErrors?.length
         ? "Please fix the highlighted fields and try again."
         : err.reason === "not_found"
           ? getGenerateNotFoundMessage(err.message)
           : ERROR_MESSAGES[err.reason] ?? ERROR_MESSAGES.unknown;
+      const reference = (err.reason === "upstream_contract" || err.reason === "upstream_generation" || err.reason === "unknown" || err.reason === "unavailable" || err.reason === "timeout") ? (err.errorId ?? err.requestId) : null;
+      const message = reference ? `${baseMessage} Error reference: ${reference}` : baseMessage;
       setApiError(message);
       setActiveStep("resume");
     },
@@ -451,6 +482,16 @@ export default function CoverLetterNewPage() {
     if (!jobSourceReady) {
       setActiveStep("resume");
       setApiError(getJobSourceMissingMessage(source));
+      return;
+    }
+    if (
+      !companyName.trim()
+      || !roleTitle.trim()
+      || !location.trim()
+      || !candidateSignatureName.trim()
+    ) {
+      setActiveStep("resume");
+      setApiError("Fill in company name, job title, location, and signature name to continue.");
       return;
     }
     if (wordCountMode === "custom" && minWords > maxWords) {
@@ -485,6 +526,7 @@ export default function CoverLetterNewPage() {
             application_context: request.application_context,
           }),
           ...(request.options && { options: request.options }),
+          force_refresh: false,
         },
         attemptKey,
       });
@@ -508,15 +550,18 @@ export default function CoverLetterNewPage() {
 
   function buildRequest(): CoverLetterFormSubmit {
     const noteParts = [
-      location.trim() && `Role location: ${location.trim()}.`,
       selectedTemplate && `Preferred layout style: ${selectedTemplate.name}.`,
     ].filter(Boolean);
     const note = noteParts.join(" ").slice(0, MAX_NOTE_CHARS);
     const appCtxFields = {
       ...(companyName.trim() && { company_name: companyName.trim() }),
+      ...(location.trim() && { company_location: location.trim() }),
       ...(roleTitle.trim() && { role_title: roleTitle.trim() }),
+      ...(experienceLevel.trim() && { experience_level: experienceLevel.trim() }),
       ...(hiringManagerName.trim() && { hiring_manager_name: hiringManagerName.trim() }),
       ...(candidateSignatureName.trim() && { candidate_signature_name: candidateSignatureName.trim() }),
+      ...(whyCompany.trim() && { why_company: whyCompany.trim() }),
+      ...(highlightAchievement.trim() && { highlight_achievement: highlightAchievement.trim() }),
       ...(includeContactDetails && { include_contact_details: true }),
     };
 
@@ -712,6 +757,12 @@ export default function CoverLetterNewPage() {
                 onHiringManagerNameChange={setHiringManagerName}
                 candidateSignatureName={candidateSignatureName}
                 onCandidateSignatureNameChange={setCandidateSignatureName}
+                experienceLevel={experienceLevel}
+                onExperienceLevelChange={setExperienceLevel}
+                whyCompany={whyCompany}
+                onWhyCompanyChange={setWhyCompany}
+                highlightAchievement={highlightAchievement}
+                onHighlightAchievementChange={setHighlightAchievement}
                 includeContactDetails={includeContactDetails}
                 onIncludeContactDetailsChange={setIncludeContactDetails}
                 jdReady={jobSourceReady}
@@ -879,6 +930,12 @@ function CoverLetterStepOneMock({
   onHiringManagerNameChange,
   candidateSignatureName,
   onCandidateSignatureNameChange,
+  experienceLevel,
+  onExperienceLevelChange,
+  whyCompany,
+  onWhyCompanyChange,
+  highlightAchievement,
+  onHighlightAchievementChange,
   includeContactDetails,
   onIncludeContactDetailsChange,
   jdReady,
@@ -924,6 +981,12 @@ function CoverLetterStepOneMock({
   onHiringManagerNameChange: (v: string) => void;
   candidateSignatureName: string;
   onCandidateSignatureNameChange: (v: string) => void;
+  experienceLevel: string;
+  onExperienceLevelChange: (v: string) => void;
+  whyCompany: string;
+  onWhyCompanyChange: (v: string) => void;
+  highlightAchievement: string;
+  onHighlightAchievementChange: (v: string) => void;
   includeContactDetails: boolean;
   onIncludeContactDetailsChange: (v: boolean) => void;
   jdReady: boolean;
@@ -946,7 +1009,12 @@ function CoverLetterStepOneMock({
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const selectedTemplate = templateStyles.find((template) => template.id === selectedTemplateId) ?? templateStyles[1];
   const stats = deriveResumeStatsForStepOne(resume);
-  const canContinue = hasResume && jdReady && (wordCountMode === "auto" || minWords <= maxWords);
+  const detailsReady =
+    companyName.trim().length > 0
+    && roleTitle.trim().length > 0
+    && location.trim().length > 0
+    && candidateSignatureName.trim().length > 0;
+  const canContinue = hasResume && jdReady && detailsReady && (wordCountMode === "auto" || minWords <= maxWords);
   const resumeName = getResumeDisplayName(resume);
   const isBuilderResume = resume?.source === "builder";
   const isDefaultResume = Boolean(resume?.is_user_default);
@@ -958,6 +1026,8 @@ function CoverLetterStepOneMock({
       ? "Upload, select, or build a resume to continue."
     : !jdReady
       ? `Paste at least ${MIN_JD_CHARS} characters of job description to continue.`
+    : !detailsReady
+      ? "Fill in company name, job title, location, and signature name to continue."
       : "Ready to generate your cover letter.";
 
   function handleResumeDragEnter(e: DragEvent<HTMLElement>) {
@@ -1037,23 +1107,16 @@ function CoverLetterStepOneMock({
               <Search className="h-4 w-4" />
               {hasResume ? "Change resume" : "Choose saved resume"}
             </button>
-            {hasResume && !isUploading && (
-              isDefaultResume ? (
-                <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 text-xs font-black text-amber-700 2xl:h-12 2xl:px-5 2xl:text-sm">
-                  <Star className="h-4 w-4 fill-current" />
-                  Default resume
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onMakeCurrentDefault}
-                  disabled={isSettingDefaultResume}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 bg-white px-4 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60 2xl:h-12 2xl:px-5 2xl:text-sm"
-                >
-                  {isSettingDefaultResume ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
-                  Set as default
-                </button>
-              )
+            {hasResume && !isUploading && !isDefaultResume && (
+              <button
+                type="button"
+                onClick={onMakeCurrentDefault}
+                disabled={isSettingDefaultResume}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 bg-white px-4 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60 2xl:h-12 2xl:px-5 2xl:text-sm"
+              >
+                {isSettingDefaultResume ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
+                Set as default
+              </button>
             )}
             <input
               ref={resumeInputRef}
@@ -1218,8 +1281,11 @@ function CoverLetterStepOneMock({
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard?.readText().then(onJdChange).catch(() => toast.info("Clipboard unavailable."))}
-                  className="inline-flex items-center gap-2 rounded-md border border-[#dfe6f5] bg-white px-4 py-2 text-sm font-bold text-[#263363] transition hover:border-[#2557a7]/40 hover:text-[#2557a7]"
+                  onClick={() => {
+                    onSourceChange("jd");
+                    navigator.clipboard?.readText().then(onJdChange).catch(() => toast.info("Clipboard unavailable."));
+                  }}
+                  className={["inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-bold transition", source === "jd" ? "border-[#2557a7] bg-blue-50 text-[#2557a7]" : "border-[#dfe6f5] bg-white text-[#263363] hover:border-[#2557a7]/40"].join(" ")}
                 >
                   <Clipboard className="h-4 w-4" />
                   Paste
@@ -1234,7 +1300,7 @@ function CoverLetterStepOneMock({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onSourceChange(source === "url" ? "jd" : "url")}
+                  onClick={() => onSourceChange("url")}
                   className={["inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-bold transition", source === "url" ? "border-[#2557a7] bg-blue-50 text-[#2557a7]" : "border-[#dfe6f5] bg-white text-[#263363] hover:border-[#2557a7]/40"].join(" ")}
                 >
                   <Link2 className="h-4 w-4" />
@@ -1273,10 +1339,11 @@ function CoverLetterStepOneMock({
           <div className="grid gap-5 sm:grid-cols-2 2xl:gap-6">
             <div>
               <label className="text-sm font-black text-[#070b33]">
-                Company name <span className="font-semibold text-[#6b789c]">(optional)</span>
+                Company name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
+                required
                 value={companyName}
                 onChange={(e) => onCompanyNameChange(e.target.value)}
                 placeholder="e.g. Globex Corporation"
@@ -1286,7 +1353,6 @@ function CoverLetterStepOneMock({
             <div>
               <AutocompleteTextField
                 label="Job title"
-                optional
                 value={roleTitle}
                 onChange={onRoleTitleChange}
                 placeholder="e.g. Senior Backend Engineer"
@@ -1316,14 +1382,55 @@ function CoverLetterStepOneMock({
             </div>
             <div>
               <label className="text-sm font-black text-[#070b33]">
-                Signature name <span className="font-semibold text-[#6b789c]">(optional)</span>
+                Signature name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
+                required
                 value={candidateSignatureName}
                 onChange={(e) => onCandidateSignatureNameChange(e.target.value)}
                 placeholder="e.g. Ananya Rao"
                 className="mt-2 h-11 w-full rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 text-sm font-semibold text-[#070b33] outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:h-14 2xl:px-4 2xl:text-[15px]"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-black text-[#070b33]">
+                Experience level <span className="font-semibold text-[#6b789c]">(optional)</span>
+              </label>
+              <select
+                value={experienceLevel}
+                onChange={(e) => onExperienceLevelChange(e.target.value)}
+                className="mt-2 h-11 w-full rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 text-sm font-semibold text-[#070b33] outline-none transition focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:h-14 2xl:px-4 2xl:text-[15px]"
+              >
+                <option value="">Let AI infer from resume</option>
+                <option value="fresher">Fresher</option>
+                <option value="junior">Junior</option>
+                <option value="mid level">Mid level</option>
+                <option value="senior">Senior</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-sm font-black text-[#070b33]">
+                Why this company? <span className="font-semibold text-[#6b789c]">(optional)</span>
+              </label>
+              <textarea
+                value={whyCompany}
+                onChange={(e) => onWhyCompanyChange(e.target.value)}
+                rows={2}
+                placeholder="e.g. Their focus on developer tooling matches the products I want to keep building."
+                className="mt-2 w-full resize-y rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 py-2.5 text-sm font-semibold text-[#070b33] outline-none transition placeholder:font-medium placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:text-[15px]"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-sm font-black text-[#070b33]">
+                Achievement to highlight <span className="font-semibold text-[#6b789c]">(optional)</span>
+              </label>
+              <textarea
+                value={highlightAchievement}
+                onChange={(e) => onHighlightAchievementChange(e.target.value)}
+                rows={2}
+                placeholder="e.g. Led the migration that cut deployment time by 40%."
+                className="mt-2 w-full resize-y rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 py-2.5 text-sm font-semibold text-[#070b33] outline-none transition placeholder:font-medium placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:text-[15px]"
               />
             </div>
             <label className="flex cursor-pointer items-start gap-4 rounded-lg border border-[#d8e0ef] bg-[#f8fbff] px-4 py-4 transition hover:border-[#2557a7] hover:bg-blue-50/40 sm:col-span-2">
@@ -1802,7 +1909,7 @@ function deriveResumeStatsForStepOne(resume: ParsedResumeBlob | null) {
     firstPresentValue(data, ["education", "education_details", "educational_qualifications"]),
     firstPresentValue(llm, ["education", "education_details", "educational_qualifications"]),
   );
-  const explicitKeywordCount = [
+  const keywords = combineCollectionValues(
     data.ats_keywords,
     data.keywords,
     data.matched_keywords,
@@ -1813,9 +1920,10 @@ function deriveResumeStatsForStepOne(resume: ParsedResumeBlob | null) {
     llm.matched_keywords,
     llm.extracted_keywords,
     llm.strength_keywords,
-  ].reduce<number>((count, value) => {
-    return count + countCollectionItems(value);
-  }, 0);
+  );
+  const skillsList = toDisplayLabels(skills);
+  const keywordsList = toDisplayLabels(keywords);
+  const explicitKeywordCount = keywordsList.length;
   const years = [
     overallExperience.years,
     overallExperience.total_experience,
@@ -1836,8 +1944,8 @@ function deriveResumeStatsForStepOne(resume: ParsedResumeBlob | null) {
     typeof summary?.years_experience === "number" && summary.years_experience > 0
       ? `${Number.isInteger(summary.years_experience) ? summary.years_experience : summary.years_experience.toFixed(1)}+`
       : undefined;
-  const skillCount = countCollectionItems(skills) || summary?.skills_count || 0;
-  const keywordCount = explicitKeywordCount || summary?.ats_keywords_count || skillCount || undefined;
+  const skillCount = skillsList.length || summary?.skills_count || 0;
+  const keywordCount = explicitKeywordCount || summary?.ats_keywords_count || skillCount;
 
   return {
     yearsLabel: yearsLabel !== "-" ? yearsLabel : summaryYearsLabel ?? "-",
@@ -1846,6 +1954,59 @@ function deriveResumeStatsForStepOne(resume: ParsedResumeBlob | null) {
     keywordCount,
     eduCount: countCollectionItems(education) || summary?.education_count || 0,
   };
+}
+
+/**
+ * Resume fields can hold skills/keywords as plain strings, {name|skill|title|label}
+ * objects, or nested category groups ({ technical: [...], soft: [...] }) —
+ * flatten all shapes into a deduped list of display strings for the chip UI.
+ *
+ * Counting rules match countCollectionItems (and its Array.isArray/string guards):
+ * only strings (split on [,;\n]) and string array elements count. Numeric/boolean
+ * values, object fallback recursion, are ignored to prevent metadata from inflating
+ * the count (e.g., { skill_name: "Python", years: 3 } counts 1, not 2).
+ */
+function toDisplayLabels(value: unknown): string[] {
+  const labels: string[] = [];
+
+  function visit(item: unknown) {
+    if (item === null || item === undefined) return;
+    if (typeof item === "string") {
+      item
+        .split(/[,;\n]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach((part) => labels.push(part));
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(visit);
+      return;
+    }
+    if (typeof item === "object") {
+      const record = item as Record<string, unknown>;
+      const named = ["name", "skill", "title", "label", "keyword", "value"]
+        .map((key) => record[key])
+        .find((v) => typeof v === "string" && v.trim().length > 0);
+      if (named) {
+        labels.push((named as string).trim());
+        return;
+      }
+      Object.values(record).forEach((v) => {
+        if (typeof v === "string" || Array.isArray(v)) visit(v);
+      });
+    }
+  }
+
+  visit(value);
+
+  const seen = new Set<string>();
+  return labels.filter((label) => {
+    const key = label.toLowerCase();
+    if (!label || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function getDefaultResumeSummary(value: unknown): {
@@ -1964,10 +2125,15 @@ function AutocompleteTextField({
     <div className="relative">
       <label className="text-sm font-black text-[#070b33]">
         {label}
-        {optional && <span className="font-semibold text-[#6b789c]"> (optional)</span>}
+        {optional ? (
+          <span className="font-semibold text-[#6b789c]"> (optional)</span>
+        ) : (
+          <span className="text-red-500"> *</span>
+        )}
       </label>
       <input
         type="text"
+        required={!optional}
         value={value}
         onFocus={() => setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
@@ -2340,21 +2506,18 @@ function GeneratingModal({
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className="flex min-h-[calc(100vh-170px)] items-start justify-center px-4 py-8 sm:items-center sm:py-10">
-      <div className="w-full max-w-[520px] animate-in fade-in slide-in-from-bottom-4 duration-300">
-        <div className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_30px_80px_-28px_rgba(15,23,42,0.45),0_10px_24px_rgba(37,87,167,0.08)]">
-          {/* Gradient progress stripe */}
-          <div className="hidden h-1.5 w-full bg-slate-100">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-[#2557a7] via-blue-400 to-emerald-400 transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+    <div className="flex min-h-[calc(100dvh-170px)] items-start justify-center px-4 py-4 sm:items-center sm:py-6">
+      <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.30),0_8px_20px_rgba(15,23,42,0.10)]">
+          <div className="p-3.5 sm:p-4">
+            {/* Title */}
+            <p className="text-center text-[15px] font-bold text-[#1f5eff]">
+              Premium Cover Letter Generation
+            </p>
 
-          <div className="p-7">
             {/* Icon */}
-            <div className="relative mx-auto h-[190px] w-[190px]">
-              <div className="absolute inset-5 rounded-full bg-blue-50 shadow-[inset_0_0_28px_rgba(37,87,167,0.12)]" />
+            <div className="relative mx-auto mt-1.5 h-[124px] w-[124px]">
+              <div className="absolute inset-4 rounded-full bg-blue-50 shadow-[inset_0_0_28px_rgba(37,87,167,0.12)]" />
               <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 140 140" aria-hidden="true">
                 <circle cx="70" cy="70" r={radius} fill="none" stroke="#dbeafe" strokeWidth="14" />
                 <circle
@@ -2376,39 +2539,22 @@ function GeneratingModal({
                   </linearGradient>
                 </defs>
               </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-[44px] font-medium leading-none tracking-tight text-slate-950">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
+                <span className="text-[30px] font-black leading-none tracking-tight text-slate-950 tabular-nums">
                   {progress}%
                 </span>
-                <span className="mt-2 text-sm font-semibold text-slate-500">
+                <span className="text-[12px] font-medium text-slate-500">
                   {isComplete ? "finishing..." : `${secondsLeft} sec left`}
                 </span>
               </div>
             </div>
 
-            {/* Title */}
-            <div className="mt-5 text-center">
-              <h3 className="text-[22px] font-black tracking-tight text-[#1f5eff]">
-                Premium Cover Letter Generation
-              </h3>
-              <p className="mt-3 text-lg font-black text-[#1f5eff]">
-                {progress >= 100 ? "Opening your draft..." : activeState.detail}
-              </p>
-            </div>
-
-            {/* Progress bar + percentage */}
-            <div className="hidden">
-              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#2557a7] to-blue-400 transition-all duration-500"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <p className="mt-2 text-right text-xs font-bold text-[#2557a7]">{progress}%</p>
-            </div>
+            <p className="mt-1.5 text-center text-[13px] font-bold text-[#1f5eff]">
+              {progress >= 100 ? "Opening your draft..." : activeState.detail}
+            </p>
 
             {/* 4 cycling progress states */}
-            <div className="mt-5 space-y-2">
+            <div className="mt-2.5 space-y-1">
               {progressStates.map((state, index) => {
                 const itemThreshold = ((index + 1) / progressStates.length) * 100;
                 const done = progress >= itemThreshold || progress >= 100;
@@ -2417,13 +2563,13 @@ function GeneratingModal({
                   <div
                     key={state.label}
                     className={[
-                      "flex items-center justify-between gap-3 rounded-lg px-4 py-3 transition-all duration-200",
+                      "flex items-center justify-between gap-2 rounded-lg px-3 py-1 transition-all duration-200",
                       done ? "bg-emerald-50" : active ? "bg-blue-50" : "bg-slate-50",
                     ].join(" ")}
                   >
                     <span
                       className={[
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-300",
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all duration-300",
                         done
                           ? "bg-emerald-500 text-white"
                           : active
@@ -2432,16 +2578,16 @@ function GeneratingModal({
                       ].join(" ")}
                     >
                       {done ? (
-                        <CheckCircle2 className="h-4 w-4" />
+                        <CheckCircle2 className="h-3 w-3" />
                       ) : active ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
                       ) : (
-                        <Clock3 className="h-3.5 w-3.5" />
+                        <Clock3 className="h-2.5 w-2.5" />
                       )}
                     </span>
                     <p
                       className={[
-                        "min-w-0 flex-1 truncate text-sm font-bold transition-colors duration-200",
+                        "min-w-0 flex-1 truncate text-[12px] font-semibold transition-colors duration-200",
                         done
                           ? "text-emerald-700"
                           : active
@@ -2453,7 +2599,7 @@ function GeneratingModal({
                     </p>
                     <span
                       className={[
-                        "shrink-0 text-sm font-black",
+                        "shrink-0 text-[11px] font-bold",
                         done ? "text-emerald-600" : active ? "text-amber-500" : "text-slate-400",
                       ].join(" ")}
                     >
@@ -2465,19 +2611,19 @@ function GeneratingModal({
             </div>
 
             {/* Role / template summary strip */}
-            <div className="mt-6 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs">
+            <div className="mt-2.5 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+              <div className="text-[11px]">
                 <p className="font-bold text-slate-400">Template</p>
                 <p className="mt-0.5 font-black text-slate-950">{selectedTemplate}</p>
               </div>
               {roleTitle && (
-                <div className="max-w-36 text-right text-xs">
+                <div className="max-w-32 text-right text-[11px]">
                   <p className="font-bold text-slate-400">Role</p>
                   <p className="mt-0.5 truncate font-black text-slate-950">{roleTitle}</p>
                 </div>
               )}
               {companyName && (
-                <div className="max-w-28 text-right text-xs">
+                <div className="max-w-24 text-right text-[11px]">
                   <p className="font-bold text-slate-400">Company</p>
                   <p className="mt-0.5 truncate font-black text-slate-950">{companyName}</p>
                 </div>
@@ -2488,7 +2634,7 @@ function GeneratingModal({
               <button
                 type="button"
                 onClick={onCancel}
-                className="mt-5 w-full rounded-lg border border-slate-200 bg-white py-3 text-sm font-bold text-slate-600 transition hover:border-red-200 hover:text-red-600"
+                className="mt-2.5 w-full rounded-lg border border-slate-200 bg-white py-1.5 text-[12px] font-bold text-slate-600 transition hover:border-red-200 hover:text-red-600"
               >
                 Cancel generation
               </button>

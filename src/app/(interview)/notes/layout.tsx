@@ -16,11 +16,7 @@ export default function NotesLayout({ children }: { children: React.ReactNode })
           <div
             className="pt-14 min-h-screen transition-[margin] duration-300 bg-gray-50"
             style={{ marginLeft: "var(--sidebar-width, 56px)" }}
-          >
             <NotesSidebar />
-            <div className="overflow-auto">
-              {children}
-            </div>
           </div>
         </div>
       </MockInterviewProvider>

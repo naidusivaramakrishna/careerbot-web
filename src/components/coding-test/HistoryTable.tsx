@@ -118,7 +118,7 @@ export default function HistoryTable({
           return (
             <li key={e.submission_id}>
               <Link
-                href={`/coding-test/${e.problem_slug}`}
+                href={`/coding-test/${e.problem_slug}?submission=${e.submission_id}`}
                 className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-indigo-300 hover:shadow-sm"
               >
                 <div className="min-w-0">

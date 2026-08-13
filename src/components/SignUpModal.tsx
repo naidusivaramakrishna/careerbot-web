@@ -68,20 +68,22 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
         setErrors({ email: "", username: "", password: "", login: "" })
         setLoading((prev) => ({ ...prev, signUp: true }))
         try {
-            // Tenant ID is auto-generated and set in context
-            // httpClient will add X-Tenant-Id header automatically
             await signUp(signUpForm)
-
+        } catch (err) {
+            handleApiError(err, false)
+            setLoading((prev) => ({ ...prev, signUp: false }))
+            return
+        }
+        try {
             // Sign in immediately after signup to get access_token and refresh_token
             await signIn({ email: signUpForm.email, password: signUpForm.password })
-
-            // Verification email is sent automatically by backend
-            // User can verify email from profile/settings later
             toast.success("Account created! Redirecting...")
             localStorage.setItem('token_last_refreshed_at', Date.now().toString())
             if (onSuccess) { onSuccess(); onClose(); } else { window.location.href = authRedirectTo !== DEFAULT_AUTH_REDIRECT ? `/onboarding?next=${encodeURIComponent(authRedirectTo)}` : "/onboarding" }
         } catch (err) {
-            handleApiError(err)
+            // Account was created — treat the follow-up sign-in failure as a login
+            // error so it is never mis-attributed to a signup field (e.g. "username").
+            handleApiError(err, true)
         } finally {
             setLoading((prev) => ({ ...prev, signUp: false }))
         }
@@ -168,7 +170,15 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
             }
             // Handle direct error message from backend
             else if (res?.data?.error?.message) {
-                newErrors.login = res.data.error.message
+                const msg = res.data.error.message as string
+                const msgLower = msg.toLowerCase()
+                if (!isLogin && msgLower.includes('username')) {
+                    newErrors.username = msg
+                } else if (!isLogin && msgLower.includes('email')) {
+                    newErrors.email = msg
+                } else {
+                    newErrors.login = msg
+                }
                 setErrors(newErrors)
             }
             // Handle generic error messages with safe, user-friendly mapping.
@@ -181,7 +191,16 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     ? { ...res.data, status: res.status }
                     : err
                 const safeMessage = mapAuthError(errorPayload, context)
-                newErrors.login = safeMessage
+                const rawMsg = (
+                    res?.data?.detail || res?.data?.message || res?.data?.error || ''
+                ).toString().toLowerCase()
+                if (!isLogin && rawMsg.includes('username')) {
+                    newErrors.username = safeMessage
+                } else if (!isLogin && rawMsg.includes('email')) {
+                    newErrors.email = safeMessage
+                } else {
+                    newErrors.login = safeMessage
+                }
                 setErrors(newErrors)
             }
         } else {
@@ -192,73 +211,74 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
     const renderLoginForm = () => {
         const activeLoginError = errors.email ? 'email' : errors.password ? 'password' : errors.login ? 'login' : null
         return (
-        <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="flex flex-col gap-4">
-            <input
-                type="email"
-                name="email"
-                autoFocus
-                placeholder="Email Address"
-                value={loginForm.email}
-                onChange={handleChange}
-                data-testid="login-email-input"
-                id="login-email"
-                className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
-            />
-            {activeLoginError === 'email' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
-
-            <div className="relative">
+            <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="flex flex-col gap-4">
                 <input
-                    type={showPassword ? "text" : "password"}
-                    name="password"
-                    placeholder="Password"
-                    value={loginForm.password}
+                    type="email"
+                    name="email"
+                    autoFocus
+                    placeholder="Email Address"
+                    value={loginForm.email}
                     onChange={handleChange}
-                    data-testid="login-password-input"
-                    id="login-password"
-                    className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
+                    data-testid="login-email-input"
+                    id="login-email"
+                    className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
                 />
-                <button
-                    type="button"
-                    onClick={() => setShowPassword((p) => !p)}
-                    data-testid="toggle-login-password-btn"
-                    aria-label="Toggle password visibility"
-                    className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                {activeLoginError === 'email' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
+
+                <div className="relative">
+                    <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        placeholder="Password"
+                        value={loginForm.password}
+                        onChange={handleChange}
+                        data-testid="login-password-input"
+                        id="login-password"
+                        className={`w-full rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border border-red-400 focus:ring-red-300' : 'bg-gray-100 border border-gray-300 focus:ring-blue-200'}`}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword((p) => !p)}
+                        data-testid="toggle-login-password-btn"
+                        aria-label="Toggle password visibility"
+                        className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                        {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
+                    </button>
+                </div>
+
+                {activeLoginError === 'password' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
+                {activeLoginError === 'login' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.login}</p>}
+
+                <p
+                    data-testid="forgot-password-link"
+                    className="text-xs font-semibold cursor-pointer flex justify-end my-2 text-blue-500 hover:text-blue-700 transition-colors"
+                    onClick={() => {
+                        router.push('/forgot-password')
+                        onClose()
+                    }}
                 >
-                    {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
+                    Forgot Password?
+                </p>
+
+                <button
+                    type="submit"
+                    disabled={loading.login}
+                    data-testid="login-submit-btn"
+                    className="w-full py-3 rounded-xl font-semibold text-white text-sm bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 hover:opacity-90 transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-purple-200 flex items-center justify-center gap-2"
+                >
+                    {loading.login ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            Signing in...
+                        </>
+                    ) : (
+                        "Sign in"
+                    )}
                 </button>
-            </div>
-
-            {activeLoginError === 'password' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
-            {activeLoginError === 'login' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.login}</p>}
-
-            <p
-                data-testid="forgot-password-link"
-                className="text-xs font-semibold cursor-pointer flex justify-end my-2 text-blue-500 hover:text-blue-700 transition-colors"
-                onClick={() => {
-                    router.push('/forgot-password')
-                    onClose()
-                }}
-            >
-                Forgot Password?
-            </p>
-
-            <button
-                type="submit"
-                disabled={loading.login}
-                data-testid="login-submit-btn"
-                className="w-full py-3 rounded-xl font-semibold text-white text-sm bg-linear-to-r from-pink-500 via-purple-500 to-blue-500 hover:opacity-90 transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-purple-200 flex items-center justify-center gap-2"
-            >
-                {loading.login ? (
-                    <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Signing in...
-                    </>
-                ) : (
-                    "Sign in"
-                )}
-            </button>
-        </form>
-    )}
+            </form>
+        )
+    }
 
 
     const renderAuthForm = () => {
@@ -307,68 +327,62 @@ const AuthModal: React.FC<Props> = ({ open, onClose, initialFormType = "signup",
                     <div className="grow h-px bg-gray-300"></div>
                 </div>
 
-                {(() => {
-                    const activeError = (formType === 'signup' && errors.username) ? 'username'
-                        : errors.email ? 'email'
-                        : errors.password ? 'password'
-                        : errors.login ? 'login' : null
-                    return (
-                        <div className="flex flex-col gap-4">
-                            {formType === "signup" && (
-                                <>
-                                    <input
-                                        type="text"
-                                        name="username"
-                                        autoFocus
-                                        placeholder="Username"
-                                        value={signUpForm.username}
-                                        onChange={handleChange}
-                                        data-testid="signup-username-input"
-                                        id="signup-username"
-                                        className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.username ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
-                                    />
-                                    {activeError === 'username' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.username}</p>}
-                                </>
-                            )}
-
+                <div className="flex flex-col gap-4">
+                    {formType === "signup" && (
+                        <>
                             <input
-                                type="email"
-                                name="email"
-                                placeholder="Email Address"
-                                value={formType === "signup" ? signUpForm.email : loginForm.email}
+                                type="text"
+                                name="username"
+                                autoFocus
+                                placeholder="Username"
+                                value={signUpForm.username}
                                 onChange={handleChange}
-                                data-testid="signup-email-input"
-                                id="signup-email"
-                                className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.email || (formType === "signin" && errors.login)) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                                data-testid="signup-username-input"
+                                id="signup-username"
+                                className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${errors.username ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                                style={errors.username ? { boxShadow: '0 0 0 1000px #fef2f2 inset', WebkitBoxShadow: '0 0 0 1000px #fef2f2 inset' } : undefined}
                             />
-                            {activeError === 'email' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
+                            {errors.username && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.username}</p>}
+                        </>
+                    )}
 
-                            <div className="relative">
-                                <input
-                                    type={showPassword ? "text" : "password"}
-                                    name="password"
-                                    placeholder="Password"
-                                    value={formType === "signup" ? signUpForm.password : loginForm.password}
-                                    onChange={handleChange}
-                                    data-testid="signup-password-input"
-                                    id="signup-password"
-                                    className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.password || (formType === "signin" && errors.login)) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword((p) => !p)}
-                                    data-testid="toggle-password-btn"
-                                    aria-label="Toggle password visibility"
-                                    className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                                >
-                                    {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
-                                </button>
-                            </div>
-                            {activeError === 'password' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
-                            {activeError === 'login' && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.login}</p>}
-                        </div>
-                    )
-                })()}
+                    <input
+                        type="email"
+                        name="email"
+                        placeholder="Email Address"
+                        value={formType === "signup" ? signUpForm.email : loginForm.email}
+                        onChange={handleChange}
+                        data-testid="signup-email-input"
+                        id="signup-email"
+                        className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.email || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                        style={(errors.email || errors.login) ? { boxShadow: '0 0 0 1000px #fef2f2 inset', WebkitBoxShadow: '0 0 0 1000px #fef2f2 inset' } : undefined}
+                    />
+                    {errors.email && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.email}</p>}
+
+                    <div className="relative">
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            name="password"
+                            placeholder="Password"
+                            value={formType === "signup" ? signUpForm.password : loginForm.password}
+                            onChange={handleChange}
+                            data-testid="signup-password-input"
+                            id="signup-password"
+                            className={`w-full rounded-xl px-4 py-3 border text-sm text-gray-800 placeholder-[#635B6B] outline-none focus:ring-2 transition-all ${(errors.password || errors.login) ? 'bg-red-50 border-red-400 focus:ring-red-300' : 'bg-gray-100 border-gray-300 focus:ring-blue-300'}`}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword((p) => !p)}
+                            data-testid="toggle-password-btn"
+                            aria-label="Toggle password visibility"
+                            className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            {showPassword ? <EyeClosed size={20} /> : <Eye size={20} />}
+                        </button>
+                    </div>
+                    {errors.password && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.password}</p>}
+                    {errors.login && <p role="alert" className="text-red-500 text-xs -mt-2">{errors.login}</p>}
+                </div>
 
                 {formType === "signin" && (
                     <p

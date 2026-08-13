@@ -1,0 +1,35 @@
+#!/usr/bin/env sh
+# Husky 9+ — no need to source husky.sh anymore (was deprecated; removed in v10).
+
+set -e
+
+echo "→ Running typecheck..."
+pnpm typecheck
+
+echo "→ Running lint..."
+pnpm lint
+
+echo "→ Running unit tests..."
+pnpm test --watch=false --passWithNoTests
+
+# Codex cross-check reminder — gated paths require an ACCEPT-AS-IS verdict
+# before merge per reviews/mobile/09_CODEX_CROSSCHECK_POLICY.md §1.
+CHANGED="$(git diff --name-only @{push}..HEAD 2>/dev/null || git diff --name-only origin/main..HEAD 2>/dev/null || echo '')"
+if echo "$CHANGED" | grep -qE '^src/api/client/|^src/features/auth/|^src/features/payments/|^src/types/contracts/'; then
+  echo ""
+  echo "⚠️  GATED PATH TOUCHED"
+  echo "    Files changed include src/api/client/, src/features/auth/,"
+  echo "    src/features/payments/, or src/types/contracts/."
+  echo ""
+  echo "    Per reviews/mobile/09_CODEX_CROSSCHECK_POLICY.md §1, this PR"
+  echo "    requires an ACCEPT-AS-IS Codex verdict BEFORE merge."
+  echo ""
+  echo "    Generate the prompt with:"
+  echo "      bash ../careerbot-web-pr15/reviews/mobile/generate-codex-prompt.sh commit HEAD"
+  echo ""
+  echo "    Pushing is allowed (the gate is at merge, not at push), but"
+  echo "    do NOT merge without the verdict."
+  echo ""
+fi
+
+echo "✅ Pre-push checks passed"
