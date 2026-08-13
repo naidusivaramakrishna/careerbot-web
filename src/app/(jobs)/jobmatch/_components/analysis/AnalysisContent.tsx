@@ -625,7 +625,7 @@ export default function AnalysisContent({
     if (!matchId || !resolvedSuggestionId) return true;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await matcherEnhanceRemove(matchId, resolvedSuggestionId) as any;
+      const res = await runSerially(() => matcherEnhanceRemove(matchId, resolvedSuggestionId)) as any;
       const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
       if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
       else if (typeof newScore === "string") {
@@ -641,7 +641,7 @@ export default function AnalysisContent({
       });
       return false;
     }
-  }, [matchId, findSkillSuggestionId, addedSkillFields]);
+  }, [matchId, findSkillSuggestionId, addedSkillFields, runSerially]);
 
   const [isRetryingMatch, setIsRetryingMatch] = React.useState(false);
 
@@ -1152,7 +1152,11 @@ export default function AnalysisContent({
               }) : [];
               setIsSavingSection(true);
               console.warn("[JobMatch] matcherUpdateSections →", { matchId, sectionLabel, items });
-              matcherUpdateSections(matchId, [{ sectionName: sectionLabel, items }])
+              // Same read-modify-write invariant as the enhance calls above:
+              // update_resume_custom_sections reads the whole parsed_data,
+              // edits custom_sections, and writes the blob back. Unqueued, a
+              // section save racing an "Add skill" silently drops one of them.
+              runSerially(() => matcherUpdateSections(matchId, [{ sectionName: sectionLabel, items }]))
                 .then(() => toast.success(`${sectionLabel} saved — ready to download`))
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 .catch((err: any) => { console.error("[JobMatch] sections save failed", err); toast.error(`Failed to save ${sectionLabel}: ${err?.message || err}`); })
