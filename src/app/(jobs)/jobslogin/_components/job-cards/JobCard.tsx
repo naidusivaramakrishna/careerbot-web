@@ -54,7 +54,15 @@ function describeFixResumeError(err: unknown): string {
   if (envelope === undefined && err instanceof Error) {
     try { envelope = JSON.parse(err.message); } catch { /* not JSON */ }
   }
-  if (!envelope || typeof envelope !== "object") return fallback;
+  if (!envelope || typeof envelope !== "object") {
+    // Plain Errors thrown directly by handleFixResume (e.g. "no description
+    // text to match against") have no JSON envelope — their message IS the
+    // user-facing text, so surface it instead of the generic fallback.
+    if (err instanceof Error && err.message.trim() && !/^HTTP \d+$/i.test(err.message.trim())) {
+      return err.message;
+    }
+    return fallback;
+  }
 
   const top = envelope as Record<string, unknown>;
   const errorObj = (typeof top.error === "object" && top.error)
@@ -117,6 +125,7 @@ interface JobCardProps {
   onApplyClick?: () => void;
   onSaveToggle?: (saved: boolean) => void;
   onRemoveApplication?: () => void;
+  onAppliedToggle?: (jobId: string) => void;
 }
 
 // Assign a consistent color to each company based on first letter
@@ -414,12 +423,15 @@ export default function JobCard(props: JobCardProps) {
         duplicate: matchResp?.duplicate,
       };
 
-      writeJobmatchSessionSnapshot({
+      const snapshotWritten = writeJobmatchSessionSnapshot({
         matchResults: newMatchResults,
         parsedResumeData: fullResumeData,
         parsedJDData: null,
         jdText: props.description || `${props.title} at ${props.company}`,
       });
+      if (!snapshotWritten) {
+        throw new Error("Could not save your match results. Please try again.");
+      }
 
       // Hard navigation, not router.push(): if /jobmatch/app was already
       // visited earlier this session, Next's client-side route cache can
@@ -580,6 +592,11 @@ export default function JobCard(props: JobCardProps) {
             setIsApplied(true);
             setShowMenu(false);
             recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId);
+            // Unlike the save path (handleSaveJob → onSaveToggle), this bypasses
+            // JobsContents' own recordJobApplication call sites — tell it directly
+            // so the Applied tab badge/list update without waiting for that tab
+            // to be (re)activated.
+            props.onAppliedToggle?.(props.id);
             toast.success("Marked as applied");
           },
         },
@@ -1338,74 +1355,7 @@ export default function JobCard(props: JobCardProps) {
       />
     )}
 
-    {showMenu && menuPos && createPortal(
-      <div
-        ref={menuPortalRef}
-        style={{ position: "fixed", top: menuPos.top, left: menuPos.left, zIndex: 9999 }}
-        className="w-48 bg-white rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.14)] border border-gray-100 py-1.5"
-      >
-        {[
-          props.onRemove && {
-            icon: XCircle, label: "Remove From List",
-            action: () => { setShowMenu(false); props.onRemove?.(); toast.success("Job removed from list"); },
-          },
-          props.onRemoveApplication && {
-            icon: Trash2, label: "Remove Application",
-            action: () => {
-              setShowMenu(false);
-              if (window.confirm("Remove this job from your Applied list? This can't be undone.")) {
-                props.onRemoveApplication?.();
-                toast.success("Application removed");
-              }
-            },
-          },
-          {
-            icon: CheckCircle, label: "Already Applied",
-            action: () => {
-              setIsApplied(true);
-              setShowMenu(false);
-              recordJobApplication(props.id, props.title, props.company, props.url || props.application_url || "", userId);
-              toast.success("Marked as applied");
-            },
-          },
-          {
-            icon: Share2, label: "Share",
-            action: () => {
-              const link = props.url || props.application_url || window.location.href;
-              if (navigator.clipboard) {
-                navigator.clipboard.writeText(link)
-                  .then(() => toast.success("Link copied to clipboard!"))
-                  .catch(() => toast.error("Could not copy link"));
-              } else {
-                const el = document.createElement("textarea");
-                el.value = link;
-                document.body.appendChild(el);
-                el.select();
-                document.execCommand("copy");
-                document.body.removeChild(el);
-                toast.success("Link copied to clipboard!");
-              }
-              setShowMenu(false);
-            },
-          },
-          {
-            icon: Flag, label: "Report Issue",
-            action: () => { setShowMenu(false); toast.info("Thanks for reporting. We'll look into it."); },
-          },
-        ].filter((item): item is NonNullable<typeof item> => !!item).map(({ icon: Icon, label, action }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={action}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-[#4F46E5] transition-colors text-left group/item"
-          >
-            <Icon size={15} className="text-gray-400 group-hover/item:text-[#4F46E5] shrink-0 transition-colors" />
-            {label}
-          </button>
-        ))}
-      </div>,
-      document.body
-    )}
+    {menuNode}
     {showResumePrompt && (
       <ResumeCustomizePrompt
         jobTitle={props.title}

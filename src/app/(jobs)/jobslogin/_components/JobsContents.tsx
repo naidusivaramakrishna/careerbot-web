@@ -598,6 +598,40 @@ export default function JobsContents() {
     }
   }, [userId]);
 
+  // ── "Already Applied" quick-mark from any job card's menu (JobCard already
+  //    wrote the record via recordJobApplication before calling this) — same
+  //    reasoning as handleSaveToggle: bump the badge and, if the Applied
+  //    tab's list is already loaded, append a placeholder immediately instead
+  //    of waiting for the next time the Applied tab is (re)activated. ──
+  const handleAppliedToggle = useCallback((jobId: string) => {
+    const record = getApplicationHistory(userId).find((app) => app.jobId === jobId);
+    setAppliedJobsCount((c) => c + 1);
+    if (!record) return;
+
+    const placeholder = normalizeJob({
+      id: record.jobId,
+      title: record.title,
+      company: record.company,
+      url: record.url,
+      created_at: record.appliedAt,
+      is_applied: true,
+    });
+    setAppliedJobsList((prev) => (prev.some((job) => job.id === jobId) ? prev : [...prev, placeholder]));
+
+    (async () => {
+      try {
+        const res = await getJobById(jobId);
+        if (res.data) {
+          const full = normalizeJob(res.data as unknown as Record<string, unknown>);
+          setAppliedJobsList((prev) => prev.map((job) => (job.id === jobId ? full : job)));
+        }
+      } catch {
+        // Keep the placeholder — same reasoning as fetchAppliedJobsList: a
+        // failed lookup shouldn't drop a job that's genuinely applied.
+      }
+    })();
+  }, [userId]);
+
   // ── Permanently remove an entry from the Applied tab — deletes the
   //    underlying application record (unlike the Smart Match "Not
   //    interested" dismiss, which only ever hides a card for the current
@@ -1010,6 +1044,7 @@ export default function JobsContents() {
                     }
                     onSaveToggle={handleSaveToggle}
                     onRemoveApplication={activeTab === "applied" ? handleRemoveApplication : undefined}
+                    onAppliedToggle={handleAppliedToggle}
                     allowDismiss={isMatchedTab}
                   />
                 )}

@@ -49,6 +49,10 @@ type JobListProps = {
   // where it actually deletes the underlying application record, unlike
   // allowDismiss below which never persists anything.
   onRemoveApplication?: (jobId: string) => void;
+  // Fired when a job is quick-marked "Already Applied" from the card menu
+  // (as opposed to the Apply Now → confirm-on-return flow, see onApplyClick),
+  // so JobsContents can bump the Applied tab badge/list immediately.
+  onAppliedToggle?: (jobId: string) => void;
   // "Not interested" only makes sense for Smart Match recommendations — and
   // even there it's a transient, session-only hide (see removedIds below),
   // never persisted. Saved/Applied entries are jobs the user deliberately
@@ -59,7 +63,7 @@ type JobListProps = {
   allowDismiss?: boolean;
 };
 
-export default function JobList({ jobs, onBotClick, onApplyClick, onSaveToggle, onRemoveApplication, allowDismiss = false }: JobListProps) {
+export default function JobList({ jobs, onBotClick, onApplyClick, onSaveToggle, onRemoveApplication, onAppliedToggle, allowDismiss = false }: JobListProps) {
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   const visibleJobs = jobs.filter((job) => !removedIds.has(job.id));
@@ -75,6 +79,7 @@ export default function JobList({ jobs, onBotClick, onApplyClick, onSaveToggle, 
           onApplyClick={() => onApplyClick?.(job)}
           onSaveToggle={(saved) => onSaveToggle?.(job.id, saved)}
           onRemoveApplication={onRemoveApplication ? () => onRemoveApplication(job.id) : undefined}
+          onAppliedToggle={onAppliedToggle ? () => onAppliedToggle(job.id) : undefined}
         />
       ))}
     </div>

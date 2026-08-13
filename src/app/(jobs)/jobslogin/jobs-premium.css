@@ -101,12 +101,10 @@
 .jobs-premium-theme .jobs-premium-card {
   border-color: #dfe6ef;
   border-radius: 16px;
-  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.045) !important;
 }
 
 .jobs-premium-theme .jobs-premium-card:hover {
   border-color: #ccd8e8;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.075) !important;
 }
 
 .jobs-premium-theme .jobs-premium-card h3 {

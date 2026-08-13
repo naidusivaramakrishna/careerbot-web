@@ -46,15 +46,26 @@ export function getApplicationHistory(userId?: string | null): JobApplication[] 
 
   // Merge the scoped (per-user) and unscoped bucket so an application
   // recorded before the user id had resolved (unscoped write) still shows
-  // up once reads start using the resolved, scoped key.
-  const scoped = readApplicationsAt(scopedKey(APPLIED_JOBS_KEY, userId));
+  // up once reads start using the resolved, scoped key. This is a one-shot
+  // migration, not a permanent union — the unscoped bucket is shared across
+  // every account on this browser, so it must be folded in and cleared here
+  // rather than merged on every read, or it would leak into other accounts.
+  const scopedK = scopedKey(APPLIED_JOBS_KEY, userId);
+  const scoped = readApplicationsAt(scopedK);
   if (!userId) return scoped;
 
   const unscoped = readApplicationsAt(APPLIED_JOBS_KEY);
   if (unscoped.length === 0) return scoped;
 
   const seen = new Set(scoped.map((app) => app.jobId));
-  return [...scoped, ...unscoped.filter((app) => !seen.has(app.jobId))];
+  const migrated = [...scoped, ...unscoped.filter((app) => !seen.has(app.jobId))];
+  try {
+    localStorage.setItem(scopedK, JSON.stringify(migrated));
+    localStorage.removeItem(APPLIED_JOBS_KEY);
+  } catch (e) {
+    console.error("getApplicationHistory: Failed to migrate unscoped applications:", e instanceof Error ? e.message : String(e));
+  }
+  return migrated;
 }
 
 export function isJobApplied(jobId: string, userId?: string | null): boolean {
@@ -137,15 +148,26 @@ export function getSavedJobs(userId?: string | null): SavedJob[] {
   // A user can click Save while useCurrentUserId is still resolving. That
   // write lands in the unscoped bucket; once the id resolves, reads switch to
   // the scoped bucket. Merge both so the saved job does not disappear during
-  // that transition. Prefer scoped records and de-duplicate by stable job id.
-  const scoped = readSavedJobsAt(scopedKey(SAVED_JOBS_KEY, userId));
+  // that transition. This is a one-shot migration, not a permanent union —
+  // the unscoped bucket is shared across every account on this browser, so
+  // it must be folded into the scoped bucket and cleared here, or it would
+  // leak into every other account that reads on this browser afterward.
+  const scopedK = scopedKey(SAVED_JOBS_KEY, userId);
+  const scoped = readSavedJobsAt(scopedK);
   if (!userId) return scoped;
 
   const unscoped = readSavedJobsAt(SAVED_JOBS_KEY);
   if (unscoped.length === 0) return scoped;
 
   const seen = new Set(scoped.map((job) => job.jobId));
-  return [...scoped, ...unscoped.filter((job) => !seen.has(job.jobId))];
+  const migrated = [...scoped, ...unscoped.filter((job) => !seen.has(job.jobId))];
+  try {
+    localStorage.setItem(scopedK, JSON.stringify(migrated));
+    localStorage.removeItem(SAVED_JOBS_KEY);
+  } catch (e) {
+    console.error("getSavedJobs: Failed to migrate unscoped saved jobs:", e instanceof Error ? e.message : String(e));
+  }
+  return migrated;
 }
 
 export function isJobSaved(jobId: string, userId?: string | null): boolean {
@@ -223,6 +245,9 @@ export function clearAllApplications(userId?: string | null): void {
 
   try {
     localStorage.removeItem(scopedKey(APPLIED_JOBS_KEY, userId));
+    // getApplicationHistory merges the scoped and unscoped buckets on read —
+    // clear both or the unscoped copy makes cleared applications reappear.
+    if (userId) localStorage.removeItem(APPLIED_JOBS_KEY);
   } catch (e) {
     console.error("clearAllApplications: Failed to clear:", e instanceof Error ? e.message : String(e));
   }
@@ -233,6 +258,9 @@ export function clearAllSavedJobs(userId?: string | null): void {
 
   try {
     localStorage.removeItem(scopedKey(SAVED_JOBS_KEY, userId));
+    // getSavedJobs merges the scoped and unscoped buckets on read — clear
+    // both or the unscoped copy makes cleared saved jobs reappear.
+    if (userId) localStorage.removeItem(SAVED_JOBS_KEY);
   } catch (e) {
     console.error("clearAllSavedJobs: Failed to clear:", e instanceof Error ? e.message : String(e));
   }
