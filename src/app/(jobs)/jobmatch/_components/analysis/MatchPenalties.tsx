@@ -176,7 +176,12 @@ function CategoryGroup({
   // of rate-limited calls doesn't spam one toast per skill; the bulk loop
   // shows a single summary toast instead.
   const handleAdd = async (p: Penalty, opts?: { silent?: boolean }): Promise<boolean> => {
-    if (addedIds.has(p.suggestion_id) || loadingIds.has(p.suggestion_id)) return true;
+    // Already applied — genuinely a success, nothing left to do.
+    if (addedIds.has(p.suggestion_id)) return true;
+    // Already in flight from another click: the outcome is unknown, so don't
+    // report success. The bulk loop counts a true return toward its "Added N
+    // of M" toast, and this item's own request may still fail.
+    if (loadingIds.has(p.suggestion_id)) return false;
     if (isSkillActionable && !p.target) return false;
     if (!isSkillActionable && !(onApplyFix && isPenaltyApplyable(p))) return false;
     setLoadingIds(prev => new Set(prev).add(p.suggestion_id));
@@ -344,7 +349,13 @@ function CategoryGroup({
                         Recover <span className="font-bold text-green-700">+{Math.abs(sg.parent.penalty).toFixed(1)} pts</span>
                       </span>
                     </div>
-                    {!readOnly && canAct && (
+                    {/* sg.items.length > 0: subgroups pair a bulk parent with
+                        individuals of the SAME severity, so a parent whose
+                        severity matches nothing gets an empty item list. Its
+                        button would render enabled (groupAllAdded is false on
+                        an empty array) and then do nothing when clicked — no
+                        request, no toast. Don't offer the action at all. */}
+                    {!readOnly && canAct && sg.items.length > 0 && (
                       <button
                         onClick={() => handleGroupBulkAdd(sg.items, sg.parent)}
                         disabled={isGroupLoading || groupAllAdded}

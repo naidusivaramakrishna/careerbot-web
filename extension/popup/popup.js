@@ -688,7 +688,12 @@ chrome.tabs.onActivated.addListener(() => {
   const isStaleProcessing =
     activeStateName === 'processing' &&
     Date.now() - processingSince > MAX_FLOW_CALLS * API_TIMEOUT_MS + 5000;
-  if (['processing', 'results', 'coverLetter'].includes(activeStateName) && !isStaleProcessing) return;
+  // 'loading' bails out too: init() shows it while verifyExtensionUser() is in
+  // flight, and it hides state-login — so the sign-in guard above passes. A tab
+  // switch inside that round-trip would otherwise fall through to the full idle
+  // UI for a user who isn't authenticated yet (unlockRail(true) never having
+  // run), then snap back to the login state when the request rejects.
+  if (['loading', 'processing', 'results', 'coverLetter'].includes(activeStateName) && !isStaleProcessing) return;
   applyStoredJD();
 });
 

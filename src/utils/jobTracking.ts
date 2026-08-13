@@ -55,17 +55,14 @@ function mustDiscardUnscoped(key: string, userId?: string | null): boolean {
   return !userId && !unscopedWriteThisLoad[key];
 }
 
-// Drops an unscoped bucket that this load did not write. Called from the read
-// paths once a real user id has resolved: such a bucket belongs to a session
-// that ended without signing out (tab closed, token expiry), so no account can
-// claim it — and clearUnscopedJobTrackingData only runs from signOut(), which
-// that session never reached. Without this the records (job titles, companies,
-// locations) would sit in shared localStorage indefinitely.
-function discardLeftoverUnscoped(key: string): void {
-  try {
-    if (localStorage.getItem(key) !== null) localStorage.removeItem(key);
-  } catch { /* storage unavailable — nothing to clean up */ }
-}
+// NOTE: deliberately NOT auto-deleting a leftover unscoped bucket here.
+// An earlier attempt did (to stop orphaned records sitting in shared storage
+// past the session that wrote them) and it could destroy the CURRENT user's
+// own save: unscopedWriteThisLoad resets on every page load, including the
+// hard navigation to /jobmatch/app that JobCard does, so a save made before
+// the id resolved looked like a foreign orphan on the very next load.
+// Refusing to MIGRATE the bucket is what closes the cross-account leak;
+// deleting it is a separate concern and is handled by signOut() only.
 
 // ==================== APPLICATION TRACKING ====================
 
@@ -94,12 +91,10 @@ export function getApplicationHistory(userId?: string | null): JobApplication[] 
   const scoped = readApplicationsAt(scopedK);
   if (!userId) return scoped;
 
-  if (!unscopedWriteThisLoad[APPLIED_JOBS_KEY]) {
-    // See getSavedJobs — refuse to migrate a leftover bucket, and drop it so
-    // it doesn't sit in shared storage past the session that wrote it.
-    discardLeftoverUnscoped(APPLIED_JOBS_KEY);
-    return scoped;
-  }
+  // Refuse to migrate a bucket this load did not write — it cannot be
+  // attributed to whichever account resolves next. Left in place, not
+  // deleted (see the note near discardLeftoverUnscoped's removal above).
+  if (!unscopedWriteThisLoad[APPLIED_JOBS_KEY]) return scoped;
 
   const unscoped = readApplicationsAt(APPLIED_JOBS_KEY);
   if (unscoped.length === 0) return scoped;
@@ -210,14 +205,10 @@ export function getSavedJobs(userId?: string | null): SavedJob[] {
   const scoped = readSavedJobsAt(scopedK);
   if (!userId) return scoped;
 
-  if (!unscopedWriteThisLoad[SAVED_JOBS_KEY]) {
-    // A bucket left behind by a session that never signed out (tab closed,
-    // token expiry) can't be attributed to this account — but it must not sit
-    // in shared storage indefinitely either, readable by any later account.
-    // Refuse to migrate it AND drop it, now that a real user id has resolved.
-    discardLeftoverUnscoped(SAVED_JOBS_KEY);
-    return scoped;
-  }
+  // Refuse to migrate a bucket this load did not write — it cannot be
+  // attributed to whichever account resolves next. Left in place, not
+  // deleted (see the note near discardLeftoverUnscoped's removal above).
+  if (!unscopedWriteThisLoad[SAVED_JOBS_KEY]) return scoped;
 
   const unscoped = readSavedJobsAt(SAVED_JOBS_KEY);
   if (unscoped.length === 0) return scoped;

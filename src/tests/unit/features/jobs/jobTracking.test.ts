@@ -71,9 +71,11 @@ describe("saved job tracking", () => {
 
     expect(getSavedJobs("user-B")).toEqual([]);
 
-    // And it is dropped rather than left sitting in shared storage — the
-    // session that wrote it never signed out, so signOut's cleanup never ran.
-    expect(localStorage.getItem("savedJobs")).toBeNull();
+    // Left in place, NOT deleted: the flag resets on every page load, so a
+    // save the current user made moments ago (before their id resolved, then
+    // a navigation) is indistinguishable from a foreign orphan here. Refusing
+    // to migrate is what closes the leak; deleting would risk their own data.
+    expect(localStorage.getItem("savedJobs")).not.toBeNull();
 
     // User B saving their own job must not persist the foreign record into
     // savedJobs:user-B either.

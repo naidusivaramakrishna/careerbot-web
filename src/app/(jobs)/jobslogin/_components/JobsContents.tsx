@@ -319,6 +319,8 @@ export default function JobsContents() {
   const [matchedNoResume, setMatchedNoResume] = useState(false);
   const [matchedError, setMatchedError] = useState(false);
   const [matchBandFilter] = useState<"all" | "strong" | "good" | "partial" | "low">("all");
+  // Discards superseded Smart Match responses — see fetchSmartMatchedJobs.
+  const matchedFetchTokenRef = useRef(0);
 
   // ── Sort helper ──
   const sortJobs = useCallback((list: NormalizedJob[], sort: FilterSort): NormalizedJob[] => {
@@ -351,6 +353,12 @@ export default function JobsContents() {
   const fetchSmartMatchedJobs = useCallback(async (page = 1, options?: { bypassGuard?: boolean; forceRefresh?: boolean }) => {
     const { bypassGuard = false, forceRefresh = false } = options ?? {};
     if (matchedFetched && page === matchedPage && !bypassGuard) return;
+    // Monotonic run token — same pattern as savedJobsFetchTokenRef above.
+    // Filter changes now dispatch a fetch each time (see the effect below), so
+    // two in quick succession can resolve out of order and let the slower,
+    // older response overwrite the newer one. Nothing self-corrects afterward,
+    // because the filters-key ref is already advanced.
+    const token = ++matchedFetchTokenRef.current;
     setMatchedLoading(true);
     setMatchedNoResume(false);
     setMatchedError(false);
@@ -376,6 +384,7 @@ export default function JobsContents() {
       // instead, so an enum mismatch degrades to the old behaviour rather
       // than an empty tab.
       const usedServerFilters = Object.keys(matchedServerFilters).length > 0;
+      let fellBackToUnfiltered = false;
       if (data.jobs.length === 0 && usedServerFilters) {
         data = await getSmartMatchedJobs({
           limit: MATCHED_PER_PAGE,
@@ -385,16 +394,23 @@ export default function JobsContents() {
         if (!Array.isArray(data.jobs)) {
           throw new Error("Unexpected Smart Match response shape");
         }
+        fellBackToUnfiltered = true;
       }
+      if (matchedFetchTokenRef.current !== token) return;
       const normalized = data.jobs.map((item) =>
         normalizeJob(item.job, item.match.score, item.match)
       );
       setMatchedJobs(normalized);
-      setMatchedTotal(data.total ?? normalized.length);
+      // After a fallback, data.total counts the WHOLE unfiltered pool while
+      // the list rendered is this page narrowed client-side — driving the
+      // pager off it would advertise pages that are empty once narrowed.
+      // Size it to what's actually on this page instead.
+      setMatchedTotal(fellBackToUnfiltered ? normalized.length : (data.total ?? normalized.length));
       setMatchedPage(page);
       setMatchedFetched(true);
       setMatchedNoResume(false);
     } catch (err: unknown) {
+      if (matchedFetchTokenRef.current !== token) return;
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 404) {
         // No resume on file is a terminal state — cache it so we don't refetch.
@@ -410,7 +426,9 @@ export default function JobsContents() {
         toast.error("Could not load Smart Match jobs. Please try again later.");
       }
     } finally {
-      setMatchedLoading(false);
+      // Only the newest run owns the spinner — a superseded one clearing it
+      // would hide the fact that a fresher fetch is still in flight.
+      if (matchedFetchTokenRef.current === token) setMatchedLoading(false);
     }
   }, [matchedFetched, matchedPage, matchedServerFilters]);
 
@@ -601,10 +619,10 @@ export default function JobsContents() {
       // the record is actually there — toggleJobSaved swallows write failures
       // (quota, private mode), so an unconditional increment would leave the
       // badge counting a job that was never saved.
-      const saved = getSavedJobs(userId);
-      const savedRecord = saved.find((job) => job.jobId === jobId);
+      const savedList = getSavedJobs(userId);
+      const savedRecord = savedList.find((job) => job.jobId === jobId);
       if (!savedRecord) return;
-      setSavedJobsCount(saved.length);
+      setSavedJobsCount(savedList.length);
 
       const placeholder = normalizeJob({
         id: savedRecord.jobId,
@@ -686,8 +704,15 @@ export default function JobsContents() {
   //    session) so it can't reappear on the next fetch. ──
   const handleRemoveApplication = useCallback((jobId: string) => {
     removeApplication(jobId, userId);
-    setAppliedJobsList((prev) => prev.filter((job) => job.id !== jobId));
-    setAppliedJobsCount((c) => Math.max(0, c - 1));
+    // Derived from storage, not decremented — removeApplication swallows its
+    // write failures exactly like toggleJobSaved does, so a blind decrement
+    // would drop the badge for a record still on disk (which then reappears
+    // on the next Applied-tab activation). Same as the two sibling handlers.
+    const remaining = getApplicationHistory(userId);
+    setAppliedJobsCount(remaining.length);
+    if (!remaining.some((app) => app.jobId === jobId)) {
+      setAppliedJobsList((prev) => prev.filter((job) => job.id !== jobId));
+    }
   }, [userId]);
 
   // ── Trigger SmartMatch fetch when tab becomes active — also covers the
