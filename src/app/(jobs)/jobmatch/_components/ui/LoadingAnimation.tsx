@@ -86,9 +86,12 @@ export default function LoadingAnimation({ stage }: { stage: LoadingStage }) {
           <span className="text-xl font-bold tabular-nums text-blue-600">
             {progress}%
           </span>
-          <span className="sr-only">
-            {activeMessage}, {progress}% complete
-          </span>
+          {/* Stage label only — the percentage ticks every 90ms, and inside
+              this aria-live region that queued ~99 separate announcements per
+              analysis, drowning out everything else on the page for a screen
+              reader. The visible counter above still conveys it sighted; the
+              stage changes are the meaningful milestones to announce. */}
+          <span className="sr-only">{activeMessage}</span>
         </div>
 
         <div className="flex h-8 min-w-80 items-center justify-center" aria-hidden="true">

@@ -127,13 +127,6 @@ export interface PremiumConsentResponse {
   consented_at?: string | null;
 }
 
-export const getPremiumConsent = async (): Promise<PremiumConsentResponse> => {
-  const response = await httpClient.get<PremiumConsentResponse>(
-    '/profile/consent/premium'
-  );
-  return response.data;
-};
-
 export const setPremiumConsent = async (
   consent_given: boolean
 ): Promise<PremiumConsentResponse> => {

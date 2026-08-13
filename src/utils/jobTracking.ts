@@ -137,7 +137,11 @@ export function removeApplication(jobId: string, userId?: string | null): void {
     const scoped = readApplicationsAt(scopedK).filter((app) => app.jobId !== jobId);
     localStorage.setItem(scopedK, JSON.stringify(scoped));
 
-    if (userId) {
+    // Only rewrite the unscoped bucket if it actually exists — an
+    // unconditional write would recreate the shared key (as "[]") right after
+    // clearUnscopedJobTrackingData removed it, working against the invariant
+    // that it must never outlive the session that wrote it.
+    if (userId && localStorage.getItem(APPLIED_JOBS_KEY) !== null) {
       const unscoped = readApplicationsAt(APPLIED_JOBS_KEY).filter((app) => app.jobId !== jobId);
       localStorage.setItem(APPLIED_JOBS_KEY, JSON.stringify(unscoped));
     }
@@ -248,7 +252,9 @@ export function removeSavedJob(jobId: string, userId?: string | null): void {
     const scoped = readSavedJobsAt(scopedK).filter((job) => job.jobId !== jobId);
     localStorage.setItem(scopedK, JSON.stringify(scoped));
 
-    if (userId) {
+    // Only rewrite the unscoped bucket if it actually exists — see the same
+    // guard in removeApplication above.
+    if (userId && localStorage.getItem(SAVED_JOBS_KEY) !== null) {
       const unscoped = readSavedJobsAt(SAVED_JOBS_KEY).filter((job) => job.jobId !== jobId);
       localStorage.setItem(SAVED_JOBS_KEY, JSON.stringify(unscoped));
     }

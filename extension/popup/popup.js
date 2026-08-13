@@ -473,7 +473,6 @@ function setupResultsState() {
 
 // ─── File input handlers ──────────────────────────────────────────────────────
 let selectedFile = null;
-let selectedFileJD = null;
 let jdIsDetected = false;
 
 function syncIdleActions() {
@@ -500,7 +499,7 @@ function syncIdleActions() {
   }
 }
 
-function bindFileInput(inputId, displayId, fileVar) {
+function bindFileInput(inputId, displayId) {
   const input   = document.getElementById(inputId);
   const display = document.getElementById(displayId);
   if (!input || !display) return;
@@ -512,21 +511,16 @@ function bindFileInput(inputId, displayId, fileVar) {
     if (validationError) {
       alert(validationError);
       input.value = '';
-      if (fileVar === 'idle') selectedFile = null; else selectedFileJD = null;
+      selectedFile = null;
       display.textContent = 'No file selected';
-      if (fileVar === 'idle') {
-        syncIdleActions();
-      }
+      syncIdleActions();
       return;
     }
 
-    if (fileVar === 'idle') selectedFile = file;
-    else selectedFileJD = file;
+    selectedFile = file;
     display.textContent = file.name;
     // Enable analyze button only when both file and JD text are present
-    if (fileVar === 'idle') {
-      syncIdleActions();
-    }
+    syncIdleActions();
   });
 }
 
@@ -781,7 +775,7 @@ function setupIdleState() {
   if (_idleSetup) return;
   _idleSetup = true;
 
-  bindFileInput('resume-file-input', 'idle-resume-name', 'idle');
+  bindFileInput('resume-file-input', 'idle-resume-name');
   setupJDToggles();
 
   document.getElementById('btn-manual-tailor').addEventListener('click', async () => {
@@ -1097,13 +1091,10 @@ async function generateCoverLetter() {
 
   try {
     // Step 1: resolve parsed_resume_id.
-    // Priority: cachedResumeId (set after Analyze) → upload selectedFileJD → upload selectedFile
+    // Priority: cachedResumeId (set after Analyze) → upload selectedFile
     let parsedResumeId = cachedResumeId || null;
-    if (!parsedResumeId) {
-      const fileToUpload = selectedFileJD || selectedFile || null;
-      if (fileToUpload) {
-        parsedResumeId = await uploadResume(fileToUpload);
-      }
+    if (!parsedResumeId && selectedFile) {
+      parsedResumeId = await uploadResume(selectedFile);
     }
     if (!parsedResumeId) throw new Error('No resume found. Please upload a resume first.');
 

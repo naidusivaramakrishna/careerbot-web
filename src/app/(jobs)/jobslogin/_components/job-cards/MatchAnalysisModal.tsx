@@ -688,6 +688,14 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
   // job once it finally resolves. A monotonic run token catches that too.
   const runRef = useRef(0);
 
+  // Set whenever a call routes back to the consent screen. prepare() and
+  // handleConfirm() both swallow their own errors and set phase internally,
+  // so handleGrantConsent's catch never fires for them — without this flag a
+  // retry that 428s again (e.g. the consent write succeeded but hasn't
+  // replicated yet) would silently re-render the identical consent screen and
+  // "I Agree — Continue" would read as a dead button.
+  const reenteredConsentRef = useRef(false);
+
   // Step 1 — resolve resume_id + jd_id → create pending action
   const prepare = useCallback(async () => {
     const run = ++runRef.current;
@@ -721,6 +729,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
 
       if (isConsentRequiredError(err)) {
         setConsentRetry("prepare");
+        reenteredConsentRef.current = true;
         setPhase("consent");
         return;
       }
@@ -755,6 +764,7 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
     } catch (err: unknown) {
       if (isConsentRequiredError(err)) {
         setConsentRetry("execute");
+        reenteredConsentRef.current = true;
         setPhase("consent");
         return;
       }
@@ -768,12 +778,18 @@ function PremiumView({ jobId, jobTitle, company, onBack, onClose }: {
   const handleGrantConsent = async () => {
     setConsentSubmitting(true);
     setConsentError("");
+    reenteredConsentRef.current = false;
     try {
       await setPremiumConsent(true);
       if (consentRetry === "execute") {
         await handleConfirm();
       } else {
         await prepare();
+      }
+      // The retry landed back on this same screen (see reenteredConsentRef) —
+      // the consent write reported success but the retried call still 428'd.
+      if (reenteredConsentRef.current) {
+        setConsentError("Your consent was saved, but the request was still refused. Please try again in a moment.");
       }
     } catch (err: unknown) {
       setConsentError(err instanceof Error ? err.message : "Could not save consent. Please try again.");

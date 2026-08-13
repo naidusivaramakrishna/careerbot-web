@@ -391,6 +391,19 @@ export default function AnalysisContent({
     };
   });
 
+  // Mirrors resumeSections synchronously, for applyTextFix below — a plain
+  // React ref, not the state closure, because applyTextFix's useCallback
+  // deps deliberately exclude resumeSections (to avoid recreating the
+  // callback on every resume edit), and because a setResumeSections updater
+  // is not guaranteed to run before the async function that queued it
+  // returns (see applyTextFix's use). Kept in sync generally via the effect
+  // below, AND updated directly by applyTextFix itself at write time so two
+  // concurrent "Apply fix" clicks each see the other's write immediately
+  // rather than racing on a stale snapshot.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const resumeSectionsRef = React.useRef<Record<string, any>>(resumeSections);
+  React.useEffect(() => { resumeSectionsRef.current = resumeSections; }, [resumeSections]);
+
   const resumeId: string | undefined =
     liveMatchResults?.data?.resume_id ??
     liveMatchResults?.resume_id ??
@@ -459,7 +472,22 @@ export default function AnalysisContent({
     });
     // Update match score (and persist to resume doc) in the backend
     const resolvedSuggestionId = suggestion_id ?? findSkillSuggestionId(s);
-    if (!matchId || !resolvedSuggestionId) return true;
+    // No suggestion id means there is no server-side route to persist this
+    // skill (enhance/apply resolves the skill FROM the suggestion), so nothing
+    // reaches the resume document. Roll the optimistic update back and report
+    // failure rather than returning true — the contract is "was it actually
+    // persisted", and a false success here leaves the chip green while the
+    // downloaded resume silently lacks the skill. Reachable from
+    // JDHighlighter's missing-skill chips, which call in with no id and whose
+    // wording isn't guaranteed to match a penalty target exactly.
+    if (!matchId || !resolvedSuggestionId) {
+      setAddedSkillFields((prev) => prev.filter((item) => item !== s));
+      setResumeSections((prev: Record<string, unknown>) => {
+        const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+        return { ...prev, skills: existing.filter((item) => item !== s) };
+      });
+      return false;
+    }
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const res = await runSerially(() => matcherEnhanceApply(matchId, resolvedSuggestionId)) as any;
@@ -600,21 +628,26 @@ export default function AnalysisContent({
       const rawAfter = weak?.improved || penalty?.after_example;
       const after = manualValue ? fillManualBlank(rawAfter, blankText, manualValue) : rawAfter;
       if (before && after && before !== after) {
-        // Functional form — resumeSections is captured at render time, but
-        // runSerially only serializes the network call, not the render
-        // cycle. Two quick "Apply fix" clicks (bullet 1, then bullet 2
-        // before the first resolves) would otherwise give both callbacks the
-        // same stale snapshot, and fix 2's write would silently erase fix
-        // 1's rewrite from the preview even though the server kept both.
-        setResumeSections((prev) => {
-          const result = replaceBulletText(prev, before, after);
-          if (result.changed.length) {
-            result.changed.forEach((c) => markHighlighted(c.section, String(c.idx)));
-            return result.sections;
-          }
+        // Run the replacement against the ref, NOT inside a setState updater:
+        // this function must return whether the mirror actually matched, and
+        // an updater is not guaranteed to have run by the time we return
+        // (React batches it, and StrictMode double-invokes it — so setting an
+        // outer flag from inside one is both late and unsound).
+        //
+        // The ref also solves what the functional-updater form was there for:
+        // runSerially only serializes the network call, not the render cycle,
+        // so two quick "Apply fix" clicks could otherwise both read the same
+        // stale render-time snapshot and have the second silently erase the
+        // first. Advancing resumeSectionsRef synchronously here means the
+        // second click sees the first's result immediately.
+        const result = replaceBulletText(resumeSectionsRef.current, before, after);
+        if (result.changed.length) {
+          resumeSectionsRef.current = result.sections;
+          setResumeSections(result.sections);
+          result.changed.forEach((c) => markHighlighted(c.section, String(c.idx)));
+        } else {
           mirrored = false;
-          return prev;
-        });
+        }
       }
     }
 

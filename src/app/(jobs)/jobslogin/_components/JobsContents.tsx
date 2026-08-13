@@ -575,9 +575,14 @@ export default function JobsContents() {
       // saved job (potentially dozens) just to add one, including while the
       // Saved tab isn't even the active/rendered tab. The full fetch still
       // runs when the Saved tab is actually (re)activated, below.
-      const savedRecord = getSavedJobs(userId).find((job) => job.jobId === jobId);
-      setSavedJobsCount((c) => c + 1);
+      // Count is derived from the persisted list, and only after confirming
+      // the record is actually there — toggleJobSaved swallows write failures
+      // (quota, private mode), so an unconditional increment would leave the
+      // badge counting a job that was never saved.
+      const saved = getSavedJobs(userId);
+      const savedRecord = saved.find((job) => job.jobId === jobId);
       if (!savedRecord) return;
+      setSavedJobsCount(saved.length);
 
       const placeholder = normalizeJob({
         id: savedRecord.jobId,
@@ -680,22 +685,33 @@ export default function JobsContents() {
   //    Model, Job Type, Location, Date Posted, or the search box) — without
   //    this, filtering only ever narrowed whichever page was already loaded,
   //    missing matches sitting on unfetched pages. Skipped on mount (the
-  //    effect above owns the first fetch) and only while Smart Match is the
-  //    active tab. ──
+  //    effect above owns the first fetch). ──
   const matchedFilterMountRef = useRef(true);
+  // The filter set the currently-loaded results were actually fetched with.
+  // Compared (rather than just reacting to a filter change) so a filter
+  // changed while another tab was active still reaches the server on the way
+  // back: the tab-activation effect above only fetches when !matchedFetched,
+  // so without this the request would be skipped entirely and filtering would
+  // silently fall back to client-side-only narrowing of the loaded page.
+  const lastFetchedFiltersKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (matchedFilterMountRef.current) {
       matchedFilterMountRef.current = false;
+      lastFetchedFiltersKeyRef.current = matchedServerFiltersKey;
       return;
     }
     if (activeTab !== "matched" || !matchedFetched) return;
+    if (lastFetchedFiltersKeyRef.current === matchedServerFiltersKey) return;
+    lastFetchedFiltersKeyRef.current = matchedServerFiltersKey;
     fetchSmartMatchedJobs(1, { bypassGuard: true });
     // matchedServerFiltersKey (a stable serialization of matchedServerFilters)
     // is the real change signal — fetchSmartMatchedJobs is intentionally
     // omitted so it recreating for an unrelated reason (e.g. matchedPage
-    // changing while paginating) doesn't also trigger a refetch here.
+    // changing while paginating) doesn't also trigger a refetch here. The
+    // key comparison above is what prevents a duplicate fetch when both this
+    // and the tab-activation effect run in the same pass.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchedServerFiltersKey]);
+  }, [matchedServerFiltersKey, activeTab, matchedFetched]);
 
   // ── Top Picks — real recommendations, sorted by match score ──
   const topPickJobs = useMemo(
