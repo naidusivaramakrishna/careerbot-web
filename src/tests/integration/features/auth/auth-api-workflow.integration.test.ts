@@ -8,7 +8,7 @@
  * Covers:
  *   - signIn:   POSTs to /api/backend/auth/signin, returns tokens, stores tenant mapping
  *   - signUp:   POSTs to /api/backend/auth/signup, returns success, stores tenant mapping
- *   - signOut:  POSTs to /auth/signout (fire-and-forget)
+ *   - signOut:  POSTs to /api/backend/auth/signout (fire-and-forget)
  *   - resendVerificationEmail: POSTs to /auth/email/resend
  *   - verifyEmail:             POSTs to /auth/email/verify
  *   - requestPasswordReset:    POSTs to /auth/password/reset
@@ -141,8 +141,8 @@ describe('Auth API — signUp', () => {
 describe('Auth API — signOut', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it('POSTs to /auth/signout', async () => {
-    const spy = vi.spyOn(httpClient, 'post').mockResolvedValueOnce(makeResponse({}));
+  it('POSTs to /api/backend/auth/signout', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({ ok: true } as Response);
 
     // signOut calls window.location.href — mock it to avoid jsdom navigation error
     Object.defineProperty(window, 'location', {
@@ -152,11 +152,14 @@ describe('Auth API — signOut', () => {
 
     await signOut();
 
-    expect(spy).toHaveBeenCalledWith('/auth/signout');
+    expect(spy).toHaveBeenCalledWith(
+      '/api/backend/auth/signout',
+      expect.objectContaining({ method: 'POST', credentials: 'include' })
+    );
   });
 
   it('does not throw even if the signout request fails', async () => {
-    vi.spyOn(httpClient, 'post').mockRejectedValueOnce(new Error('Network error'));
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'));
 
     Object.defineProperty(window, 'location', {
       writable: true,

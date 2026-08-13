@@ -475,6 +475,7 @@ function setupResultsState() {
 // ─── File input handlers ──────────────────────────────────────────────────────
 let selectedFile = null;
 let selectedFileJD = null;
+let jdIsDetected = false;
 
 function syncIdleActions() {
   const hasResume = Boolean(selectedFile);
@@ -560,6 +561,9 @@ function setupJDToggles() {
   // Enable analyze only when both JD text and a resume file are present
   if (jdInput) {
     jdInput.addEventListener('input', () => {
+      // Once the user edits detected text, it is their draft and must survive
+      // tab changes or removal/expiry of the stored auto-detection.
+      jdIsDetected = false;
       syncIdleActions();
     });
   }
@@ -802,7 +806,16 @@ function applyJDContent(detectedJD) {
   showState('idle');
 
   const jdTextarea = document.getElementById('manual-jd-input');
-  if (jdTextarea) jdTextarea.value = detectedJD.jd || '';
+  // A stored detection may be re-applied on focus/tab activation. Never let it
+  // overwrite a non-empty draft that the user pasted or edited in the panel.
+  if (jdTextarea?.value?.trim() && !jdIsDetected) {
+    syncIdleActions();
+    return;
+  }
+  if (jdTextarea) {
+    jdTextarea.value = detectedJD.jd || '';
+    jdIsDetected = true;
+  }
 
   const bannerEl  = document.getElementById('idle-detected-job');
   const titleEl   = document.getElementById('idle-detected-title');
@@ -821,8 +834,9 @@ function clearIdleDetectedJob() {
   document.getElementById('idle-detected-job')?.classList.add('hidden');
   const jdTextarea = document.getElementById('manual-jd-input');
   const actionEl = document.getElementById('idle-jd-action-label');
-  if (jdTextarea) jdTextarea.value = '';
-  if (actionEl) actionEl.textContent = 'Paste';
+  if (jdTextarea && jdIsDetected) jdTextarea.value = '';
+  jdIsDetected = false;
+  if (actionEl) actionEl.textContent = jdTextarea?.value?.trim() ? 'Edit' : 'Paste';
   syncIdleActions();
 }
 
@@ -1150,7 +1164,7 @@ let clLetterId = null;
 
 async function generateCoverLetter() {
   const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
-  const jdText  = clampJdText(detectedJD?.jd  || document.getElementById('jd-textarea-main')?.value?.trim() || '');
+  const jdText  = clampJdText(document.getElementById('manual-jd-input')?.value?.trim() || detectedJD?.jd || '');
   const jobMeta = detectedJD?.meta || {};
 
   if (!jdText) {
