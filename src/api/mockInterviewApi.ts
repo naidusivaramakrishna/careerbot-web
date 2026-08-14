@@ -549,6 +549,7 @@ export interface ReportResponse {
     hr?: number;
     communication?: number;
     confidence?: number;
+    technical?: number;
     [key: string]: number | undefined;
   };
   answers: ReportAnswer[];
@@ -559,6 +560,15 @@ export interface ReportResponse {
   strengths?: string[];
   improvement_areas?: string[];
   created_at: string;
+  // Coding round data (live_technical sessions only)
+  coding_performance?: {
+    score: number;
+    criteria?: Record<string, number>;
+    summary?: string;
+    follow_ups_completed?: number;
+    average_followup_score?: number;
+    [key: string]: unknown;
+  };
   // Computed fields used by UI (may come from backend or derived)
   duration_min?: number;
   question_count?: number;

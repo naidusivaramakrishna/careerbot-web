@@ -83,6 +83,37 @@ function mapReport(api: ReportResponse): UiReport {
     ? Math.round(api.overall_score * 10)
     : api.overall_score;
 
+  // Map coding_performance from API to CodingRoundData
+  let codingRound: CodingRoundData | undefined;
+  if (api.coding_performance) {
+    const perf = api.coding_performance as any;
+    // Convert criteria object to grading_result breakdown format
+    const breakdown: Record<string, { score: number; weight: number }> = {};
+    if (perf.criteria) {
+      Object.entries(perf.criteria).forEach(([key, value]) => {
+        breakdown[key] = { score: value as number, weight: 100 };
+      });
+    }
+    codingRound = {
+      problem_slug: perf.problem_slug ?? "coding-round",
+      problem_title: perf.problem_title ?? "Coding Problem",
+      language: perf.language ?? "python",
+      score: perf.score ?? null,
+      grading_result: perf.summary ? {
+        breakdown,
+        summary: perf.summary as string,
+        suggestions: perf.suggestions ?? [],
+      } : null,
+      time_taken_s: perf.time_taken_s ?? 0,
+      followup_answers: perf.followup_scores ? perf.followup_scores.map((fs: any) => ({
+        attempt_number: fs.attempt_number ?? 0,
+        follow_up_question: fs.follow_up_question ?? fs.question ?? "",
+        score: fs.score ?? 0,
+        max_score: fs.max_score ?? 100,
+      })) : undefined,
+    };
+  }
+
   return {
     session_id: api.session_id,
     date: new Date(api.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
@@ -105,6 +136,7 @@ function mapReport(api: ReportResponse): UiReport {
       { dimension: "HR Readiness", score: Math.round((api.scores?.hr ?? api.scores?.overall ?? 0) * 10) },
       { dimension: "Communication", score: Math.round((api.scores?.communication ?? api.scores?.overall ?? 0) * 10) },
       { dimension: "Confidence", score: Math.round((api.scores?.confidence ?? api.scores?.overall ?? 0) * 10) },
+      ...(api.scores?.technical ? [{ dimension: "Technical", score: Math.round(api.scores.technical * 10) }] : []),
     ],
     strengths: api.strengths ?? [],
     areas_to_improve: api.improvement_areas ?? [],
@@ -116,7 +148,7 @@ function mapReport(api: ReportResponse): UiReport {
       filler_count: a.filler_count ?? 0,
       feedback: a.feedback,
     })),
-    coding_round: (api as unknown as { coding_round?: CodingRoundData }).coding_round,
+    coding_round: codingRound,
   };
 }
 
