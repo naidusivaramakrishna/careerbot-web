@@ -27,22 +27,36 @@ export interface FillResult {
 const RESUME_ID_KEY = "dashboard_resume_id";
 
 export function useResumeProfileFill(userId?: string) {
-  const storageKey = userId ? `${RESUME_ID_KEY}_${userId}` : null;
+  // When userId is provided (dashboard) use a per-user key to prevent cross-account
+  // leakage. When userId is absent (onboarding, pre-auth context) fall back to the
+  // unscoped key so the resume_id is still persisted and available after navigation.
+  const storageKey = userId ? `${RESUME_ID_KEY}_${userId}` : RESUME_ID_KEY;
 
   const [step, setStep] = useState<FillStep>("idle");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FillResult | null>(null);
   const [resumeId, setResumeId] = useState<string | null>(null);
 
-  // Read from localStorage on client mount — keyed by userId so it never
-  // leaks between accounts sharing the same browser.
   useEffect(() => {
-    if (!storageKey) return;
     const stored = localStorage.getItem(storageKey);
-    if (stored) setResumeId(stored);
-  }, [storageKey]);
+    if (stored) {
+      setResumeId(stored);
+      return;
+    }
+    // First scoped read after dashboard loads: migrate any value written under the
+    // unscoped key (e.g. during onboarding) into the scoped key, then remove the
+    // unscoped entry so it cannot leak to a different account on the same browser.
+    if (userId) {
+      const legacy = localStorage.getItem(RESUME_ID_KEY);
+      if (legacy) {
+        setResumeId(legacy);
+        localStorage.setItem(storageKey, legacy);
+        localStorage.removeItem(RESUME_ID_KEY);
+      }
+    }
+  }, [storageKey, userId]);
 
-  const fill = async (file: File) => {
+  const fill = async (file: File): Promise<boolean> => {
     setError(null);
     setResult(null);
 
@@ -54,10 +68,10 @@ export function useResumeProfileFill(userId?: string) {
         uploadResume(file).catch(() => { /* non-fatal — profile tab will be missing but parse continues */ }),
       ]);
 
-      // Persist resume_id for the ATS scan step (user-scoped key)
+      // Persist resume_id for the ATS scan step (scoped or unscoped key)
       if (parsed.resume_id) {
         setResumeId(parsed.resume_id);
-        if (storageKey) localStorage.setItem(storageKey, parsed.resume_id);
+        localStorage.setItem(storageKey, parsed.resume_id);
       }
       const profileData = mapResumeToProfile(parsed);
 
@@ -179,9 +193,11 @@ export function useResumeProfileFill(userId?: string) {
 
       setResult(counts);
       setStep("done");
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process resume");
       setStep("error");
+      return false;
     }
   };
 

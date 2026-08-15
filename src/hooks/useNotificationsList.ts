@@ -7,7 +7,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   getNotifications,
-  Notification,
   NotificationListResponse,
 } from '@/api/notificationsApi';
 
@@ -58,10 +57,13 @@ export function useNotificationsList(initialPage: number = 1, limit: number = 20
 
   return {
     notifications: data?.items || [],
+    totalCount: data?.total || 0,
+    readCount: data?.read_count || 0,
     unreadCount: data?.unread_count || 0,
     pagination: data?.pagination || {
       page: 1,
       limit,
+      total_items: 0,
       total_pages: 0,
       has_next: false,
       has_prev: false,

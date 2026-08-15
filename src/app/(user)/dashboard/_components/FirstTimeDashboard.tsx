@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import Link from "next/link";
 import {
   Activity as ActivityIcon,
+  AlertCircle,
   ArrowRight,
   Briefcase,
   Check,
@@ -24,6 +25,7 @@ import { DashboardSummary, type Activity } from "@/types/dashboard.types";
 import { useResumeProfileFill } from "@/hooks/useResumeProfileFill";
 import { useDashboard } from "@/contexts/DashboardContext";
 import ProfileFillModal from "./ProfileFillModal";
+import { runAtsScan } from "@/api/resumeatsapi";
 
 const SURFACE = "rounded-2xl border border-gray-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.055)]";
 const PAD = "px-5 py-5 sm:px-6";
@@ -422,11 +424,26 @@ const UpgradeNote = ({ lowCredits }: { lowCredits: boolean }) => {
   );
 };
 
-const AtsPopup = ({ score, onClose }: { score: number; onClose: () => void }) => {
-  const scorePct = Math.min(Math.max(score, 0), 100);
+const AtsPopup = ({
+  running,
+  score,
+  error,
+  resumeId,
+  onRetry,
+  onCancel,
+}: {
+  running: boolean;
+  score: number | null;
+  error: string | null;
+  resumeId: string | null;
+  onRetry: () => void;
+  onCancel: () => void;
+}) => {
+  const scorePct = score !== null ? Math.min(Math.max(score, 0), 100) : 0;
   const label = scorePct >= 70 ? "ATS ready" : scorePct >= 40 ? "Needs work" : "High risk";
   const dialogRef = React.useRef<HTMLDivElement>(null);
   const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
+  const reportHref = `/atslogin/report${resumeId ? `?resume_id=${encodeURIComponent(resumeId)}` : ""}`;
 
   React.useEffect(() => {
     previousActiveElementRef.current = document.activeElement as HTMLElement;
@@ -440,21 +457,96 @@ const AtsPopup = ({ score, onClose }: { score: number; onClose: () => void }) =>
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button aria-label="Close ATS report" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="ats-popup-title" tabIndex={-1} className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl" onKeyDown={(event) => event.key === "Escape" && onClose()}>
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3.5 sm:px-5">
-          <h2 id="ats-popup-title" className="text-base font-black text-gray-950">ATS Score Report</h2>
-          <button type="button" onClick={onClose} aria-label="Close ATS report" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-gray-100"><X size={16} /></button>
-        </div>
-        <div className="px-5 py-6 text-center sm:px-6">
-          <p className="text-5xl font-black leading-none text-gray-950">{scorePct}</p>
-          <p className="mt-2 text-sm font-black uppercase text-[#2557a7]">{label}</p>
-          <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-gray-600">Open the full ATS report to review keyword gaps, formatting quality, and recruiter-screening risk.</p>
-          <div className="mt-5 flex gap-3">
-            <Link href="/atslogin" onClick={onClose} className="flex h-10 flex-1 items-center justify-center rounded-xl bg-[#2557a7] text-sm font-black text-white">Full report</Link>
-            <button type="button" onClick={onClose} className="h-10 rounded-xl border border-gray-200 px-4 text-sm font-black text-gray-700">Close</button>
+      {running
+        ? <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+        : <button aria-label="Cancel" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      }
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ats-popup-title"
+        tabIndex={-1}
+        className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden"
+        onKeyDown={(e) => !running && e.key === "Escape" && onCancel()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4" style={{ background: "linear-gradient(135deg, #1f4e98, #2557a7, #5896d7)" }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
+              <ScanSearch size={15} className="text-white" />
+            </div>
+            <div>
+              <p className="text-[10px] text-white/60 font-medium uppercase tracking-wider leading-none mb-0.5">ATS Analysis</p>
+              <p id="ats-popup-title" className="text-sm font-bold text-white leading-none">ATS Score Report</p>
+            </div>
           </div>
+          {!running && (
+            <button onClick={onCancel} aria-label="Cancel" className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+              <X size={14} className="text-white" />
+            </button>
+          )}
         </div>
+
+        {/* Calculating */}
+        {running && (
+          <div className="p-5 flex flex-col items-center gap-4">
+            <div className="relative flex items-center justify-center mt-2" style={{ width: 80, height: 80 }}>
+              <svg width="80" height="80" className="-rotate-90 animate-spin" style={{ animationDuration: "2s" }}>
+                <circle cx="40" cy="40" r="32" fill="none" stroke="#dbeafe" strokeWidth="6" />
+                <circle cx="40" cy="40" r="32" fill="none" stroke="#2557a7" strokeWidth="6" strokeLinecap="round"
+                  strokeDasharray={`${2 * Math.PI * 32 * 0.25} ${2 * Math.PI * 32 * 0.75}`} />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <ScanSearch size={22} style={{ color: "#2557a7" }} />
+              </div>
+            </div>
+            <div className="text-center pb-2">
+              <p className="text-sm font-bold text-gray-900">Calculating your ATS score…</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Analysing your resume against ATS screening criteria</p>
+            </div>
+          </div>
+        )}
+
+        {/* Score */}
+        {!running && score !== null && (
+          <div className="px-5 py-6 text-center sm:px-6">
+            <p className="text-5xl font-black leading-none text-gray-950">{scorePct}</p>
+            <p className="mt-2 text-sm font-black uppercase text-[#2557a7]">{label}</p>
+            <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-gray-600">
+              Open the full ATS report to review keyword gaps, formatting quality, and recruiter-screening risk.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <Link href={reportHref} className="flex h-10 flex-1 items-center justify-center rounded-xl bg-[#2557a7] text-sm font-black text-white">
+                Full report
+              </Link>
+              <button type="button" onClick={onCancel} className="h-10 rounded-xl border border-gray-200 px-4 text-sm font-black text-gray-700">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {!running && error && (
+          <div className="p-5 flex flex-col items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mt-2" style={{ background: "#fef2f2" }}>
+              <AlertCircle size={26} className="text-red-500" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-bold text-gray-900 mb-1">Scan failed</p>
+              <p className="text-[11px] text-gray-400 leading-relaxed">{error}</p>
+            </div>
+            <div className="flex gap-2 w-full pb-1">
+              <button onClick={onRetry} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-opacity hover:opacity-90" style={{ background: "linear-gradient(135deg, #2557a7, #1f4e98)" }}>
+                Try Again
+              </button>
+              <button onClick={onCancel} className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -464,9 +556,14 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { refreshDashboard } = useDashboard();
   const { step, error: fillError, result: fillResult, resumeId, fill, reset } = useResumeProfileFill(data.user.id);
-  const [atsScanLoading, setAtsScanLoading] = useState(false);
-  const [atsScore] = useState<number | null>(data.best_scores.ats_score ?? null);
-  const [showAtsPopup, setShowAtsPopup] = useState(false);
+  // P2 fix: derived from prop so it updates on every silent refresh
+  const atsScore = data.best_scores.ats_score ?? null;
+
+  const [showAtsScanPopup, setShowAtsScanPopup] = useState(false);
+  const [atsScanRunning, setAtsScanRunning] = useState(false);
+  const [atsScanScore, setAtsScanScore] = useState<number | null>(null);
+  const [atsScanError, setAtsScanError] = useState<string | null>(null);
+  const [atsScanDismissed, setAtsScanDismissed] = useState(false);
   const [resumeJustUploaded, setResumeJustUploaded] = useState(false);
 
   // When upload completes, mark step done optimistically and refresh backend data
@@ -485,7 +582,7 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
     progress: {
       ...data.progress,
       resume_uploaded: resumeJustUploaded ? true : data.progress.resume_uploaded,
-      ats_scan_done: atsScore !== null ? true : data.progress.ats_scan_done,
+      ats_scan_done: (atsScore !== null || atsScanDismissed) ? true : data.progress.ats_scan_done,
     },
   };
 
@@ -495,10 +592,18 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
     event.target.value = "";
   };
 
-  const handleAtsScan = async () => {
-    if (atsScore !== null) {
-      setShowAtsPopup(true);
-      return;
+  const executeScan = async () => {
+    if (!resumeId) return;
+    setAtsScanRunning(true);
+    setAtsScanError(null);
+    setAtsScanScore(null);
+    try {
+      const score = await runAtsScan(resumeId);
+      setAtsScanScore(score);
+    } catch (err) {
+      setAtsScanError(err instanceof Error ? err.message : "Failed to calculate ATS score");
+    } finally {
+      setAtsScanRunning(false);
     }
 
     if (!resumeId) {
@@ -509,6 +614,38 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
 
     setAtsScanLoading(true);
     window.location.href = `/atslogin/report?resume_id=${encodeURIComponent(resumeId)}`;
+  };
+
+  const handleAtsScan = () => {
+    if (atsScore !== null) {
+      // Existing backend score — show popup immediately with it
+      setAtsScanScore(atsScore);
+      setAtsScanError(null);
+      setAtsScanRunning(false);
+      setShowAtsScanPopup(true);
+      return;
+    }
+
+    if (!resumeId) {
+      toast.info("Upload or parse a resume first, then your ATS report will be ready.");
+      window.location.href = "/atslogin";
+      return;
+    }
+
+    // Open popup immediately in calculating state, run scan in background
+    setAtsScanScore(null);
+    setAtsScanError(null);
+    setShowAtsScanPopup(true);
+    executeScan();
+  };
+
+  const handleAtsScanCancel = () => {
+    setShowAtsScanPopup(false);
+    // If a fresh scan just completed, advance step 4 optimistically and pull fresh data
+    if (atsScore === null && atsScanScore !== null) {
+      setAtsScanDismissed(true);
+      refreshDashboard();
+    }
   };
 
   const primaryAction: DashboardAction = lowCredits
@@ -545,7 +682,6 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
               cta: "Run ATS scan",
               meta: data.recommended_step.estimated_time || "~1 minute",
               onClick: handleAtsScan,
-              loading: atsScanLoading,
               Icon: ScanSearch,
             }
           : {
@@ -571,7 +707,16 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
         />
       )}
 
-      {showAtsPopup && atsScore !== null && <AtsPopup score={atsScore} onClose={() => { setShowAtsPopup(false); refreshDashboard(); }} />}
+      {showAtsScanPopup && (
+        <AtsPopup
+          running={atsScanRunning}
+          score={atsScanScore}
+          error={atsScanError}
+          resumeId={resumeId}
+          onRetry={executeScan}
+          onCancel={handleAtsScanCancel}
+        />
+      )}
 
       <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-gray-950 sm:px-6 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-[1320px] space-y-5">

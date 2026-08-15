@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   TrendingUp, ThumbsUp, ThumbsDown, AlertTriangle, Mic, Clock, Zap, Pause,
-  ChevronDown, ChevronUp, RotateCcw, Star,
+  ChevronDown, ChevronUp, RotateCcw, Star, WifiOff,
 } from "lucide-react";
 import { rateAnswerFeedback } from "@/api/mockInterviewApi";
 
@@ -28,6 +28,7 @@ export interface FeedbackCardProps {
   attemptNumber?: number;
   feedback?: string;
   answerId?: string;
+  evaluationFailed?: boolean;
 }
 
 function ScoreBar({ score = 0 }: { score: number }) {
@@ -176,6 +177,7 @@ export default function FeedbackCard({
   attemptNumber,
   feedback,
   answerId,
+  evaluationFailed,
 }: FeedbackCardProps) {
   const [showImproved, setShowImproved] = useState(false);
   const [ratingState, setRatingState] = useState<"idle" | "up" | "down">("idle");

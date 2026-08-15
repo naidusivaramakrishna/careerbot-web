@@ -237,15 +237,7 @@ export default function ResumeLandingPage() {
       const status = error.response?.status;
       const detail = (error.response?.data?.detail || error.message || "").toLowerCase();
 
-      // Server is the source of truth. The upfront `!isAuthenticated` guard uses
-      // a MOUNT-TIME snapshot (useAuth runs its check once, useEffect(…, [])),
-      // so on a long-lived landing page the session can expire while the flag
-      // still reads true -- the guard passes and the API returns 401/403. Without
-      // this branch that fell through to a generic "please try again" with no
-      // route back to sign-in, and the user could only retry forever.
-      if (status === 401 || (status === 403 && (detail.includes("auth") || detail.includes("sign")))) {
-        setShowSignin(true);
-      } else if (
+      if (
         status === 409 ||
         detail.includes("already") ||
         detail.includes("limit") ||

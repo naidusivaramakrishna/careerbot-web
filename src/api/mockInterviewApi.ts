@@ -448,15 +448,17 @@ export const generateTechnicalQuestions = async (
 // ==================== HR QUESTIONS ====================
 
 export interface HrQuestion {
-  question_id: string;
-  question_text: string;
+  id: string;
+  text: string;
   category: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  time_limit_seconds: number;
+  key_points: string[];
+  time_limit_s: number;
 }
 
 export interface GenerateHrQuestionsResponse {
+  session_id: string;
   questions: HrQuestion[];
+  round_number: number;
 }
 
 /**
@@ -476,18 +478,11 @@ export const generateHrQuestions = async (
 // ==================== MR / TR QUESTIONS ====================
 
 export interface MrTrQuestion {
-  question_id: string;
-  question_text: string;
+  id: string;
+  text: string;
   category: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  time_limit_seconds: number;
-  evaluation_focus: string[];
-  // TR-only fields
-  skill_tag?: string;
-  question_type?: string;
-  key_points?: string[];
-  // MR-only fields
-  competency?: string;
+  key_points: string[];
+  time_limit_s: number;
 }
 
 export interface GenerateMrTrQuestionsRequest {
@@ -504,11 +499,9 @@ export interface GenerateMrTrQuestionsRequest {
 }
 
 export interface GenerateMrTrQuestionsResponse {
-  mode: string;
+  session_id: string;
   questions: MrTrQuestion[];
-  total_questions: number;
-  requested_questions: number;
-  skill_coverage?: Record<string, number>;
+  round_number: number;
 }
 
 /**
@@ -632,9 +625,12 @@ export const downloadReportPdf = async (sessionId: string): Promise<void> => {
 // ==================== PHASE 3 — LIVE INTERVIEW INTERFACES ====================
 
 export interface LiveCreateRequest {
-  session_type: 'hr' | 'technical' | 'mixed' | 'technical_coding';
+  session_type: 'hr' | 'technical' | 'managerial' | 'technical_coding';
   resume_id?: string;
+  target_role?: string;
   enable_streaming_stt?: boolean;
+  voice?: string;
+  use_orchestrator?: boolean;
 }
 
 export interface LiveCreateResponse {
@@ -704,7 +700,7 @@ export type WsClientMessage =
 // ── WS Message types (server → client) ──
 export type WsServerMessage =
   | { type: 'session_ready'; session_id: string; total_questions: number; estimated_duration_m: number }
-  | { type: 'session_resumed'; session_id: string; questions_asked: number; total_questions: number; current_question: string }
+  | { type: 'session_resumed'; session_id: string; questions_asked: number; total_questions: number; current_question: string; pending_answer?: boolean; resumed_from_event_id?: number }
   | { type: 'question_audio'; question_number: number; text: string; audio: string | null; time_limit_s: number; is_follow_up?: boolean; audio_format?: string; sample_rate?: number; duration_ms?: number; lip_sync?: LipSyncPayload | null }
   | { type: 'transcript_partial'; text: string; new_word?: string; word_index?: number; timestamp_ms?: number; is_final?: boolean }
   | { type: 'transcript_final'; text: string; is_final: true }
@@ -730,6 +726,33 @@ export const createLiveSession = async (data: LiveCreateRequest): Promise<LiveCr
     data as unknown as Record<string, unknown>
   );
   return response.data;
+};
+
+/**
+ * Submit the proctoring video for a completed live session.
+ * POST /api/v1/mock-interview/evaluate-video  (multipart/form-data)
+ * Fields: session_id, file
+ */
+export const evaluateLiveSessionVideo = async (
+  sessionId: string,
+  video: Blob,
+): Promise<void> => {
+  const cleanType = (video.type || 'video/mp4').split(';')[0];
+  const cleanBlob = video.type === cleanType ? video : new Blob([video], { type: cleanType });
+  const ext = cleanType.includes('mp4') ? 'mp4' : 'webm';
+
+  const formData = new FormData();
+  formData.append('session_id', sessionId);
+  formData.append('file', cleanBlob, `session-${sessionId}.${ext}`);
+
+  await httpClient.post(
+    '/mock-interview/evaluate-video',
+    formData,
+    {
+      headers: { 'Content-Type': undefined as unknown as string },
+      timeout: 15 * 60 * 1000,
+    },
+  );
 };
 
 /**
