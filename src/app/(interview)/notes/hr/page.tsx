@@ -32,7 +32,18 @@ const HOW_IT_WORKS = [
     icon: BarChart2,
     title: "Round-based recall",
     body: "Start with your prepared notes, then move to keywords only for interview-like recall.",
+  },
 ];
+
+// STOPGAP - needs real content before this page ships.
+// technical/page.tsx and managerial/page.tsx both declare a TIPS array of
+// round-specific advice strings here; hr/page.tsx referenced `tips={TIPS}`
+// (line ~70) without ever declaring it, which is a ReferenceError the moment
+// the page renders. tsc is advisory in CI and next.config.ts sets
+// ignoreBuildErrors, so the build goes green and the page still crashes.
+// An empty array renders the section empty instead of crashing. Replace it
+// with five HR-round tips, matching the sibling pages.
+const TIPS: string[] = [];
 
 const HR_QUESTIONS_KEY = "hr_generated_questions";
 

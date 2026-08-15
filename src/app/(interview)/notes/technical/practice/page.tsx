@@ -67,22 +67,6 @@ function TechnicalPracticeContent() {
   const [currentAnswer, setCurrentAnswer] = useState<AnswerState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  const showSubmitError = useCallback((msg: string) => {
-    if (errorDismissRef.current) clearTimeout(errorDismissRef.current);
-    setSubmitError(msg);
-    errorDismissRef.current = setTimeout(() => setSubmitError(null), 5000);
-  }, []);
-
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [sessionError, setSessionError] = useState<string | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answeredMap, setAnsweredMap] = useState<Record<string, AnswerState>>({});
-  const [currentAnswer, setCurrentAnswer] = useState<AnswerState>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const showSubmitError = useCallback((msg: string) => {
