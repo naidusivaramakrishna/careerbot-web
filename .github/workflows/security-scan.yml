@@ -54,6 +54,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # A self-hosted runner keeps /tmp between jobs; a GitHub-hosted one does
+      # not. gitleaks-action downloads to a fixed /tmp/gitleaks.tmp and refuses
+      # to overwrite an existing file, so the first self-hosted run succeeded
+      # and every run after it failed with "Destination file path
+      # /tmp/gitleaks.tmp already exists". Clear it before each run.
+      - name: Clear stale gitleaks download (self-hosted /tmp persists)
+        run: rm -rf /tmp/gitleaks.tmp /tmp/gitleaks-*
+
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
