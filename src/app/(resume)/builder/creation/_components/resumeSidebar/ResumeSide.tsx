@@ -396,32 +396,12 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     if (activeSection === index) setActiveSection(null);
 
     // Clear section data from resumeData so the preview updates immediately
-    if (removed.name === "Declaration") {
-      // Declaration has three top-level fields, not an array
-      setResumeData((prev) => ({
-        ...prev,
-        declaration: undefined,
-        declarationDate: undefined,
-        declarationPlace: undefined,
-      }));
-    } else {
-      const dataKey = SECTION_DATA_KEY_MAP[removed.name];
-      if (dataKey) {
-        // UNION of both branches' key sets. #42 dropped databases/tools/
-        // cloud_platforms (they move into custom_skills post-migration) and
-        // added project_management/marketing_sales; #40 kept the legacy trio.
-        // Clearing a section should blank EVERY key a stored resume might
-        // carry, so a half-migrated document does not keep stale skills in
-        // whichever keys this omitted.
-        const emptyValue = dataKey === "categorizedSkills"
-          ? {
-              programming_languages: [], frameworks: [],
-              databases: [], tools: [], cloud_platforms: [],
-              soft_skills: [], project_management: [], marketing_sales: [],
-            }
-          : [];
-        setResumeData((prev) => ({ ...prev, [dataKey]: emptyValue }));
-      }
+    const dataKey = SECTION_DATA_KEY_MAP[removed.name];
+    if (dataKey) {
+      const emptyValue = dataKey === "categorizedSkills"
+        ? { programming_languages: [], frameworks: [], soft_skills: [], project_management: [], marketing_sales: [] }
+        : [];
+      setResumeData((prev) => ({ ...prev, [dataKey]: emptyValue }));
     }
 
     // Remove from sectionOrder so it doesn't come back on refresh

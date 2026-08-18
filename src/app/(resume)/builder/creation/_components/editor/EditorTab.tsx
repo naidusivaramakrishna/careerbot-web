@@ -538,12 +538,10 @@ const EditorTab: React.FC<Props> = ({
 
     // ProfessionalSummary writes directly to resumeData context, not formData
     if (openModalSection === "Professional Summary") {
-      const targetRole = resumeData.professionalSummary?.targetRole?.trim() || "";
       const summary = resumeData.professionalSummary?.summary?.trim() || "";
       const newErrors: Record<string, string> = {};
-      if (!targetRole) newErrors["targetRole"] = "This field is required";
       if (!summary) newErrors["summary"] = "This field is required";
-      return { isValid: !targetRole ? false : !summary ? false : true, newErrors };
+      return { isValid: !!summary, newErrors };
     }
 
     const sectionFields = getSectionFields(openModalSection);

@@ -17,17 +17,11 @@ export function useAISuggestions() {
     setLoadingIndex(index);
 
     try {
-      const text = await generateAIDescription(type, prompt);
-
-      const options = text
-        .split(/\n+/)
-        .map((s: string) => s.trim())
-        .filter((s: string) => s.length > 0)
-        .slice(0, 5);
+      const options = await generateAIDescription(type, prompt);
 
       setSuggestions((prev) => ({
         ...prev,
-        [index]: options.length > 0 ? options : [text],
+        [index]: options,
       }));
       setActivePopup(index);
     } catch (err) {

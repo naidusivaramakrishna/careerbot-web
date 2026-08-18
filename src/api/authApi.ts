@@ -1,5 +1,6 @@
 import { httpClient } from "@/lib/http";
 import { getTenantId, setTenantForEmail, getTenantByEmail } from '@/lib/tenantStorage';
+import { clearUnscopedJobTrackingData } from '@/utils/jobTracking';
 
 export interface LoginRequest {
   email: string;
@@ -108,9 +109,31 @@ export const signOut = async () => {
   localStorage.removeItem('token_last_refreshed_at');
   localStorage.removeItem('uploaded_resume_filename');
 
-  ['jm_matchResults', 'jm_parsedResumeData', 'jm_parsedJDData', 'jm_jdText', 'last_resume_path', 'builder_fresh_start'].forEach(
-    (key) => sessionStorage.removeItem(key)
-  );
+  // Job tracking's unscoped savedJobs/appliedJobs buckets are shared across
+  // every account on this browser (see jobTracking.ts's scopedKey) — must be
+  // cleared here or a leftover record can get folded into the next account
+  // that signs in, since the scoped buckets (savedJobs:<userId>) are per-user
+  // and correctly left alone.
+  clearUnscopedJobTrackingData();
+
+  ['last_resume_path', 'builder_fresh_start'].forEach((key) => sessionStorage.removeItem(key));
+
+  // Job Match session state: sweep by PREFIX, not by allow-list.
+  //
+  // This used to name each jm_* key explicitly, which meant a newly added key
+  // was RETAINED BY DEFAULT. jm_analysisDraft was added with the analysis-draft
+  // feature and never registered here, so an analysis draft built from one
+  // user's resume and JD survived sign-out and was restored on mount for the
+  // next user signing in to the SAME TAB (AnalysisContent.tsx reads it on
+  // mount). sessionStorage is per-tab but explicitly survives logout -> login.
+  //
+  // A prefix sweep cannot drift the way the list did. Every jm_* key is Job
+  // Match session state and none of them may outlive the session.
+  // Iterate backwards: removeItem() re-indexes the store as it goes.
+  for (let i = sessionStorage.length - 1; i >= 0; i--) {
+    const k = sessionStorage.key(i);
+    if (k?.startsWith('jm_')) sessionStorage.removeItem(k);
+  }
   window.location.href = "/";
 };
 

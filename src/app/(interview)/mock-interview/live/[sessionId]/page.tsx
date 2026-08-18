@@ -6,11 +6,13 @@ import { useRouter, useParams } from "next/navigation";
 import {
   buildWsUrl,
   getLiveSessionState,
+  evaluateLiveSessionVideo,
   WsServerMessage,
   WsClientMessage,
   LiveCreateResponse,
 } from "@/api/mockInterviewApi";
 import type { LipSyncPayload, LipSyncViseme, LipSyncWord } from "@/api/mockInterviewApi";
+import { MOCK_INTERVIEWERS, isValidInterviewerIndex, pickInterviewerIndex } from "../../_lib/interviewers";
 import { CodingTransition } from "@/components/interview/CodingTransition";
 import { CodingStep } from "@/components/interview/CodingStep";
 import type { SubmitSolutionResponse } from "@/app/coding-test/_lib/types";
@@ -204,40 +206,30 @@ interface ScoreToast {
   score: number;
 }
 
-const INTERVIEWERS = [
-  {
-    name: "Arjun",
-    role: "Senior HR Interviewer",
-    src: "/images/ai-interviewer-room-male-01.png",
-  },
-  {
-    name: "Rahul",
-    role: "Technical Interview Panelist",
-    src: "/images/ai-interviewer-room-male-02.png",
-  },
-  {
-    name: "Meera",
-    role: "Senior HR Interviewer",
-    src: "/images/ai-interviewer-room-female-01.png",
-  },
-  {
-    name: "Nisha",
-    role: "Product Engineering Interviewer",
-    src: "/images/ai-interviewer-room-female-02.png",
-  },
-] as const;
-
-function pickInterviewerIndex(sessionId: string) {
-  if (!sessionId) return 0;
-
-  let hash = 0;
-  for (let i = 0; i < sessionId.length; i += 1) {
-    hash = (hash + sessionId.charCodeAt(i) * (i + 1)) % INTERVIEWERS.length;
-  }
-
-  return hash;
+interface StoredInterviewerSelection {
+  session_id?: string;
+  interviewer_index?: number;
+  interviewer_name?: string;
+  gender?: string;
+  voice?: string;
 }
 
+function readStoredInterviewerIndex(sessionId: string) {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const rawSelection = sessionStorage.getItem("live_session_interviewer");
+    if (!rawSelection) return null;
+
+    const selection = JSON.parse(rawSelection) as StoredInterviewerSelection;
+    if (selection.session_id && selection.session_id !== sessionId) return null;
+    if (!isValidInterviewerIndex(selection.interviewer_index)) return null;
+
+    return selection.interviewer_index;
+  } catch {
+    return null;
+  }
+}
 // ─── Animated waveform for AI talking ────────────────────────────────────────
 
 const AI_WAVE_BARS = [18, 30, 24, 38, 22, 34, 28, 20, 36, 26, 32, 22];
@@ -668,7 +660,7 @@ export default function LiveInterviewSessionPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
-  const interviewer = useMemo(() => INTERVIEWERS[pickInterviewerIndex(sessionId)], [sessionId]);
+  const interviewer = useMemo(() => MOCK_INTERVIEWERS[readStoredInterviewerIndex(sessionId) ?? pickInterviewerIndex(sessionId)], [sessionId]);
 
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
   const [sessionType, setSessionType] = useState("Live");
@@ -758,7 +750,11 @@ export default function LiveInterviewSessionPage() {
   const [cameraError, setCameraError] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Turn the webcam on automatically when the live interview opens
+  // Proctoring video recording — captured throughout the session, submitted on completion
+  const videoRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoChunksRef = useRef<Blob[]>([]);
+
+  // Turn the webcam on automatically when the live interview opens, and start proctoring recording
   useEffect(() => {
     let cancelled = false;
     let localStream: MediaStream | null = null;
@@ -772,12 +768,41 @@ export default function LiveInterviewSessionPage() {
         localStream = stream;
         setCameraStream(stream);
         setCameraError(false);
+
+        // Start proctoring recorder — prefer MP4 so the evaluator can decode it reliably
+        const mimeType = MediaRecorder.isTypeSupported("video/mp4")
+          ? "video/mp4"
+          : MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+          ? "video/webm;codecs=vp9"
+          : "video/webm";
+        try {
+          const recorder = new MediaRecorder(stream, { mimeType });
+          videoChunksRef.current = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) videoChunksRef.current.push(e.data);
+          };
+          recorder.onstop = () => {
+            // Actual submission is triggered by the completion effect; nothing to do here
+          };
+          recorder.start(5000); // flush a chunk every 5 s so partial data survives tab crashes
+          videoRecorderRef.current = recorder;
+        } catch {
+          // Recording failed to start — non-fatal; the interview continues without proctoring
+        }
       })
       .catch(() => {
         if (!cancelled) setCameraError(true);
       });
     return () => {
       cancelled = true;
+      // Null out the onstop handler so cleanup stop doesn't race with completion submission
+      if (videoRecorderRef.current) {
+        videoRecorderRef.current.onstop = null;
+        if (videoRecorderRef.current.state !== "inactive") {
+          videoRecorderRef.current.stop();
+        }
+        videoRecorderRef.current = null;
+      }
       localStream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
@@ -814,12 +839,33 @@ export default function LiveInterviewSessionPage() {
     }
   }, []);
 
-  // Release camera + exit fullscreen when the interview finishes
+  // When the interview finishes: stop the proctoring recorder, submit the video, release camera
   useEffect(() => {
     if (phase !== "completed") return;
+
+    const recorder = videoRecorderRef.current;
+    if (recorder) {
+      const submit = () => {
+        const chunks = videoChunksRef.current;
+        if (chunks.length === 0) return;
+        const mt = (recorder.mimeType || "video/mp4").split(";")[0];
+        const blob = new Blob(chunks, { type: mt });
+        evaluateLiveSessionVideo(sessionId, blob).catch(() => {}); // fire-and-forget
+      };
+
+      if (recorder.state !== "inactive") {
+        recorder.onstop = submit;
+        recorder.stop();
+      } else {
+        // Recorder already stopped (e.g. stream was cut mid-session) but chunks are buffered
+        submit();
+      }
+      videoRecorderRef.current = null;
+    }
+
     cameraStream?.getTracks().forEach((t) => t.stop());
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  }, [phase, cameraStream]);
+  }, [phase, cameraStream, sessionId]);
 
   // Leave fullscreen if the user navigates away mid-interview
   useEffect(() => {
@@ -839,6 +885,12 @@ export default function LiveInterviewSessionPage() {
   const [showReconnectModal, setShowReconnectModal] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const MAX_RECONNECT = 3;
+
+  // Reconnect state kept in refs to avoid stale-closure issues inside WS callbacks
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTokenRef = useRef<string | null>(null);   // token from session_paused
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastEventIdRef = useRef<number>(0);                // event dedup baseline
 
   const [scoreToast, setScoreToast] = useState<ScoreToast | null>(null);
   const scoreToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1015,6 +1067,22 @@ export default function LiveInterviewSessionPage() {
     scoreToastTimerRef.current = setTimeout(() => setScoreToast(null), 4000);
   }, []);
 
+  // Stable ref so onclose/session_paused can call doReconnect without stale closures.
+  // The real implementation is assigned after doReconnect is defined below.
+  const doReconnectRef = useRef<() => void>(() => {});
+
+  // Tracks whether session_ready was ever received — used to distinguish
+  // an initial-connection failure (ticket expired) from a mid-session drop.
+  const sessionReadyRef = useRef(false);
+
+  // Stable router ref so the onclose callback never captures a stale router.
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
+
+  // Survives React StrictMode double-mount: stores the authenticated WS URL so
+  // the second mount uses the ticket even after sessionStorage was cleared.
+  const initialWsUrlRef = useRef<string | null>(null);
+
   const handleWsMessage = useCallback((msg: WsServerMessage) => {
     switch (msg.type) {
       case "coding_round_start":
@@ -1027,17 +1095,34 @@ export default function LiveInterviewSessionPage() {
         setShowCodingTransition(true);
         return;
       case "session_ready":
+        sessionReadyRef.current = true;
         setTotalQuestions(msg.total_questions);
         setServerError(null);
         setWsConnected(true);
         break;
-      case "session_resumed":
+      case "session_resumed": {
+        // Reset reconnect tracking for future disconnects
+        reconnectAttemptRef.current = 0;
+        setReconnectAttempt(0);
+        // Establish dedup baseline so replayed events are ignored
+        lastEventIdRef.current = msg.resumed_from_event_id ?? 0;
+
         setTotalQuestions(msg.total_questions);
         setQuestionNumber(msg.questions_asked + 1);
+        // Restore the current question text (not just the number)
+        if (msg.current_question) {
+          setCurrentQuestion({ number: msg.questions_asked + 1, text: msg.current_question });
+        }
         setServerError(null);
         setWsConnected(true);
         setShowReconnectModal(false);
+        // If the candidate was mid-answer when the connection dropped, restore listening phase
+        if (msg.pending_answer) {
+          setPhase("listening");
+          startTimer(120); // fallback limit; server will send time_limit_s with next question if answer is finished
+        }
         break;
+      }
       case "question_audio": {
         const lipSync = msg.lip_sync ?? null;
         const usesTimedReveal = Boolean(msg.audio && !isAudioMutedRef.current && hasUsableWordTiming(lipSync));
@@ -1090,6 +1175,15 @@ export default function LiveInterviewSessionPage() {
       case "session_paused":
         setWsConnected(false);
         setShowReconnectModal(true);
+        // Capture token so the reconnect path skips the HTTP /state round-trip
+        if (msg.reconnect_token) reconnectTokenRef.current = msg.reconnect_token;
+        // Auto-reconnect immediately — the server is about to close the WS;
+        // we want to fire before onclose so the timer is already set when it arrives.
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          doReconnectRef.current();
+        }, 500);
         break;
       case "error":
         setServerError(msg.message || "The interview service reported an issue. You can retry or end for a partial report.");
@@ -1111,47 +1205,79 @@ export default function LiveInterviewSessionPage() {
 
     ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data) as WsServerMessage;
-        handleWsMessage(msg);
+        const raw = JSON.parse(event.data) as WsServerMessage & { event_id?: number };
+        // Skip replayed frames sent by the server after reconnect (dedup by event_id)
+        if (raw.event_id !== undefined) {
+          if (raw.event_id <= lastEventIdRef.current) return;
+          lastEventIdRef.current = raw.event_id;
+        }
+        handleWsMessage(raw);
       } catch { /* ignore malformed frames */ }
     };
 
     ws.onclose = (event) => {
       setWsConnected(false);
-      if (event.code !== 1000 && event.code !== 1001) {
+
+      // Clean close — interview ended normally; do not reconnect
+      if (event.code === 1000 || event.code === 1001) return;
+
+      // Terminal server codes — the token/session is gone; reconnecting would fail.
+      // If session_ready was never received this is an initial-connection failure
+      // (e.g. ticket expired during StrictMode remount or slow navigation): redirect
+      // back to the setup page so the user can get a fresh ticket.
+      const TERMINAL_CODES = [4001, 4002, 4003];
+      if (TERMINAL_CODES.includes(event.code)) {
+        if (!sessionReadyRef.current) {
+          routerRef.current.replace('/mock-interview/live');
+          return;
+        }
         setShowReconnectModal(true);
+        reconnectAttemptRef.current = MAX_RECONNECT + 1; // force "Connection Failed" state in modal
+        setReconnectAttempt(MAX_RECONNECT + 1);
+        return;
+      }
+
+      // Abnormal drop — auto-reconnect unless session_paused already scheduled it
+      setShowReconnectModal(true);
+      if (!reconnectTimerRef.current) {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          doReconnectRef.current();
+        }, 1500); // brief delay to let the network stabilise
       }
     };
 
     ws.onerror = () => {
+      // onerror is always followed by onclose; rely on onclose to drive reconnect
       setWsConnected(false);
-      setShowReconnectModal(true);
     };
   }, [handleWsMessage]);
 
-  // On mount: read session data from sessionStorage and open WebSocket
+  // On mount: read session data from sessionStorage and open WebSocket.
+  // initialWsUrlRef survives StrictMode double-mount: the first mount reads and
+  // removes sessionStorage, saves the ticket URL to the ref, then opens the WS.
+  // The second mount (StrictMode remount) skips sessionStorage and reuses the ref.
   useEffect(() => {
     if (!sessionId) return;
 
-    try {
-      const raw = sessionStorage.getItem("live_session_data");
-      if (raw) {
-        const data = JSON.parse(raw) as LiveCreateResponse;
-        if (data.session_id === sessionId) {
-          sessionStorage.removeItem("live_session_data");
-          // Append one-time ticket for WS authentication if not already in the URL
-          const wsUrl = data.ticket_id && !data.ws_url.includes('ticket=')
-            ? `${data.ws_url}${data.ws_url.includes('?') ? '&' : '?'}ticket=${data.ticket_id}`
-            : data.ws_url;
-          openWebSocket(wsUrl);
-          return;
+    if (!initialWsUrlRef.current) {
+      try {
+        const raw = sessionStorage.getItem("live_session_data");
+        if (raw) {
+          const data = JSON.parse(raw) as LiveCreateResponse;
+          if (data.session_id === sessionId) {
+            sessionStorage.removeItem("live_session_data");
+            const wsUrl = data.ticket_id && !data.ws_url.includes('ticket=')
+              ? `${data.ws_url}${data.ws_url.includes('?') ? '&' : '?'}ticket=${data.ticket_id}`
+              : data.ws_url;
+            initialWsUrlRef.current = wsUrl;
+          }
         }
-      }
-    } catch { /* ignore parse error */ }
+      } catch { /* ignore parse error */ }
+    }
 
-    // Fallback: construct ws path directly
-    const wsPath = `/api/v1/mock-interview/live/${sessionId}`;
-    openWebSocket(wsPath);
+    const wsUrl = initialWsUrlRef.current ?? `/api/v1/mock-interview/live/${sessionId}`;
+    openWebSocket(wsUrl);
   }, [sessionId, openWebSocket]);
 
   useEffect(() => {
@@ -1185,20 +1311,43 @@ export default function LiveInterviewSessionPage() {
     setPhase("completed");
   }, [stopTimer, wsSend]);
 
-  const handleReconnect = useCallback(async () => {
-    const next = reconnectAttempt + 1;
-    setReconnectAttempt(next);
-    if (next > MAX_RECONNECT || !sessionId) return;
+  const doReconnect = useCallback(async () => {
+    if (!sessionId) return;
+
+    reconnectAttemptRef.current += 1;
+    const attempt = reconnectAttemptRef.current;
+    setReconnectAttempt(attempt);
+
+    if (attempt > MAX_RECONNECT) return; // all attempts exhausted — modal shows "Connection Failed"
 
     try {
-      const state = await getLiveSessionState(sessionId);
-      if (!state.can_reconnect || !state.reconnect_token) return;
+      // Prefer the token captured from session_paused (avoids an HTTP round-trip inside the narrow reconnect window)
+      let token = reconnectTokenRef.current;
+      reconnectTokenRef.current = null; // consume it
 
-      const wsPath = `/api/v1/mock-interview/live/${sessionId}?ticket=${state.reconnect_token}`;
+      if (!token) {
+        const state = await getLiveSessionState(sessionId);
+        if (!state.can_reconnect || !state.reconnect_token) {
+          // Session expired or ended — abandon to partial report
+          router.push(`/mock-interview/report/${sessionId}`);
+          return;
+        }
+        token = state.reconnect_token;
+      }
+
+      const wsPath = `/api/v1/mock-interview/live/${sessionId}?ticket=${token}`;
       openWebSocket(wsPath);
-      setShowReconnectModal(false);
-    } catch { /* leave modal open */ }
-  }, [reconnectAttempt, sessionId, openWebSocket]);
+      // Modal stays open until session_resumed confirms success
+    } catch { /* leave modal open; next auto-attempt fires from new WS onclose */ }
+  }, [sessionId, openWebSocket, router]);
+
+  // Keep doReconnectRef current so onclose/setTimeout callbacks never hold stale closures
+  useEffect(() => { doReconnectRef.current = doReconnect; }, [doReconnect]);
+
+  // Manual retry button in ReconnectModal
+  const handleReconnect = useCallback(() => {
+    doReconnect();
+  }, [doReconnect]);
 
   const isQuestionBeingSpoken = phase === "ai-talking" || phase === "follow-up";
   const questionTextForDisplay = currentQuestion

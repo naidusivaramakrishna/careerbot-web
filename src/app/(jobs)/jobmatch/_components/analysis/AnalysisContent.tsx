@@ -1,22 +1,74 @@
 "use client";
 
 import React from "react";
-import MultiColorCircularScore from "@/app/(resume)/builder/creation/_components/score/MultiColorCircularScore";
 import ResumePreview from "../resume/ResumePreview";
 import { AnalysisContentProps } from "../_types";
 import {
   FileText, Download, Pencil, User, Briefcase, GraduationCap,
   Star, Award, ArrowLeft, ChevronRight, BookOpen, Trophy,
-  Heart, Building2, Plus, Globe, AlignLeft, Users,
+  Heart, Building2, Plus, Globe, AlignLeft, Users, X,
 } from "lucide-react";
 import { FaCheckCircle } from "react-icons/fa";
 import { RiSparkling2Fill } from "react-icons/ri";
 import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
 import JDHighlighter from "../highlighter/JDHighlighter";
-import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, parserAddSkills, parserRemoveSkills, matcherUpdateSections } from "@/api/parserApi";
+import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, matcherUpdateSections, matchResumeAndJD } from "@/api/parserApi";
 import { toast } from "sonner";
 import ScoreBreakdown from "./ScoreBreakdown";
 import MatchPenalties from "./MatchPenalties";
+import JobMatchScoreGauge from "./JobMatchScoreGauge";
+
+const ANALYSIS_DRAFT_KEY = "jm_analysisDraft";
+
+// Contact fields (email/phone/location) can only be written back onto a
+// parser-sourced resume through the suggestion-apply endpoint — matcherEnhanceApply
+// resolves `suggest_add_contact_{field}` server-side (job_matcher.py's
+// _resolve_contact_fix) and writes straight to the resume the download reads.
+// PATCH /resumes/{id} (the Resume Builder's own update route) looks like the
+// obvious choice but hard-rejects any resume with source: "ai_parse" — every
+// resume that reaches JobMatch — so that path 404s even though the resume is
+// real. This only resolves a field while there's still a pending
+// "suggest_add_contact_<field>" suggestion for it (i.e. it was detected
+// missing); there's no backend path yet to edit an already-present field.
+const CONTACT_SUGGESTION_PREFIX = "suggest_add_contact_";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pendingContactSuggestions(matchResult: any): Record<string, string> {
+  const penalties = matchResult?.Match_Penalties?.penalties ?? [];
+  const byField: Record<string, string> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const p of penalties as any[]) {
+    const sid = p?.suggestion_id;
+    if (typeof sid === "string" && sid.startsWith(CONTACT_SUGGESTION_PREFIX)) {
+      byField[sid.slice(CONTACT_SUGGESTION_PREFIX.length)] = sid;
+    }
+  }
+  return byField;
+}
+
+interface AnalysisDraft {
+  matchId?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  resumeSections: Record<string, any>;
+  activeSectionIds: string[];
+  deletedSectionIds: string[];
+  customSections: { id: string; label: string }[];
+  addedSkillFields: string[];
+  highlightFields: Record<string, string[]>;
+  liveScore: number;
+}
+
+function readAnalysisDraft(matchId?: string): AnalysisDraft | null {
+  try {
+    if (!matchId) return null;
+    const raw = sessionStorage.getItem(ANALYSIS_DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as AnalysisDraft;
+    return draft.matchId === matchId ? draft : null;
+  } catch {
+    return null;
+  }
+}
 
 // All possible predefined sections
 const ALL_SECTIONS = [
@@ -34,6 +86,104 @@ const ALL_SECTIONS = [
   { id: "hobbies",          label: "Hobbies",               icon: AlignLeft,    hasAI: true  },
   { id: "references",       label: "References",            icon: Users,        hasAI: false },
 ];
+
+// Best-effort local mirror of a bullet-text rewrite the backend just applied
+// to the resume document (job title / summary already overwrite one known
+// field, but a bullet rewrite can live inside experience/internships/projects
+// under several different field names depending on the source template).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function replaceInValue(val: any, before: string, after: string): any {
+  if (typeof val === "string") {
+    return val.includes(before) ? val.split(before).join(after) : val;
+  }
+  if (Array.isArray(val)) {
+    return val.map((v) => replaceInValue(v, before, after));
+  }
+  if (val && typeof val === "object") {
+    const out = { ...val };
+    for (const key of ["description", "details", "responsibilities", "achievements", "text", "value", "bullet"]) {
+      if (key in out) out[key] = replaceInValue(out[key], before, after);
+    }
+    return out;
+  }
+  return val;
+}
+
+// Read-only counterpart to replaceInValue/replaceBulletText below — finds which
+// (section, idx) items still contain a not-yet-applied suggestion's "before"
+// text, so the preview can red-highlight them. Mirrors the same field-name
+// list so an item stops matching (and the red highlight clears) the instant
+// replaceBulletText actually rewrites it.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function containsInValue(val: any, needle: string): boolean {
+  if (typeof val === "string") return val.includes(needle);
+  if (Array.isArray(val)) return val.some((v) => containsInValue(v, needle));
+  if (val && typeof val === "object") {
+    return ["description", "details", "responsibilities", "achievements", "text", "value", "bullet"]
+      .some((key) => key in val && containsInValue(val[key], needle));
+  }
+  return false;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findPendingBulletItems(sections: Record<string, any>, needle: string): { section: string; idx: number }[] {
+  const hits: { section: string; idx: number }[] = [];
+  for (const key of ["experience", "internships", "projects"]) {
+    const arr = sections[key];
+    if (!Array.isArray(arr)) continue;
+    arr.forEach((item: unknown, idx: number) => {
+      if (containsInValue(item, needle)) hits.push({ section: key, idx });
+    });
+  }
+  return hits;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function replaceBulletText(
+  sections: Record<string, any>,
+  before: string,
+  after: string
+): { sections: Record<string, any>; changed: { section: string; idx: number }[] } {
+/* eslint-enable @typescript-eslint/no-explicit-any */
+  const next = { ...sections };
+  const changed: { section: string; idx: number }[] = [];
+  for (const key of ["experience", "internships", "projects"]) {
+    if (Array.isArray(next[key])) {
+      next[key] = next[key].map((item: unknown, idx: number) => {
+        const updated = replaceInValue(item, before, after);
+        if (JSON.stringify(updated) !== JSON.stringify(item)) changed.push({ section: key, idx });
+        return updated;
+      });
+    }
+  }
+  return { sections: next, changed };
+}
+
+// The AI leaves an unfilled metric as a literal standalone "n" in both the
+// before/after suggestion text (e.g. "...with n+ successful integrations")
+// rather than invent a number. When the backend reports the blank (via
+// details.text) and the user supplies its value, substitute it ONLY at the
+// specific "n<suffix>" token the backend described (e.g. "n+", "n%", "n-tier")
+// — not every standalone "n" in the text — since one bullet can carry more
+// than one such placeholder with unrelated meanings, e.g. "Built n-tier
+// architecture serving n+ users" has two independent blanks. A blanket
+// replace-all would stamp the same number into both.
+function fillManualBlank(
+  rawAfter: string | undefined,
+  blankText: string | undefined,
+  manualValue: string
+): string | undefined {
+  if (!rawAfter) return rawAfter;
+  // Case-insensitive: a blank reported as "N+" would otherwise yield an empty
+  // suffix and fall through to the unanchored /\bn\b/ this function exists to
+  // avoid.
+  const suffixMatch = blankText?.match(/\bn([+%-]?)/i);
+  const suffix = suffixMatch?.[1] ?? "";
+  const escapedSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // No /g flag — replaces only the first (and, per the above, only intended) match.
+  const pattern = suffix ? new RegExp(`\\bn${escapedSuffix}`, "i") : /\bn\b/i;
+  return pattern.test(rawAfter) ? rawAfter.replace(pattern, manualValue + suffix) : rawAfter;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function hasData(val: any): boolean {
@@ -118,28 +268,114 @@ export default function AnalysisContent({
   parsedResumeData,
   onBackToUpload,
 }: AnalysisContentProps) {
+  // Lifted into state (rather than read straight off the prop) so a retried
+  // match — see handleRetryMatch — can replace it without needing the parent
+  // to re-render this component with new props.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [liveMatchResults, setLiveMatchResults] = React.useState<any>(matchResults);
+
+  const matchId: string | undefined =
+    liveMatchResults?.data?.id ??
+    liveMatchResults?.data?._id ??
+    liveMatchResults?.data?.match_id ??
+    liveMatchResults?.match_id;
+  const restoredDraft = React.useMemo(() => readAnalysisDraft(matchId), [matchId]);
+
   const [isEditMode, setIsEditMode] = React.useState(false);
   const [openSection, setOpenSection] = React.useState<string | null>(null);
   const [isSavingSection, setIsSavingSection] = React.useState(false);
+  const [isDownloading, setIsDownloading] = React.useState(false);
+
+  // Every matcherEnhanceApply call (skills, bullet/text fixes, contact fields)
+  // reads the resume's whole parsed_data, edits one thing, and writes the whole
+  // blob back — see set_resume_contact_field / replace_resume_text on the
+  // backend. That's only safe one request at a time; the UI lets a user click
+  // "Add skill"/"Apply fix" on several different suggestions in quick
+  // succession, and each row's own loading state doesn't know about the
+  // others, so nothing stops those requests firing concurrently and racing —
+  // whichever write lands last silently overwrites the others' edits (or, if
+  // the burst is large enough, trips the AI rate limit and shows as "Couldn't
+  // apply this fix"). Routing every call through this queue forces them to
+  // run one at a time regardless of how fast the user clicks.
+  const applyQueueRef = React.useRef<Promise<unknown>>(Promise.resolve());
+  const runSerially = React.useCallback(<T,>(fn: () => Promise<T>): Promise<T> => {
+    const run = applyQueueRef.current.then(fn, fn);
+    applyQueueRef.current = run.then(() => undefined, () => undefined);
+    return run;
+  }, []);
+
+  // Fill-in-the-blank prompt for a fix whose suggested text still has an
+  // unfilled metric ("...by n%"). Deliberately NOT window.prompt() — native
+  // dialogs are commonly blocked or silently no-op in embedded/sandboxed
+  // preview contexts, which would make this fail with zero feedback (exactly
+  // what "apply all fixes" looked like before: no error, just never applies).
+  const [numberPromptState, setNumberPromptState] = React.useState<{ blankText?: string; resolve: (v: string | null) => void } | null>(null);
+  // Kept in sync with numberPromptState so the unmount cleanup below can
+  // resolve whatever prompt is current, not whatever was current when that
+  // effect first ran. Synced in an effect, not the render body: a render that
+  // React discards (concurrent rendering, StrictMode double-invoke) must not
+  // advance the ref, and only the unmount cleanup reads it — so commit-time
+  // is soon enough. Same convention as resumeSectionsRef below.
+  const numberPromptStateRef = React.useRef(numberPromptState);
+  React.useEffect(() => { numberPromptStateRef.current = numberPromptState; }, [numberPromptState]);
+
+  const askForNumber = React.useCallback((blankText?: string): Promise<string | null> => {
+    return new Promise((resolve) => {
+      setNumberPromptState((prev) => {
+        // Only one prompt slot exists. Two suggestions that both come back
+        // needs_value (e.g. Apply clicked on two STAR bullets in quick
+        // succession — runSerially only serializes the network calls, not
+        // this prompt) would otherwise have the second call's state replace
+        // the first's, orphaning its resolve — that row's applyTextFix
+        // promise never settles and its "Apply fix" spinner never clears.
+        // Resolve the outgoing prompt with null (as if cancelled) first.
+        prev?.resolve(null);
+        return { blankText, resolve };
+      });
+    });
+  }, []);
+
+  // Same leak if the user navigates away (unmounts this component) with the
+  // prompt still open — nothing would ever call its resolve otherwise.
+  React.useEffect(() => {
+    return () => {
+      numberPromptStateRef.current?.resolve(null);
+    };
+  }, []);
 
   // Track which skills were added (for green highlight in resume template)
-  const [addedSkillFields, setAddedSkillFields] = React.useState<string[]>([]);
+  const [addedSkillFields, setAddedSkillFields] = React.useState<string[]>(() => restoredDraft?.addedSkillFields ?? []);
+
+  // Track which other fields (job title, summary, individual experience/
+  // internship/project bullets) were just changed by an applied fix — same
+  // green-highlight mechanism JobMatchTemplateThree already uses for skills
+  // (hl()/hlIdx() read this via the addedFields prop), just populated for
+  // more than skills now that non-skill fixes are applyable too.
+  const [highlightFields, setHighlightFields] = React.useState<Record<string, string[]>>(() => restoredDraft?.highlightFields ?? {});
+  const markHighlighted = React.useCallback((section: string, field: string) => {
+    setHighlightFields((prev) => {
+      const existing = prev[section] ?? [];
+      if (existing.includes(field)) return prev;
+      return { ...prev, [section]: [...existing, field] };
+    });
+  }, []);
 
   // Active section IDs (from parsed data + user-added)
   const [activeSectionIds, setActiveSectionIds] = React.useState<string[]>(
-    () => detectActiveSections(parsedResumeData)
+    () => restoredDraft?.activeSectionIds ?? detectActiveSections(parsedResumeData)
   );
 
-  const [deletedSectionIds, setDeletedSectionIds] = React.useState<string[]>([]);
+  const [deletedSectionIds, setDeletedSectionIds] = React.useState<string[]>(() => restoredDraft?.deletedSectionIds ?? []);
 
   // Custom sections added by user
-  const [customSections, setCustomSections] = React.useState<{ id: string; label: string }[]>([]);
+  const [customSections, setCustomSections] = React.useState<{ id: string; label: string }[]>(() => restoredDraft?.customSections ?? []);
   const [showCustomInput, setShowCustomInput] = React.useState(false);
   const [customName, setCustomName] = React.useState("");
 
   // Resume section data
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [resumeSections, setResumeSections] = React.useState<Record<string, any>>(() => {
+    if (restoredDraft?.resumeSections) return restoredDraft.resumeSections;
     const d = parsedResumeData?.parsed_data || parsedResumeData || {};
     const llm = d?.llm_data || {};
     return {
@@ -161,27 +397,78 @@ export default function AnalysisContent({
     };
   });
 
-  const matchId: string | undefined =
-    matchResults?.data?.id ??
-    matchResults?.data?._id ??
-    matchResults?.data?.match_id ??
-    matchResults?.match_id;
+  // Mirrors resumeSections synchronously, for applyTextFix below — a plain
+  // React ref, not the state closure, because applyTextFix's useCallback
+  // deps deliberately exclude resumeSections (to avoid recreating the
+  // callback on every resume edit), and because a setResumeSections updater
+  // is not guaranteed to run before the async function that queued it
+  // returns (see applyTextFix's use). Kept in sync generally via the effect
+  // below, AND updated directly by applyTextFix itself at write time so two
+  // concurrent "Apply fix" clicks each see the other's write immediately
+  // rather than racing on a stale snapshot.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const resumeSectionsRef = React.useRef<Record<string, any>>(resumeSections);
+  React.useEffect(() => { resumeSectionsRef.current = resumeSections; }, [resumeSections]);
 
   const resumeId: string | undefined =
-    matchResults?.data?.resume_id ??
-    matchResults?.resume_id ??
+    liveMatchResults?.data?.resume_id ??
+    liveMatchResults?.resume_id ??
     parsedResumeData?.resume_id ??
     parsedResumeData?.parsed_data?.resume_id ??
     parsedResumeData?.data?.resume_id;
 
-  // Live ATS score — updates when skills are added/removed
-  const initialScore = Math.min(100, Math.max(0, parseFloat(String(matchResults?.data?.ats_score || "0"))));
-  const [liveScore, setLiveScore] = React.useState<number>(initialScore);
+  const jdId: string | undefined = liveMatchResults?.jd_id;
 
-  // Add a skill: call enhance/apply (updates match score) + parserAddSkills (persists to resume doc for download)
-  const directAddSkill = React.useCallback(async (skill: string, suggestion_id?: string) => {
+  const matchResult = liveMatchResults?.data?.match_result ?? {};
+  const techSkills   = matchResult?.Technical_Skills ?? {};
+  const softSkills   = matchResult?.Soft_Skills ?? {};
+  const capSkills    = matchResult?.Capabilities_Check ?? {};
+  const certSkills   = matchResult?.Certifications_Check ?? {};
+  const jobTitle     = matchResult?.Job_Title_Check ?? {};
+  const starCheck    = matchResult?.STAR_Pattern_Check ?? {};
+
+  // Live ATS score — updates when skills are added/removed
+  const initialScore = Math.min(100, Math.max(0, parseFloat(String(liveMatchResults?.data?.ats_score || "0"))));
+  const [liveScore, setLiveScore] = React.useState<number>(() => restoredDraft?.liveScore ?? initialScore);
+
+  React.useEffect(() => {
+    try {
+      if (!matchId) return;
+      const draft: AnalysisDraft = {
+        matchId,
+        resumeSections,
+        activeSectionIds,
+        deletedSectionIds,
+        customSections,
+        addedSkillFields,
+        highlightFields,
+        liveScore,
+      };
+      sessionStorage.setItem(ANALYSIS_DRAFT_KEY, JSON.stringify(draft));
+    } catch {}
+  }, [matchId, resumeSections, activeSectionIds, deletedSectionIds, customSections, addedSkillFields, highlightFields, liveScore]);
+
+  // Resolve a suggestion_id for a skill name from Match_Penalties — needed
+  // when a skill is added/removed from a source that doesn't already carry
+  // one (e.g. clicking a missing skill highlighted directly in the JD text).
+  const findSkillSuggestionId = React.useCallback((skillName: string): string | undefined => {
+    const target = skillName.trim().toLowerCase();
+    const penalties = matchResult?.Match_Penalties?.penalties ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const penalty = penalties.find((p: any) =>
+      (p.category === "technical_skills" || p.category === "soft_skills") &&
+      p.target?.trim().toLowerCase() === target
+    );
+    return penalty?.suggestion_id;
+  }, [matchResult]);
+
+  // Add a skill: enhance/apply updates the match score AND persists the skill
+  // into the resume document server-side (see job_matcher.py enhance/apply —
+  // it writes added skills via repository.update_resume_with_skill), so a
+  // separate parser-side persistence call isn't needed here.
+  const directAddSkill = React.useCallback(async (skill: string, suggestion_id?: string): Promise<boolean> => {
     const s = skill.trim();
-    if (!s) return;
+    if (!s) return false;
     // Optimistic local update
     setAddedSkillFields((prev) => prev.includes(s) ? prev : [...prev, s]);
     setResumeSections((prev: Record<string, unknown>) => {
@@ -189,54 +476,283 @@ export default function AnalysisContent({
       if (existing.includes(s)) return prev;
       return { ...prev, skills: [...existing, s] };
     });
-    // Update match score in backend and read new score from response
-    if (matchId && suggestion_id) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await matcherEnhanceApply(matchId, suggestion_id) as any;
-        const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
-        if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
-        else if (typeof newScore === "string") {
-          const n = parseFloat(newScore);
-          if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
-        }
-      } catch { /* local state already updated */ }
+    // Update match score (and persist to resume doc) in the backend
+    const resolvedSuggestionId = suggestion_id ?? findSkillSuggestionId(s);
+    // No suggestion id means there is no server-side route to persist this
+    // skill (enhance/apply resolves the skill FROM the suggestion), so nothing
+    // reaches the resume document. Roll the optimistic update back and report
+    // failure rather than returning true — the contract is "was it actually
+    // persisted", and a false success here leaves the chip green while the
+    // downloaded resume silently lacks the skill. Reachable from
+    // JDHighlighter's missing-skill chips, which call in with no id and whose
+    // wording isn't guaranteed to match a penalty target exactly.
+    if (!matchId || !resolvedSuggestionId) {
+      setAddedSkillFields((prev) => prev.filter((item) => item !== s));
+      setResumeSections((prev: Record<string, unknown>) => {
+        const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+        return { ...prev, skills: existing.filter((item) => item !== s) };
+      });
+      return false;
     }
-    // Always persist skill directly to resume document so download includes it
-    if (resumeId) {
-      try { await parserAddSkills(resumeId, s); } catch { /* best effort */ }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await runSerially(() => matcherEnhanceApply(matchId, resolvedSuggestionId)) as any;
+      const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+      if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+      else if (typeof newScore === "string") {
+        const n = parseFloat(newScore);
+        if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+      }
+      return true;
+    } catch {
+      setAddedSkillFields((prev) => prev.filter((item) => item !== s));
+      setResumeSections((prev: Record<string, unknown>) => {
+        const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+        return { ...prev, skills: existing.filter((item) => item !== s) };
+      });
+      return false;
     }
-  }, [matchId, resumeId]);
+  }, [matchId, findSkillSuggestionId, runSerially]);
 
-  // Remove a skill: call enhance/remove + parserRemoveSkills
-  const directRemoveSkill = React.useCallback(async (skill: string, suggestion_id?: string) => {
+  // Apply a non-skill fix (job title / summary / bullet rewrite) — these are
+  // resolved entirely server-side from suggestion_id, so unlike skills there's
+  // no separate "target" to persist; we just mirror the resulting text change
+  // locally so the live preview matches what the backend wrote to the resume.
+  const applyTextFix = React.useCallback(async (suggestion_id: string, category: string): Promise<boolean> => {
+    if (!matchId || !suggestion_id) return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let res: any;
+    // Set below when the needs_value flow prompts the user for a number —
+    // used to patch the cached suggestion text before mirroring it into the
+    // preview (see the comment near its use further down).
+    let manualValue: string | undefined;
+    let blankText: string | undefined;
+    try {
+      res = await runSerially(() => matcherEnhanceApply(matchId, suggestion_id));
+    } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+      // The AI deliberately leaves a metric blank ("...deployment of n+
+      // features") rather than invent a number — the backend refuses to
+      // apply until the real value is supplied ("needs_value"). Prompt for
+      // it and retry once instead of failing outright.
+      //
+      // Backend error envelope nests the real code at error.details.error
+      // (same shape as the premium-consent 428 flow) — err.response.data.error
+      // is the whole { message, error_code, details, ... } object, not a
+      // string, so comparing it directly to "needs_value" never matched and
+      // this prompt silently never fired. Falls back to the flat shape too,
+      // in case a different status/shape is used here.
+      const errPayload = err?.response?.data;
+      const errCode = errPayload?.error?.details?.error ?? errPayload?.error;
+      const isNeedsValue =
+        (err?.response?.status === 409 || err?.response?.status === 422) &&
+        errCode === "needs_value";
+      if (isNeedsValue) {
+        // `text` may arrive as an array of blanks or as a bare string —
+        // indexing [0] on a string yields its first character, which would
+        // make fillManualBlank fall back to the unanchored /\bn\b/ form it
+        // exists to avoid. Normalise both shapes.
+        const rawBlank = errPayload?.error?.details?.text ?? errPayload?.text;
+        blankText = Array.isArray(rawBlank) ? rawBlank[0] : (typeof rawBlank === "string" ? rawBlank : undefined);
+        const answer = await askForNumber(blankText);
+        const numeric = answer?.trim().replace(/,/g, "");
+        if (!numeric || !/^\d+(\.\d+)?$/.test(numeric)) {
+          if (answer !== null) toast.error("Please enter a plain number, e.g. 20.");
+          return false;
+        }
+        manualValue = numeric;
+        try {
+          res = await runSerially(() => matcherEnhanceApply(matchId, suggestion_id, "manual", numeric));
+        } catch {
+          toast.error("Couldn't apply this fix. Please try again.");
+          return false;
+        }
+      } else {
+        const isRateLimited = err?.response?.status === 429;
+        toast.error(
+          isRateLimited
+            ? "Applying fixes too fast — wait a few seconds and try this one again."
+            : "Couldn't apply this fix. Please try again."
+        );
+        return false;
+      }
+    }
+
+    const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+    if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+    else if (typeof newScore === "string") {
+      const n = parseFloat(newScore);
+      if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+    }
+
+    if (res?.applied === false) {
+      toast.info(res?.message || "Nothing to update for this suggestion yet.");
+      return false;
+    }
+
+    const penalties = matchResult?.Match_Penalties?.penalties ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const penalty = penalties.find((p: any) => p.suggestion_id === suggestion_id);
+
+    // Tracks whether the LOCAL preview mirror actually changed something —
+    // stays true for job_title/summary (which don't have a before/after
+    // match step to fail) and is only ever flipped to false below, when a
+    // bullet rewrite's before text can't be found in resumeSections (e.g.
+    // whitespace/normalization drift) despite the backend applying the fix
+    // successfully. The caller (MatchPenalties) uses this return value to
+    // decide the confident "Added to resume" state, so it must reflect the
+    // mirror, not just whether the network call itself succeeded.
+    let mirrored = true;
+
+    if (category === "job_title") {
+      const newTitle = penalty?.target || jobTitle?.jd_title;
+      if (newTitle) {
+        setResumeSections((prev: Record<string, unknown>) => ({
+          ...prev,
+          contact: { ...(prev.contact as Record<string, unknown> ?? {}), jobTitle: newTitle },
+        }));
+        markHighlighted("contact", "title");
+      }
+    } else if (category === "summary") {
+      const newSummary = penalty?.after_example || matchResult?.Summary_Check?.suggested_summary;
+      if (newSummary) {
+        setResumeSections((prev) => ({ ...prev, summary: newSummary }));
+        markHighlighted("summary", "text");
+      }
+    } else {
+      // Generic bullet/text rewrite — covers requirements/experience/star_pattern,
+      // and any other category (e.g. capabilities) whose penalty was merged with
+      // a real before/after pair by the backend's bullet-consolidation step. This
+      // mirrors _resolve_one_text_edit's catch-all, which works from before/after
+      // text alone and doesn't care about category.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const weak = (starCheck?.weak_bullets ?? []).find((w: any) => w.suggestion_id === suggestion_id);
+      const before = weak?.original || penalty?.before_example;
+      // weak.improved/penalty.after_example are cached from the original
+      // match-analysis call and may still carry the unfilled "n" metric
+      // placeholder (e.g. "...with n+ successful integrations") — the
+      // backend resolves it server-side once a manual value is supplied,
+      // but this cached copy doesn't know that. Substitute it locally (see
+      // fillManualBlank — anchored to the specific blank the backend
+      // reported, not every standalone "n") so the preview matches what the
+      // backend actually saved (and what the downloaded resume already
+      // shows correctly).
+      const rawAfter = weak?.improved || penalty?.after_example;
+      const after = manualValue ? fillManualBlank(rawAfter, blankText, manualValue) : rawAfter;
+      if (before && after && before !== after) {
+        // Run the replacement against the ref, NOT inside a setState updater:
+        // this function must return whether the mirror actually matched, and
+        // an updater is not guaranteed to have run by the time we return
+        // (React batches it, and StrictMode double-invokes it — so setting an
+        // outer flag from inside one is both late and unsound).
+        //
+        // The ref also solves what the functional-updater form was there for:
+        // runSerially only serializes the network call, not the render cycle,
+        // so two quick "Apply fix" clicks could otherwise both read the same
+        // stale render-time snapshot and have the second silently erase the
+        // first. Advancing resumeSectionsRef synchronously here means the
+        // second click sees the first's result immediately.
+        const result = replaceBulletText(resumeSectionsRef.current, before, after);
+        if (result.changed.length) {
+          resumeSectionsRef.current = result.sections;
+          setResumeSections(result.sections);
+          result.changed.forEach((c) => markHighlighted(c.section, String(c.idx)));
+        } else {
+          mirrored = false;
+        }
+      }
+    }
+
+    return mirrored;
+  }, [matchId, matchResult, jobTitle, starCheck, markHighlighted, runSerially, askForNumber]);
+
+  // Remove a skill: enhance/remove updates the match score AND removes the
+  // skill from the resume document server-side (see job_matcher.py
+  // enhance/remove — repository.remove_skill_from_resume).
+  const directRemoveSkill = React.useCallback(async (skill: string, suggestion_id?: string): Promise<boolean> => {
     const s = skill.trim();
+    const wasHighlighted = addedSkillFields.includes(s);
     setAddedSkillFields((prev) => prev.filter((x) => x !== s));
     setResumeSections((prev: Record<string, unknown>) => {
       const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
       return { ...prev, skills: existing.filter((x) => x !== s) };
     });
-    if (matchId && suggestion_id) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await matcherEnhanceRemove(matchId, suggestion_id) as any;
-        const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
-        if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
-        else if (typeof newScore === "string") {
-          const n = parseFloat(newScore);
-          if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
-        }
-      } catch { /* local state already updated */ }
+    const resolvedSuggestionId = suggestion_id ?? findSkillSuggestionId(s);
+    // Mirror of directAddSkill's guard above: without a suggestion id there
+    // is no server-side route to remove the skill from the resume document,
+    // so nothing is persisted. Restore the optimistic removal and report
+    // failure rather than returning true — otherwise the chip clears while
+    // the downloaded resume still contains the skill.
+    if (!matchId || !resolvedSuggestionId) {
+      if (wasHighlighted) setAddedSkillFields((prev) => prev.includes(s) ? prev : [...prev, s]);
+      setResumeSections((prev: Record<string, unknown>) => {
+        const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+        return existing.includes(s) ? prev : { ...prev, skills: [...existing, s] };
+      });
+      return false;
     }
-    if (resumeId) {
-      try { await parserRemoveSkills(resumeId, s); } catch { /* best effort */ }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await runSerially(() => matcherEnhanceRemove(matchId, resolvedSuggestionId)) as any;
+      const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after ?? res?.match_result?.ats_score;
+      if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+      else if (typeof newScore === "string") {
+        const n = parseFloat(newScore);
+        if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+      }
+      return true;
+    } catch {
+      if (wasHighlighted) setAddedSkillFields((prev) => prev.includes(s) ? prev : [...prev, s]);
+      setResumeSections((prev: Record<string, unknown>) => {
+        const existing: string[] = Array.isArray(prev.skills) ? prev.skills as string[] : [];
+        return existing.includes(s) ? prev : { ...prev, skills: [...existing, s] };
+      });
+      return false;
     }
-  }, [matchId, resumeId]);
+  }, [matchId, findSkillSuggestionId, addedSkillFields, runSerially]);
+
+  const [isRetryingMatch, setIsRetryingMatch] = React.useState(false);
+
+  // Re-runs the match with force_refresh=true, bypassing the backend's
+  // (resume+jd+version) result cache — a plain retry without that flag would
+  // just re-fetch the same cached response, including whichever sub-check
+  // (e.g. Soft_Skills) crashed the first time.
+  const handleRetryMatch = React.useCallback(async () => {
+    if (!resumeId || !jdId || isRetryingMatch) return;
+    setIsRetryingMatch(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const matchResp = await matchResumeAndJD(resumeId, jdId, { force_refresh: true }) as any;
+      const finalMatchData = matchResp?.data;
+      if (!finalMatchData) throw new Error("Empty match response");
+      const updated = {
+        ...liveMatchResults,
+        data: finalMatchData,
+        match_id: matchResp?.match_id ?? finalMatchData?.match_id,
+      };
+      setLiveMatchResults(updated);
+      const newScore = Math.min(100, Math.max(0, parseFloat(String(finalMatchData?.ats_score ?? liveScore))));
+      setLiveScore(newScore);
+      try { sessionStorage.setItem("jm_matchResults", JSON.stringify(updated)); } catch {}
+      toast.success("Match re-checked.");
+    } catch {
+      toast.error("Couldn't re-run the match. Please try again.");
+    } finally {
+      setIsRetryingMatch(false);
+    }
+  }, [resumeId, jdId, isRetryingMatch, liveMatchResults, liveScore]);
 
   const handleDownload = React.useCallback(async () => {
-    if (!resumeId) return;
-    try { await downloadResumePdf(resumeId); } catch { /* silent */ }
-  }, [resumeId]);
+    if (!resumeId || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await downloadResumePdf(resumeId, undefined, matchId);
+      toast.success("Resume downloaded");
+    } catch {
+      toast.error("Couldn't download your resume. Please try again.");
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [resumeId, matchId, isDownloading]);
 
   const score = liveScore;
 
@@ -253,10 +769,6 @@ export default function AnalysisContent({
     return { ...parsedResumeData, parsed_data: { ...base, skills: merged } };
   }, [parsedResumeData, addedSkillFields]);
 
-  const matchResult = matchResults?.data?.match_result ?? {};
-  const techSkills   = matchResult?.Technical_Skills ?? {};
-  const softSkills   = matchResult?.Soft_Skills ?? {};
-
   const matchedTechSkills: string[] = [
     ...(techSkills.matched_critical_skills ?? []).map((s: { skill: string }) => s.skill),
     ...(techSkills.matched_important_skills ?? []).map((s: { skill: string }) => s.skill),
@@ -269,10 +781,54 @@ export default function AnalysisContent({
   ];
   const matchedSoftSkills: string[] = softSkills.matched_skills ?? [];
   const missingSoftSkills: string[] = softSkills.missing_skills ?? [];
-  const capSkills   = matchResult?.Capabilities_Check ?? {};
-  const certSkills  = matchResult?.Certifications_Check ?? {};
-  const jobTitle    = matchResult?.Job_Title_Check ?? {};
-  const starCheck   = matchResult?.STAR_Pattern_Check ?? {};
+
+  // Missing skills still outstanding after local edits — once a skill is
+  // added it lands in addedSkillFields (see directAddSkill), so drop it here
+  // rather than showing it as both a real chip and a red "ghost" one.
+  const pendingSkills = React.useMemo(
+    () => missingTechSkills.filter((s) => !addedSkillFields.some((a) => a.toLowerCase() === s.toLowerCase())),
+    [missingTechSkills, addedSkillFields]
+  );
+  const pendingSoftSkills = React.useMemo(
+    () => missingSoftSkills.filter((s) => !addedSkillFields.some((a) => a.toLowerCase() === s.toLowerCase())),
+    [missingSoftSkills, addedSkillFields]
+  );
+
+  // Same "still outstanding" idea as pendingSkills, but for the non-skill
+  // suggestion categories (job title / summary / bullet rewrites) — mirrors
+  // the {section: [field, ...]} shape of highlightFields (the green-preview
+  // state) so JobMatchTemplateThree can red-highlight anything not in
+  // highlightFields yet. job_title/summary flip the instant applyTextFix
+  // marks them highlighted; bullets flip the instant their "before" text is
+  // no longer found in resumeSections (i.e. replaceBulletText rewrote it) —
+  // both conditions are checked here so a fix applied via any other path
+  // (e.g. a retried match) still clears the red state correctly.
+  const pendingFields = React.useMemo(() => {
+    const fields: Record<string, string[]> = {};
+    const add = (section: string, field: string) => {
+      if (!fields[section]) fields[section] = [];
+      if (!fields[section].includes(field)) fields[section].push(field);
+    };
+    const penalties = matchResult?.Match_Penalties?.penalties ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const p of penalties as any[]) {
+      if (p.category === "technical_skills" || p.category === "soft_skills") continue;
+      if (p.category === "job_title") {
+        if (!(highlightFields.contact ?? []).includes("title")) add("contact", "title");
+      } else if (p.category === "summary") {
+        if (!(highlightFields.summary ?? []).includes("text")) add("summary", "text");
+      } else {
+        const before = p.before_example;
+        const after = p.after_example;
+        if (before && after && before !== after) {
+          for (const hit of findPendingBulletItems(resumeSections, before)) {
+            add(hit.section, String(hit.idx));
+          }
+        }
+      }
+    }
+    return fields;
+  }, [matchResult, highlightFields, resumeSections]);
 
   const matchedCapabilities: string[] = [
     // Capabilities
@@ -285,9 +841,6 @@ export default function AnalysisContent({
     // STAR matched bullets (first few words as phrase)
     ...(starCheck.strong_bullets ?? []).map((b: { text?: string; bullet?: string }) => b.text ?? b.bullet ?? "").filter(Boolean),
   ];
-
-  const totalMatchedCount = matchedTechSkills.length + matchedSoftSkills.length;
-  const totalMissingCount = missingTechSkills.length + missingSoftSkills.length;
 
   // Sections shown in the active list
   const activePredefined = ALL_SECTIONS.filter((s) => activeSectionIds.includes(s.id));
@@ -322,14 +875,14 @@ export default function AnalysisContent({
   ];
 
   return (
-    <div className="relative w-full h-screen bg-gray-50 overflow-hidden flex flex-col">
+    <div className="relative flex min-h-[calc(100vh-3.5rem)] w-full flex-col bg-gray-50">
       <style>{`
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #f3f4f6; border-radius: 999px; }
         ::-webkit-scrollbar-thumb:hover { background: #e5e7eb; }
       `}</style>
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 items-start">
 
         {/* LEFT — Section list sidebar (edit mode only) — fixed overlay, does not disturb layout */}
         {isEditMode && (
@@ -451,10 +1004,20 @@ export default function AnalysisContent({
         )}
 
         {/* CENTER — Resume Preview (always visible) */}
-        <div className="flex-1 overflow-y-auto bg-[#f1f5f9] border-r border-gray-200 px-8 py-6 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
-          <div className="bg-white rounded-lg border border-[#dce8fb] shadow-[0_10px_26px_rgba(37,87,167,0.07)] flex flex-col overflow-hidden">
+        <div className="min-w-0 flex-1 space-y-5 bg-[#f3f6fa] px-4 py-4 sm:px-6 lg:px-7">
+          <div>
+          <div className="mt-0 mb-4">
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+              AI-Powered Resume Tailoring
+            </p>
+            <h1 className="text-[22px] sm:text-[24px] font-extrabold uppercase tracking-tight text-slate-900 leading-none">
+              Tailor Your Resume
+            </h1>
+            <div className="mt-2 border-t border-slate-200" />
+          </div>
+          <div className="bg-white rounded-xl border border-[#dce8fb] shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_30px_rgba(37,87,167,0.10)] flex flex-col overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb] bg-white shrink-0">
+            <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-[#e5ebf3] bg-white shrink-0">
               <div className="flex items-center gap-3">
                 {onBackToUpload && (
                   <button
@@ -464,25 +1027,22 @@ export default function AnalysisContent({
                     <ArrowLeft className="w-3.5 h-3.5" /> Back
                   </button>
                 )}
-                <div className="flex items-center gap-2.5">
-                  <div className="w-1.5 h-5 rounded-full bg-[#2557a7]" />
-                  <h3 className="text-[13px] font-bold text-gray-700 tracking-wide uppercase">Resume Preview</h3>
-                </div>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownload} disabled={!resumeId || isSavingSection} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-gray-600 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  <Download className="w-3.5 h-3.5" /> {isSavingSection ? "Saving..." : "Download"}
+                <button onClick={handleDownload} disabled={!resumeId || isSavingSection || isDownloading} className="flex min-h-10 items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold text-gray-600 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Download className="w-3.5 h-3.5" /> {isDownloading ? "Downloading..." : isSavingSection ? "Saving..." : "Download"}
                 </button>
                 <button
                   onClick={() => setIsEditMode((v) => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-lg border transition-all ${isEditMode ? "bg-[#2557a7] text-white border-[#2557a7] hover:bg-[#1e4a96]" : "text-gray-600 border-gray-200 hover:text-[#2557a7] hover:bg-blue-50"}`}
+                  className={`flex min-h-10 items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold rounded-lg border transition-all ${isEditMode ? "bg-[#2557a7] text-white border-[#2557a7] hover:bg-[#1e4a96]" : "text-[#2557a7] border-[#b9cdec] hover:bg-blue-50"}`}
                 >
                   <Pencil className="w-3.5 h-3.5" />
                   {isEditMode ? "Close Editor" : "Edit"}
                 </button>
               </div>
             </div>
-            <div className="overflow-auto p-5" style={{ zoom: 1.1, scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+            <div className="min-h-[34rem] bg-[#f3f6fa] p-4 sm:p-5">
+              <div className="mx-auto max-w-[960px]" style={{ zoom: 0.94 }}>
               {/* This view always has parsedData synchronously from props —
                   there's no PDF/DOCX blob or async load here — so those
                   ResumePreview props are fixed no-ops rather than real state. */}
@@ -495,62 +1055,55 @@ export default function AnalysisContent({
                 docxBlob={null}
                 parsedData={mergedParsedData}
                 resumeId=""
-                addedFields={{ skills: addedSkillFields }}
+                addedFields={{ skills: addedSkillFields, ...highlightFields }}
+                pendingSkills={pendingSkills}
+                pendingSoftSkills={pendingSoftSkills}
+                pendingFields={pendingFields}
                 editOverrides={resumeSections}
                 onEditSection={(key) => { setIsEditMode(true); setOpenSection(key); }}
                 onDeleteSection={(key) => { setDeletedSectionIds((prev) => [...prev, key]); setActiveSectionIds((prev) => prev.filter((id) => id !== key)); }}
                 deletedSections={deletedSectionIds}
               />
+              </div>
             </div>
 
           </div>
+          </div>
 
-          {/* Score Breakdown — below resume preview */}
-          <ScoreBreakdown matchResult={matchResult} />
-
-          {/* Match Penalties — improvement suggestions */}
+          <ScoreBreakdown matchResult={matchResult} onRetryMatch={handleRetryMatch} isRetryingMatch={isRetryingMatch} />
           <MatchPenalties
             matchResult={matchResult}
             onAddSkill={directAddSkill}
             onRemoveSkill={directRemoveSkill}
+            onApplyFix={applyTextFix}
+            onOpenSection={(key) => setOpenSection(key)}
           />
         </div>
 
         {/* RIGHT — ATS Score + Job Description */}
-        <div className="w-[520px] shrink-0 overflow-y-auto bg-[#f6f8fc] border-l border-gray-200 p-5 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+        <div className="w-[clamp(440px,32vw,520px)] shrink-0" aria-hidden="true" />
+        <aside
+          className="fixed bottom-0 right-0 top-14 z-20 w-[clamp(440px,32vw,520px)] space-y-3 overflow-y-auto overscroll-contain border-l border-gray-200 bg-[#f6f8fc] p-4"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#94a3b8 transparent", scrollbarGutter: "stable" }}
+          aria-label="Job match score and job description"
+        >
 
           {/* ATS Score Card */}
-          <div className="rounded-lg border border-[#dce8fb] bg-white shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
-            <div className="p-5">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg, #5896d7, #2557a7)" }} />
-                <h3 className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">ATS Match Score</h3>
-              </div>
-              <div className="flex flex-col items-center mb-4">
-                <div className="w-32 h-32 drop-shadow-sm">
-                  <MultiColorCircularScore value={score} />
-                </div>
-                <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wide uppercase">Overall Score</p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#fff5f5,#fef2f2)", borderColor: "#fecaca" }}>
-                  <p className="text-[18px] font-extrabold text-red-500">{totalMissingCount}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#f87171" }}>Missing</p>
-                </div>
-                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#f0fdf4,#dcfce7)", borderColor: "#bbf7d0" }}>
-                  <p className="text-[18px] font-extrabold text-green-600">{totalMatchedCount}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#4ade80" }}>Matched</p>
-                </div>
-                <div className="text-center rounded-xl py-2.5 border" style={{ background: "linear-gradient(145deg,#eff6ff,#dbeafe)", borderColor: "#bfdbfe" }}>
-                  <p className="text-[18px] font-extrabold text-[#2557a7]">{activeSectionIds.length}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: "#60a5fa" }}>Sections</p>
-                </div>
+          <div className="shrink-0 overflow-hidden rounded-xl border border-[#dce8fb] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_30px_rgba(37,87,167,0.10)]">
+            <div className="p-3">
+              <p className="mb-1 text-left text-xl font-extrabold tracking-wide text-slate-900">
+                YOUR JD MATCH SCORE
+              </p>
+
+              <div className="mb-2">
+                <JobMatchScoreGauge value={score} />
+
               </div>
             </div>
           </div>
 
           {/* Job Description Card */}
-          <div className="rounded-lg border border-[#dce8fb] bg-white shadow-[0_10px_26px_rgba(37,87,167,0.07)] overflow-hidden">
+          <div className="min-h-[28rem] overflow-hidden rounded-xl border border-[#dce8fb] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_30px_rgba(37,87,167,0.10)]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb]" style={{ background: "linear-gradient(135deg,#f0f5ff,#e8eef8)" }}>
               <div className="flex items-center gap-2.5">
                 <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
@@ -558,12 +1111,12 @@ export default function AnalysisContent({
               </div>
               <button
                 onClick={() => { try { navigator.clipboard.writeText(jdText); } catch {} }}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-[#2557a7] bg-white hover:bg-blue-50 rounded-lg border border-[#c7d9f5] transition-all shadow-sm"
+                className="flex min-h-9 items-center gap-1.5 rounded-lg border border-[#c7d9f5] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#2557a7] shadow-sm transition-all hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2"
               >
                 <FileText className="w-3 h-3" /> Copy
               </button>
             </div>
-            <div className="p-5 max-h-[32rem] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+            <div className="break-words p-5 text-[14px] leading-6">
               {jdText ? (
                 <JDHighlighter
                   text={jdText}
@@ -579,7 +1132,7 @@ export default function AnalysisContent({
               )}
             </div>
           </div>
-        </div>
+        </aside>
       </div>
 
       {/* Section Editor Modal — popup with blur like Resume Builder */}
@@ -589,9 +1142,71 @@ export default function AnalysisContent({
           sectionLabel={openSectionLabel}
           initialData={resumeSections[openSection] ?? []}
           onSave={(key, data) => {
+            const previousValue = resumeSections[key];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             setResumeSections((prev: Record<string, any>) => ({ ...prev, [key]: data }));
             setOpenSection(null);
+
+            // See CONTACT_SUGGESTION_PREFIX comment above: contact fields can only
+            // be persisted through matcherEnhanceApply, one field at a time, and
+            // only while a "suggest_add_contact_<field>" suggestion is still
+            // pending for it.
+            if (key === "contact") {
+              if (!resumeId || !matchId) return;
+
+              const suggestionIdByField = pendingContactSuggestions(matchResult);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const fieldValues: Record<string, any> = {
+                name: data.fullname || data.name,
+                email: data.email,
+                phone: data.phone,
+                location: data.location,
+              };
+              const toApply = Object.entries(suggestionIdByField)
+                .filter(([field]) => fieldValues[field] && String(fieldValues[field]).trim())
+                .map(([field, suggestionId]) => ({ suggestionId, value: String(fieldValues[field]).trim() }));
+
+              if (!toApply.length) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                setResumeSections((prev: Record<string, any>) => ({ ...prev, contact: previousValue }));
+                toast.error("Only fields flagged as missing (email, phone, location) can be saved here right now.");
+                return;
+              }
+
+              setIsSavingSection(true);
+              (async () => {
+                // Sequential, not Promise.all: set_resume_contact_field does a
+                // read-whole-parsed_data → mutate one field → write-whole-parsed_data
+                // round trip. Firing email/phone/location concurrently means all
+                // three read the same pre-edit snapshot and whichever write lands
+                // last overwrites the other two fields' edits with stale data —
+                // that's why location silently didn't survive last time even
+                // though its own request succeeded. One at a time avoids the race.
+                try {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  let last: any = null;
+                  for (const { suggestionId, value } of toApply) {
+                    last = await runSerially(() => matcherEnhanceApply(matchId, suggestionId, "manual", value));
+                  }
+                  toast.success("Personal Info saved — ready to download");
+                  const newScore = last?.score_diff?.after ?? last?.data?.score_diff?.after ?? last?.match_result?.ats_score;
+                  if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+                  else if (typeof newScore === "string") {
+                    const n = parseFloat(newScore);
+                    if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+                  }
+                } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+                  console.error("[JobMatch] contact save failed", err);
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  setResumeSections((prev: Record<string, any>) => ({ ...prev, contact: previousValue }));
+                  toast.error(`Failed to save Personal Info: ${err?.message || err}`);
+                } finally {
+                  setIsSavingSection(false);
+                }
+              })();
+              return;
+            }
+
             if (matchId) {
               const sectionLabel = openSectionLabel || key;
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -604,7 +1219,11 @@ export default function AnalysisContent({
               }) : [];
               setIsSavingSection(true);
               console.warn("[JobMatch] matcherUpdateSections →", { matchId, sectionLabel, items });
-              matcherUpdateSections(matchId, [{ sectionName: sectionLabel, items }])
+              // Same read-modify-write invariant as the enhance calls above:
+              // update_resume_custom_sections reads the whole parsed_data,
+              // edits custom_sections, and writes the blob back. Unqueued, a
+              // section save racing an "Add skill" silently drops one of them.
+              runSerially(() => matcherUpdateSections(matchId, [{ sectionName: sectionLabel, items }]))
                 .then(() => toast.success(`${sectionLabel} saved — ready to download`))
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 .catch((err: any) => { console.error("[JobMatch] sections save failed", err); toast.error(`Failed to save ${sectionLabel}: ${err?.message || err}`); })
@@ -613,6 +1232,69 @@ export default function AnalysisContent({
           }}
           onClose={() => setOpenSection(null)}
         />
+      )}
+
+      {/* Fill-in-the-blank prompt — see askForNumber above */}
+      {numberPromptState && (
+        <div
+          className="fixed inset-0 z-1200 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { numberPromptState.resolve(null); setNumberPromptState(null); }}
+        >
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget as HTMLFormElement;
+              const input = form.elements.namedItem("number-value") as HTMLInputElement;
+              numberPromptState.resolve(input.value);
+              setNumberPromptState(null);
+            }}
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"
+          >
+            <div className="mb-3 flex items-start justify-between">
+              <h3 className="text-[15px] font-bold text-gray-900">Fill in the number</h3>
+              <button
+                type="button"
+                onClick={() => { numberPromptState.resolve(null); setNumberPromptState(null); }}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Cancel"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {numberPromptState.blankText && (
+              <p className="mb-3 rounded-lg bg-slate-50 p-2.5 text-[12.5px] italic text-gray-600">
+                &quot;{numberPromptState.blankText}&quot;
+              </p>
+            )}
+            <label className="mb-1 block text-[12px] font-semibold text-gray-700">
+              This fix needs a real number to replace the blank — e.g. 20
+            </label>
+            <input
+              name="number-value"
+              type="text"
+              inputMode="decimal"
+              autoFocus
+              placeholder="20"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { numberPromptState.resolve(null); setNumberPromptState(null); }}
+                className="rounded-lg border border-gray-200 px-3.5 py-2 text-[13px] font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg bg-[#2557a7] px-3.5 py-2 text-[13px] font-semibold text-white hover:opacity-90"
+              >
+                Apply fix
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

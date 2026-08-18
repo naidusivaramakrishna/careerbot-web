@@ -37,8 +37,8 @@ function buildStages(state: MockStageState): Stage[] {
     },
     {
       id: "practice",
-      label: "Practice Mode",
-      shortLabel: "Practice",
+      label: "Managerial Practice",
+      shortLabel: "Managerial",
       href: "/notes/managerial",
       icon: Mic,
       locked: !state.notes_generated,

@@ -71,8 +71,17 @@ export default function NancyChat({
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [usedActions, setUsedActions] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
+    // Skip on mount — with only the greeting + suggestion chips present,
+    // scrolling the bottom anchor into view pushes the greeting's own top
+    // lines out of frame. Only auto-scroll once a message actually gets
+    // added (user sends something / picks a suggestion).
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     const timer = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 50);
@@ -185,7 +194,7 @@ export default function NancyChat({
         )}
 
         {/* CHAT BODY */}
-        <div className="flex-1 space-y-3 overflow-y-auto bg-[linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] px-4 pb-4 pt-4">
+        <div className="scrollbar-hide flex-1 space-y-3 overflow-y-auto bg-[linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] px-4 pb-4 pt-4">
           {messages.map((msg, idx) => (
             <div
               key={idx}
@@ -236,6 +245,12 @@ export default function NancyChat({
                 )}
             </div>
           ))}
+
+          {/* Anchor sits right after the last real message — not after the
+              typing indicator / quick-action suggestions below, so
+              scrollIntoView reveals the newest answer in full instead of
+              scrolling past it to show the suggestion chips underneath. */}
+          <div ref={messagesEndRef} />
 
           {/* Typing indicator */}
           {isTyping && (
@@ -288,8 +303,6 @@ export default function NancyChat({
               </div>
             );
           })()}
-
-          <div ref={messagesEndRef} />
         </div>
 
         {/* INPUT */}

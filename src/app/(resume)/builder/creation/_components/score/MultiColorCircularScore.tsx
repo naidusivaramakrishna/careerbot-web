@@ -5,6 +5,8 @@ interface Props {
   value: number;
   size?: number;
   duration?: number;
+  /** Show a smaller "/100" next to the score number. */
+  showMax?: boolean;
 }
 
 const TIER = {
@@ -17,7 +19,7 @@ function getTier(v: number) {
   return v >= 70 ? "good" : v >= 40 ? "mid" : "low";
 }
 
-export default function MultiColorCircularScore({ value, size = 128, duration = 900 }: Props) {
+export default function MultiColorCircularScore({ value, size = 128, duration = 900, showMax = false }: Props) {
   const [anim, setAnim] = useState(0);
   const uid = useId().replace(/:/g, "s");
 
@@ -78,12 +80,29 @@ export default function MultiColorCircularScore({ value, size = 128, duration = 
 
       {/* Center number */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span
-          className="font-bold tabular-nums leading-none"
-          style={{ fontSize: Math.round(size * 0.255), color: c.text }}
-        >
-          {Math.round(anim)}
-        </span>
+        {showMax ? (
+          <span className="flex items-baseline leading-none">
+            <span
+              className="font-bold tabular-nums"
+              style={{ fontSize: Math.round(size * 0.255), color: c.text }}
+            >
+              {Math.round(anim)}
+            </span>
+            <span
+              className="font-semibold tabular-nums text-gray-400"
+              style={{ fontSize: Math.round(size * 0.11) }}
+            >
+              /100
+            </span>
+          </span>
+        ) : (
+          <span
+            className="font-bold tabular-nums leading-none"
+            style={{ fontSize: Math.round(size * 0.255), color: c.text }}
+          >
+            {Math.round(anim)}
+          </span>
+        )}
       </div>
     </div>
   );

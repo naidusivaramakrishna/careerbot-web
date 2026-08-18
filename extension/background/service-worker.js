@@ -28,7 +28,12 @@ const ALLOWED_JD_HOSTS = [
 function isFromAllowedHost(tab) {
   if (!tab?.url) return false;
   try {
-    return ALLOWED_JD_HOSTS.includes(new URL(tab.url).hostname);
+    const tabUrl = new URL(tab.url);
+    if (!['http:', 'https:'].includes(tabUrl.protocol)) return false;
+    // Strict allowlist only — a check against data.meta.url would compare
+    // two attacker-controlled values (both come from the message sender),
+    // making the check self-satisfying and equivalent to "any http(s) tab".
+    return ALLOWED_JD_HOSTS.includes(tabUrl.hostname);
   } catch {
     return false;
   }

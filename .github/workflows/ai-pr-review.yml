@@ -18,9 +18,22 @@ permissions:
   pull-requests: write
   issues: write
 
+# One global queue with no cancellation meant every push stacked another
+# ~25-minute review behind the last one, and all PRs shared the same queue.
+# Because the AI review and the CI jobs run on the SAME physical self-hosted
+# runner, that backlog also starved Lint and Build / Security Scan.
+#
+# Per-PR group: two different PRs no longer block each other (they still
+# serialise at the runner, which is the real capacity limit).
+# cancel-in-progress: a new push supersedes the previous review of that same
+# PR. Scheduled runs group by github.ref, so a newer hourly sweep replaces an
+# older one rather than stacking behind it.
+#
+# This block is copied verbatim from the master copy of this workflow, which
+# already had the fix. The feature branches were carrying a stale version.
 concurrency:
-  group: ai-pr-review
-  cancel-in-progress: false
+  group: ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ai-review:

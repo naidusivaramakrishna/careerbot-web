@@ -60,9 +60,10 @@ next-env.d.ts
 
 # editor / scratch backups
 *.backup
+
 # local debug scripts / screenshots (never commit)
 verify-login.mjs
 verify-*.png
+
 # local browser audit captures (chrome profiles, cache, screenshots)
 /audit/
-.claude/settings.local.json
