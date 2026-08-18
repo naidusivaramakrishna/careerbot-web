@@ -178,12 +178,14 @@ client.interceptors.response.use(
     const isAdmin = isAdminRequest(originalRequest?.url);
     const skipAuthRedirect =
       originalRequest?.headers?.get?.('X-Skip-Auth-Redirect') === 'true' ||
-      originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true';
+      originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true' ||
+      originalRequest?.headers?.['x-skip-auth-redirect'] === 'true';
     // skipLoginRedirect: still attempts token refresh on 401, but does NOT
     // redirect to login if the refresh also fails (user is unauthenticated).
     const skipLoginRedirect =
       originalRequest?.headers?.get?.('X-Skip-Login-Redirect') === 'true' ||
-      originalRequest?.headers?.['X-Skip-Login-Redirect'] === 'true';
+      originalRequest?.headers?.['X-Skip-Login-Redirect'] === 'true' ||
+      originalRequest?.headers?.['x-skip-login-redirect'] === 'true';
 
     // 403 = tenant mismatch — do NOT attempt token refresh, just reject
     if (error.response?.status === 403) {
