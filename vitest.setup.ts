@@ -120,6 +120,7 @@ const localStorageMock = {
   }),
 };
 Object.defineProperty(window, 'localStorage', {
+  configurable: true,
   value: localStorageMock,
 });
 

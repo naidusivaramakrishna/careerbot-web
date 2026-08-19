@@ -6,7 +6,9 @@ import { BarChart2, Mic, MessageSquare, Users } from "lucide-react";
 import { generateMrTrQuestions } from "@/api/mockInterviewApi";
 import PracticeLandingPage from "../_components/PracticeLandingPage";
 
-export const MANAGERIAL_QUESTIONS_KEY = "managerial_generated_questions";
+// Not exported: see notes/technical/page.tsx. Nothing imports this -
+// notes/managerial/practice declares the same literal locally.
+const MANAGERIAL_QUESTIONS_KEY = "managerial_generated_questions";
 
 const STATS = [
   { value: "10", label: "questions" },

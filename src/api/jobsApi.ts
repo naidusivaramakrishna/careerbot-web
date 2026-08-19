@@ -110,6 +110,13 @@ export interface SmartMatchParams {
   min_education_score?: number;
   location?: string;
   mode?: string;
+  job_type?: string;
+  // NOT experience_years — that param means "the candidate's own years,
+  // return jobs they qualify for," while the frontend's Experience filter
+  // means "jobs requiring this many years." Different axes; do not wire
+  // one to the other.
+  posted_within_days?: number;
+  query?: string;
   // Bypasses the backend's own scored-results cache (see cache_hit on
   // SmartMatchResponse) — needed for "Retry Smart Match" to actually get a
   // fresh computation instead of the same cached response.

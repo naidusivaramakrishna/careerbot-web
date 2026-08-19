@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Link2, Sparkles, CheckCircle2 } from "lucide-react";
+import { Upload, Link2, Sparkles, CheckCircle2, ChevronRight } from "lucide-react";
 
 const MODAL_TABS = [
   { num: 1, label: "Upload Resume",    icon: Upload },
@@ -17,6 +17,7 @@ interface WizardModalShellProps {
   onBack: () => void;
   onContinueClick: () => void;
   continueDisabled: boolean;
+  onAnalyzeClick: () => void;
   children: React.ReactNode;
 }
 
@@ -24,7 +25,7 @@ interface WizardModalShellProps {
 // open/close cycle — only then can it play the exit animation; if the parent
 // unmounted this component on close, the exit transition would never run.
 export default function WizardModalShell({
-  open, wizardStep, onClose, onBack, onContinueClick, continueDisabled, children,
+  open, wizardStep, onClose, onBack, onContinueClick, continueDisabled, onAnalyzeClick, children,
 }: WizardModalShellProps) {
   return (
     <AnimatePresence>
@@ -55,6 +56,8 @@ export default function WizardModalShell({
             borderRadius: 20,
             boxShadow: "0 8px 16px rgba(0,0,0,0.10), 0 32px 80px rgba(15,23,42,0.28)",
             width: "100%", maxWidth: 680,
+            maxHeight: "calc(100vh - 32px)",
+            display: "flex", flexDirection: "column",
             overflow: "hidden",
           }}
           onClick={e => e.stopPropagation()}
@@ -67,6 +70,7 @@ export default function WizardModalShell({
             boxShadow: "0 2px 6px rgba(0,0,0,0.07)",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 28,
             position: "relative", zIndex: 1,
+            flexShrink: 0,
           }}>
             {MODAL_TABS.map((tab, idx) => {
               const Icon = tab.icon;
@@ -106,8 +110,9 @@ export default function WizardModalShell({
 
           </div>
 
-          {/* ── Modal step content ── */}
-          <div style={{ padding: "28px 28px 20px" }}>
+          {/* ── Modal step content — scrolls internally so the card never grows
+              taller than the viewport; header/footer stay put. ── */}
+          <div style={{ padding: "28px 28px 20px", flex: 1, minHeight: 0, overflowY: "auto" }}>
             {children}
           </div>
 
@@ -117,6 +122,7 @@ export default function WizardModalShell({
             display: "flex", alignItems: "center",
             justifyContent: "space-between",
             background: "#F6F8FA",
+            flexShrink: 0,
           }}>
             <button
               onClick={onBack}
@@ -131,7 +137,7 @@ export default function WizardModalShell({
               ← Go Back
             </button>
 
-            {wizardStep < 3 && (
+            {wizardStep < 3 ? (
               <button
                 onClick={onContinueClick}
                 style={{
@@ -149,6 +155,25 @@ export default function WizardModalShell({
                 }}
               >
                 Continue →
+              </button>
+            ) : (
+              <button
+                onClick={onAnalyzeClick}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  height: 40, padding: "0 24px", borderRadius: 10,
+                  fontSize: 13.5, fontWeight: 700,
+                  cursor: "pointer",
+                  background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
+                  color: "#fff",
+                  border: "none",
+                  boxShadow: "0 4px 16px rgba(37,87,167,0.28)",
+                  transition: "all 0.2s",
+                }}
+              >
+                <Sparkles style={{ width: 14, height: 14 }} />
+                Analyze Match Score
+                <ChevronRight style={{ width: 15, height: 15 }} />
               </button>
             )}
           </div>

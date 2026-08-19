@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Brain, MessageCircle, X } from "lucide-react";
+import { Sparkles, MessageCircle, X } from "lucide-react";
 import TopPickCard from "./TopPickCard";
 import TrendingSkillsCard from "./TrendingSkillsCard";
 
@@ -33,26 +33,33 @@ export default function JobsRightSidebar({
 
   return (
     <>
-      <div className="border-b border-slate-200/80 bg-white px-4 py-3.5">
+      <div className="jobs-intelligence-header border-b border-slate-100 bg-[linear-gradient(135deg,#ffffff_0%,#f8faff_100%)] px-4 py-3.5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-[#4F46E5] shadow-inner shadow-white">
-              <Brain size={18} />
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-2xl text-white"
+              style={{ background: "linear-gradient(135deg, #5896d7, #4338CA)", boxShadow: "0 4px 10px rgba(79,70,229,0.18)" }}
+            >
+              <Sparkles size={18} />
             </div>
             <div>
               <h2 className="text-[15px] font-extrabold leading-tight text-slate-950">Career intelligence</h2>
               <p className="mt-0.5 text-[11px] font-medium text-slate-500">Live recommendations from your job graph</p>
             </div>
           </div>
-          <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-emerald-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Live
           </span>
         </div>
       </div>
 
-      <div className="scrollbar-hide relative min-h-0 flex-1 overflow-y-auto scroll-smooth bg-[#f8fafc] px-3 py-3">
+      <div className="jobs-intelligence-body scrollbar-hide relative min-h-0 flex-1 overflow-y-auto scroll-smooth bg-[#f8fafc] px-3 py-3">
         <div className="space-y-3 pb-3">
-          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div
+            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white"
+            style={{ boxShadow: "0 6px 20px rgba(15,23,42,0.05), 0 0 22px rgba(79,70,229,0.08)" }}
+          >
             <TopPickCard
               jobs={topPicks}
               loading={topPicksLoading}
@@ -60,10 +67,16 @@ export default function JobsRightSidebar({
               onViewAll={onViewAllRecommendations}
             />
           </div>
-          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm" style={{ minHeight: 330 }}>
+          <div
+            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white"
+            style={{ minHeight: 330, boxShadow: "0 6px 20px rgba(15,23,42,0.05), 0 0 22px rgba(79,70,229,0.08)" }}
+          >
             <TrendingSkillsCard />
           </div>
-          <div className="rounded-2xl border border-[#4F46E5]/15 bg-white p-4 shadow-sm">
+          <div
+            className="rounded-2xl border border-[#4F46E5]/15 bg-white p-4"
+            style={{ boxShadow: "0 6px 20px rgba(15,23,42,0.05), 0 0 22px rgba(79,70,229,0.08)" }}
+          >
             <div className="flex items-start gap-3">
               <button
                 type="button"

@@ -2,7 +2,6 @@ import httpClient from "@/lib/http";
 import axios from "axios";
 import type { AxiosRequestConfig } from 'axios';
 import { logApiRequest, logApiResponse, logApiError } from "@/lib/tracing";
-import logger from "@/lib/logger";
 import type { ParseResumeResponse, ParseFromProfileResponse, ParseJDResponse, ResumeData } from '@/types/api.types';
 
 /* ========== SAFE HELPERS ========== */
@@ -37,25 +36,6 @@ async function safeGet<T = unknown>(url: string, config?: AxiosRequestConfig): P
     return response.data;
   } catch (err: unknown) {
     logApiError('GET', url, err);
-    if (axios.isAxiosError(err)) {
-      const raw = err.response?.data ?? err.message;
-      const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
-      apiError.__raw = raw;
-      throw apiError;
-    }
-    throw err;
-  }
-}
-
-async function safePatch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-  try {
-    logApiRequest('PATCH', url, data);
-    const typedData = data as Record<string, unknown> | undefined;
-    const response = await httpClient.patch<T>(url, typedData, config);
-    logApiResponse('PATCH', url, response.status, response.headers['x-trace-id']);
-    return response.data;
-  } catch (err: unknown) {
-    logApiError('PATCH', url, err);
     if (axios.isAxiosError(err)) {
       const raw = err.response?.data ?? err.message;
       const apiError: ApiErrorWithRaw = new Error(typeof raw === 'string' ? raw : JSON.stringify(raw)) as ApiErrorWithRaw;
@@ -162,33 +142,6 @@ export async function deleteResume(resume_id: string): Promise<void> {
 
 export async function enhanceKeywords(resume_id: string): Promise<unknown> {
   return await safePost<unknown>(`/parser/keyword_enhancement/${resume_id}`);
-}
-
-/* ========== ADD / REMOVE SKILLS — RESUME DIRECT UPDATE ========== */
-
-async function patchResumeSkills(resume_id: string, skills: string | string[], action: "add" | "remove") {
-  const skillArray = Array.isArray(skills) ? skills : [skills];
-  if (!resume_id?.trim()) throw new Error(`Invalid resume_id: ${resume_id}`);
-  if (!skillArray.length) throw new Error("No skills provided");
-
-  const endpoint = `/parser/${action}-skills/${resume_id}`;
-  logger.api.request('PATCH', endpoint, { skills: skillArray });
-  try {
-    const res = await safePatch(endpoint, { skills: skillArray });
-    logger.debug(`Skills ${action}ed successfully`, { count: skillArray.length });
-    return res;
-  } catch (err: unknown) {
-    logger.api.error('PATCH', endpoint, err);
-    throw err;
-  }
-}
-
-export async function parserAddSkills(resume_id: string, skills: string | string[]) {
-  return patchResumeSkills(resume_id, skills, "add");
-}
-
-export async function parserRemoveSkills(resume_id: string, skills: string | string[]) {
-  return patchResumeSkills(resume_id, skills, "remove");
 }
 
 /* ========== JD PARSING ========== */
@@ -345,8 +298,9 @@ export async function parseJDByJob(jobId: string) {
 }
 
 /* ========== MATCHING ========== */
-export async function matchResumeAndJD(resume_id: string, jd_id: string) {
-  const data = await safePost(`/matcher/match`, {
+export async function matchResumeAndJD(resume_id: string, jd_id: string, options: { force_refresh?: boolean } = {}) {
+  const qs = options.force_refresh ? '?force_refresh=true' : '';
+  const data = await safePost(`/matcher/match${qs}`, {
     resume_id,
     jd_id,
   });
@@ -365,53 +319,6 @@ export async function getMatchAnalytics(resume_id?: string, jd_id?: string) {
 
 export async function listAllMatches() {
   return await safeGet(`/matcher/list`);
-}
-
-/* ========== SCORE UPDATE — MATCHER LIVE UPDATE ========== */
-
-const MATCHER_SKILL_ERRORS = {
-  add:    { key: "duplicate_skill",            msg: "Skill already exists in resume" },
-  remove: { key: "cannot_remove_original_skill", msg: "Cannot remove original skill from resume" },
-} as const;
-
-async function patchMatcherSkill(match_id: string, skills: string | string[], action: "add" | "remove") {
-  const skill = Array.isArray(skills) ? skills[0] : skills;
-  if (!skill || !skill.trim()) throw new Error("No skill provided");
-
-  const endpoint = `/matcher/live-update/${match_id}/${action}-skill`;
-  const payload = action === "add" ? { skill_to_add: skill.trim() } : { skill_to_remove: skill.trim() };
-  const { key: skipError, msg: skipMsg } = MATCHER_SKILL_ERRORS[action];
-
-  logger.api.request('POST', endpoint, payload);
-  try {
-    const resp = await httpClient.post<Record<string, unknown>>(endpoint, payload);
-    logger.debug(`Skill ${action}ed from matcher`, { match_id, skill });
-    const data = resp.data as Record<string, unknown>;
-    return {
-      success: true,
-      data,
-      ats_scores: (data?.ats_scores as Record<string, unknown>) || { new: data?.new_ats_score },
-      updated_technical_skills: data?.updated_technical_skills as string[] | undefined,
-    };
-  } catch (err: unknown) {
-    if (axios.isAxiosError(err)) {
-      const raw = err.response?.data;
-      if (raw?.error === skipError || raw?.detail?.error === skipError) {
-        logger.warn(skipMsg, { match_id, skill });
-        return { skipped: true, data: null, reason: skipError };
-      }
-    }
-    logger.api.error('POST', endpoint, err);
-    throw err;
-  }
-}
-
-export async function matcherAddSkill(match_id: string, skills: string | string[]) {
-  return patchMatcherSkill(match_id, skills, "add");
-}
-
-export async function matcherRemoveSkill(match_id: string, skills: string | string[]) {
-  return patchMatcherSkill(match_id, skills, "remove");
 }
 
 /* ========== ENHANCE APPLY / REMOVE ========== */
@@ -488,8 +395,6 @@ export const parserApi = {
   downloadResumePdf,
   deleteResume,
   enhanceKeywords,
-  parserAddSkills,
-  parserRemoveSkills,
   parseJDFile,
   parseJDText,
   parseJDUrl,
@@ -497,8 +402,6 @@ export const parserApi = {
   matchResumeAndJD,
   getMatchAnalytics,
   listAllMatches,
-  matcherAddSkill,
-  matcherRemoveSkill,
   matcherUpdateSections,
 };
 export default parserApi;

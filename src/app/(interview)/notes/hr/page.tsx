@@ -27,11 +27,21 @@ const HOW_IT_WORKS = [
   {
     icon: MessageSquare,
     title: "Tone and clarity review",
+    body: "Every answer is scored on content, clarity, structure, and length, with filler words counted so you can see where delivery slips.",
   },
   {
     icon: BarChart2,
     title: "Round-based recall",
     body: "Start with your prepared notes, then move to keywords only for interview-like recall.",
+  },
+];
+
+const TIPS = [
+  "Back every strength and weakness with a specific example, not an adjective.",
+  "Say why this role and this team, not why any job would do.",
+  "Give each answer a clear situation, action, and outcome.",
+  "Pause instead of filling the gap; filler words are counted in your score.",
+  "Know your salary range and notice period before the call starts.",
 ];
 
 const HR_QUESTIONS_KEY = "hr_generated_questions";
@@ -70,6 +80,7 @@ export default function HRPage() {
         "Calmer recruiter conversations",
       ]}
       ctaLabel="Start HR Practice"
+      loading={loading}
       error={error}
       onStart={handleStart}
     />

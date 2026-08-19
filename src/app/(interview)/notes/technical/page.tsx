@@ -44,7 +44,11 @@ const TIPS = [
   "Keep answers structured: problem, approach, detail, verification.",
 ];
 
-export const TECH_QUESTIONS_KEY = "tech_generated_questions";
+// Not exported: a Next.js App Router page file may only export the default
+// component and framework-recognised names, and an extra export fails the
+// generated route type. Nothing imports this - notes/technical/practice
+// declares the same literal locally.
+const TECH_QUESTIONS_KEY = "tech_generated_questions";
 
 export default function TechnicalPage() {
   const router = useRouter();

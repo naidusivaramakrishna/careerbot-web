@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Upload, Link2, Sparkles, ChevronRight, AlertCircle } from "lucide-react";
+import { Upload, Link2, AlertCircle } from "lucide-react";
 
 interface WizardStepConfirmProps {
   uploadedFile: File | null;
@@ -9,11 +9,10 @@ interface WizardStepConfirmProps {
   jdFile: File | null;
   jdText: string;
   error: string | null;
-  onAnalyze: () => void;
 }
 
 export default function WizardStepConfirm({
-  uploadedFile, sessionResumeName, jdFile, jdText, error, onAnalyze,
+  uploadedFile, sessionResumeName, jdFile, jdText, error,
 }: WizardStepConfirmProps) {
   const isUrl = /^https?:\/\/.+/i.test(jdText.trim());
   const jdLabel = jdFile
@@ -128,37 +127,9 @@ export default function WizardStepConfirm({
         </div>
       )}
 
-      <button
-        onClick={onAnalyze}
-        style={{
-          width: "100%", height: 48, borderRadius: 14,
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-          fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em",
-          cursor: "pointer",
-          background: "linear-gradient(135deg, #2557a7 0%, #1a3a8f 100%)",
-          color: "#fff", border: "none",
-          boxShadow: "0 6px 24px rgba(37,87,167,0.34)",
-          transition: "all 0.2s ease",
-        }}
-        onMouseEnter={e => {
-          const b = e.currentTarget as HTMLButtonElement;
-          b.style.boxShadow = "0 10px 36px rgba(37,87,167,0.44)";
-          b.style.transform = "translateY(-1px)";
-        }}
-        onMouseLeave={e => {
-          const b = e.currentTarget as HTMLButtonElement;
-          b.style.boxShadow = "0 6px 24px rgba(37,87,167,0.34)";
-          b.style.transform = "translateY(0)";
-        }}
-      >
-        <Sparkles style={{ width: 18, height: 18 }} />
-        Analyze Match Score
-        <ChevronRight style={{ width: 17, height: 17 }} />
-      </button>
-
       <p style={{
         textAlign: "center", fontSize: 11.5, color: "#94A3B8",
-        marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+        marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
       }}>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
