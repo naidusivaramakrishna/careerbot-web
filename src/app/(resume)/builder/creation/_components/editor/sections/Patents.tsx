@@ -8,6 +8,8 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { toast } from "sonner";
 import {
@@ -61,6 +63,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Patents: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const { errors, validateRequired, clearError, clearSectionIndexErrors, reindexErrors } = useValidation();
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
@@ -296,7 +300,13 @@ const Patents: React.FC = () => {
     const resumeId = localStorage.getItem("current_resume_id");
     try {
       setDeletingIndex(index);
-      if (resumeId && entry.id) await deleteResumeSectionItem(resumeId, 'patents', entry.id);
+      if (resumeId && entry.id) {
+        if (isEnhancedResume) {
+          await deleteSectionItemFromEnhancedResume(resumeId, 'patents', entry.id);
+        } else {
+          await deleteResumeSectionItem(resumeId, 'patents', entry.id);
+        }
+      }
       const updated = savedEntries.filter((_, i) => i !== index);
       setSavedEntries(updated);
       clearSectionIndexErrors("patents", index);

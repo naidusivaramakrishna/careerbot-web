@@ -65,6 +65,10 @@ interface NotesData {
     teamwork_example: string;
     handling_gaps: string;
     learning_attitude: string;
+    salary_discussion: string;
+    relocation_answer: string;
+    shift_answer: string;
+    weakness_answer: string;
   };
   unfilled_count: number;
 }
@@ -94,10 +98,10 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const projectExplanations: ProjectNote[] = (apiNotes.project_explanations ?? []).map((p: any) => {
-    const techStack = Array.isArray(p.tech_stack)
-      ? p.tech_stack.join(", ")
-      : p.tech_stack ?? (Array.isArray(p.key_tech_terms) ? p.key_tech_terms.join(", ") : (p.key_tech_terms ?? ""));
+  const projectExplanations: ProjectNote[] = (apiNotes.project_explanations ?? []).map((p: any, i: number) => {
+    const techStack = Array.isArray(p.key_tech_terms)
+      ? p.key_tech_terms.join(", ")
+      : (p.key_tech_terms ?? "");
 
     const followUpQuestions = Array.isArray(p.follow_up_questions)
       ? p.follow_up_questions
@@ -108,11 +112,11 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
       : [];
 
     return {
-      project_name: p.project_name ?? "",
+      project_name: p.project_name ?? p.title ?? `Project ${i + 1}`,
       overview: p.overview ?? p.one_liner ?? "",
       your_role: p.your_role ?? p.role ?? "",
       tech_stack: techStack,
-      how_it_works: p.how_it_works ?? p.explanation_script ?? "",
+      how_it_works: p.explanation_script ?? "",
       challenges: p.challenges ?? "",
       results: p.results ?? "",
       follow_up_questions: followUpQuestions,
@@ -132,6 +136,10 @@ function mapApiToNotesData(apiNotes: Record<string, any>): NotesData {
         ? additional.employment_gaps.talking_points.join("\n")
         : ""),
     learning_attitude: additional.learning_attitude ?? "",
+    salary_discussion: additional.salary_discussion?.script ?? additional.salary_discussion ?? "",
+    relocation_answer: additional.relocation_answer?.script ?? additional.relocation_answer ?? "",
+    shift_answer: additional.shift_answer?.script ?? additional.shift_answer ?? "",
+    weakness_answer: additional.weakness_answer?.script ?? additional.weakness_answer ?? "",
   };
 
   return {
@@ -350,14 +358,14 @@ function GenerationProgress({ stage }: { stage: number }) {
 
 export default function NotesPage() {
   const router = useRouter();
-  const { userId, setNotesGenerated: setContextNotesGenerated, progressLoading } = useMockInterview();
+  const { setNotesGenerated: setContextNotesGenerated, progressLoading } = useMockInterview();
   const [notes, setNotes] = useState<NotesData | null>(null);
   const [activeTab, setActiveTab] = useState("intro");
   const [experienceLevel, setExperienceLevel] = useState<"fresher" | "experienced">("fresher");
   const [generating, setGenerating] = useState(false);
   const [genStage, setGenStage] = useState(0);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving] = useState(false);
   const [notesGenerated, setNotesGenerated] = useState(false);
   const [notesLoading, setNotesLoading] = useState(true);
   const [targetRole, setTargetRole] = useState("");
@@ -366,11 +374,25 @@ export default function NotesPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // On mount: if we already have a resume_id, fetch notes directly.
+  // getAllResumesUnified is deferred to loadResumes() which only runs when
+  // the user opens the generation form (notes not yet generated).
   useEffect(() => {
     if (progressLoading) return;
 
     const storedId = localStorage.getItem("current_resume_id") ?? "";
+    if (storedId) {
+      setResumeId(storedId);
+      loadNotes(storedId);
+    } else {
+      setNotesLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progressLoading]);
 
+  // Loads the resume list — only called when showing the generation form.
+  const loadResumes = () => {
+    const storedId = localStorage.getItem("current_resume_id") ?? "";
     getAllResumesUnified()
       .then(({ builder_resumes, enhanced_resumes }) => {
         const builderOptions = (builder_resumes as unknown as ResumeResponse[]).map(toResumeOption);
@@ -380,35 +402,23 @@ export default function NotesPage() {
           role: "",
         }));
         const allOptions: ResumeOption[] = [...builderOptions, ...enhancedOptions];
-
-        if (allOptions.length === 0) {
-          setAvailableResumes([]);
-          setNotesLoading(false);
-          return;
-        }
-
         setAvailableResumes(allOptions);
-
         const bestId = allOptions.some((r) => r.id === storedId)
           ? storedId
-          : allOptions[0].id;
+          : allOptions[0]?.id ?? "";
         setResumeId(bestId);
-        localStorage.setItem("current_resume_id", bestId);
-        loadNotes(bestId);
+        if (bestId) localStorage.setItem("current_resume_id", bestId);
       })
-      .catch(() => {
-        setNotesLoading(false);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progressLoading, userId]);
+      .catch(() => {});
+  };
 
   function loadNotes(_resumeId: string) {
-    if (!userId) {
+    if (!_resumeId) {
       setNotesLoading(false);
       return;
     }
 
-    getNotes(userId)
+    getNotes(_resumeId)
       .then((record) => {
         const hasNotes =
           record?.notes != null &&
@@ -501,43 +511,51 @@ export default function NotesPage() {
     }
   };
 
-  const handleSaveAndContinue = async () => {
-    if (!userId) {
-      router.push("/notes/english");
-      return;
-    }
-    setSaving(true);
-    try {
-      if (notes) await updateNotes(userId, notes as unknown as Record<string, unknown>);
-    } catch {
-      // Non-blocking — navigate regardless
-    } finally {
-      setSaving(false);
-    }
+  const handleSaveAndContinue = () => {
     router.push("/notes/english");
   };
 
+  const persistNotes = (updated: NotesData) => {
+    if (!resumeId) return;
+    updateNotes(resumeId, updated as unknown as Record<string, unknown>).catch(() => {});
+  };
+
   const updateSelfIntro = (v: string) =>
-    setNotes((n) => n ? { ...n, self_introduction: v } : n);
+    setNotes((n) => {
+      const updated = n ? { ...n, self_introduction: v } : n;
+      if (updated) persistNotes(updated);
+      return updated;
+    });
 
   const updateProject = (i: number, k: keyof ProjectNote, v: string) =>
     setNotes((n) => {
       if (!n) return n;
       const projs = [...n.project_explanations];
       projs[i] = { ...projs[i], [k]: v } as ProjectNote;
-      return { ...n, project_explanations: projs };
+      const updated = { ...n, project_explanations: projs };
+      persistNotes(updated);
+      return updated;
     });
 
   const updateHR = (questionId: string, v: string) =>
-    setNotes((n) => n ? ({
-      ...n,
-      hr_answers: n.hr_answers.map((qa) =>
-        qa.question_id === questionId ? { ...qa, answer_script: v } : qa
-      ),
-    }) : n);
+    setNotes((n) => {
+      if (!n) return n;
+      const updated = {
+        ...n,
+        hr_answers: n.hr_answers.map((qa) =>
+          qa.question_id === questionId ? { ...qa, answer_script: v } : qa
+        ),
+      };
+      persistNotes(updated);
+      return updated;
+    });
 
   const updateAdditional = (k: keyof NotesData["additional_notes"], v: string) =>
-    setNotes((n) => n ? { ...n, additional_notes: { ...n.additional_notes, [k]: v } } : n);
+    setNotes((n) => {
+      const updated = n ? { ...n, additional_notes: { ...n.additional_notes, [k]: v } } : n;
+      if (updated) persistNotes(updated);
+      return updated;
+    });
 
   const toggleHobby = (hobby: string) =>
     setNotes((n) => {
@@ -545,7 +563,9 @@ export default function NotesPage() {
       const hobbies = n.additional_notes.hobbies.includes(hobby)
         ? n.additional_notes.hobbies.filter((h) => h !== hobby)
         : [...n.additional_notes.hobbies, hobby];
-      return { ...n, additional_notes: { ...n.additional_notes, hobbies } };
+      const updated = { ...n, additional_notes: { ...n.additional_notes, hobbies } };
+      persistNotes(updated);
+      return updated;
     });
 
   if (notesLoading) {
@@ -556,6 +576,13 @@ export default function NotesPage() {
       </div>
     );
   }
+
+  useEffect(() => {
+    if (!notesGenerated && !generating && availableResumes.length === 0) {
+      loadResumes();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesGenerated, generating]);
 
   if (!notesGenerated && !generating) {
     return (
@@ -910,39 +937,38 @@ export default function NotesPage() {
             <p className="text-xs text-gray-400 mt-2">💡 Only select hobbies you can talk about confidently for 30+ seconds.</p>
           </div>
 
-          {[
-            { key: "career_goals_short" as const, label: "Short-term Career Goals", note: "1–2 year goal. Should align with the role you're applying for." },
-            { key: "career_goals_long" as const, label: "Long-term Career Goals", note: "5-year vision. Realistic and ambitious — shows growth mindset." },
-            { key: "why_this_field" as const, label: "Why This Field", note: "Genuine reason only. Interviewers spot fake answers quickly." },
-            { key: "teamwork_example" as const, label: "Teamwork Example", note: "Use STAR format: Situation → Task → Action → Result." },
-          ].map(({ key, label, note }) => (
-            <div key={key} className="border border-gray-100 rounded-xl p-4">
-              <EditableBlock label={label} value={notes.additional_notes[key] as string} onChange={(v) => updateAdditional(key, v)} rows={3} />
-              <p className="text-xs text-gray-400 mt-2">💡 {note}</p>
-            </div>
-          ))}
-
-          <div className="border border-[#2557a7]/20 bg-[#2557a7]/5 rounded-xl p-4">
-            <p className="text-[10px] font-bold text-[#2557a7] uppercase tracking-widest mb-1.5">Handling Employment / Education Gaps</p>
-            <p className="text-xs text-gray-600 mb-3">Only fill this if you have a gap. Interviewers may ask about it directly.</p>
-            <EditableBlock
-              value={notes.additional_notes.handling_gaps}
-              onChange={(v) => updateAdditional("handling_gaps", v)}
-              rows={3}
-            />
-            <p className="text-xs text-gray-400 mt-2">💡 Be honest and brief. Always end with something positive you did during the gap.</p>
-          </div>
-
-          <div className="border border-gray-200 bg-gray-50 rounded-xl p-4">
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Learning Attitude & Self-Development</p>
-            <p className="text-xs text-gray-600 mb-3">Interviewers ask: &ldquo;How do you stay updated?&rdquo; or &ldquo;What was the last thing you learned?&rdquo;</p>
-            <EditableBlock
-              value={notes.additional_notes.learning_attitude}
-              onChange={(v) => updateAdditional("learning_attitude", v)}
-              rows={3}
-            />
-            <p className="text-xs text-gray-400 mt-2">💡 Mention a specific resource, course, or recent thing you learned. Makes the answer credible.</p>
-          </div>
+          {(Object.keys(notes.additional_notes) as Array<keyof NotesData["additional_notes"]>)
+            .filter((key) => {
+              const val = notes.additional_notes[key];
+              return typeof val === "string" && val.trim().length > 0;
+            })
+            .map((key) => {
+              const LABELS: Partial<Record<keyof NotesData["additional_notes"], { label: string; note: string }>> = {
+                career_goals_short:  { label: "Short-term Career Goals",          note: "1–2 year goal. Should align with the role you're applying for." },
+                career_goals_long:   { label: "Long-term Career Goals",            note: "5-year vision. Realistic and ambitious — shows growth mindset." },
+                why_this_field:      { label: "Why This Field",                    note: "Genuine reason only. Interviewers spot fake answers quickly." },
+                teamwork_example:    { label: "Teamwork Example",                  note: "Use STAR format: Situation → Task → Action → Result." },
+                handling_gaps:       { label: "Handling Employment / Education Gaps", note: "Be honest and brief. Always end with something positive you did during the gap." },
+                learning_attitude:   { label: "Learning Attitude & Self-Development", note: "Mention a specific resource, course, or recent thing you learned." },
+                salary_discussion:   { label: "Salary Discussion",                 note: "Research the market range beforehand. Stay open to negotiation." },
+                weakness_answer:     { label: "Weakness Answer",                   note: "Mention a real weakness and always follow with what you're doing to improve it." },
+                relocation_answer:   { label: "Relocation / Work Location",        note: "Be clear and honest about your flexibility." },
+                shift_answer:        { label: "Shift / Availability",              note: "Confirm your actual availability — don't over-promise." },
+              };
+              const meta = LABELS[key];
+              if (!meta) return null;
+              return (
+                <div key={key} className="border border-gray-100 rounded-xl p-4">
+                  <EditableBlock
+                    label={meta.label}
+                    value={notes.additional_notes[key] as string}
+                    onChange={(v) => updateAdditional(key, v)}
+                    rows={3}
+                  />
+                  <p className="text-xs text-gray-400 mt-2">💡 {meta.note}</p>
+                </div>
+              );
+            })}
         </div>
       )}
 

@@ -65,7 +65,14 @@ const activityIcons: Record<string, React.ElementType> = {
 
 const formatPlan = (planId: string, planName?: string) => planName || planId.replace(/[_-]/g, " ").trim() || "Free Plan";
 
-const firstName = (name: string) => name?.trim().split(" ")[0] || "there";
+const firstName = (name: string) => {
+  const trimmed = name?.trim();
+  if (!trimmed) return "there";
+  return trimmed
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+};
 
 const timeAgo = (ts: string) => {
   const diff = Date.now() - new Date(ts).getTime();
@@ -123,7 +130,7 @@ const Header = ({ data }: { data: DashboardSummary }) => {
   );
 };
 
-const ReadinessPath = ({ data }: { data: DashboardSummary }) => {
+const ReadinessPath = ({ data, lowCredits }: { data: DashboardSummary; lowCredits: boolean }) => {
   const steps = [
     { label: "Upload Resume", complete: data.progress.resume_uploaded },
     { label: "Complete Profile", complete: data.progress.profile_completed },
@@ -143,7 +150,7 @@ const ReadinessPath = ({ data }: { data: DashboardSummary }) => {
         </div>
         <div className="grid flex-1 gap-3 sm:grid-cols-4 lg:max-w-3xl">
           {steps.map((step, index) => {
-            const active = index === currentIndex && !step.complete;
+            const active = !lowCredits && index === currentIndex && !step.complete;
             return (
               <div key={step.label} className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -174,7 +181,7 @@ const StatusRow = ({ label, value, detail }: { label: string; value: string; det
   </div>
 );
 
-const PrimaryDashboardPanel = ({ data, action }: { data: DashboardSummary; action: DashboardAction }) => {
+const PrimaryDashboardPanel = ({ data, action, lowCredits }: { data: DashboardSummary; action: DashboardAction; lowCredits: boolean }) => {
   const ActionIcon = action.Icon;
   const profileState = data.profile.completeness >= 85 ? "Strong" : data.profile.completeness >= 60 ? "Improving" : "Needs setup";
   const atsValue = data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score}`;
@@ -182,7 +189,7 @@ const PrimaryDashboardPanel = ({ data, action }: { data: DashboardSummary; actio
 
   return (
     <section className={`${SURFACE} overflow-hidden`}>
-      <ReadinessPath data={data} />
+      <ReadinessPath data={data} lowCredits={lowCredits} />
       <div className="grid lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="px-4 py-5 sm:px-5 lg:py-5">
           <div className="inline-flex items-center gap-2 rounded-full border border-[#c8d7ef] bg-[#f8fbff] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#2557a7]">
@@ -267,14 +274,14 @@ const OperationsTable = ({ data }: { data: DashboardSummary }) => {
         {rows.map((row) => {
           const Icon = row.Icon;
           return (
-            <Link key={row.label} href={row.href} className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-5 py-3 transition hover:bg-gray-50 sm:px-6">
+            <div key={row.label} className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-5 py-3 sm:px-6">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-[#2557a7]"><Icon size={17} /></span>
               <span className="min-w-0">
                 <span className="block text-sm font-black text-gray-950">{row.label}</span>
                 <span className="mt-1 block truncate text-xs leading-5 text-gray-500">{row.detail}</span>
               </span>
               <span className="hidden text-sm font-black text-gray-500 sm:block">{row.metric}</span>
-            </Link>
+            </div>
           );
         })}
       </div>
@@ -721,7 +728,7 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
       <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-gray-950 sm:px-6 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-[1320px] space-y-5">
           <Header data={effectiveData} />
-          <PrimaryDashboardPanel data={effectiveData} action={primaryAction} />
+          <PrimaryDashboardPanel data={effectiveData} action={primaryAction} lowCredits={lowCredits} />
 
           <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="space-y-5">

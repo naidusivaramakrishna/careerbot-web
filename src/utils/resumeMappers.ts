@@ -395,9 +395,6 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
       credentialId:
         str(cert.credential_id) || str(cert.credentialId) ||
         str(pMatch?.credentialId) || str(pMatch?.credential_id),
-      credentialUrl:
-        str(cert.credentialUrl) || str(cert.credential_url) ||
-        str(pMatch?.credentialUrl) || str(pMatch?.credential_url),
     };
   });
 

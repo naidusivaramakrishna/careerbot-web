@@ -134,6 +134,9 @@ const RHUBARB_VISEME_TO_NORMALIZED: Record<string, string> = {
   X: "sil",
 };
 
+const MOUTH_SPRITE_IDS = ["sil", "PP", "FF", "TH", "DD", "KK", "CH", "SS", "NN", "RR", "AA", "E", "I", "O", "U"] as const;
+const MOUTH_SPRITE_ID_SET = new Set<string>(MOUTH_SPRITE_IDS);
+
 function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
 }
@@ -200,6 +203,15 @@ function visibleQuestionAt(words: LipSyncWord[], fullText: string, currentMs: nu
 function lipSyncTimelineMs(audio: HTMLAudioElement, lipSync: LipSyncPayload) {
   const offset = typeof lipSync.audio_start_offset_ms === "number" ? lipSync.audio_start_offset_ms : 0;
   return Math.max(0, audio.currentTime * 1000 - offset);
+}
+
+function mouthSpriteIdFromCue(cue: MouthCue) {
+  if (MOUTH_SPRITE_ID_SET.has(cue.visemeId)) return cue.visemeId;
+  return cue.level > 0.12 ? "AA" : "sil";
+}
+
+function mouthSpriteSrc(basePath: string, cue: MouthCue) {
+  return `${basePath}/mouth-${mouthSpriteIdFromCue(cue).toLowerCase()}.svg`;
 }
 interface ScoreToast {
   questionNumber: number;
@@ -683,11 +695,20 @@ export default function LiveInterviewSessionPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [completedReportId, setCompletedReportId] = useState<string | null>(null);
   const [interviewerMouthCue, setInterviewerMouthCue] = useState<MouthCue>(CLOSED_MOUTH_CUE);
+  const [mouthSpriteFailed, setMouthSpriteFailed] = useState(false);
   const [useLipSyncQuestionReveal, setUseLipSyncQuestionReveal] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   // Keep ref in sync with state so toggles mid-playback take effect
   useEffect(() => { isAudioMutedRef.current = isAudioMuted; }, [isAudioMuted]);
+
+  useEffect(() => {
+    setMouthSpriteFailed(false);
+    MOUTH_SPRITE_IDS.forEach((spriteId) => {
+      const image = new window.Image();
+      image.src = `${interviewer.mouthSpriteBasePath}/mouth-${spriteId.toLowerCase()}.svg`;
+    });
+  }, [interviewer.mouthSpriteBasePath]);
 
   useEffect(() => {
     const storedType = sessionStorage.getItem("live_session_type");
@@ -1338,7 +1359,16 @@ export default function LiveInterviewSessionPage() {
       const wsPath = `/api/v1/mock-interview/live/${sessionId}?ticket=${token}`;
       openWebSocket(wsPath);
       // Modal stays open until session_resumed confirms success
-    } catch { /* leave modal open; next auto-attempt fires from new WS onclose */ }
+    } catch {
+      // getLiveSessionState threw (network still down) or openWebSocket failed.
+      // No new WS was created, so no onclose will fire — schedule the next attempt manually.
+      if (attempt <= MAX_RECONNECT) {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          doReconnectRef.current();
+        }, 2000);
+      }
+    }
   }, [sessionId, openWebSocket, router]);
 
   // Keep doReconnectRef current so onclose/setTimeout callbacks never hold stale closures
@@ -1357,6 +1387,8 @@ export default function LiveInterviewSessionPage() {
     : "Your interviewer is preparing the first question.";
 
   const interviewerMouthLevel = interviewerMouthCue.level;
+  const mouthAnchor = interviewer.mouthAnchor;
+  const mouthSprite = mouthSpriteSrc(interviewer.mouthSpriteBasePath, interviewerMouthCue);
 
   const handleCodingSubmitted = useCallback((result: SubmitSolutionResponse) => {
     wsSend({
@@ -1588,27 +1620,44 @@ export default function LiveInterviewSessionPage() {
 
                 {isQuestionBeingSpoken && (
                   <div
-                    className="pointer-events-none absolute left-1/2 top-[43.5%] z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center mix-blend-multiply"
+                    className="pointer-events-none absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
                     data-testid="interviewer-mouth-cue"
                     data-viseme={interviewerMouthCue.visemeId}
+                    data-mouth-sprite={mouthSpriteIdFromCue(interviewerMouthCue)}
                     style={{
-                      opacity: 0.12 + interviewerMouthLevel * 0.32,
-                      transform: `translate(-50%, calc(-50% + ${interviewerMouthCue.yOffset}px)) scaleX(${interviewerMouthCue.widthScale}) scaleY(${interviewerMouthCue.heightScale})`,
+                      left: `${mouthAnchor.xPercent}%`,
+                      top: `${mouthAnchor.yPercent}%`,
+                      width: `clamp(${mouthAnchor.minWidthPx}px, ${mouthAnchor.widthPercent}%, ${mouthAnchor.maxWidthPx}px)`,
+                      transform: `translate(-50%, calc(-50% + ${interviewerMouthCue.yOffset}px)) rotate(${mouthAnchor.rotationDeg ?? 0}deg) scale(${0.96 + interviewerMouthLevel * 0.08})`,
                     }}
                     aria-hidden="true"
                   >
-                    <span
-                      className="block bg-black/75 shadow-[0_0_10px_rgba(0,0,0,0.24)] transition-[width,height,border-radius,filter] duration-75 ease-linear motion-reduce:transition-none"
-                      style={{
-                        width: `${28 + interviewerMouthLevel * 14}px`,
-                        height: `${14 + interviewerMouthLevel * 10}px`,
-                        borderRadius: interviewerMouthCue.borderRadius,
-                        filter: `blur(${0.12 + interviewerMouthLevel * 0.28}px)`,
-                      }}
-                    />
+                    {!mouthSpriteFailed ? (
+                      <Image
+                        src={mouthSprite}
+                        alt=""
+                        width={120}
+                        height={64}
+                        unoptimized
+                        className="block h-auto w-full select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.22)] transition-[opacity,transform] duration-75 ease-linear motion-reduce:transition-none"
+                        style={{ opacity: 0.72 + interviewerMouthLevel * 0.28 }}
+                        onError={() => setMouthSpriteFailed(true)}
+                        draggable={false}
+                      />
+                    ) : (
+                      <span
+                        className="block bg-black/75 shadow-[0_0_10px_rgba(0,0,0,0.24)] transition-[width,height,border-radius,filter] duration-75 ease-linear motion-reduce:transition-none"
+                        style={{
+                          width: `${28 + interviewerMouthLevel * 14}px`,
+                          height: `${14 + interviewerMouthLevel * 10}px`,
+                          borderRadius: interviewerMouthCue.borderRadius,
+                          filter: `blur(${0.12 + interviewerMouthLevel * 0.28}px)`,
+                          opacity: 0.12 + interviewerMouthLevel * 0.32,
+                        }}
+                      />
+                    )}
                   </div>
-                )}
-                <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
+                )}                <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
                   <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-400" : "bg-white/50"}`} />
                   {wsConnected ? "Live interview room" : "Connecting room"}
                 </div>

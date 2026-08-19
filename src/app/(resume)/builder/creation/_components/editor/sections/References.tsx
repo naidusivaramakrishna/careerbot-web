@@ -5,7 +5,9 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
 interface ReferenceEntry {
@@ -23,6 +25,8 @@ const emptyReference = (): ReferenceEntry => ({
 
 const References: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -184,7 +188,11 @@ const References: React.FC = () => {
       // // console.log("🗑️ Deleting reference item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "references", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "references", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "references", itemId);
+      }
 
       // // console.log("✅ Reference item deleted from backend successfully");
 

@@ -217,24 +217,24 @@ export const generateNotes = async (data: GenerateNotesRequest): Promise<Generat
 };
 
 /**
- * Fetch stored interview prep notes for a user
- * GET /api/v1/mock-interview/notes/{user_id}
+ * Fetch stored interview prep notes for a resume
+ * GET /api/v1/mock-interview/notes/{resume_id}
  */
-export const getNotes = async (userId: string): Promise<NotesRecord> => {
-  const response = await httpClient.get<NotesRecord>(`/mock-interview/notes/${userId}`);
+export const getNotes = async (resumeId: string): Promise<NotesRecord> => {
+  const response = await httpClient.get<NotesRecord>(`/mock-interview/notes/${resumeId}`);
   return response.data;
 };
 
 /**
  * Partially update interview prep notes (user edits)
- * PUT /api/v1/mock-interview/notes/{user_id}
+ * PUT /api/v1/mock-interview/notes/{resume_id}
  */
 export const updateNotes = async (
-  userId: string,
+  resumeId: string,
   notes: Record<string, unknown>
 ): Promise<UpdateNotesResponse> => {
   const response = await httpClient.put<UpdateNotesResponse>(
-    `/mock-interview/notes/${userId}`,
+    `/mock-interview/notes/${resumeId}`,
     { notes } as unknown as Record<string, unknown>
   );
   return response.data;

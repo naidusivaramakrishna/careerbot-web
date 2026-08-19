@@ -63,7 +63,6 @@ export interface ResumeResponse {
     issueDate: string;
     expiryDate?: string;
     credentialId?: string;
-    credentialUrl?: string;
   }>;
   achievements?: Array<{
     id?: string;
@@ -918,10 +917,12 @@ export const deleteResume = async (resumeId: string): Promise<void> => {
 };
 
 // ==================== AUTO-SAVE RESUME ====================
+export type AutoSaveResumeResponse = ResumeResponse & { warnings?: string[] };
+
 export const autoSaveResume = async (
   resumeId: string,
   resumeData: Partial<ResumeResponse>
-): Promise<ResumeResponse | null> => {
+): Promise<AutoSaveResumeResponse | null> => {
 
   try {
     logger.debug("💾 Auto-saving resume:", resumeId);
@@ -929,7 +930,7 @@ export const autoSaveResume = async (
     // ✅ Transform data for backward compatibility
     const transformedData = transformResumeDataForBackend(resumeData);
 
-    const response = await httpClient.patch<ResumeResponse>(
+    const response = await httpClient.patch<AutoSaveResumeResponse>(
       `/resumes/${resumeId}`,
       transformedData,
       {
@@ -945,7 +946,11 @@ export const autoSaveResume = async (
       return null;
     }
 
-    logger.info("✅ Auto-save successful");
+    if (response.data?.warnings?.length) {
+      logger.warn("⚠️ Auto-save completed with warnings:", response.data.warnings);
+    } else {
+      logger.info("✅ Auto-save successful");
+    }
     return response.data;
 
   } catch (error) {
