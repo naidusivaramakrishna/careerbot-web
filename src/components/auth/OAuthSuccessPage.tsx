@@ -17,6 +17,18 @@ export function OAuthSuccessPage({ provider }: Props) {
     useEffect(() => {
         const verifyAndRedirect = async () => {
             try {
+                // ✅ Extract tokens from URL params (backend sends them as backup to httpOnly cookies)
+                const accessToken = searchParams.get('access_token')
+                const refreshToken = searchParams.get('refresh_token')
+
+                if (accessToken && refreshToken) {
+                    // Store tokens in localStorage as backup (for debugging or if cookies fail)
+                    localStorage.setItem('access_token_backup', accessToken)
+                    localStorage.setItem('refresh_token_backup', refreshToken)
+                    console.log('✅ OAuth tokens received and stored as backup')
+                }
+
+                // ✅ Verify authentication (uses httpOnly cookies set by backend callback)
                 const authenticated = await isAuthenticated()
 
                 if (authenticated) {

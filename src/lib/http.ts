@@ -113,6 +113,14 @@ const processQueue = (
 
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // ✅ Add Authorization header if token exists in localStorage (OAuth tokens)
+    // This is a backup for httpOnly cookies in case they don't work across domains
+    if (typeof window !== 'undefined' && config.headers) {
+      const token = localStorage.getItem('access_token_backup');
+      if (token) {
+        config.headers.set('Authorization', `Bearer ${token}`);
+      }
+    }
 
     const correlationId = getCorrelationId();
     if (correlationId && config.headers) {

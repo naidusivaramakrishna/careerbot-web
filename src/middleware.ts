@@ -8,6 +8,8 @@ const publicRoutes = [
     '/',
     '/admin/login',
     '/recruiter/auth',
+    '/auth/google/success',
+    '/auth/error',
     '/verify-email',
     '/reset-password',
     '/forgot-password',

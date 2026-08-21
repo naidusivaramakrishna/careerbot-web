@@ -32,24 +32,40 @@ export default function AuthPage() {
         prompt: "select_account",
         access_type: "offline",
       });
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/auth/google/login-url?${params.toString()}`);
+      const backendUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/auth/google/login-url?${params.toString()}`;
+      logger.info("📍 Backend OAuth URL endpoint:", backendUrl);
+
+      const response = await fetch(backendUrl);
 
       if (!response.ok) {
-        throw new Error(`Failed to get Google login URL: ${response.status}`);
+        const errorText = await response.text();
+        logger.error("❌ Backend returned error:", {
+          status: response.status,
+          statusText: response.statusText,
+          responseBody: errorText.substring(0, 500),
+        });
+        throw new Error(`Failed to get Google login URL: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
       const authUrl = data.auth_url;
 
       if (!authUrl) {
+        logger.error("❌ No auth_url in response:", data);
         throw new Error("No auth_url in response");
       }
 
-      logger.info("✅ Redirecting to Google OAuth...", { authUrl: authUrl.substring(0, 50) + "..." });
+      logger.info("✅ Generated Google OAuth URL:", {
+        authUrl: authUrl.substring(0, 100) + "...",
+        hasPrompt: authUrl.includes("prompt"),
+        hasAccessType: authUrl.includes("access_type"),
+      });
+
       window.location.href = authUrl;
     } catch (error) {
       logger.error("❌ Failed to initiate Google OAuth:", error);
-      alert("Failed to start Google sign-in. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Failed to start Google sign-in: ${errorMessage}`);
     }
   };
 
