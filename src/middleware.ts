@@ -9,6 +9,7 @@ const publicRoutes = [
     '/admin/login',
     '/recruiter/auth',
     '/auth/google/success',
+    '/auth/linkedin/success',
     '/auth/error',
     '/verify-email',
     '/reset-password',
