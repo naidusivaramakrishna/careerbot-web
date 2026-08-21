@@ -69,15 +69,24 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       // don't lose their local state (e.g. optimistic step flags).
       if (!hasDataRef.current) setLoading(true);
       setError(null);
+      logger.info('DashboardContext: fetching dashboard summary...');
       const summary = await getDashboardSummary({ skipAuthRedirect: true });
       if (!mountedRef.current) return;
       hasDataRef.current = true;
       setData(summary);
       setCreditsRemaining(summary.plan.credits_remaining);
-      logger.info('DashboardContext: data loaded');
+      logger.info('DashboardContext: data loaded successfully', {
+        credits: summary.plan.credits_remaining,
+        userId: summary.user?.id
+      });
     } catch (err) {
       if (!mountedRef.current) return;
-      logger.error('DashboardContext: fetch failed', err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logger.error('DashboardContext: fetch failed', {
+        error: errorMessage,
+        status: (err as any)?.response?.status,
+        statusText: (err as any)?.response?.statusText
+      });
       setError(err as Error);
     } finally {
       if (mountedRef.current) setLoading(false);
