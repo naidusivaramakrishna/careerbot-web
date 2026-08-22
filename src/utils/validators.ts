@@ -1,5 +1,10 @@
 const SAFE_URL_PROTOCOLS = new Set(["http:", "https:"]);
+// Matches the JD backend's /jd/extract SUPPORTED_EXTENSIONS (jd_parser.py) —
+// .txt included, since that endpoint genuinely accepts it.
 const ALLOWED_DOCUMENT_EXTENSIONS = [".pdf", ".doc", ".docx", ".txt"];
+// Matches the resume backend's /parser/parse_resume/ SUPPORTED_EXTENSIONS
+// (resume_parser.py) — no .txt there, unlike the JD upload path above.
+const ALLOWED_RESUME_EXTENSIONS = [".pdf", ".doc", ".docx"];
 
 /**
  * Cheap client-side UX guard only (rejects the wrong file before an upload
@@ -9,6 +14,12 @@ const ALLOWED_DOCUMENT_EXTENSIONS = [".pdf", ".doc", ".docx", ".txt"];
 export function hasAllowedDocumentExtension(fileName: string): boolean {
   const lower = fileName.toLowerCase();
   return ALLOWED_DOCUMENT_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/** Same guard as above, scoped to what /parser/parse_resume/ actually accepts. */
+export function hasAllowedResumeExtension(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return ALLOWED_RESUME_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
 /**

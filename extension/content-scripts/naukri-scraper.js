@@ -61,7 +61,62 @@
         if (skills.length >= 2) return skills.join(', ');
       }
     }
+
+    // Fallback: Naukri rotates its CSS-module class hashes on every deploy,
+    // which breaks the class-based selectors above and causes the chip
+    // list to fall through to the page's raw innerText — where adjacent
+    // chips have no whitespace between them and merge into one blob (e.g.
+    // "Python DevelopmentMachine Learning"). Locate the "Key Skills" label
+    // by its text instead (stable across deploys) and read each chip as
+    // its own DOM element, so skills stay separated regardless of hash.
+    const heading = Array.from(document.querySelectorAll('label, span, div, h2, h3, h4, strong'))
+      .find(el => el.children.length === 0 && /^key skills$/i.test(el.innerText.trim()));
+    if (heading) {
+      // Chips sit as siblings/cousins under the same wrapping container as
+      // the heading — NOT in an unrelated section that follows it. Hopping
+      // to the wrapper's *next* sibling (as this fallback previously did)
+      // reached past the skills widget into the neighbouring "About the
+      // company" card and picked up badges/news text as if they were
+      // skills (e.g. "Private", "Forbes Global 2000", article headlines).
+      const containers = [heading.nextElementSibling, heading.parentElement].filter(Boolean);
+      for (const container of containers) {
+        const skills = Array.from(container.querySelectorAll('*'))
+          .filter(el => el.children.length === 0)
+          .map(el => el.innerText.trim())
+          // Skill names are short phrases; anything longer is prose from an
+          // unrelated section, not a chip — drop it rather than risk
+          // polluting the list.
+          .filter(s => s && s.length <= 60 && !/preferred keyskills/i.test(s) && !/^key skills$/i.test(s));
+        const unique = [...new Set(skills)];
+        if (unique.length >= 2 && unique.length <= 40) return unique.join(', ');
+      }
+    }
+
     return null;
+  }
+
+  // Drops the raw "Key Skills" heading/legend line and the merged,
+  // un-separated chip line(s) (e.g. "TypeScriptAI AgentsJavascript...")
+  // from the scraped JD text, since a clean comma-separated version is
+  // appended separately by the caller and would otherwise be duplicated.
+  function stripRawKeySkillsLines(jdText, skills) {
+    if (!skills || !skills.length) return jdText;
+    const lines = jdText.split('\n').filter(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      if (/^key skills$/i.test(trimmed)) return false;
+      if (/preferred keyskills/i.test(trimmed)) return false;
+      let remainder = trimmed;
+      let matched = 0;
+      for (const skill of skills) {
+        if (skill && remainder.includes(skill)) {
+          remainder = remainder.split(skill).join('');
+          matched++;
+        }
+      }
+      return !(matched >= 2 && remainder.trim().length === 0);
+    });
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   function extractJobDescription() {
@@ -75,11 +130,16 @@
     for (const sel of selectors) {
       const el = document.querySelector(sel);
       if (el && el.innerText.trim().length > 100) {
-        const jdText = el.innerText.trim();
+        let jdText = el.innerText.trim();
         // Append key skills as a clean comma-separated list so the backend
         // can parse each skill separately instead of one merged blob.
         const skills = extractKeySkills();
         if (skills) {
+          // The raw scrape above still contains Naukri's own "Key Skills"
+          // heading/legend and the merged, un-separated chip text (e.g.
+          // "TypeScriptAI AgentsJavascript..."). Strip that out so it isn't
+          // duplicated alongside the clean list appended below.
+          jdText = stripRawKeySkillsLines(jdText, skills.split(', '));
           return `${jdText}\n\nKey Skills: ${skills}`;
         }
         return jdText;

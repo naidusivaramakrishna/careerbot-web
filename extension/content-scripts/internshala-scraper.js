@@ -37,24 +37,122 @@
            document.querySelector('.about_company_text_container') !== null;
   }
 
+  // Internshala shows several useful structured fields (Start Date,
+  // CTC/Stipend, Experience, Apply By, Perks, Number of openings) outside
+  // the "About the job" text block, so they were never captured — only the
+  // free-text description was, even though the rest of the page carries
+  // real job data. Same heading-anchored technique as the JD-section
+  // extraction below: find each field by its label text (stable across
+  // markup changes) and read the value from the sibling that follows it.
+  function extractDetailByLabel(labelText) {
+    const leaves = Array.from(document.querySelectorAll('div, span, label, strong, h3, h4, h5'))
+      .filter(el => el.children.length === 0);
+    const heading = leaves.find(el => el.innerText.trim().toLowerCase() === labelText.toLowerCase());
+    if (!heading) return null;
+    const candidates = [heading.nextElementSibling, heading.parentElement?.nextElementSibling].filter(Boolean);
+    for (const node of candidates) {
+      const text = node.innerText.trim();
+      // A genuine field value is short. Anything longer means the sibling
+      // walked past this field into an unrelated section — skip it rather
+      // than risk pulling in the wrong content (see the Naukri key-skills
+      // fix, which hit the same failure mode).
+      if (text && text.length <= 120) return text;
+    }
+    return null;
+  }
+
+  // Location has no visible label next to it (unlike Start Date/CTC/etc.),
+  // so it can't be found by extractDetailByLabel — it needs its own
+  // selector, same as title/company in extractMeta() below.
+  function extractLocation() {
+    const el = document.querySelector(
+      '#location_names, .location_link, .locations, [class*="location_link"], [class*="location_names"]'
+    );
+    const text = el?.innerText?.trim();
+    return text && text.length <= 120 ? text : null;
+  }
+
+  // "Skill(s) required" is a chip list, not a single value, so it needs the
+  // same chip-reading technique used for Naukri's Key Skills fix: search
+  // within the heading's own parent (where the chips actually live as
+  // siblings), not a section that follows it — hopping past the wrapper
+  // previously reached into the neighbouring "Earn certifications in these
+  // skills" block on Naukri's equivalent widget, so this stays scoped the
+  // same safe way.
+  function extractRequiredSkills() {
+    const leaves = Array.from(document.querySelectorAll('div, span, label, strong, h3, h4, h5'))
+      .filter(el => el.children.length === 0);
+    const heading = leaves.find(el => /^skill\(s\)\s*required$/i.test(el.innerText.trim()));
+    if (!heading) return null;
+    const containers = [heading.nextElementSibling, heading.parentElement].filter(Boolean);
+    for (const container of containers) {
+      const skills = Array.from(container.querySelectorAll('*'))
+        .filter(el => el.children.length === 0)
+        .map(el => el.innerText.trim())
+        .filter(s => s && s.length <= 60 && !/^skill\(s\)\s*required$/i.test(s));
+      const unique = [...new Set(skills)];
+      if (unique.length >= 1 && unique.length <= 40) return unique.join(', ');
+    }
+    return null;
+  }
+
+  function extractJobMeta() {
+    const lines = [];
+    const push = (label, value) => { if (value) lines.push(`${label}: ${value}`); };
+
+    push('Location', extractLocation());
+    push('Start Date', extractDetailByLabel('Start Date'));
+    // CTC (jobs), Stipend (internships), and Salary (a duplicate restated
+    // further down the page) all describe the same figure — take the first
+    // that matches instead of repeating it three times.
+    push('Pay', extractDetailByLabel('CTC (Annual)') || extractDetailByLabel('Stipend') || extractDetailByLabel('Salary'));
+    push('Experience', extractDetailByLabel('Experience'));
+    push('Apply By', extractDetailByLabel('Apply By'));
+    push('Skills Required', extractRequiredSkills());
+    push('Perks', extractDetailByLabel('Perks'));
+    push('Number of Openings', extractDetailByLabel('Number of openings'));
+
+    return lines.length ? lines.join('\n') : null;
+  }
+
   function extractJobDescription() {
-    const selectors = [
+    const details = extractJobMeta();
+    const withDetails = (text) => (details ? `${details}\n\n${text}` : text);
+
+    // Primary: find the JD section by its heading text. This is far more
+    // stable across Internshala markup changes than CSS class names, and
+    // (unlike class selectors) it can't accidentally match the "About
+    // Company" section instead of the actual role description.
+    const headingTexts = ['about the internship', 'about the job', 'job description', 'about this job'];
+    const leaves = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, div, span, strong, label'))
+      .filter(el => el.children.length === 0);
+    for (const wanted of headingTexts) {
+      const heading = leaves.find(el => el.innerText.trim().toLowerCase() === wanted);
+      if (!heading) continue;
+      const candidates = [heading.nextElementSibling, heading.parentElement?.nextElementSibling].filter(Boolean);
+      for (const node of candidates) {
+        const text = node.innerText.trim();
+        if (text.length > 100) return withDetails(text);
+      }
+    }
+
+    // Fallback: known JD container classes. Deliberately excludes the
+    // about-company selectors (.about_company_text_container, #about-company,
+    // .about-section) — those hold the company bio, not the role
+    // description, and were previously being returned as the JD by mistake
+    // whenever the real JD selector failed to match (the reported bug:
+    // "About KocharTech..." scraped instead of "About the internship...").
+    const jdSelectors = [
       '.internship_other_details_container',
-      '.about_company_text_container',
-      '#about-company',
-      '.about-section',
       '[class*="job_description"]',
       '.job-description-paragraph',
       '.container-fluid .row .col-8',
     ];
-    for (const sel of selectors) {
+    for (const sel of jdSelectors) {
       const el = document.querySelector(sel);
-      if (el && el.innerText.trim().length > 100) return el.innerText.trim();
+      if (el && el.innerText.trim().length > 100) return withDetails(el.innerText.trim());
     }
-    // Combine multiple sections for richer JD
-    const sections = document.querySelectorAll('.internship_other_details_container, .about_company_text_container');
-    const combined = Array.from(sections).map(el => el.innerText.trim()).join('\n\n');
-    if (combined.length > 100) return combined;
+
     return null;
   }
 
