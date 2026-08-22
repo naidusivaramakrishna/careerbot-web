@@ -18,6 +18,7 @@ import { useCreditsBalance } from '@/hooks/useCreditsBalance';
 import { useNotificationStream } from '@/hooks/useNotificationStream';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
 import { getProfile, getProfilePicture, UserProfile } from '@/api/userApi';
+import { getDashboardSummary } from '@/api/dashboardApi';
 import { signOut } from '@/api/authApi';
 import { Notification } from '@/api/notificationsApi';
 import { resolveNotificationRoute } from '@/lib/notificationRoute';
@@ -192,9 +193,31 @@ export default function Header() {
   /* Profile */
   useEffect(() => {
     const fetchProfile = async () => {
+      // Step 1: try to get the full profile
+      let profile: UserProfile | null = null;
       try {
-        const profile = await getProfile({ skipAuthRedirect: true });
-        setUserProfile(profile);
+        profile = await getProfile({ skipAuthRedirect: true });
+      } catch { /* silently fail */ }
+
+      // Step 2: if profile has no display name (or failed entirely), fall back to
+      // dashboard summary which always carries user.name after signup
+      if (!profile?.username && !profile?.full_name) {
+        try {
+          const summary = await getDashboardSummary({ skipAuthRedirect: true });
+          if (summary?.user?.name) {
+            profile = {
+              ...(profile ?? {}),
+              full_name: summary.user.name,
+              email: profile?.email ?? summary.user.email,
+            };
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (profile) setUserProfile(profile);
+
+      // Step 3: profile picture (independent of name)
+      try {
         const picRes = await getProfilePicture({ skipAuthRedirect: true });
         if (picRes?.picture_url) {
           const fullUrl = picRes.picture_url.startsWith('http')

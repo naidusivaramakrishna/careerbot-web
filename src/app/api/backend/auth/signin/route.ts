@@ -105,10 +105,21 @@ export async function POST(request: NextRequest) {
 
     // Forward Set-Cookie headers from backend, rewriting per sanitiseCookie
     // so the browser actually accepts them.
-    response.headers.getSetCookie().forEach((cookie) => {
-      res.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest));
+    const setCookies = response.headers.getSetCookie();
+    console.log(`[Auth Signin] Backend returned ${setCookies.length} Set-Cookie headers`);
+
+    if (setCookies.length === 0) {
+      console.warn('[Auth Signin] ⚠️ WARNING: Backend did not return any Set-Cookie headers!');
+      console.warn('[Auth Signin] User will not be authenticated for subsequent requests');
+    }
+
+    setCookies.forEach((cookie) => {
+      const sanitized = sanitiseCookie(cookie, isSecureRequest);
+      console.log(`[Auth Signin] Setting cookie: ${sanitized.substring(0, 50)}...`);
+      res.headers.append('Set-Cookie', sanitized);
     });
 
+    console.log('[Auth Signin] ✅ Signin successful, cookies set, response returned');
     return res;
 
   } catch {
