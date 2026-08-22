@@ -82,6 +82,8 @@ export const FAILED_REASON_MESSAGES: Record<CoverLetterReason, string> = {
     "The draft is longer than recommended. Trim before exporting.",
   review_required:
     "The draft requires review before use.",
+  unsupported_required_jd_skill:
+    "The role requires a skill that your resume does not currently support. Review the requirement before applying.",
 };
 
 // ── api / network error reasons (raised by coverLetterApi.ts) ──
@@ -98,6 +100,7 @@ export type CoverLetterApiErrorReason =
   | "timeout"
   | "unauthorized"
   | "not_found"
+  | "generation_in_progress"
   | "download_unavailable"
   | "unknown";
 
@@ -115,11 +118,13 @@ export const ERROR_MESSAGES: Record<CoverLetterApiErrorReason, string> = {
   unavailable:
     "Cover letter generation is temporarily unavailable. Please try again later.",
   timeout:
-    "Generation timed out. Please try again.",
+    "Generation is taking longer than expected and may still complete. Check History before trying again.",
   unauthorized:
     "Your session has expired. Please sign in again.",
   not_found:
     "We couldn't find that cover letter.",
+  generation_in_progress:
+    "Your cover letter is still being generated. Please wait a moment, then check History.",
   download_unavailable:
     "Failed cover letters can't be downloaded.",
   unknown:
