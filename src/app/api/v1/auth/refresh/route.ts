@@ -48,10 +48,19 @@ export async function POST(request: NextRequest) {
     };
     if (correlationId) headers['X-Correlation-ID'] = correlationId;
 
+    // Forward the request body so OAuth exchange calls (which carry
+    // { refresh_token: "..." } from the Google/LinkedIn success pages)
+    // reach the backend. Cookie-based refreshes send an empty body — that's fine too.
+    let bodyText = '{}';
+    try {
+      const raw = await request.text();
+      if (raw && raw.trim() !== '' && raw.trim() !== '{}') bodyText = raw;
+    } catch { /* ignore — fall back to empty body */ }
+
     const response = await fetch(`${BACKEND_URL}/api/v1/auth/refresh`, {
       method: 'POST',
       headers,
-      body: '{}',
+      body: bodyText,
     });
 
     const contentType = response.headers.get('content-type') ?? '';

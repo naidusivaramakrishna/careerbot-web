@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { httpClient } from "@/lib/http";
 import { getStoredAuthRedirect } from "@/lib/authRedirect";
+import { isAuthenticated } from "@/api/authApi";
 
 function GoogleOAuthContent() {
   const router = useRouter();
@@ -27,19 +28,37 @@ function GoogleOAuthContent() {
 
       try {
         setStatus("Establishing session...");
-        // Google OAuth backend sends tokens as URL params instead of httpOnly cookies
-        // directly. Call /auth/refresh with the refresh_token so the backend sets the
-        // httpOnly cookie session that the rest of the app depends on.
-        await httpClient.post("/auth/refresh", { refresh_token: refreshToken });
-      } catch {
-        // Backend may have already set cookies via the callback redirect; continue anyway.
-      }
 
-      setStatus("Redirecting to dashboard...");
-      sessionStorage.removeItem("__signing_out");
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      // getStoredAuthRedirect() returns whatever page the user came from, or /dashboard
-      router.push(getStoredAuthRedirect());
+        // Mark session as fresh BEFORE calling /auth/refresh so the axios
+        // interceptor treats any 401 as transient (not a real session expiry)
+        // and does NOT redirect to the login page mid-exchange.
+        localStorage.setItem("token_last_refreshed_at", Date.now().toString());
+
+        // Exchange the Google refresh_token for httpOnly session cookies.
+        // The /api/v1/auth/refresh proxy forwards this body to the backend,
+        // which sets access_token + refresh_token as httpOnly cookies on the
+        // frontend domain so every subsequent request is authenticated.
+        await httpClient.post("/auth/refresh", { refresh_token: refreshToken });
+
+        setStatus("Verifying session...");
+        const authed = await isAuthenticated();
+        if (!authed) {
+          // Cookies didn't land — clear stale marker and go home
+          localStorage.removeItem("token_last_refreshed_at");
+          setStatus("Session verification failed");
+          setTimeout(() => router.push("/"), 1500);
+          return;
+        }
+
+        setStatus("Redirecting to dashboard...");
+        sessionStorage.removeItem("__signing_out");
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        router.push(getStoredAuthRedirect());
+      } catch {
+        localStorage.removeItem("token_last_refreshed_at");
+        setStatus("Sign in failed — please try again");
+        setTimeout(() => router.push("/"), 1500);
+      }
     };
 
     processOAuth();
