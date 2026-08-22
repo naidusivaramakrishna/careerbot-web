@@ -30,11 +30,9 @@ import { parseJDByJob, parseJDFile, parseJDText, parseJDUrl } from "@/api/parser
 import { getResumeById } from "@/api/resumeApi";
 import { extractResume } from "@/api/resumeParsingApi";
 import SignUpModal from "@/components/SignUpModal";
-import { CoverLetterTemplatePreview, CoverLetterTemplatePreviewModal } from "@/app/cover-letter/_components/CoverLetterTemplatePreview";
+import { CoverLetterTemplatePreview } from "@/app/cover-letter/_components/CoverLetterTemplatePreview";
 import { useCurrentUserId } from "@/hooks/useCurrentUserId";
 import { useDefaultCoverLetterResume } from "@/hooks/useDefaultCoverLetterResume";
-import { useDefaultCoverLetterTemplate } from "@/hooks/useDefaultCoverLetterTemplate";
-import { useCoverLetterTemplates } from "@/hooks/useCoverLetterTemplates";
 import { useGenerateCoverLetter } from "@/hooks/useGenerateCoverLetter";
 import { useHasParsedResume } from "@/hooks/useHasParsedResume";
 import { useLatestParsedResume } from "@/hooks/useLatestParsedResume";
@@ -43,16 +41,11 @@ import { getCorrelationId } from "@/lib/correlationId";
 import { logger } from "@/lib/logger";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
 import { getCoverLetterParsedResumeId, getCoverLetterResumeSource } from "@/lib/coverLetterResume";
-import type { CoverLetterFormSubmit, CoverLetterResumeOption, CoverLetterTemplate, CoverLetterTemplateId } from "@/types/coverLetter";
+import type { CoverLetterFormSubmit, CoverLetterResumeOption, CoverLetterTemplateId } from "@/types/coverLetter";
 
 const MAX_RESUME_UPLOAD_MB = 10;
 const MIN_JD_CHARS = 50;
 const MAX_NOTE_CHARS = 300;
-// Mirrors ApplicationContext caps in the CL-1.2 API schema.
-const MAX_ROLE_TITLE_CHARS = 200;
-const MAX_COMPANY_LOCATION_CHARS = 200;
-const MAX_WHY_COMPANY_CHARS = 1_000;
-const MAX_HIGHLIGHT_ACHIEVEMENT_CHARS = 1_000;
 // Mirrors the backend GenerateOptions bounds exactly (ge=200, le=500).
 const WORD_COUNT_FLOOR = 200;
 const WORD_COUNT_CEIL = 500;
@@ -285,8 +278,6 @@ export default function CoverLetterNewPage() {
   const gate = useHasParsedResume();
   const latest = useLatestParsedResume();
   const defaultResume = useDefaultCoverLetterResume();
-  const defaultTemplate = useDefaultCoverLetterTemplate();
-  const templateCatalog = useCoverLetterTemplates();
   const { userId } = useCurrentUserId();
   const [uploadedResume, setUploadedResume] = useState<ParsedResumeBlob | null>(null);
   const [selectedResume, setSelectedResume] = useState<ParsedResumeBlob | null>(null);
@@ -336,13 +327,6 @@ export default function CoverLetterNewPage() {
     },
     () => setShowSignIn(true),
   );
-  useEffect(() => {
-    const preferred = defaultTemplate.defaultTemplate?.template_id as TemplateStyleId | undefined;
-    if (preferred && templateStyles.some((template) => template.id === preferred)) {
-      setSelectedTemplateId(preferred);
-      pendingTemplateIdRef.current = preferred;
-    }
-  }, [defaultTemplate.defaultTemplate?.template_id]);
   // If the initial resume fetch fails with an auth error (session expired),
   // open the sign-in modal immediately so the user can re-authenticate without
   // having to navigate away from this page.
@@ -462,7 +446,6 @@ export default function CoverLetterNewPage() {
           : trackerJobId.trim().length > 0;
   const generation = useGenerateCoverLetter({
     onSuccess: (response) => {
-      setApiError(null);
       rememberGeneratedLetterTemplate(response.letter_id, pendingTemplateIdRef.current);
       setGeneratedLetterId(response.letter_id);
     },
@@ -793,17 +776,6 @@ export default function CoverLetterNewPage() {
                 onMaxWordsChange={setMaxWords}
                 selectedTemplateId={selectedTemplateId}
                 onTemplateChange={setSelectedTemplateId}
-                templateCatalog={templateCatalog.templates}
-                defaultTemplateId={defaultTemplate.defaultTemplate?.template_id}
-                isSavingDefaultTemplate={defaultTemplate.isSaving}
-                onSetDefaultTemplate={async (id) => {
-                  try {
-                    await defaultTemplate.setDefault(id);
-                    toast.success("Default cover-letter template updated.");
-                  } catch {
-                    toast.error("Could not update your default template.");
-                  }
-                }}
                 onContinue={() => void handleSubmit()}
               />
             )}
@@ -977,10 +949,6 @@ function CoverLetterStepOneMock({
   onMaxWordsChange,
   selectedTemplateId,
   onTemplateChange,
-  templateCatalog,
-  defaultTemplateId,
-  isSavingDefaultTemplate,
-  onSetDefaultTemplate,
   onContinue,
 }: {
   hasResume: boolean;
@@ -1032,10 +1000,6 @@ function CoverLetterStepOneMock({
   onMaxWordsChange: (v: number) => void;
   selectedTemplateId: TemplateStyleId;
   onTemplateChange: (id: TemplateStyleId) => void;
-  templateCatalog: CoverLetterTemplate[];
-  defaultTemplateId?: CoverLetterTemplateId;
-  isSavingDefaultTemplate: boolean;
-  onSetDefaultTemplate: (id: CoverLetterTemplateId) => Promise<void>;
   onContinue: () => void;
 }) {
   const inputId = "cover-letter-resume-upload-mock";
@@ -1393,7 +1357,6 @@ function CoverLetterStepOneMock({
                 onChange={onRoleTitleChange}
                 placeholder="e.g. Senior Backend Engineer"
                 suggestions={jobTitleSuggestions}
-                maxLength={MAX_ROLE_TITLE_CHARS}
               />
             </div>
             <div className="sm:col-span-2">
@@ -1403,7 +1366,6 @@ function CoverLetterStepOneMock({
                 onChange={onLocationChange}
                 placeholder="e.g. Bengaluru, India"
                 suggestions={locationSuggestions}
-                maxLength={MAX_COMPANY_LOCATION_CHARS}
               />
             </div>
             <div>
@@ -1454,12 +1416,10 @@ function CoverLetterStepOneMock({
               <textarea
                 value={whyCompany}
                 onChange={(e) => onWhyCompanyChange(e.target.value)}
-                maxLength={MAX_WHY_COMPANY_CHARS}
                 rows={2}
                 placeholder="e.g. Their focus on developer tooling matches the products I want to keep building."
                 className="mt-2 w-full resize-y rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 py-2.5 text-sm font-semibold text-[#070b33] outline-none transition placeholder:font-medium placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:text-[15px]"
               />
-              <p className="mt-1 text-right text-xs font-semibold text-slate-500">{whyCompany.length}/{MAX_WHY_COMPANY_CHARS}</p>
             </div>
             <div className="sm:col-span-2">
               <label className="text-sm font-black text-[#070b33]">
@@ -1468,12 +1428,10 @@ function CoverLetterStepOneMock({
               <textarea
                 value={highlightAchievement}
                 onChange={(e) => onHighlightAchievementChange(e.target.value)}
-                maxLength={MAX_HIGHLIGHT_ACHIEVEMENT_CHARS}
                 rows={2}
                 placeholder="e.g. Led the migration that cut deployment time by 40%."
                 className="mt-2 w-full resize-y rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 py-2.5 text-sm font-semibold text-[#070b33] outline-none transition placeholder:font-medium placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:text-[15px]"
               />
-              <p className="mt-1 text-right text-xs font-semibold text-slate-500">{highlightAchievement.length}/{MAX_HIGHLIGHT_ACHIEVEMENT_CHARS}</p>
             </div>
             <label className="flex cursor-pointer items-start gap-4 rounded-lg border border-[#d8e0ef] bg-[#f8fbff] px-4 py-4 transition hover:border-[#2557a7] hover:bg-blue-50/40 sm:col-span-2">
               <input
@@ -1657,10 +1615,6 @@ function CoverLetterStepOneMock({
         onTemplateChange={onTemplateChange}
         onClose={() => setTemplatesOpen(false)}
         open={templatesOpen}
-        templates={templateCatalog}
-        defaultTemplateId={defaultTemplateId}
-        isSavingDefaultTemplate={isSavingDefaultTemplate}
-        onSetDefaultTemplate={onSetDefaultTemplate}
       />
     </section>
   );
@@ -2078,21 +2032,12 @@ function TemplatePickerDrawer({
   selectedTemplateId,
   onTemplateChange,
   onClose,
-  templates,
-  defaultTemplateId,
-  isSavingDefaultTemplate,
-  onSetDefaultTemplate,
 }: {
   open: boolean;
   selectedTemplateId: TemplateStyleId;
   onTemplateChange: (id: TemplateStyleId) => void;
   onClose: () => void;
-  templates: CoverLetterTemplate[];
-  defaultTemplateId?: CoverLetterTemplateId;
-  isSavingDefaultTemplate: boolean;
-  onSetDefaultTemplate: (id: CoverLetterTemplateId) => Promise<void>;
 }) {
-  const [previewing, setPreviewing] = useState<{ name: string; url: string } | null>(null);
   if (!open) return null;
 
   return (
@@ -2130,11 +2075,7 @@ function TemplatePickerDrawer({
                 ].join(" ")}
               >
                 <div className={["rounded-lg border border-white/70 p-2", template.paper].join(" ")}>
-                  <CoverLetterTemplatePreview
-                    template={template}
-                    previewUrl={templates.find((item) => item.template_id === template.backendTemplateId)?.preview_url}
-                    size="large"
-                  />
+                  <DocumentPreview template={template} />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-start justify-between gap-3">
@@ -2146,63 +2087,12 @@ function TemplatePickerDrawer({
                   </p>
                   <p className="mt-2 text-sm leading-5 text-[#10235f]">{template.description}</p>
                   <p className="mt-2 text-xs font-semibold text-slate-500">Best for {template.bestFor}</p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {(() => {
-                      const previewUrl = templates.find((item) => item.template_id === template.backendTemplateId)?.preview_url;
-                      return <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (previewUrl) setPreviewing({ name: template.name, url: previewUrl });
-                        }}
-                        onKeyDown={(event) => {
-                          if ((event.key === "Enter" || event.key === " ") && previewUrl) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            setPreviewing({ name: template.name, url: previewUrl });
-                          }
-                        }}
-                        aria-disabled={!previewUrl}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-black ${previewUrl ? "bg-[#2557a7] text-white hover:bg-[#1e4a94]" : "cursor-wait bg-slate-100 text-slate-400"}`}
-                      >
-                        {previewUrl ? "Preview" : "Loading preview..."}
-                      </span>;
-                    })()}
-                    {defaultTemplateId === template.backendTemplateId ? (
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">Your default</span>
-                    ) : (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void onSetDefaultTemplate(template.backendTemplateId);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            void onSetDefaultTemplate(template.backendTemplateId);
-                          }
-                        }}
-                        className="rounded-full border border-[#cdd8ee] px-2.5 py-1 text-[11px] font-black text-[#2557a7]"
-                      >
-                        {isSavingDefaultTemplate ? "Saving..." : "Make default"}
-                      </span>
-                    )}
-                  </div>
                 </div>
               </button>
             );
           })}
         </div>
       </div>
-      <CoverLetterTemplatePreviewModal
-        previewUrl={previewing?.url ?? null}
-        templateName={previewing?.name ?? "Template"}
-        onClose={() => setPreviewing(null)}
-      />
     </div>
   );
 }
@@ -2214,7 +2104,6 @@ function AutocompleteTextField({
   onChange,
   placeholder,
   suggestions,
-  maxLength,
 }: {
   label: string;
   optional?: boolean;
@@ -2222,7 +2111,6 @@ function AutocompleteTextField({
   onChange: (value: string) => void;
   placeholder: string;
   suggestions: string[];
-  maxLength?: number;
 }) {
   const [open, setOpen] = useState(false);
   const query = value.trim().toLowerCase();
@@ -2255,7 +2143,6 @@ function AutocompleteTextField({
         }}
         placeholder={placeholder}
         autoComplete="off"
-        maxLength={maxLength}
         className="mt-2 h-11 w-full rounded-lg border border-[#d8e0ef] bg-[#fbfdff] px-3 text-sm font-semibold text-[#070b33] outline-none transition placeholder:text-[#8a95b3] focus:border-[#2557a7] focus:bg-white focus:shadow-[0_10px_24px_rgba(37,87,167,0.08)] focus:ring-4 focus:ring-blue-100 2xl:mt-3 2xl:h-14 2xl:px-4 2xl:text-[15px]"
       />
       {showSuggestions && (

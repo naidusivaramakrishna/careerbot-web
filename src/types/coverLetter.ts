@@ -55,8 +55,7 @@ export type CoverLetterReason =
   | "thin_claim_catalog"
   | "short_letter_warning"
   | "long_letter_warning"
-  | "review_required"
-  | "unsupported_required_jd_skill";
+  | "review_required";
 
 // Supported resume-parser schema versions on the request — must
 // match `_SUPPORTED_RESUME_SCHEMA_VERSIONS` in the api-side schema.
@@ -330,19 +329,8 @@ export interface CoverLetterTemplate {
   description: string;
   supports: CoverLetterExportFormat[];
   is_default: boolean;
-  /** Absolute backend URL for the non-personal PDF style preview. */
-  preview_url: string;
   sections?: Record<string, CoverLetterTemplateSection> | null;
   placeholders?: Record<string, CoverLetterTemplatePlaceholder> | null;
-}
-
-export interface CoverLetterDefaultTemplateRequest {
-  template_id: CoverLetterTemplateId;
-}
-
-export interface CoverLetterDefaultTemplateResponse {
-  template: CoverLetterTemplate;
-  is_user_default: boolean;
 }
 
 export interface CoverLetterTemplateCatalogResponse {

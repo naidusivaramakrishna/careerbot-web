@@ -14,7 +14,6 @@ export const FALLBACK_COVER_LETTER_TEMPLATES: CoverLetterTemplate[] = [
     description: "Traditional letterhead with a strong top rule and recruiter-safe spacing.",
     supports: ["pdf", "docx"],
     is_default: true,
-    preview_url: "",
   },
   {
     template_id: "modern",
@@ -22,7 +21,6 @@ export const FALLBACK_COVER_LETTER_TEMPLATES: CoverLetterTemplate[] = [
     description: "Bold masthead, clean contact row, and polished SaaS-style structure.",
     supports: ["pdf", "docx"],
     is_default: false,
-    preview_url: "",
   },
   {
     template_id: "compact",
@@ -30,7 +28,6 @@ export const FALLBACK_COVER_LETTER_TEMPLATES: CoverLetterTemplate[] = [
     description: "Dense one-page rhythm with tight paragraphs and clear section breaks.",
     supports: ["pdf", "docx"],
     is_default: false,
-    preview_url: "",
   },
   {
     template_id: "executive",
@@ -38,7 +35,6 @@ export const FALLBACK_COVER_LETTER_TEMPLATES: CoverLetterTemplate[] = [
     description: "Premium side rail with executive profile treatment and spacious body copy.",
     supports: ["pdf", "docx"],
     is_default: false,
-    preview_url: "",
   },
   {
     template_id: "minimal",
@@ -46,7 +42,6 @@ export const FALLBACK_COVER_LETTER_TEMPLATES: CoverLetterTemplate[] = [
     description: "Open whitespace, quiet typography, and a confident editorial feel.",
     supports: ["pdf", "docx"],
     is_default: false,
-    preview_url: "",
   },
   {
     template_id: "signature",
@@ -54,7 +49,6 @@ export const FALLBACK_COVER_LETTER_TEMPLATES: CoverLetterTemplate[] = [
     description: "Monogram header and signature finish for a memorable professional note.",
     supports: ["pdf", "docx"],
     is_default: false,
-    preview_url: "",
   },
 ];
 

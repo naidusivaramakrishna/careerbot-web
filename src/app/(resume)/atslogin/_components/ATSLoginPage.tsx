@@ -118,8 +118,7 @@ interface LoadingOverlayProps {
 
 
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function LegacyUploadZone({ isDragging, onDragOver, onDragLeave, onDrop, onAnalyze, canScan, buttonLabel }: UploadZoneProps) {
+function UploadZone({ isDragging, onDragOver, onDragLeave, onDrop, onAnalyze, canScan, buttonLabel }: UploadZoneProps) {
   return (
     <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       <label
@@ -208,45 +207,6 @@ function LegacyUploadZone({ isDragging, onDragOver, onDragLeave, onDrop, onAnaly
           <span>•</span>
           <span>100% private</span>
         </div>
-      </label>
-    </div>
-  );
-}
-
-function UploadZone({ isDragging, onDragOver, onDragLeave, onDrop }: UploadZoneProps) {
-  return (
-    <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
-      <label
-        htmlFor="ats-file-upload"
-        className={[
-          "group flex min-h-[360px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 text-center transition-all duration-200",
-          isDragging
-            ? "border-[#2557a7] bg-blue-50"
-            : "border-blue-200 bg-white hover:border-[#2557a7] hover:bg-blue-50/30",
-        ].join(" ")}
-      >
-        <motion.div
-          animate={isDragging ? { scale: 1.08, y: -4 } : { scale: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: EASE }}
-          className="grid h-24 w-24 place-items-center rounded-full border border-blue-100 bg-blue-50 text-[#2557a7] shadow-[0_12px_30px_rgba(37,87,167,0.12)]"
-        >
-          <UploadCloud className="h-11 w-11" strokeWidth={1.8} />
-        </motion.div>
-
-        <div className="mt-7 space-y-2">
-          <p className="text-xl font-bold tracking-[-0.02em] text-slate-950 sm:text-2xl">
-            {isDragging ? "Release to upload" : "Drop your resume here"}
-          </p>
-          <p className="text-sm text-slate-500">
-            or <span className="font-semibold text-[#2557a7] underline decoration-blue-200 underline-offset-4">browse files</span>
-          </p>
-        </div>
-
-        <div className="mt-7 inline-flex items-center rounded-xl bg-[#2557a7] px-7 py-3.5 text-sm font-bold text-white shadow-[0_10px_22px_rgba(37,87,167,0.22)] transition-transform group-hover:-translate-y-0.5">
-          <UploadCloud className="mr-2.5 h-5 w-5" />
-          Browse resume
-        </div>
-        <p className="mt-5 text-sm font-medium text-slate-500">PDF, DOCX or DOC</p>
       </label>
     </div>
   );
@@ -810,18 +770,18 @@ export default function ATSLoginPage() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden bg-white py-8 sm:py-12 lg:flex lg:items-center lg:py-16">
+    <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden flex flex-col justify-center pt-6 sm:pt-10 lg:pt-12 pb-12 lg:pb-20" style={{ backgroundColor: "#FAFBFF" }}>
 
       {/* ── Background layers ── */}
       {/* Dot grid */}
-      <div className="hidden"
+      <div className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage: "radial-gradient(circle,rgba(148,163,184,0.18) 1px,transparent 1px)",
           backgroundSize: "24px 24px",
         }}
       />
       {/* Top bloom */}
-      <div className="hidden"
+      <div className="absolute top-0 left-1/2 pointer-events-none"
         style={{
           width: 900, height: 480,
           transform: "translateX(-50%) translateY(-30%)",
@@ -830,7 +790,7 @@ export default function ATSLoginPage() {
         }}
       />
       {/* Bottom-right accent */}
-      <div className="hidden"
+      <div className="absolute bottom-0 right-0 pointer-events-none"
         style={{
           width: 500, height: 400,
           background: "radial-gradient(ellipse at bottom right,rgba(16,185,129,0.05) 0%,transparent 60%)",
@@ -854,14 +814,14 @@ export default function ATSLoginPage() {
       </AnimatePresence>
 
       {/* ── Main workspace ── */}
-      <div className="relative mx-auto w-full max-w-[1380px] px-5 sm:px-8 lg:px-12">
+      <div className="relative w-full max-w-full xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-16">
 
         {/* ── Badge — above grid so heading aligns with card top ── */}
         <motion.div
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28, ease: EASE }}
-          className="hidden"
+          className="pb-4"
         >
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full"
             style={{ background: "white", boxShadow: "0 0 0 1px rgba(37,87,167,0.2), 0 2px 8px rgba(37,87,167,0.10)" }}
@@ -879,27 +839,41 @@ export default function ATSLoginPage() {
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-12 xl:gap-16">
+        <div className="grid grid-cols-1 items-start gap-8 py-4 lg:grid-cols-[0.9fr_1.1fr] lg:gap-8">
 
           {/* ── LEFT: Hero content ── */}
           <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.36, ease: EASE }}
-            className="flex flex-col gap-8"
+            className="flex flex-col gap-7"
           >
             {/* Heading */}
             <div>
-              <h1 className="mb-4 text-3xl font-bold leading-tight tracking-[-0.035em] text-slate-950 sm:text-4xl">
-                AI Resume Analysis
+              <h1 className="font-black leading-[1.05] tracking-[-0.04em] mb-4"
+                style={{ fontSize: "clamp(36px,3.8vw,52px)" }}
+              >
+                <span className="text-slate-950">AI </span>
+                <span style={{
+                  background: "linear-gradient(135deg,#2557a7 0%,#2557a7 50%,#1a3a8f 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}>
+                  Resume
+                </span>
+                <span className="text-slate-950"> Analysis</span>
               </h1>
-              <p className="max-w-[300px] text-[15px] leading-7 text-slate-500">
-                Upload your resume and get an instant AI-powered analysis with actionable insights.
+              <p className="text-slate-500 leading-relaxed"
+                style={{ fontSize: "clamp(14px,1.1vw,16px)", maxWidth: 440 }}
+              >
+                <span className="block font-semibold text-slate-600">Improve your ATS score before applying.</span>
+                <span className="mt-2 block">Upload your resume and get an instant AI-powered analysis with actionable insights.</span>
               </p>
             </div>
 
             {/* Trusted-user proof */}
-            <div className="hidden">
+            <div className="flex items-center gap-2 text-[10px] text-slate-500">
               <div className="flex -space-x-2" aria-hidden="true">
                 {["A", "M", "R"].map((initial, index) => (
                   <span key={initial} className={`grid h-7 w-7 place-items-center rounded-full border-2 border-white text-[9px] font-bold text-white ${["bg-rose-400", "bg-slate-700", "bg-amber-500"][index]}`}>{initial}</span>
@@ -913,28 +887,11 @@ export default function ATSLoginPage() {
 
             {/* What the analysis includes */}
             <div>
-              <div className="divide-y divide-slate-200 border-y border-slate-200">
-                {[
-                  [FileCheck2, "Format Check", "Resume readability and structure."],
-                  [BookOpenCheck, "Content Scan", "Key skills, experience, and achievements."],
-                  [Target, "ATS Compatibility", "Match potential and optimization spots."],
-                ].map(([Icon, title, detail]) => (
-                  <div key={title as string} className="flex items-start gap-4 py-5">
-                    <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#2557a7] text-white">
-                      <Icon className="h-4 w-4" strokeWidth={2.4} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold leading-5 text-slate-900">{title}</p>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="hidden">
+              <div className="mb-4 flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-[#2563eb]" />
                 <p className="text-sm font-bold text-slate-800">What you’ll receive</p>
               </div>
-              <div className="hidden">
+              <div className="grid gap-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.06)]">
                 {[
                   [BarChart3, "bg-blue-600", "ATS Compatibility Score", "Know how ATS-friendly your resume is"],
                   [Target, "bg-emerald-500", "Keyword Match Analysis", "See how well you match the job description"],
@@ -968,8 +925,8 @@ export default function ATSLoginPage() {
           </motion.div>
 
           {/* ── RIGHT: Upload card ── */}
-          <div className="relative w-full self-start">
-            <div className="hidden"
+          <div className="relative w-full max-w-[640px] justify-self-end self-start">
+            <div className="absolute -inset-x-6 -inset-y-4 pointer-events-none rounded-[2.5rem]"
               style={{
                 background: "radial-gradient(ellipse at 50% 60%,rgba(37,87,167,0.13) 0%,transparent 65%)",
                 filter: "blur(20px)",
@@ -980,16 +937,18 @@ export default function ATSLoginPage() {
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.36, delay: 0.06, ease: EASE }}
-              className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.10)]"
+              className="relative rounded-3xl overflow-hidden"
               style={{
-                background: "#ffffff",
+                background: "rgba(255,255,255,0.95)",
+                backdropFilter: "blur(12px)",
+                boxShadow: "0 0 0 1px rgba(203,213,225,0.9), 0 8px 32px rgba(15,23,42,0.10), 0 32px 80px rgba(15,23,42,0.13), 0 2px 4px rgba(37,87,167,0.04)",
               }}
             >
               <div className="absolute top-0 left-0 right-0 h-px"
                 style={{ background: "linear-gradient(90deg,transparent,rgba(37,87,167,0.3) 30%,rgba(37,87,167,0.4) 60%,transparent)" }}
               />
 
-              <div className="flex flex-col gap-5 p-5 sm:p-7">
+              <div className="p-4 flex flex-col gap-3">
 
                 {/* Stepper */}
                 <div className="flex items-center">
@@ -999,7 +958,7 @@ export default function ATSLoginPage() {
                         <div
                           className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 tracking-wide"
                           style={i === 0 ? {
-                            background: "#2557a7",
+                            background: "linear-gradient(135deg,#1a3a5c,#2557a7)",
                             color: "white",
                             boxShadow: "0 3px 8px rgba(37,87,167,0.35)",
                           } : {
@@ -1079,13 +1038,7 @@ export default function ATSLoginPage() {
 
               </div>
 
-              <div className="grid gap-3 border-t border-slate-200 px-5 py-5 text-sm text-slate-500 sm:grid-cols-3 sm:px-7">
-                <span className="flex items-center gap-2"><FileCheck2 className="h-4 w-4 shrink-0 text-[#2557a7]" />PDF, DOCX, DOC</span>
-                <span className="flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-[#2557a7]" />10MB maximum</span>
-                <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 shrink-0 text-[#2557a7]" />Encrypted &amp; private</span>
-              </div>
-
-              <div className="hidden">
+              <div className="grid grid-cols-2 gap-4 border-t border-slate-100 bg-slate-50/60 p-4">
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
                   <p className="text-xs font-bold text-slate-600">Supported formats</p>
                   <div className="mt-2 grid grid-cols-3 gap-2">
@@ -1120,7 +1073,7 @@ export default function ATSLoginPage() {
 
         </div>
 
-        <div className="hidden">
+        <div className="mt-8 grid grid-cols-2 gap-4 rounded-2xl border border-slate-100 bg-white px-6 py-5 shadow-[0_8px_28px_rgba(15,23,42,0.06)] sm:grid-cols-4">
           {[
             { Icon: Users, value: "2.5M+", label: "Resumes Analyzed", tone: "bg-blue-50 text-[#2563eb]" },
             { Icon: ShieldCheck, value: "98%", label: "ATS Accuracy", tone: "bg-emerald-50 text-emerald-600" },
