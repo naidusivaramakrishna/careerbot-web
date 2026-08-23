@@ -270,8 +270,12 @@ export const handlers = [
     })
   ),
 
-  // Auth refresh: return 401 immediately so the interceptor fails fast
-  // rather than attempting a real network call in tests
+  // Auth refresh via proxy route (new): return 401 immediately so the interceptor fails fast
+  http.post('http://localhost/api/backend/auth/refresh', () =>
+    HttpResponse.json({ detail: 'Token expired' }, { status: 401 })
+  ),
+
+  // Auth refresh legacy endpoint (kept for backward compatibility in tests)
   http.post(`${API_V1}/auth/refresh`, () =>
     HttpResponse.json({ detail: 'Token expired' }, { status: 401 })
   ),

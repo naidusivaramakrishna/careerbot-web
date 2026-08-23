@@ -222,6 +222,13 @@ export const adminLogin = async (
 
     logger.info('✅ Login successful');
 
+    // Store the actual token expiry from backend for accurate refresh timing
+    // Validate expires_in: must be a positive number (clamp to reasonable range: 5 min - 24 hours)
+    if (response.data.expires_in && !isNaN(response.data.expires_in) && response.data.expires_in > 0) {
+      const expirySeconds = Math.max(5 * 60, Math.min(24 * 60 * 60, response.data.expires_in));
+      localStorage.setItem('admin_token_expires_in_seconds', expirySeconds.toString());
+    }
+
     // ✅ Backend sets httpOnly cookies - tokens are automatically sent with requests
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('adminTokenUpdated'));
@@ -285,6 +292,8 @@ export const adminLogout = async (): Promise<void> => {
     if (typeof window !== 'undefined') {
       // Clear cached admin role from sessionStorage so next login uses fresh role
       sessionStorage.removeItem('admin_role');
+      // Clear admin token expiry
+      localStorage.removeItem('admin_token_expires_in_seconds');
       // Force redirect to admin login
       window.location.href = '/admin/login';
     }
@@ -397,6 +406,13 @@ export const refreshAdminToken = async (): Promise<AdminLoginResponse> => {
     const response = await httpClient.post<AdminLoginResponse>(
       '/admin/auth/refresh'
     );
+
+    // Store the actual token expiry from backend for accurate refresh timing
+    // Validate expires_in: must be a positive number (clamp to reasonable range: 5 min - 24 hours)
+    if (response.data.expires_in && !isNaN(response.data.expires_in) && response.data.expires_in > 0) {
+      const expirySeconds = Math.max(5 * 60, Math.min(24 * 60 * 60, response.data.expires_in));
+      localStorage.setItem('admin_token_expires_in_seconds', expirySeconds.toString());
+    }
 
     // ✅ Backend handles httpOnly cookie setting automatically
     if (typeof window !== 'undefined') {

@@ -23,6 +23,7 @@ import { logger } from '@/lib/logger';
  * @param pathname - Current pathname to detect admin routes
  */
 const LAST_REFRESH_KEY = 'token_last_refreshed_at';
+const LAST_ATTEMPT_KEY = 'token_last_refresh_attempt_at';
 const TOKEN_EXPIRY_SECONDS_KEY = 'token_expires_in_seconds';
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 60 * 1000; // 1 minute
@@ -32,6 +33,7 @@ const DEFAULT_TOKEN_EXPIRY_SECONDS = 30 * 60; // 30 minutes fallback
 let isRefreshing = false;
 let refreshStartTime = 0;
 const REFRESH_TIMEOUT_MS = 30 * 1000; // 30 second timeout to prevent hung refreshes
+let retryTimeoutId: NodeJS.Timeout | null = null;
 
 const getTokenExpirySeconds = (): number => {
   if (typeof window === 'undefined') return DEFAULT_TOKEN_EXPIRY_SECONDS;
@@ -49,16 +51,26 @@ const setLastRefreshedAt = () => {
   localStorage.setItem(LAST_REFRESH_KEY, Date.now().toString());
 };
 
+const getLastRefreshAttemptAt = (): number => {
+  if (typeof window === 'undefined') return 0;
+  return parseInt(localStorage.getItem(LAST_ATTEMPT_KEY) || '0', 10);
+};
+
+const setLastRefreshAttemptAt = () => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LAST_ATTEMPT_KEY, Date.now().toString());
+};
+
 const handleUserSessionExpired = () => {
-  logger.error('[Token Refresh] User session expired - clearing tokens and redirecting to login');
+  logger.error('[Token Refresh] User session expired - redirecting to login');
 
   if (typeof window !== 'undefined') {
-    // Clear user auth tokens only
-    document.cookie = 'access_token=; Max-Age=0; path=/;';
-    document.cookie = 'refresh_token=; Max-Age=0; path=/;';
+    // Clear local session state (backend clears httpOnly cookies automatically)
     localStorage.removeItem(LAST_REFRESH_KEY);
+    localStorage.removeItem(LAST_ATTEMPT_KEY);
+    localStorage.removeItem('token_expires_in_seconds');
 
-    // Redirect to login with reason
+    // Redirect to login with reason - backend will expire httpOnly cookies
     window.location.href = '/?showLogin=true&reason=session_expired';
   }
 };
@@ -108,11 +120,11 @@ export const useTokenRefresh = (
 
         // If we haven't exhausted retries, schedule another attempt
         if (attempt < MAX_RETRY_ATTEMPTS) {
-          // Update timestamp on retry to keep isSessionFresh() from timing out
+          // Update attempt timestamp to signal that we're actively retrying
           // This prevents http.ts interceptor from logging user out during retry window
-          setLastRefreshedAt();
+          setLastRefreshAttemptAt();
           logger.info(`[Token Refresh] Scheduling retry in ${RETRY_DELAY_MS / 1000 / 60} minute...`);
-          setTimeout(() => {
+          retryTimeoutId = setTimeout(() => {
             doRefreshWithRetry(attempt + 1);
           }, RETRY_DELAY_MS);
           return false;
@@ -221,6 +233,10 @@ export const useTokenRefresh = (
 
     return () => {
       clearInterval(refreshTimer);
+      if (retryTimeoutId) {
+        clearTimeout(retryTimeoutId);
+        retryTimeoutId = null;
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       logger.info('[Token Refresh] Cleared token refresh timer and visibility listener');
     };

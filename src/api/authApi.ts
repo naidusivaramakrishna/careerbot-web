@@ -72,8 +72,10 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
   }
 
   // Store the actual token expiry from backend for accurate refresh timing
-  if (response.data.expires_in) {
-    localStorage.setItem('token_expires_in_seconds', response.data.expires_in.toString());
+  // Validate expires_in: must be a positive number (clamp to reasonable range: 5 min - 24 hours)
+  if (response.data.expires_in && !isNaN(response.data.expires_in) && response.data.expires_in > 0) {
+    const expirySeconds = Math.max(5 * 60, Math.min(24 * 60 * 60, response.data.expires_in));
+    localStorage.setItem('token_expires_in_seconds', expirySeconds.toString());
   }
 
   // Clear the signout guard so future 401s can redirect to login normally.
@@ -112,6 +114,7 @@ export const signOut = async () => {
   codingKeys.forEach((k) => localStorage.removeItem(k));
 
   localStorage.removeItem('token_last_refreshed_at');
+  localStorage.removeItem('token_expires_in_seconds');
   localStorage.removeItem('uploaded_resume_filename');
 
   // Job tracking's unscoped savedJobs/appliedJobs buckets are shared across
@@ -347,8 +350,10 @@ export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
     // ✅ Backend reads refresh_token from httpOnly cookie automatically
     // Backend sets new access_token as httpOnly cookie in response
     // Store the actual token expiry from backend for accurate refresh timing
-    if (response.data.expires_in) {
-      localStorage.setItem('token_expires_in_seconds', response.data.expires_in.toString());
+    // Validate expires_in: must be a positive number (clamp to reasonable range: 5 min - 24 hours)
+    if (response.data.expires_in && !isNaN(response.data.expires_in) && response.data.expires_in > 0) {
+      const expirySeconds = Math.max(5 * 60, Math.min(24 * 60 * 60, response.data.expires_in));
+      localStorage.setItem('token_expires_in_seconds', expirySeconds.toString());
     }
     return response.data;
   } catch (error: unknown) {

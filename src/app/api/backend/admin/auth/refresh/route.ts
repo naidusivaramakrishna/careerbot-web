@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   try {
     let response: Response;
     try {
-      response = await fetch(`${BACKEND_URL}/api/v1/auth/refresh`, {
+      response = await fetch(`${BACKEND_URL}/api/v1/admin/auth/refresh`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         return NextResponse.json(
-          { error: 'Token refresh timeout' },
+          { error: 'Admin token refresh timeout' },
           { status: 504 }
         );
       }
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Token refresh failed' }));
+      const errorData = await response.json().catch(() => ({ error: 'Admin token refresh failed' }));
       return NextResponse.json(errorData, { status: response.status });
     }
 
@@ -50,8 +50,7 @@ export async function POST(request: NextRequest) {
       request.nextUrl.protocol === 'https:' ||
       request.headers.get('x-forwarded-proto') === 'https';
 
-    // ✅ CRITICAL: Forward Set-Cookie headers from backend, rewriting per sanitiseCookie
-    // This is what was missing! Without this, the new refresh_token never reaches the browser
+    // Forward Set-Cookie headers from backend, rewriting per sanitiseCookie
     response.headers.getSetCookie().forEach((cookie) => {
       res.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest));
     });
@@ -60,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   } catch {
     return NextResponse.json(
-      { error: 'Token refresh service unavailable' },
+      { error: 'Admin token refresh service unavailable' },
       { status: 502 }
     );
   } finally {

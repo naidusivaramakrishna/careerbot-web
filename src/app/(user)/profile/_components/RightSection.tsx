@@ -181,14 +181,15 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 throw new Error('Failed to parse resume data');
             }
 
-            // Track which sections succeeded/failed for user feedback
-            const sectionResults = {
-                personal: false,
-                education: false,
-                experience: false,
-                skills: false,
-                projects: false,
-                certifications: false,
+            // Track which sections succeeded/failed/skipped for user feedback
+            // 'ok' = succeeded, 'failed' = attempted but failed, 'skipped' = not in resume
+            const sectionResults: Record<string, 'ok' | 'failed' | 'skipped'> = {
+                personal: 'skipped',
+                education: 'skipped',
+                experience: 'skipped',
+                skills: 'skipped',
+                projects: 'skipped',
+                certifications: 'skipped',
             };
 
             // ---------------------------------------
@@ -207,9 +208,10 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     };
 
                     await updateProfile(personalPayload);
-                    sectionResults.personal = true;
+                    sectionResults.personal = 'ok';
                 } catch (err) {
                     logger.error("Error updating personal information:", err);
+                    sectionResults.personal = 'failed';
                 }
             }
 
@@ -228,9 +230,10 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                             end_date: edu.end_date,
                         });
                     }
-                    sectionResults.education = true;
+                    sectionResults.education = 'ok';
                 } catch (err) {
                     logger.error("Error adding education:", err);
+                    sectionResults.education = 'failed';
                 }
             }
 
@@ -250,9 +253,10 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                             description: exp.description,
                         });
                     }
-                    sectionResults.experience = true;
+                    sectionResults.experience = 'ok';
                 } catch (err) {
                     logger.error("Error adding experience:", err);
+                    sectionResults.experience = 'failed';
                 }
             }
 
@@ -264,9 +268,10 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     for (const skill of mapped.skills) {
                         await addSkillAutoFill({ name: skill });
                     }
-                    sectionResults.skills = true;
+                    sectionResults.skills = 'ok';
                 } catch (err) {
                     logger.error("Error adding skills:", err);
+                    sectionResults.skills = 'failed';
                 }
             }
 
@@ -286,9 +291,10 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                             project_link: project.project_link,
                         });
                     }
-                    sectionResults.projects = true;
+                    sectionResults.projects = 'ok';
                 } catch (err) {
                     logger.error("Error adding projects:", err);
+                    sectionResults.projects = 'failed';
                 }
             }
 
@@ -305,47 +311,61 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                             end_date: cert.end_date,
                         });
                     }
-                    sectionResults.certifications = true;
+                    sectionResults.certifications = 'ok';
                 } catch (err) {
                     logger.error("Error adding certifications:", err);
+                    sectionResults.certifications = 'failed';
                 }
             }
 
-            // 🔄 1️⃣0️⃣ RE-FETCH UPDATED DATA FROM DB (with error handling for each)
-            let fetchedEducation = [];
-            let updatedExp = [];
-            let updatedSkills = [];
-            let updatedProjects = [];
-            let updatedCertifications = [];
+            // 🔄 1️⃣0️⃣ RE-FETCH UPDATED DATA FROM DB (in parallel with graceful error handling)
+            const results = await Promise.allSettled([
+                getEducation(),
+                getExperience(),
+                getSkills(),
+                getProjects(),
+                getCertification(),
+            ]);
 
-            try {
-                fetchedEducation = await getEducation();
-            } catch (err) {
-                logger.warn("Error fetching education:", err);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let fetchedEducation: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedExp: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedSkills: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedProjects: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedCertifications: Record<string, any>[] = [];
+
+            if (results[0].status === 'fulfilled') {
+                fetchedEducation = results[0].value;
+            } else {
+                logger.warn("Error fetching education:", results[0].reason);
             }
 
-            try {
-                updatedExp = await getExperience();
-            } catch (err) {
-                logger.warn("Error fetching experience:", err);
+            if (results[1].status === 'fulfilled') {
+                updatedExp = results[1].value;
+            } else {
+                logger.warn("Error fetching experience:", results[1].reason);
             }
 
-            try {
-                updatedSkills = await getSkills();
-            } catch (err) {
-                logger.warn("Error fetching skills:", err);
+            if (results[2].status === 'fulfilled') {
+                updatedSkills = results[2].value;
+            } else {
+                logger.warn("Error fetching skills:", results[2].reason);
             }
 
-            try {
-                updatedProjects = await getProjects();
-            } catch (err) {
-                logger.warn("Error fetching projects:", err);
+            if (results[3].status === 'fulfilled') {
+                updatedProjects = results[3].value;
+            } else {
+                logger.warn("Error fetching projects:", results[3].reason);
             }
 
-            try {
-                updatedCertifications = await getCertification();
-            } catch (err) {
-                logger.warn("Error fetching certifications:", err);
+            if (results[4].status === 'fulfilled') {
+                updatedCertifications = results[4].value;
+            } else {
+                logger.warn("Error fetching certifications:", results[4].reason);
             }
 
             // ✅ FIRST: Update profile context with all new data BEFORE refreshing dashboard
@@ -411,11 +431,11 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
 
             // Show detailed success/failure message
             const successSections = Object.entries(sectionResults)
-                .filter(([_, success]) => success)
+                .filter(([, status]) => status === 'ok')
                 .map(([section]) => section);
 
             const failedSections = Object.entries(sectionResults)
-                .filter(([_, success]) => !success)
+                .filter(([, status]) => status === 'failed')
                 .map(([section]) => section);
 
             if (successSections.length > 0) {
@@ -519,34 +539,53 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 throw new Error('Failed to parse LinkedIn data');
             }
 
+            // Track which sections succeeded/failed for user feedback
+            const sectionResults: Record<string, 'ok' | 'failed'> = {
+                personal: 'failed',
+                education: 'failed',
+                experience: 'failed',
+                skills: 'failed',
+                projects: 'failed',
+            };
+
             // -------------------------------
             // 1️⃣ UPDATE PERSONAL INFO
             // -------------------------------
             if (mapped?.personalInformation) {
-                await updateProfile({
-                    full_name: mapped.personalInformation.fullName,
-                    phone_number: mapped.personalInformation.phone,
-                    location: mapped.personalInformation.location,
-                    headline: "Software Developer",
-                    linkedin_url: mapped.personalInformation.linkedin,
-                    github_url: mapped.personalInformation.github,
-                    summary: mapped.personalInformation.summary
-                });
+                try {
+                    await updateProfile({
+                        full_name: mapped.personalInformation.fullName,
+                        phone_number: mapped.personalInformation.phone,
+                        location: mapped.personalInformation.location,
+                        headline: "Software Developer",
+                        linkedin_url: mapped.personalInformation.linkedin,
+                        github_url: mapped.personalInformation.github,
+                        summary: mapped.personalInformation.summary
+                    });
+                    sectionResults.personal = 'ok';
+                } catch (err) {
+                    logger.error("Error updating personal information from LinkedIn:", err);
+                }
             }
 
             // -------------------------------
             // 2️⃣ EDUCATION
             // -------------------------------
             if (mapped.education?.length) {
-                for (const edu of mapped.education) {
-                    await addEducationAutoFill({
-                        institution: edu.institution || '',
-                        degree: edu.degree || '',
-                        stream: edu.stream || "",
-                        cgpa: edu.cgpa,
-                        start_date: edu.start_date || '',
-                        end_date: edu.end_date,
-                    });
+                try {
+                    for (const edu of mapped.education) {
+                        await addEducationAutoFill({
+                            institution: edu.institution || '',
+                            degree: edu.degree || '',
+                            stream: edu.stream || "",
+                            cgpa: edu.cgpa,
+                            start_date: edu.start_date || '',
+                            end_date: edu.end_date,
+                        });
+                    }
+                    sectionResults.education = 'ok';
+                } catch (err) {
+                    logger.error("Error adding education from LinkedIn:", err);
                 }
             }
 
@@ -554,16 +593,21 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 3️⃣ EXPERIENCE
             // -------------------------------
             if (mapped.workExperience?.length) {
-                for (const exp of mapped.workExperience) {
-                    await addExperienceAutoFill({
-                        job_title: exp.job_title || '',
-                        company: exp.company || '',
-                        job_type: exp.job_type || 'full_time',
-                        location: exp.location || '',
-                        start_date: exp.start_date || '',
-                        end_date: exp.end_date,
-                        description: exp.description,
-                    });
+                try {
+                    for (const exp of mapped.workExperience) {
+                        await addExperienceAutoFill({
+                            job_title: exp.job_title || '',
+                            company: exp.company || '',
+                            job_type: exp.job_type || 'full_time',
+                            location: exp.location || '',
+                            start_date: exp.start_date || '',
+                            end_date: exp.end_date,
+                            description: exp.description,
+                        });
+                    }
+                    sectionResults.experience = 'ok';
+                } catch (err) {
+                    logger.error("Error adding experience from LinkedIn:", err);
                 }
             }
 
@@ -571,8 +615,13 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 4️⃣ SKILLS
             // -------------------------------
             if (mapped.skills?.length) {
-                for (const skill of mapped.skills) {
-                    await addSkillAutoFill({ name: skill });
+                try {
+                    for (const skill of mapped.skills) {
+                        await addSkillAutoFill({ name: skill });
+                    }
+                    sectionResults.skills = 'ok';
+                } catch (err) {
+                    logger.error("Error adding skills from LinkedIn:", err);
                 }
             }
 
@@ -580,28 +629,66 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 5️⃣ PROJECTS
             // -------------------------------
             if (mapped.projects?.length) {
-                for (const project of mapped.projects) {
-                    await addProjectAutoFill({
-                        project_name: project.project_name,
-                        role: project.role,
-                        technologies: project.technologies || '',
-                        start_date: project.start_date || '',
-                        end_date: project.end_date,
-                        description: project.description,
-                        project_link: project.project_link,
-                    });
+                try {
+                    for (const project of mapped.projects) {
+                        await addProjectAutoFill({
+                            project_name: project.project_name,
+                            role: project.role,
+                            technologies: project.technologies || '',
+                            start_date: project.start_date || '',
+                            end_date: project.end_date,
+                            description: project.description,
+                            project_link: project.project_link,
+                        });
+                    }
+                    sectionResults.projects = 'ok';
+                } catch (err) {
+                    logger.error("Error adding projects from LinkedIn:", err);
                 }
             }
 
             // -------------------------------
             // 6️⃣ RELOAD DATA
             // -------------------------------
-            const [updatedEducation, updatedExp, updatedSkills, updatedProjects] = await Promise.all([
+            const reloadResults = await Promise.allSettled([
                 getEducation(),
                 getExperience(),
                 getSkills(),
                 getProjects(),
             ]);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedEducation: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedExp: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedSkills: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedProjects: Record<string, any>[] = [];
+
+            if (reloadResults[0].status === 'fulfilled') {
+                updatedEducation = reloadResults[0].value;
+            } else {
+                logger.warn("Error reloading education from LinkedIn:", reloadResults[0].reason);
+            }
+
+            if (reloadResults[1].status === 'fulfilled') {
+                updatedExp = reloadResults[1].value;
+            } else {
+                logger.warn("Error reloading experience from LinkedIn:", reloadResults[1].reason);
+            }
+
+            if (reloadResults[2].status === 'fulfilled') {
+                updatedSkills = reloadResults[2].value;
+            } else {
+                logger.warn("Error reloading skills from LinkedIn:", reloadResults[2].reason);
+            }
+
+            if (reloadResults[3].status === 'fulfilled') {
+                updatedProjects = reloadResults[3].value;
+            } else {
+                logger.warn("Error reloading projects from LinkedIn:", reloadResults[3].reason);
+            }
 
             setProfileData((prev) => ({
                 ...prev,
@@ -630,7 +717,22 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 }));
             }
 
-            toast.success("LinkedIn imported successfully!", { id: "linkedin-import" });
+            const successSections = Object.entries(sectionResults)
+                .filter(([, status]) => status === 'ok')
+                .map(([section]) => section);
+
+            const failedSections = Object.entries(sectionResults)
+                .filter(([, status]) => status === 'failed')
+                .map(([section]) => section);
+
+            if (successSections.length > 0) {
+                const message = failedSections.length > 0
+                    ? `LinkedIn imported partially. Loaded: ${successSections.join(", ")}. Failed: ${failedSections.join(", ")}`
+                    : "LinkedIn imported successfully!";
+                toast.success(message, { id: "linkedin-import" });
+            } else {
+                toast.error("Failed to import LinkedIn data. Please try again.", { id: "linkedin-import" });
+            }
 
             // ✅ FINAL: Refresh dashboard AFTER all profile updates complete
             // Use setTimeout to ensure profile context has updated first

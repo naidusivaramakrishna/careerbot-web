@@ -31,15 +31,17 @@ const ProfileContent = () => {
             <h1 className="text-xl font-bold mt-4 text-gray-800">Profile</h1>
 
             <div className="min-h-screen bg-[#F4F6F9] px-4 mt-4 rounded-tl-[20px] rounded-bl-[20px] flex flex-col gap-4">
-                {/* Email Verification Banner - Sized to match MainSection width (4/5) */}
-                {userEmail && !isEmailVerified && (
-                    <div className="w-4/5 min-w-0 mt-2">
-                        <EmailVerificationBanner userEmail={userEmail} isVerified={isEmailVerified} />
-                    </div>
-                )}
-
+                {/* Main content flex row */}
                 <div className="flex gap-4 w-full">
-                    <MainSection />
+                    {/* Left column: Banner and MainSection */}
+                    <div className="flex-4 min-w-0 flex flex-col ">
+                        {/* Email Verification Banner - Matches MainSection width */}
+                        {userEmail && !isEmailVerified && (
+                            <EmailVerificationBanner userEmail={userEmail} isVerified={isEmailVerified} />
+                        )}
+                        <MainSection />
+                    </div>
+                    {/* Right column: RightSection */}
                     <RightSection
                         completeness={dashboardData?.profile?.completeness ?? 0}
                         missingFields={dashboardData?.profile?.missing_fields ?? []}
