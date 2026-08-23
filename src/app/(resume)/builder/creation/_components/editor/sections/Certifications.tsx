@@ -5,7 +5,9 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
 interface CertificationEntry {
@@ -14,7 +16,6 @@ interface CertificationEntry {
   year: string;
   expiryDate?: string;
   credentialId?: string;
-  credentialUrl?: string;
   id?: string;
 }
 
@@ -24,11 +25,12 @@ const emptyCertification = (): CertificationEntry => ({
   year: "",
   expiryDate: "",
   credentialId: "",
-  credentialUrl: "",
 });
 
 const Certifications: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -36,6 +38,7 @@ const Certifications: React.FC = () => {
     clearError,
     clearSectionIndexErrors,
     reindexErrors,
+    setFieldError,
   } = useValidation();
 
   const [showTips] = useState(true);
@@ -193,7 +196,11 @@ const Certifications: React.FC = () => {
       // // console.log("🗑️ Deleting certification item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "certifications", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "certifications", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "certifications", itemId);
+      }
 
       // // console.log("✅ Certification item deleted from backend successfully");
 
@@ -381,9 +388,28 @@ const Certifications: React.FC = () => {
                           type="text"
                           value={certification.year}
                           placeholder="YYYY"
-                          onChange={(e) => handleChange(editIndex, "year", e.target.value)}
-                          className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]"
+                          maxLength={4}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                            handleChange(editIndex, "year", digits);
+                            clearError("certification", globalIndex, "year");
+                          }}
+                          onBlur={() => {
+                            const val = certification.year.trim();
+                            if (!val) return;
+                            if (!/^\d{4}$/.test(val)) {
+                              setFieldError("certification", globalIndex, "year", "Year must be exactly 4 digits (e.g., 2024)");
+                            } else {
+                              clearError("certification", globalIndex, "year");
+                            }
+                          }}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 focus:outline-none ${errors[`certification-${globalIndex}-year`] ? "border-red-500" : "border-transparent focus:border-[#5896d7]"}`}
                         />
+                        {errors[`certification-${globalIndex}-year`] && (
+                          <span className="text-xs text-red-500">
+                            {errors[`certification-${globalIndex}-year`]}
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-col gap-1 flex-1">
@@ -393,10 +419,45 @@ const Certifications: React.FC = () => {
                         <input
                           type="text"
                           value={certification.expiryDate || ""}
-                          placeholder="YYYY or MM/YYYY"
-                          onChange={(e) => handleChange(editIndex, "expiryDate", e.target.value)}
-                          className="w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 border-transparent focus:outline-none focus:border-[#5896d7]"
+                          placeholder="YYYY or MM/YYYY or Never expires"
+                          onChange={(e) => {
+                            handleChange(editIndex, "expiryDate", e.target.value);
+                            clearError("certification", globalIndex, "expiryDate");
+                          }}
+                          onBlur={() => {
+                            const expiry = certification.expiryDate?.trim();
+                            const issueYear = certification.year?.trim();
+                            if (!expiry || !issueYear || !/^\d{4}$/.test(issueYear)) {
+                              clearError("certification", globalIndex, "expiryDate");
+                              return;
+                            }
+                            const lower = expiry.toLowerCase();
+                            if (lower.includes("never") || lower.includes("lifetime") || lower.includes("permanent")) {
+                              clearError("certification", globalIndex, "expiryDate");
+                              return;
+                            }
+                            const issueYearNum = parseInt(issueYear, 10);
+                            let expiryYear: number | null = null;
+                            if (/^\d{4}$/.test(expiry)) {
+                              expiryYear = parseInt(expiry, 10);
+                            } else if (/^\d{1,2}\/\d{4}$/.test(expiry)) {
+                              expiryYear = parseInt(expiry.split("/")[1], 10);
+                            } else if (/^[A-Za-z]{3}\s+\d{2}$/.test(expiry)) {
+                              expiryYear = 2000 + parseInt(expiry.split(/\s+/)[1], 10);
+                            }
+                            if (expiryYear !== null && expiryYear < issueYearNum) {
+                              setFieldError("certification", globalIndex, "expiryDate", `Expiry cannot be before issue year (${issueYear})`);
+                            } else {
+                              clearError("certification", globalIndex, "expiryDate");
+                            }
+                          }}
+                          className={`w-full px-3 py-3.5 text-sm rounded-md text-black hover:bg-gray-100 bg-[#faf9f8] border-b-2 focus:outline-none ${errors[`certification-${globalIndex}-expiryDate`] ? "border-red-500" : "border-transparent focus:border-[#5896d7]"}`}
                         />
+                        {errors[`certification-${globalIndex}-expiryDate`] && (
+                          <span className="text-xs text-red-500">
+                            {errors[`certification-${globalIndex}-expiryDate`]}
+                          </span>
+                        )}
                       </div>
                     </div>
 

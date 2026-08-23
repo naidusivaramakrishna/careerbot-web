@@ -1,17 +1,9 @@
 "use client";
 import { usePathname } from "next/navigation";
-// import Sidebar from "@/components/layout/Sidebar";
-// import Header from "@/components/layout/Header";
-import { Montserrat } from "next/font/google";
 import { VideoRecordingProvider } from "@/contexts/VideoRecordingContext";
 import { DashboardProvider } from "@/contexts/DashboardContext";
 import CommunicationHeader from "./components/CommunicationHeader";
-
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "700", "900"],
-});
+import LandingNavbar from "@/app/(landing)/_components/LandingNavbar";
 
 export default function CommunicationLayout({
   children,
@@ -19,15 +11,15 @@ export default function CommunicationLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const showCommunicationHeader = pathname !== "/communication";
+  const isLandingPage = pathname === "/communication";
 
   // All communication pages: h-screen flex-col keeps everything within viewport, no browser scroll
   return (
     <DashboardProvider>
       <VideoRecordingProvider>
-        <div className={`${montserrat.variable} antialiased font-montserrat h-screen flex flex-col overflow-hidden`}>
-          {showCommunicationHeader && <CommunicationHeader />}
-          <div className={`flex-1 min-h-0 ${showCommunicationHeader ? "overflow-hidden" : "overflow-auto"}`}>
+        <div className={`antialiased font-sans h-screen flex flex-col overflow-hidden`}>
+          {isLandingPage ? <LandingNavbar /> : <CommunicationHeader />}
+          <div className={`flex-1 min-h-0 ${isLandingPage ? "overflow-auto" : "overflow-hidden"}`}>
             {children}
           </div>
         </div>
@@ -41,7 +33,7 @@ export default function CommunicationLayout({
   // if (showLayout) return (
   //   <DashboardProvider>
   //     <VideoRecordingProvider>
-  //       <div className={`${montserrat.variable} antialiased font-montserrat`}>
+  //       <div className={`antialiased font-sans`}>
   //         <Header />
   //         <div className="flex pt-14 bg-gray-50">
   //           <Sidebar />

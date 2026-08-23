@@ -230,7 +230,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               })() : data.categorizedSkills && Object.keys(data.categorizedSkills).length > 0 ? (
                 <>
                   {Object.entries(data.categorizedSkills)
-                    .filter(([category]) => category !== 'custom_categories')
+                    .filter(([category]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(category))
                     .map(([category, categorySkills]) => {
                       const skillArr = Array.isArray(categorySkills)
                         ? (categorySkills as string[]).filter(s => typeof s === "string")

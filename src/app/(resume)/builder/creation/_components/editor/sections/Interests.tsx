@@ -20,7 +20,9 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 
 interface InterestEntry {
   name: string;
@@ -57,6 +59,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Interests: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -229,7 +233,11 @@ const Interests: React.FC = () => {
       // // console.log("🗑️ Deleting interest item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "interests", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "interests", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "interests", itemId);
+      }
 
       // // console.log("✅ Interest item deleted from backend successfully");
 
