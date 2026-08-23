@@ -1014,11 +1014,12 @@ export const downloadResume = async (
   accentColor?: string,
   sectionOrder?: string[],
   fontFamily?: string,
-  lineSpacing?: string
+  lineSpacing?: string,
+  careerLevel?: string
 ): Promise<Blob> => {
 
   try {
-    logger.debug("⬇️ Downloading resume:", resumeId, "Format:", format, "Catalogue:", catalogueTemplateId, "Domain:", domainTemplateId, "SectionBg:", sectionBgColor, "SectionOrder:", sectionOrder, "Font:", fontFamily, "LineSpacing:", lineSpacing);
+    logger.debug("⬇️ Downloading resume:", resumeId, "Format:", format, "Catalogue:", catalogueTemplateId, "Domain:", domainTemplateId, "SectionBg:", sectionBgColor, "SectionOrder:", sectionOrder, "Font:", fontFamily, "LineSpacing:", lineSpacing, "CareerLevel:", careerLevel);
 
     const backendFormat = format === 'doc' ? 'docx' : format;
     const params = new URLSearchParams({ format: backendFormat });
@@ -1029,6 +1030,7 @@ export const downloadResume = async (
     if (sectionOrder && sectionOrder.length > 0) params.append('section_order', JSON.stringify(sectionOrder));
     if (fontFamily) params.append('font_family', fontFamily);
     if (lineSpacing) params.append('line_height', lineSpacing);
+    if (careerLevel) params.append('career_level', careerLevel);
 
     logger.debug("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?${params.toString()}`);
 

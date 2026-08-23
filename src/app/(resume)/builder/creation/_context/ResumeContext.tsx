@@ -151,6 +151,27 @@ export interface ResumeData {
     languages?: string;
     titlePrefix?: string;
     qualifications?: string;
+    // Government Standard — India-specific
+    fathersName?: string;
+    maritalStatus?: string;
+    gender?: string;
+    permanentAddress?: string;
+    // Healthcare
+    specialisation?: string;
+    medicalRegNo?: string;
+    // Legal
+    barEnrollmentNo?: string;
+    yearOfEnrollment?: string;
+    courtsOfPractise?: string;
+    // Marine
+    rank?: string;
+    cocNumber?: string;
+    stcwCertificates?: string;
+    vesselTypes?: string;
+    // Research Scholar
+    orcidId?: string;
+    googleScholarUrl?: string;
+    hIndex?: string;
   };
   professionalSummary: {
     summary: string;
@@ -257,7 +278,19 @@ export interface ResumeData {
     publicationName: string;
     date: string;
     url: string;
+    doi?: string;
   }[];
+  patents: {
+    id?: string;
+    title: string;
+    patentNumber?: string;
+    date?: string;
+    description?: string;
+    status?: string;
+  }[];
+  declaration?: string;
+  declarationDate?: string;
+  declarationPlace?: string;
   customSections?: CustomSection[];
 }
 
@@ -403,6 +436,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       interests: [],
       languages: [],
       publications: [],
+      patents: [],
+      declaration: "",
+      declarationDate: "",
+      declarationPlace: "",
       customSections: [],
     };
   }

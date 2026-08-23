@@ -3,7 +3,6 @@ import React from "react";
 import { ResumeData, ResumeStyle } from "../builder/creation/_context/ResumeContext";
 import { DEFAULT_DECLARATION } from "../builder/creation/_components/editor/sections/Declaration";
 import SafeHTML from "@/components/common/SafeHTML";
-import { ExternalLink } from "lucide-react";
 
 interface Props {
   data: ResumeData;
@@ -14,6 +13,8 @@ interface Props {
   onPageCountChange?: (count: number) => void;
   layoutVariant?: "centered" | "left-right" | "left-stacked" | "classic-formal" | "classic" | "executive" | "slate" | "aether" | "pillar" | "ember";
 }
+
+const CORPORATE_DOMAINS = ['software_engineering', 'cybersecurity', 'finance', 'sales_business_development', 'core_engineering', 'electronics_and_vlsi', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources', 'logistics_warehouse_operations'];
 
 const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", domainFamily = "healthcare", sectionOrder = [], layoutVariant = "centered" }) => {
   const {
@@ -45,7 +46,9 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       return "PROFESSIONAL SUMMARY";
     }
     if (section === "Skills") {
-      return (careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President") ? "CORE COMPETENCIES" : "SKILLS";
+      const isCorporateDomain = CORPORATE_DOMAINS.includes(domainFamily || '');
+      const isSeniorLevel = careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President";
+      return isCorporateDomain && isSeniorLevel ? "CORE COMPETENCIES" : "SKILLS";
     }
     if (section === "Projects") {
       return domainFamily === "core_engineering" ? "KEY PROJECTS" : "PROJECTS";
@@ -101,15 +104,6 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
   };
 
   const accent = style.accentColor ?? style.headingColor;
-
-  const headingStyle: React.CSSProperties = {
-    color: style.headingColor,
-    fontSize: style.headingFontSize,
-    fontWeight: "bold",
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-    marginBottom: "0.4rem",
-  };
 
   const sectionHeadingStyle: React.CSSProperties = {
     color: accent,
@@ -220,7 +214,7 @@ const Template2: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {renderSectionHeading(getSectionTitle("Skills"))}
             <div style={sectionBorderStyle("12px")} />
             <div style={{ ...baseTextStyle }}>
-              {(careerLevel === 'Director' || careerLevel === 'Vice President') && data.categorizedSkills ? (() => {
+              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && data.categorizedSkills ? (() => {
                 const allSkills: string[] = [];
                 Object.entries(data.categorizedSkills!)
                   .filter(([cat]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(cat))

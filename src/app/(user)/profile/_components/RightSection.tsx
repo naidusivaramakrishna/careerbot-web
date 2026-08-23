@@ -181,36 +181,56 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 throw new Error('Failed to parse resume data');
             }
 
+            // Track which sections succeeded/failed for user feedback
+            const sectionResults = {
+                personal: false,
+                education: false,
+                experience: false,
+                skills: false,
+                projects: false,
+                certifications: false,
+            };
+
             // ---------------------------------------
             // 3️⃣ UPDATE PERSONAL INFO IN DB
             // ---------------------------------------
             if (mapped?.personalInformation) {
-                const personalPayload = {
-                    full_name: mapped.personalInformation.fullName,
-                    phone_number: mapped.personalInformation.phone,
-                    headline: mapped.personalInformation.headline || "Software developer",
-                    location: mapped.personalInformation.location,
-                    linkedin_url: mapped.personalInformation.linkedin,
-                    github_url: mapped.personalInformation.github,
-                    summary: mapped.personalInformation.summary,
-                };
+                try {
+                    const personalPayload = {
+                        full_name: mapped.personalInformation.fullName,
+                        phone_number: mapped.personalInformation.phone,
+                        headline: mapped.personalInformation.headline || "Software developer",
+                        location: mapped.personalInformation.location,
+                        linkedin_url: mapped.personalInformation.linkedin,
+                        github_url: mapped.personalInformation.github,
+                        summary: mapped.personalInformation.summary,
+                    };
 
-                await updateProfile(personalPayload);
+                    await updateProfile(personalPayload);
+                    sectionResults.personal = true;
+                } catch (err) {
+                    logger.error("Error updating personal information:", err);
+                }
             }
 
             // ---------------------------------------
             // 4️⃣ STORE EDUCATION IN DB
             // ---------------------------------------
             if (mapped.education?.length) {
-                for (const edu of mapped.education) {
-                    await addEducationAutoFill({
-                        institution: edu.institution || '',
-                        degree: edu.degree || '',
-                        stream: edu.stream || '',
-                        cgpa: edu.cgpa,
-                        start_date: edu.start_date || '',
-                        end_date: edu.end_date,
-                    });
+                try {
+                    for (const edu of mapped.education) {
+                        await addEducationAutoFill({
+                            institution: edu.institution || '',
+                            degree: edu.degree || '',
+                            stream: edu.stream || '',
+                            cgpa: edu.cgpa,
+                            start_date: edu.start_date || '',
+                            end_date: edu.end_date,
+                        });
+                    }
+                    sectionResults.education = true;
+                } catch (err) {
+                    logger.error("Error adding education:", err);
                 }
             }
 
@@ -218,16 +238,21 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 5️⃣ STORE EXPERIENCE IN DB
             // ---------------------------------------
             if (mapped.workExperience?.length) {
-                for (const exp of mapped.workExperience) {
-                    await addExperienceAutoFill({
-                        job_title: exp.job_title || '',
-                        company: exp.company || '',
-                        job_type: "full_time",
-                        location: exp.location || "India",
-                        start_date: exp.start_date || '',
-                        end_date: exp.end_date,
-                        description: exp.description,
-                    });
+                try {
+                    for (const exp of mapped.workExperience) {
+                        await addExperienceAutoFill({
+                            job_title: exp.job_title || '',
+                            company: exp.company || '',
+                            job_type: "full_time",
+                            location: exp.location || "India",
+                            start_date: exp.start_date || '',
+                            end_date: exp.end_date,
+                            description: exp.description,
+                        });
+                    }
+                    sectionResults.experience = true;
+                } catch (err) {
+                    logger.error("Error adding experience:", err);
                 }
             }
 
@@ -235,8 +260,13 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 6️⃣ STORE SKILLS IN DB
             // ---------------------------------------
             if (mapped.skills?.length) {
-                for (const skill of mapped.skills) {
-                    await addSkillAutoFill({ name: skill });
+                try {
+                    for (const skill of mapped.skills) {
+                        await addSkillAutoFill({ name: skill });
+                    }
+                    sectionResults.skills = true;
+                } catch (err) {
+                    logger.error("Error adding skills:", err);
                 }
             }
 
@@ -244,16 +274,21 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 7️⃣ STORE PROJECTS IN DB
             // ---------------------------------------
             if (mapped.projects?.length) {
-                for (const project of mapped.projects) {
-                    await addProjectAutoFill({
-                        project_name: project.project_name,
-                        role: project.role,
-                        technologies: project.technologies || '',
-                        start_date: project.start_date || '',
-                        end_date: project.end_date,
-                        description: project.description,
-                        project_link: project.project_link,
-                    });
+                try {
+                    for (const project of mapped.projects) {
+                        await addProjectAutoFill({
+                            project_name: project.project_name,
+                            role: project.role,
+                            technologies: project.technologies || '',
+                            start_date: project.start_date || '',
+                            end_date: project.end_date,
+                            description: project.description,
+                            project_link: project.project_link,
+                        });
+                    }
+                    sectionResults.projects = true;
+                } catch (err) {
+                    logger.error("Error adding projects:", err);
                 }
             }
 
@@ -261,24 +296,57 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 8️⃣ STORE CERTIFICATIONS IN DB
             // ---------------------------------------
             if (mapped.certifications?.length) {
-                for (const cert of mapped.certifications) {
-                    await addCertificationAutoFill({
-                        certification_name: cert.certification_name || '',
-                        issuer: cert.issuer || '',
-                        start_date: cert.start_date || '',
-                        end_date: cert.end_date,
-                    });
+                try {
+                    for (const cert of mapped.certifications) {
+                        await addCertificationAutoFill({
+                            certification_name: cert.certification_name || '',
+                            issuer: cert.issuer || '',
+                            start_date: cert.start_date || '',
+                            end_date: cert.end_date,
+                        });
+                    }
+                    sectionResults.certifications = true;
+                } catch (err) {
+                    logger.error("Error adding certifications:", err);
                 }
             }
 
-            // 🔄 1️⃣0️⃣ RE-FETCH UPDATED DATA FROM DB
-            const [fetchedEducation, updatedExp, updatedSkills, updatedProjects, updatedCertifications] = await Promise.all([
-                getEducation(),
-                getExperience(),
-                getSkills(),
-                getProjects(),
-                getCertification(),
-            ]);
+            // 🔄 1️⃣0️⃣ RE-FETCH UPDATED DATA FROM DB (with error handling for each)
+            let fetchedEducation = [];
+            let updatedExp = [];
+            let updatedSkills = [];
+            let updatedProjects = [];
+            let updatedCertifications = [];
+
+            try {
+                fetchedEducation = await getEducation();
+            } catch (err) {
+                logger.warn("Error fetching education:", err);
+            }
+
+            try {
+                updatedExp = await getExperience();
+            } catch (err) {
+                logger.warn("Error fetching experience:", err);
+            }
+
+            try {
+                updatedSkills = await getSkills();
+            } catch (err) {
+                logger.warn("Error fetching skills:", err);
+            }
+
+            try {
+                updatedProjects = await getProjects();
+            } catch (err) {
+                logger.warn("Error fetching projects:", err);
+            }
+
+            try {
+                updatedCertifications = await getCertification();
+            } catch (err) {
+                logger.warn("Error fetching certifications:", err);
+            }
 
             // ✅ FIRST: Update profile context with all new data BEFORE refreshing dashboard
             // This prevents multiple re-renders and toast notifications
@@ -341,7 +409,26 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 }));
             }
 
-            toast.success("Resume imported successfully!", { id: "resume-upload" });
+            // Show detailed success/failure message
+            const successSections = Object.entries(sectionResults)
+                .filter(([_, success]) => success)
+                .map(([section]) => section);
+
+            const failedSections = Object.entries(sectionResults)
+                .filter(([_, success]) => !success)
+                .map(([section]) => section);
+
+            if (successSections.length > 0) {
+                const message = failedSections.length > 0
+                    ? `Resume imported partially. Loaded: ${successSections.join(", ")}. Failed: ${failedSections.join(", ")}`
+                    : "Resume imported successfully!";
+                toast.success(message, { id: "resume-upload" });
+            } else {
+                toast.error("Failed to import resume. Please try again.", { id: "resume-upload" });
+                setUploading(false);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
+            }
 
             // Store the file after the full import succeeds (intentional trade-off:
             // if any profile-save step above throws, resume_url is not persisted —

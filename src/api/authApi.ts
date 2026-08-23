@@ -71,6 +71,11 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     setTenantForEmail(data.email, response.data.tenant_id);
   }
 
+  // Store the actual token expiry from backend for accurate refresh timing
+  if (response.data.expires_in) {
+    localStorage.setItem('token_expires_in_seconds', response.data.expires_in.toString());
+  }
+
   // Clear the signout guard so future 401s can redirect to login normally.
   sessionStorage.removeItem('__signing_out');
 
@@ -326,17 +331,25 @@ export interface TokenRefreshResponse {
  */
 export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
   try {
+    // Use Next.js proxy route which properly forwards Set-Cookie headers
+    // This ensures the new refresh_token reaches the browser correctly
     const response = await httpClient.post<TokenRefreshResponse>(
-      "/auth/refresh",
+      "/api/backend/auth/refresh",
       {},
       {
+        baseURL: "",
         headers: {
           "Content-Type": "application/json",
+          "X-Tenant-Id": getTenantId(),
         },
       }
     );
     // ✅ Backend reads refresh_token from httpOnly cookie automatically
     // Backend sets new access_token as httpOnly cookie in response
+    // Store the actual token expiry from backend for accurate refresh timing
+    if (response.data.expires_in) {
+      localStorage.setItem('token_expires_in_seconds', response.data.expires_in.toString());
+    }
     return response.data;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Token refresh failed";

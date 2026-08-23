@@ -43,14 +43,16 @@ const bodyContains = (data: unknown, str: string): boolean => {
   return false;
 };
 
-// True if the user logged in (or last refreshed) within the past 2 minutes.
+// True if the user logged in (or last refreshed) within the past 35 minutes.
 // A failed refresh within this window is almost certainly a transient backend
 // issue, not real session expiry — so we skip the logout redirect.
+// This window must be larger than the token refresh interval (25 min) to avoid
+// logging out users during refresh retries when token expires but refresh fails.
 const LAST_REFRESH_KEY = 'token_last_refreshed_at';
 const isSessionFresh = (): boolean => {
   if (typeof window === 'undefined') return false;
   const ts = parseInt(localStorage.getItem(LAST_REFRESH_KEY) || '0', 10);
-  return ts > 0 && Date.now() - ts < 2 * 60 * 1000;
+  return ts > 0 && Date.now() - ts < 35 * 60 * 1000;  // 35 minutes = 30 min token + 5 min buffer
 };
 
 const clearAllTokens = () => {
