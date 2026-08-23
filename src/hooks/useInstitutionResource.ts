@@ -1,0 +1,175 @@
+'use client';
+
+/**
+ * Data-fetching hooks for the institution area.
+ *
+ * Same shape as the repo's other hooks (`useCoverLetterList`, `useCreditsBalance`):
+ * `{ data, isLoading, error, refetch }`, a sequence guard so a stale response
+ * cannot overwrite a newer one, and no external state library.
+ *
+ * `isLoading` is only true while a fetch is IN FLIGHT. Screens distinguish
+ * "still loading" from "loaded and empty" with `data === null` vs `[]`, so an
+ * empty result renders its designed empty state instead of a permanent skeleton.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { InstitutionApiError } from '@/api/institutionApi';
+import {
+  listBatches,
+  listDepartments,
+  listSections,
+  listStudentProgress,
+  listStudents,
+  getMyStudentProfile,
+  getInstitutionContext,
+  listMembers,
+} from '@/api/institutionApi';
+import type {
+  Batch,
+  Department,
+  InstitutionContext,
+  ListStudentsParams,
+  MemberRecord,
+  Paged,
+  ProgressRecord,
+  Section,
+  Student,
+} from '@/types/institution';
+
+export interface ResourceState<T> {
+  data: T | null;
+  isLoading: boolean;
+  error: InstitutionApiError | null;
+  refetch: () => Promise<void>;
+}
+
+function toApiError(err: unknown): InstitutionApiError {
+  return err instanceof InstitutionApiError
+    ? err
+    : new InstitutionApiError({
+        reason: 'UNKNOWN',
+        message: err instanceof Error ? err.message : undefined,
+      });
+}
+
+/**
+ * @param fetcher  must be stable (wrap in useCallback at the call site)
+ * @param enabled  false keeps the hook idle — used when a prerequisite (an
+ *                 institution session, a selected student) is not there yet
+ */
+export function useInstitutionResource<T>(
+  fetcher: () => Promise<T>,
+  enabled: boolean = true,
+): ResourceState<T> {
+  const [data, setData] = useState<T | null>(null);
+  const [isLoading, setIsLoading] = useState(enabled);
+  const [error, setError] = useState<InstitutionApiError | null>(null);
+  const seqRef = useRef(0);
+
+  const run = useCallback(async () => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
+    const mySeq = ++seqRef.current;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await fetcher();
+      if (mySeq !== seqRef.current) return; // superseded
+      setData(result);
+    } catch (err) {
+      if (mySeq !== seqRef.current) return;
+      setError(toApiError(err));
+    } finally {
+      if (mySeq === seqRef.current) setIsLoading(false);
+    }
+  }, [fetcher, enabled]);
+
+  useEffect(() => {
+    void run();
+    return () => {
+      // Invalidate any in-flight result so it cannot setState after unmount.
+      seqRef.current += 1;
+    };
+  }, [run]);
+
+  return { data, isLoading, error, refetch: run };
+}
+
+export function useDepartments(enabled = true): ResourceState<Department[]> {
+  return useInstitutionResource(useCallback(() => listDepartments(), []), enabled);
+}
+
+export function useBatches(enabled = true): ResourceState<Batch[]> {
+  return useInstitutionResource(useCallback(() => listBatches(), []), enabled);
+}
+
+export function useSections(departmentId?: string, enabled = true): ResourceState<Section[]> {
+  return useInstitutionResource(
+    useCallback(() => listSections(departmentId ? { department_id: departmentId } : {}), [departmentId]),
+    enabled,
+  );
+}
+
+/** The roster, unwrapped.
+ *
+ *  GET /students returns a page plus a total now, so a client can page without
+ *  fetching the whole roster to count it. This keeps the existing components
+ *  on a plain Student[] -- use useStudentsPaged when you need the total or a
+ *  search term. */
+export function useStudents(enabled = true): ResourceState<Student[]> {
+  return useInstitutionResource(
+    useCallback(async () => (await listStudents()).items, []), enabled);
+}
+
+/** Server-side search and paging.
+ *
+ *  Filtering the whole roster in the browser is fine at 400 students and
+ *  unusable at a deemed university with 30,000 -- and it ships every student's
+ *  record to the browser to answer a question about one person. */
+export function useStudentsPaged(
+  params: ListStudentsParams = {},
+  enabled = true,
+): ResourceState<Paged<Student>> {
+  const { skip, limit, q, department_id, batch_year } = params;
+  return useInstitutionResource(
+    useCallback(
+      () => listStudents({ skip, limit, q, department_id, batch_year }),
+      [skip, limit, q, department_id, batch_year],
+    ),
+    enabled,
+  );
+}
+
+/** The caller's OWN student record, rather than "the first row of the roster
+ *  and trust the server scoped it to one". */
+export function useMyStudentProfile(enabled = true): ResourceState<Student | null> {
+  return useInstitutionResource(
+    useCallback(() => getMyStudentProfile(), []), enabled);
+}
+
+/** Whether this college is currently writable, and which features are on --
+ *  knowable BEFORE the user loses work to a refused write. */
+export function useInstitutionContext(enabled = true): ResourceState<InstitutionContext> {
+  return useInstitutionResource(
+    useCallback(() => getInstitutionContext(), []), enabled);
+}
+
+/** College staff, so a human can PICK a faculty member instead of typing an
+ *  internal account id that no screen displays. */
+export function useMembers(
+  role?: 'cpo' | 'hod' | 'faculty' | 'student',
+  enabled = true,
+): ResourceState<MemberRecord[]> {
+  return useInstitutionResource(useCallback(() => listMembers(role), [role]), enabled);
+}
+
+export function useStudentProgress(
+  studentId: string | null | undefined,
+  enabled = true,
+): ResourceState<ProgressRecord[]> {
+  return useInstitutionResource(
+    useCallback(() => listStudentProgress(studentId as string), [studentId]),
+    enabled && Boolean(studentId),
+  );
+}
