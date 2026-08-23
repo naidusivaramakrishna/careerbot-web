@@ -227,14 +227,25 @@ export const getNotes = async (resumeId: string): Promise<NotesRecord> => {
 
 /**
  * Partially update interview prep notes (user edits)
- * PUT /api/v1/mock-interview/notes/{resume_id}
+ * PUT /api/v1/mock-interview/notes/{user_id}
+ *
+ * NOTE: this takes a USER id, unlike getNotes above which takes a resume id.
+ * That asymmetry is the backend's, not a mistake here:
+ *   - GET  /notes/{resume_id} resolves resume-scoped, falling back to
+ *     user-scoped when the segment is the caller's own id.
+ *   - PUT  /notes/{user_id}   compares the segment to the authenticated user
+ *     and returns 403 Access denied on any mismatch.
+ * The stored notes document is keyed on user_id alone (see save_notes in
+ * careerbot-api's mock_interview repository), so a user-scoped write and a
+ * resume-filtered read address the SAME record — passing a resume id here
+ * only produces a 403, it does not address a different document.
  */
 export const updateNotes = async (
-  resumeId: string,
+  userId: string,
   notes: Record<string, unknown>
 ): Promise<UpdateNotesResponse> => {
   const response = await httpClient.put<UpdateNotesResponse>(
-    `/mock-interview/notes/${resumeId}`,
+    `/mock-interview/notes/${userId}`,
     { notes } as unknown as Record<string, unknown>
   );
   return response.data;

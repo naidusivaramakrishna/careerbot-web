@@ -50,7 +50,20 @@ export const MOCK_INTERVIEWERS = [
   },
 ] as const;
 
-export type MockInterviewer = (typeof MOCK_INTERVIEWERS)[number];
+/**
+ * MockInterviewer keeps the literal `as const` shape (slug unions, exact
+ * numbers) but widens mouthAnchor to the DECLARED interface.
+ *
+ * Without this, mouthAnchor's type is inferred purely from the array literals.
+ * No entry sets the optional `rotationDeg`, so it is absent from the inferred
+ * union and `mouthAnchor.rotationDeg` is a type error at the one call site
+ * that reads it — even though InterviewerMouthAnchor declares the field and
+ * the call site already guards with `?? 0`. Declaring an optional property
+ * that the derived type then discards is the drift; this closes it.
+ */
+export type MockInterviewer = Omit<(typeof MOCK_INTERVIEWERS)[number], "mouthAnchor"> & {
+  mouthAnchor: InterviewerMouthAnchor;
+};
 
 export function isValidInterviewerIndex(index: unknown): index is number {
   return (
