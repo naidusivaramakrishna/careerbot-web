@@ -5,7 +5,9 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { toast } from "sonner";
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
 interface AwardEntry {
@@ -23,6 +25,8 @@ const emptyAward = (): AwardEntry => ({
 
 const Awards: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -186,7 +190,11 @@ const Awards: React.FC = () => {
       // // console.log("🗑️ Deleting award item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "awards", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "awards", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "awards", itemId);
+      }
 
       // // console.log("✅ Award item deleted from backend successfully");
 

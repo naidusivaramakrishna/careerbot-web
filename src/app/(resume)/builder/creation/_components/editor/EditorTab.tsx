@@ -320,7 +320,10 @@ const EditorTab: React.FC<Props> = ({
             declarationDate: live.declarationDate ?? "",
             declarationPlace: live.declarationPlace ?? "",
           };
-          await autoSaveResume(resumeId, autoSaveDecl);
+          const declSaveResponse = await autoSaveResume(resumeId, autoSaveDecl);
+          if (declSaveResponse?.warnings?.length) {
+            declSaveResponse.warnings.forEach(w => toast.warning(w, { duration: 6000 }));
+          }
           setLastSaved(new Date());
           setIsAutoSaving(false);
           return;
@@ -414,6 +417,10 @@ const EditorTab: React.FC<Props> = ({
         } else {
           const updatePayload = { [backendKey]: sectionData };
           const autoSaveResponse = await autoSaveResume(resumeId, updatePayload);
+
+          if (autoSaveResponse?.warnings?.length) {
+            autoSaveResponse.warnings.forEach(w => toast.warning(w, { duration: 6000 }));
+          }
 
           // Sync backend-assigned IDs back into resumeData. Without this, the next
           // auto-save re-sends the same entry without an id and the backend creates

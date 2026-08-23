@@ -194,7 +194,6 @@ export interface ResumeData {
     issueDate: string;
     expiryDate?: string;
     credentialId?: string;
-    credentialUrl?: string;
   }[];
   achievements: {
     id?: string;
@@ -898,7 +897,6 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             year: cert.year || cert.issueDate || "",
             expiryDate: cert.expiryDate || cert.expiry_date || "",
             credentialId: cert.credentialId || cert.credential_id || "",
-            credentialUrl: cert.credentialUrl || "",
           })),
           achievements: normalizeId((data.achievements || []) as Record<string, unknown>[]) as ResumeData["achievements"],
           volunteering: normalizeId((data.volunteering || []) as Record<string, unknown>[]) as ResumeData["volunteering"],

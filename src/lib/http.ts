@@ -171,8 +171,43 @@ function extractBackendMessage(data: unknown): string | null {
    Response Interceptor
 -------------------------------------------------- */
 
+/* --------------------------------------------------
+   Credit sync helper — fires on any response that carries
+   credits_remaining or user_credits_remaining so the
+   DashboardContext can update without a full re-fetch.
+-------------------------------------------------- */
+
+let _creditsBc: BroadcastChannel | null = null;
+const getCreditsBc = (): BroadcastChannel | null => {
+  if (typeof window === 'undefined') return null;
+  if (!_creditsBc) {
+    try { _creditsBc = new BroadcastChannel('careerbot_credits'); } catch { /* unsupported */ }
+  }
+  return _creditsBc;
+};
+
+const maybeSyncCredits = (data: unknown): void => {
+  if (!data || typeof data !== 'object') return;
+  const d = data as Record<string, unknown>;
+  const remaining =
+    typeof d.credits_remaining === 'number' ? d.credits_remaining :
+    typeof d.user_credits_remaining === 'number' ? d.user_credits_remaining :
+    null;
+  if (remaining === null) return;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('credits-updated', { detail: { credits_remaining: remaining } })
+    );
+    getCreditsBc()?.postMessage({ credits_remaining: remaining });
+  }
+};
+
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    maybeSyncCredits(response.data);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     const isAdmin = isAdminRequest(originalRequest?.url);
