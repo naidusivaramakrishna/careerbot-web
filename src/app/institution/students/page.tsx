@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { GraduationCap, Search, UserPlus } from 'lucide-react';
+import { GraduationCap, Search, UserPlus, KeyRound} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { useInstitution } from '@/contexts/InstitutionContext';
@@ -18,6 +18,7 @@ import { StudentStatusPill } from '../_components/StatusPill';
 import { PageHeader } from '../_components/Typography';
 import { WriteGuard } from '../_components/WriteGuard';
 import { FOCUS_RING } from '../_components/tokens';
+import { InviteCodeDialog } from '../_components/InviteCodeDialog';
 
 /**
  * The roster.
@@ -36,6 +37,10 @@ function StudentsRoster() {
   const students = useStudents();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
+  // Which student the invite dialog is open for, if any.
+  const [inviteFor, setInviteFor] = useState<Student | null>(null);
+  const writable = !readOnlyReason;
+  const refetch = students.refetch;
 
   const rows = students.data;
 
@@ -232,7 +237,43 @@ function StudentsRoster() {
               width: 'w-[130px]',
               render: (s) => <StudentStatusPill status={s.status} />,
             },
+            {
+              // Whether the student can actually sign in yet. A roster row is
+              // just a record until someone claims it, and an officer needs to
+              // see at a glance who is still waiting.
+              key: 'account',
+              header: 'Account',
+              width: 'w-[190px]',
+              render: (s) =>
+                s.claim_status === 'claimed' ? (
+                  <span className="text-[12px] text-[#64748b]">Signed up</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      // The row is a link to the student page; issuing a code
+                      // must not navigate away from the roster.
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setInviteFor(s);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#cbd5e1] bg-white px-2 py-1 text-[12px] font-medium text-[#334155] hover:bg-[#f1f5f9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2557a7]"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                    {s.claim_status === 'invited' ? 'Reissue code' : 'Invite'}
+                  </button>
+                ),
+            },
           ]}
+        />
+      ) : null}
+
+      {inviteFor ? (
+        <InviteCodeDialog
+          student={inviteFor}
+          writable={writable}
+          onClose={() => setInviteFor(null)}
+          onIssued={() => void refetch()}
         />
       ) : null}
     </>

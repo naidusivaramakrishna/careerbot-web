@@ -129,6 +129,29 @@ export interface InstitutionContext {
   disabled_features: string[];
 }
 
+/** What issuing an invite returns.
+ *
+ *  `code` is the ONLY copy. The server stores a keyed digest and cannot read
+ *  it back, so if it is lost the college reissues. The UI must show it once
+ *  and say so plainly -- a screen that implies it can be retrieved later sets
+ *  the officer up to lose it. */
+export interface IssuedInvite {
+  student_id: string;
+  full_name: string;
+  admission_number: string | null;
+  expires_at: string;
+  code: string;
+}
+
+export interface ClaimResult {
+  institution_id: string;
+  institution_name: string;
+  student_id: string;
+  /** true when this account had already claimed the row -- a repeat redeem,
+   *  not a failure. */
+  already_claimed: boolean;
+}
+
 export interface ListSectionsParams {
   department_id?: string;
 }

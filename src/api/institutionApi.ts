@@ -57,6 +57,8 @@ import type {
   Paged,
   ListStudentsParams,
   InstitutionContext,
+  IssuedInvite,
+  ClaimResult,
 } from '@/types/institution';
 
 const BASE = '/institution';
@@ -127,6 +129,41 @@ export function onInstitutionReadOnly(listener: ReadOnlyListener): () => void {
   return () => {
     readOnlyListeners.delete(listener);
   };
+}
+
+type StaleSessionListener = () => void;
+const staleSessionListeners = new Set<StaleSessionListener>();
+
+/** Fires when the stored college token stops being usable.
+ *
+ *  Without this the UI is stuck forever: the gate sees a stored session so it
+ *  skips auto-select, every scoped call is refused, and the user sits looking
+ *  at a college name in the sidebar with zeroes in every panel and no way out
+ *  short of clearing browser storage.
+ *
+ *  It is not an edge case. It happens whenever a membership is revoked, a
+ *  college is removed, or the row the token names is rebuilt -- the token is
+ *  still cryptographically valid, it just points at something that is gone. */
+export function onInstitutionSessionStale(listener: StaleSessionListener): () => void {
+  staleSessionListeners.add(listener);
+  return () => {
+    staleSessionListeners.delete(listener);
+  };
+}
+
+function publishStaleSession(error: InstitutionApiError, status?: number): void {
+  // The backend answers 403 with FORBIDDEN for a membership it cannot resolve
+  // -- deliberately indistinguishable from "not yours", so the response does
+  // not disclose whether the membership exists. The MESSAGE is what
+  // distinguishes it, and matching on it is unpleasant but it is the only
+  // signal available without weakening that property.
+  const looksStale =
+    (status === 403 || status === 401) &&
+    /no active institution membership|membership not found|not usable|malformed/i.test(
+      error.message ?? '',
+    );
+  if (!looksStale) return;
+  staleSessionListeners.forEach((listener) => listener());
 }
 
 function publishReadOnly(error: InstitutionApiError): void {
@@ -261,10 +298,11 @@ function mapError(err: unknown): InstitutionApiError {
   });
 }
 
-/** Map, publish read-only state, then rethrow. */
+/** Map, publish read-only and stale-session state, then rethrow. */
 function fail(err: unknown): never {
   const mapped = mapError(err);
   publishReadOnly(mapped);
+  publishStaleSession(mapped, axios.isAxiosError(err) ? err.response?.status : undefined);
   throw mapped;
 }
 
@@ -470,6 +508,53 @@ export async function getInstitutionContext(): Promise<InstitutionContext> {
   }
 }
 
+/** Issue a claim code for a roster entry.
+ *
+ *  The response carries the one and only copy of the code. */
+export async function issueInvite(
+  studentId: string, expiresDays = 30,
+): Promise<IssuedInvite> {
+  try {
+    const response = await httpClient.post<IssuedInvite>(
+      `${BASE}/students/${encodeURIComponent(studentId)}/invite`,
+      { expires_days: expiresDays },
+      withInstitutionAuth(),
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Cancel every live code for a student without issuing a new one. */
+export async function revokeInvites(studentId: string): Promise<number> {
+  try {
+    const response = await httpClient.post<{ revoked: number }>(
+      `${BASE}/students/${encodeURIComponent(studentId)}/invite/revoke`,
+      {},
+      withInstitutionAuth(),
+    );
+    return response.data?.revoked ?? 0;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Redeem a code and bind THIS account to the roster row it names.
+ *
+ *  Runs on the ORDINARY consumer session, deliberately: the person redeeming
+ *  has no college membership yet -- getting one is what redeeming does. It
+ *  must not carry an institution token, and it must not require one. */
+export async function claimWithInviteCode(code: string): Promise<ClaimResult> {
+  try {
+    const response = await httpClient.post<ClaimResult>(
+      `${BASE}/claim`, { code }, { headers: SKIP_REDIRECT_HEADERS });
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /** The college's staff, so a human can PICK one.
  *
  *  Assigning students to a faculty member previously meant typing an internal
@@ -574,6 +659,9 @@ const institutionApi = {
   getMyStudentProfile,
   getInstitutionContext,
   listMembers,
+  issueInvite,
+  revokeInvites,
+  claimWithInviteCode,
   getStudent,
   createStudent,
   assignStudentsToFaculty,

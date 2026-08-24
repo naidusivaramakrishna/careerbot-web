@@ -25,6 +25,7 @@ import {
   InstitutionApiError,
   listMemberships,
   onInstitutionReadOnly,
+  onInstitutionSessionStale,
 } from '@/api/institutionApi';
 import {
   clearInstitutionSession,
@@ -80,6 +81,9 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
 
   // Guards against a slow membership fetch resolving after unmount.
   const mountedRef = useRef(true);
+  // One stale-session recovery per mount. Without this the clear/re-select
+  // cycle repeats indefinitely and the page appears to refresh forever.
+  const staleRecoveryAttempted = useRef(false);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -121,6 +125,30 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
   // for the rest of the session rather than re-discovering it per screen.
   useEffect(() => onInstitutionReadOnly((reason) => setReadOnlyReason(reason)), []);
 
+  // A stored college token the server will no longer accept must not be kept.
+  // Holding it leaves the gate believing a college is selected, so it skips
+  // auto-select and every scoped call is refused -- a college name in the
+  // sidebar, zeroes in every panel, and no way out from inside the UI.
+  //
+  // RECOVERY IS ATTEMPTED EXACTLY ONCE. The obvious version of this loops
+  // forever: clear the session, the gate re-selects, the same call fails, the
+  // handler clears again. If one clean re-selection does not fix it the cause
+  // is not a stale token, and retrying cannot help -- so it stops and lets the
+  // error surface rather than spinning the page.
+  useEffect(
+    () =>
+      onInstitutionSessionStale(() => {
+        if (staleRecoveryAttempted.current) return;
+        staleRecoveryAttempted.current = true;
+        clearInstitutionSession();
+        if (!mountedRef.current) return;
+        setSession(null);
+        setReadOnlyReason(null);
+        void refreshMemberships();
+      }),
+    [refreshMemberships],
+  );
+
   const selectMembership = useCallback(
     async (membershipId: string) => {
       setIsSwitching(true);
@@ -133,6 +161,8 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
         setSession(stored);
         // Read-only is a property of the college, so clear it when switching.
         setReadOnlyReason(null);
+        // A deliberate switch is a fresh start: allow one recovery again.
+        staleRecoveryAttempted.current = false;
       } catch (err) {
         if (!mountedRef.current) return;
         setSwitchError(

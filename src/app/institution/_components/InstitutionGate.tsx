@@ -7,6 +7,7 @@ import Header from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
 import { cn } from '@/lib/utils';
+import { usePathname } from 'next/navigation';
 import { useInstitution } from '@/contexts/InstitutionContext';
 import { ROLE_LABELS, ROLE_SCOPE_HINT } from '@/lib/institutionMessages';
 import { EmptyState } from './EmptyState';
@@ -155,8 +156,21 @@ function CollegePicker() {
   );
 }
 
+/** Pages under /institution that must NOT be gated.
+ *
+ *  /join is where a student turns an invite code into a membership. Gating it
+ *  shows "you are not part of a college" to precisely the people holding a
+ *  valid invitation -- the one audience for whom that message is both true
+ *  and useless. */
+const UNGATED = ['/institution/join'];
+
 export function InstitutionGate({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { memberships, isLoadingMemberships, membershipsError, session } = useInstitution();
+
+  if (pathname && UNGATED.some((p) => pathname.startsWith(p))) {
+    return <>{children}</>;
+  }
 
   if (isLoadingMemberships) {
     return (
@@ -183,13 +197,20 @@ export function InstitutionGate({ children }: { children: React.ReactNode }) {
         <EmptyState
           icon={GraduationCap}
           title="No college account here"
-          body="This area is for students and staff of a partner college. Your CareerBOT account is not linked to one. If your college uses CareerBOT, your placement office can add you."
+          body="This area is for students and staff of a partner college. Your CareerBOT account is not linked to one yet. If your placement office gave you an invite code, use it here."
           action={
-            <Link href="/dashboard">
-              <Button variant="default" size="sm">
-                Go to my dashboard
-              </Button>
-            </Link>
+            <div className="flex items-center justify-center gap-2">
+              <Link href="/institution/join">
+                <Button variant="default" size="sm">
+                  I have an invite code
+                </Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button variant="outline" size="sm">
+                  Go to my dashboard
+                </Button>
+              </Link>
+            </div>
           }
         />
       </GateFrame>
