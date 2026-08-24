@@ -121,13 +121,26 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 3️⃣ Map to ProfileData format
             const mapped = mapResumeToProfile(result);
 
+            // Ensure mapped is defined BEFORE destroying anything.
+            if (!mapped) {
+                throw new Error('Failed to parse resume data');
+            }
+
             // =====================================================
             // 3️⃣ DELETE existing data AFTER parse so we also clear
             //    any entries auto-saved by the parse endpoint itself
             // =====================================================
+            // Each delete below is gated on the import ACTUALLY carrying
+            // replacement data for that section. Previously every section was
+            // cleared unconditionally, so importing a profile with no projects
+            // deleted the projects the user had already entered -- the resume
+            // path even recorded such a section as 'skipped' ("not in resume")
+            // while having just destroyed it. Import replaces the sections it
+            // covers; it must not empty the others.
+
 
             // DELETE EDUCATION
-            try {
+            if (mapped.education?.length) try {
                 const existingEducation = await getEducation();
                 for (const edu of existingEducation) {
                     if (edu.id) await deleteEducation(edu.id);
@@ -137,7 +150,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE EXPERIENCE
-            try {
+            if (mapped.workExperience?.length) try {
                 const existingExperience = await getExperience();
                 for (const exp of existingExperience) {
                     if (exp.id) await deleteExperience(exp.id);
@@ -147,7 +160,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE SKILLS
-            try {
+            if (mapped.skills?.length) try {
                 const existingSkills = await getSkills();
                 for (const skill of existingSkills) {
                     if (skill.id) await deleteSkill(skill.id);
@@ -157,7 +170,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE PROJECTS
-            try {
+            if (mapped.projects?.length) try {
                 const existingProjects = await getProjects();
                 for (const project of existingProjects) {
                     await deleteProject(project.id!);
@@ -167,18 +180,13 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE CERTIFICATIONS
-            try {
+            if (mapped.certifications?.length) try {
                 const existingCertifications = await getCertification();
                 for (const cert of existingCertifications) {
                     if (cert.id) await deleteCertification(cert.id);
                 }
             } catch (err) {
                 logger.warn("Error deleting certifications:", err);
-            }
-
-            // Ensure mapped is defined
-            if (!mapped) {
-                throw new Error('Failed to parse resume data');
             }
 
             // Track which sections succeeded/failed/skipped for user feedback
@@ -438,6 +446,22 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 .filter(([, status]) => status === 'failed')
                 .map(([section]) => section);
 
+            // Store the parsed file itself. This runs BEFORE the success/failure
+            // branch below because the file belongs on the profile whenever the
+            // parse succeeded -- independent of how many profile SECTIONS the
+            // resume happened to populate. The branch's early return for
+            // "no sections imported" skipped this entirely, so a resume that
+            // parsed but yielded no sections was never stored.
+            uploadResume(file)
+                .then((res) => {
+                    if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url }));
+                    localStorage.setItem('uploaded_resume_filename', file.name);
+                })
+                .catch((err) => {
+                    logger.warn("Resume file storage failed:", err);
+                    toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
+                });
+
             if (successSections.length > 0) {
                 const message = failedSections.length > 0
                     ? `Resume imported partially. Loaded: ${successSections.join(", ")}. Failed: ${failedSections.join(", ")}`
@@ -449,19 +473,6 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 if (fileInputRef.current) fileInputRef.current.value = '';
                 return;
             }
-
-            // Store the file after the full import succeeds (intentional trade-off:
-            // if any profile-save step above throws, resume_url is not persisted —
-            // this is preferred over storing a file whose data was never applied).
-            uploadResume(file)
-                .then((res) => {
-                    if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url }));
-                    localStorage.setItem('uploaded_resume_filename', file.name);
-                })
-                .catch((err) => {
-                    logger.warn("Resume file storage failed:", err);
-                    toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
-                });
 
             // ✅ FINAL: Refresh dashboard AFTER all profile updates complete
             // Use setTimeout to ensure profile context has updated first
@@ -488,12 +499,24 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 merge_strategy: "merge"
             });
 
+            // Map BEFORE deleting: the gates below need to know what the
+            // import actually provides.
+            const mapped = mapLinkedinToProfile(res);
+
             // =====================================================
             // 1️⃣ DELETE old data before adding newly imported data
             // =====================================================
+            // Each delete below is gated on the import ACTUALLY carrying
+            // replacement data for that section. Previously every section was
+            // cleared unconditionally, so importing a profile with no projects
+            // deleted the projects the user had already entered -- the resume
+            // path even recorded such a section as 'skipped' ("not in resume")
+            // while having just destroyed it. Import replaces the sections it
+            // covers; it must not empty the others.
+
 
             // DELETE EDUCATION
-            try {
+            if (mapped.education?.length) try {
                 const existingEducation = await getEducation();
                 for (const edu of existingEducation) {
                     if (edu.id) await deleteEducation(edu.id);
@@ -503,7 +526,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE EXPERIENCE
-            try {
+            if (mapped.workExperience?.length) try {
                 const existingExperience = await getExperience();
                 for (const exp of existingExperience) {
                     if (exp.id) await deleteExperience(exp.id);
@@ -513,7 +536,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE SKILLS
-            try {
+            if (mapped.skills?.length) try {
                 const existingSkills = await getSkills();
                 for (const skill of existingSkills) {
                     if (skill.id) await deleteSkill(skill.id);
@@ -523,7 +546,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE PROJECTS
-            try {
+            if (mapped.projects?.length) try {
                 const existingProjects = await getProjects();
                 for (const project of existingProjects) {
                     await deleteProject(project.id!);
@@ -532,7 +555,6 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 logger.warn("Error deleting projects:", err);
             }
 
-            const mapped = mapLinkedinToProfile(res);
 
             // Ensure mapped is defined
             if (!mapped) {

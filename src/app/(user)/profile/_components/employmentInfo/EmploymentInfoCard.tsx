@@ -41,7 +41,7 @@ export default function EmploymentInfoCard({ emp, onEdit }: Props) {
             <div className="mb-4 flex gap-2.5 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2.5">
                 <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <p className="text-xs text-blue-700 leading-relaxed">
-                    These are default employment preferences. Resume uploads will not override these values. You can edit them anytime to match your preferences.
+                    These are your saved defaults. Resume uploads will not override these values — you can edit them anytime.
                 </p>
             </div>
 

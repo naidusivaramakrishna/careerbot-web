@@ -3,6 +3,13 @@ import logger from '@/lib/logger';
 import { clearAdminRoleCache } from '@/app/admin/_hooks/adminRoleCache';
 // ==================== INTERFACES ====================
 
+/** Status code only -- never the axios error object, which carries credentials. */
+function axiosStatus(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const response = (err as { response?: { status?: number } }).response;
+  return response?.status;
+}
+
 export interface AdminBootstrapRequest {
   email: string;
   full_name: string;
@@ -236,7 +243,10 @@ export const adminLogin = async (
 
     return response.data;
   } catch (error: unknown) {
-    logger.error('❌ Admin login error:', error);
+      // Do NOT log the axios error object: its `config.data` carries the
+      // submitted username, password and TOTP code, and logger.ts emits
+      // error arguments unredacted in production.
+      logger.error('[Admin Auth] Login failed', { status: axiosStatus(error) });
 
     // Provide more detailed error information
     const axiosError = error as { response?: { status?: number; data?: unknown }; request?: unknown; message?: string };

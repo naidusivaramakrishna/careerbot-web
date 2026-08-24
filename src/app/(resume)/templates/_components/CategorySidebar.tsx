@@ -13,6 +13,7 @@ import {
   Scale,
   Truck,
   Anchor,
+  Briefcase,
   FlaskConical,
   Handshake,
   Headphones,

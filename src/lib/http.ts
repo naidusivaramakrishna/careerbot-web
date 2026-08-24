@@ -61,6 +61,27 @@ const isSessionFresh = (): boolean => {
   return lastRefreshedRecently || retryInProgress;
 };
 
+/**
+ * True when the backend has definitively rejected the session, as opposed to
+ * failing transiently.
+ *
+ * isSessionFresh() suppresses the logout redirect for 35 minutes so a flaky
+ * backend does not bounce a working session to the login page. But the API
+ * also returns 401 for reasons that will NEVER succeed on retry -- a revoked
+ * or already-used refresh token, a suspended account, a failed rotation
+ * (careerbot-api app/services/user_service/service.py:445-490). Suppressing
+ * those left the user in a half-logged-in state, every request 401ing, for up
+ * to 35 minutes. Definitive rejections must bypass the freshness window.
+ */
+const isDefinitiveAuthRejection = (err: unknown): boolean => {
+  if (!err || typeof err !== 'object') return false;
+  const response = (err as { response?: { status?: number; data?: { detail?: unknown } } }).response;
+  if (response?.status !== 401 && response?.status !== 403) return false;
+  const detail = response?.data?.detail;
+  if (typeof detail !== 'string') return false;
+  return /revoked|already used|suspended|rotation failed|sign in again/i.test(detail);
+};
+
 const clearAllTokens = () => {
   if (typeof window === 'undefined') return;
   // ✅ Backend clears httpOnly cookies automatically
@@ -308,7 +329,7 @@ client.interceptors.response.use(
       originalRequest.url?.includes('/auth/refresh') ||
       originalRequest.url?.includes('/admin/auth/refresh')
     ) {
-      if (isSessionFresh() || skipLoginRedirect) {
+      if ((isSessionFresh() && !isDefinitiveAuthRejection(error)) || skipLoginRedirect) {
         return Promise.reject(error);
       }
       const signingOutTimestamp = sessionStorage.getItem('__signing_out');
@@ -377,7 +398,11 @@ client.interceptors.response.use(
 
       // Don't redirect if the failure is a transient backend crash OR if the tokens
       // are fresh (user just logged in) — in both cases the session is still valid.
-      if (isRefreshBackendCrash || isSessionFresh() || skipLoginRedirect) {
+      if (
+        (isRefreshBackendCrash || isSessionFresh()) &&
+        !isDefinitiveAuthRejection(refreshError)
+        || skipLoginRedirect
+      ) {
         processQueue(refreshError, null, isAdmin);
         return Promise.reject(refreshError);
       }

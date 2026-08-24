@@ -8,7 +8,10 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 export async function POST(request: NextRequest) {
   const tenantId = request.headers.get('X-Tenant-Id') || 'public';
   const controller = new AbortController();
-  const fetchTimeout = setTimeout(() => controller.abort(), 85000);
+  // Must stay under `maxDuration` above -- an 85s abort under a 60s route
+  // limit means the platform kills the function before the intended 504
+  // can ever be returned.
+  const fetchTimeout = setTimeout(() => controller.abort(), 50000);
 
   try {
     let response: Response;
@@ -53,7 +56,7 @@ export async function POST(request: NextRequest) {
     // ✅ CRITICAL: Forward Set-Cookie headers from backend, rewriting per sanitiseCookie
     // This is what was missing! Without this, the new refresh_token never reaches the browser
     response.headers.getSetCookie().forEach((cookie) => {
-      res.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest));
+      res.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest, request.headers.get('host')));
     });
 
     return res;

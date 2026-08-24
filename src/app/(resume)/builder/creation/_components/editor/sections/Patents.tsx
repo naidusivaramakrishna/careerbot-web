@@ -77,8 +77,21 @@ const Patents: React.FC = () => {
 
   const hasValidData = (entry: PatentEntry): boolean => !!(entry.title);
 
+  // ResumeData["patents"] declares patentNumber/status/date as OPTIONAL, while
+  // PatentEntry (what this editor renders and writes) requires them. Normalize
+  // at the boundary instead of widening PatentEntry, so the inputs below still
+  // get defined string values to bind to.
+  const toPatentEntry = (p: NonNullable<typeof resumeData.patents>[number]): PatentEntry => ({
+    id: p.id,
+    title: p.title ?? "",
+    patentNumber: p.patentNumber ?? "",
+    status: p.status ?? "",
+    date: p.date ?? "",
+    description: p.description,
+  });
+
   const [savedEntries, setSavedEntries] = useState<PatentEntry[]>(() =>
-    (resumeData.patents || []).filter(hasValidData)
+    (resumeData.patents || []).map(toPatentEntry).filter(hasValidData)
   );
 
   const [editingEntries, setEditingEntries] = useState<PatentEntry[]>(() =>
@@ -130,7 +143,7 @@ const Patents: React.FC = () => {
     setSavedEntries(prev => {
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
         setEditingEntries([]);
-        return resumeData.patents!.filter(hasValidData);
+        return resumeData.patents!.map(toPatentEntry).filter(hasValidData);
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.patents!.length) return prev;

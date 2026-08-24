@@ -906,6 +906,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
           workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
           projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
+          // patents is required on ResumeData and defaulted to [] for a new
+          // resume, but was omitted here -- so LOADING a saved resume produced
+          // patents: undefined, which the Patents editor then indexed into.
+          patents: normalizeId((data.patents || []) as Record<string, unknown>[]) as ResumeData["patents"],
           ...(() => {
             let categorizedSkills: CategorizedSkills;
             if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {

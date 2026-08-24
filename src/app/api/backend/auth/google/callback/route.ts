@@ -1,33 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sanitiseCookie } from '@/lib/cookieUtils';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-/**
- * Sanitize Set-Cookie headers so the browser accepts them for the frontend domain.
- * See signin/route.ts for detailed explanation.
- */
-function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
-  const parts = cookie.split(';').map((p) => p.trim()).filter(Boolean);
-  if (parts.length === 0) return cookie;
-
-  const [pair, ...attrs] = parts;
-  let hasSameSite = false;
-  const kept: string[] = [];
-
-  for (const attr of attrs) {
-    const name = attr.split('=')[0].trim().toLowerCase();
-    if (name === 'domain') continue;
-    if (name === 'secure' && !isSecureRequest && process.env.NODE_ENV !== 'production') continue;
-    if (name === 'path') continue;
-    if (name === 'samesite') hasSameSite = true;
-    kept.push(attr);
-  }
-
-  kept.push('Path=/');
-  if (!hasSameSite) kept.push('SameSite=Lax');
-
-  return [pair, ...kept].join('; ');
-}
 
 /**
  * Handle Google OAuth callback by proxying to backend and setting cookies properly.
@@ -102,7 +77,7 @@ export async function GET(request: NextRequest) {
         request.headers.get('x-forwarded-proto') === 'https';
 
       backendResponse.headers.getSetCookie().forEach((cookie) => {
-        response.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest));
+        response.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest, request.headers.get('host')));
       });
 
       console.log('[Google OAuth] Cookies set for frontend domain');

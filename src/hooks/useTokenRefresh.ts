@@ -38,7 +38,10 @@ let retryTimeoutId: NodeJS.Timeout | null = null;
 const getTokenExpirySeconds = (): number => {
   if (typeof window === 'undefined') return DEFAULT_TOKEN_EXPIRY_SECONDS;
   const stored = localStorage.getItem(TOKEN_EXPIRY_SECONDS_KEY);
-  return stored ? parseInt(stored, 10) : DEFAULT_TOKEN_EXPIRY_SECONDS;
+  // A stale or hand-edited value parses to NaN, which would poison every
+  // interval and threshold derived from it. Fall back rather than propagate.
+  const parsed = stored ? parseInt(stored, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TOKEN_EXPIRY_SECONDS;
 };
 
 const getLastRefreshedAt = (): number => {
@@ -60,6 +63,19 @@ const setLastRefreshAttemptAt = () => {
   if (typeof window === 'undefined') return;
   localStorage.setItem(LAST_ATTEMPT_KEY, Date.now().toString());
 };
+
+/**
+ * Narrows an unknown thrown value to the { response } shape axios errors carry,
+ * without asserting `any`.
+ */
+function axiosLikeResponse(
+  err: unknown,
+): { status?: number; data?: { detail?: unknown } } | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const response = (err as { response?: unknown }).response;
+  if (!response || typeof response !== 'object') return undefined;
+  return response as { status?: number; data?: { detail?: unknown } };
+}
 
 const handleUserSessionExpired = () => {
   logger.error('[Token Refresh] User session expired - redirecting to login');
@@ -88,7 +104,15 @@ export const useTokenRefresh = (
     const actualTokenExpiryMs = actualTokenExpirySeconds * 1000;
     // Refresh 10 minutes before expiry (more conservative buffer to prevent edge cases)
     // This ensures token is refreshed well before it expires, preventing logout
-    const refreshBeforeExpiryMs = actualTokenExpiryMs - 10 * 60 * 1000;
+    // Refresh 10 minutes before expiry -- but never let the threshold go
+    // negative. expires_in is clamped to a 5-minute floor when stored, and a
+    // lifetime under 10 minutes made this negative, so the "not yet time to
+    // refresh" guard below could never be true and every tick refreshed.
+    // For short lifetimes, fall back to half the token's life.
+    const refreshBeforeExpiryMs = Math.max(
+      actualTokenExpiryMs / 2,
+      actualTokenExpiryMs - 10 * 60 * 1000,
+    );
     const isAdminRoute = pathname?.startsWith('/admin');
 
     logger.info(`[Token Refresh] Using token expiry: ${actualTokenExpirySeconds}s, will refresh at: ${(actualTokenExpiryMs - refreshBeforeExpiryMs) / 1000 / 60}min mark`);
@@ -109,8 +133,9 @@ export const useTokenRefresh = (
         return true;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        const statusCode = (error as any)?.response?.status;
-        const detail = (error as any)?.response?.data?.detail;
+        const errResponse = axiosLikeResponse(error);
+        const statusCode = errResponse?.status;
+        const detail = errResponse?.data?.detail;
         logger.error(`[Token Refresh] ❌ Attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed:`, {
           message: errorMsg,
           status: statusCode,
