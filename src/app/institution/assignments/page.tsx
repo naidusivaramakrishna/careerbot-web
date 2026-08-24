@@ -74,7 +74,7 @@ function FacultyAssignments() {
     skip: page * PAGE_SIZE,
     limit: PAGE_SIZE,
   });
-  const [facultyAccountId, setFacultyAccountId] = useState('');
+  const [facultyMembershipId, setFacultyMembershipId] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<InstitutionApiError | null>(null);
@@ -95,11 +95,11 @@ function FacultyAssignments() {
     () =>
       (faculty.data ?? [])
         .map((m) => ({
-          value: m.account_id,
-          // Falling back to the id is deliberate: a member whose platform
-          // account is gone must stay visible as something to clean up.
-          label: m.full_name
-            ? `${m.full_name}${m.department_id ? ` — ${departmentName(m.department_id)}` : ''}`
+          value: m.membership_id,
+          // Falling back to the account id is deliberate: a member the college
+          // added without a name must stay pickable, not disappear.
+          label: m.display_name
+            ? `${m.display_name}${m.department_id ? ` — ${departmentName(m.department_id)}` : ''}`
             : m.account_id,
         }))
         .sort((a, b) => a.label.localeCompare(b.label)),
@@ -141,13 +141,13 @@ function FacultyAssignments() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writable || submitting) return;
-    if (!facultyAccountId) {
+    if (!facultyMembershipId) {
       setError(
         new InstitutionApiError({
           reason: 'INVALID_REQUEST',
           message: 'Choose a faculty member.',
           fieldErrors: [
-            { field: 'faculty_account_id', message: 'Choose a faculty member.' },
+            { field: 'faculty_membership_id', message: 'Choose a faculty member.' },
           ],
         }),
       );
@@ -169,7 +169,7 @@ function FacultyAssignments() {
     try {
       const count = selected.size;
       await assignStudentsToFaculty({
-        faculty_account_id: facultyAccountId,
+        faculty_membership_id: facultyMembershipId,
         student_ids: Array.from(selected),
       });
       setDone(`${count} ${count === 1 ? 'student' : 'students'} assigned.`);
@@ -237,9 +237,9 @@ function FacultyAssignments() {
             <SelectField
               label="Faculty member"
               required
-              value={facultyAccountId}
+              value={facultyMembershipId}
               disabled={!writable || faculty.isLoading || facultyOptions.length === 0}
-              error={fieldErrors.faculty_account_id}
+              error={fieldErrors.faculty_membership_id}
               options={facultyOptions}
               placeholder={
                 faculty.isLoading
@@ -253,7 +253,7 @@ function FacultyAssignments() {
                   ? 'A head of department adds faculty before students can be assigned to them.'
                   : 'Students can only be assigned to a faculty member in their own department.'
               }
-              onChange={(e) => setFacultyAccountId(e.target.value)}
+              onChange={(e) => setFacultyMembershipId(e.target.value)}
             />
           </div>
 

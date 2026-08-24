@@ -177,6 +177,9 @@ export interface CreateMemberRequest {
   role: OnboardableRole;
   /** Required by the route for every onboardable role. */
   department_id: string;
+  /** What the college calls this person. Optional, but without it the staff
+   *  picker can only show an account id, which nobody can read. */
+  display_name?: string;
 }
 
 export interface MemberRecord {
@@ -186,12 +189,11 @@ export interface MemberRecord {
   role: InstitutionRole;
   department_id: string | null;
   active?: boolean;
-  /** The person's name, from their platform account. `null` when that account
-   *  is gone -- the membership still lists, because a row that needs cleaning
-   *  up should be visible rather than error the screen. Deliberately the ONLY
-   *  profile field here: a name is what a human picks by, and anything more
-   *  turns a picker into a staff directory. */
-  full_name?: string | null;
+  /** What the COLLEGE called this person when it added them. Typed by the
+   *  college, not read from the platform account: that join crossed the tenant
+   *  boundary, because staff onboarding accepts any account id and `users`
+   *  carries no institution at all. `null` when they were added by id alone. */
+  display_name?: string | null;
 }
 
 /** models.py StudentProfile.status */
@@ -240,7 +242,12 @@ export interface CreateStudentRequest {
 }
 
 export interface CreateFacultyAssignmentRequest {
-  faculty_account_id: string;
+  /** The MEMBERSHIP, not the account. Naming the account routed a request
+   *  value onto a protected scope key, and answered differently for "no such
+   *  account", "not in your scope" and "not a faculty member" -- which
+   *  confirms membership state for accounts the caller cannot see. The
+   *  membership id comes from GET /members, already scoped to the caller. */
+  faculty_membership_id: string;
   student_ids: string[];
 }
 

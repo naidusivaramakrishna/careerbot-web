@@ -141,6 +141,7 @@ function MemberForm({
   readOnlyHint: string | null;
 }) {
   const [accountId, setAccountId] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [memberRole, setMemberRole] = useState<OnboardableRole>(allowedRoles[0] ?? 'student');
   const [departmentId, setDepartmentId] = useState(defaultDepartmentId);
   const [submitting, setSubmitting] = useState(false);
@@ -164,9 +165,11 @@ function MemberForm({
         account_id: accountId.trim(),
         role: memberRole,
         department_id: departmentId,
+        display_name: displayName.trim() || undefined,
       });
       setDone(`${ROLE_LABELS[memberRole]} access granted.`);
       setAccountId('');
+      setDisplayName('');
     } catch (err) {
       setError(
         err instanceof InstitutionApiError ? err : new InstitutionApiError({ reason: 'UNKNOWN' }),
@@ -206,6 +209,16 @@ function MemberForm({
             error={fieldErrors.account_id}
             hint="The id of the existing account you are adding."
             onChange={(e) => setAccountId(e.target.value)}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <TextField
+            label="Their name"
+            value={displayName}
+            disabled={!writable}
+            error={fieldErrors.display_name}
+            hint="How they appear when you assign students to them. Without it the list can only show the account id."
+            onChange={(e) => setDisplayName(e.target.value)}
           />
         </div>
         <SelectField
