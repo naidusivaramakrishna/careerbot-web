@@ -96,11 +96,21 @@ function FacultyAssignments() {
       (faculty.data ?? [])
         .map((m) => ({
           value: m.membership_id,
-          // Falling back to the account id is deliberate: a member the college
-          // added without a name must stay pickable, not disappear.
-          label: m.display_name
-            ? `${m.display_name}${m.department_id ? ` — ${departmentName(m.department_id)}` : ''}`
-            : m.account_id,
+          // The account id is ALWAYS shown, never replaced by the name.
+          //
+          // display_name is typed by whoever onboarded this person and is
+          // never verified against the account behind it, so on its own it is
+          // a label anyone able to add staff can choose. Someone could add
+          // their own account as "Prof Meera Iyer" and collect another
+          // officer's students. The name makes the list readable; the id is
+          // what actually identifies the row, so both are on screen.
+          label: [
+            m.display_name?.trim(),
+            m.department_id ? departmentName(m.department_id) : null,
+            m.account_id,
+          ]
+            .filter(Boolean)
+            .join(' · '),
         }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,7 +261,7 @@ function FacultyAssignments() {
               hint={
                 facultyOptions.length === 0 && !faculty.isLoading
                   ? 'A head of department adds faculty before students can be assigned to them.'
-                  : 'Students can only be assigned to a faculty member in their own department.'
+                  : 'Names are entered by your college and are not verified. Check the account id.'
               }
               onChange={(e) => setFacultyMembershipId(e.target.value)}
             />
