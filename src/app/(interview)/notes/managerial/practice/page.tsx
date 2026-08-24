@@ -559,6 +559,9 @@ function ManagerialPracticeContent() {
             </div>
           )}
 
+        </div>
+
+        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           {currentAnswer && (
             <FeedbackCard
               weightedScore={currentAnswer.weightedScore}
@@ -581,9 +584,6 @@ function ManagerialPracticeContent() {
               answerId={currentAnswer.answerId}
             />
           )}
-        </div>
-
-        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
             showNotes
               ? roundNumber === 1
@@ -630,17 +630,15 @@ function ManagerialPracticeContent() {
             )}
           </div>
 
-          {!currentAnswer && (
-            <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-              <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
-                <Mic size={24} className="text-[#2557a7]" />
-              </div>
-              <p className="text-sm font-black text-gray-800">AI Feedback</p>
-              <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
-                Record your answer to unlock score breakdowns, key-point coverage, and a stronger model response.
-              </p>
+          <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+            <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
+              <Mic size={24} className="text-[#2557a7]" />
             </div>
-          )}
+            <p className="text-sm font-black text-gray-800">AI Feedback</p>
+            <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
+              Record your answer to unlock score breakdowns, key-point coverage, and a stronger model response.
+            </p>
+          </div>
         </aside>
 
       </div>

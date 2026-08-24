@@ -7,7 +7,9 @@ import { toast } from "sonner";
 import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 
 type ScoreType = "CGPA" | "Marks" | "GPA" | "Percentage";
 
@@ -34,6 +36,8 @@ const emptyEducation = (): EducationEntry => ({
 
 const Education: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -41,6 +45,7 @@ const Education: React.FC = () => {
     clearError,
     clearSectionIndexErrors,
     reindexErrors,
+    setFieldError,
   } = useValidation();
 
   const [showTips] = useState(true);
@@ -252,7 +257,11 @@ const Education: React.FC = () => {
       // // console.log("🗑️ Deleting education item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "education", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "education", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "education", itemId);
+      }
 
       // // console.log("✅ Education item deleted from backend successfully");
 
@@ -457,6 +466,7 @@ const Education: React.FC = () => {
                           onChange={(val) => handleChange(editIndex, "endDate", val)}
                           placeholder="MM/YY"
                           minDate={education.startDate}
+                          allowFutureDates
                         />
                       </div>
                     </div>
@@ -464,13 +474,37 @@ const Education: React.FC = () => {
                     {/* Combined Score Field with Dropdown */}
                     <div className="flex flex-col gap-1">
                       <label className="text-sm font-semibold text-[#3b3b3b]">Score</label>
-                      <div className="flex items-center rounded-md bg-[#faf9f8] border-b-2 border-transparent focus-within:border-blue-500 hover:bg-gray-100">
+                      <div className={`flex items-center rounded-md bg-[#faf9f8] border-b-2 hover:bg-gray-100 ${errors[`education-${globalIndex}-scoreValue`] ? "border-red-500" : "border-transparent focus-within:border-blue-500"}`}>
                         {/* Score Value Input */}
                         <input
                           type="text"
                           value={education.scoreValue || ""}
                           placeholder={education.scoreType === "Percentage" ? "e.g., 85" : "e.g., 3.8"}
-                          onChange={(e) => handleChange(editIndex, "scoreValue", e.target.value)}
+                          onChange={(e) => {
+                            handleChange(editIndex, "scoreValue", e.target.value);
+                            clearError("education", globalIndex, "scoreValue");
+                          }}
+                          onBlur={() => {
+                            const val = education.scoreValue?.trim();
+                            if (!val || !education.scoreType || education.scoreType === "Marks") {
+                              clearError("education", globalIndex, "scoreValue");
+                              return;
+                            }
+                            const num = parseFloat(val);
+                            const limits: Record<string, [number, number]> = {
+                              Percentage: [0, 100],
+                              CGPA: [0, 10],
+                              GPA: [0, 4],
+                            };
+                            const [min, max] = limits[education.scoreType] ?? [0, Infinity];
+                            if (isNaN(num)) {
+                              setFieldError("education", globalIndex, "scoreValue", `Score must be a number for ${education.scoreType}`);
+                            } else if (num < min || num > max) {
+                              setFieldError("education", globalIndex, "scoreValue", `${education.scoreType} must be between ${min} and ${max}`);
+                            } else {
+                              clearError("education", globalIndex, "scoreValue");
+                            }
+                          }}
                           maxLength={10}
                           className="flex-1 px-3 py-3.5 text-sm bg-transparent text-black outline-none"
                         />
@@ -494,6 +528,11 @@ const Education: React.FC = () => {
                           ))}
                         </select>
                       </div>
+                      {errors[`education-${globalIndex}-scoreValue`] && (
+                        <span className="text-xs text-red-500">
+                          {errors[`education-${globalIndex}-scoreValue`]}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );

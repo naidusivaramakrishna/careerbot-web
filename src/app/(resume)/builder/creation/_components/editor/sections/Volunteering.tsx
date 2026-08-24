@@ -6,7 +6,9 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { toast } from "sonner";
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
 interface VolunteeringEntry {
@@ -26,6 +28,8 @@ const emptyVolunteering = (): VolunteeringEntry => ({
 
 const Volunteering: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
 
   const {
     errors,
@@ -189,7 +193,11 @@ const Volunteering: React.FC = () => {
       // // console.log("🗑️ Deleting volunteering item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "volunteering", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "volunteering", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "volunteering", itemId);
+      }
 
       // // console.log("✅ Volunteering item deleted from backend successfully");
 

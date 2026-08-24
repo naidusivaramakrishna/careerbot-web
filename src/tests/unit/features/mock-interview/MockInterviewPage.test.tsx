@@ -89,6 +89,7 @@ type MotionMockProps = React.HTMLAttributes<HTMLElement> & {
 type ImageMockProps = React.ImgHTMLAttributes<HTMLImageElement> & {
   priority?: boolean;
   fill?: boolean;
+  unoptimized?: boolean;
 };
 
 vi.mock("framer-motion", () => ({
@@ -113,6 +114,7 @@ vi.mock("next/image", () => ({
     const imgProps: React.ImgHTMLAttributes<HTMLImageElement> = { ...props };
     delete (imgProps as ImageMockProps).priority;
     delete (imgProps as ImageMockProps).fill;
+    delete (imgProps as ImageMockProps).unoptimized;
     return React.createElement("img", imgProps);
   },
 }));

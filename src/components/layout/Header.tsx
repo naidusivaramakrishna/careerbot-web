@@ -18,6 +18,7 @@ import { useCreditsBalance } from '@/hooks/useCreditsBalance';
 import { useNotificationStream } from '@/hooks/useNotificationStream';
 import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
 import { getProfile, getProfilePicture, UserProfile } from '@/api/userApi';
+import { getDashboardSummary } from '@/api/dashboardApi';
 import { signOut } from '@/api/authApi';
 import { Notification } from '@/api/notificationsApi';
 import { resolveNotificationRoute } from '@/lib/notificationRoute';
@@ -192,9 +193,31 @@ export default function Header() {
   /* Profile */
   useEffect(() => {
     const fetchProfile = async () => {
+      // Step 1: try to get the full profile
+      let profile: UserProfile | null = null;
       try {
-        const profile = await getProfile({ skipAuthRedirect: true });
-        setUserProfile(profile);
+        profile = await getProfile({ skipAuthRedirect: true });
+      } catch { /* silently fail */ }
+
+      // Step 2: if profile has no display name (or failed entirely), fall back to
+      // dashboard summary which always carries user.name after signup
+      if (!profile?.username && !profile?.full_name) {
+        try {
+          const summary = await getDashboardSummary({ skipAuthRedirect: true });
+          if (summary?.user?.name) {
+            profile = {
+              ...(profile ?? {}),
+              full_name: summary.user.name,
+              email: profile?.email ?? summary.user.email,
+            };
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (profile) setUserProfile(profile);
+
+      // Step 3: profile picture (independent of name)
+      try {
         const picRes = await getProfilePicture({ skipAuthRedirect: true });
         if (picRes?.picture_url) {
           const fullUrl = picRes.picture_url.startsWith('http')
@@ -526,9 +549,6 @@ export default function Header() {
               <div className="absolute right-0 top-10 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
-                  {/* Only when it ADDS information: displayName already falls back
-                      to full_name when username is absent, so an unguarded render
-                      printed the same name twice for every pre-username account. */}
                   {userProfile?.full_name && userProfile.full_name !== displayName && (
                     <p className="text-[12px] text-gray-600 truncate">{userProfile.full_name}</p>
                   )}

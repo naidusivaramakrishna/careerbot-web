@@ -44,9 +44,14 @@ const SocialLoginButtons: React.FC<Props> = ({ variant = "signup", redirectTo })
     try {
       storeRedirectTarget()
       const loginUrl = await getGoogleLoginUrl()
+      if (!loginUrl) {
+        throw new Error('No OAuth URL returned from backend')
+      }
       window.location.href = loginUrl
     } catch (error) {
-      toast.error(extractErrorMessage(error, 'Failed to initiate Google login'))
+      const errorMsg = extractErrorMessage(error, 'Failed to initiate Google login')
+      console.error('[Google OAuth] Error:', { error, errorMsg })
+      toast.error(errorMsg)
     }
   }
 
