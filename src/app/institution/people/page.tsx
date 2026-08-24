@@ -320,8 +320,17 @@ function StudentForm({
           : {}),
       });
       setDone(
-        `${student.full_name} added to the roster. They will appear as ` +
-        `"not yet claimed" until they redeem an invite code and sign in.`);
+        student.faculty_assignment_pending
+          // The student WAS created. Only the automatic assignment to the
+          // faculty member who added them did not complete, which means they
+          // will not appear on that person's own list until somebody assigns
+          // them. Saying nothing would leave a faculty member looking for a
+          // student they had just added and concluding it had not saved.
+          ? `${student.full_name} added to the roster, but could not be put ` +
+            `on your list of students. Ask your head of department or ` +
+            `placement officer to assign them to you.`
+          : `${student.full_name} added to the roster. They will appear as ` +
+            `"not yet claimed" until they redeem an invite code and sign in.`);
       setFullName('');
       setAdmissionNumber('');
       setCollegeEmail('');

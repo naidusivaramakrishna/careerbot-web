@@ -224,6 +224,16 @@ export interface Student {
   photo_url?: string | null;
   created_at?: string;
   updated_at?: string;
+  /** Present ONLY on the response to a faculty member creating a student, and
+   *  only when the automatic assignment to that faculty member did not
+   *  complete. The student WAS created -- this is not a failure -- but they
+   *  are not on the creator's list, so the creator cannot see them or record
+   *  their progress until somebody assigns them.
+   *
+   *  Saying so is the point: the alternative was failing the whole request,
+   *  which told the faculty member their student did not exist and sent them
+   *  into a retry the unique admission-number index refuses. */
+  faculty_assignment_pending?: boolean;
 }
 
 export interface CreateStudentRequest {
