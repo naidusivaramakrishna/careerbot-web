@@ -12,7 +12,7 @@ import { FaCheckCircle } from "react-icons/fa";
 import { RiSparkling2Fill } from "react-icons/ri";
 import JobMatchSectionEditor from "../resume/JobMatchSectionEditor";
 import JDHighlighter from "../highlighter/JDHighlighter";
-import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, matcherUpdateSections, matchResumeAndJD } from "@/api/parserApi";
+import { matcherEnhanceApply, matcherEnhanceRemove, downloadResumePdf, matcherUpdateSections } from "@/api/parserApi";
 import { toast } from "sonner";
 import ScoreBreakdown from "./ScoreBreakdown";
 import MatchPenalties from "./MatchPenalties";
@@ -56,6 +56,51 @@ interface AnalysisDraft {
   addedSkillFields: string[];
   highlightFields: Record<string, string[]>;
   liveScore: number;
+  appliedSuggestionIds: string[];
+  // Which of appliedSuggestionIds were applied via a BULK parent. The backend
+  // only recorded the parent's suggestion_id, so undoing one of these by its
+  // own child id 404s. Without persisting this, a restored draft made every
+  // child look individually applied and re-enabled an Undo that always failed.
+  bulkAppliedSuggestionIds: string[];
+}
+
+/**
+ * Patches the stored draft's applied-suggestion bookkeeping directly.
+ *
+ * The draft is normally written by a mounted effect, but an apply/undo request
+ * can still be in flight when the user hits Back: the component unmounts, the
+ * request commits server-side, and its setState calls are no-ops, so the draft
+ * never learns about it. Returning to Analysis would then restore state that
+ * disagrees with the server -- an applied fix shown as pending, or an undone
+ * one stuck on "Added".
+ *
+ * Writing through to sessionStorage here works because this runs from a
+ * closure that survives unmount, unlike React state.
+ */
+function patchAnalysisDraftApplied(
+  matchId: string | undefined,
+  suggestionId: string,
+  applied: boolean,
+): void {
+  try {
+    if (!matchId) return;
+    const raw = sessionStorage.getItem(ANALYSIS_DRAFT_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw) as AnalysisDraft;
+    if (draft.matchId !== matchId) return;
+
+    const ids = new Set(draft.appliedSuggestionIds ?? []);
+    const bulk = new Set(draft.bulkAppliedSuggestionIds ?? []);
+    if (applied) {
+      ids.add(suggestionId);
+    } else {
+      ids.delete(suggestionId);
+      bulk.delete(suggestionId);
+    }
+    draft.appliedSuggestionIds = Array.from(ids);
+    draft.bulkAppliedSuggestionIds = Array.from(bulk);
+    sessionStorage.setItem(ANALYSIS_DRAFT_KEY, JSON.stringify(draft));
+  } catch {}
 }
 
 function readAnalysisDraft(matchId?: string): AnalysisDraft | null {
@@ -268,11 +313,8 @@ export default function AnalysisContent({
   parsedResumeData,
   onBackToUpload,
 }: AnalysisContentProps) {
-  // Lifted into state (rather than read straight off the prop) so a retried
-  // match — see handleRetryMatch — can replace it without needing the parent
-  // to re-render this component with new props.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [liveMatchResults, setLiveMatchResults] = React.useState<any>(matchResults);
+  const [liveMatchResults] = React.useState<any>(matchResults);
 
   const matchId: string | undefined =
     liveMatchResults?.data?.id ??
@@ -346,6 +388,31 @@ export default function AnalysisContent({
   // Track which skills were added (for green highlight in resume template)
   const [addedSkillFields, setAddedSkillFields] = React.useState<string[]>(() => restoredDraft?.addedSkillFields ?? []);
 
+  // suggestion_ids applied via MatchPenalties' "Apply fix"/"Add skill" buttons
+  // (skills AND non-skill text fixes) — persisted so those cards still show
+  // "Added" instead of resetting to "Apply fix" after navigating away and back.
+  const [appliedSuggestionIds, setAppliedSuggestionIds] = React.useState<string[]>(() => restoredDraft?.appliedSuggestionIds ?? []);
+  const [bulkAppliedSuggestionIds, setBulkAppliedSuggestionIds] = React.useState<string[]>(() => restoredDraft?.bulkAppliedSuggestionIds ?? []);
+  const handleBulkApplied = React.useCallback((suggestionIds: string[]) => {
+    setBulkAppliedSuggestionIds((prev) => {
+      const next = new Set(prev);
+      suggestionIds.forEach((id) => next.add(id));
+      return Array.from(next);
+    });
+  }, []);
+  const handleSuggestionApplied = React.useCallback((suggestionId: string, applied: boolean) => {
+    // Write through to the stored draft as well as React state: this callback
+    // still runs if the request completes after the user navigated away, when
+    // setState no longer does anything.
+    patchAnalysisDraftApplied(matchId, suggestionId, applied);
+    if (!applied) setBulkAppliedSuggestionIds((prev) => prev.filter((id) => id !== suggestionId));
+    setAppliedSuggestionIds((prev) =>
+      applied
+        ? (prev.includes(suggestionId) ? prev : [...prev, suggestionId])
+        : prev.filter((id) => id !== suggestionId)
+    );
+  }, [matchId]);
+
   // Track which other fields (job title, summary, individual experience/
   // internship/project bullets) were just changed by an applied fix — same
   // green-highlight mechanism JobMatchTemplateThree already uses for skills
@@ -357,6 +424,19 @@ export default function AnalysisContent({
       const existing = prev[section] ?? [];
       if (existing.includes(field)) return prev;
       return { ...prev, [section]: [...existing, field] };
+    });
+  }, []);
+  const unmarkHighlighted = React.useCallback((section: string, field: string) => {
+    setHighlightFields((prev) => {
+      const existing = prev[section] ?? [];
+      if (!existing.includes(field)) return prev;
+      const next = existing.filter((f) => f !== field);
+      if (next.length === 0) {
+        const rest = { ...prev };
+        delete rest[section];
+        return rest;
+      }
+      return { ...prev, [section]: next };
     });
   }, []);
 
@@ -408,6 +488,9 @@ export default function AnalysisContent({
   // rather than racing on a stale snapshot.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const resumeSectionsRef = React.useRef<Record<string, any>>(resumeSections);
+  // suggestion_id -> the bullet text apply actually wrote into the preview,
+  // so undo can find it again even when a manual value filled a metric blank.
+  const appliedTextRef = React.useRef<Record<string, string>>({});
   React.useEffect(() => { resumeSectionsRef.current = resumeSections; }, [resumeSections]);
 
   const resumeId: string | undefined =
@@ -443,10 +526,12 @@ export default function AnalysisContent({
         addedSkillFields,
         highlightFields,
         liveScore,
+        appliedSuggestionIds,
+        bulkAppliedSuggestionIds,
       };
       sessionStorage.setItem(ANALYSIS_DRAFT_KEY, JSON.stringify(draft));
     } catch {}
-  }, [matchId, resumeSections, activeSectionIds, deletedSectionIds, customSections, addedSkillFields, highlightFields, liveScore]);
+  }, [matchId, resumeSections, activeSectionIds, deletedSectionIds, customSections, addedSkillFields, highlightFields, liveScore, appliedSuggestionIds, bulkAppliedSuggestionIds]);
 
   // Resolve a suggestion_id for a skill name from Match_Penalties — needed
   // when a skill is added/removed from a source that doesn't already carry
@@ -656,6 +741,10 @@ export default function AnalysisContent({
           resumeSectionsRef.current = result.sections;
           setResumeSections(result.sections);
           result.changed.forEach((c) => markHighlighted(c.section, String(c.idx)));
+          // Remember the text we ACTUALLY wrote. When a manual value filled a
+          // metric blank, `after` differs from the cached after_example, and
+          // undo searching for the cached copy would find nothing.
+          appliedTextRef.current[suggestion_id] = after;
         } else {
           mirrored = false;
         }
@@ -664,6 +753,81 @@ export default function AnalysisContent({
 
     return mirrored;
   }, [matchId, matchResult, jobTitle, starCheck, markHighlighted, runSerially, askForNumber]);
+
+  // Undo a non-skill fix (job title / summary / bullet rewrite) — the inverse
+  // of applyTextFix above. The backend endpoint (POST /enhance/remove) fully
+  // reverts its own bookkeeping and the stored resume document from what it
+  // snapshotted at apply time; this just mirrors that same reversal into the
+  // local preview using the same before/after text applyTextFix used to apply
+  // it (job_title/summary have no before/after pair on the penalty itself, so
+  // those fall back to the untouched parsedResumeData / Job_Title_Check.matched_title
+  // — the resume's state before ANY fix was applied).
+  const removeTextFix = React.useCallback(async (suggestion_id: string, category: string): Promise<boolean> => {
+    if (!matchId || !suggestion_id) return false;
+    // Mirrors applyTextFix: true unless the local preview could not be reverted.
+    let mirrored = true;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let res: any;
+    try {
+      res = await runSerially(() => matcherEnhanceRemove(matchId, suggestion_id));
+    } catch {
+      toast.error("Couldn't undo this fix. Please try again.");
+      return false;
+    }
+
+    const newScore = res?.score_diff?.after ?? res?.data?.score_diff?.after;
+    if (typeof newScore === "number") setLiveScore(Math.min(100, Math.max(0, newScore)));
+    else if (typeof newScore === "string") {
+      const n = parseFloat(newScore);
+      if (!isNaN(n)) setLiveScore(Math.min(100, Math.max(0, n)));
+    }
+
+    const penalties = matchResult?.Match_Penalties?.penalties ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const penalty = penalties.find((p: any) => p.suggestion_id === suggestion_id);
+    const original = parsedResumeData?.parsed_data ?? parsedResumeData ?? {};
+
+    if (category === "job_title") {
+      const originalTitle = jobTitle?.matched_title;
+      if (originalTitle) {
+        setResumeSections((prev: Record<string, unknown>) => ({
+          ...prev,
+          contact: { ...(prev.contact as Record<string, unknown> ?? {}), jobTitle: originalTitle },
+        }));
+      }
+      unmarkHighlighted("contact", "title");
+    } else if (category === "summary") {
+      const originalSummary =
+        original.professionalSummary ?? original.professional_summary ?? original.summary ?? original.career_objective ?? "";
+      setResumeSections((prev) => ({ ...prev, summary: originalSummary }));
+      unmarkHighlighted("summary", "text");
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const weak = (starCheck?.weak_bullets ?? []).find((w: any) => w.suggestion_id === suggestion_id);
+      const before = weak?.original || penalty?.before_example;
+      // Prefer the text apply actually wrote. The cached after_example may
+      // still carry an unfilled "n+" metric placeholder, so searching for it
+      // would miss a bullet that was saved as "20+".
+      const after = appliedTextRef.current[suggestion_id] ?? (weak?.improved || penalty?.after_example);
+      if (before && after && before !== after) {
+        const result = replaceBulletText(resumeSectionsRef.current, after, before);
+        if (result.changed.length) {
+          resumeSectionsRef.current = result.sections;
+          setResumeSections(result.sections);
+          result.changed.forEach((c) => unmarkHighlighted(c.section, String(c.idx)));
+          delete appliedTextRef.current[suggestion_id];
+        } else {
+          // The server rolled the fix back but the preview still shows the
+          // applied text. Reporting success here would clear the card's
+          // "Added" state and leave preview and server disagreeing with no
+          // way for the user to notice.
+          mirrored = false;
+        }
+      }
+    }
+
+    return mirrored;
+  }, [matchId, matchResult, jobTitle, starCheck, parsedResumeData, unmarkHighlighted, runSerially]);
 
   // Remove a skill: enhance/remove updates the match score AND removes the
   // skill from the resume document server-side (see job_matcher.py
@@ -709,37 +873,6 @@ export default function AnalysisContent({
       return false;
     }
   }, [matchId, findSkillSuggestionId, addedSkillFields, runSerially]);
-
-  const [isRetryingMatch, setIsRetryingMatch] = React.useState(false);
-
-  // Re-runs the match with force_refresh=true, bypassing the backend's
-  // (resume+jd+version) result cache — a plain retry without that flag would
-  // just re-fetch the same cached response, including whichever sub-check
-  // (e.g. Soft_Skills) crashed the first time.
-  const handleRetryMatch = React.useCallback(async () => {
-    if (!resumeId || !jdId || isRetryingMatch) return;
-    setIsRetryingMatch(true);
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const matchResp = await matchResumeAndJD(resumeId, jdId, { force_refresh: true }) as any;
-      const finalMatchData = matchResp?.data;
-      if (!finalMatchData) throw new Error("Empty match response");
-      const updated = {
-        ...liveMatchResults,
-        data: finalMatchData,
-        match_id: matchResp?.match_id ?? finalMatchData?.match_id,
-      };
-      setLiveMatchResults(updated);
-      const newScore = Math.min(100, Math.max(0, parseFloat(String(finalMatchData?.ats_score ?? liveScore))));
-      setLiveScore(newScore);
-      try { sessionStorage.setItem("jm_matchResults", JSON.stringify(updated)); } catch {}
-      toast.success("Match re-checked.");
-    } catch {
-      toast.error("Couldn't re-run the match. Please try again.");
-    } finally {
-      setIsRetryingMatch(false);
-    }
-  }, [resumeId, jdId, isRetryingMatch, liveMatchResults, liveScore]);
 
   const handleDownload = React.useCallback(async () => {
     if (!resumeId || isDownloading) return;
@@ -875,7 +1008,7 @@ export default function AnalysisContent({
   ];
 
   return (
-    <div className="relative flex min-h-[calc(100vh-3.5rem)] w-full flex-col bg-gray-50">
+    <div className="relative flex min-h-[calc(100vh-3.5rem)] w-full flex-col bg-[#f6f8fc]">
       <style>{`
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -1004,44 +1137,48 @@ export default function AnalysisContent({
         )}
 
         {/* CENTER — Resume Preview (always visible) */}
-        <div className="min-w-0 flex-1 space-y-5 bg-[#f3f6fa] px-4 py-4 sm:px-6 lg:px-7">
+        <div className="min-w-0 flex-1 space-y-5 bg-[#f6f8fc] px-5 py-5 sm:px-7 lg:px-8">
           <div>
           <div className="mt-0 mb-4">
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2557a7]">
               AI-Powered Resume Tailoring
             </p>
-            <h1 className="text-[22px] sm:text-[24px] font-extrabold uppercase tracking-tight text-slate-900 leading-none">
+            <h1 className="text-[24px] sm:text-[28px] font-extrabold uppercase tracking-tight text-[#1f2937] leading-none">
               Tailor Your Resume
             </h1>
-            <div className="mt-2 border-t border-slate-200" />
+            <p className="mt-2 text-[13px] text-slate-500">
+              We analyze your resume against the job description and suggest fixes to improve your{" "}
+              <span className="text-[#2557a7]">match</span>.
+            </p>
           </div>
-          <div className="bg-white rounded-xl border border-[#dce8fb] shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_30px_rgba(37,87,167,0.10)] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-[14px] border border-[#dfe5ee] shadow-[0_4px_16px_rgba(15,23,42,0.045)] flex flex-col overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-[#e5ebf3] bg-white shrink-0">
+            <div className="flex items-center justify-between gap-4 px-5 py-3 border-b border-[#e5ebf3] bg-white shrink-0">
               <div className="flex items-center gap-3">
+                <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#2f3d55]">Resume Preview</span>
                 {onBackToUpload && (
                   <button
                     onClick={onBackToUpload}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-gray-500 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#2557a7] hover:bg-blue-50 rounded-lg border border-[#b9cdec] transition-all"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Back
                   </button>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownload} disabled={!resumeId || isSavingSection || isDownloading} className="flex min-h-10 items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold text-gray-600 hover:text-[#2557a7] hover:bg-blue-50 rounded-lg border border-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  <Download className="w-3.5 h-3.5" /> {isDownloading ? "Downloading..." : isSavingSection ? "Saving..." : "Download"}
+                <button onClick={handleDownload} disabled={!resumeId || isSavingSection || isDownloading} className="flex min-h-10 items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold text-[#2557a7] hover:bg-blue-50 rounded-lg border border-[#b9cdec] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Download className="w-3.5 h-3.5" /> {isDownloading ? "Downloading..." : isSavingSection ? "Saving..." : "Download PDF"}
                 </button>
                 <button
                   onClick={() => setIsEditMode((v) => !v)}
                   className={`flex min-h-10 items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold rounded-lg border transition-all ${isEditMode ? "bg-[#2557a7] text-white border-[#2557a7] hover:bg-[#1e4a96]" : "text-[#2557a7] border-[#b9cdec] hover:bg-blue-50"}`}
                 >
                   <Pencil className="w-3.5 h-3.5" />
-                  {isEditMode ? "Close Editor" : "Edit"}
+                  {isEditMode ? "Close Editor" : "Edit resume"}
                 </button>
               </div>
             </div>
-            <div className="min-h-[34rem] bg-[#f3f6fa] p-4 sm:p-5">
+            <div className="min-h-[31rem] bg-[#f7f9fc] p-4 sm:p-5">
               <div className="mx-auto max-w-[960px]" style={{ zoom: 0.94 }}>
               {/* This view always has parsedData synchronously from props —
                   there's no PDF/DOCX blob or async load here — so those
@@ -1070,44 +1207,53 @@ export default function AnalysisContent({
           </div>
           </div>
 
-          <ScoreBreakdown matchResult={matchResult} onRetryMatch={handleRetryMatch} isRetryingMatch={isRetryingMatch} />
+          <ScoreBreakdown
+            matchResult={matchResult}
+            currentSummary={
+              typeof resumeSections.summary === "string"
+                ? resumeSections.summary
+                : resumeSections.summary?.summary ?? resumeSections.summary?.text ?? ""
+            }
+          />
           <MatchPenalties
             matchResult={matchResult}
             onAddSkill={directAddSkill}
             onRemoveSkill={directRemoveSkill}
             onApplyFix={applyTextFix}
+            onRemoveFix={removeTextFix}
             onOpenSection={(key) => setOpenSection(key)}
+            appliedSuggestionIds={appliedSuggestionIds}
+            bulkAppliedSuggestionIds={bulkAppliedSuggestionIds}
+            onSuggestionApplied={handleSuggestionApplied}
+            onBulkApplied={handleBulkApplied}
           />
         </div>
 
         {/* RIGHT — ATS Score + Job Description */}
-        <div className="w-[clamp(440px,32vw,520px)] shrink-0" aria-hidden="true" />
+        <div className="w-[clamp(390px,30vw,470px)] shrink-0" aria-hidden="true" />
         <aside
-          className="fixed bottom-0 right-0 top-14 z-20 w-[clamp(440px,32vw,520px)] space-y-3 overflow-y-auto overscroll-contain border-l border-gray-200 bg-[#f6f8fc] p-4"
+          className="fixed bottom-0 right-0 top-14 z-20 w-[clamp(390px,30vw,470px)] space-y-3 overflow-y-auto overscroll-contain border-l border-[#e2e7ef] bg-[#f6f8fc] p-4"
           style={{ scrollbarWidth: "thin", scrollbarColor: "#94a3b8 transparent", scrollbarGutter: "stable" }}
           aria-label="Job match score and job description"
         >
 
           {/* ATS Score Card */}
-          <div className="shrink-0 overflow-hidden rounded-xl border border-[#dce8fb] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_30px_rgba(37,87,167,0.10)]">
-            <div className="p-3">
-              <p className="mb-1 text-left text-xl font-extrabold tracking-wide text-slate-900">
+          <div className="shrink-0 overflow-hidden rounded-[14px] border border-[#dfe5ee] bg-white shadow-[0_4px_16px_rgba(15,23,42,0.045)]">
+            <div className="px-4 pb-3 pt-3">
+              <p className="mb-1 text-left text-[13px] font-extrabold tracking-[0.04em] text-[#1f2937]">
                 YOUR JD MATCH SCORE
               </p>
 
-              <div className="mb-2">
-                <JobMatchScoreGauge value={score} />
-
-              </div>
+              <JobMatchScoreGauge value={score} targetRole={jobTitle?.jd_title} />
             </div>
           </div>
 
           {/* Job Description Card */}
-          <div className="min-h-[28rem] overflow-hidden rounded-xl border border-[#dce8fb] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_30px_rgba(37,87,167,0.10)]">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dce8fb]" style={{ background: "linear-gradient(135deg,#f0f5ff,#e8eef8)" }}>
+          <div className="min-h-[31rem] overflow-hidden rounded-[14px] border border-[#dfe5ee] bg-white shadow-[0_4px_16px_rgba(15,23,42,0.045)]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5eaf1] bg-white">
               <div className="flex items-center gap-2.5">
-                <div className="w-1.5 h-5 rounded-full" style={{ background: "linear-gradient(180deg,#5896d7,#2557a7)" }} />
-                <p className="text-[12px] font-bold text-[#1e3a6e] uppercase tracking-widest">Job Description</p>
+                <FileText className="h-4 w-4 text-[#3A4F7A]" />
+                <p className="text-[12px] font-extrabold text-[#1f2937] uppercase tracking-[0.06em]">Job Description</p>
               </div>
               <button
                 onClick={() => { try { navigator.clipboard.writeText(jdText); } catch {} }}
