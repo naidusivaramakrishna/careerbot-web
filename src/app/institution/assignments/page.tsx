@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { assignStudentsToFaculty, InstitutionApiError } from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
-import { useStudents } from '@/hooks/useInstitutionResource';
+import { useDepartments, useMembers, useStudents } from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import { EmptyState } from '../_components/EmptyState';
 import { ErrorNotice, FormError } from '../_components/ErrorNotice';
-import { TextField, fieldErrorMap } from '../_components/FormField';
+import { SelectField, fieldErrorMap } from '../_components/FormField';
 import { RoleGuard } from '../_components/RoleGuard';
 import { LoadingAnnouncement, TableSkeleton } from '../_components/Skeletons';
 import { StudentStatusPill } from '../_components/StatusPill';
@@ -25,10 +25,11 @@ import { CARD, FOCUS_RING } from '../_components/tokens';
  * they may write, so the screen is explicit about the consequence rather than
  * being a bare multi-select.
  *
- * CONTRACT GAP: there is no route that lists the college's faculty, so the
- * faculty member is identified by typing their account id. That is a real
- * usability problem for a CPO with fifty staff and is called out in the report;
- * inventing a `GET /members` to make the picker nicer would have been worse.
+ * The faculty member is PICKED, not typed. This screen used to ask for an
+ * internal account id that no page anywhere displays, which nobody enters
+ * correctly -- and a typo silently hands a cohort to the wrong person or to
+ * nobody at all. The list comes from GET /members?role=faculty, already scoped
+ * to the caller, so an HOD is offered only their own department's staff.
  *
  * The roster is a checkbox table rather than a tag input: a placement officer
  * assigns a whole section at once, and checkboxes support "select all shown"
@@ -37,6 +38,8 @@ import { CARD, FOCUS_RING } from '../_components/tokens';
 function FacultyAssignments() {
   const { readOnlyReason, canWrite } = useInstitution();
   const students = useStudents();
+  const faculty = useMembers('faculty');
+  const departments = useDepartments();
   const [facultyAccountId, setFacultyAccountId] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
@@ -45,6 +48,26 @@ function FacultyAssignments() {
   const [done, setDone] = useState<string | null>(null);
 
   const rows = students.data;
+  const departmentName = (id: string | null) =>
+    departments.data?.find((d) => d.id === id)?.name ?? id ?? '';
+
+  // Sorted by the thing a human reads, so the list does not reorder itself
+  // between visits the way an id-ordered one does.
+  const facultyOptions = useMemo(
+    () =>
+      (faculty.data ?? [])
+        .map((m) => ({
+          value: m.account_id,
+          // Falling back to the id is deliberate: a member whose platform
+          // account is gone must stay visible as something to clean up.
+          label: m.full_name
+            ? `${m.full_name}${m.department_id ? ` — ${departmentName(m.department_id)}` : ''}`
+            : m.account_id,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [faculty.data, departments.data],
+  );
   const writable = canWrite('assign_faculty');
   const fieldErrors = fieldErrorMap(error);
 
@@ -83,13 +106,13 @@ function FacultyAssignments() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writable || submitting) return;
-    if (!facultyAccountId.trim()) {
+    if (!facultyAccountId) {
       setError(
         new InstitutionApiError({
           reason: 'INVALID_REQUEST',
-          message: 'Enter the faculty member’s account id.',
+          message: 'Choose a faculty member.',
           fieldErrors: [
-            { field: 'faculty_account_id', message: 'Enter the faculty member’s account id.' },
+            { field: 'faculty_account_id', message: 'Choose a faculty member.' },
           ],
         }),
       );
@@ -111,7 +134,7 @@ function FacultyAssignments() {
     try {
       const count = selected.size;
       await assignStudentsToFaculty({
-        faculty_account_id: facultyAccountId.trim(),
+        faculty_account_id: facultyAccountId,
         student_ids: Array.from(selected),
       });
       setDone(`${count} ${count === 1 ? 'student' : 'students'} assigned.`);
@@ -151,6 +174,10 @@ function FacultyAssignments() {
         <ErrorNotice error={students.error} onRetry={students.refetch} className="mb-4" />
       ) : null}
 
+      {faculty.error ? (
+        <ErrorNotice error={faculty.error} onRetry={faculty.refetch} className="mb-4" />
+      ) : null}
+
       {students.isLoading && !rows ? (
         <>
           <TableSkeleton rows={6} columns={4} />
@@ -172,13 +199,25 @@ function FacultyAssignments() {
               Assignments are added to whatever this faculty member already has.
             </Body>
             <FormError error={error} />
-            <TextField
-              label="Faculty account id"
+            <SelectField
+              label="Faculty member"
               required
               value={facultyAccountId}
-              disabled={!writable}
+              disabled={!writable || faculty.isLoading || facultyOptions.length === 0}
               error={fieldErrors.faculty_account_id}
-              hint="The CareerBOT account id of the faculty member."
+              options={facultyOptions}
+              placeholder={
+                faculty.isLoading
+                  ? 'Loading staff…'
+                  : facultyOptions.length === 0
+                    ? 'No faculty members yet'
+                    : 'Choose a faculty member'
+              }
+              hint={
+                facultyOptions.length === 0 && !faculty.isLoading
+                  ? 'A head of department adds faculty before students can be assigned to them.'
+                  : 'Students can only be assigned to a faculty member in their own department.'
+              }
               onChange={(e) => setFacultyAccountId(e.target.value)}
             />
           </div>

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { getAllResumesUnified, getAllResumes } from "@/api/resumeApi";
 import { getEnhancementHistory } from "@/api/enhancerApi";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useHasCollegeMembership } from "@/hooks/useCollegeMembership";
 import {
   EnterpriseApplicationTrackerIcon as IcoTracker,
   EnterpriseAtsScanIcon as IcoAtsScan,
@@ -38,6 +39,17 @@ const IcoMockTest = ({ size = 18, className = "", sw = 1.6 }: IP) => (
     <rect x="4" y="3" width="12" height="15" rx="1.5" stroke="currentColor" strokeWidth={sw} />
     <path d="M7.5 3.5V2.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1" stroke="currentColor" strokeWidth={sw} />
     <path d="M7 8h6M7 11.5h6M7 15h3.5" stroke="currentColor" strokeWidth={sw * 0.85} />
+  </svg>
+);
+
+/** My College — a building with a flag, distinct from the job-search icons */
+const IcoCollege = ({ size = 18, className = "", sw = 1.6 }: IP) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M2.5 17.5h15" stroke="currentColor" strokeWidth={sw} />
+    <path d="M4 17.5V8.5L10 5.5l6 3v9" stroke="currentColor" strokeWidth={sw} />
+    <path d="M10 5.5V2.5l3 1-3 1" stroke="currentColor" strokeWidth={sw * 0.9} />
+    <path d="M8 17.5v-4h4v4" stroke="currentColor" strokeWidth={sw * 0.9} />
   </svg>
 );
 
@@ -173,6 +185,20 @@ const VISIBLE_NAV_GROUPS = NAV_GROUPS
   .map((group) => ({ ...group, items: group.items.filter(isItemEnabled) }))
   .filter((group) => group.items.length > 0);
 
+// The college area is NOT in NAV_GROUPS. That list is computed once at module
+// scope from build-time flags, and college membership is a per-USER fact
+// resolved at runtime -- putting it there would show every jobseeker a link
+// that refuses them the moment they follow it.
+// Typed as one of NAV_GROUPS' own elements rather than `as const`: the render
+// loop reads `item.subItems`, and a narrower literal type drops that property
+// from the union and fails the build.
+const COLLEGE_NAV_GROUP: (typeof NAV_GROUPS)[number] = {
+  label: "COLLEGE",
+  items: [
+    { id: "institution", label: "My College", icon: IcoCollege, path: "/institution" },
+  ],
+};
+
 const EXPANDED_PATHS = ["/dashboard", "/profile"];
 
 /* Collapsed sidebar sub-item flyout — uses JS hover + close delay so the
@@ -290,8 +316,17 @@ export default function Sidebar() {
   const { data: dashboardData } = useDashboard();
   const profileCompleteness = dashboardData?.profile.completeness ?? 0;
 
+  // Appended, not interleaved: a college user is still a jobseeker, so their
+  // own tools stay where they have always been and the college is one more
+  // place they can go.
+  const hasCollege = useHasCollegeMembership();
+  const navGroups = useMemo(
+    () => (hasCollege ? [...VISIBLE_NAV_GROUPS, COLLEGE_NAV_GROUP] : VISIBLE_NAV_GROUPS),
+    [hasCollege],
+  );
+
   const getActiveId = () => {
-    for (const group of VISIBLE_NAV_GROUPS) {
+    for (const group of navGroups) {
       for (const item of group.items) {
         if (item.id === "cover_letter" && pathname.startsWith("/cover-letter/")) {
           return item.id;
@@ -376,7 +411,7 @@ export default function Sidebar() {
         id="dashboard-sidebar"
         style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
         <nav className="flex-1 min-h-0 overflow-visible py-1 px-2" aria-label="Primary navigation collapsed" role="navigation">
-          {VISIBLE_NAV_GROUPS.map((group, gi) => (
+          {navGroups.map((group, gi) => (
             <div key={group.label}>
               {gi > 0 && <div className="mx-1 my-1.5 border-t border-gray-300" />}
               <div className="space-y-px">
@@ -537,7 +572,7 @@ export default function Sidebar() {
       style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1.5 pb-1 space-y-1" aria-label="Primary navigation" role="navigation">
-        {VISIBLE_NAV_GROUPS.map((group) => (
+        {navGroups.map((group) => (
           <div key={group.label}>
             {/* Section label with trailing line */}
             <div className="flex items-center gap-1.5 px-1 mb-0.5">

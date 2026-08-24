@@ -25,11 +25,19 @@ import { FOCUS_RING } from './tokens';
  *   - with exactly one membership there is nothing to switch, so it renders as
  *     a plain, non-interactive identity chip instead of a dead dropdown.
  *
- * `institution_id` is the college slug. GET /memberships does not return a
- * display name, so the slug is what we can honestly show (see report).
+ * The college is named by `institution_name`, which GET /memberships returns.
+ * The slug is the fallback and only the fallback: it is an internal id, and
+ * shouting "DEMO-COLLEGE" at a placement officer in the one place a
+ * wrong-college mistake happens is how a term's results get entered against
+ * the wrong institution.
  */
-function collegeLabel(institutionId: string): string {
-  return institutionId.replace(/[-_]+/g, ' ').toUpperCase();
+function collegeLabel(membership: {
+  institution_id: string;
+  institution_name?: string | null;
+}): string {
+  const name = membership.institution_name?.trim();
+  if (name) return name;
+  return membership.institution_id.replace(/[-_]+/g, ' ').toUpperCase();
 }
 
 function MembershipRow({
@@ -63,7 +71,7 @@ function MembershipRow({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium leading-5 text-[#0f172a]">
-            {collegeLabel(membership.institution_id)}
+            {collegeLabel(membership)}
           </span>
           <span className="block text-[12px] leading-4 text-[#64748b]">
             {ROLE_LABELS[membership.role]} · {ROLE_SCOPE_HINT[membership.role]}
@@ -99,7 +107,13 @@ export function CollegeSwitcher() {
 
   if (!session) return null;
 
-  const activeLabel = collegeLabel(session.institution_id);
+  // POST /session returns the id but not the name, so the active college is
+  // named from the membership list that is already loaded. Falling back to the
+  // session alone keeps the header correct if that list is still in flight.
+  const activeMembership = memberships.find(
+    (m) => m.institution_id === session.institution_id,
+  );
+  const activeLabel = collegeLabel(activeMembership ?? session);
   const roleLabel = ROLE_LABELS[session.role];
   const canSwitch = memberships.length > 1;
 

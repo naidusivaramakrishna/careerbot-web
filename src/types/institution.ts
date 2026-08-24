@@ -34,6 +34,12 @@ export const INSTITUTION_ROLES: readonly InstitutionRole[] = [
 export interface InstitutionMembership {
   membership_id: string;
   institution_id: string;
+  /** The college's REAL name. The route has always returned it; this type
+   *  dropped it, so every screen fell back to prettifying the slug and a
+   *  placement officer at VIT Chennai was greeted by "VIT CHENNAI" at best and
+   *  "DEMO COLLEGE" at worst. The server falls back to the slug itself when
+   *  the institution row is missing, so this is always a usable string. */
+  institution_name: string;
   role: InstitutionRole;
   /** Absent for `cpo` — a CPO is institution-wide, not department-scoped. */
   department_id: string | null;
@@ -171,6 +177,12 @@ export interface MemberRecord {
   role: InstitutionRole;
   department_id: string | null;
   active?: boolean;
+  /** The person's name, from their platform account. `null` when that account
+   *  is gone -- the membership still lists, because a row that needs cleaning
+   *  up should be visible rather than error the screen. Deliberately the ONLY
+   *  profile field here: a name is what a human picks by, and anything more
+   *  turns a picker into a staff directory. */
+  full_name?: string | null;
 }
 
 /** models.py StudentProfile.status */
