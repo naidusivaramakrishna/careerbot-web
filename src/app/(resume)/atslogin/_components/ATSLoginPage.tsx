@@ -914,11 +914,11 @@ export default function ATSLoginPage() {
             {/* What the analysis includes */}
             <div>
               <div className="divide-y divide-slate-200 border-y border-slate-200">
-                {[
+                {([
                   [FileCheck2, "Format Check", "Resume readability and structure."],
                   [BookOpenCheck, "Content Scan", "Key skills, experience, and achievements."],
                   [Target, "ATS Compatibility", "Match potential and optimization spots."],
-                ].map(([Icon, title, detail]) => (
+                ] as const).map(([Icon, title, detail]) => (
                   <div key={title as string} className="flex items-start gap-4 py-5">
                     <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#2557a7] text-white">
                       <Icon className="h-4 w-4" strokeWidth={2.4} />
@@ -935,14 +935,14 @@ export default function ATSLoginPage() {
                 <p className="text-sm font-bold text-slate-800">What you’ll receive</p>
               </div>
               <div className="hidden">
-                {[
+                {([
                   [BarChart3, "bg-blue-600", "ATS Compatibility Score", "Know how ATS-friendly your resume is"],
                   [Target, "bg-emerald-500", "Keyword Match Analysis", "See how well you match the job description"],
                   [FileWarning, "bg-amber-500", "Missing Sections", "Identify important gaps in your resume"],
                   [Scissors, "bg-violet-500", "Formatting Review", "Check structure, style & readability"],
                   [Sparkles, "bg-rose-500", "AI Recommendations", "Get AI-powered improvement suggestions"],
                   [TrendingUp, "bg-teal-500", "Resume Improvement Plan", "Actionable steps to boost your score"],
-                ].map(([Icon, color, title, detail]) => (
+                ] as const).map(([Icon, color, title, detail]) => (
                   <div key={title as string} className="flex items-center gap-3">
                     <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${color} text-white`}><Icon className="h-4 w-4" /></div>
                     <div className="min-w-0 flex-1"><p className="text-[12px] font-bold leading-4 text-slate-800">{title}</p><p className="text-[10px] leading-4 text-slate-500">{detail}</p></div>

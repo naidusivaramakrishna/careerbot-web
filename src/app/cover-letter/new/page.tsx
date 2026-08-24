@@ -49,7 +49,7 @@ const MAX_RESUME_UPLOAD_MB = 10;
 const MIN_JD_CHARS = 50;
 const MAX_NOTE_CHARS = 300;
 // Mirrors ApplicationContext caps in the CL-1.2 API schema.
-const MAX_ROLE_TITLE_CHARS = 200;
+const MAX_ROLE_TITLE_CHARS = 300;  // ApplicationContext.role_title is max_length=300 API-side
 const MAX_COMPANY_LOCATION_CHARS = 200;
 const MAX_WHY_COMPANY_CHARS = 1_000;
 const MAX_HIGHLIGHT_ACHIEVEMENT_CHARS = 1_000;
@@ -326,6 +326,14 @@ export default function CoverLetterNewPage() {
   const [maxWords, setMaxWords] = useState(400);
   const [selectedTemplateId, setSelectedTemplateId] = useState<TemplateStyleId>("modern");
   const pendingTemplateIdRef = useRef<TemplateStyleId>("modern");
+  // The saved default arrives asynchronously. Once the user has picked a
+  // template themselves, a late-arriving default must not silently replace
+  // their choice — so we only seed the selection while it is untouched.
+  const userPickedTemplateRef = useRef(false);
+  const handleTemplateChange = useCallback((id: TemplateStyleId) => {
+    userPickedTemplateRef.current = true;
+    setSelectedTemplateId(id);
+  }, []);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
   const [generatedLetterId, setGeneratedLetterId] = useState<string | null>(null);
@@ -337,6 +345,7 @@ export default function CoverLetterNewPage() {
     () => setShowSignIn(true),
   );
   useEffect(() => {
+    if (userPickedTemplateRef.current) return;
     const preferred = defaultTemplate.defaultTemplate?.template_id as TemplateStyleId | undefined;
     if (preferred && templateStyles.some((template) => template.id === preferred)) {
       setSelectedTemplateId(preferred);
@@ -792,7 +801,7 @@ export default function CoverLetterNewPage() {
                 maxWords={maxWords}
                 onMaxWordsChange={setMaxWords}
                 selectedTemplateId={selectedTemplateId}
-                onTemplateChange={setSelectedTemplateId}
+                onTemplateChange={handleTemplateChange}
                 templateCatalog={templateCatalog.templates}
                 defaultTemplateId={defaultTemplate.defaultTemplate?.template_id}
                 isSavingDefaultTemplate={defaultTemplate.isSaving}
