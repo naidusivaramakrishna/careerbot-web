@@ -462,7 +462,6 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   //   }
   // };
   const handleBlur = (key: string, value: string) => {
-  // Check if this is a required field
   const lowerKey = key.toLowerCase();
   const optionalFields = [
     "linkedin",
@@ -476,23 +475,51 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     "category",
     "proficiencylevel",
   ];
-  
+
   const isRequired = !optionalFields.some((optional) => lowerKey.includes(optional));
-  
-  // Only set error if field is required AND empty
-  if (isRequired && (!value || value.trim() === "")) {
-    setErrors(prev => ({
-      ...prev,
-      [key]: "This field is required"
-    }));
-  } else {
-    // Clear error if field has value
-    setErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors[key];
-      return newErrors;
-    });
+
+  const trimmed = value?.trim() ?? "";
+
+  // Required-field empty check
+  if (isRequired && !trimmed) {
+    setErrors(prev => ({ ...prev, [key]: "This field is required" }));
+    return;
   }
+
+  // URL domain/prefix validation for LinkedIn, GitHub, Portfolio
+  if (trimmed) {
+    let urlError: string | null = null;
+
+    if (key === "linkedinUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "LinkedIn URL must start with http:// or https://";
+      } else if (!trimmed.includes("linkedin.com")) {
+        urlError = "LinkedIn URL must be a linkedin.com address";
+      }
+    } else if (key === "githubUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "GitHub URL must start with http:// or https://";
+      } else if (!trimmed.includes("github.com")) {
+        urlError = "GitHub URL must be a github.com address";
+      }
+    } else if (key === "portfolioUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "Portfolio URL must start with http:// or https://";
+      }
+    }
+
+    if (urlError) {
+      setErrors(prev => ({ ...prev, [key]: urlError as string }));
+      return;
+    }
+  }
+
+  // Clear error
+  setErrors(prev => {
+    const newErrors = { ...prev };
+    delete newErrors[key];
+    return newErrors;
+  });
 };
 
 

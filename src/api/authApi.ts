@@ -146,7 +146,12 @@ export const signOut = async () => {
 };
 
 export const getGoogleLoginUrl = async (): Promise<string> => {
-  const response = await httpClient.get<{ auth_url: string }>("/auth/google/login-url");
+  const response = await httpClient.get<{ auth_url: string }>("/auth/google/login-url", {
+    params: {
+      prompt: "select_account",
+      access_type: "offline",
+    },
+  });
   return response.data.auth_url;
 };
 

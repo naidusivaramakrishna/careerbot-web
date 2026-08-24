@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import LandingNavbar from "@/app/(landing)/_components/LandingNavbar";
 import SignUpModal from "@/components/SignUpModal";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -330,6 +331,7 @@ export default function MockInterviewPage() {
 
   return (
     <>
+      <LandingNavbar />
       {/* ════════════════════════════════════════════════════════════════
           HERO
       ════════════════════════════════════════════════════════════════ */}

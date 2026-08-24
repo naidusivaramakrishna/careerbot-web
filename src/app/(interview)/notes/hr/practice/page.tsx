@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -573,6 +573,8 @@ function HRPracticeContent() {
             </div>
           )}
 
+        </div>
+        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           {currentAnswer && (
             <FeedbackCard
               weightedScore={currentAnswer.weightedScore}
@@ -595,66 +597,64 @@ function HRPracticeContent() {
               answerId={currentAnswer.answerId}
             />
           )}
-        </div>
-
-        {/* Right column ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â FeedbackCard */}
-        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
-          <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
-            showNotes
-              ? roundNumber === 1
-                ? "border-[#2557a7]/20 bg-[#2557a7]/5"
-                : "border-gray-200 bg-gray-50"
-              : "border-gray-200 bg-gray-50"
-          }`}>
-            <button
-              type="button"
-              aria-expanded={showNotes}
-              onClick={() => setShowNotes((s) => !s)}
-              className="w-full flex items-center justify-between px-3 py-2.5"
-            >
-              <div className={`flex items-center gap-2 text-sm font-semibold ${roundNumber === 1 ? "text-[#2557a7]" : "text-gray-700"}`}>
-                {roundNumber === 1 ? <BookOpen size={14} /> : <Key size={14} />}
-                {roundNumber === 1 ? "Your Notes" : "Keywords only"}
-              </div>
-              {showNotes
-                ? <EyeOff size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />
-                : <Eye size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />}
-            </button>
-            {showNotes && (
-              <div className={`max-h-52 overflow-auto px-3 pb-3 border-t pt-2.5 ${roundNumber === 1 ? "border-[#2557a7]/15" : "border-gray-200"}`}>
-                {roundNumber === 1 ? (
-                  (question.note_script || notesMap[question.question_id]) ? (
-                    <p className="text-xs text-[#2557a7] leading-5 whitespace-pre-wrap">
-                      {question.note_script || notesMap[question.question_id]}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">
-                      No answer script found for this question. Go to the Notes page to generate your prepared scripts.
-                    </p>
-                  )
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(question.keywords.length ? question.keywords : ["motivation", "fit", "example"]).map((kw) => (
-                      <span key={kw} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
-                        {kw}
-                      </span>
-                    ))}
+          {!currentAnswer && (
+            <>
+              <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
+                showNotes
+                  ? roundNumber === 1
+                    ? "border-[#2557a7]/20 bg-[#2557a7]/5"
+                    : "border-gray-200 bg-gray-50"
+                  : "border-gray-200 bg-gray-50"
+              }`}>
+                <button
+                  type="button"
+                  aria-expanded={showNotes}
+                  onClick={() => setShowNotes((s) => !s)}
+                  className="w-full flex items-center justify-between px-3 py-2.5"
+                >
+                  <div className={`flex items-center gap-2 text-sm font-semibold ${roundNumber === 1 ? "text-[#2557a7]" : "text-gray-700"}`}>
+                    {roundNumber === 1 ? <BookOpen size={14} /> : <Key size={14} />}
+                    {roundNumber === 1 ? "Your Notes" : "Keywords only"}
+                  </div>
+                  {showNotes
+                    ? <EyeOff size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />
+                    : <Eye size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />}
+                </button>
+                {showNotes && (
+                  <div className={`max-h-52 overflow-auto px-3 pb-3 border-t pt-2.5 ${roundNumber === 1 ? "border-[#2557a7]/15" : "border-gray-200"}`}>
+                    {roundNumber === 1 ? (
+                      (question.note_script || notesMap[question.question_id]) ? (
+                        <p className="text-xs text-[#2557a7] leading-5 whitespace-pre-wrap">
+                          {question.note_script || notesMap[question.question_id]}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">
+                          No answer script found for this question. Go to the Notes page to generate your prepared scripts.
+                        </p>
+                      )
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(question.keywords.length ? question.keywords : ["motivation", "fit", "example"]).map((kw) => (
+                          <span key={kw} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {!currentAnswer && (
-            <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-              <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
-                <Mic size={24} className="text-[#2557a7]" />
+              <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+                <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
+                  <Mic size={24} className="text-[#2557a7]" />
+                </div>
+                <p className="text-sm font-black text-gray-800">AI Feedback</p>
+                <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
+                  Record your answer to unlock tone, clarity, structure, and confidence feedback.
+                </p>
               </div>
-              <p className="text-sm font-black text-gray-800">AI Feedback</p>
-              <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
-                Record your answer to unlock tone, clarity, structure, and confidence feedback.
-              </p>
-            </div>
+            </>
           )}
         </aside>
 

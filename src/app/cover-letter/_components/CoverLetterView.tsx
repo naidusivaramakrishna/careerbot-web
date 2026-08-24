@@ -18,10 +18,11 @@ import {
 import { toast } from "sonner";
 import type { CoverLetterResponse, CoverLetterTemplateId } from "@/types/coverLetter";
 import { useCoverLetterTemplates } from "@/hooks/useCoverLetterTemplates";
+import { useDefaultCoverLetterTemplate } from "@/hooks/useDefaultCoverLetterTemplate";
 import { useDownloadCoverLetter } from "@/hooks/useDownloadCoverLetter";
 import { useUpdateCoverLetter } from "@/hooks/useUpdateCoverLetter";
 import { ERROR_MESSAGES } from "@/lib/coverLetterMessages";
-import { CoverLetterTemplatePreview } from "./CoverLetterTemplatePreview";
+import { CoverLetterTemplatePreview, CoverLetterTemplatePreviewModal } from "./CoverLetterTemplatePreview";
 import CoverLetterStatusPill from "./CoverLetterStatusPill";
 import WarningBanner from "./WarningBanner";
 import { getMatchBand, getMatchLabel, getMatchLabelTone, type MatchBand } from "../_utils/matchLabel";
@@ -170,6 +171,7 @@ function redirectToLoginForExport() {
 
 export default function CoverLetterView({ letter, actions }: CoverLetterViewProps) {
   const { templates, isLoading: templatesLoading } = useCoverLetterTemplates();
+  const templatePreference = useDefaultCoverLetterTemplate();
   const [currentLetter, setCurrentLetter] = useState(letter);
   const [selectedDisplayTemplateId, setSelectedDisplayTemplateId] =
     useState<DisplayTemplateId>(() => getStoredGeneratedLetterTemplate(letter.letter_id) ?? "modern");
@@ -229,6 +231,12 @@ export default function CoverLetterView({ letter, actions }: CoverLetterViewProp
       setSelectedDisplayTemplateId(storedTemplateId);
     }
   }, [currentLetter.letter_id]);
+
+  useEffect(() => {
+    if (getStoredGeneratedLetterTemplate(currentLetter.letter_id)) return;
+    const preferred = templatePreference.defaultTemplate?.template_id as DisplayTemplateId | undefined;
+    if (preferred && displayTemplateIds.has(preferred)) setSelectedDisplayTemplateId(preferred);
+  }, [currentLetter.letter_id, templatePreference.defaultTemplate?.template_id]);
 
   const wordCount = currentLetter.metadata?.word_count ?? currentLetter.plain_text?.split(/\s+/).filter(Boolean).length ?? 0;
   const titleLine = `${formatGeneratedFull(currentLetter.created_at)} - ${wordCount} words`;
@@ -302,6 +310,17 @@ export default function CoverLetterView({ letter, actions }: CoverLetterViewProp
       templatesOpen={templatesOpen}
       onTemplatesOpenChange={setTemplatesOpen}
       templatesLoading={templatesLoading}
+      templates={templates}
+      defaultTemplateId={templatePreference.defaultTemplate?.template_id}
+      isSavingDefaultTemplate={templatePreference.isSaving}
+      onSetDefaultTemplate={async (id) => {
+        try {
+          await templatePreference.setDefault(id);
+          toast.success("Default cover-letter template updated.");
+        } catch {
+          toast.error("Could not update your default template.");
+        }
+      }}
       canDownload={canDownload}
       supportsPdf={supportsPdf}
       supportsDocx={supportsDocx}
@@ -334,6 +353,10 @@ function ReadyCoverLetterReview({
   templatesOpen,
   onTemplatesOpenChange,
   templatesLoading,
+  templates,
+  defaultTemplateId,
+  isSavingDefaultTemplate,
+  onSetDefaultTemplate,
   canDownload,
   supportsPdf,
   supportsDocx,
@@ -362,6 +385,10 @@ function ReadyCoverLetterReview({
   templatesOpen: boolean;
   onTemplatesOpenChange: (open: boolean) => void;
   templatesLoading: boolean;
+  templates: import("@/types/coverLetter").CoverLetterTemplate[];
+  defaultTemplateId?: CoverLetterTemplateId;
+  isSavingDefaultTemplate: boolean;
+  onSetDefaultTemplate: (id: CoverLetterTemplateId) => Promise<void>;
   canDownload: boolean;
   supportsPdf: boolean;
   supportsDocx: boolean;
@@ -528,6 +555,10 @@ function ReadyCoverLetterReview({
           onTemplatesOpenChange(false);
         }}
         templatesLoading={templatesLoading}
+        templates={templates}
+        defaultTemplateId={defaultTemplateId}
+        isSavingDefaultTemplate={isSavingDefaultTemplate}
+        onSetDefaultTemplate={onSetDefaultTemplate}
       />
     </article>
   );
@@ -735,13 +766,22 @@ function TemplateBrowseDrawer({
   selectedTemplateId,
   onTemplateChange,
   templatesLoading,
+  templates: catalogTemplates,
+  defaultTemplateId,
+  isSavingDefaultTemplate,
+  onSetDefaultTemplate,
 }: {
   open: boolean;
   onClose: () => void;
   selectedTemplateId: DisplayTemplateId;
   onTemplateChange: (id: DisplayTemplateId) => void;
   templatesLoading: boolean;
+  templates: import("@/types/coverLetter").CoverLetterTemplate[];
+  defaultTemplateId?: CoverLetterTemplateId;
+  isSavingDefaultTemplate: boolean;
+  onSetDefaultTemplate: (id: CoverLetterTemplateId) => Promise<void>;
 }) {
+  const [previewing, setPreviewing] = useState<{ name: string; url: string } | null>(null);
   if (!open) return null;
   const grouped = displayTemplates.reduce<Record<string, Array<(typeof displayTemplates)[number]>>>((acc, template) => {
     const key = template.badge;
@@ -781,7 +821,10 @@ function TemplateBrowseDrawer({
                       selectedTemplateId === template.id ? "border-[#2557a7] bg-blue-50 ring-1 ring-[#2557a7]" : "border-[#dfe6f5] bg-white",
                     ].join(" ")}
                   >
-                    <MiniDoc template={template} />
+                    <MiniDoc
+                      template={template}
+                      previewUrl={catalogTemplates.find((item) => item.template_id === template.backendTemplateId)?.preview_url}
+                    />
                     <span className="min-w-0 pr-6">
                       <span className="block text-sm font-black text-[#070b33]">{template.name}</span>
                       <span className="mt-1 block text-xs font-black uppercase tracking-[0.14em] text-[#2557a7]">
@@ -791,6 +834,52 @@ function TemplateBrowseDrawer({
                         {template.description}
                       </span>
                       <span className="mt-2 block text-xs font-semibold text-slate-500">Best for {template.bestFor}</span>
+                      <span className="mt-3 flex flex-wrap items-center gap-2">
+                        {(() => {
+                          const previewUrl = catalogTemplates.find((item) => item.template_id === template.backendTemplateId)?.preview_url;
+                          return <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (previewUrl) setPreviewing({ name: template.name, url: previewUrl });
+                            }}
+                            onKeyDown={(event) => {
+                              if ((event.key === "Enter" || event.key === " ") && previewUrl) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setPreviewing({ name: template.name, url: previewUrl });
+                              }
+                            }}
+                            aria-disabled={!previewUrl}
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-black ${previewUrl ? "bg-[#2557a7] text-white hover:bg-[#1e4a94]" : "cursor-wait bg-slate-100 text-slate-400"}`}
+                          >
+                            {previewUrl ? "Preview" : "Loading preview..."}
+                          </span>;
+                        })()}
+                        {defaultTemplateId === template.backendTemplateId ? (
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">Your default</span>
+                        ) : (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void onSetDefaultTemplate(template.backendTemplateId);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                void onSetDefaultTemplate(template.backendTemplateId);
+                              }
+                            }}
+                            className="rounded-full border border-[#cdd8ee] px-2.5 py-1 text-[11px] font-black text-[#2557a7] hover:bg-white"
+                          >
+                            {isSavingDefaultTemplate ? "Saving..." : "Make default"}
+                          </span>
+                        )}
+                      </span>
                     </span>
                     {selectedTemplateId === template.id && <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-[#2557a7]" />}
                   </button>
@@ -800,6 +889,11 @@ function TemplateBrowseDrawer({
           ))}
         </div>
       </aside>
+      <CoverLetterTemplatePreviewModal
+        previewUrl={previewing?.url ?? null}
+        templateName={previewing?.name ?? "Template"}
+        onClose={() => setPreviewing(null)}
+      />
     </div>
   );
 }
@@ -1019,11 +1113,13 @@ function LetterBody({
 function MiniDoc({
   template,
   compact = false,
+  previewUrl,
 }: {
   template: (typeof displayTemplates)[number];
   compact?: boolean;
+  previewUrl?: string;
 }) {
-  return <CoverLetterTemplatePreview template={template} size={compact ? "compact" : "picker"} />;
+  return <CoverLetterTemplatePreview template={template} previewUrl={previewUrl} size={compact ? "compact" : "picker"} />;
 }
 
 function getEvidenceScore(letter: CoverLetterResponse): number {

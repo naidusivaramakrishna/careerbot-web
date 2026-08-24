@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -401,6 +401,8 @@ function TechnicalPracticeContent() {
             </div>
           )}
 
+        </div>
+        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           {currentAnswer && (
             <FeedbackCard
               weightedScore={currentAnswer.weightedScore}
@@ -423,38 +425,36 @@ function TechnicalPracticeContent() {
               answerId={currentAnswer.answerId}
             />
           )}
-        </div>
-
-        {/* Right column ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â FeedbackCard */}
-        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
-          {question.keywords.length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm">
-              <div className="flex items-center gap-2 mb-2.5">
-                <Key size={13} className="text-gray-500" />
-                <span className="text-xs font-semibold text-gray-600">Key points to cover</span>
-              </div>
-              <div className="max-h-52 overflow-auto">
-                <div className="flex flex-wrap gap-2">
-                  {question.keywords.map((kw, i) => (
-                    <span key={i} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           {!currentAnswer && (
-            <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-              <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
-                <Code2 size={24} className="text-[#2557a7]" />
+            <>
+              {question.keywords.length > 0 && (
+                <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <Key size={13} className="text-gray-500" />
+                    <span className="text-xs font-semibold text-gray-600">Key points to cover</span>
+                  </div>
+                  <div className="max-h-52 overflow-auto">
+                    <div className="flex flex-wrap gap-2">
+                      {question.keywords.map((kw, i) => (
+                        <span key={i} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+                <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
+                  <Code2 size={24} className="text-[#2557a7]" />
+                </div>
+                <p className="text-sm font-black text-gray-800">AI Feedback</p>
+                <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
+                  Record your answer to unlock score breakdowns, key-point coverage, and a stronger model response.
+                </p>
               </div>
-              <p className="text-sm font-black text-gray-800">AI Feedback</p>
-              <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
-                Record your answer to unlock score breakdowns, key-point coverage, and a stronger model response.
-              </p>
-            </div>
+            </>
           )}
         </aside>
 

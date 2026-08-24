@@ -6,7 +6,9 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { toast } from "sonner";
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 
 interface LanguageEntry {
@@ -22,6 +24,8 @@ const emptyLanguage = (): LanguageEntry => ({
 
 const Languages: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const { errors, validateRequired, clearError, clearSectionIndexErrors, reindexErrors } = useValidation();
 
   const [showTips] = useState(true);
@@ -178,7 +182,11 @@ const Languages: React.FC = () => {
       // // console.log("🗑️ Deleting language item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "languages", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "languages", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "languages", itemId);
+      }
 
       // // console.log("✅ Language item deleted from backend successfully");
 
