@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
     backendUrl.searchParams.set('code', code);
     if (state) backendUrl.searchParams.set('state', state);
 
-    console.log(`[Google OAuth] Exchanging code at ${backendUrl.toString()}`);
+    // Never log backendUrl — it carries the live authorization code and state.
+    console.info('[Google OAuth] Exchanging authorization code');
 
     const backendResponse = await fetch(backendUrl.toString(), {
       method: 'GET',
@@ -78,20 +79,21 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL('/auth/error?message=no_redirect', request.url));
       }
 
-      console.log(`[Google OAuth] Backend redirecting to: ${location}`);
+      // The Location header can carry auth material; log only that we got one.
+      console.info('[Google OAuth] Backend returned a redirect');
 
       // Parse the redirect URL to extract tokens
       const redirectUrl = new URL(location, BACKEND_URL);
-      const accessToken = redirectUrl.searchParams.get('access_token');
-      const refreshToken = redirectUrl.searchParams.get('refresh_token');
-
-      // Create response redirecting to frontend success page
+      // Redirect WITHOUT copying any token into the query string.
+      //
+      // This previously forwarded access_token / refresh_token "for backup (in
+      // case cookies don't work)". A token in a URL is persisted to browser
+      // history, sent in the Referer of later requests from that page, and
+      // captured by proxy and CDN logs — and the success page then treated
+      // whatever arrived as a credential. The session is carried by the
+      // Set-Cookie headers forwarded below, which is the mechanism the backend
+      // actually uses.
       const frontendUrl = new URL('/auth/google/success', request.url);
-
-      // Preserve tokens in URL for backup (in case cookies don't work)
-      if (accessToken) frontendUrl.searchParams.set('access_token', accessToken);
-      if (refreshToken) frontendUrl.searchParams.set('refresh_token', refreshToken);
-
       const response = NextResponse.redirect(frontendUrl);
 
       // Sanitize and forward Set-Cookie headers from backend

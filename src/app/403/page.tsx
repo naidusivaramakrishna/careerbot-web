@@ -11,7 +11,7 @@ export default function Forbidden() {
         <div className="text-red-600 text-6xl font-bold mb-4">403</div>
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Access Denied</h1>
         <p className="text-gray-600 mb-6">
-          You don't have permission to access this resource.
+          You don&apos;t have permission to access this resource.
         </p>
 
         <button

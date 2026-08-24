@@ -113,14 +113,19 @@ const processQueue = (
 
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // ✅ Add Authorization header if token exists in localStorage (OAuth tokens)
-    // This is a backup for httpOnly cookies in case they don't work across domains
-    if (typeof window !== 'undefined' && config.headers) {
-      const token = localStorage.getItem('access_token_backup');
-      if (token) {
-        config.headers.set('Authorization', `Bearer ${token}`);
-      }
-    }
+    // No Authorization header is set from localStorage.
+    //
+    // This used to read 'access_token_backup' and attach it as a Bearer token
+    // on every request, described as "a backup for httpOnly cookies in case
+    // they don't work across domains". Nothing legitimate ever wrote that key:
+    // both OAuth callbacks establish the session as httpOnly cookies and put
+    // nothing in the query string (verified against careerbot-api
+    // origin/integration/develop2_072026_pr: google_oauth.py and
+    // linkedin_oauth.py). The only writer was a success page copying whatever
+    // happened to be in a public URL — so this line replayed an
+    // attacker-supplied token as the caller's credential on every API call.
+    //
+    // Cookies are sent by withCredentials; that is the auth path.
 
     const correlationId = getCorrelationId();
     if (correlationId && config.headers) {

@@ -115,7 +115,8 @@ export async function POST(request: NextRequest) {
 
     setCookies.forEach((cookie) => {
       const sanitized = sanitiseCookie(cookie, isSecureRequest);
-      console.log(`[Auth Signin] Setting cookie: ${sanitized.substring(0, 50)}...`);
+      // Do not log cookie values — the first 50 chars include the JWT header/payload.
+      console.info('[Auth Signin] Setting authentication cookie');
       res.headers.append('Set-Cookie', sanitized);
     });
 

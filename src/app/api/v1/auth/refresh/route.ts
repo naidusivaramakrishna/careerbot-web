@@ -48,25 +48,31 @@ export async function POST(request: NextRequest) {
     };
     if (correlationId) headers['X-Correlation-ID'] = correlationId;
 
-    // Forward the request body so OAuth exchange calls (which carry
-    // { refresh_token: "..." } from the Google/LinkedIn success pages)
-    // reach the backend. Cookie-based refreshes send an empty body — that's fine too.
-    let bodyText = '{}';
-    try {
-      const raw = await request.text();
-      if (raw && raw.trim() !== '' && raw.trim() !== '{}') bodyText = raw;
-    } catch { /* ignore — fall back to empty body */ }
-
+    // Refresh is cookie-driven: the refresh_token cookie is forwarded in the
+    // `cookie` header above. We deliberately do NOT relay a caller-supplied
+    // body — accepting { refresh_token } from client JS would let a script
+    // swap in an arbitrary token and mint cookies for another account.
     const response = await fetch(`${BACKEND_URL}/api/v1/auth/refresh`, {
       method: 'POST',
       headers,
-      body: bodyText,
+      body: '{}',
     });
 
     const contentType = response.headers.get('content-type') ?? '';
-    const body = contentType.includes('application/json')
+    let body: unknown = contentType.includes('application/json')
       ? await response.json()
       : await response.text();
+
+    // The backend returns the rotated access/refresh tokens in its JSON body.
+    // They reach the browser as httpOnly Set-Cookie headers below; echoing them
+    // in a readable body would hand any same-origin script the long-lived
+    // refresh token and defeat the httpOnly design.
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const rest = { ...(body as Record<string, unknown>) };
+      delete rest.access_token;
+      delete rest.refresh_token;
+      body = rest;
+    }
 
     const res = NextResponse.json(body, { status: response.status });
 

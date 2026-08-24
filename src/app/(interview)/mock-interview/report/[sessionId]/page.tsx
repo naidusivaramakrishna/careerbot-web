@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { CodingPerformanceSection } from "@/components/interview/CodingPerformanceSection";
 import type { CodingRoundData } from "@/components/interview/CodingPerformanceSection";
+import type { ScoreBreakdown } from "@/app/coding-test/_lib/types";
 
 // ─── UI report shape ─────────────────────────────────────────────────────────
 
@@ -86,31 +87,82 @@ function mapReport(api: ReportResponse): UiReport {
   // Map coding_performance from API to CodingRoundData
   let codingRound: CodingRoundData | undefined;
   if (api.coding_performance) {
-    const perf = api.coding_performance as any;
+    // Typed via ReportResponse; every read below is guarded because the
+    // backend evolves this payload independently of the frontend.
+    const perf = api.coding_performance;
+    const str = (v: unknown, fallback: string) =>
+      typeof v === "string" && v !== "" ? v : fallback;
+    const num = (v: unknown, fallback: number) =>
+      typeof v === "number" && Number.isFinite(v) ? v : fallback;
     // Convert criteria object to grading_result breakdown format
-    const breakdown: Record<string, { score: number; weight: number }> = {};
-    if (perf.criteria) {
+    // criteria values are objects ({score, weight, feedback}) on the current
+    // backend; older payloads used a bare number. Handle both, drop anything
+    // we cannot read a numeric score out of.
+    const breakdown = {} as ScoreBreakdown;
+    if (perf.criteria && typeof perf.criteria === "object") {
       Object.entries(perf.criteria).forEach(([key, value]) => {
-        breakdown[key] = { score: value as number, weight: 100 };
+        let score: number | undefined;
+        let weight = 100;
+        let feedback = "";
+
+        if (typeof value === "number") {
+          score = value;
+        } else if (value && typeof value === "object") {
+          const c = value as { score?: unknown; weight?: unknown; feedback?: unknown };
+          if (typeof c.score === "number") score = c.score;
+          if (typeof c.weight === "number" && c.weight > 0) weight = c.weight;
+          if (typeof c.feedback === "string") feedback = c.feedback;
+        }
+
+        if (score === undefined) return;
+        breakdown[key as keyof ScoreBreakdown] = {
+          name: key,
+          score,
+          weight,
+          feedback,
+          suggestions: [],
+        };
       });
     }
+
+    // Backend field is ai_feedback_summary; `summary` is a legacy alias.
+    const summary =
+      typeof perf.ai_feedback_summary === "string"
+        ? perf.ai_feedback_summary
+        : typeof perf.summary === "string"
+          ? perf.summary
+          : "";
+    const improvements = Array.isArray(perf.improvements)
+      ? perf.improvements.filter((v: unknown): v is string => typeof v === "string")
+      : Array.isArray(perf.suggestions)
+        ? perf.suggestions.filter((v: unknown): v is string => typeof v === "string")
+        : [];
+    const hasGrading = summary !== "" || Object.keys(breakdown).length > 0;
     codingRound = {
-      problem_slug: perf.problem_slug ?? "coding-round",
-      problem_title: perf.problem_title ?? "Coding Problem",
-      language: perf.language ?? "python",
-      score: perf.score ?? null,
-      grading_result: perf.summary ? {
+      problem_slug: str(perf.problem_slug, "coding-round"),
+      problem_title: str(perf.problem_title, "Coding Problem"),
+      language: str(perf.language, "python"),
+      score: typeof perf.score === "number" ? perf.score : null,
+      // Previously gated on perf.summary alone, which is never present on the
+      // current backend — the whole breakdown and AI feedback were dropped.
+      grading_result: hasGrading ? {
+        total_score: typeof perf.score === "number" ? perf.score : 0,
         breakdown,
-        summary: perf.summary as string,
-        suggestions: perf.suggestions ?? [],
+        summary,
+        suggestions: improvements,
       } : null,
-      time_taken_s: perf.time_taken_s ?? 0,
-      followup_answers: perf.followup_scores ? perf.followup_scores.map((fs: any) => ({
-        attempt_number: fs.attempt_number ?? 0,
-        follow_up_question: fs.follow_up_question ?? fs.question ?? "",
-        score: fs.score ?? 0,
-        max_score: fs.max_score ?? 100,
-      })) : undefined,
+      time_taken_s: num(perf.time_taken_s, 0),
+      followup_answers: Array.isArray(perf.followup_scores)
+        ? perf.followup_scores.map((raw: unknown) => {
+            const fs = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+            return {
+              attempt_number: num(fs.attempt_number, 0),
+              follow_up_question: str(fs.follow_up_question, str(fs.question, "")),
+              score: num(fs.score, 0),
+              max_score: num(fs.max_score, 100),
+            };
+          })
+        : undefined,
     };
   }
 

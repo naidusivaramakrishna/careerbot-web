@@ -39,6 +39,19 @@ interface DashboardContextValue {
 /*  Context                                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Narrows an unknown thrown value to the { response } shape axios errors carry,
+ * without asserting `any`. Returns undefined for anything else.
+ */
+function axiosLikeResponse(
+  err: unknown,
+): { status?: number; statusText?: string } | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const response = (err as { response?: unknown }).response;
+  if (!response || typeof response !== 'object') return undefined;
+  return response as { status?: number; statusText?: string };
+}
+
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
 /* ------------------------------------------------------------------ */
@@ -84,8 +97,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       logger.error('DashboardContext: fetch failed', {
         error: errorMessage,
-        status: (err as any)?.response?.status,
-        statusText: (err as any)?.response?.statusText
+        status: axiosLikeResponse(err)?.status,
+        statusText: axiosLikeResponse(err)?.statusText
       });
       setError(err as Error);
     } finally {
