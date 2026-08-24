@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { GraduationCap, Search, UserPlus, KeyRound} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { useInstitution } from '@/contexts/InstitutionContext';
-import { useStudents } from '@/hooks/useInstitutionResource';
+import { useStudentsPaged } from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT, studentStatusLabel } from '@/lib/institutionMessages';
 import type { Student } from '@/types/institution';
 import { DataTable, OptionalCell, StackedCell } from '../_components/DataTable';
@@ -23,40 +24,59 @@ import { InviteCodeDialog } from '../_components/InviteCodeDialog';
 /**
  * The roster.
  *
- * `GET /institution/students` takes no query parameters and returns the caller's
- * whole scope in one response, so search and the status filter run client-side
- * over what was fetched. That is honest at department scale and at most college
- * scales; it is the first thing that will need a server-side `?q=` when a
- * college passes a few thousand students (see report).
+ * Search, the status filter and paging all run on the SERVER. They used to run
+ * in the browser over whatever one default page had returned, which is honest
+ * at forty students and a lie at a thousand: the box searched the first fifty
+ * and answered "no students match that" for everyone else, and the header
+ * announced "50 students in your view" to a college that had just uploaded a
+ * thousand. Both look exactly like a student who was never added.
  */
+const PAGE_SIZE = 50;
 const STATUS_FILTERS = ['all', 'enrolled', 'graduated', 'withdrawn', 'suspended'] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 function StudentsRoster() {
   const { readOnlyReason, allows } = useInstitution();
-  const students = useStudents();
+  const params = useSearchParams();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
+  const [page, setPage] = useState(0);
+
+  // The dashboard's "no section yet" tile links here with the filter applied,
+  // so the number it states and the list it opens are the same question.
+  const withoutSection = params.get('without_section') === '1';
+
+  // Debounced: a five-letter name is one request, not five.
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(query.trim());
+      setPage(0);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const students = useStudentsPaged({
+    q: search || undefined,
+    status: status === 'all' ? undefined : status,
+    without_section: withoutSection || undefined,
+    skip: page * PAGE_SIZE,
+    limit: PAGE_SIZE,
+  });
   // Which student the invite dialog is open for, if any.
   const [inviteFor, setInviteFor] = useState<Student | null>(null);
   const writable = !readOnlyReason;
   const refetch = students.refetch;
 
-  const rows = students.data;
+  const rows = students.data?.items ?? null;
+  const total = students.data?.total ?? 0;
+  const filtering = Boolean(search) || status !== 'all' || withoutSection;
+  const shownFrom = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const shownTo = Math.min(page * PAGE_SIZE + (rows?.length ?? 0), total);
 
-  const filtered = useMemo(() => {
-    if (!rows) return null;
-    const q = query.trim().toLowerCase();
-    return rows.filter((s) => {
-      if (status !== 'all' && s.status !== status) return false;
-      if (!q) return true;
-      return (
-        s.full_name.toLowerCase().includes(q) ||
-        (s.admission_number ?? '').toLowerCase().includes(q) ||
-        (s.college_email ?? '').toLowerCase().includes(q)
-      );
-    });
-  }, [rows, query, status]);
+  // The server has already applied every filter. Re-applying them here is what
+  // made the search box lie about the rows it had not loaded.
+  const filtered = rows;
 
   const addButton = (
     <Link href="/institution/people" tabIndex={readOnlyReason ? -1 : undefined}>
@@ -73,7 +93,9 @@ function StudentsRoster() {
         title="Students"
         description={
           rows
-            ? `${rows.length} ${rows.length === 1 ? 'student' : 'students'} in your view.`
+            ? `${total} ${total === 1 ? 'student' : 'students'}${
+                filtering ? ' match' : ' in your view'
+              }.`
             : 'Everyone you can see, newest first.'
         }
         actions={
@@ -93,7 +115,22 @@ function StudentsRoster() {
         <ErrorNotice error={students.error} onRetry={students.refetch} className="mb-4" />
       ) : null}
 
-      {rows && rows.length > 0 ? (
+      {withoutSection ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#fcd34d] bg-[#fffbeb] px-3 py-2">
+          <span className="text-[13px] leading-5 text-[#78350f]">
+            Showing only students who are in no class group. They are invisible
+            to every faculty roster until they are placed in one.
+          </span>
+          <Link
+            href="/institution/students"
+            className="rounded-sm text-[12px] font-medium text-[#92400e] underline"
+          >
+            Show everyone
+          </Link>
+        </div>
+      ) : null}
+
+      {rows && (rows.length > 0 || filtering) ? (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1 sm:max-w-[320px]">
             <Search
@@ -126,7 +163,10 @@ function StudentsRoster() {
                   key={value}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => setStatus(value)}
+                  onClick={() => {
+                    setStatus(value);
+                    setPage(0);
+                  }}
                   className={cn(
                     'rounded-md px-2.5 py-1 text-[12px] font-medium',
                     'transition-colors duration-150 motion-reduce:transition-none',
@@ -149,7 +189,7 @@ function StudentsRoster() {
           <TableSkeleton rows={8} columns={5} />
           <LoadingAnnouncement label="Loading students" />
         </>
-      ) : rows && rows.length === 0 ? (
+      ) : rows && rows.length === 0 && !filtering ? (
         <EmptyState
           icon={GraduationCap}
           title="No students yet"
@@ -176,6 +216,7 @@ function StudentsRoster() {
               onClick={() => {
                 setQuery('');
                 setStatus('all');
+                setPage(0);
               }}
             >
               Clear filters
@@ -276,6 +317,35 @@ function StudentsRoster() {
           onIssued={() => void refetch()}
         />
       ) : null}
+
+      {total > PAGE_SIZE ? (
+        <nav
+          className="mt-3 flex flex-wrap items-center justify-between gap-3"
+          aria-label="Roster pages"
+        >
+          <span className="text-[12px] leading-4 tabular-nums text-[#64748b]">
+            {shownFrom}–{shownTo} of {total}
+          </span>
+          <span className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0 || students.isLoading}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={shownTo >= total || students.isLoading}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </span>
+        </nav>
+      ) : null}
     </>
   );
 }
@@ -283,7 +353,12 @@ function StudentsRoster() {
 export default function StudentsPage() {
   return (
     <RoleGuard capability="read_students">
-      <StudentsRoster />
+      {/* useSearchParams needs a Suspense boundary, or the build refuses to
+          prerender this route at all. The fallback is the same skeleton the
+          roster shows while it loads, so the boundary is invisible. */}
+      <Suspense fallback={<TableSkeleton rows={8} columns={5} />}>
+        <StudentsRoster />
+      </Suspense>
     </RoleGuard>
   );
 }

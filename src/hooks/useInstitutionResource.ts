@@ -111,16 +111,6 @@ export function useSections(departmentId?: string, enabled = true): ResourceStat
   );
 }
 
-/** The roster, unwrapped.
- *
- *  GET /students returns a page plus a total now, so a client can page without
- *  fetching the whole roster to count it. This keeps the existing components
- *  on a plain Student[] -- use useStudentsPaged when you need the total or a
- *  search term. */
-export function useStudents(enabled = true): ResourceState<Student[]> {
-  return useInstitutionResource(
-    useCallback(async () => (await listStudents()).items, []), enabled);
-}
 
 /** Server-side search and paging.
  *
@@ -131,11 +121,15 @@ export function useStudentsPaged(
   params: ListStudentsParams = {},
   enabled = true,
 ): ResourceState<Paged<Student>> {
-  const { skip, limit, q, department_id, batch_year } = params;
+  const { skip, limit, q, status, department_id, batch_year, without_section } =
+    params;
   return useInstitutionResource(
     useCallback(
-      () => listStudents({ skip, limit, q, department_id, batch_year }),
-      [skip, limit, q, department_id, batch_year],
+      () =>
+        listStudents({
+          skip, limit, q, status, department_id, batch_year, without_section,
+        }),
+      [skip, limit, q, status, department_id, batch_year, without_section],
     ),
     enabled,
   );

@@ -5,7 +5,12 @@ import Link from 'next/link';
 import { Building2, GraduationCap, Layers, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useInstitution } from '@/contexts/InstitutionContext';
-import { useBatches, useDepartments, useSections, useStudents } from '@/hooks/useInstitutionResource';
+import {
+  useBatches,
+  useDepartments,
+  useSections,
+  useStudentsPaged,
+} from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import type { Student } from '@/types/institution';
 import { DataTable, StackedCell, OptionalCell } from './DataTable';
@@ -32,24 +37,30 @@ import { WriteGuard } from './WriteGuard';
  * roster runs longer and their org tiles are dropped (they do not create
  * departments or batches).
  */
+// Enough rows for the longest "recently added" list below (an HOD's twelve),
+// and no more. This screen states counts; it does not tally them.
+const RECENT_LIMIT = 12;
+
 export function AdminOverview({ scope }: { scope: 'cpo' | 'hod' }) {
   const { readOnlyReason, canWrite, allows } = useInstitution();
-  const students = useStudents();
+  // Only the rows this screen actually SHOWS. The headline count comes from
+  // the server's `total`, not from the length of this list: reading the count
+  // off a page of results told a placement officer who had just uploaded a
+  // thousand students that they had fifty.
+  const students = useStudentsPaged({ limit: RECENT_LIMIT });
   const departments = useDepartments(scope === 'cpo');
   const batches = useBatches(scope === 'cpo');
   const sections = useSections(undefined, true);
 
-  const rows = students.data;
+  // Asked for as a COUNT, not as rows to tally. limit:1 because only `total`
+  // is read -- a student in no class group is invisible to every faculty
+  // roster, which is exactly the outlier that must stay true at a thousand
+  // students rather than quietly reporting whatever fitted on one page.
+  const unplaced = useStudentsPaged({ limit: 1, without_section: true });
 
-  /**
-   * Coverage: a student with no section is invisible to a faculty roster, so
-   * it is the outlier a placement officer actually needs surfaced. Computed
-   * client-side because the contract has no aggregate endpoint (see report).
-   */
-  const withoutSection = useMemo(
-    () => (rows ? rows.filter((s) => !s.section_id).length : 0),
-    [rows],
-  );
+  const rows = students.data?.items;
+  const studentTotal = students.data?.total ?? 0;
+  const withoutSection = unplaced.data?.total ?? 0;
 
   const recent = useMemo(() => {
     if (!rows) return [];
@@ -104,7 +115,7 @@ export function AdminOverview({ scope }: { scope: 'cpo' | 'hod' }) {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
             label="Students"
-            value={rows?.length ?? 0}
+            value={studentTotal}
             caption={isCpo ? 'Across the college' : 'In your department'}
             href="/institution/students"
           />
@@ -135,7 +146,7 @@ export function AdminOverview({ scope }: { scope: 'cpo' | 'hod' }) {
               label="No section yet"
               value={withoutSection}
               caption="Not in any class group"
-              href="/institution/students"
+              href="/institution/students?without_section=1"
               emphasis
             />
           ) : null}
@@ -145,12 +156,12 @@ export function AdminOverview({ scope }: { scope: 'cpo' | 'hod' }) {
       <section className="mt-6">
         <div className="mb-2.5 flex items-baseline justify-between gap-3">
           <SectionTitle>Recently added students</SectionTitle>
-          {rows && rows.length > recent.length ? (
+          {studentTotal > recent.length ? (
             <Link
               href="/institution/students"
               className="rounded-sm text-[12px] font-medium text-[#2557a7] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7] focus-visible:ring-offset-2"
             >
-              View all {rows.length}
+              View all {studentTotal}
             </Link>
           ) : null}
         </div>

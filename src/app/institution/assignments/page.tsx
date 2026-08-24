@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { assignStudentsToFaculty, InstitutionApiError } from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
-import { useDepartments, useMembers, useStudents } from '@/hooks/useInstitutionResource';
+import {
+  useDepartments,
+  useMembers,
+  useStudentsPaged,
+} from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import { EmptyState } from '../_components/EmptyState';
 import { ErrorNotice, FormError } from '../_components/ErrorNotice';
@@ -34,20 +38,54 @@ import { CARD, FOCUS_RING } from '../_components/tokens';
  * The roster is a checkbox table rather than a tag input: a placement officer
  * assigns a whole section at once, and checkboxes support "select all shown"
  * after a search, which is the actual motion.
+ *
+ * The search and paging are SERVER-side. They used to be neither: the page
+ * loaded one default page of the roster and filtered that in the browser, so
+ * at a college of a thousand students the box searched the first fifty and
+ * answered "no students match" for the other nine hundred and fifty. A silent
+ * wrong answer is worse than an error, and it looks exactly like a student who
+ * has not been added yet.
+ *
+ * Ticks survive paging and searching, because they are held as a set of ids
+ * rather than derived from the rows on screen. Assigning a section, then
+ * searching for two more students, then submitting is one motion and must not
+ * quietly drop the section.
  */
+const PAGE_SIZE = 100;
 function FacultyAssignments() {
   const { readOnlyReason, canWrite } = useInstitution();
-  const students = useStudents();
   const faculty = useMembers('faculty');
   const departments = useDepartments();
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+
+  // Debounced so a five-letter name is one request, not five.
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(query.trim());
+      setPage(0);        // a new search starts at the beginning, not page 7
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const students = useStudentsPaged({
+    q: search || undefined,
+    skip: page * PAGE_SIZE,
+    limit: PAGE_SIZE,
+  });
   const [facultyAccountId, setFacultyAccountId] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<InstitutionApiError | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const rows = students.data;
+  const rows = students.data?.items;
+  const total = students.data?.total ?? 0;
+  const shownFrom = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const shownTo = Math.min(page * PAGE_SIZE + (rows?.length ?? 0), total);
+  const hasPrev = page > 0;
+  const hasNext = shownTo < total;
   const departmentName = (id: string | null) =>
     departments.data?.find((d) => d.id === id)?.name ?? id ?? '';
 
@@ -71,17 +109,14 @@ function FacultyAssignments() {
   const writable = canWrite('assign_faculty');
   const fieldErrors = fieldErrorMap(error);
 
-  const visible = useMemo(() => {
-    if (!rows) return [];
-    const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (s) =>
-        s.full_name.toLowerCase().includes(q) ||
-        (s.admission_number ?? '').toLowerCase().includes(q) ||
-        (s.section_id ?? '').toLowerCase().includes(q),
-    );
-  }, [rows, query]);
+  // The server already applied the search. Filtering again here is what made
+  // the box lie about the students it had not loaded.
+  const visible = rows ?? [];
+
+  // Ticks on other pages are still going to be submitted, so say so. Without
+  // this the count on the button looks wrong to anyone who has paged away
+  // from where they made the selection.
+  const offPageSelected = selected.size - visible.filter((s) => selected.has(s.id)).length;
 
   const allVisibleSelected = visible.length > 0 && visible.every((s) => selected.has(s.id));
 
@@ -183,7 +218,7 @@ function FacultyAssignments() {
           <TableSkeleton rows={6} columns={4} />
           <LoadingAnnouncement label="Loading students" />
         </>
-      ) : rows && rows.length === 0 ? (
+      ) : rows && rows.length === 0 && !search ? (
         <EmptyState
           icon={Users}
           title="No students to assign yet"
@@ -223,14 +258,23 @@ function FacultyAssignments() {
           </div>
 
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-3">
-            <SectionTitle>Students</SectionTitle>
+            <div className="flex min-w-0 items-baseline gap-2.5">
+              <SectionTitle>Students</SectionTitle>
+              <span className="text-[12px] leading-4 tabular-nums text-[#64748b]">
+                {students.isLoading
+                  ? 'Searching…'
+                  : total === 0
+                    ? 'No matches'
+                    : `${shownFrom}–${shownTo} of ${total}`}
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filter by name, number or section"
-                aria-label="Filter students"
+                placeholder="Search name or admission number"
+                aria-label="Search students"
                 className={cn(
                   'w-[260px] rounded-lg border border-[#cbd5e1] bg-white px-3 py-1.5 text-[13px] leading-5',
                   'placeholder:text-[#94a3b8]',
@@ -238,7 +282,7 @@ function FacultyAssignments() {
                 )}
               />
               <Button type="button" variant="outline" size="sm" onClick={toggleAllVisible}>
-                {allVisibleSelected ? 'Clear shown' : 'Select shown'}
+                {allVisibleSelected ? 'Clear page' : 'Select page'}
               </Button>
             </div>
           </div>
@@ -303,6 +347,37 @@ function FacultyAssignments() {
             </table>
           </div>
 
+          {total > PAGE_SIZE ? (
+            <nav
+              className="mt-2.5 flex items-center justify-between gap-3"
+              aria-label="Student roster pages"
+            >
+              <span className="text-[12px] leading-4 text-[#64748b]">
+                Page {page + 1} of {Math.ceil(total / PAGE_SIZE)}
+              </span>
+              <span className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!hasPrev || students.isLoading}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!hasNext || students.isLoading}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </span>
+            </nav>
+          ) : null}
+
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {readOnlyReason ? (
               <WriteGuard active hint={READ_ONLY_CONTROL_HINT[readOnlyReason]}>
@@ -311,6 +386,11 @@ function FacultyAssignments() {
             ) : (
               saveButton
             )}
+            {offPageSelected > 0 ? (
+              <span className="text-[12px] leading-4 text-[#64748b]">
+                {offPageSelected} selected on other pages
+              </span>
+            ) : null}
             <p role="status" aria-live="polite" className="min-h-[1rem]">
               {done ? <span className="text-[12px] font-medium text-green-700">{done}</span> : null}
             </p>

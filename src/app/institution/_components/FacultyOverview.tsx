@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ClipboardPen, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useInstitution } from '@/contexts/InstitutionContext';
-import { useStudents } from '@/hooks/useInstitutionResource';
+import { useStudentsPaged } from '@/hooks/useInstitutionResource';
 import { READ_ONLY_CONTROL_HINT } from '@/lib/institutionMessages';
 import type { Student } from '@/types/institution';
 import { DataTable, OptionalCell, StackedCell } from './DataTable';
@@ -29,10 +29,18 @@ import { WriteGuard } from './WriteGuard';
  * resolves the assignment set per request), so there is no client-side filter
  * to get wrong.
  */
+const ROSTER_LIMIT = 200;
+
 export function FacultyOverview() {
   const { readOnlyReason } = useInstitution();
-  const students = useStudents();
-  const rows = students.data;
+  // 200 is the route's maximum page. A faculty roster is tens of students, so
+  // one page is the whole thing -- but `total` is read rather than assumed, so
+  // a roster that outgrows a page says so instead of quietly ending at 50,
+  // which is where the default left it.
+  const students = useStudentsPaged({ limit: ROSTER_LIMIT });
+  const rows = students.data?.items;
+  const total = students.data?.total ?? 0;
+  const truncated = total > (rows?.length ?? 0);
 
   const recordButton = (
     <Link href="/institution/progress" tabIndex={readOnlyReason ? -1 : undefined}>
@@ -63,6 +71,12 @@ export function FacultyOverview() {
 
       {students.error ? (
         <ErrorNotice error={students.error} onRetry={students.refetch} className="mb-4" />
+      ) : null}
+
+      {truncated ? (
+        <p className="mb-3 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2 text-[13px] leading-5 text-[#475569]">
+          Showing {rows?.length} of {total}. Use the roster to search the rest.
+        </p>
       ) : null}
 
       {students.isLoading && !rows ? (

@@ -2,7 +2,10 @@
 
 import React, { useCallback, useState } from 'react';
 import { ClipboardPen, Users } from 'lucide-react';
-import { useStudents, useStudentProgress } from '@/hooks/useInstitutionResource';
+import {
+  useStudentProgress,
+  useStudentsPaged,
+} from '@/hooks/useInstitutionResource';
 import { activityLabel } from '@/lib/institutionMessages';
 import type { ProgressRecord } from '@/types/institution';
 import { DataTable, OptionalCell } from '../_components/DataTable';
@@ -23,8 +26,13 @@ import { PageHeader, SectionTitle } from '../_components/Typography';
  * "all recent progress" route, only per-student, so the right column follows
  * the form's selection (see report).
  */
+const ROSTER_LIMIT = 200;
+
 function RecordProgress() {
-  const students = useStudents();
+  // The picker must offer every student this faculty member may write for. The
+  // default page was fifty, so anyone past that was simply not in the list --
+  // and an absent student looks exactly like one who was never assigned.
+  const students = useStudentsPaged({ limit: ROSTER_LIMIT });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const progress = useStudentProgress(selectedId, Boolean(selectedId));
 
@@ -32,7 +40,9 @@ function RecordProgress() {
     void progress.refetch();
   }, [progress]);
 
-  const rows = students.data;
+  const rows = students.data?.items;
+  const total = students.data?.total ?? 0;
+  const truncated = total > (rows?.length ?? 0);
 
   return (
     <>
@@ -43,6 +53,13 @@ function RecordProgress() {
 
       {students.error ? (
         <ErrorNotice error={students.error} onRetry={students.refetch} className="mb-4" />
+      ) : null}
+
+      {truncated ? (
+        <p className="mb-3 rounded-lg border border-[#fcd34d] bg-[#fffbeb] px-3 py-2 text-[13px] leading-5 text-[#78350f]">
+          This form lists {rows?.length} of your {total} students. Record
+          progress for the rest from their own record on the roster.
+        </p>
       ) : null}
 
       {students.isLoading && !rows ? (

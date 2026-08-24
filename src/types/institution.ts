@@ -122,6 +122,15 @@ export interface ListStudentsParams {
   q?: string;
   department_id?: string;
   batch_year?: number;
+  /** Enrolment state. Filtered on the SERVER so the answer covers the whole
+   *  roster: filtering it in the browser answered over one page, and "no
+   *  graduates" was a lie about everyone who had not been loaded. */
+  status?: StudentStatus;
+  /** Only students who are in no class group. They are invisible to every
+   *  faculty roster until placed in one, so a placement officer needs to find
+   *  them -- and at a thousand students that answer cannot come from counting
+   *  one page in the browser. */
+  without_section?: boolean;
 }
 
 /** What the caller may do here, answerable BEFORE they try. */
