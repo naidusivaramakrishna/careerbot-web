@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GraduationCap, Loader2 } from 'lucide-react';
 
+import Header from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { claimWithInviteCode, InstitutionApiError } from '@/api/institutionApi';
 import { useInstitution } from '@/contexts/InstitutionContext';
@@ -108,12 +109,27 @@ export default function JoinCollegePage() {
   );
 }
 
+/** Deliberately the same shell the gate's own screens use.
+ *
+ *  This page is reached from those screens -- a student clicks "I have an
+ *  invite code" on "No college account here" -- so arriving somewhere with no
+ *  header and a differently sized card reads as leaving the product. It also
+ *  needs min-h-screen rather than a fraction of it: 70vh left a band of raw
+ *  page background below the tinted area, which looks like a rendering fault
+ *  rather than a design.
+ */
 function Frame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-[70vh] items-center justify-center bg-[#eef2fb] px-4 py-10">
-      <div className="w-full max-w-[420px] rounded-xl border border-[#e2e8f0] bg-white p-6">
-        {children}
+    <>
+      <Header />
+      <div
+        className="flex min-h-screen items-start justify-center px-4 pb-10 pt-20"
+        style={{ backgroundColor: '#eef2fb' }}
+      >
+        <div className="w-full max-w-[520px] rounded-xl border border-[#e2e8f0] bg-white p-6">
+          {children}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

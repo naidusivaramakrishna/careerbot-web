@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { InstitutionApiError } from '@/api/institutionApi';
 import { ERROR_MESSAGES } from '@/lib/institutionMessages';
+import type { InstitutionErrorReason } from '@/lib/institutionMessages';
 
 /**
  * Renders a failed request, branching on the canonical `reason` — never on the
@@ -16,6 +17,31 @@ import { ERROR_MESSAGES } from '@/lib/institutionMessages';
  * error. `error_id` is surfaced only for the failures a user cannot act on, so
  * they have something to quote to support.
  */
+/**
+ * What to actually show a person.
+ *
+ * The server's message is written for whoever reads the logs. A student who
+ * opened the wrong screen was shown "role student may not perform
+ * read_students" -- true, and meaningless to them: it names an internal
+ * policy action and tells them nothing they can do.
+ *
+ * So for refusals the curated copy wins. For INPUT errors it does not: there
+ * the server names the field and the reason ("admission_number cannot be
+ * blank"), which is exactly what the person needs, and replacing it with
+ * "Check the form" would throw away the useful part.
+ */
+const SERVER_MESSAGE_IS_USEFUL = new Set<InstitutionErrorReason>([
+  'INVALID_REQUEST',
+  'NOT_FOUND',
+]);
+
+function displayMessage(error: InstitutionApiError): string {
+  if (SERVER_MESSAGE_IS_USEFUL.has(error.reason) && error.message) {
+    return error.message;
+  }
+  return ERROR_MESSAGES[error.reason] || error.message || 'Something went wrong.';
+}
+
 export function ErrorNotice({
   error,
   onRetry,
@@ -39,7 +65,7 @@ export function ErrorNotice({
     <Alert variant={variant} className={className} role="alert">
       <AlertDescription>
         <span className="block text-[13px] font-medium leading-5">
-          {error.message || ERROR_MESSAGES[error.reason]}
+          {displayMessage(error)}
         </span>
         {showSupportRef ? (
           <span className="mt-1 block text-[12px] leading-4 opacity-80">
@@ -72,7 +98,7 @@ export function FormError({ error }: { error: InstitutionApiError | null }) {
       role="alert"
     >
       <AlertDescription className="text-[13px] font-medium">
-        {error.message || ERROR_MESSAGES[error.reason]}
+        {displayMessage(error)}
       </AlertDescription>
     </Alert>
   );

@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
-import { useStudents, useStudentProgress } from '@/hooks/useInstitutionResource';
+import { useMyStudentProfile, useStudentProgress } from '@/hooks/useInstitutionResource';
 import { activityLabel } from '@/lib/institutionMessages';
 import { ACTIVITY_TYPES, type ProgressRecord } from '@/types/institution';
 import { EmptyState } from './EmptyState';
@@ -22,14 +22,23 @@ import { CARD } from './tokens';
  * a next step.
  *
  * CONTRACT NOTE: there is no `GET /students/me`. A student's `GET /students` is
- * self-scoped by the server, so the single row it returns is them. If that ever
- * returns more than one row this screen would be wrong, so it takes the row
- * whose account matches the session's membership rather than blindly [0]
- * where it can, and falls back to the first row otherwise.
+ * ASKS FOR ITS OWN RECORD, not for the roster.
+ *
+ * This used to call the roster endpoint and take the first row, assuming the
+ * server had scoped it to one. It failed outright the first time a real
+ * student opened it: students are not permitted to read the roster at all, so
+ * the screen showed "role student may not perform read_students" instead of
+ * their progress.
+ *
+ * Even with permission it was wrong in a quieter way -- if that call ever
+ * returned more than one row, a student would silently be shown somebody
+ * else's record. /students/me answers the question this screen is actually
+ * asking, and refuses rather than guessing when an account resolves to more
+ * than one student.
  */
 export function StudentOverview() {
-  const self = useStudents();
-  const student = self.data?.[0] ?? null;
+  const self = useMyStudentProfile();
+  const student = self.data ?? null;
   const progress = useStudentProgress(student?.id, Boolean(student));
 
   /**
