@@ -1,6 +1,16 @@
 // Internshala JD scraper
 
 (function () {
+
+  // querySelectorAll('*') also returns SVG leaves (<path>, <circle>) from
+  // decorative icons. innerText is an HTMLElement property, so on those it is
+  // undefined and .trim() throws -- one icon inside a chip container was
+  // enough to abort extraction entirely. Read defensively.
+  function leafText(el) {
+    const t = typeof el?.innerText === 'string' ? el.innerText : (el?.textContent || '');
+    return t.trim();
+  }
+
   if (window.__careerbotInternshala) return;
   window.__careerbotInternshala = true;
 
@@ -88,7 +98,7 @@
     for (const container of containers) {
       const skills = Array.from(container.querySelectorAll('*'))
         .filter(el => el.children.length === 0)
-        .map(el => el.innerText.trim())
+        .map(el => leafText(el))
         .filter(s => s && s.length <= 60 && !/^skill\(s\)\s*required$/i.test(s));
       const unique = [...new Set(skills)];
       if (unique.length >= 1 && unique.length <= 40) return unique.join(', ');

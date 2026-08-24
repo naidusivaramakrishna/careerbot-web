@@ -431,9 +431,16 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           score={summaryScore}
           passText="Your professional summary aligns well with the role."
         >
-          {summary.reason && (
+          {/* Gated on reason OR suggested_summary, not reason alone. The API can
+              return Summary_Check with a suggested_summary and no reason -- its
+              own fixture does exactly that (careerbot-api
+              tests/unit/api/test_job_matcher_fix_apply.py:56-59) -- and gating
+              the whole block on reason rendered an empty card for that shape. */}
+          {(summary.reason || summary.suggested_summary) && (
             <div className="space-y-3">
-              <p className="text-[13px] text-gray-600 leading-relaxed">{summary.reason}</p>
+              {summary.reason && (
+                <p className="text-[13px] text-gray-600 leading-relaxed">{summary.reason}</p>
+              )}
               {summary.suggested_summary && (
                 <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
                   {currentSummary && (
@@ -462,9 +469,15 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
           score={jobScore}
           passText="Your job title aligns well with the role."
         >
-          {job.reason && (
+          {/* Same sibling issue as Summary above: the API fixture supplies
+              Job_Title_Check with jd_title/matched_title and no reason
+              (test_job_matcher_fix_apply.py:55), so gating on reason alone hid
+              the titles entirely. */}
+          {(job.reason || job.matched_title || job.jd_title) && (
             <div className="space-y-1.5">
-              <p className="text-[13px] text-gray-600 leading-relaxed">{job.reason}</p>
+              {job.reason && (
+                <p className="text-[13px] text-gray-600 leading-relaxed">{job.reason}</p>
+              )}
               {(job.matched_title || job.jd_title) && (
                 <p className="text-[12px] text-gray-500">
                   Your title <span className="font-bold text-gray-800">{job.matched_title || "—"}</span>

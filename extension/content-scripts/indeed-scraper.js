@@ -1,8 +1,24 @@
 // Indeed JD scraper
 
 (function () {
+
+  // querySelectorAll('*') also returns SVG leaves (<path>, <circle>) from
+  // decorative icons. innerText is an HTMLElement property, so on those it is
+  // undefined and .trim() throws -- one icon inside a chip container was
+  // enough to abort extraction entirely. Read defensively.
+  function leafText(el) {
+    const t = typeof el?.innerText === 'string' ? el.innerText : (el?.textContent || '');
+    return t.trim();
+  }
+
   if (window.__careerbotIndeed) return;
   window.__careerbotIndeed = true;
+
+  // Per-frame: this guard lives on each frame's own window, so it does not
+  // deduplicate across frames.
+  const IS_TOP_FRAME = (() => {
+    try { return window.top === window.self; } catch { return false; }
+  })();
 
   // Inject critical CSS to lock banner positioning
   const style = document.createElement('style');
@@ -61,8 +77,8 @@
     const container = heading.nextElementSibling || heading.parentElement?.nextElementSibling;
     if (!container) return null;
     const values = Array.from(container.querySelectorAll('*'))
-      .filter(el => el.children.length === 0 && el.innerText.trim().length > 0)
-      .map(el => el.innerText.trim());
+      .filter(el => el.children.length === 0 && leafText(el).length > 0)
+      .map(el => leafText(el));
     const unique = [...new Set(values)];
     return unique.length ? unique.join(', ') : (container.innerText.trim() || null);
   }
@@ -80,7 +96,7 @@
     for (const container of containers) {
       const items = Array.from(container.querySelectorAll('*'))
         .filter(el => el.children.length === 0)
-        .map(el => el.innerText.trim())
+        .map(el => leafText(el))
         .filter(s => s && s.length <= 80 && !/pulled from the full job description/i.test(s) && s.toLowerCase() !== 'benefits');
       const unique = [...new Set(items)];
       if (unique.length >= 1 && unique.length <= 30) return unique.join(', ');
@@ -175,7 +191,13 @@
 
     const meta = extractMeta();
     chrome.runtime.sendMessage({ type: 'JD_DETECTED', data: { jd, meta } }).catch(() => {});
-    injectBanner(meta, jd);
+    // manifest.json runs this script with all_frames:true so the split-view
+    // job description (which Indeed renders in a same-origin iframe) can be
+    // read. The BANNER, though, must only ever be injected by the top frame:
+    // position:fixed resolves against the containing frame's viewport, so a
+    // subframe would paint the banner inside its own box, and a page whose
+    // top document ALSO matches would end up with two banners.
+    if (IS_TOP_FRAME) injectBanner(meta, jd);
   }
 
   function injectBanner(meta, jd) {
@@ -401,7 +423,7 @@
 
   // Detect URL changes for job navigation
   let lastUrl = window.location.href;
-  const urlPollInterval = setInterval(() => {
+  const pollUrl = () => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
       // Keep only the JD we actually published as stale. The interval may
@@ -413,16 +435,29 @@
       document.getElementById('cb-shadow-host')?.remove();
       tryDetect();
     }
-  }, 500);
+  };
+  let urlPollInterval = setInterval(pollUrl, 500);
 
   // Neither the interval nor the MutationObserver above stop on their own —
   // without this, both keep running on a bfcache-restored or long-lived
   // Indeed tab (see linkedin-scraper.js / wellfound-scraper.js, which already
   // tear down their equivalents this way).
+  // Suspend on pagehide, resume on pageshow. Using { once: true } here meant a
+  // back-forward-cache restore -- which reuses this same document, so the
+  // script does not re-run and __careerbotIndeed is still set -- left the
+  // poller and observer permanently dead, and detection never recovered.
   window.addEventListener('pagehide', () => {
     clearInterval(urlPollInterval);
     observer.disconnect();
-  }, { once: true });
+  });
+
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+    lastUrl = window.location.href;
+    urlPollInterval = setInterval(pollUrl, 500);
+    startObserver();
+    tryDetect();
+  });
 
   // Show the CareerBot brand icon in the banner (static — not the company's logo).
   function setBrandIcon(iconEl) {

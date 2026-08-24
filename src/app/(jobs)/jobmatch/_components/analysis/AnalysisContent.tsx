@@ -57,6 +57,50 @@ interface AnalysisDraft {
   highlightFields: Record<string, string[]>;
   liveScore: number;
   appliedSuggestionIds: string[];
+  // Which of appliedSuggestionIds were applied via a BULK parent. The backend
+  // only recorded the parent's suggestion_id, so undoing one of these by its
+  // own child id 404s. Without persisting this, a restored draft made every
+  // child look individually applied and re-enabled an Undo that always failed.
+  bulkAppliedSuggestionIds: string[];
+}
+
+/**
+ * Patches the stored draft's applied-suggestion bookkeeping directly.
+ *
+ * The draft is normally written by a mounted effect, but an apply/undo request
+ * can still be in flight when the user hits Back: the component unmounts, the
+ * request commits server-side, and its setState calls are no-ops, so the draft
+ * never learns about it. Returning to Analysis would then restore state that
+ * disagrees with the server -- an applied fix shown as pending, or an undone
+ * one stuck on "Added".
+ *
+ * Writing through to sessionStorage here works because this runs from a
+ * closure that survives unmount, unlike React state.
+ */
+function patchAnalysisDraftApplied(
+  matchId: string | undefined,
+  suggestionId: string,
+  applied: boolean,
+): void {
+  try {
+    if (!matchId) return;
+    const raw = sessionStorage.getItem(ANALYSIS_DRAFT_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw) as AnalysisDraft;
+    if (draft.matchId !== matchId) return;
+
+    const ids = new Set(draft.appliedSuggestionIds ?? []);
+    const bulk = new Set(draft.bulkAppliedSuggestionIds ?? []);
+    if (applied) {
+      ids.add(suggestionId);
+    } else {
+      ids.delete(suggestionId);
+      bulk.delete(suggestionId);
+    }
+    draft.appliedSuggestionIds = Array.from(ids);
+    draft.bulkAppliedSuggestionIds = Array.from(bulk);
+    sessionStorage.setItem(ANALYSIS_DRAFT_KEY, JSON.stringify(draft));
+  } catch {}
 }
 
 function readAnalysisDraft(matchId?: string): AnalysisDraft | null {
@@ -348,13 +392,26 @@ export default function AnalysisContent({
   // (skills AND non-skill text fixes) — persisted so those cards still show
   // "Added" instead of resetting to "Apply fix" after navigating away and back.
   const [appliedSuggestionIds, setAppliedSuggestionIds] = React.useState<string[]>(() => restoredDraft?.appliedSuggestionIds ?? []);
+  const [bulkAppliedSuggestionIds, setBulkAppliedSuggestionIds] = React.useState<string[]>(() => restoredDraft?.bulkAppliedSuggestionIds ?? []);
+  const handleBulkApplied = React.useCallback((suggestionIds: string[]) => {
+    setBulkAppliedSuggestionIds((prev) => {
+      const next = new Set(prev);
+      suggestionIds.forEach((id) => next.add(id));
+      return Array.from(next);
+    });
+  }, []);
   const handleSuggestionApplied = React.useCallback((suggestionId: string, applied: boolean) => {
+    // Write through to the stored draft as well as React state: this callback
+    // still runs if the request completes after the user navigated away, when
+    // setState no longer does anything.
+    patchAnalysisDraftApplied(matchId, suggestionId, applied);
+    if (!applied) setBulkAppliedSuggestionIds((prev) => prev.filter((id) => id !== suggestionId));
     setAppliedSuggestionIds((prev) =>
       applied
         ? (prev.includes(suggestionId) ? prev : [...prev, suggestionId])
         : prev.filter((id) => id !== suggestionId)
     );
-  }, []);
+  }, [matchId]);
 
   // Track which other fields (job title, summary, individual experience/
   // internship/project bullets) were just changed by an applied fix — same
@@ -431,6 +488,9 @@ export default function AnalysisContent({
   // rather than racing on a stale snapshot.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const resumeSectionsRef = React.useRef<Record<string, any>>(resumeSections);
+  // suggestion_id -> the bullet text apply actually wrote into the preview,
+  // so undo can find it again even when a manual value filled a metric blank.
+  const appliedTextRef = React.useRef<Record<string, string>>({});
   React.useEffect(() => { resumeSectionsRef.current = resumeSections; }, [resumeSections]);
 
   const resumeId: string | undefined =
@@ -467,10 +527,11 @@ export default function AnalysisContent({
         highlightFields,
         liveScore,
         appliedSuggestionIds,
+        bulkAppliedSuggestionIds,
       };
       sessionStorage.setItem(ANALYSIS_DRAFT_KEY, JSON.stringify(draft));
     } catch {}
-  }, [matchId, resumeSections, activeSectionIds, deletedSectionIds, customSections, addedSkillFields, highlightFields, liveScore, appliedSuggestionIds]);
+  }, [matchId, resumeSections, activeSectionIds, deletedSectionIds, customSections, addedSkillFields, highlightFields, liveScore, appliedSuggestionIds, bulkAppliedSuggestionIds]);
 
   // Resolve a suggestion_id for a skill name from Match_Penalties — needed
   // when a skill is added/removed from a source that doesn't already carry
@@ -680,6 +741,10 @@ export default function AnalysisContent({
           resumeSectionsRef.current = result.sections;
           setResumeSections(result.sections);
           result.changed.forEach((c) => markHighlighted(c.section, String(c.idx)));
+          // Remember the text we ACTUALLY wrote. When a manual value filled a
+          // metric blank, `after` differs from the cached after_example, and
+          // undo searching for the cached copy would find nothing.
+          appliedTextRef.current[suggestion_id] = after;
         } else {
           mirrored = false;
         }
@@ -699,6 +764,8 @@ export default function AnalysisContent({
   // — the resume's state before ANY fix was applied).
   const removeTextFix = React.useCallback(async (suggestion_id: string, category: string): Promise<boolean> => {
     if (!matchId || !suggestion_id) return false;
+    // Mirrors applyTextFix: true unless the local preview could not be reverted.
+    let mirrored = true;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let res: any;
     try {
@@ -738,18 +805,28 @@ export default function AnalysisContent({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const weak = (starCheck?.weak_bullets ?? []).find((w: any) => w.suggestion_id === suggestion_id);
       const before = weak?.original || penalty?.before_example;
-      const after = weak?.improved || penalty?.after_example;
+      // Prefer the text apply actually wrote. The cached after_example may
+      // still carry an unfilled "n+" metric placeholder, so searching for it
+      // would miss a bullet that was saved as "20+".
+      const after = appliedTextRef.current[suggestion_id] ?? (weak?.improved || penalty?.after_example);
       if (before && after && before !== after) {
         const result = replaceBulletText(resumeSectionsRef.current, after, before);
         if (result.changed.length) {
           resumeSectionsRef.current = result.sections;
           setResumeSections(result.sections);
           result.changed.forEach((c) => unmarkHighlighted(c.section, String(c.idx)));
+          delete appliedTextRef.current[suggestion_id];
+        } else {
+          // The server rolled the fix back but the preview still shows the
+          // applied text. Reporting success here would clear the card's
+          // "Added" state and leave preview and server disagreeing with no
+          // way for the user to notice.
+          mirrored = false;
         }
       }
     }
 
-    return true;
+    return mirrored;
   }, [matchId, matchResult, jobTitle, starCheck, parsedResumeData, unmarkHighlighted, runSerially]);
 
   // Remove a skill: enhance/remove updates the match score AND removes the
@@ -1146,7 +1223,9 @@ export default function AnalysisContent({
             onRemoveFix={removeTextFix}
             onOpenSection={(key) => setOpenSection(key)}
             appliedSuggestionIds={appliedSuggestionIds}
+            bulkAppliedSuggestionIds={bulkAppliedSuggestionIds}
             onSuggestionApplied={handleSuggestionApplied}
+            onBulkApplied={handleBulkApplied}
           />
         </div>
 

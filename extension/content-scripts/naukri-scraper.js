@@ -1,6 +1,16 @@
 // Naukri JD scraper
 
 (function () {
+
+  // querySelectorAll('*') also returns SVG leaves (<path>, <circle>) from
+  // decorative icons. innerText is an HTMLElement property, so on those it is
+  // undefined and .trim() throws -- one icon inside a chip container was
+  // enough to abort extraction entirely. Read defensively.
+  function leafText(el) {
+    const t = typeof el?.innerText === 'string' ? el.innerText : (el?.textContent || '');
+    return t.trim();
+  }
+
   if (window.__careerbotNaukri) return;
   window.__careerbotNaukri = true;
 
@@ -82,7 +92,7 @@
       for (const container of containers) {
         const skills = Array.from(container.querySelectorAll('*'))
           .filter(el => el.children.length === 0)
-          .map(el => el.innerText.trim())
+          .map(el => leafText(el))
           // Skill names are short phrases; anything longer is prose from an
           // unrelated section, not a chip — drop it rather than risk
           // polluting the list.

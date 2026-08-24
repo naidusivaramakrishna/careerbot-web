@@ -35,6 +35,10 @@ interface MatchPenaltiesProps {
   appliedSuggestionIds?: string[];
   /** Reports a suggestion_id's applied state changing (add or Undo) so the caller can persist it. */
   onSuggestionApplied?: (suggestionId: string, applied: boolean) => void;
+  /** suggestion_ids applied via a BULK parent in a previous session. Undo is not offered for these: the backend recorded only the parent id, so removing by a child id 404s. */
+  bulkAppliedSuggestionIds?: string[];
+  /** Reports suggestion_ids that were just applied via a bulk parent, so the caller can persist their provenance. */
+  onBulkApplied?: (suggestionIds: string[]) => void;
 }
 
 // Resume section ids the manual-editor popup understands — mirrors ALL_SECTIONS
@@ -121,7 +125,7 @@ const SUGGESTION_TYPE_META = {
 };
 
 function CategoryGroup({
-  category, items, onAddSkill, onRemoveSkill, onApplyFix, onRemoveFix, onOpenSection, readOnly, appliedSuggestionIds, onSuggestionApplied,
+  category, items, onAddSkill, onRemoveSkill, onApplyFix, onRemoveFix, onOpenSection, readOnly, appliedSuggestionIds, onSuggestionApplied, bulkAppliedSuggestionIds, onBulkApplied,
 }: {
   category: string;
   items: Penalty[];
@@ -133,6 +137,8 @@ function CategoryGroup({
   readOnly?: boolean;
   appliedSuggestionIds?: string[];
   onSuggestionApplied?: (suggestionId: string, applied: boolean) => void;
+  bulkAppliedSuggestionIds?: string[];
+  onBulkApplied?: (suggestionIds: string[]) => void;
 }) {
   const [open, setOpen] = useState(true);
   // Seeded from the persisted appliedSuggestionIds so a suggestion applied in
@@ -147,7 +153,10 @@ function CategoryGroup({
   // but tracked separately so their row can say "applied, not yet confirmed
   // in preview" honestly instead of claiming the same verified "Added" state
   // an individually-applied fix gets.
-  const [bulkAppliedIds, setBulkAppliedIds] = useState<Set<string>>(new Set());
+  // Seeded from persisted provenance so a restored draft still knows which
+  // children came from a bulk parent -- otherwise they render an Undo that
+  // sends the child id the backend never recorded, and always 404s.
+  const [bulkAppliedIds, setBulkAppliedIds] = useState<Set<string>>(() => new Set(bulkAppliedSuggestionIds));
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [bulkLoadingKey, setBulkLoadingKey] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
@@ -264,6 +273,7 @@ function CategoryGroup({
             groupItems.forEach(p => n.add(p.suggestion_id));
             return n;
           });
+          onBulkApplied?.(groupItems.map(p => p.suggestion_id));
         } else {
           // onApplyFix already toasts the specific reason (rate limit, needs a
           // number, etc.) when it fails outright — but a cancelled fill-in-the-
@@ -509,16 +519,31 @@ function CategoryGroup({
                             </button>
                             {isSkillActionable && onRemoveSkill && isAdded && (
                               <button
+                                // Guarded like the text Undo below: a fast double
+                                // click otherwise queued two removes, and the
+                                // second's "not applied" rejection restored the
+                                // optimistic local removal -- re-adding a skill
+                                // the server had already dropped.
+                                disabled={removingIds.has(p.suggestion_id)}
                                 onClick={async () => {
-                                  const ok = await onRemoveSkill(p.target!, p.suggestion_id);
-                                  if (ok) {
-                                    setAddedIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
-                                    onSuggestionApplied?.(p.suggestion_id, false);
-                                  } else toast.error("Couldn't remove this skill. Please try again.");
+                                  if (removingIds.has(p.suggestion_id)) return;
+                                  setRemovingIds(prev => new Set(prev).add(p.suggestion_id));
+                                  try {
+                                    const ok = await onRemoveSkill(p.target!, p.suggestion_id);
+                                    if (ok) {
+                                      setAddedIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
+                                      onSuggestionApplied?.(p.suggestion_id, false);
+                                    } else toast.error("Couldn't remove this skill. Please try again.");
+                                  } finally {
+                                    setRemovingIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
+                                  }
                                 }}
-                                className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                                className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                <RotateCcw className="h-3 w-3" aria-hidden="true" /> Undo
+                                {removingIds.has(p.suggestion_id)
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <RotateCcw className="h-3 w-3" aria-hidden="true" />}
+                                Undo
                               </button>
                             )}
                             {/* Bulk-applied fixes excluded — see handleRemoveFix. */}
@@ -558,7 +583,7 @@ function CategoryGroup({
   );
 }
 
-export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill, onApplyFix, onRemoveFix, onOpenSection, readOnly, appliedSuggestionIds, onSuggestionApplied }: MatchPenaltiesProps) {
+export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill, onApplyFix, onRemoveFix, onOpenSection, readOnly, appliedSuggestionIds, onSuggestionApplied, bulkAppliedSuggestionIds, onBulkApplied }: MatchPenaltiesProps) {
   const backendPenalties: Penalty[] = matchResult?.Match_Penalties?.penalties ?? [];
 
   // The backend flags a missing "technical_skills" field in Formatting_Check but,
@@ -625,6 +650,8 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill,
           onOpenSection={onOpenSection}
           readOnly={readOnly}
           appliedSuggestionIds={appliedSuggestionIds}
+          bulkAppliedSuggestionIds={bulkAppliedSuggestionIds}
+          onBulkApplied={onBulkApplied}
           onSuggestionApplied={onSuggestionApplied}
         />
       ))}
