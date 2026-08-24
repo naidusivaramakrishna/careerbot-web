@@ -217,7 +217,7 @@ function DesktopDropdown({
       <button
         aria-haspopup="true"
         aria-expanded={active}
-        className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-2 text-[13px] font-semibold transition-colors xl:px-3.5 xl:text-sm ${
+        className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-2 text-sm font-semibold transition-colors ${
           active ? 'bg-blue-50 text-[#2557a7]' : 'cursor-pointer text-gray-700 hover:bg-blue-50 hover:text-[#2557a7]'
         }`}
       >
@@ -385,23 +385,23 @@ export default function LandingNavbar({
           scrolled ? 'pb-2' : 'pb-0'
         }`}
       >
-        <nav className="mx-auto flex h-[78px] max-w-[1590px] items-center justify-between gap-2 rounded-[18px] border border-slate-200/80 bg-white/92 px-5 shadow-[0_14px_38px_rgba(15,35,75,0.08)] backdrop-blur-xl lg:px-[72px] xl:gap-4">
+        <nav className="mx-auto flex h-[78px] max-w-[1800px] items-center justify-between gap-4 rounded-[18px] border border-slate-200/80 bg-white/92 px-5 shadow-[0_14px_38px_rgba(15,35,75,0.08)] backdrop-blur-xl xl:grid xl:grid-cols-[170px_minmax(0,1fr)_auto] xl:px-7">
           {/* Logo */}
-          <Link href="/" className="-ml-1 flex shrink-0 items-center transition-opacity hover:opacity-80" aria-label="CareerBOT home">
+          <Link href="/" className="-ml-1 flex min-w-0 shrink-0 items-center transition-opacity hover:opacity-80 xl:w-[170px]" aria-label="CareerBOT home">
             <Image
               src="/assets/icons/Logo.png"
               alt="CareerBot"
               width={54}
               height={54}
-                className="-mr-1 h-10 w-10 shrink-0 xl:h-11 xl:w-11"
+              className="-mr-1 h-10 w-10 shrink-0"
               style={{ filter: 'hue-rotate(8deg) saturate(130%) brightness(68%)' }}
               priority
             />
-            <span className="text-base font-black tracking-tight text-[#2b78bc] xl:text-xl">CareerBOT</span>
+            <span className="whitespace-nowrap text-xl font-black tracking-tight text-[#2b78bc]">CareerBOT</span>
           </Link>
 
           {/* Desktop nav — items render in declared order */}
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 lg:flex xl:gap-4">
+          <div className="hidden min-w-0 items-center justify-center gap-3 xl:flex">
             {navItems.map((item, i) => {
               if (item.kind === 'dropdown') {
                 return (
@@ -424,7 +424,7 @@ export default function LandingNavbar({
                   aria-label={link.ariaLabel}
                   aria-current={isActive ? 'page' : undefined}
                   onClick={() => setActiveDropdown(null)}
-                  className={`cursor-pointer whitespace-nowrap rounded-full px-2 py-2 text-[13px] font-semibold transition-colors xl:px-3.5 xl:text-sm ${
+                  className={`cursor-pointer whitespace-nowrap rounded-full px-2 py-2 text-sm font-semibold transition-colors ${
                     isActive
                       ? 'bg-blue-50 text-[#2557a7]'
                       : 'text-gray-700 hover:bg-blue-50 hover:text-[#2557a7]'
@@ -439,38 +439,38 @@ export default function LandingNavbar({
           {/* Auth buttons */}
           <div className="flex shrink-0 items-center gap-2">
             {authMode === 'authenticated' ? (
-              <div className="hidden items-center gap-1.5 lg:flex xl:gap-2">
+              <div className="hidden items-center gap-2 xl:flex">
                 <Link
                   href="/dashboard"
                   onClick={() => setActiveDropdown(null)}
-                  className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
+                  className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full bg-[#2557a7] px-4 py-2 text-sm font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95"
                 >
-                  <ShieldCheck size={13} className="xl:h-3.5 xl:w-3.5" />
+                  <ShieldCheck size={14} />
                   Dashboard
                 </Link>
               </div>
             ) : (
-              <div className="hidden items-center gap-1.5 lg:flex xl:gap-2">
+              <div className="hidden items-center gap-2 xl:flex">
                 <button
                   onClick={handleSignin}
-                  className="cursor-pointer whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-700 shadow-[0_6px_16px_rgba(15,35,75,0.08)] transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] xl:px-4 xl:text-sm"
+                  className="cursor-pointer whitespace-nowrap rounded-full bg-[#2557a7] px-5 py-2 text-sm font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95"
                 >
                   Sign In
                 </button>
-                <Link
+                {/* <Link
                   href="/builder/start"
                   onClick={() => setActiveDropdown(null)}
-                  className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
+                  className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full bg-[#2557a7] px-4 py-2 text-sm font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95"
                 >
-                  <ShieldCheck size={13} className="xl:h-3.5 xl:w-3.5" />
+                  <ShieldCheck size={14} />
                   Get Started Free
-                </Link>
+                </Link> */}
               </div>
             )}
 
             <button
               onClick={() => setMobileOpen(true)}
-              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-blue-50 hover:text-[#2557a7] lg:hidden"
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-blue-50 hover:text-[#2557a7] xl:hidden"
               aria-label="Open menu"
             >
               <Menu size={20} />
@@ -481,7 +481,7 @@ export default function LandingNavbar({
 
       {/* Mobile drawer — same order as navItems */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-[60] lg:hidden">
+        <div className="fixed inset-0 z-[60] xl:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={closeMobile} aria-hidden="true" />
           <div className="absolute right-0 top-0 flex h-full w-[min(88vw,340px)] flex-col bg-white shadow-xl">
             <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-gray-200 px-4">
@@ -557,18 +557,18 @@ export default function LandingNavbar({
                 <>
                   <button
                     onClick={handleSignin}
-                    className="flex w-full cursor-pointer items-center justify-center rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7]"
+                    className="flex w-full cursor-pointer items-center justify-center rounded-xl bg-[#2557a7] py-2.5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_8px_22px_rgba(37,87,167,0.28)] active:scale-95"
                   >
                     Sign In
                   </button>
-                  <Link
+                  {/* <Link
                     href="/builder/start"
                     onClick={closeMobile}
                     className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#2557a7] py-2.5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_8px_22px_rgba(37,87,167,0.28)] active:scale-95"
                   >
                     <ShieldCheck size={15} />
                     Get Started Free
-                  </Link>
+                  </Link> */}
                 </>
               )}
             </div>
