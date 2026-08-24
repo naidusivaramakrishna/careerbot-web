@@ -71,6 +71,13 @@ export const signIn = async (data: LoginRequest): Promise<LoginResponse> => {
     setTenantForEmail(data.email, response.data.tenant_id);
   }
 
+  // Store the actual token expiry from backend for accurate refresh timing
+  // Validate expires_in: must be a positive number (clamp to reasonable range: 5 min - 24 hours)
+  if (response.data.expires_in && !isNaN(response.data.expires_in) && response.data.expires_in > 0) {
+    const expirySeconds = Math.max(5 * 60, Math.min(24 * 60 * 60, response.data.expires_in));
+    localStorage.setItem('token_expires_in_seconds', expirySeconds.toString());
+  }
+
   // Clear the signout guard so future 401s can redirect to login normally.
   sessionStorage.removeItem('__signing_out');
 
@@ -107,6 +114,7 @@ export const signOut = async () => {
   codingKeys.forEach((k) => localStorage.removeItem(k));
 
   localStorage.removeItem('token_last_refreshed_at');
+  localStorage.removeItem('token_expires_in_seconds');
   localStorage.removeItem('uploaded_resume_filename');
 
   // Job tracking's unscoped savedJobs/appliedJobs buckets are shared across
@@ -331,17 +339,27 @@ export interface TokenRefreshResponse {
  */
 export const refreshAccessToken = async (): Promise<TokenRefreshResponse> => {
   try {
+    // Use Next.js proxy route which properly forwards Set-Cookie headers
+    // This ensures the new refresh_token reaches the browser correctly
     const response = await httpClient.post<TokenRefreshResponse>(
-      "/auth/refresh",
+      "/api/backend/auth/refresh",
       {},
       {
+        baseURL: "",
         headers: {
           "Content-Type": "application/json",
+          "X-Tenant-Id": getTenantId(),
         },
       }
     );
     // ✅ Backend reads refresh_token from httpOnly cookie automatically
     // Backend sets new access_token as httpOnly cookie in response
+    // Store the actual token expiry from backend for accurate refresh timing
+    // Validate expires_in: must be a positive number (clamp to reasonable range: 5 min - 24 hours)
+    if (response.data.expires_in && !isNaN(response.data.expires_in) && response.data.expires_in > 0) {
+      const expirySeconds = Math.max(5 * 60, Math.min(24 * 60 * 60, response.data.expires_in));
+      localStorage.setItem('token_expires_in_seconds', expirySeconds.toString());
+    }
     return response.data;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Token refresh failed";

@@ -1,34 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sanitiseCookie } from '@/lib/cookieUtils';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-/**
- * Sanitize Set-Cookie headers from the backend.
- * Strips Domain (backend sets its own IP/hostname, which the browser rejects),
- * strips Secure on non-HTTPS dev requests, forces Path=/, adds SameSite=Lax.
- */
-function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
-  const parts = cookie.split(';').map((p) => p.trim()).filter(Boolean);
-  if (parts.length === 0) return cookie;
-
-  const [pair, ...attrs] = parts;
-  let hasSameSite = false;
-  const kept: string[] = [];
-
-  for (const attr of attrs) {
-    const name = attr.split('=')[0].trim().toLowerCase();
-    if (name === 'domain') continue;
-    if (name === 'secure' && !isSecureRequest && process.env.NODE_ENV !== 'production') continue;
-    if (name === 'path') continue;
-    if (name === 'samesite') hasSameSite = true;
-    kept.push(attr);
-  }
-
-  kept.push('Path=/');
-  if (!hasSameSite) kept.push('SameSite=Lax');
-
-  return [pair, ...kept].join('; ');
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -78,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     const setCookies = response.headers.getSetCookie();
     setCookies.forEach((cookie) => {
-      res.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest));
+      res.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest, request.headers.get('host')));
     });
 
     return res;

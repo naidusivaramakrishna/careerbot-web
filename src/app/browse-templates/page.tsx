@@ -18,7 +18,7 @@ import {
 } from "./_data/constants"
 import { resolveTemplateImageUrl } from "@/lib/imageUtils"
 
-const TRUST_BADGES = ['100% ATS Friendly', '14+ Industries', 'Free to browse']
+const TRUST_BADGES = ['100% ATS Friendly', '18 Industries', 'Free to browse']
 const QUICK_SEARCHES = ['Software Engineer', 'Healthcare', 'Finance', 'Legal', 'Education']
 const STEPS = [
   { num: '1', label: 'Choose style', active: true },

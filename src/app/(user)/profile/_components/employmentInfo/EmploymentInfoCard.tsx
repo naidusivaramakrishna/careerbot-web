@@ -1,4 +1,4 @@
-import { MapPin, Pencil } from "lucide-react";
+import { MapPin, Pencil, Info } from "lucide-react";
 import { EmploymentInfo } from "@/api/userApi";
 
 interface Props {
@@ -35,6 +35,14 @@ export default function EmploymentInfoCard({ emp, onEdit }: Props) {
                     <Pencil className="w-3.5 h-3.5" />
                     Edit
                 </button>
+            </div>
+
+            {/* Info banner about default values */}
+            <div className="mb-4 flex gap-2.5 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2.5">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-700 leading-relaxed">
+                    These are your saved defaults. Resume uploads will not override these values — you can edit them anytime.
+                </p>
             </div>
 
             <div className="flex flex-col gap-2 mb-4">

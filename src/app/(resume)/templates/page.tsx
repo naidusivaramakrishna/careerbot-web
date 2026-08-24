@@ -28,16 +28,19 @@ const DOMAIN_NAMES: Record<string, string> = {
   legal: 'Legal',
   logistics_warehouse_operations: 'Logistics & Warehouse Operations',
   marine_merchant_navy: 'Marine & Merchant Navy',
-  modern_minimal_template: 'Modern Minimal',
   research_scholar: 'Research Scholar',
   sales_business_development: 'Sales & Business Development',
-  general_professional: 'General Professional'
+  customer_support_service: 'Customer Support & Account Management',
+  product_engineering_leadership: 'Product & Engineering Leadership',
+  marketing_creative: 'Marketing & Creative',
+  operations_management: 'Operations & Management',
+  human_resources: 'Human Resources & Talent'
 };
 
 import { DOMAIN_FAMILY_IMAGES, FALLBACK_TEMPLATE_IMAGE } from './_constants/templateImages';
 import { resolveTemplateImageUrl } from '@/lib/imageUtils';
 
-const TRUST_BADGES = ['100% ATS Friendly', '14+ Industries', '100+ Templates'];
+const TRUST_BADGES = ['100% ATS Friendly', '18 Industries', '100+ Templates'];
 
 interface DomainModal {
   domainFamily: string;

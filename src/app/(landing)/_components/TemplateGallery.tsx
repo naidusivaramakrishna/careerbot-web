@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, ChevronLeft, ChevronRight, Eye, Search, Sparkles, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
+import { isAuthenticated } from '@/api/authApi';
 
 type TemplateCategory =
   | 'all'
@@ -152,9 +153,10 @@ interface TemplateGalleryProps {
   onOpenSignup?: () => void;
 }
 
-function getAuthToken() {
-  return localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
-}
+// Auth is httpOnly-cookie based, so no token is readable here -- and nothing
+// writes 'auth_token' any more. Reading it meant this always saw "logged out"
+// and showed the signup modal to signed-in users, while keeping a stale
+// pre-cookie token alive in storage. Ask the API instead.
 
 export default function TemplateGallery({ onOpenSignup }: TemplateGalleryProps) {
   const router = useRouter();
@@ -185,17 +187,15 @@ export default function TemplateGallery({ onOpenSignup }: TemplateGalleryProps) 
     });
   }, [activeFilter, searchTerm]);
 
-  const handleUseTemplate = () => {
-    const token = getAuthToken();
+  const handleUseTemplate = async () => {
+    const authed = await isAuthenticated();
 
-    if (!token && onOpenSignup) {
-      onOpenSignup();
+    if (!authed) {
+      if (onOpenSignup) onOpenSignup();
       return;
     }
 
-    if (token) {
-      router.push('/templates');
-    }
+    router.push('/templates');
   };
 
   const scrollCarousel = (direction: 'left' | 'right') => {
