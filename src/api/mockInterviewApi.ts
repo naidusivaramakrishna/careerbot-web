@@ -553,6 +553,7 @@ export interface ReportResponse {
     hr?: number;
     communication?: number;
     confidence?: number;
+    technical?: number;
     [key: string]: number | undefined;
   };
   answers: ReportAnswer[];
@@ -563,6 +564,22 @@ export interface ReportResponse {
   strengths?: string[];
   improvement_areas?: string[];
   created_at: string;
+  // Coding round data (live_technical sessions only)
+  coding_performance?: {
+    score: number;
+    // Backend sends nested criterion objects, not bare numbers. See
+    // careerbot-api tests/coding_test/test_interview_coding.py (_STEP_RESPONSE.grade.criteria).
+    criteria?: Record<string, { score: number; weight: number; feedback?: string }>;
+    // Backend field is ai_feedback_summary; `summary` is kept only as a
+    // tolerated legacy alias.
+    ai_feedback_summary?: string;
+    summary?: string;
+    strengths?: string[];
+    improvements?: string[];
+    follow_ups_completed?: number;
+    average_followup_score?: number;
+    [key: string]: unknown;
+  };
   // Computed fields used by UI (may come from backend or derived)
   duration_min?: number;
   question_count?: number;

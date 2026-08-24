@@ -113,6 +113,19 @@ const processQueue = (
 
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // No Authorization header is set from localStorage.
+    //
+    // This used to read 'access_token_backup' and attach it as a Bearer token
+    // on every request, described as "a backup for httpOnly cookies in case
+    // they don't work across domains". Nothing legitimate ever wrote that key:
+    // both OAuth callbacks establish the session as httpOnly cookies and put
+    // nothing in the query string (verified against careerbot-api
+    // origin/integration/develop2_072026_pr: google_oauth.py and
+    // linkedin_oauth.py). The only writer was a success page copying whatever
+    // happened to be in a public URL — so this line replayed an
+    // attacker-supplied token as the caller's credential on every API call.
+    //
+    // Cookies are sent by withCredentials; that is the auth path.
 
     const correlationId = getCorrelationId();
     if (correlationId && config.headers) {
@@ -213,12 +226,14 @@ client.interceptors.response.use(
     const isAdmin = isAdminRequest(originalRequest?.url);
     const skipAuthRedirect =
       originalRequest?.headers?.get?.('X-Skip-Auth-Redirect') === 'true' ||
-      originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true';
+      originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true' ||
+      originalRequest?.headers?.['x-skip-auth-redirect'] === 'true';
     // skipLoginRedirect: still attempts token refresh on 401, but does NOT
     // redirect to login if the refresh also fails (user is unauthenticated).
     const skipLoginRedirect =
       originalRequest?.headers?.get?.('X-Skip-Login-Redirect') === 'true' ||
-      originalRequest?.headers?.['X-Skip-Login-Redirect'] === 'true';
+      originalRequest?.headers?.['X-Skip-Login-Redirect'] === 'true' ||
+      originalRequest?.headers?.['x-skip-login-redirect'] === 'true';
 
     // 403 = tenant mismatch — do NOT attempt token refresh, just reject
     if (error.response?.status === 403) {
