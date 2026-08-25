@@ -128,7 +128,7 @@ export function StudentOverview() {
             <EmptyState
               icon={Sparkles}
               title="Nothing recorded yet"
-              body="Your faculty adds a record each time you finish a mock test, a coding test, an interview, an English assessment or a resume scan. As soon as one is logged, it shows up here."
+              body="Finish a mock test, a coding test, a mock interview or an English assessment and the result appears here on its own. Your faculty can also add a record by hand."
             />
           ) : (
             <div className="space-y-2">
