@@ -23,7 +23,7 @@ import {
   getMatchAnalytics,
 } from "@/api/parserApi";
 import { getExtensionSession } from "@/api/extensionApi";
-import { hasAllowedDocumentExtension } from "@/utils/validators";
+import { hasAllowedDocumentExtension, hasAllowedResumeExtension } from "@/utils/validators";
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 
@@ -138,7 +138,7 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
 
   const handleResumeUpload = (file: File) => {
     if (!file) return;
-    if (!hasAllowedDocumentExtension(file.name)) { setError("Please upload a PDF, DOC, DOCX, or TXT file."); return; }
+    if (!hasAllowedResumeExtension(file.name)) { setError("Please upload a PDF, DOC, or DOCX file."); return; }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) { setError("Resume must be under 10MB."); return; }
     setUploadedFile(file);
     setError(null);
@@ -415,10 +415,15 @@ const Overview = ({ sessionId }: { sessionId?: string }) => {
       <style>{WIZARD_OVERVIEW_STYLES}</style>
 
       {/* ── Outer wrapper: scopes overlay to the content area only ── */}
-      <div style={{ position: "relative", minHeight: "100vh" }}>
+      {/* minHeight subtracts the fixed Header's height (h-14 = 3.5rem) — this
+          renders inside <main className="mt-14">, so a plain 100vh here would
+          stack on top of that offset and overflow the viewport by 3.5rem,
+          producing an empty scrollbar (see AnalysisContent.tsx, which uses
+          the same calc for the same reason). */}
+      <div style={{ position: "relative", minHeight: "calc(100vh - 3.5rem)" }}>
 
       {/* ── Page shell — blurs only this area when modal is open ── */}
-      <div ref={containerRef} className="relative min-h-screen overflow-hidden" style={{
+      <div ref={containerRef} className="relative min-h-[calc(100vh-3.5rem)] overflow-hidden" style={{
         background: "#EEF4FF",
         filter: wizardStep > 0 ? "blur(4px)" : "none",
         transition: "filter 0.25s ease",

@@ -25,6 +25,7 @@ export default function AuthPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
+
   // Get saved credentials from localStorage for sign-in suggestions
   const getSavedCredentials = (): string[] => {
     try {
@@ -313,6 +314,14 @@ export default function AuthPage() {
             <h2 className="text-xl font-semibold mb-6 text-center text-blue-600">
               {isSignUp ? "Create an account" : "Welcome back"}
             </h2>
+
+            {/* Google sign-in intentionally not offered here.
+                The backend's Google account-creation path assigns UserRole.USER
+                (careerbot-api app/services/user_service/repository.py:224),
+                while recruiter signup assigns UserRole.RECRUITER (:172). Routing
+                recruiters through candidate OAuth silently creates the wrong
+                account type and lands them on the candidate /dashboard.
+                Re-add once the backend exposes a role-aware recruiter OAuth. */}
 
             <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
               {/* Username field - shown for both signup and login */}

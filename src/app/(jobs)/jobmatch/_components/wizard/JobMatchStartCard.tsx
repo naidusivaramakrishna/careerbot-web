@@ -2,12 +2,12 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Sparkles, CheckCircle2, ArrowRight } from "lucide-react";
+import { Sparkles, CheckCircle2, ArrowRight, Upload, FileText, Target } from "lucide-react";
 
 const WIZARD_STEPS = [
-  { title: "Upload Resume",    desc: "Upload your resume in PDF or DOCX format." },
-  { title: "Job Description",  desc: "Paste or upload the target job posting." },
-  { title: "Get Match Score",  desc: "AI analyzes fit and highlights skill gaps." },
+  { title: "Upload Resume",    desc: "Upload your resume in PDF, DOC, or DOCX format.",  badge: "Start here", icon: Upload },
+  { title: "Job Description",  desc: "Paste or upload the target job posting.",    badge: "Next",       icon: FileText },
+  { title: "Get Match Score",  desc: "AI analyzes fit and highlights skill gaps.", badge: "Final",      icon: Target },
 ];
 
 interface JobMatchStartCardProps {
@@ -40,7 +40,7 @@ export default function JobMatchStartCard({ mounted, onStart }: JobMatchStartCar
             }}>
               <Sparkles style={{ width: 11, height: 11, color: "#2557a7" }} />
             </span>
-            AI Job Matching
+            AI-Powered
           </span>
         </div>
 
@@ -53,14 +53,9 @@ export default function JobMatchStartCard({ mounted, onStart }: JobMatchStartCar
           <span style={{ color: "#2557a7" }}>Match</span>
         </h1>
 
-        <p style={{ fontSize: 15.5, color: "#475569", lineHeight: 1.58, maxWidth: 620, margin: "0 0 20px" }}>
+        <p style={{ fontSize: 15.5, color: "#475569", lineHeight: 1.58, maxWidth: 620, margin: 0 }}>
           Upload a resume, add the target job description, and generate a focused fit report with gaps and next edits.
         </p>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#64748B", fontSize: 12.5, fontWeight: 700 }}>
-            <CheckCircle2 style={{ width: 15, height: 15, color: "#16a34a" }} />
-            Private analysis. No workflow changes required.
-        </div>
 
       </motion.div>
 
@@ -112,8 +107,8 @@ export default function JobMatchStartCard({ mounted, onStart }: JobMatchStartCar
                   className="jm-workflow-card"
                   style={{
                     display: "flex",
-                    alignItems: "flex-start",
-                    gap: 12,
+                    flexDirection: "column",
+                    gap: 10,
                     flex: 1,
                     minWidth: 180,
                     minHeight: 108,
@@ -124,18 +119,33 @@ export default function JobMatchStartCard({ mounted, onStart }: JobMatchStartCar
                     transition: "all 0.18s ease",
                   }}
                 >
-                  <span style={{
-                    width: 32, height: 32, borderRadius: 9,
-                    background: idx === 0 ? "#2557a7" : "#fff",
-                    color: idx === 0 ? "#fff" : "#64748B",
-                    border: idx === 0 ? "1px solid #2557a7" : "1px solid #DDE7F4",
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 12.5, fontWeight: 900, flexShrink: 0,
-                  }}>
-                    {idx + 1}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{
+                      width: 32, height: 32, borderRadius: 9,
+                      background: idx === 0 ? "#2557a7" : "#fff",
+                      color: idx === 0 ? "#fff" : "#64748B",
+                      border: idx === 0 ? "1px solid #2557a7" : "1px solid #DDE7F4",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 12.5, fontWeight: 900, flexShrink: 0,
+                    }}>
+                      {idx + 1}
+                    </span>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center",
+                      height: 20, padding: "0 8px", borderRadius: 999,
+                      background: idx === 0 ? "rgba(37,87,167,0.10)" : "#EEF2F7",
+                      color: idx === 0 ? "#2557a7" : "#64748B",
+                      fontSize: 10, fontWeight: 800, letterSpacing: "0.03em",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {step.badge}
+                    </span>
+                  </div>
                   <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: 14, fontWeight: 850, color: "#0f172a", margin: "0 0 5px", lineHeight: 1.2 }}>{step.title}</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "0 0 5px" }}>
+                      <step.icon style={{ width: 14, height: 14, color: idx === 0 ? "#2557a7" : "#94A3B8", flexShrink: 0 }} />
+                      <p style={{ fontSize: 14, fontWeight: 850, color: "#0f172a", margin: 0, lineHeight: 1.2 }}>{step.title}</p>
+                    </div>
                     <p style={{ fontSize: 12.5, color: "#64748B", margin: 0, lineHeight: 1.42 }}>{step.desc}</p>
                   </div>
                 </div>
@@ -143,20 +153,36 @@ export default function JobMatchStartCard({ mounted, onStart }: JobMatchStartCar
             ))}
           </div>
 
-          {/* CTA button */}
+          {/* CTA banner */}
           <div style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
+            justifyContent: "space-between",
             gap: 16,
             flexWrap: "wrap",
             marginTop: 16,
-            paddingTop: 16,
-            borderTop: "1px solid #EEF2F7",
+            padding: "14px 16px",
+            borderRadius: 12,
+            border: "1.5px dashed rgba(37,87,167,0.35)",
+            background: "linear-gradient(180deg,#F7FAFF 0%,#F0F6FF 100%)",
           }}>
-            <p style={{ margin: 0, fontSize: 12.5, color: "#64748B", fontWeight: 650 }}>
-              Analysis starts after your resume and job description are added.
-            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+              <span style={{
+                width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                background: "#fff", border: "1px solid #DDE7F4",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Upload style={{ width: 17, height: 17, color: "#2557a7" }} />
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: "#0f172a" }}>
+                  Upload your resume to start matching
+                </p>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B", fontWeight: 600 }}>
+                  Analysis starts after your resume and job description are added.
+                </p>
+              </div>
+            </div>
             <button
               onClick={onStart}
               className="jm-start-btn"

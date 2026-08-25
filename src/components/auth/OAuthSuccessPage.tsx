@@ -9,6 +9,23 @@ interface Props {
     provider: string
 }
 
+/**
+ * Remove access_token / refresh_token from the address bar without navigating.
+ *
+ * A token in a URL is written to browser history, sent in the Referer header
+ * of any subsequent third-party request from this page, and captured by proxy
+ * and CDN access logs. Replacing the entry as soon as the value has been read
+ * keeps the credential out of all three.
+ */
+function scrubAuthTokensFromUrl(): void {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('access_token') && !url.searchParams.has('refresh_token')) return
+    url.searchParams.delete('access_token')
+    url.searchParams.delete('refresh_token')
+    window.history.replaceState({}, '', url.toString())
+}
+
 export function OAuthSuccessPage({ provider }: Props) {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -17,6 +34,34 @@ export function OAuthSuccessPage({ provider }: Props) {
     useEffect(() => {
         const verifyAndRedirect = async () => {
             try {
+                // NO token is read from the URL, and none is stored.
+                //
+                // The backend's LinkedIn callback redirects here with the
+                // session already set as httpOnly cookies and nothing in the
+                // query string — verified against careerbot-api
+                // origin/integration/develop2_072026_pr:
+                // app/api/v1/endpoints/linkedin_oauth.py, which builds
+                // RedirectResponse(f"{frontend_url}/auth/linkedin/success")
+                // and then calls set_access_token_cookie /
+                // set_refresh_token_cookie. (The careerbot:// deep-link
+                // further down that file is the mobile path, not this page.)
+                //
+                // So the legitimate flow NEVER supplies access_token or
+                // refresh_token here. Anything that does is a crafted link,
+                // which is why the previous behaviour — persisting both to
+                // localStorage "as backup (for debugging or if cookies fail)"
+                // — was worse than redundant: the long-lived refresh token
+                // became readable by any XSS on this origin, and the access
+                // token was replayed as an Authorization: Bearer header on
+                // every subsequent request by the interceptor in lib/http.ts,
+                // letting an attacker-supplied token drive the victim's
+                // session.
+                //
+                // The cookies are the session. The URL is scrubbed so nothing
+                // supplied there survives in history or a Referer header.
+                scrubAuthTokensFromUrl()
+
+                // ✅ Verify authentication (uses httpOnly cookies set by backend callback)
                 const authenticated = await isAuthenticated()
 
                 if (authenticated) {

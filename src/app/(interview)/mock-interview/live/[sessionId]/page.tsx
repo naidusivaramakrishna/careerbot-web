@@ -13,6 +13,7 @@ import {
 } from "@/api/mockInterviewApi";
 import type { LipSyncPayload, LipSyncViseme, LipSyncWord } from "@/api/mockInterviewApi";
 import { MOCK_INTERVIEWERS, isValidInterviewerIndex, pickInterviewerIndex } from "../../_lib/interviewers";
+import type { MockInterviewer } from "../../_lib/interviewers";
 import { CodingTransition } from "@/components/interview/CodingTransition";
 import { CodingStep } from "@/components/interview/CodingStep";
 import type { SubmitSolutionResponse } from "@/app/coding-test/_lib/types";
@@ -672,7 +673,12 @@ export default function LiveInterviewSessionPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
-  const interviewer = useMemo(() => MOCK_INTERVIEWERS[readStoredInterviewerIndex(sessionId) ?? pickInterviewerIndex(sessionId)], [sessionId]);
+  // Typed as MockInterviewer, not left to inference: indexing MOCK_INTERVIEWERS
+  // directly yields the `as const` literal shape, which omits the optional
+  // rotationDeg that InterviewerMouthAnchor declares — so reading it below is a
+  // type error even though the field is part of the intended contract and the
+  // read already guards with `?? 0`.
+  const interviewer = useMemo<MockInterviewer>(() => MOCK_INTERVIEWERS[readStoredInterviewerIndex(sessionId) ?? pickInterviewerIndex(sessionId)], [sessionId]);
 
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
   const [sessionType, setSessionType] = useState("Live");

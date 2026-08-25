@@ -118,14 +118,42 @@ export const recruiterAuthApi = {
     }
   },
 
-  /** Redirect to Google OAuth */
-  googleAuth: (): void => {
-    window.location.href = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1'}/recruiter/auth/google`;
+  /** Get Google OAuth login URL and redirect */
+  googleAuth: async (): Promise<void> => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+      const params = new URLSearchParams({
+        prompt: "select_account",
+        access_type: "offline",
+      });
+      const response = await fetch(`${baseUrl}/auth/google/login-url?${params.toString()}`);
+      const data = await response.json();
+      if (data.auth_url) {
+        window.location.href = data.auth_url;
+      } else {
+        throw new Error('No auth_url in response');
+      }
+    } catch (error) {
+      console.error('Failed to get Google OAuth URL:', error);
+      throw error;
+    }
   },
 
-  /** Redirect to LinkedIn OAuth */
-  linkedinAuth: (): void => {
-    window.location.href = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1'}/recruiter/auth/linkedin`;
+  /** Get LinkedIn OAuth login URL and redirect */
+  linkedinAuth: async (): Promise<void> => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8000/api/v1';
+      const response = await fetch(`${baseUrl}/auth/linkedin/login-url`);
+      const data = await response.json();
+      if (data.auth_url) {
+        window.location.href = data.auth_url;
+      } else {
+        throw new Error('No auth_url in response');
+      }
+    } catch (error) {
+      console.error('Failed to get LinkedIn OAuth URL:', error);
+      throw error;
+    }
   },
 
   // ── Job Management ────────────────────────────────────────────────────────────

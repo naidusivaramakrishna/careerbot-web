@@ -15,8 +15,8 @@ const DEV_CONFIG = {
 };
 
 const PROD_CONFIG = {
-  BASE_URL:   '', // e.g. https://api.careerbot.ai/api/v1
-  PORTAL_URL: '', // e.g. https://app.careerbot.ai
+  BASE_URL:   'https://careerbot-staging.southindia.cloudapp.azure.com/api/v1',
+  PORTAL_URL: 'https://careerbot-staging.southindia.cloudapp.azure.com',
 };
 
 // Guard: refuse to initialise in production mode with empty URLs so the

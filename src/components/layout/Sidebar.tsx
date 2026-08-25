@@ -106,7 +106,7 @@ const NAV_GROUPS: {
   {
     label: "GENERATE",
     items: [
-      { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history", flag: "NEXT_PUBLIC_COVER_LETTER_ENABLED" },
+      { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history" },
       { id: "interview_notes",        label: "Interview Notes",          icon: IcoNotes,       path: "/notes/generate" },
     ],
   },
@@ -125,7 +125,7 @@ const NAV_GROUPS: {
 //
 // IMPORTANT (Codex WEB-1.1 P2): Next only statically inlines
 // `process.env.NEXT_PUBLIC_*` when the reference is a LITERAL property
-// access (e.g. `process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED`). A
+// access (e.g. `process.env.NEXT_PUBLIC_CODING_TEST_ENABLED`). A
 // dynamic lookup like `process.env[someVarName]` is NOT inlined into
 // the client bundle and evaluates to `undefined` at runtime in the
 // browser - which would silently hide every flagged item even when
@@ -136,8 +136,6 @@ const NAV_GROUPS: {
 // via a literal property access so Next can inline it. To add a new
 // flag, add a row here AND set `flag: "..."` on the nav item.
 const STATIC_FLAGS: Record<string, boolean> = {
-  NEXT_PUBLIC_COVER_LETTER_ENABLED:
-    process.env.NEXT_PUBLIC_COVER_LETTER_ENABLED === "true",
   NEXT_PUBLIC_CODING_TEST_ENABLED:
     process.env.NEXT_PUBLIC_CODING_TEST_ENABLED !== "false",
 };

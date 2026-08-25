@@ -163,6 +163,20 @@ export function normalizeJob(job: Record<string, unknown>, matchScore = 0, match
   };
 }
 
+/**
+ * True if every word in `query` appears somewhere in the job's title/company,
+ * in any order — a literal whole-phrase substring match missed real matches
+ * whenever word order or extra words differed, e.g. "python full stack
+ * developer" not matching a job titled "Full Stack Developer (Python)".
+ * An empty/whitespace-only query matches everything.
+ */
+export function jobMatchesSearchQuery(job: Pick<NormalizedJob, "title" | "company">, query: string): boolean {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const haystack = `${job.title} ${job.company}`.toLowerCase();
+  return terms.every((term) => haystack.includes(term));
+}
+
 const MATCHED_PER_PAGE = 50;
 
 export default function JobsContents() {
@@ -791,9 +805,7 @@ export default function JobsContents() {
   //    to search server-side anymore). For Smart Match this only searches
   //    within the currently-loaded page of matches, not the full dataset. ──
   useEffect(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const matchesQuery = (job: NormalizedJob) =>
-      !query || job.title.toLowerCase().includes(query) || job.company.toLowerCase().includes(query);
+    const matchesQuery = (job: NormalizedJob) => jobMatchesSearchQuery(job, searchQuery);
 
     // Matched tab: apply band filter + other filters
     if (activeTab === "matched") {

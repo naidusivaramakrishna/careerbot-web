@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { logger } from "@/lib/logger";
 import { generateNotes, getNotes, updateNotes } from "@/api/mockInterviewApi";
 import { getAllResumesUnified } from "@/api/resumeApi";
 import { parseResumeForEnhancer } from "@/api/enhancerApi";
@@ -358,7 +359,7 @@ function GenerationProgress({ stage }: { stage: number }) {
 
 export default function NotesPage() {
   const router = useRouter();
-  const { setNotesGenerated: setContextNotesGenerated, progressLoading } = useMockInterview();
+  const { setNotesGenerated: setContextNotesGenerated, progressLoading, userId } = useMockInterview();
   const [notes, setNotes] = useState<NotesData | null>(null);
   const [activeTab, setActiveTab] = useState("intro");
   const [experienceLevel, setExperienceLevel] = useState<"fresher" | "experienced">("fresher");
@@ -373,6 +374,7 @@ export default function NotesPage() {
   const [availableResumes, setAvailableResumes] = useState<ResumeOption[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // On mount: if we already have a resume_id, fetch notes directly.
   // getAllResumesUnified is deferred to loadResumes() which only runs when
@@ -524,8 +526,21 @@ export default function NotesPage() {
   };
 
   const persistNotes = (updated: NotesData) => {
-    if (!resumeId) return;
-    updateNotes(resumeId, updated as unknown as Record<string, unknown>).catch(() => {});
+    // updateNotes takes a USER id: PUT /notes/{user_id} compares the segment to
+    // the authenticated user and 403s on any mismatch. Passing resumeId here
+    // meant every note edit failed with 403 — and the empty .catch() swallowed
+    // it, so the edit looked saved and was silently lost on reload.
+    // The notes document is keyed on user_id alone, so this writes the same
+    // record the resume-scoped GET reads.
+    if (!userId) return;
+    updateNotes(userId, updated as unknown as Record<string, unknown>)
+      .then(() => setSaveError(null))
+      .catch((err) => {
+      // Do not swallow: a failed autosave the user cannot see is worse than a
+      // visible error, because the next reload silently discards their edits.
+      logger.error("Failed to persist interview notes", err);
+      setSaveError("Your latest change could not be saved. Please retry.");
+    });
   };
 
   const updateSelfIntro = (v: string) =>
@@ -575,6 +590,20 @@ export default function NotesPage() {
       persistNotes(updated);
       return updated;
     });
+
+  // This effect MUST run before the notesLoading early-return below.
+  // React identifies hooks by call ORDER, so a hook placed after a conditional
+  // return is skipped on the renders that take that branch — the hook count
+  // changes between renders and React either throws "Rendered fewer hooks than
+  // expected" or misassociates state across hooks. eslint's
+  // react-hooks/rules-of-hooks reports it, but next.config sets
+  // eslint.ignoreDuringBuilds: true, so the build would never have caught it.
+  useEffect(() => {
+    if (!notesGenerated && !generating && availableResumes.length === 0) {
+      loadResumes();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesGenerated, generating]);
 
   if (notesLoading) {
     return (
@@ -721,6 +750,16 @@ export default function NotesPage() {
           <div className="flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 mb-3">
             <AlertCircle size={12} className="text-gray-400 shrink-0" />
             {generateError}
+          </div>
+        )}
+
+        {/* Autosave failure. Rendered rather than logged only: these edits are
+            saved in the background, so a silent failure looks identical to a
+            successful save until the page is reloaded and the work is gone. */}
+        {saveError && (
+          <div className="flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 mb-3">
+            <AlertCircle size={12} className="text-red-400 shrink-0" />
+            {saveError}
           </div>
         )}
 
