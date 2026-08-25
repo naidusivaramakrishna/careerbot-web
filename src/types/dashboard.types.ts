@@ -34,7 +34,10 @@ export interface DashboardSummary {
     resumes_enhanced: number;
     job_matches: number;
     job_applications: number;
+    /** Communication/English Assessment sessions — shown on Interview Prep block */
     assessments_taken: number;
+    /** Aptitude/screening mock tests — shown on Mock Test block */
+    mock_tests_taken?: number;
   };
   best_scores: {
     ats_score?: number; // 0-100

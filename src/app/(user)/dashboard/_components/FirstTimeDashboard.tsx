@@ -256,8 +256,8 @@ const OperationsTable = ({ data }: { data: DashboardSummary }) => {
     { label: "ATS Scan", detail: "Check screening compatibility before applying", href: "/atslogin", Icon: ScanSearch, metric: data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score} best` },
     { label: "Job Match", detail: "Compare roles against your resume and profile", href: "/jobmatch", Icon: Briefcase, metric: `${data.usage_counts.job_matches} matches` },
     { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobs", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
-    { label: "Interview Prep", detail: "Mock interviews and communication practice", href: "/mock-interview", Icon: MessageSquare, metric: "Practice" },
-    { label: "Mock Test", detail: "Assessments, aptitude, and screening practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} tests` },
+    { label: "Interview Prep", detail: "Mock interviews and communication practice", href: "/mock-interview", Icon: MessageSquare, metric: data.usage_counts.assessments_taken ? `${data.usage_counts.assessments_taken} sessions` : "Practice" },
+    { label: "Mock Test", detail: "Assessments, aptitude, and screening practice", href: "/mock-test", Icon: MessageSquare, metric: data.usage_counts.mock_tests_taken ? `${data.usage_counts.mock_tests_taken} tests` : "Practice" },
     { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", href: "/coding-test", Icon: Code2, metric: "Practice" },
   ];
 
