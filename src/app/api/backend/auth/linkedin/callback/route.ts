@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
+/**
+ * Sanitize Set-Cookie headers so the browser accepts them for the frontend domain.
+ * See signin/route.ts for detailed explanation.
+ */
 function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
   const parts = cookie.split(';').map((p) => p.trim()).filter(Boolean);
   if (parts.length === 0) return cookie;
@@ -33,7 +37,7 @@ function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
  * 2. We forward to backend at /api/v1/auth/linkedin/callback
  * 3. Backend exchanges code, creates/updates user, sets tokens in httpOnly cookies
  * 4. We sanitize Set-Cookie headers for frontend domain
- * 5. We redirect to /auth/linkedin/success with tokens in URL as backup
+ * 5. We redirect to /auth/linkedin/success (no tokens in the query string)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -52,7 +56,8 @@ export async function GET(request: NextRequest) {
     backendUrl.searchParams.set('code', code);
     if (state) backendUrl.searchParams.set('state', state);
 
-    console.log(`[LinkedIn OAuth] Exchanging code at ${backendUrl.toString()}`);
+    // Never log backendUrl — it carries the live authorization code and state.
+    console.info('[LinkedIn OAuth] Exchanging authorization code');
 
     const backendResponse = await fetch(backendUrl.toString(), {
       method: 'GET',
@@ -71,16 +76,18 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL('/auth/error?message=no_redirect', request.url));
       }
 
-      console.log(`[LinkedIn OAuth] Backend redirecting to: ${location}`);
+      // The Location header can carry auth material; log only that we got one.
+      console.info('[LinkedIn OAuth] Backend returned a redirect');
 
-      const redirectUrl = new URL(location, BACKEND_URL);
-      const accessToken = redirectUrl.searchParams.get('access_token');
-      const refreshToken = redirectUrl.searchParams.get('refresh_token');
-
+      // Redirect WITHOUT copying any token into the query string.
+      //
+      // This previously forwarded access_token / refresh_token from the backend
+      // redirect "as backup". A token in a URL is persisted to browser history,
+      // sent in the Referer of later requests from that page, and captured by
+      // proxy and CDN logs — and the success page then treated whatever arrived
+      // as a credential. The session is carried by the Set-Cookie headers
+      // forwarded below, which is the mechanism the backend actually uses.
       const frontendUrl = new URL('/auth/linkedin/success', request.url);
-      if (accessToken) frontendUrl.searchParams.set('access_token', accessToken);
-      if (refreshToken) frontendUrl.searchParams.set('refresh_token', refreshToken);
-
       const response = NextResponse.redirect(frontendUrl);
 
       const isSecureRequest =
