@@ -193,25 +193,34 @@ export default function Header() {
   /* Profile */
   useEffect(() => {
     const fetchProfile = async () => {
-      // Step 1: try to get the full profile
-      let profile: UserProfile | null = null;
-      try {
-        profile = await getProfile({ skipAuthRedirect: true });
-      } catch { /* silently fail */ }
+      // Fetch profile and dashboard summary in parallel.
+      // Dashboard summary is ALWAYS the authoritative source for display name
+      // and email — it is tied directly to the authenticated user's JWT identity
+      // and is proven to return the correct user after any sign-in flow (including
+      // OAuth account switches). getProfile() is used for supplementary fields
+      // (username, headline, etc.) but must NOT override the identity fields from
+      // the summary, because it can return stale data when tenant scoping or
+      // session sequencing causes it to resolve the wrong account.
+      const [profileResult, summaryResult] = await Promise.allSettled([
+        getProfile({ skipAuthRedirect: true }),
+        getDashboardSummary({ skipAuthRedirect: true }),
+      ]);
 
-      // Step 2: if profile has no display name (or failed entirely), fall back to
-      // dashboard summary which always carries user.name after signup
-      if (!profile?.username && !profile?.full_name) {
-        try {
-          const summary = await getDashboardSummary({ skipAuthRedirect: true });
-          if (summary?.user?.name) {
-            profile = {
-              ...(profile ?? {}),
-              full_name: summary.user.name,
-              email: profile?.email ?? summary.user.email,
-            };
-          }
-        } catch { /* ignore */ }
+      let profile: UserProfile | null =
+        profileResult.status === 'fulfilled' ? profileResult.value : null;
+
+      const summaryUser =
+        summaryResult.status === 'fulfilled'
+          ? summaryResult.value?.user
+          : null;
+
+      // Dashboard summary wins for name and email — always overwrite.
+      if (summaryUser?.name || summaryUser?.email) {
+        profile = {
+          ...(profile ?? {}),
+          full_name: summaryUser.name || profile?.full_name,
+          email: summaryUser.email || profile?.email,
+        };
       }
 
       if (profile) setUserProfile(profile);
@@ -235,6 +244,7 @@ export default function Header() {
     const onProfileUpdate = (e: CustomEvent) => {
       setUserProfile((prev) => prev ? {
         ...prev,
+        username: e.detail?.username ?? prev.username,
         full_name: e.detail?.full_name ?? prev.full_name,
         email: e.detail?.email ?? prev.email,
       } : prev);
@@ -276,9 +286,9 @@ export default function Header() {
     refetchUnreadCount();
   };
 
-  const displayName    = userProfile?.username || userProfile?.full_name || 'User';
+  const displayName    = userProfile?.full_name || userProfile?.username || 'User';
   const displayEmail   = userProfile?.email || '';
-  const displayInitial = (userProfile?.username || userProfile?.full_name || 'U')[0].toUpperCase();
+  const displayInitial = (userProfile?.full_name || userProfile?.username || 'U')[0].toUpperCase();
   const creditPct = balance?.credits_total
     ? Math.min(100, Math.max(0, (balance.credits_remaining / balance.credits_total) * 100))
     : 0;
@@ -549,8 +559,8 @@ export default function Header() {
               <div className="absolute right-0 top-10 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-50 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
-                  {userProfile?.full_name && userProfile.full_name !== displayName && (
-                    <p className="text-[12px] text-gray-600 truncate">{userProfile.full_name}</p>
+                  {userProfile?.username && userProfile.username !== displayName && (
+                    <p className="text-[12px] text-gray-500 truncate">@{userProfile.username}</p>
                   )}
                   {displayEmail && (
                     <p className="text-[13px] text-gray-500 truncate mt-0.5">{displayEmail}</p>

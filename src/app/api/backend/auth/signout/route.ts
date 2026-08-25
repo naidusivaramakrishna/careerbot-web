@@ -20,13 +20,18 @@ export async function POST(request: NextRequest) {
   }).catch(() => {});
 
   // Clear all auth cookies from the Next.js origin.
-  // refresh_token is cleared at BOTH paths because:
-  //   - Path=/ comes from the signin proxy (sanitiseCookie forces Path=/)
-  //   - Path=/api/v1/auth/refresh comes from subsequent refresh responses that
-  //     go through the next.config.ts rewrite unsanitized (backend sets this path)
+  // refresh_token must be cleared at ALL three paths it could have been written to:
+  //   - Path=/   : set by old signin flows before cookieUtils was introduced
+  //   - Path=/api : set by sanitiseCookie (cookieUtils.ts REFRESH_COOKIE_PATH)
+  //                 for signin, OAuth callbacks, and token refresh responses
+  //   - Path=/api/v1/auth/refresh : set by backend directly when the rewrite
+  //                                 proxy forwards the response unsanitized
+  // Missing any of these leaves a stale refresh_token that survives sign-out,
+  // which allows a previous session's token to contaminate the next sign-in.
   const res = NextResponse.json({ success: true });
   res.headers.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
   res.headers.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+  res.headers.append('Set-Cookie', 'refresh_token=; Path=/api; HttpOnly; SameSite=Lax; Max-Age=0');
   res.headers.append('Set-Cookie', 'refresh_token=; Path=/api/v1/auth/refresh; HttpOnly; SameSite=Lax; Max-Age=0');
   return res;
 }

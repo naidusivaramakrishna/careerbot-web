@@ -64,7 +64,14 @@ function LinkedInOAuthContent() {
         sessionStorage.removeItem("__signing_out");
         await new Promise((resolve) => setTimeout(resolve, 400));
         if (cancelled) return;
-        router.push(getStoredAuthRedirect());
+        // Hard navigation — not router.push — so that:
+        // 1. The Next.js client-side router cache (RSC payloads) is bypassed,
+        //    preventing a previous user's stale cached page from being served.
+        // 2. The server-side auth guard in (user)/layout.tsx re-runs with the
+        //    new session cookies.
+        // 3. Module-scoped JS caches (e.g. cachedUserId) reset to null.
+        // signOut() uses the same pattern for the same reasons.
+        window.location.href = getStoredAuthRedirect();
       } catch {
         if (cancelled) return;
         localStorage.removeItem("token_last_refreshed_at");
