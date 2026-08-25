@@ -22,7 +22,6 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
-  ChevronLeft,
   Loader2,
   AlertCircle,
   Sparkles,
@@ -592,18 +591,6 @@ export default function NotesPage() {
     });
 
   // This effect MUST run before the notesLoading early-return below.
-  // React identifies hooks by call ORDER, so a hook placed after a conditional
-  // return is skipped on the renders that take that branch — the hook count
-  // changes between renders and React either throws "Rendered fewer hooks than
-  // expected" or misassociates state across hooks. eslint's
-  // react-hooks/rules-of-hooks reports it, but next.config sets
-  // eslint.ignoreDuringBuilds: true, so the build would never have caught it.
-  useEffect(() => {
-    if (!notesGenerated && !generating && availableResumes.length === 0) {
-      loadResumes();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notesGenerated, generating]);
 
   if (notesLoading) {
     return (
@@ -617,13 +604,6 @@ export default function NotesPage() {
   if (!notesGenerated && !generating) {
     return (
       <div className="max-w-lg mx-auto px-4 sm:px-6 py-8">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-5 transition-colors"
-        >
-          <ChevronLeft size={14} /> Back
-        </button>
-
         <h1 className="text-xl font-bold text-gray-900 tracking-tight mb-1">Generate Interview Notes</h1>
         <p className="text-sm text-gray-500 mb-5">
           AI-generated scripts for 12+ HR questions from your resume.
@@ -790,12 +770,6 @@ export default function NotesPage() {
 
       <div className="flex items-center justify-between mb-4">
         <div>
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-2 transition-colors"
-          >
-            <ChevronLeft size={14} /> Back
-          </button>
           <h1 className="text-lg font-bold text-gray-900 tracking-tight">Interview Notes</h1>
         </div>
         <button

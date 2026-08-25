@@ -8,7 +8,7 @@ import PracticeLandingPage from "../_components/PracticeLandingPage";
 
 const STATS = [
   { value: "10", label: "questions" },
-  { value: "2", label: "rounds" },
+  { value: "1", label: "round" },
   { value: "AI", label: "feedback" },
   { value: "FIT", label: "focus" },
 ];

@@ -162,7 +162,7 @@ function InfoScreen({ onContinue }: { onContinue: () => void }) {
           </div>
         </header>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
           <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm lg:p-6">
             <div className="max-w-3xl">
               <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700">
@@ -645,8 +645,9 @@ export default function LiveSetupPage() {
       resume_id: resumeId,
       enable_streaming_stt: true,
       voice: selectedInterviewer.voice,
-      use_orchestrator: false,
+      use_orchestrator: true,
       interviewer_index: interviewerIndex,
+      interviewer_slug: selectedInterviewer.slug,
       interviewer_name: selectedInterviewer.name,
       gender: selectedInterviewer.gender,
       session_type_label: sessionType,

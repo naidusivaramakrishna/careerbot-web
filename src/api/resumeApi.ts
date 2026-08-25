@@ -766,7 +766,7 @@ export const addSkillToCategory = async (
       `/resumes/${resumeId}/skills/${category}`,
       { name: skillName }
     );
-    const id = response.data?.id ?? response.data?._id;
+    const id = response.data?.id ?? response.data?._id ?? response.data?.skill?.id;
     logger.info("✅ Skill added successfully, id:", id);
     return { id };
   } catch (error) {

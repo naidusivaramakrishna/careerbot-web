@@ -294,6 +294,9 @@ const EditorTab: React.FC<Props> = ({
 
 
   const triggerAutoSave = useCallback(async (sectionName: string) => {
+    // Skills uses individual add/delete endpoints on each chip action — no PATCH needed
+    if (sectionName === "Skills") return;
+
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
@@ -301,7 +304,7 @@ const EditorTab: React.FC<Props> = ({
 
     autoSaveTimerRef.current = setTimeout(async () => {
       const resumeId = localStorage.getItem("current_resume_id");
-      
+
       if (!resumeId || !sectionName || resumeId === 'null' || resumeId === 'undefined') {
         // // console.log("⏸️ Skipping auto-save: No valid resume ID");
         return;

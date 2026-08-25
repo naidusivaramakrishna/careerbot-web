@@ -137,9 +137,41 @@ const RHUBARB_VISEME_TO_NORMALIZED: Record<string, string> = {
 
 const MOUTH_SPRITE_IDS = ["sil", "PP", "FF", "TH", "DD", "KK", "CH", "SS", "NN", "RR", "AA", "E", "I", "O", "U"] as const;
 const MOUTH_SPRITE_ID_SET = new Set<string>(MOUTH_SPRITE_IDS);
+const INTERVIEWER_IMAGE_WIDTH = 1672;
+const INTERVIEWER_IMAGE_HEIGHT = 941;
+const INTERVIEWER_IMAGE_ZOOM = 1.24;
+const INTERVIEWER_OBJECT_POSITION_X = 0.5;
+const INTERVIEWER_OBJECT_POSITION_Y = 0.44;
+
+interface RenderedMediaFrame {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
+}
+
+function getInterviewerMediaFrame(containerWidth: number, containerHeight: number): RenderedMediaFrame {
+  const coverScale = Math.max(
+    containerWidth / INTERVIEWER_IMAGE_WIDTH,
+    containerHeight / INTERVIEWER_IMAGE_HEIGHT,
+  );
+  const coverWidth = INTERVIEWER_IMAGE_WIDTH * coverScale;
+  const coverHeight = INTERVIEWER_IMAGE_HEIGHT * coverScale;
+  const coverLeft = (containerWidth - coverWidth) * INTERVIEWER_OBJECT_POSITION_X;
+  const coverTop = (containerHeight - coverHeight) * INTERVIEWER_OBJECT_POSITION_Y;
+  const zoomedWidth = coverWidth * INTERVIEWER_IMAGE_ZOOM;
+  const zoomedHeight = coverHeight * INTERVIEWER_IMAGE_ZOOM;
+
+  return {
+    left: coverLeft + (coverWidth - zoomedWidth) / 2,
+    top: coverTop + (coverHeight - zoomedHeight) / 2,
+    width: zoomedWidth,
+    height: zoomedHeight,
+  };
 }
 
 function isRhubarbLipSync(lipSync: LipSyncPayload | null | undefined, visemeId: string) {
@@ -212,7 +244,7 @@ function mouthSpriteIdFromCue(cue: MouthCue) {
 }
 
 function mouthSpriteSrc(basePath: string, cue: MouthCue) {
-  return `${basePath}/mouth-${mouthSpriteIdFromCue(cue).toLowerCase()}.svg`;
+  return `${basePath}/mouth-${mouthSpriteIdFromCue(cue).toLowerCase()}.png`;
 }
 interface ScoreToast {
   questionNumber: number;
@@ -364,13 +396,9 @@ function QuestionTimer({ secondsLeft, total }: { secondsLeft: number; total: num
 // ─── End Early modal ──────────────────────────────────────────────────────────
 
 function EndEarlyModal({
-  questionNumber,
-  totalQuestions,
   onConfirm,
   onCancel,
 }: {
-  questionNumber: number;
-  totalQuestions: number;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -388,9 +416,6 @@ function EndEarlyModal({
             <X size={18} />
           </button>
         </div>
-        <p className="text-sm text-gray-600 mb-2">
-          You have answered <span className="text-gray-900 font-semibold">{questionNumber - 1} of {totalQuestions}</span> questions.
-        </p>
         <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-6">
           Ending early will generate a partial report. Your scores for completed questions will still be saved.
         </p>
@@ -405,7 +430,7 @@ function EndEarlyModal({
             onClick={onConfirm}
             className="flex-1 py-2.5 bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors"
           >
-            End &amp; Get Report
+            End
           </button>
         </div>
       </div>
@@ -687,7 +712,7 @@ export default function LiveInterviewSessionPage() {
   const [questionNumber, setQuestionNumber] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [timeLeft, setTimeLeft] = useState(120);
-  const [timeLimitTotal, setTimeLimitTotal] = useState(120);
+  const timeLimitTotalRef = useRef(120);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const isAudioMutedRef = useRef(false); // ref so WS handler sees latest value without stale closure
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null); // current TTS audio element
@@ -702,7 +727,9 @@ export default function LiveInterviewSessionPage() {
   const [completedReportId, setCompletedReportId] = useState<string | null>(null);
   const [interviewerMouthCue, setInterviewerMouthCue] = useState<MouthCue>(CLOSED_MOUTH_CUE);
   const [mouthSpriteFailed, setMouthSpriteFailed] = useState(false);
+  const [interviewerMediaFrame, setInterviewerMediaFrame] = useState<RenderedMediaFrame | null>(null);
   const [useLipSyncQuestionReveal, setUseLipSyncQuestionReveal] = useState(false);
+  const interviewerStageRef = useRef<HTMLElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   // Keep ref in sync with state so toggles mid-playback take effect
@@ -712,9 +739,30 @@ export default function LiveInterviewSessionPage() {
     setMouthSpriteFailed(false);
     MOUTH_SPRITE_IDS.forEach((spriteId) => {
       const image = new window.Image();
-      image.src = `${interviewer.mouthSpriteBasePath}/mouth-${spriteId.toLowerCase()}.svg`;
+      image.src = `${interviewer.mouthSpriteBasePath}/mouth-${spriteId.toLowerCase()}.png`;
     });
   }, [interviewer.mouthSpriteBasePath]);
+
+  useEffect(() => {
+    const stage = interviewerStageRef.current;
+    if (!stage) return;
+
+    const updateFrame = () => {
+      const rect = stage.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      setInterviewerMediaFrame(getInterviewerMediaFrame(rect.width, rect.height));
+    };
+
+    updateFrame();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateFrame);
+    observer?.observe(stage);
+    window.addEventListener("resize", updateFrame);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateFrame);
+    };
+  }, []);
 
   useEffect(() => {
     const storedType = sessionStorage.getItem("live_session_type");
@@ -940,6 +988,7 @@ export default function LiveInterviewSessionPage() {
   const startTimer = useCallback((duration: number) => {
     stopTimer();
     setTimeLeft(duration);
+    timeLimitTotalRef.current = duration;
     timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
@@ -1189,7 +1238,7 @@ export default function LiveInterviewSessionPage() {
         setPhase(msg.is_follow_up ? "follow-up" : "ai-talking");
         // Use server's time_limit_s; fall back to 120 only when server sends 0 or omits it
         const limit = msg.time_limit_s || 120;
-        const afterAudio = () => { setUseLipSyncQuestionReveal(false); setPhase("listening"); setTimeLimitTotal(limit); startTimer(limit); };
+        const afterAudio = () => { setUseLipSyncQuestionReveal(false); setPhase("listening"); startTimer(limit); };
         playTtsAudio(msg.audio, isAudioMutedRef, ttsAudioRef, ttsVisualizerCleanupRef, lipSync, msg.text, setInterviewerMouthCue, setVisibleQuestionText, afterAudio);
         break;
       }
@@ -1364,8 +1413,8 @@ export default function LiveInterviewSessionPage() {
     stopTimer();
     setShowEndModal(false);
     wsSend({ type: "end_interview" });
-    setPhase("completed");
-  }, [stopTimer, wsSend]);
+    router.push("/mock-interview/history");
+  }, [stopTimer, wsSend, router]);
 
   const doReconnect = useCallback(async () => {
     if (!sessionId) return;
@@ -1455,8 +1504,6 @@ export default function LiveInterviewSessionPage() {
     <>
       {showEndModal && (
         <EndEarlyModal
-          questionNumber={questionNumber}
-          totalQuestions={totalQuestions}
           onConfirm={handleEndInterview}
           onCancel={() => setShowEndModal(false)}
         />
@@ -1642,57 +1689,71 @@ export default function LiveInterviewSessionPage() {
 
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.14fr)_minmax(320px,0.78fr)_300px] gap-3 overflow-hidden">
               {/* Interviewer */}
-              <section className="relative min-h-[360px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)]">
-                <Image
-                  src={interviewer.src}
-                  alt={`${interviewer.name}, AI interviewer seated in a professional interview room`}
-                  fill
-                  className="scale-[1.24] object-cover object-[center_44%]"
-                  priority
-                  sizes="48vw"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/5 to-black/25" aria-hidden="true" />
+              <section
+                ref={interviewerStageRef}
+                className="relative min-h-[360px] overflow-hidden rounded-2xl border border-gray-200 bg-gray-950 shadow-[0_16px_48px_rgba(15,23,42,0.10)]"
+              >
+                <div
+                  className="absolute"
+                  style={interviewerMediaFrame ? {
+                    left: `${interviewerMediaFrame.left}px`,
+                    top: `${interviewerMediaFrame.top}px`,
+                    width: `${interviewerMediaFrame.width}px`,
+                    height: `${interviewerMediaFrame.height}px`,
+                  } : { inset: 0 }}
+                >
+                  <Image
+                    src={interviewer.src}
+                    alt={`${interviewer.name}, AI interviewer seated in a professional interview room`}
+                    fill
+                    className="object-fill"
+                    priority
+                    sizes="48vw"
+                  />
 
-                {isQuestionBeingSpoken && (
-                  <div
-                    className="pointer-events-none absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
-                    data-testid="interviewer-mouth-cue"
-                    data-viseme={interviewerMouthCue.visemeId}
-                    data-mouth-sprite={mouthSpriteIdFromCue(interviewerMouthCue)}
-                    style={{
-                      left: `${mouthAnchor.xPercent}%`,
-                      top: `${mouthAnchor.yPercent}%`,
-                      width: `clamp(${mouthAnchor.minWidthPx}px, ${mouthAnchor.widthPercent}%, ${mouthAnchor.maxWidthPx}px)`,
-                      transform: `translate(-50%, calc(-50% + ${interviewerMouthCue.yOffset}px)) rotate(${mouthAnchor.rotationDeg ?? 0}deg) scale(${0.96 + interviewerMouthLevel * 0.08})`,
-                    }}
-                    aria-hidden="true"
-                  >
-                    {!mouthSpriteFailed ? (
-                      <Image
-                        src={mouthSprite}
-                        alt=""
-                        width={120}
-                        height={64}
-                        unoptimized
-                        className="block h-auto w-full select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.22)] transition-[opacity,transform] duration-75 ease-linear motion-reduce:transition-none"
-                        style={{ opacity: 0.72 + interviewerMouthLevel * 0.28 }}
-                        onError={() => setMouthSpriteFailed(true)}
-                        draggable={false}
-                      />
-                    ) : (
-                      <span
-                        className="block bg-black/75 shadow-[0_0_10px_rgba(0,0,0,0.24)] transition-[width,height,border-radius,filter] duration-75 ease-linear motion-reduce:transition-none"
-                        style={{
-                          width: `${28 + interviewerMouthLevel * 14}px`,
-                          height: `${14 + interviewerMouthLevel * 10}px`,
-                          borderRadius: interviewerMouthCue.borderRadius,
-                          filter: `blur(${0.12 + interviewerMouthLevel * 0.28}px)`,
-                          opacity: 0.12 + interviewerMouthLevel * 0.32,
-                        }}
-                      />
-                    )}
-                  </div>
-                )}                <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
+                  {isQuestionBeingSpoken && (
+                    <div
+                      className="pointer-events-none absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+                      data-testid="interviewer-mouth-cue"
+                      data-viseme={interviewerMouthCue.visemeId}
+                      data-mouth-sprite={mouthSpriteIdFromCue(interviewerMouthCue)}
+                      style={{
+                        left: `${mouthAnchor.xPercent}%`,
+                        top: `${mouthAnchor.yPercent}%`,
+                        width: `clamp(${mouthAnchor.minWidthPx}px, ${mouthAnchor.widthPercent}%, ${mouthAnchor.maxWidthPx}px)`,
+                        transform: `translate(-50%, calc(-50% + ${interviewerMouthCue.yOffset}px)) rotate(${mouthAnchor.rotationDeg ?? 0}deg) scale(${0.96 + interviewerMouthLevel * 0.08})`,
+                      }}
+                      aria-hidden="true"
+                    >
+                      {!mouthSpriteFailed ? (
+                        <Image
+                          src={mouthSprite}
+                          alt=""
+                          width={120}
+                          height={64}
+                          unoptimized
+                          className="block h-auto w-full select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.22)] transition-[opacity,transform] duration-75 ease-linear motion-reduce:transition-none"
+                          style={{ opacity: 0.72 + interviewerMouthLevel * 0.28 }}
+                          onError={() => setMouthSpriteFailed(true)}
+                          draggable={false}
+                        />
+                      ) : (
+                        <span
+                          className="block bg-black/75 shadow-[0_0_10px_rgba(0,0,0,0.24)] transition-[width,height,border-radius,filter] duration-75 ease-linear motion-reduce:transition-none"
+                          style={{
+                            width: `${28 + interviewerMouthLevel * 14}px`,
+                            height: `${14 + interviewerMouthLevel * 10}px`,
+                            borderRadius: interviewerMouthCue.borderRadius,
+                            filter: `blur(${0.12 + interviewerMouthLevel * 0.28}px)`,
+                            opacity: 0.12 + interviewerMouthLevel * 0.32,
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="absolute inset-0 bg-linear-to-t from-black/45 via-black/5 to-black/25" aria-hidden="true" />
+                <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-md">
                   <span className={`h-2 w-2 rounded-full ${wsConnected ? "bg-emerald-400" : "bg-white/50"}`} />
                   {wsConnected ? "Live interview room" : "Connecting room"}
                 </div>
@@ -1888,7 +1949,7 @@ export default function LiveInterviewSessionPage() {
               <div className="rounded-2xl border border-[#2557a7]/20 bg-white p-3 shadow-sm">
                 {phase === "listening" ? (
                   <div className="flex items-center gap-3 rounded-xl bg-[#2557a7]/5 p-2">
-                    <QuestionTimer secondsLeft={timeLeft} total={timeLimitTotal} />
+                    <QuestionTimer secondsLeft={timeLeft} total={timeLimitTotalRef.current} />
                     <button
                       onClick={handleEndAnswer}
                       className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#2557a7] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[#1e4a8f]"

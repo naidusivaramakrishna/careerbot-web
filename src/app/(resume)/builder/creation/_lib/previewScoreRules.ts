@@ -5,11 +5,14 @@ const WEIGHTS = {
   contact: 10,
   summary: 10,
   education: 15,
-  skills: 20,
-  evidence: 20,
+  skills: 15,
+  evidence: 15,
   metrics: 10,
-  certifications: 10,
+  certifications: 5,
   formatting: 5,
+  achievements: 5,
+  languages: 5,
+  extras: 5,
 } as const;
 
 export const calculateScoreBreakdown = (normalized: NormalizedResumeData): PreviewScoreBreakdown => {
@@ -21,7 +24,10 @@ export const calculateScoreBreakdown = (normalized: NormalizedResumeData): Previ
     evidence: calculateEvidenceScore(normalized, normalized.isFresher),
     metrics: calculateMetricsScore(normalized),
     certifications: calculateCertificationsScore(normalized.certifications),
-    formatting: 5, // Base formatting score
+    formatting: 5,
+    achievements: calculateAchievementsScore(normalized.achievements),
+    languages: calculateLanguagesScore(normalized.languages),
+    extras: calculateExtrasScore(normalized.extras),
   };
 
   return breakdown;
@@ -60,33 +66,33 @@ const calculateEducationScore = (education: { count: number; hasGPA: boolean; ha
 const calculateSkillsScore = (skills: { total: number; categorized: boolean; categories: number }): number => {
   let score = 0;
 
-  if (skills.total >= 10) score += 8;
-  else if (skills.total >= 5) score += 5;
+  if (skills.total >= 10) score += 6;
+  else if (skills.total >= 5) score += 4;
   else if (skills.total > 0) score += 2;
 
-  if (skills.categorized && skills.categories >= 3) score += 8;
-  else if (skills.categorized && skills.categories > 0) score += 4;
+  if (skills.categorized && skills.categories >= 3) score += 6;
+  else if (skills.categorized && skills.categories > 0) score += 3;
 
-  return Math.min(score, 20);
+  return Math.min(score, 15);
 };
 
 const calculateEvidenceScore = (normalized: NormalizedResumeData, isFresher: boolean): number => {
   let score = 0;
 
   if (normalized.experience.workCount > 0) {
-    score += 10;
-    if (normalized.experience.workCount >= 2) score += 5;
+    score += 8;
+    if (normalized.experience.workCount >= 2) score += 4;
   }
 
   if (normalized.experience.internshipCount > 0) {
-    score += 5;
+    score += 3;
   }
 
   if (normalized.experience.projectCount > 0) {
-    score += normalized.isFresher ? 8 : 5;
+    score += normalized.isFresher ? 7 : 4;
   }
 
-  return Math.min(score, 20);
+  return Math.min(score, 15);
 };
 
 const calculateMetricsScore = (normalized: NormalizedResumeData): number => {
@@ -102,11 +108,37 @@ const calculateCertificationsScore = (certifications: { count: number; hasIssuer
   let score = 0;
 
   if (certifications.count > 0) {
-    score += 5;
-    if (certifications.hasIssuer) score += 5;
+    score += 3;
+    if (certifications.hasIssuer) score += 2;
   }
 
-  return Math.min(score, 10);
+  return Math.min(score, 5);
+};
+
+const calculateAchievementsScore = (achievements: { count: number; awardsCount: number }): number => {
+  let score = 0;
+
+  if (achievements.count > 0) score += 3;
+  if (achievements.count >= 3) score += 1;
+  if (achievements.awardsCount > 0) score += 1;
+
+  return Math.min(score, 5);
+};
+
+const calculateLanguagesScore = (languages: { count: number }): number => {
+  if (languages.count === 0) return 0;
+  if (languages.count >= 2) return 5;
+  return 3;
+};
+
+const calculateExtrasScore = (extras: { volunteeringCount: number; hobbiesCount: number; interestsCount: number; publicationsCount: number }): number => {
+  let score = 0;
+
+  if (extras.volunteeringCount > 0) score += 2;
+  if (extras.publicationsCount > 0) score += 2;
+  if (extras.hobbiesCount > 0 || extras.interestsCount > 0) score += 1;
+
+  return Math.min(score, 5);
 };
 
 export const generateSuggestions = (normalized: NormalizedResumeData, breakdown: PreviewScoreBreakdown): PreviewScoreSuggestion[] => {
@@ -220,7 +252,10 @@ export const calculateFinalScore = (breakdown: PreviewScoreBreakdown): number =>
     breakdown.evidence +
     breakdown.metrics +
     breakdown.certifications +
-    breakdown.formatting;
+    breakdown.formatting +
+    breakdown.achievements +
+    breakdown.languages +
+    breakdown.extras;
 
   return Math.round(total);
 };

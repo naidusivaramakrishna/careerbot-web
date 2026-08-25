@@ -658,6 +658,10 @@ export interface LiveCreateRequest {
   target_role?: string;
   enable_streaming_stt?: boolean;
   voice?: string;
+  interviewer_index?: number;
+  interviewer_name?: string;
+  interviewer_gender?: string;
+  interviewer_slug?: string;
   use_orchestrator?: boolean;
 }
 

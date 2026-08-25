@@ -158,7 +158,7 @@ const VISIBLE_NAV_GROUPS = NAV_GROUPS
   .map((group) => ({ ...group, items: group.items.filter(isItemEnabled) }))
   .filter((group) => group.items.length > 0);
 
-const EXPANDED_PATHS = ["/dashboard", "/profile"];
+const EXPANDED_PATHS = ["/dashboard", "/profile", "/atslogin", "/tracker", "/notes"];
 
 /* Collapsed sidebar sub-item flyout — uses JS hover + close delay so the
    cursor can cross the gap between icon and panel without it disappearing. */
@@ -361,11 +361,11 @@ export default function Sidebar() {
       <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-16 bg-white flex flex-col z-30 overflow-visible"
         id="dashboard-sidebar"
         style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
-        <nav className="flex-1 min-h-0 overflow-visible py-1 px-2" aria-label="Primary navigation collapsed" role="navigation">
+        <nav className="flex-1 min-h-0 overflow-visible py-0.5 px-2" aria-label="Primary navigation collapsed" role="navigation">
           {VISIBLE_NAV_GROUPS.map((group, gi) => (
             <div key={group.label}>
-              {gi > 0 && <div className="mx-1 my-1.5 border-t border-gray-300" />}
-              <div className="space-y-px">
+              {gi > 0 && <div className="mx-1 my-1 border-t border-gray-300" />}
+              <div className="space-y-0">
                 {group.items.map((item) => {
                   const isActive = activeId === item.id;
                   const Icon = item.icon;
@@ -440,7 +440,7 @@ export default function Sidebar() {
     const btn = (
       <button
         onClick={() => handleNavigation(item)}
-        className={`w-full flex items-center gap-2 px-2.5 py-1 rounded-lg transition-all duration-200 group/btn relative ${
+        className={`w-full flex items-center gap-2 px-2.5 py-0.5 rounded-lg transition-all duration-200 group/btn relative ${
           isActive ? "" : "hover:bg-gray-50"
         }`}
         style={
@@ -518,11 +518,11 @@ export default function Sidebar() {
         <rect x="0.7" y="0.7" width="4.1" height="11.6" rx="2" fill="#2557a7" />
       </svg>
     </button>
-    <div className="fixed top-14 left-0 h-[calc(100vh-56px)] w-60 bg-white flex flex-col z-30 overflow-hidden"
+    <div className="fixed top-14 left-0 h-[calc(100vh-56px)] bg-white flex flex-col z-30 overflow-hidden"
       id="dashboard-sidebar"
-      style={{ borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
+      style={{ width: 200, borderRight: "1px solid #f0f0f0", boxShadow: "4px 0 24px rgba(0,0,0,0.05)" }}>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1.5 pb-1 space-y-1" aria-label="Primary navigation" role="navigation">
+      <nav className="min-h-0 overflow-y-auto scrollbar-hide px-2.5 pt-1 pb-1 space-y-0.5" aria-label="Primary navigation" role="navigation">
         {VISIBLE_NAV_GROUPS.map((group) => (
           <div key={group.label}>
             {/* Section label with trailing line */}
@@ -544,6 +544,10 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+      <div className="flex-1" />
+      <div className="px-4 py-3 border-t border-gray-100">
+        <p className="text-[10px] text-gray-400 text-center tracking-wide">CareerBot AI</p>
+      </div>
     </div>
     </>
   );

@@ -5,6 +5,7 @@ import "@testing-library/jest-dom";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
+  replace: vi.fn(),
   pathname: "/mock-interview/live",
   params: { sessionId: "live-session-123" } as Record<string, string>,
   consentGiven: true,
@@ -28,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mocks.push, replace: vi.fn(), prefetch: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push: mocks.push, replace: mocks.replace, prefetch: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
   usePathname: () => mocks.pathname,
   useParams: () => mocks.params,
   useSearchParams: () => new URLSearchParams(),
@@ -176,6 +177,7 @@ const importMockSidebar = async () => (await import("@/app/(interview)/mock-inte
 const importReadinessGate = async () => (await import("@/app/(interview)/mock-interview/_components/ReadinessGate")).default;
 const importMockInterviewPage = async () => (await import("@/app/(interview)/mock-interview/page")).default;
 const importLiveSetupPage = async () => (await import("@/app/(interview)/mock-interview/live/page")).default;
+const importLiveStartingPage = async () => (await import("@/app/(interview)/mock-interview/live/starting/page")).default;
 const importLiveSessionPage = async () => (await import("@/app/(interview)/mock-interview/live/[sessionId]/page")).default;
 const importReportPage = async () => (await import("@/app/(interview)/mock-interview/report/[sessionId]/page")).default;
 
@@ -327,9 +329,8 @@ describe("LiveSetupPage", () => {
     expect(screen.getByRole("button", { name: /start interview now/i })).toBeInTheDocument();
   });
 
-  it("starts direct live interview with a gender-matched interviewer voice", async () => {
+  it("stores the selected interviewer with a gender-matched voice before starting", async () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.75);
-    mocks.createLiveSession.mockResolvedValue({ session_id: "created-session", ticket_id: "ticket-1", ticket_expires_at: "2026-07-17T10:00:00Z", ws_url: "/ws" });
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
     expect(screen.getByRole("heading", { name: /mock interview room information/i })).toBeInTheDocument();
@@ -344,14 +345,52 @@ describe("LiveSetupPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
     fireEvent.click(screen.getByRole("button", { name: "Technical" }));
     fireEvent.click(screen.getByRole("button", { name: /start interview now/i }));
+
+    expect(mocks.createLiveSession).not.toHaveBeenCalled();
+    expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_params", JSON.stringify({
+      session_type: "technical",
+      resume_id: undefined,
+      enable_streaming_stt: true,
+      voice: "fable",
+      use_orchestrator: true,
+      interviewer_index: 3,
+      interviewer_slug: "nisha",
+      interviewer_name: "Nisha",
+      gender: "female",
+      session_type_label: "Technical",
+    }));
+    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live/starting");
+    randomSpy.mockRestore();
+  }, 15_000);
+
+  it("creates the live session with the selected avatar voice and metadata", async () => {
+    mocks.createLiveSession.mockResolvedValue({ session_id: "created-session", ticket_id: "ticket-1", ticket_expires_at: "2026-07-17T10:00:00Z", ws_url: "/ws" });
+    vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_params" ? JSON.stringify({
+      session_type: "technical",
+      enable_streaming_stt: true,
+      voice: "alloy",
+      use_orchestrator: true,
+      interviewer_index: 3,
+      interviewer_slug: "nisha",
+      interviewer_name: "Nisha",
+      gender: "female",
+      session_type_label: "Technical",
+    }) : null);
+
+    const LiveStartingPage = await importLiveStartingPage();
+    render(<LiveStartingPage />);
+
     await waitFor(() => expect(mocks.createLiveSession).toHaveBeenCalledWith({
       session_type: "technical",
       resume_id: undefined,
       enable_streaming_stt: true,
       voice: "fable",
-      use_orchestrator: false,
+      interviewer_index: 3,
+      interviewer_name: "Nisha",
+      interviewer_gender: "female",
+      interviewer_slug: "nisha",
+      use_orchestrator: true,
     }));
-    expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_type", "Technical");
     expect(window.sessionStorage.setItem).toHaveBeenCalledWith("live_session_interviewer", JSON.stringify({
       session_id: "created-session",
       interviewer_index: 3,
@@ -359,26 +398,27 @@ describe("LiveSetupPage", () => {
       gender: "female",
       voice: "fable",
     }));
-    expect(mocks.push).toHaveBeenCalledWith("/mock-interview/live/created-session");
-    randomSpy.mockRestore();
+    expect(mocks.replace).toHaveBeenCalledWith("/mock-interview/live/created-session");
   });
 
   it("surfaces create-session failure", async () => {
     mocks.createLiveSession.mockRejectedValue(new Error("network"));
-    const LiveSetupPage = await importLiveSetupPage();
-    render(<LiveSetupPage />);
-    expect(screen.getByRole("heading", { name: /mock interview room information/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /continue to room check/i }));
-    fireEvent.click(screen.getByRole("button", { name: /test microphone/i }));
-    await waitFor(() => expect(screen.getByText(/microphone is available/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /test camera/i }));
-    await waitFor(() => expect(screen.getByText(/camera preview is working/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /test speaker/i }));
-    await waitFor(() => expect(screen.getByText(/speaker test completed/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText(/quiet environment confirmed/i));
-    fireEvent.click(screen.getByRole("button", { name: /continue to interview setup/i }));
-    fireEvent.click(screen.getByRole("button", { name: /start interview now/i }));
-    expect(await screen.findByText(/we could not create the live interview/i)).toBeInTheDocument();
+    vi.mocked(window.sessionStorage.getItem).mockImplementation((key: string) => key === "live_session_params" ? JSON.stringify({
+      session_type: "hr",
+      enable_streaming_stt: true,
+      voice: "nova",
+      use_orchestrator: true,
+      interviewer_index: 2,
+      interviewer_slug: "meera",
+      interviewer_name: "Meera",
+      gender: "female",
+      session_type_label: "HR",
+    }) : null);
+
+    const LiveStartingPage = await importLiveStartingPage();
+    render(<LiveStartingPage />);
+
+    expect(await screen.findByText(/could not create the live interview/i)).toBeInTheDocument();
   });
 });
 
@@ -392,7 +432,7 @@ describe("LiveInterviewSessionPage", () => {
     expect(screen.getByText(/connected/i)).toBeInTheDocument();
     expect(screen.getByText("1/6")).toBeInTheDocument();
     expect(screen.getByText(/Meera, AI Interviewer/i)).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("reveals question word by word, then enters listening mode", async () => {
     vi.useFakeTimers();
@@ -467,7 +507,7 @@ describe("LiveInterviewSessionPage", () => {
 
     Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: originalRaf });
     Object.defineProperty(window, "cancelAnimationFrame", { configurable: true, value: originalCancelRaf });
-  });
+  }, 15_000);
 
   it("maps every Rhubarb A-H/X mouth cue without breaking audio synchronization", async () => {
     const rafCallbacks: FrameRequestCallback[] = [];

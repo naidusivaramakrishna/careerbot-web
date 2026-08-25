@@ -23,7 +23,7 @@ export default function NotesLayout({ children }: { children: React.ReactNode })
           <Sidebar />
           <Header />
           <div
-            className="pt-14 min-h-screen transition-[margin] duration-300 bg-gray-50"
+            className="pt-14 min-h-screen bg-gray-50"
             style={{ marginLeft: "var(--sidebar-width, 56px)" }}
           >
             <NotesSidebar />
