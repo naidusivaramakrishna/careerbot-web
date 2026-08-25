@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAllResumesUnified, createResumeWithAuth } from "@/api/resumeApi";
+import httpClient from "@/lib/http";
 import { toast } from "sonner";
 import Image from "next/image";
 import {
@@ -239,13 +240,32 @@ export default function ResumeLandingPage() {
     }
   }, [signinNext, router, navigateToBuilder, createAndNavigate]);
 
-  const handleStartFree = useCallback(() => {
-    setSigninNext("builder");
+  const checkAuthSilent = useCallback(async (): Promise<boolean> => {
+    try {
+      await httpClient.get("/auth/profile", {
+        headers: { "X-Skip-Login-Redirect": "true" },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
 
-  const handleBuildNewResume = useCallback(() => {
-    setSigninNext("new-resume");
-  }, []);
+  const handleStartFree = useCallback(async () => {
+    if (await checkAuthSilent()) {
+      await navigateToBuilder();
+    } else {
+      setSigninNext("builder");
+    }
+  }, [checkAuthSilent, navigateToBuilder]);
+
+  const handleBuildNewResume = useCallback(async () => {
+    if (await checkAuthSilent()) {
+      await createAndNavigate();
+    } else {
+      setSigninNext("new-resume");
+    }
+  }, [checkAuthSilent, createAndNavigate]);
 
 
   return (

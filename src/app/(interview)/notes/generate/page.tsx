@@ -390,6 +390,14 @@ export default function NotesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressLoading]);
 
+  // Must be above the notesLoading early return — hooks cannot be called conditionally.
+  useEffect(() => {
+    if (!notesGenerated && !generating && availableResumes.length === 0) {
+      loadResumes();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesGenerated, generating]);
+
   // Loads the resume list — only called when showing the generation form.
   const loadResumes = () => {
     const storedId = localStorage.getItem("current_resume_id") ?? "";
@@ -576,13 +584,6 @@ export default function NotesPage() {
       </div>
     );
   }
-
-  useEffect(() => {
-    if (!notesGenerated && !generating && availableResumes.length === 0) {
-      loadResumes();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notesGenerated, generating]);
 
   if (!notesGenerated && !generating) {
     return (

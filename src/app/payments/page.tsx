@@ -42,12 +42,12 @@ export default function PricingPage() {
             <span className="text-xl font-bold tracking-tight text-[#2557a7]">CareerBOT</span>
           </Link>
 
-          <Link
-            href="/builder/start"
+          <div
+            // href="/builder/start"
             className="inline-flex items-center gap-2 rounded-full bg-[#2557a7] px-4 py-2 text-[13px] font-bold text-white shadow-[0_6px_18px_rgba(37,87,167,0.22)] transition-all hover:bg-[#1e4a94] active:scale-95"
           >
             Get Started Free
-          </Link>
+          </div>
         </nav>
       </header>
 

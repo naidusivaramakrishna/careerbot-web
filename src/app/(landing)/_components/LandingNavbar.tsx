@@ -453,18 +453,18 @@ export default function LandingNavbar({
               <div className="hidden items-center gap-1.5 lg:flex xl:gap-2">
                 <button
                   onClick={handleSignin}
-                  className="cursor-pointer whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-700 shadow-[0_6px_16px_rgba(15,35,75,0.08)] transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] xl:px-4 xl:text-sm"
+                  className="cursor-pointer whitespace-nowrap rounded-full border border-slate-200 bg-[#2557a7] px-3 py-2 text-[13px] font-semibold text-white shadow-[0_6px_16px_rgba(15,35,75,0.08)] transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#2557a7] xl:px-4 xl:text-sm"
                 >
                   Sign In
                 </button>
-                <Link
+                {/* <Link
                   href="/builder/start"
                   onClick={() => setActiveDropdown(null)}
                   className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-[#2557a7] px-3 py-2 text-[13px] font-bold text-white shadow-[0_12px_26px_rgba(37,87,167,0.26)] transition-all hover:bg-[#1e4a94] hover:shadow-[0_15px_30px_rgba(37,87,167,0.34)] active:scale-95 xl:gap-2 xl:px-4 xl:text-sm"
                 >
                   <ShieldCheck size={13} className="xl:h-3.5 xl:w-3.5" />
                   Get Started Free
-                </Link>
+                </Link> */}
               </div>
             )}
 

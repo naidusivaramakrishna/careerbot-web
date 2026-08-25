@@ -8,8 +8,8 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import {
   EnterpriseApplicationTrackerIcon as IcoTracker,
   EnterpriseAtsScanIcon as IcoAtsScan,
-  EnterpriseBillingHistoryIcon as IcoHistory,
   EnterpriseChevronRightIcon as IcoChevronRight,
+  EnterpriseCommunicationIcon as IcoCommunication,
   EnterpriseCoverLetterIcon as IcoCoverLetter,
   EnterpriseDashboardIcon as IcoDashboard,
   EnterpriseInterviewPrepIcon as IcoInterview,
@@ -18,7 +18,6 @@ import {
   EnterpriseNotesIcon as IcoNotes,
   EnterpriseProfileIcon as IcoProfile,
   EnterpriseResumeIcon as IcoResume,
-  EnterpriseSubscriptionIcon as IcoGem,
   type EnterpriseNavIcon,
 } from "@/components/icons/EnterpriseNavIcons";
 /* NAV CONFIG */
@@ -114,22 +113,10 @@ const NAV_GROUPS: {
   {
     label: "PREPARE",
     items: [
-      { id: "mock_interview", label: "Mock Interview", icon: IcoInterview, path: "/mock-interview/live" },
-      {
-        id: "mock_test", label: "Mock Test", icon: IcoMockTest, path: "",
-        subItems: [
-          { id: "comm_assess",    label: "Communication Assessment", path: "/communication/start" },
-          { id: "mock_test_sub",  label: "Mock Test",                path: "/mock-test" },
-        ],
-      },
-      { id: "coding_test", label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
-    ],
-  },
-  {
-    label: "BILLING",
-    items: [
-      { id: "subscription",    label: "Subscription",    icon: IcoGem,     path: "/account/subscriptions" },
-      { id: "billing_history", label: "Billing History", icon: IcoHistory, path: "/settings/billing" },
+      { id: "mock_interview", label: "Mock Interview",  icon: IcoInterview, path: "/mock-interview/live" },
+      { id: "comm_assess",   label: "Communication",   icon: IcoCommunication, path: "/communication/start" },
+      { id: "mock_test",     label: "Mock Test",       icon: IcoMockTest,  path: "/mock-test" },
+      { id: "coding_test",   label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
     ],
   },
 ];
@@ -276,7 +263,7 @@ export default function Sidebar() {
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--sidebar-width",
-      isExpanded ? "240px" : "64px"
+      isExpanded ? "200px" : "64px"
     );
   }, [isExpanded]);
 
@@ -303,7 +290,8 @@ export default function Sidebar() {
     }
     if (pathname.startsWith("/notes"))                                          return "interview_notes";
     if (pathname.startsWith("/mock-interview"))                                 return "mock_interview";
-    if (pathname.startsWith("/mock-test") || pathname.startsWith("/communication")) return "mock_test";
+    if (pathname.startsWith("/communication"))                                  return "comm_assess";
+    if (pathname.startsWith("/mock-test"))                                      return "mock_test";
     if (pathname.startsWith("/settings"))                                       return "settings";
     if (pathname.startsWith("/account/subscriptions"))  return "subscription";
     if (pathname.startsWith("/settings/billing"))       return "billing_history";
@@ -444,7 +432,7 @@ export default function Sidebar() {
       if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
       if (!wrapperRef.current) return;
       const r = wrapperRef.current.getBoundingClientRect();
-      setDropPos({ top: r.top - 48, left: r.right + 4 });
+      setDropPos({ top: r.top - 20, left: r.right + 4 });
     }, []);
 
     const closeDrop = useCallback(() => {
@@ -524,7 +512,7 @@ export default function Sidebar() {
       aria-label="Collapse sidebar navigation"
       aria-expanded={isExpanded}
       aria-controls="dashboard-sidebar"
-      style={{ position: "fixed", top: 58, left: 226, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+      style={{ position: "fixed", top: 58, left: 186, zIndex: 50, width: 28, height: 28, borderRadius: 8, background: "transparent", border: "none", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
     >
       {/* Collapse icon: filled strip on the left */}
       <svg width="15" height="13" viewBox="0 0 15 13" fill="none">

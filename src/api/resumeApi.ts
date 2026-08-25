@@ -633,14 +633,13 @@ const transformResumeDataForBackend = (resumeData: Partial<ResumeResponse>): Par
     };
   }
 
-  // Ensure personalInfo is sent under both snake_case and camelCase keys so the
-  // backend PDF generator finds it regardless of which convention it uses.
+  // Strip the snake_case alias — backend PATCH accepts personalInfo and normalizes
+  // internally; sending both risks divergence if values ever differ.
   const raw = transformed as Record<string, unknown>;
-  if (raw['personal_info']) {
+  if (raw['personal_info'] && !transformed.personalInfo) {
     raw['personalInfo'] = raw['personal_info'];
-  } else if (transformed.personalInfo) {
-    raw['personal_info'] = transformed.personalInfo;
   }
+  delete raw['personal_info'];
 
   // Transform customSections from fields-based to items-based structure
   if (transformed.customSections && Array.isArray(transformed.customSections) && transformed.customSections.length > 0) {

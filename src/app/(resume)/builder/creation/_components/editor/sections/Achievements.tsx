@@ -374,9 +374,22 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      const text = suggestion.replace(/<[^>]*>/g, '').trim();
+      const current = el.innerHTML.trim();
+      if (!current || current === '<br>') {
+        el.innerHTML = `<ul><li>${text}</li></ul>`;
+      } else {
+        const uls = el.getElementsByTagName('ul');
+        if (uls.length > 0) {
+          const li = document.createElement('li');
+          li.textContent = text;
+          uls[uls.length - 1].appendChild(li);
+        } else {
+          el.innerHTML += `<ul><li>${text}</li></ul>`;
+        }
+      }
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -389,18 +402,7 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   const toggleSpellCheck = (editIndex: number) => {

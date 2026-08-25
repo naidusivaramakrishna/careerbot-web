@@ -82,9 +82,10 @@ export function MockInterviewProvider({ children }: { children: ReactNode }) {
           logger.debug("🔑 Mock interview user id:", resolvedUserId);
         }
 
-        // Check if notes already exist for this user so sidebar unlocks Practice/Technical
-        if (resolvedUserId) {
-          getNotes(resolvedUserId)
+        // Check if notes already exist for this resume so sidebar unlocks Practice/Technical
+        const resumeId = localStorage.getItem("current_resume_id");
+        if (resumeId) {
+          getNotes(resumeId)
             .then((record) => {
               if (!cancelled && record?.notes) {
                 setStageState((s) => ({ ...s, notes_generated: true }));

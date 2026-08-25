@@ -974,10 +974,17 @@ export default function LiveInterviewSessionPage() {
         const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!AudioContextCtor) return;
 
-        // Request 16 kHz — browser resamples internally from hardware rate
-        const ctx = new AudioContextCtor({ sampleRate: 16000 });
+        // Do NOT pass { sampleRate: 16000 } — browsers silently ignore it and stay at
+        // hardware rate (48 kHz on most devices). Capture at native rate and downsample.
+        const ctx = new AudioContextCtor();
         audioContextRef.current = ctx;
-        ctx.resume().catch(() => {}); // unblock if browser auto-suspended
+        ctx.resume().catch(() => {});
+
+        const NATIVE_RATE = ctx.sampleRate;   // actual rate: 48000, 44100, etc.
+        const TARGET_RATE = 16000;
+        const RATIO = NATIVE_RATE / TARGET_RATE; // 3.0 for 48 kHz, 2.75625 for 44.1 kHz
+
+        console.warn('[STT DEBUG] AudioContext sampleRate:', NATIVE_RATE, '| ratio:', RATIO.toFixed(4), '| target:', TARGET_RATE);
 
         const source = ctx.createMediaStreamSource(stream);
 
@@ -994,22 +1001,42 @@ export default function LiveInterviewSessionPage() {
         };
         tick();
 
-        // 4096 samples × 2 bytes = 8192 bytes per chunk (always even — required by backend PCM framing)
-        processor = ctx.createScriptProcessor(4096, 1, 1);
+        // Native buffer sized so each chunk yields ~256 ms at 16 kHz after downsampling.
+        // ScriptProcessorNode requires a power-of-2 buffer size.
+        const nativeBufSize = Math.pow(2, Math.round(Math.log2(RATIO * 4096))) as 256 | 512 | 1024 | 2048 | 4096 | 8192 | 16384;
+        processor = ctx.createScriptProcessor(nativeBufSize, 1, 1);
         processor.onaudioprocess = (event) => {
           const float32 = event.inputBuffer.getChannelData(0);
-          const int16 = new Int16Array(float32.length);
-          for (let i = 0; i < float32.length; i++) {
-            int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32767)));
+
+          // Linear-interpolation downsample: native rate → 16 kHz.
+          // Handles integer ratios (48k→16k = 3×) and fractional ones (44.1k→16k = 2.75625×).
+          const outLen = Math.floor(float32.length / RATIO);
+          const resampled = new Float32Array(outLen);
+          for (let i = 0; i < outLen; i++) {
+            const pos = i * RATIO;
+            const lo  = Math.floor(pos);
+            const hi  = Math.min(lo + 1, float32.length - 1);
+            resampled[i] = float32[lo] + (float32[hi] - float32[lo]) * (pos - lo);
           }
-          // Encode to base64 without spread (safe for large buffers)
+
+          // Float32 → signed Int16 PCM (little-endian, as expected by backend)
+          const int16 = new Int16Array(resampled.length);
+          for (let i = 0; i < resampled.length; i++) {
+            int16[i] = Math.max(-32768, Math.min(32767, Math.round(resampled[i] * 32767)));
+          }
+
+          // Uint8Array view of the Int16 buffer → base64 (loop avoids spread stack overflow on large buffers)
           const bytes = new Uint8Array(int16.buffer);
           let binary = "";
           for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+
           if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(
-              JSON.stringify({ type: "audio_chunk", data: btoa(binary), sequence: audioSeqRef.current++ })
-            );
+            const seq = audioSeqRef.current++;
+            // Log first chunk and every 10th to confirm audio is flowing without console spam
+            if (seq === 0 || seq % 10 === 0) {
+              console.warn(`[STT DEBUG] audio_chunk seq=${seq} | samples=${resampled.length} | bytes=${bytes.byteLength} | nativeRate=${NATIVE_RATE}`);
+            }
+            wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: btoa(binary), sequence: seq }));
           }
         };
 
@@ -1172,10 +1199,12 @@ export default function LiveInterviewSessionPage() {
         break;
       }
       case "transcript_partial":
+        console.warn('[STT DEBUG] transcript_partial received:', msg.text);
         setServerError(null);
         setPartialTranscript(msg.text);
         break;
       case "transcript_final":
+        console.warn('[STT DEBUG] transcript_final received:', msg.text);
         setServerError(null);
         setTranscript(msg.text);
         setPartialTranscript("");

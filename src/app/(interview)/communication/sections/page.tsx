@@ -132,6 +132,7 @@ export default function SectionsPage() {
           }
         } catch (recordingError) {
           logger.error('Failed to start video recording:', recordingError);
+          throw recordingError; // block navigation — camera must be working before assessment starts
         }
       }
 
@@ -144,6 +145,8 @@ export default function SectionsPage() {
         setError('Microphone and camera permissions are required. Please allow both and try again.');
       } else if (e.name === 'NotFoundError') {
         setError('No microphone or camera found. Please connect both devices and try again.');
+      } else if (e.name === 'NotReadableError' || (e.message || '').toLowerCase().includes('could not start video source')) {
+        setError('Camera is in use by another application (e.g. Zoom, Teams, another tab). Please close it and try again.');
       } else if (e.message) {
         setError(e.message);
       } else {

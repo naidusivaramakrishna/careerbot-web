@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MOCK_INTERVIEWERS, pickRandomInterviewerIndex } from "../_lib/interviewers";
-import { useMockInterview } from "../_context/MockInterviewContext";
-import ConsentModal from "../_components/ConsentModal";
 import {
   AlertCircle,
   ArrowRight,
@@ -601,7 +599,6 @@ function PreInterviewScreen({
 
 export default function LiveSetupPage() {
   const router = useRouter();
-  const { consentGiven, setConsentGiven } = useMockInterview();
   const [phase, setPhase] = useState<SetupPhase>("info");
   const [sessionType, setSessionType] = useState<SessionType>("HR");
   const [isMobile, setIsMobile] = useState(false);
@@ -656,15 +653,6 @@ export default function LiveSetupPage() {
     }));
     router.push('/mock-interview/live/starting');
   };
-
-  if (!consentGiven) {
-    return (
-      <ConsentModal
-        onAccept={() => setConsentGiven(true)}
-        onDecline={() => router.push("/mock-interview")}
-      />
-    );
-  }
 
   return (
     <>

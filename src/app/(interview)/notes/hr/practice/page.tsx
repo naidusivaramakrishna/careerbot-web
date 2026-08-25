@@ -211,8 +211,9 @@ function HRPracticeContent() {
       setCurrentIndex(0);
       setAnsweredMap({});
 
-      if (userId) {
-        getNotes(userId)
+      const resumeId = localStorage.getItem("current_resume_id");
+      if (resumeId) {
+        getNotes(resumeId)
           .then((record) => {
             const rawNotes = record?.notes as Record<string, unknown> | undefined;
             if (!rawNotes || Object.keys(rawNotes).length === 0) return;

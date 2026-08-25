@@ -1,14 +1,17 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import {
+  AlertCircle,
+  ArrowRight,
+  CalendarDays,
+  CheckCircle,
+  Loader,
   Lock,
   Mail,
-  CheckCircle,
-  AlertCircle,
-  Loader,
+  ShieldCheck,
+  UserCircle,
   Zap,
-  ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -20,15 +23,11 @@ const SettingsPage = () => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Reset Password States
   type PasswordResetStatus = "idle" | "loading" | "success" | "error";
   const [resetStatus, setResetStatus] = useState<PasswordResetStatus>("idle");
   const [resetErrorMessage, setResetErrorMessage] = useState("");
-
-  // Email Verification States
   const [resendLoading, setResendLoading] = useState(false);
 
-  // Fetch user profile on mount
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -45,7 +44,6 @@ const SettingsPage = () => {
     fetchProfile();
   }, []);
 
-  // Handle password reset request (sends email with token)
   const handleRequestPasswordReset = async () => {
     if (!userProfile?.email) {
       toast.error("Email not found");
@@ -57,16 +55,12 @@ const SettingsPage = () => {
 
     try {
       logger.info("Requesting password reset for:", userProfile.email);
-
       const response = await requestPasswordReset({ email: userProfile.email });
-
       logger.info("Password reset request response:", response);
-
       setResetStatus("success");
       toast.success(response.message || "Password reset email sent successfully!");
     } catch (error: unknown) {
       logger.error("Error requesting password reset:", error);
-
       setResetStatus("error");
 
       let errorMsg = "Failed to request password reset. Please try again.";
@@ -85,7 +79,6 @@ const SettingsPage = () => {
     }
   };
 
-  // Handle email verification resend
   const handleResendVerification = async () => {
     if (!userProfile?.email) {
       toast.error("Email not found");
@@ -97,8 +90,7 @@ const SettingsPage = () => {
       await resendVerificationEmail({ email: userProfile.email });
       toast.success("Verification email sent! Check your inbox.");
     } catch (error: unknown) {
-      const errorMsg =
-        error instanceof Error ? error.message : "Failed to resend email";
+      const errorMsg = error instanceof Error ? error.message : "Failed to resend email";
       logger.error("Resend verification error:", error);
       toast.error(errorMsg);
     } finally {
@@ -106,267 +98,205 @@ const SettingsPage = () => {
     }
   };
 
+  const memberSince = userProfile?.created_at
+    ? new Date(userProfile.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : "Not available";
+
   if (loading) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-            <p className="text-gray-600">Loading settings...</p>
+      <main className="min-h-screen bg-[#f6f7f9] px-4 py-6 text-gray-950 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-[70vh] max-w-6xl items-center justify-center">
+          <div className="rounded-2xl border border-gray-200 bg-white px-8 py-7 text-center shadow-[0_18px_55px_rgba(15,23,42,0.055)]">
+            <Loader className="mx-auto h-8 w-8 animate-spin text-[#2557a7]" />
+            <p className="mt-4 text-sm font-black text-gray-950">Loading settings</p>
+            <p className="mt-1 text-sm text-gray-500">Preparing your account preferences.</p>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 
-
   return (
-    <div className="p-6 max-w-6xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
-        <p className="text-gray-600">
-          Manage your account security and preferences
-        </p>
-      </div>
-
-      {/* Settings Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Reset Password Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-start gap-4 mb-6">
-            <div className="flex-shrink-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-blue-100">
-                <Lock className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-gray-950 sm:px-6 lg:px-8 lg:py-6">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <header className="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-[0_18px_55px_rgba(15,23,42,0.055)] sm:px-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                Reset Password
-              </h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Update your password to keep your account secure
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">Account control center</p>
+              <h1 className="mt-1.5 text-[26px] font-black leading-tight tracking-[-0.03em] text-gray-950 sm:text-[30px]">
+                Settings
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
+                Manage account access, email verification, plan usage, and the security details that keep your CareerBot workspace reliable.
               </p>
             </div>
-          </div>
 
-          {resetStatus === "success" ? (
-            <>
-              <div className="mb-6 flex justify-center">
-                <div className="bg-green-100 rounded-full p-4">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
-                </div>
-              </div>
-              <h3 className="text-lg font-semibold text-green-600 mb-2 text-center">Email Sent!</h3>
-              <p className="text-gray-600 text-center mb-6">
-                A password reset link has been sent to <strong>{userProfile?.email}</strong>. Check your email and follow the instructions to set your new password.
-              </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-gray-700">💡 <strong>Tip:</strong> Check your spam folder if you don&apos;t see the email.</p>
-              </div>
-              <button
-                onClick={() => setResetStatus("idle")}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition-colors"
-              >
-                Done
-              </button>
-            </>
-          ) : resetStatus === "error" ? (
-            <>
-              <div className="mb-6 flex justify-center">
-                <div className="bg-red-100 rounded-full p-4">
-                  <AlertCircle className="w-8 h-8 text-red-600" />
-                </div>
-              </div>
-              <h3 className="text-lg font-semibold text-red-600 mb-2 text-center">Error</h3>
-              <p className="text-gray-600 text-center mb-6">{resetErrorMessage}</p>
-              <button
-                onClick={() => setResetStatus("idle")}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition-colors"
-              >
-                Try Again
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-gray-600 mb-4">
-                We&apos;ll send you an email with a link to reset your password. You can set your new password by clicking the link in the email.
-              </p>
-              <button
-                onClick={handleRequestPasswordReset}
-                disabled={resetStatus === "loading"}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                {resetStatus === "loading" ? (
-                  <>
-                    <Loader size={18} className="animate-spin" />
-                    Sending Email...
-                  </>
-                ) : (
-                  "Send Reset Link"
-                )}
-              </button>
-              <div className="mt-4 p-3 bg-orange-50 rounded-lg border border-orange-200">
-                <p className="text-xs text-orange-700">
-                  <strong>Note:</strong> The reset link will expire in 48 hours.
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Email Verification Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-start gap-4 mb-6">
-            <div className="flex-shrink-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-green-100">
-                <Mail className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Email Verification
-              </h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Verify your email to unlock all features
-              </p>
-            </div>
-          </div>
-
-          {/* Email Status */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  {userProfile?.email || "No email"}
-                </p>
-                {userProfile?.is_verified ? (
-                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                    <CheckCircle size={14} />
-                    Email verified
-                  </p>
-                ) : (
-                  <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
-                    <AlertCircle size={14} />
-                    Email not verified
-                  </p>
-                )}
-              </div>
-              {userProfile?.is_verified && (
-                <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-100">
-                  <CheckCircle size={20} className="text-green-600" />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Status Message */}
-          {userProfile?.is_verified ? (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-green-700">
-                ✓ Your email is verified. You have access to all features.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-orange-700">
-                Please verify your email to enable all features. Check your
-                inbox for the verification link.
-              </p>
-            </div>
-          )}
-
-          {/* Resend Button */}
-          <button
-            onClick={handleResendVerification}
-            disabled={resendLoading || userProfile?.is_verified}
-            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            {resendLoading ? (
-              <>
-                <Loader size={18} className="animate-spin" />
-                Sending...
-              </>
-            ) : userProfile?.is_verified ? (
-              "Email Already Verified"
-            ) : (
-              "Resend Verification Email"
-            )}
-          </button>
-
-          {/* Help Text */}
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs text-blue-700">
-              <strong>💡 Tip:</strong> Check your spam folder if you don&apos;t see
-              the email. Verification links expire in 48 hours.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Plan & Credits Navigation Card */}
-      <Link href="/settings/subscription">
-        <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="flex items-center justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-blue-100 shrink-0">
-                <Zap className="h-6 w-6 text-[#2557a7]" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">Plan &amp; Credits</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  View your subscription, credit balance, and usage history
-                </p>
-              </div>
-            </div>
-            <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-[#2557a7] transition-colors shrink-0" />
-          </div>
-        </div>
-      </Link>
-
-      {/* Additional Settings Section */}
-      <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Account Information
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Account Status */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Account Status
-            </label>
-            <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-              <span className="inline-flex items-center gap-2 text-sm">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-gray-900 font-medium">Active</span>
+            <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-2">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#2557a7] ring-1 ring-gray-200">
+                <UserCircle size={19} />
               </span>
+              <div className="min-w-0 pr-2">
+                <p className="truncate text-sm font-black text-gray-950">{userProfile?.email || "Account email unavailable"}</p>
+                <p className="mt-0.5 text-xs font-semibold text-gray-500">
+                  {userProfile?.is_verified ? "Verified workspace" : "Verification required"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.055)]">
+            <div className="border-b border-gray-200 px-5 py-4 sm:px-6">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef4ff] text-[#2557a7] ring-1 ring-[#d9e5f8]">
+                  <ShieldCheck size={18} />
+                </span>
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">Security</p>
+                  <h2 className="mt-1 text-lg font-black tracking-[-0.025em] text-gray-950">Account access</h2>
+                  <p className="mt-1 text-sm leading-6 text-gray-500">Keep sign-in recovery and email access up to date.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="divide-y divide-gray-100">
+              <div className="grid gap-4 px-5 py-5 sm:grid-cols-[42px_1fr_auto] sm:items-start sm:px-6">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-[#2557a7]">
+                  <Lock size={17} />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black text-gray-950">Password reset</h3>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
+                    Send a secure reset link to your registered email. The link expires in 48 hours.
+                  </p>
+
+                  {resetStatus === "success" && (
+                    <div className="mt-4 rounded-2xl border border-[#c8d7ef] bg-[#f8fbff] px-4 py-3">
+                      <p className="flex items-center gap-2 text-sm font-black text-[#2557a7]">
+                        <CheckCircle size={16} />
+                        Reset email sent
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-gray-600">
+                        Check {userProfile?.email}. If it is not visible, review spam or promotions.
+                      </p>
+                    </div>
+                  )}
+
+                  {resetStatus === "error" && (
+                    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                      <p className="flex items-center gap-2 text-sm font-black text-red-700">
+                        <AlertCircle size={16} />
+                        Request failed
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-red-700">{resetErrorMessage}</p>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={resetStatus === "idle" ? handleRequestPasswordReset : () => setResetStatus("idle")}
+                  disabled={resetStatus === "loading"}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#2557a7] px-4 text-sm font-black text-white shadow-[0_12px_28px_rgba(37,87,167,0.2)] transition hover:bg-[#1f4a91] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {resetStatus === "loading" ? (
+                    <>
+                      <Loader size={16} className="animate-spin" />
+                      Sending
+                    </>
+                  ) : resetStatus === "idle" ? (
+                    "Send reset link"
+                  ) : (
+                    "Done"
+                  )}
+                </button>
+              </div>
+
+              <div className="grid gap-4 px-5 py-5 sm:grid-cols-[42px_1fr_auto] sm:items-start sm:px-6">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-[#2557a7]">
+                  <Mail size={17} />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-black text-gray-950">Email verification</h3>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${userProfile?.is_verified ? "bg-[#eef4ff] text-[#2557a7]" : "bg-gray-100 text-gray-600"}`}>
+                      {userProfile?.is_verified ? "Verified" : "Not verified"}
+                    </span>
+                  </div>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
+                    {userProfile?.is_verified
+                      ? "Your email is verified and your workspace features are available."
+                      : "Verify your email to keep account recovery and CareerBot workflows fully available."}
+                  </p>
+                  <p className="mt-3 truncate rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">
+                    {userProfile?.email || "No email found"}
+                  </p>
+                </div>
+                <button
+                  onClick={handleResendVerification}
+                  disabled={resendLoading || userProfile?.is_verified}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-black text-[#2557a7] transition hover:bg-[#eef4ff] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                >
+                  {resendLoading ? (
+                    <>
+                      <Loader size={16} className="animate-spin" />
+                      Sending
+                    </>
+                  ) : userProfile?.is_verified ? (
+                    "Verified"
+                  ) : (
+                    "Resend email"
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Member Since */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Member Since
-            </label>
-            <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-sm text-gray-900">
-                {userProfile?.created_at
-                  ? new Date(userProfile.created_at).toLocaleDateString(
-                      "en-US",
-                      {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      }
-                    )
-                  : "N/A"}
-              </p>
+          <aside className="space-y-5">
+            <div className="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-[0_18px_55px_rgba(15,23,42,0.055)]">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">Account</p>
+              <h2 className="mt-1.5 text-lg font-black tracking-[-0.025em] text-gray-950">Profile status</h2>
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between gap-4 rounded-xl bg-gray-50 px-3 py-3 ring-1 ring-gray-200">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-gray-600">
+                    <span className="h-2 w-2 rounded-full bg-[#2557a7]" />
+                    Account status
+                  </span>
+                  <span className="text-sm font-black text-gray-950">Active</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 rounded-xl bg-gray-50 px-3 py-3 ring-1 ring-gray-200">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-gray-600">
+                    <CalendarDays size={15} className="text-[#2557a7]" />
+                    Member since
+                  </span>
+                  <span className="text-right text-sm font-black text-gray-950">{memberSince}</span>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+
+            <Link
+              href="/settings/subscription"
+              className="group block rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-[0_18px_55px_rgba(15,23,42,0.055)] transition hover:border-[#c8d7ef] hover:bg-[#fbfdff]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef4ff] text-[#2557a7] ring-1 ring-[#d9e5f8]">
+                  <Zap size={17} />
+                </span>
+                <ArrowRight className="mt-2 h-5 w-5 shrink-0 text-gray-400 transition group-hover:text-[#2557a7]" />
+              </div>
+              <p className="mt-4 text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">Plan and credits</p>
+              <h2 className="mt-1.5 text-lg font-black tracking-[-0.025em] text-gray-950">Subscription</h2>
+              <p className="mt-2 text-sm leading-6 text-gray-500">
+                Review your plan, credits, and usage history from one place.
+              </p>
+            </Link>
+          </aside>
+        </section>
       </div>
-    </div>
+    </main>
   );
 };
 
