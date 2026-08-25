@@ -13,7 +13,7 @@
  *   - verifyEmail:             POSTs to /auth/email/verify
  *   - requestPasswordReset:    POSTs to /auth/password/reset
  *   - confirmPasswordReset:    PATCHes /auth/password/reset
- *   - refreshAccessToken:      POSTs to /auth/refresh, rethrows errors as Error
+ *   - refreshAccessToken:      POSTs to /api/backend/auth/refresh (via proxy), rethrows errors as Error
  *
  * Run: npx vitest run src/tests/integration/features/auth
  */
@@ -331,7 +331,7 @@ describe('Auth API — confirmPasswordReset', () => {
 describe('Auth API — refreshAccessToken', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it('POSTs to /auth/refresh', async () => {
+  it('POSTs to /api/backend/auth/refresh via proxy', async () => {
     const spy = vi.spyOn(httpClient, 'post').mockResolvedValueOnce(
       makeResponse({ access_token: 'new-at', refresh_token: 'new-rt', token_type: 'bearer' })
     );
@@ -339,9 +339,9 @@ describe('Auth API — refreshAccessToken', () => {
     await refreshAccessToken();
 
     expect(spy).toHaveBeenCalledWith(
-      '/auth/refresh',
+      '/api/backend/auth/refresh',
       {},
-      expect.any(Object)
+      expect.objectContaining({ baseURL: '' })
     );
   });
 

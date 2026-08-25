@@ -39,13 +39,20 @@
   }
 
   function extractJobDescription() {
+    // 'section#application' was previously in this list as a fallback, but
+    // it's the application FORM, not the job description — on Greenhouse's
+    // apply view, where the JD container often isn't rendered at all, that
+    // fallback matched instead and returned form boilerplate (e.g. the
+    // "This hiring process utilizes artificial intelligence tools..."
+    // disclosure text) mislabeled as the job description. Returning null
+    // here (no JD detected) is correct on that page — wrong content is
+    // worse than no content.
     const selectors = [
       '#content',
       '.content',
       '[class*="job-post"]',
       '#job-description',
       '.job_description',
-      'section#application',
     ];
     for (const sel of selectors) {
       const el = document.querySelector(sel);

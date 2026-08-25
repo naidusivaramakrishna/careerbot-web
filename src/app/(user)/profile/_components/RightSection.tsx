@@ -121,13 +121,26 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 3️⃣ Map to ProfileData format
             const mapped = mapResumeToProfile(result);
 
+            // Ensure mapped is defined BEFORE destroying anything.
+            if (!mapped) {
+                throw new Error('Failed to parse resume data');
+            }
+
             // =====================================================
             // 3️⃣ DELETE existing data AFTER parse so we also clear
             //    any entries auto-saved by the parse endpoint itself
             // =====================================================
+            // Each delete below is gated on the import ACTUALLY carrying
+            // replacement data for that section. Previously every section was
+            // cleared unconditionally, so importing a profile with no projects
+            // deleted the projects the user had already entered -- the resume
+            // path even recorded such a section as 'skipped' ("not in resume")
+            // while having just destroyed it. Import replaces the sections it
+            // covers; it must not empty the others.
+
 
             // DELETE EDUCATION
-            try {
+            if (mapped.education?.length) try {
                 const existingEducation = await getEducation();
                 for (const edu of existingEducation) {
                     if (edu.id) await deleteEducation(edu.id);
@@ -137,7 +150,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE EXPERIENCE
-            try {
+            if (mapped.workExperience?.length) try {
                 const existingExperience = await getExperience();
                 for (const exp of existingExperience) {
                     if (exp.id) await deleteExperience(exp.id);
@@ -147,7 +160,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE SKILLS
-            try {
+            if (mapped.skills?.length) try {
                 const existingSkills = await getSkills();
                 for (const skill of existingSkills) {
                     if (skill.id) await deleteSkill(skill.id);
@@ -157,7 +170,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE PROJECTS
-            try {
+            if (mapped.projects?.length) try {
                 const existingProjects = await getProjects();
                 for (const project of existingProjects) {
                     await deleteProject(project.id!);
@@ -167,7 +180,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE CERTIFICATIONS
-            try {
+            if (mapped.certifications?.length) try {
                 const existingCertifications = await getCertification();
                 for (const cert of existingCertifications) {
                     if (cert.id) await deleteCertification(cert.id);
@@ -176,41 +189,59 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 logger.warn("Error deleting certifications:", err);
             }
 
-            // Ensure mapped is defined
-            if (!mapped) {
-                throw new Error('Failed to parse resume data');
-            }
+            // Track which sections succeeded/failed/skipped for user feedback
+            // 'ok' = succeeded, 'failed' = attempted but failed, 'skipped' = not in resume
+            const sectionResults: Record<string, 'ok' | 'failed' | 'skipped'> = {
+                personal: 'skipped',
+                education: 'skipped',
+                experience: 'skipped',
+                skills: 'skipped',
+                projects: 'skipped',
+                certifications: 'skipped',
+            };
 
             // ---------------------------------------
             // 3️⃣ UPDATE PERSONAL INFO IN DB
             // ---------------------------------------
             if (mapped?.personalInformation) {
-                const personalPayload = {
-                    full_name: mapped.personalInformation.fullName,
-                    phone_number: mapped.personalInformation.phone,
-                    headline: mapped.personalInformation.headline || "Software developer",
-                    location: mapped.personalInformation.location,
-                    linkedin_url: mapped.personalInformation.linkedin,
-                    github_url: mapped.personalInformation.github,
-                    summary: mapped.personalInformation.summary,
-                };
+                try {
+                    const personalPayload = {
+                        full_name: mapped.personalInformation.fullName,
+                        phone_number: mapped.personalInformation.phone,
+                        headline: mapped.personalInformation.headline || "Software developer",
+                        location: mapped.personalInformation.location,
+                        linkedin_url: mapped.personalInformation.linkedin,
+                        github_url: mapped.personalInformation.github,
+                        summary: mapped.personalInformation.summary,
+                    };
 
-                await updateProfile(personalPayload);
+                    await updateProfile(personalPayload);
+                    sectionResults.personal = 'ok';
+                } catch (err) {
+                    logger.error("Error updating personal information:", err);
+                    sectionResults.personal = 'failed';
+                }
             }
 
             // ---------------------------------------
             // 4️⃣ STORE EDUCATION IN DB
             // ---------------------------------------
             if (mapped.education?.length) {
-                for (const edu of mapped.education) {
-                    await addEducationAutoFill({
-                        institution: edu.institution || '',
-                        degree: edu.degree || '',
-                        stream: edu.stream || '',
-                        cgpa: edu.cgpa,
-                        start_date: edu.start_date || '',
-                        end_date: edu.end_date,
-                    });
+                try {
+                    for (const edu of mapped.education) {
+                        await addEducationAutoFill({
+                            institution: edu.institution || '',
+                            degree: edu.degree || '',
+                            stream: edu.stream || '',
+                            cgpa: edu.cgpa,
+                            start_date: edu.start_date || '',
+                            end_date: edu.end_date,
+                        });
+                    }
+                    sectionResults.education = 'ok';
+                } catch (err) {
+                    logger.error("Error adding education:", err);
+                    sectionResults.education = 'failed';
                 }
             }
 
@@ -218,16 +249,22 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 5️⃣ STORE EXPERIENCE IN DB
             // ---------------------------------------
             if (mapped.workExperience?.length) {
-                for (const exp of mapped.workExperience) {
-                    await addExperienceAutoFill({
-                        job_title: exp.job_title || '',
-                        company: exp.company || '',
-                        job_type: "full_time",
-                        location: exp.location || "India",
-                        start_date: exp.start_date || '',
-                        end_date: exp.end_date,
-                        description: exp.description,
-                    });
+                try {
+                    for (const exp of mapped.workExperience) {
+                        await addExperienceAutoFill({
+                            job_title: exp.job_title || '',
+                            company: exp.company || '',
+                            job_type: "full_time",
+                            location: exp.location || "India",
+                            start_date: exp.start_date || '',
+                            end_date: exp.end_date,
+                            description: exp.description,
+                        });
+                    }
+                    sectionResults.experience = 'ok';
+                } catch (err) {
+                    logger.error("Error adding experience:", err);
+                    sectionResults.experience = 'failed';
                 }
             }
 
@@ -235,8 +272,14 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 6️⃣ STORE SKILLS IN DB
             // ---------------------------------------
             if (mapped.skills?.length) {
-                for (const skill of mapped.skills) {
-                    await addSkillAutoFill({ name: skill });
+                try {
+                    for (const skill of mapped.skills) {
+                        await addSkillAutoFill({ name: skill });
+                    }
+                    sectionResults.skills = 'ok';
+                } catch (err) {
+                    logger.error("Error adding skills:", err);
+                    sectionResults.skills = 'failed';
                 }
             }
 
@@ -244,16 +287,22 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 7️⃣ STORE PROJECTS IN DB
             // ---------------------------------------
             if (mapped.projects?.length) {
-                for (const project of mapped.projects) {
-                    await addProjectAutoFill({
-                        project_name: project.project_name,
-                        role: project.role,
-                        technologies: project.technologies || '',
-                        start_date: project.start_date || '',
-                        end_date: project.end_date,
-                        description: project.description,
-                        project_link: project.project_link,
-                    });
+                try {
+                    for (const project of mapped.projects) {
+                        await addProjectAutoFill({
+                            project_name: project.project_name,
+                            role: project.role,
+                            technologies: project.technologies || '',
+                            start_date: project.start_date || '',
+                            end_date: project.end_date,
+                            description: project.description,
+                            project_link: project.project_link,
+                        });
+                    }
+                    sectionResults.projects = 'ok';
+                } catch (err) {
+                    logger.error("Error adding projects:", err);
+                    sectionResults.projects = 'failed';
                 }
             }
 
@@ -261,24 +310,71 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 8️⃣ STORE CERTIFICATIONS IN DB
             // ---------------------------------------
             if (mapped.certifications?.length) {
-                for (const cert of mapped.certifications) {
-                    await addCertificationAutoFill({
-                        certification_name: cert.certification_name || '',
-                        issuer: cert.issuer || '',
-                        start_date: cert.start_date || '',
-                        end_date: cert.end_date,
-                    });
+                try {
+                    for (const cert of mapped.certifications) {
+                        await addCertificationAutoFill({
+                            certification_name: cert.certification_name || '',
+                            issuer: cert.issuer || '',
+                            start_date: cert.start_date || '',
+                            end_date: cert.end_date,
+                        });
+                    }
+                    sectionResults.certifications = 'ok';
+                } catch (err) {
+                    logger.error("Error adding certifications:", err);
+                    sectionResults.certifications = 'failed';
                 }
             }
 
-            // 🔄 1️⃣0️⃣ RE-FETCH UPDATED DATA FROM DB
-            const [fetchedEducation, updatedExp, updatedSkills, updatedProjects, updatedCertifications] = await Promise.all([
+            // 🔄 1️⃣0️⃣ RE-FETCH UPDATED DATA FROM DB (in parallel with graceful error handling)
+            const results = await Promise.allSettled([
                 getEducation(),
                 getExperience(),
                 getSkills(),
                 getProjects(),
                 getCertification(),
             ]);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let fetchedEducation: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedExp: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedSkills: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedProjects: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedCertifications: Record<string, any>[] = [];
+
+            if (results[0].status === 'fulfilled') {
+                fetchedEducation = results[0].value;
+            } else {
+                logger.warn("Error fetching education:", results[0].reason);
+            }
+
+            if (results[1].status === 'fulfilled') {
+                updatedExp = results[1].value;
+            } else {
+                logger.warn("Error fetching experience:", results[1].reason);
+            }
+
+            if (results[2].status === 'fulfilled') {
+                updatedSkills = results[2].value;
+            } else {
+                logger.warn("Error fetching skills:", results[2].reason);
+            }
+
+            if (results[3].status === 'fulfilled') {
+                updatedProjects = results[3].value;
+            } else {
+                logger.warn("Error fetching projects:", results[3].reason);
+            }
+
+            if (results[4].status === 'fulfilled') {
+                updatedCertifications = results[4].value;
+            } else {
+                logger.warn("Error fetching certifications:", results[4].reason);
+            }
 
             // ✅ FIRST: Update profile context with all new data BEFORE refreshing dashboard
             // This prevents multiple re-renders and toast notifications
@@ -341,11 +437,21 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 }));
             }
 
-            toast.success("Resume imported successfully!", { id: "resume-upload" });
+            // Show detailed success/failure message
+            const successSections = Object.entries(sectionResults)
+                .filter(([, status]) => status === 'ok')
+                .map(([section]) => section);
 
-            // Store the file after the full import succeeds (intentional trade-off:
-            // if any profile-save step above throws, resume_url is not persisted —
-            // this is preferred over storing a file whose data was never applied).
+            const failedSections = Object.entries(sectionResults)
+                .filter(([, status]) => status === 'failed')
+                .map(([section]) => section);
+
+            // Store the parsed file itself. This runs BEFORE the success/failure
+            // branch below because the file belongs on the profile whenever the
+            // parse succeeded -- independent of how many profile SECTIONS the
+            // resume happened to populate. The branch's early return for
+            // "no sections imported" skipped this entirely, so a resume that
+            // parsed but yielded no sections was never stored.
             uploadResume(file)
                 .then((res) => {
                     if (mountedRef.current) setProfileData((prev) => ({ ...prev, resume_url: res.resume_url }));
@@ -355,6 +461,18 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                     logger.warn("Resume file storage failed:", err);
                     toast.warning("Resume parsed successfully but could not be saved to your profile.", { id: "resume-upload-store" });
                 });
+
+            if (successSections.length > 0) {
+                const message = failedSections.length > 0
+                    ? `Resume imported partially. Loaded: ${successSections.join(", ")}. Failed: ${failedSections.join(", ")}`
+                    : "Resume imported successfully!";
+                toast.success(message, { id: "resume-upload" });
+            } else {
+                toast.error("Failed to import resume. Please try again.", { id: "resume-upload" });
+                setUploading(false);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
+            }
 
             // ✅ FINAL: Refresh dashboard AFTER all profile updates complete
             // Use setTimeout to ensure profile context has updated first
@@ -381,12 +499,24 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 merge_strategy: "merge"
             });
 
+            // Map BEFORE deleting: the gates below need to know what the
+            // import actually provides.
+            const mapped = mapLinkedinToProfile(res);
+
             // =====================================================
             // 1️⃣ DELETE old data before adding newly imported data
             // =====================================================
+            // Each delete below is gated on the import ACTUALLY carrying
+            // replacement data for that section. Previously every section was
+            // cleared unconditionally, so importing a profile with no projects
+            // deleted the projects the user had already entered -- the resume
+            // path even recorded such a section as 'skipped' ("not in resume")
+            // while having just destroyed it. Import replaces the sections it
+            // covers; it must not empty the others.
+
 
             // DELETE EDUCATION
-            try {
+            if (mapped.education?.length) try {
                 const existingEducation = await getEducation();
                 for (const edu of existingEducation) {
                     if (edu.id) await deleteEducation(edu.id);
@@ -396,7 +526,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE EXPERIENCE
-            try {
+            if (mapped.workExperience?.length) try {
                 const existingExperience = await getExperience();
                 for (const exp of existingExperience) {
                     if (exp.id) await deleteExperience(exp.id);
@@ -406,7 +536,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE SKILLS
-            try {
+            if (mapped.skills?.length) try {
                 const existingSkills = await getSkills();
                 for (const skill of existingSkills) {
                     if (skill.id) await deleteSkill(skill.id);
@@ -416,7 +546,7 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             }
 
             // DELETE PROJECTS
-            try {
+            if (mapped.projects?.length) try {
                 const existingProjects = await getProjects();
                 for (const project of existingProjects) {
                     await deleteProject(project.id!);
@@ -425,41 +555,59 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 logger.warn("Error deleting projects:", err);
             }
 
-            const mapped = mapLinkedinToProfile(res);
 
             // Ensure mapped is defined
             if (!mapped) {
                 throw new Error('Failed to parse LinkedIn data');
             }
 
+            // Track which sections succeeded/failed for user feedback
+            const sectionResults: Record<string, 'ok' | 'failed'> = {
+                personal: 'failed',
+                education: 'failed',
+                experience: 'failed',
+                skills: 'failed',
+                projects: 'failed',
+            };
+
             // -------------------------------
             // 1️⃣ UPDATE PERSONAL INFO
             // -------------------------------
             if (mapped?.personalInformation) {
-                await updateProfile({
-                    full_name: mapped.personalInformation.fullName,
-                    phone_number: mapped.personalInformation.phone,
-                    location: mapped.personalInformation.location,
-                    headline: "Software Developer",
-                    linkedin_url: mapped.personalInformation.linkedin,
-                    github_url: mapped.personalInformation.github,
-                    summary: mapped.personalInformation.summary
-                });
+                try {
+                    await updateProfile({
+                        full_name: mapped.personalInformation.fullName,
+                        phone_number: mapped.personalInformation.phone,
+                        location: mapped.personalInformation.location,
+                        headline: "Software Developer",
+                        linkedin_url: mapped.personalInformation.linkedin,
+                        github_url: mapped.personalInformation.github,
+                        summary: mapped.personalInformation.summary
+                    });
+                    sectionResults.personal = 'ok';
+                } catch (err) {
+                    logger.error("Error updating personal information from LinkedIn:", err);
+                }
             }
 
             // -------------------------------
             // 2️⃣ EDUCATION
             // -------------------------------
             if (mapped.education?.length) {
-                for (const edu of mapped.education) {
-                    await addEducationAutoFill({
-                        institution: edu.institution || '',
-                        degree: edu.degree || '',
-                        stream: edu.stream || "",
-                        cgpa: edu.cgpa,
-                        start_date: edu.start_date || '',
-                        end_date: edu.end_date,
-                    });
+                try {
+                    for (const edu of mapped.education) {
+                        await addEducationAutoFill({
+                            institution: edu.institution || '',
+                            degree: edu.degree || '',
+                            stream: edu.stream || "",
+                            cgpa: edu.cgpa,
+                            start_date: edu.start_date || '',
+                            end_date: edu.end_date,
+                        });
+                    }
+                    sectionResults.education = 'ok';
+                } catch (err) {
+                    logger.error("Error adding education from LinkedIn:", err);
                 }
             }
 
@@ -467,16 +615,21 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 3️⃣ EXPERIENCE
             // -------------------------------
             if (mapped.workExperience?.length) {
-                for (const exp of mapped.workExperience) {
-                    await addExperienceAutoFill({
-                        job_title: exp.job_title || '',
-                        company: exp.company || '',
-                        job_type: exp.job_type || 'full_time',
-                        location: exp.location || '',
-                        start_date: exp.start_date || '',
-                        end_date: exp.end_date,
-                        description: exp.description,
-                    });
+                try {
+                    for (const exp of mapped.workExperience) {
+                        await addExperienceAutoFill({
+                            job_title: exp.job_title || '',
+                            company: exp.company || '',
+                            job_type: exp.job_type || 'full_time',
+                            location: exp.location || '',
+                            start_date: exp.start_date || '',
+                            end_date: exp.end_date,
+                            description: exp.description,
+                        });
+                    }
+                    sectionResults.experience = 'ok';
+                } catch (err) {
+                    logger.error("Error adding experience from LinkedIn:", err);
                 }
             }
 
@@ -484,8 +637,13 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 4️⃣ SKILLS
             // -------------------------------
             if (mapped.skills?.length) {
-                for (const skill of mapped.skills) {
-                    await addSkillAutoFill({ name: skill });
+                try {
+                    for (const skill of mapped.skills) {
+                        await addSkillAutoFill({ name: skill });
+                    }
+                    sectionResults.skills = 'ok';
+                } catch (err) {
+                    logger.error("Error adding skills from LinkedIn:", err);
                 }
             }
 
@@ -493,28 +651,66 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
             // 5️⃣ PROJECTS
             // -------------------------------
             if (mapped.projects?.length) {
-                for (const project of mapped.projects) {
-                    await addProjectAutoFill({
-                        project_name: project.project_name,
-                        role: project.role,
-                        technologies: project.technologies || '',
-                        start_date: project.start_date || '',
-                        end_date: project.end_date,
-                        description: project.description,
-                        project_link: project.project_link,
-                    });
+                try {
+                    for (const project of mapped.projects) {
+                        await addProjectAutoFill({
+                            project_name: project.project_name,
+                            role: project.role,
+                            technologies: project.technologies || '',
+                            start_date: project.start_date || '',
+                            end_date: project.end_date,
+                            description: project.description,
+                            project_link: project.project_link,
+                        });
+                    }
+                    sectionResults.projects = 'ok';
+                } catch (err) {
+                    logger.error("Error adding projects from LinkedIn:", err);
                 }
             }
 
             // -------------------------------
             // 6️⃣ RELOAD DATA
             // -------------------------------
-            const [updatedEducation, updatedExp, updatedSkills, updatedProjects] = await Promise.all([
+            const reloadResults = await Promise.allSettled([
                 getEducation(),
                 getExperience(),
                 getSkills(),
                 getProjects(),
             ]);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedEducation: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedExp: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedSkills: Record<string, any>[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let updatedProjects: Record<string, any>[] = [];
+
+            if (reloadResults[0].status === 'fulfilled') {
+                updatedEducation = reloadResults[0].value;
+            } else {
+                logger.warn("Error reloading education from LinkedIn:", reloadResults[0].reason);
+            }
+
+            if (reloadResults[1].status === 'fulfilled') {
+                updatedExp = reloadResults[1].value;
+            } else {
+                logger.warn("Error reloading experience from LinkedIn:", reloadResults[1].reason);
+            }
+
+            if (reloadResults[2].status === 'fulfilled') {
+                updatedSkills = reloadResults[2].value;
+            } else {
+                logger.warn("Error reloading skills from LinkedIn:", reloadResults[2].reason);
+            }
+
+            if (reloadResults[3].status === 'fulfilled') {
+                updatedProjects = reloadResults[3].value;
+            } else {
+                logger.warn("Error reloading projects from LinkedIn:", reloadResults[3].reason);
+            }
 
             setProfileData((prev) => ({
                 ...prev,
@@ -543,7 +739,22 @@ const RightSection = ({ completeness, missingFields }: RightSectionProps) => {
                 }));
             }
 
-            toast.success("LinkedIn imported successfully!", { id: "linkedin-import" });
+            const successSections = Object.entries(sectionResults)
+                .filter(([, status]) => status === 'ok')
+                .map(([section]) => section);
+
+            const failedSections = Object.entries(sectionResults)
+                .filter(([, status]) => status === 'failed')
+                .map(([section]) => section);
+
+            if (successSections.length > 0) {
+                const message = failedSections.length > 0
+                    ? `LinkedIn imported partially. Loaded: ${successSections.join(", ")}. Failed: ${failedSections.join(", ")}`
+                    : "LinkedIn imported successfully!";
+                toast.success(message, { id: "linkedin-import" });
+            } else {
+                toast.error("Failed to import LinkedIn data. Please try again.", { id: "linkedin-import" });
+            }
 
             // ✅ FINAL: Refresh dashboard AFTER all profile updates complete
             // Use setTimeout to ensure profile context has updated first

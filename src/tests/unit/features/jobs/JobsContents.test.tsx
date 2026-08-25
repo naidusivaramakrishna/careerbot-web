@@ -9,7 +9,7 @@ vi.mock('@/hooks/useCurrentUserId', () => ({
   useCurrentUserId: () => ({ userId: 'test-user' }),
 }));
 
-import { normalizeJob } from '@/app/(jobs)/jobslogin/_components/JobsContents';
+import { normalizeJob, jobMatchesSearchQuery } from '@/app/(jobs)/jobslogin/_components/JobsContents';
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 //
@@ -163,5 +163,35 @@ describe('normalizeJob', () => {
   it('returns an empty array when neither key is present', () => {
     const job = normalizeJob({ id: 'job-1', title: 'Engineer' });
     expect(job.requirements).toEqual([]);
+  });
+});
+
+describe('jobMatchesSearchQuery', () => {
+  // Pins the fix for search only matching an exact whole-phrase substring —
+  // that missed real matches whenever word order or extra words differed.
+  it('matches when the words appear in a different order than the query', () => {
+    const job = { title: 'Full Stack Developer (Python)', company: 'Acme' };
+    expect(jobMatchesSearchQuery(job, 'python full stack developer')).toBe(true);
+  });
+
+  it('matches when a query word is in the company instead of the title', () => {
+    const job = { title: 'Software Engineer', company: 'Acme Robotics' };
+    expect(jobMatchesSearchQuery(job, 'engineer robotics')).toBe(true);
+  });
+
+  it('is case-insensitive', () => {
+    const job = { title: 'Backend Developer', company: 'Acme' };
+    expect(jobMatchesSearchQuery(job, 'BACKEND')).toBe(true);
+  });
+
+  it('rejects when any query word is missing from both title and company', () => {
+    const job = { title: 'Backend Developer', company: 'Acme' };
+    expect(jobMatchesSearchQuery(job, 'backend designer')).toBe(false);
+  });
+
+  it('matches everything for an empty or whitespace-only query', () => {
+    const job = { title: 'Backend Developer', company: 'Acme' };
+    expect(jobMatchesSearchQuery(job, '')).toBe(true);
+    expect(jobMatchesSearchQuery(job, '   ')).toBe(true);
   });
 });

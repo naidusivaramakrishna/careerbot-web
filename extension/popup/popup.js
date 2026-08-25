@@ -105,6 +105,13 @@ function unlockRail(unlock) {
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 const API_TIMEOUT_MS = 60000;
+// Resume parsing is AI-driven and can legitimately run past 60s for larger/
+// denser resumes (observed up to ~69s in backend logs) — the generic
+// API_TIMEOUT_MS aborts the request client-side before the backend finishes,
+// which then completes anyway and warms the cache, making a same-resume
+// retry succeed instantly and masking the real cause as "random" flakiness.
+// Matches the web app's axios timeout (src/lib/http.ts) for the same call.
+const RESUME_UPLOAD_TIMEOUT_MS = 120000;
 // Sequential fetchWithTimeout calls in the longest flow (doTailor: upload →
 // parse JD → match → tailor). Used to budget the stuck-flow detection below.
 const MAX_FLOW_CALLS = 4;
@@ -210,7 +217,7 @@ async function uploadResume(file) {
     method: 'POST',
     credentials: 'include',
     body: form,
-  });
+  }, RESUME_UPLOAD_TIMEOUT_MS);
   if (!res.ok) throw new Error('Resume upload failed');
   const data = await res.json();
   return data.resume_id || data.id || data._id || null;
@@ -480,12 +487,16 @@ function syncIdleActions() {
   const hasResume = Boolean(selectedFile);
   const hasJobDescription = Boolean(document.getElementById('manual-jd-input')?.value?.trim());
   const ready = hasResume && hasJobDescription;
-  ['btn-manual-tailor', 'btn-cover-letter-idle'].forEach((id) => {
+  ['btn-idle-get-started', 'btn-manual-tailor', 'btn-cover-letter-idle'].forEach((id) => {
     const button = document.getElementById(id);
     if (button) button.disabled = !ready;
   });
+  if (!ready) closeIdleActionMenu();
   const status = document.querySelector('#state-idle .jdt-label');
   if (status) status.textContent = hasJobDescription ? 'Job description added' : 'No job description added';
+
+  document.getElementById('idle-step-number-1')?.classList.toggle('is-complete', hasResume);
+  document.getElementById('idle-step-number-2')?.classList.toggle('is-complete', hasJobDescription);
 
   const helpEl = document.getElementById('idle-actions-help');
   if (helpEl) {
@@ -498,6 +509,21 @@ function syncIdleActions() {
         : 'Add a job description to continue';
     }
   }
+}
+
+function openIdleActionMenu() {
+  const backdrop = document.getElementById('idle-action-modal-backdrop');
+  const btn = document.getElementById('btn-idle-get-started');
+  if (!backdrop || !btn || btn.disabled) return;
+  backdrop.classList.remove('hidden');
+  btn.setAttribute('aria-expanded', 'true');
+}
+
+function closeIdleActionMenu() {
+  const backdrop = document.getElementById('idle-action-modal-backdrop');
+  const btn = document.getElementById('btn-idle-get-started');
+  if (backdrop) backdrop.classList.add('hidden');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
 function bindFileInput(inputId, displayId) {
@@ -520,6 +546,7 @@ function bindFileInput(inputId, displayId) {
 
     selectedFile = file;
     display.textContent = file.name;
+    display.title = file.name;
     // Enable analyze button only when both file and JD text are present
     syncIdleActions();
   });
@@ -681,13 +708,14 @@ chrome.tabs.onActivated.addListener(() => {
   // case this is the only thing left that can bring the panel back.
   //
   // Budget the longest flow, not one call: doTailor issues four sequential
-  // fetchWithTimeout calls and analyzeScore three, each allowed the full
-  // API_TIMEOUT_MS. Using a single call's timeout here reset a genuinely
-  // running analysis (large upload + cold parse) the moment the user switched
-  // tabs, discarding the in-flight results.
+  // fetchWithTimeout calls and analyzeScore three. One of them (the resume
+  // upload) is allowed RESUME_UPLOAD_TIMEOUT_MS, the rest API_TIMEOUT_MS —
+  // using a single call's timeout here reset a genuinely running analysis
+  // (large upload + cold parse) the moment the user switched tabs, discarding
+  // the in-flight results.
   const isStaleProcessing =
     activeStateName === 'processing' &&
-    Date.now() - processingSince > MAX_FLOW_CALLS * API_TIMEOUT_MS + 5000;
+    Date.now() - processingSince > RESUME_UPLOAD_TIMEOUT_MS + (MAX_FLOW_CALLS - 1) * API_TIMEOUT_MS + 5000;
   // 'loading' bails out too: init() shows it while verifyExtensionUser() is in
   // flight, and it hides state-login — so the sign-in guard above passes. A tab
   // switch inside that round-trip would otherwise fall through to the full idle
@@ -792,6 +820,7 @@ function setupIdleState() {
   setupJDToggles();
 
   document.getElementById('btn-manual-tailor').addEventListener('click', async () => {
+    closeIdleActionMenu();
     const jdText = document.getElementById('manual-jd-input')?.value?.trim();
     if (!jdText) { alert('Please paste a job description.'); return; }
     const { detectedJD } = await chrome.storage.local.get('detectedJD').catch(() => ({}));
@@ -804,7 +833,16 @@ function setupIdleState() {
     await analyzeScore(jdText, jdIsDetected ? (detectedJD?.meta ?? null) : null, selectedFile, null);
   });
 
-  document.getElementById('btn-cover-letter-idle')?.addEventListener('click', generateCoverLetter);
+  document.getElementById('btn-cover-letter-idle')?.addEventListener('click', () => {
+    closeIdleActionMenu();
+    generateCoverLetter();
+  });
+
+  document.getElementById('btn-idle-get-started')?.addEventListener('click', openIdleActionMenu);
+  document.getElementById('btn-idle-action-modal-close')?.addEventListener('click', closeIdleActionMenu);
+  document.getElementById('idle-action-modal-backdrop')?.addEventListener('click', (e) => {
+    if (e.target.id === 'idle-action-modal-backdrop') closeIdleActionMenu();
+  });
   document.getElementById('idle-paste-action')?.addEventListener('click', () => {
     const expandArea = document.getElementById('jd-expand-area');
     if (expandArea?.classList.contains('hidden')) {

@@ -17,10 +17,13 @@ export const DOMAIN_FAMILY_IMAGES: Record<string, string> = {
   legal:                           '/assets/templates/legal.png',
   logistics_warehouse_operations:  '/assets/templates/logistics.png',
   marine_merchant_navy:            '/assets/templates/marine_merchant.png',
-  modern_minimal_template:         '/assets/templates/modern_minimal.png',
   research_scholar:                '/assets/templates/research_scholar.png',
   sales_business_development:      '/assets/templates/sales_business.png',
-  general_professional:            '/assets/templates/software_engineering.png',
+  customer_support_service:        '/assets/templates/customer_support_service.png',
+  product_engineering_leadership:  '/assets/templates/product_engineering_leadership.png',
+  marketing_creative:              '/assets/templates/marketing_creative.png',
+  operations_management:           '/assets/templates/operations_management.png',
+  human_resources:                 '/assets/templates/human_resources.png',
 };
 
 export const FALLBACK_TEMPLATE_IMAGE = '/assets/templates/template-1.png';
