@@ -17,6 +17,7 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 
 // Reusable Toolbar Button Component
@@ -175,35 +176,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
-      // BUILD the node, never interpolate into innerHTML.
-      //
-      // The strip below only matches a '<' that has a matching '>', so an
-      // unclosed tag survives it untouched: '<img src=x onerror=...' comes out
-      // of .replace() byte-for-byte, and the old template then handed it to
-      // the HTML parser, which resolved it into a real <img> and fired the
-      // handler. `suggestion` is AI text derived from an uploaded resume, and
-      // the result was written straight back into the SAVED resume below, so
-      // it persisted. The middle branch already did this correctly with
-      // textContent; the two innerHTML branches did not.
-      const text = suggestion.replace(/<[^>]*>/g, '').trim();
-      const current = el.innerHTML.trim();
-      const li = document.createElement('li');
-      li.textContent = text;
-      if (!current || current === '<br>') {
-        el.innerHTML = '';
-        const ul = document.createElement('ul');
-        ul.appendChild(li);
-        el.appendChild(ul);
-      } else {
-        const uls = el.getElementsByTagName('ul');
-        if (uls.length > 0) {
-          uls[uls.length - 1].appendChild(li);
-        } else {
-          const ul = document.createElement('ul');
-          ul.appendChild(li);
-          el.appendChild(ul);
-        }
-      }
+      appendSuggestionBullet(el, suggestion);
       handleChange(el.innerHTML);
 
       setTimeout(() => {

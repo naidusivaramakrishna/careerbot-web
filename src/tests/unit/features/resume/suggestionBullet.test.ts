@@ -11,35 +11,15 @@
  * resume, and the result was written straight back into the SAVED resume, so
  * it persisted rather than lasting one render.
  *
- * This test reproduces the sink and the fix on the same shape of DOM the
- * editors use. It is deliberately not importing the components -- they are
- * 700-line editors behind a resume context -- but the logic under test is
- * copied verbatim from them, so a divergence shows up as a failure here.
+ * The logic now lives in ONE module that all seven editors import, so this
+ * test drives the real thing rather than a copy of it.
  */
 import { describe, expect, it, beforeEach } from 'vitest';
-
-// Verbatim from the seven section editors after the fix.
-function appendSuggestionBullet(el: HTMLElement, suggestion: string) {
-  const text = suggestion.replace(/<[^>]*>/g, '').trim();
-  const current = el.innerHTML.trim();
-  const li = document.createElement('li');
-  li.textContent = text;
-  if (!current || current === '<br>') {
-    el.innerHTML = '';
-    const ul = document.createElement('ul');
-    ul.appendChild(li);
-    el.appendChild(ul);
-  } else {
-    const uls = el.getElementsByTagName('ul');
-    if (uls.length > 0) {
-      uls[uls.length - 1].appendChild(li);
-    } else {
-      const ul = document.createElement('ul');
-      ul.appendChild(li);
-      el.appendChild(ul);
-    }
-  }
-}
+// THE PRODUCTION FUNCTION. The first version of this file copied the fixed
+// implementation into the test, which meant reverting the real one left this
+// green -- a test that cannot fail. All seven section editors now import
+// this same symbol, so this exercises what actually ships.
+import { appendSuggestionBullet } from '@/app/(resume)/builder/creation/_lib/appendSuggestionBullet';
 
 let el: HTMLElement;
 beforeEach(() => {
@@ -93,5 +73,19 @@ describe('appendSuggestionBullet', () => {
 
     expect(el.querySelector('br')).toBeNull();
     expect(el.querySelector('ul li')?.textContent).toBe('First bullet');
+  });
+});
+
+describe('every section editor uses the shared helper', () => {
+  // The 7-way copy is what allowed one sink to be seven sinks. If a section
+  // grows its own inline version again, this fails.
+  it('has no inline innerHTML bullet construction left', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const dir = 'src/app/(resume)/builder/creation/_components/editor/sections';
+    const offenders = readdirSync(dir)
+      .filter((f) => f.endsWith('.tsx'))
+      .filter((f) => /innerHTML\s*\+?=\s*`<ul>/.test(readFileSync(`${dir}/${f}`, 'utf8')));
+
+    expect(offenders).toEqual([]);
   });
 });

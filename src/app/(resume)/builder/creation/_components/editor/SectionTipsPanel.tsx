@@ -204,6 +204,8 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
 
               const undoBtnState = undoStates[s.id] ?? "idle";
               const isUndoing = undoBtnState === "loading";
+              // Applied fixes and in-flight ones are not re-appliable.
+              const isDisabled = isLoading || isUndoing || btnState === "success";
 
               return isAuto ? (
                 // ── Auto fix: a clickable CARD, not a <button> ──
@@ -222,10 +224,26 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
                 // this reason and its Undo button works.
                 <div
                   key={s.id}
-                  role="group"
+                  // role="button" + tabIndex + key handling, NOT role="group".
+                  // The first pass used "group", which fixed the hydration
+                  // error and quietly removed keyboard activation: a native
+                  // <button> is focusable and fires on Enter and Space for
+                  // free, and a plain div is neither. Anyone not using a mouse
+                  // lost the ability to apply a fix at all.
+                  role={isDisabled ? undefined : "button"}
+                  tabIndex={isDisabled ? undefined : 0}
+                  aria-disabled={isDisabled || undefined}
                   onClick={() => {
-                    if (isLoading || isUndoing || btnState === "success") return;
+                    if (isDisabled) return;
                     handleAutoFix(s.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (isDisabled) return;
+                    // Space scrolls the panel by default; a button must not.
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleAutoFix(s.id);
+                    }
                   }}
                   title={btnState === "success" ? undefined : "Click to auto-apply this fix"}
                   className={`w-full text-left px-3 py-2.5 rounded-md text-sm leading-relaxed transition-all duration-200 border flex flex-col gap-1.5 group ${
