@@ -3,13 +3,6 @@ import logger from '@/lib/logger';
 
 // ==================== INTERFACES ====================
 
-// ── Consent ────────────────────────────────────────────────────────────────────
-
-export interface ConsentResponse {
-  consent_recorded: boolean;
-  timestamp: string;
-}
-
 // ── Generate Notes ─────────────────────────────────────────────────────────────
 
 export interface GenerateNotesRequest {
@@ -182,18 +175,6 @@ export interface EnglishEssentials {
 }
 
 // ==================== API FUNCTIONS ====================
-
-/**
- * Record user consent for AI processing (DPDP compliance)
- * POST /api/v1/mock-interview/consent
- */
-export const recordConsent = async (consent_given: boolean): Promise<ConsentResponse> => {
-  const response = await httpClient.post<ConsentResponse>(
-    '/mock-interview/consent',
-    { consent_given } as unknown as Record<string, unknown>
-  );
-  return response.data;
-};
 
 /**
  * Generate AI-powered interview prep notes from user's resume
@@ -658,6 +639,10 @@ export interface LiveCreateRequest {
   target_role?: string;
   enable_streaming_stt?: boolean;
   voice?: string;
+  interviewer_index?: number;
+  interviewer_name?: string;
+  interviewer_gender?: string;
+  interviewer_slug?: string;
   use_orchestrator?: boolean;
 }
 

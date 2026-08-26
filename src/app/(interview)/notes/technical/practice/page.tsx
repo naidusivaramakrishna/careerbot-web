@@ -4,13 +4,13 @@ import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight, ChevronLeft, Code2, Mic, Clock,
-  CheckCircle2, Loader2, AlertCircle, Key, RotateCcw,
+  CheckCircle2, Loader2, AlertCircle, Key, RotateCcw, BookOpen, Eye, EyeOff,
 } from "lucide-react";
 import AudioRecorder from "@/app/(interview)/communication/components/AudioRecorder";
 import FeedbackCard from "@/app/(interview)/mock-interview/_components/FeedbackCard";
 import TranscriptDisplay from "@/app/(interview)/mock-interview/_components/TranscriptDisplay";
 import {
-  submitPracticeAnswer, MrTrQuestion, GenerateMrTrQuestionsResponse, SubmitAnswerResponse,
+  submitPracticeAnswer, getNotes, MrTrQuestion, GenerateMrTrQuestionsResponse, SubmitAnswerResponse,
 } from "@/api/mockInterviewApi";
 
 const TECH_QUESTIONS_KEY = "tech_generated_questions";
@@ -48,6 +48,59 @@ type Question = {
   expected_duration_s: number;
 };
 
+// ─── Note-matching helpers ────────────────────────────────────────────────────
+
+function wordOverlap(a: string, b: string): number {
+  const words = (s: string) => s.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+  const aSet = new Set(words(a));
+  const bWords = words(b);
+  const matches = bWords.filter((w) => aSet.has(w)).length;
+  return matches / Math.max(aSet.size, 1);
+}
+
+type ProjectNote = {
+  project_name?: string;
+  tech_stack?: string;
+  overview?: string;
+  how_it_works?: string;
+  your_role?: string;
+  challenges?: string;
+  results?: string;
+};
+
+function matchTechNoteScript(questionText: string, notes: Record<string, unknown>): string {
+  const text = questionText.toLowerCase();
+
+  // Self-introduction questions
+  if (text.includes("about yourself") || text.includes("introduce") || text.includes("background")) {
+    const raw = notes.self_introduction;
+    if (typeof raw === "string") return raw;
+    if (raw && typeof raw === "object") return (raw as { script?: string }).script ?? "";
+  }
+
+  // Project explanation questions — match by project name + tech stack keyword overlap
+  const projects = notes.project_explanations as ProjectNote[] | undefined;
+  if (projects?.length) {
+    let best = { score: 0, script: "" };
+    for (const p of projects) {
+      const combined = `${p.project_name ?? ""} ${p.tech_stack ?? ""} ${p.overview ?? ""}`;
+      const score = wordOverlap(text, combined);
+      if (score > best.score) {
+        const parts = [
+          p.how_it_works,
+          p.your_role   && `Role: ${p.your_role}`,
+          p.challenges  && `Challenges: ${p.challenges}`,
+          p.results     && `Results: ${p.results}`,
+        ].filter(Boolean) as string[];
+        best = { score, script: parts.join("\n\n") };
+      }
+    }
+    if (best.script) return best.script;
+  }
+
+  return "";
+}
+
 // ─── Content ──────────────────────────────────────────────────────────────────
 
 function TechnicalPracticeContent() {
@@ -68,6 +121,8 @@ function TechnicalPracticeContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [notesMap, setNotesMap] = useState<Record<string, string>>({});
+  const [showNotes, setShowNotes] = useState(true);
 
   const showSubmitError = useCallback((msg: string) => {
     if (errorDismissRef.current) clearTimeout(errorDismissRef.current);
@@ -91,16 +146,32 @@ function TechnicalPracticeContent() {
       return;
     }
 
+    const mappedQuestions = stored.questions.map((q: MrTrQuestion) => ({
+      id: q.id,
+      text: q.text,
+      keywords: q.key_points,
+      expected_duration_s: q.time_limit_s,
+    }));
+
     setSessionId(stored.session_id);
-    setQuestions(
-      stored.questions.map((q: MrTrQuestion) => ({
-        id: q.id,
-        text: q.text,
-        keywords: q.key_points,
-        expected_duration_s: q.time_limit_s,
-      }))
-    );
+    setQuestions(mappedQuestions);
     setSessionLoading(false);
+
+    // Load prepared notes and match each question to its script (self-intro or project)
+    const resumeId = localStorage.getItem("current_resume_id");
+    if (resumeId) {
+      getNotes(resumeId)
+        .then((record) => {
+          const rawNotes = record?.notes as Record<string, unknown> | undefined;
+          if (!rawNotes || Object.keys(rawNotes).length === 0) return;
+          const map: Record<string, string> = {};
+          mappedQuestions.forEach((q) => {
+            map[q.id] = matchTechNoteScript(q.text, rawNotes);
+          });
+          setNotesMap(map);
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const question = questions[currentIndex];
@@ -444,6 +515,36 @@ function TechnicalPracticeContent() {
                   </div>
                 </div>
               )}
+
+              <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${showNotes ? "border-[#2557a7]/20 bg-[#2557a7]/5" : "border-gray-200 bg-gray-50"}`}>
+                <button
+                  type="button"
+                  aria-expanded={showNotes}
+                  onClick={() => setShowNotes((s) => !s)}
+                  className="w-full flex items-center justify-between px-3 py-2.5"
+                >
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[#2557a7]">
+                    <BookOpen size={14} />
+                    Your Notes
+                  </div>
+                  {showNotes
+                    ? <EyeOff size={14} className="text-[#2557a7]" />
+                    : <Eye size={14} className="text-[#2557a7]" />}
+                </button>
+                {showNotes && (
+                  <div className="max-h-52 overflow-auto px-3 pb-3 border-t border-[#2557a7]/15 pt-2.5">
+                    {notesMap[question.id] ? (
+                      <p className="text-xs text-[#2557a7] leading-5 whitespace-pre-wrap">
+                        {notesMap[question.id]}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">
+                        No notes found for this question. Go to the Notes page to generate your prepared scripts.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
                 <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">

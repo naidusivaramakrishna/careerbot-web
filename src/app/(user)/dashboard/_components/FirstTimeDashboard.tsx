@@ -17,7 +17,6 @@ import {
   Sparkles,
   Upload,
   User,
-  Wand2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,6 +25,14 @@ import { useResumeProfileFill } from "@/hooks/useResumeProfileFill";
 import { useDashboard } from "@/contexts/DashboardContext";
 import ProfileFillModal from "./ProfileFillModal";
 import { runAtsScan } from "@/api/resumeatsapi";
+import {
+  EnterpriseAtsScanIcon as IcoAtsScan,
+  EnterpriseInterviewPrepIcon as IcoInterview,
+  EnterpriseJobMatchIcon as IcoJobMatch,
+  EnterpriseJobsIcon as IcoJobs,
+  EnterpriseProfileIcon as IcoProfile,
+  EnterpriseResumeIcon as IcoResume,
+} from "@/components/icons/EnterpriseNavIcons";
 
 const SURFACE = "rounded-2xl border border-gray-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.055)]";
 const PAD = "px-5 py-5 sm:px-6";
@@ -43,7 +50,7 @@ type DashboardAction = {
   Icon: React.ElementType;
 };
 
-type ExtensionItem = {
+type _ExtensionItem = {
   title: string;
   detail: string;
   href: string;
@@ -51,16 +58,18 @@ type ExtensionItem = {
 };
 
 const activityIcons: Record<string, React.ElementType> = {
-  ats_scan: ScanSearch,
+  ats_scan: IcoAtsScan,
   assessment: MessageSquare,
-  enhancement: Wand2,
-  job_application: Briefcase,
-  job_match: Briefcase,
-  profile_update: User,
-  profile_updated: User,
-  resume_create: FileText,
-  resume_enhanced: Wand2,
-  resume_parse: FileText,
+  enhancement: IcoAtsScan,
+  interview: IcoInterview,
+  mock_interview: IcoInterview,
+  job_application: IcoJobs,
+  job_match: IcoJobMatch,
+  profile_update: IcoProfile,
+  profile_updated: IcoProfile,
+  resume_create: IcoResume,
+  resume_enhanced: IcoResume,
+  resume_parse: IcoResume,
 };
 
 const formatPlan = (planId: string, planName?: string) => planName || planId.replace(/[_-]/g, " ").trim() || "Free Plan";
@@ -151,16 +160,29 @@ const ReadinessPath = ({ data, lowCredits }: { data: DashboardSummary; lowCredit
         <div className="grid flex-1 gap-3 sm:grid-cols-4 lg:max-w-3xl">
           {steps.map((step, index) => {
             const active = !lowCredits && index === currentIndex && !step.complete;
+            const dimmed = lowCredits; // all steps inactive when upgrade needed
             return (
               <div key={step.label} className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-black ${step.complete ? "bg-[#2557a7] text-white" : active ? "bg-[#eef4ff] text-[#2557a7] ring-1 ring-[#2557a7]" : "bg-gray-100 text-gray-400"}`}>
+                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-black ${
+                    step.complete
+                      ? dimmed ? "bg-gray-300 text-white" : "bg-[#2557a7] text-white"
+                      : active ? "bg-[#eef4ff] text-[#2557a7] ring-1 ring-[#2557a7]"
+                      : "bg-gray-100 text-gray-400"
+                  }`}>
                     {step.complete ? <Check size={9} strokeWidth={3} /> : index + 1}
                   </span>
-                  <span className={`truncate text-[13px] font-black ${step.complete || active ? "text-gray-950" : "text-gray-500"}`}>{step.label}</span>
+                  <span className={`truncate text-[13px] font-black ${
+                    step.complete
+                      ? dimmed ? "text-gray-400" : "text-gray-950"
+                      : active ? "text-gray-950" : "text-gray-500"
+                  }`}>{step.label}</span>
                 </div>
                 <div className="mt-2 h-1 rounded-full bg-gray-100">
-                  <div className="h-full rounded-full bg-[#2557a7]" style={{ width: step.complete ? "100%" : active ? "42%" : "0%" }} />
+                  <div className="h-full rounded-full bg-[#2557a7]" style={{
+                    width: step.complete ? (dimmed ? "100%" : "100%") : active ? "42%" : "0%",
+                    opacity: dimmed && step.complete ? 0.25 : 1,
+                  }} />
                 </div>
               </div>
             );
@@ -256,19 +278,21 @@ const OperationsTable = ({ data }: { data: DashboardSummary }) => {
     { label: "ATS Scan", detail: "Check screening compatibility before applying", href: "/atslogin", Icon: ScanSearch, metric: data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score} best` },
     { label: "Job Match", detail: "Compare roles against your resume and profile", href: "/jobmatch", Icon: Briefcase, metric: `${data.usage_counts.job_matches} matches` },
     { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobs", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
-    // assessments_taken is english_assessment + mock_test COMBINED (see
-    // dashboard.types.ts). It belongs on the Mock Test tile, which is where it
-    // was before this PR moved it. Pointing it at Interview Prep reported
-    // mock-test runs as interview sessions, and left Mock Test reading a field
-    // -- mock_tests_taken -- that the backend has never returned, so that tile
-    // said "Practice" forever no matter how many tests the user had taken.
-    // Splitting the two needs a backend counter first.
-    { label: "Interview Prep", detail: "Mock interviews and communication practice", href: "/mock-interview", Icon: MessageSquare, metric: "Practice" },
-    // "assessments", not "tests": the counter is english_assessment +
-    // mock_test combined, so calling it tests states a number that is not the
-    // number of tests. This tile is the closest home the dashboard has for it
-    // until the backend splits the counter.
-    { label: "Mock Test", detail: "Assessments, aptitude, and screening practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} assessments` },
+    // KEEPS this PR's four-tile split -- it is a better information
+    // architecture than the two it replaced -- and DROPS the three fields it
+    // read to fill them. usage_counts has six fields on the backend and
+    // mock_interviews_taken / mock_tests_taken / coding_tests_taken are not
+    // among them, so each `?? 0` rendered a permanent, confident zero: "0
+    // sessions" to a user who had done twenty. A wrong number is worse than
+    // no number, because only the missing one is visible as missing.
+    //
+    // assessments_taken is the one real counter, and it is english_assessment
+    // + mock_test COMBINED (repository_impl.py counts both under one $in), so
+    // it is labelled "assessments" rather than "tests" and sits on the closest
+    // tile. Giving the other three honest numbers needs backend counters first.
+    { label: "Mock Interview", detail: "AI-powered live mock interview sessions", href: "/mock-interview", Icon: MessageSquare, metric: "Practice" },
+    { label: "Communication Assessment", detail: "Improve spoken and listening communication skills", href: "/communication/start", Icon: MessageSquare, metric: "Practice" },
+    { label: "Mock Test", detail: "Aptitude, arithmetic, reasoning and technical practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} assessments` },
     { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", href: "/coding-test", Icon: Code2, metric: "Practice" },
   ];
 
@@ -320,79 +344,89 @@ const PlanUsage = ({ data, creditsUsed }: { data: DashboardSummary; creditsUsed:
   );
 };
 
-const ExtensionsPanel = () => {
-  const extensions: ExtensionItem[] = [
-    {
-      title: "Job Match Extension",
-      detail: "Capture job descriptions from job boards and open matching faster.",
-      href: "/extension?workflow=job-match",
-      Icon: Briefcase,
-    },
-    {
-      title: "Cover Letter Extension",
-      detail: "Send role context into cover letter workflows without copy-paste.",
-      href: "/extension?workflow=cover-letter",
-      Icon: FileText,
-    },
-  ];
+const ExtensionsPanel = () => (
+  <section className={`${SURFACE} overflow-hidden`}>
+    <div className="border-b border-gray-200 px-4 py-3.5 sm:px-5">
+      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">Extensions</p>
+      <h2 className="mt-1.5 text-lg font-black tracking-[-0.025em] text-gray-950">Install browser tools</h2>
+      <p className="mt-2 text-sm leading-6 text-gray-500">Move job context into CareerBot workflows faster.</p>
+    </div>
+    <Link href="/extension" className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-5 py-3.5 transition hover:bg-gray-50 sm:px-6">
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef4ff] text-[#2557a7]">
+        <Briefcase size={17} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-black text-gray-950">CareerBot Extension</span>
+        <span className="mt-1 block text-xs leading-5 text-gray-500">Capture job descriptions, open job match, and generate cover letters directly from any job board.</span>
+      </span>
+      <span className="hidden text-sm font-black text-[#2557a7] sm:inline">Install now</span>
+    </Link>
+  </section>
+);
+
+const ActivityLedger = ({ activities }: { activities: ActivityItem[] }) => {
+  const visibleActivities = activities.slice(0, 4);
 
   return (
     <section className={`${SURFACE} overflow-hidden`}>
-      <div className="border-b border-gray-200 px-4 py-3.5 sm:px-5">
-        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">Extensions</p>
-        <h2 className="mt-1.5 text-lg font-black tracking-[-0.025em] text-gray-950">Install browser tools</h2>
-        <p className="mt-2 text-sm leading-6 text-gray-500">Move job context into CareerBot workflows faster.</p>
+      <div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div>
+          <h2 className="text-lg font-black tracking-[0.025em] text-gray-950">Recent activity</h2>
+          <p className="mt-1 text-sm leading-5 text-gray-500">Latest resume, ATS, profile, and job-search actions.</p>
+        </div>
+        <Link
+          href="/dashboard/recent-activity"
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 text-sm font-black text-[#2557a7] transition hover:bg-[#eef4ff]"
+        >
+          View all <ArrowRight size={14} />
+        </Link>
       </div>
-      <div className="divide-y divide-gray-100">
-        {extensions.map(({ title, detail, href, Icon }) => (
-          <Link key={title} href={href} className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-5 py-3.5 transition hover:bg-gray-50 sm:px-6">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef4ff] text-[#2557a7]"><Icon size={17} /></span>
-            <span className="min-w-0">
-              <span className="block text-sm font-black text-gray-950">{title}</span>
-              <span className="mt-1 block text-xs leading-5 text-gray-500">{detail}</span>
+
+      {visibleActivities.length > 0 ? (
+        <div className="px-4 py-3 sm:px-5">
+          <div className="relative space-y-2 before:absolute before:left-5 before:top-5 before:h-[calc(100%-40px)] before:w-px before:bg-gray-200">
+            {visibleActivities.map((item) => {
+              const Icon = activityIcons[(item.type ?? item.feature ?? "").toLowerCase()] ?? ActivityIcon;
+              const creditLabel = item.credits_used ? `${item.credits_used} cr` : "Free";
+
+              return (
+                <div key={item.id} className="relative grid grid-cols-[42px_1fr] gap-3 rounded-2xl border border-transparent px-1 py-2 transition hover:border-gray-200 hover:bg-gray-50 sm:grid-cols-[42px_1fr_auto]">
+                  <span className="relative z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-[#d9e5f8] bg-[#eef4ff] text-[#2557a7] shadow-[0_8px_20px_rgba(37,87,167,0.08)]">
+                    <Icon size={17} />
+                  </span>
+                  <div className="min-w-0 self-center">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-[13px] font-black text-gray-950">{item.feature_label}</p>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-black text-gray-500">{creditLabel}</span>
+                    </div>
+                    <p className="mt-1 truncate text-xs leading-5 text-gray-500">{item.result_summary || "Action completed successfully"}</p>
+                  </div>
+                  <div className="col-start-2 self-center text-left sm:col-start-auto sm:text-right">
+                    <span className="inline-flex rounded-full bg-white px-2.5 py-1 text-xs font-bold text-gray-500 ring-1 ring-gray-200">
+                      {timeAgo(item.timestamp)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="px-5 py-8 sm:px-6">
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-7 text-center">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white text-[#2557a7] shadow-sm ring-1 ring-gray-200">
+              <ActivityIcon size={18} />
             </span>
-            <span className="hidden text-sm font-black text-[#2557a7] sm:inline">Install now</span>
-          </Link>
-        ))}
-      </div>
+            <p className="mt-3 text-sm font-black text-gray-950">No activity yet</p>
+            <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-gray-500">
+              Your completed resume uploads, ATS scans, profile updates, and applications will appear here.
+            </p>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
-
-const ActivityLedger = ({ activities }: { activities: ActivityItem[] }) => (
-  <section className={`${SURFACE} overflow-hidden`}>
-    <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-4 py-3.5 sm:px-5">
-      <div>
-        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">Recent activity</p>
-        <h2 className="mt-1.5 text-lg font-black tracking-[-0.025em] text-gray-950">Work completed</h2>
-      </div>
-      <Link href="/dashboard/recent-activity" className="text-sm font-black text-[#2557a7]">View all</Link>
-    </div>
-    <div className="divide-y divide-gray-100">
-      {activities.length > 0 ? activities.slice(0, 4).map((item) => {
-        const Icon = activityIcons[(item.type ?? item.feature ?? "").toLowerCase()] ?? ActivityIcon;
-        return (
-          <div key={item.id} className="grid grid-cols-[40px_1fr_auto] items-center gap-3 px-5 py-3.5 sm:px-6">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-[#2557a7]"><Icon size={17} /></span>
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-black text-gray-950">{item.feature_label}</p>
-              <p className="mt-1 truncate text-xs leading-5 text-gray-500">{item.result_summary || "Action completed"}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm font-black text-gray-950">{item.credits_used ? `${item.credits_used} cr` : "Free"}</p>
-              <p className="mt-1 text-xs font-semibold text-gray-400">{timeAgo(item.timestamp)}</p>
-            </div>
-          </div>
-        );
-      }) : (
-        <div className="px-5 py-10 text-center sm:px-6">
-          <p className="font-black text-gray-950">No activity yet</p>
-          <p className="mt-1 text-sm text-gray-500">Upload a resume, complete your profile, run an ATS scan, or apply to jobs to start your ledger.</p>
-        </div>
-      )}
-    </div>
-  </section>
-);
 
 const TrendsPanel = ({ data }: { data: DashboardSummary }) => {
   const fallbackRoles = [

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createLiveSession } from "@/api/mockInterviewApi";
+import { getInterviewerByIndex, isVoiceMatchedToGender } from "../../_lib/interviewers";
 import { Loader2 } from "lucide-react";
 
 interface SessionParams {
@@ -12,6 +13,7 @@ interface SessionParams {
   voice: string;
   use_orchestrator: boolean;
   interviewer_index: number;
+  interviewer_slug?: string;
   interviewer_name: string;
   gender: string;
   session_type_label: string;
@@ -42,29 +44,42 @@ export default function LiveStartingPage() {
     }
 
     sessionStorage.removeItem("live_session_params");
+    const selectedInterviewer = getInterviewerByIndex(params.interviewer_index);
+    const fallbackVoice = params.gender === "female" ? "nova" : "alloy";
+    const voice = selectedInterviewer?.voice ?? (isVoiceMatchedToGender(params.voice, params.gender) ? params.voice : fallbackVoice);
+    const interviewerName = selectedInterviewer?.name ?? params.interviewer_name;
+    const interviewerGender = selectedInterviewer?.gender ?? params.gender;
+    const interviewerSlug = selectedInterviewer?.slug ?? params.interviewer_slug;
 
-    createLiveSession({
+    const basePayload = {
       session_type: params.session_type,
       resume_id: params.resume_id,
       enable_streaming_stt: params.enable_streaming_stt,
-      voice: params.voice,
-      use_orchestrator: params.use_orchestrator,
-    })
-      .then((data) => {
-        sessionStorage.setItem("live_session_data", JSON.stringify(data));
-        sessionStorage.setItem("live_session_type", params.session_type_label);
-        sessionStorage.setItem(
-          "live_session_interviewer",
-          JSON.stringify({
-            session_id: data.session_id,
-            interviewer_index: params.interviewer_index,
-            interviewer_name: params.interviewer_name,
-            gender: params.gender,
-            voice: params.voice,
-          }),
-        );
-        router.replace(`/mock-interview/live/${data.session_id}`);
-      })
+      voice,
+      interviewer_index: params.interviewer_index,
+      interviewer_name: interviewerName,
+      interviewer_gender: interviewerGender,
+      interviewer_slug: interviewerSlug,
+    };
+
+    const onSuccess = (data: Awaited<ReturnType<typeof createLiveSession>>) => {
+      sessionStorage.setItem("live_session_data", JSON.stringify(data));
+      sessionStorage.setItem("live_session_type", params.session_type_label);
+      sessionStorage.setItem(
+        "live_session_interviewer",
+        JSON.stringify({
+          session_id: data.session_id,
+          interviewer_index: params.interviewer_index,
+          interviewer_name: interviewerName,
+          gender: interviewerGender,
+          voice,
+        }),
+      );
+      router.replace(`/mock-interview/live/${data.session_id}`);
+    };
+
+    createLiveSession({ ...basePayload, use_orchestrator: true })
+      .then(onSuccess)
       .catch(() => {
         setError("Could not create the live interview. Please check your connection and try again.");
       });

@@ -9,7 +9,18 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Activity } from '@/types/dashboard.types';
-import { ArrowLeft, Clock, Loader2 } from 'lucide-react';
+import {
+  Activity as ActivityIcon,
+  AlertCircle,
+  ArrowLeft,
+  Briefcase,
+  Clock,
+  FileText,
+  Loader2,
+  MessageSquare,
+  ScanSearch,
+  UserRoundCheck,
+} from 'lucide-react';
 import { getDashboardSummary } from '@/api/dashboardApi';
 import { toast } from 'sonner';
 
@@ -19,6 +30,21 @@ const RecentActivityPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+
+  const activityIcons: Record<string, React.ElementType> = {
+    ats_scan: ScanSearch,
+    assessment: MessageSquare,
+    enhancement: FileText,
+    interview: MessageSquare,
+    mock_interview: MessageSquare,
+    job_application: Briefcase,
+    job_match: Briefcase,
+    profile_update: UserRoundCheck,
+    profile_updated: UserRoundCheck,
+    resume_create: FileText,
+    resume_enhanced: FileText,
+    resume_parse: FileText,
+  };
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -49,6 +75,7 @@ const RecentActivityPage: React.FC = () => {
     const diffDays = Math.floor(diffMs / 86400000);
     const diffWeeks = Math.floor(diffMs / 604800000);
 
+    if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
     if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
     if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
@@ -97,141 +124,210 @@ const RecentActivityPage: React.FC = () => {
   const startIdx = (currentPage - 1) * itemsPerPage;
   const paginatedActivities = activities.slice(startIdx, startIdx + itemsPerPage);
   const groupedActivities = groupActivitiesByDay(paginatedActivities);
+  const creditsUsed = activities.reduce((total, activity) => total + Math.max(0, activity.credits_used || 0), 0);
+  const completedActions = activities.length;
+  const lastActivity = activities[0] ? formatTimeAgo(activities[0].timestamp) : 'No activity';
+  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1).filter((page) => (
+    page === 1 ||
+    page === totalPages ||
+    Math.abs(page - currentPage) <= 1
+  ));
 
   if (loading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-[#5896d7] animate-spin" />
-          <p className="text-gray-600">Loading activities...</p>
+      <div className="min-h-screen bg-[#f6f7f9] px-4 py-6 text-gray-950 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center">
+          <div className="rounded-2xl border border-gray-200 bg-white px-8 py-7 text-center shadow-[0_18px_55px_rgba(15,23,42,0.055)]">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#2557a7]" />
+            <p className="mt-4 text-sm font-black text-gray-950">Loading recent activity</p>
+            <p className="mt-1 text-sm text-gray-500">Collecting your latest workspace actions.</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 pb-20 max-w-4xl mx-auto min-h-screen flex flex-col">
-      {/* Header */}
-      <div className="mb-8 shrink-0">
-        <Link href="/dashboard">
-          <button className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium mb-4">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </button>
-        </Link>
-        <h1 className="text-3xl font-bold text-gray-900 mb-1">Recent Activity</h1>
-        <p className="text-gray-500">All your actions and activities</p>
-      </div>
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-5 text-gray-950 sm:px-6 lg:px-8 lg:py-6">
+      <div className="mx-auto max-w-5xl space-y-5">
+        <header className="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-[0_18px_55px_rgba(15,23,42,0.055)] sm:px-6">
+          <Link
+            href="/dashboard"
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 text-sm font-black text-[#2557a7] transition hover:bg-[#eef4ff]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Dashboard
+          </Link>
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <h1 className="mt-1.5 text-[26px] font-black leading-tight tracking-[-0.03em] text-gray-950 sm:text-[30px]">
+                Recent activity
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
+                A clear history of completed resume, profile, ATS, matching, and application actions in your CareerBot workspace.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-2 sm:min-w-[390px]">
+              <div className="rounded-xl bg-white px-3 py-3 ring-1 ring-gray-200">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">Actions</p>
+                <p className="mt-1 text-lg font-black text-gray-950">{completedActions}</p>
+              </div>
+              <div className="rounded-xl bg-white px-3 py-3 ring-1 ring-gray-200">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">Credits</p>
+                <p className="mt-1 text-lg font-black text-gray-950">{creditsUsed}</p>
+              </div>
+              <div className="rounded-xl bg-white px-3 py-3 ring-1 ring-gray-200">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">Latest</p>
+                <p className="mt-1 truncate text-sm font-black text-gray-950">{lastActivity}</p>
+              </div>
+            </div>
+          </div>
+        </header>
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
-          <p className="text-red-700 font-medium">Failed to load activities</p>
-          <p className="text-red-600 text-sm mt-1">{error}</p>
-        </div>
+        <section className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
+          <div className="flex gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-red-600 ring-1 ring-red-100">
+              <AlertCircle size={18} />
+            </span>
+            <div>
+              <p className="text-sm font-black text-red-800">Failed to load activities</p>
+              <p className="mt-1 text-sm leading-6 text-red-700">{error}</p>
+            </div>
+          </div>
+        </section>
       )}
 
       {/* Empty State */}
       {!error && activities.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
-          <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">No activity yet</h3>
-          <p className="text-gray-500">Your actions will appear here</p>
-        </div>
+        <section className="rounded-2xl border border-gray-200 bg-white px-5 py-12 text-center shadow-[0_18px_55px_rgba(15,23,42,0.055)] sm:px-6">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eef4ff] text-[#2557a7] ring-1 ring-[#d9e5f8]">
+            <Clock className="h-5 w-5" />
+          </span>
+          <h2 className="mt-4 text-lg font-black tracking-[-0.025em] text-gray-950">No activity yet</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
+            Once you upload a resume, complete your profile, run an ATS scan, match a job, or apply, the completed work will appear here.
+          </p>
+          <Link
+            href="/dashboard"
+            className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-[#2557a7] px-4 text-sm font-black text-white shadow-[0_12px_28px_rgba(37,87,167,0.2)] transition hover:bg-[#1f4a91]"
+          >
+            Continue setup
+          </Link>
+        </section>
       ) : (
         <>
           {/* Activity List */}
-          <div className="space-y-8 flex-1">
+          <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.055)]">
+            <div className="border-b border-gray-200 px-5 py-4 sm:px-6">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">Timeline</p>
+                  <h2 className="mt-1.5 text-lg font-black tracking-[-0.025em] text-gray-950">Completed work</h2>
+                </div>
+                <p className="text-sm font-semibold text-gray-500">
+                  Showing {startIdx + 1}-{Math.min(startIdx + itemsPerPage, activities.length)} of {activities.length}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-6 px-4 py-4 sm:px-6">
             {Object.entries(groupedActivities).map(([day, dayActivities]) => (
               <div key={day}>
                 {/* Day Header */}
-                <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4 sticky top-0 bg-white py-2 z-10">
-                  {day}
-                </h2>
+                <div className="mb-3 flex items-center gap-3">
+                  <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-400">{day}</h3>
+                  <div className="h-px flex-1 bg-gray-100" />
+                </div>
 
                 {/* Activities for this day */}
-                <div className="space-y-0 divide-y divide-gray-100">
-                  {dayActivities.map((activity) => (
+                <div className="relative space-y-2 before:absolute before:left-5 before:top-5 before:h-[calc(100%-40px)] before:w-px before:bg-gray-200">
+                  {dayActivities.map((activity) => {
+                    const Icon = activityIcons[(activity.feature ?? '').toLowerCase()] ?? ActivityIcon;
+
+                    return (
                     <div
                       key={activity.id}
-                      className="bg-white border border-gray-100 rounded-lg p-4 hover:border-gray-200 transition-colors"
+                      className="relative grid grid-cols-[42px_1fr] gap-3 rounded-2xl border border-transparent px-1 py-2 transition hover:border-gray-200 hover:bg-gray-50 sm:grid-cols-[42px_1fr_auto]"
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-900">
-                            {activity.feature_label}
-                          </h3>
-                          {activity.result_summary && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              {activity.result_summary}
-                            </p>
-                          )}
-                          <p className="text-xs text-gray-400 mt-2">
-                            {formatTimeAgo(activity.timestamp)}
-                          </p>
+                      <span className="relative z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-[#d9e5f8] bg-[#eef4ff] text-[#2557a7] shadow-[0_8px_20px_rgba(37,87,167,0.08)]">
+                        <Icon size={17} />
+                      </span>
+                      <div className="min-w-0 self-center">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="truncate text-[13px] font-black text-gray-950">{activity.feature_label}</h3>
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-black text-gray-500">
+                            {activity.credits_used > 0 ? `${activity.credits_used} credits` : 'Free'}
+                          </span>
                         </div>
-
-                        {/* Credits Used */}
-                        {activity.credits_used > 0 && (
-                          <div className="flex-shrink-0 text-right">
-                            <div className="inline-block px-3 py-1 bg-red-50 rounded-full">
-                              <span className="text-sm font-semibold text-red-700">
-                                -{activity.credits_used} cr
-                              </span>
-                            </div>
-                          </div>
-                        )}
+                        <p className="mt-1 text-xs leading-5 text-gray-500">
+                          {activity.result_summary || 'Action completed successfully'}
+                        </p>
+                      </div>
+                      <div className="col-start-2 self-center text-left sm:col-start-auto sm:text-right">
+                        <span className="inline-flex rounded-full bg-white px-2.5 py-1 text-xs font-bold text-gray-500 ring-1 ring-gray-200">
+                          {formatTimeAgo(activity.timestamp)}
+                        </span>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          </section>
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
-              <p className="text-sm text-gray-600">
-                Showing {startIdx + 1} to {Math.min(startIdx + itemsPerPage, activities.length)} of {activities.length} activities
+            <nav className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-[0_18px_55px_rgba(15,23,42,0.04)] sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <p className="text-sm font-semibold text-gray-500">
+                Page {currentPage} of {totalPages}
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
-                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="h-10 rounded-xl border border-gray-200 px-4 text-sm font-black text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   Previous
                 </button>
-                <div className="flex items-center gap-2">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <div className="flex flex-wrap items-center gap-2">
+                  {pageNumbers.map((page, index) => (
+                    <React.Fragment key={page}>
+                      {index > 0 && page - pageNumbers[index - 1] > 1 && (
+                        <span className="flex h-10 w-8 items-center justify-center text-sm font-black text-gray-400">...</span>
+                      )}
                     <button
-                      key={page}
                       onClick={() => setCurrentPage(page)}
-                      className={`w-10 h-10 rounded-lg font-medium transition-colors ${
+                      className={`h-10 w-10 rounded-xl text-sm font-black transition ${
                         currentPage === page
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-[#2557a7] text-white shadow-[0_10px_22px_rgba(37,87,167,0.18)]'
                           : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
                       }`}
                     >
                       {page}
                     </button>
+                    </React.Fragment>
                   ))}
                 </div>
                 <button
                   onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
-                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="h-10 rounded-xl border border-gray-200 px-4 text-sm font-black text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   Next
                 </button>
               </div>
-            </div>
+            </nav>
           )}
         </>
       )}
-    </div>
+      </div>
+    </main>
   );
 };
 

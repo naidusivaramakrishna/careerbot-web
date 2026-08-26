@@ -25,6 +25,9 @@ export const computePreviewScore = (resume: ResumeResponse): PreviewScoreResult 
         metrics: 0,
         certifications: 0,
         formatting: 0,
+        achievements: 0,
+        languages: 0,
+        extras: 0,
       },
       suggestions: [],
     };

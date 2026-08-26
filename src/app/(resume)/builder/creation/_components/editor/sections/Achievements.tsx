@@ -22,6 +22,7 @@ import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
 import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface AchievementEntry {
   title: string;
@@ -374,9 +375,9 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -389,18 +390,7 @@ Recognized with Employee of the Year award for driving 40% increase in team prod
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   const toggleSpellCheck = (editIndex: number) => {
