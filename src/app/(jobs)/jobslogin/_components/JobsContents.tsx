@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
-import { getSmartMatchedJobs, getJobById } from "@/api/jobsApi";
+import { getSmartMatchedJobs, getJobById, getJobTitleSuggestions } from "@/api/jobsApi";
 import type { MatchedJobItem } from "@/api/jobsApi";
 import type { FilterParams } from "./filters/filterConstants";
 import { WORK_MODELS, JOB_TYPES, DATE_PRESETS } from "./filters/filterConstants";
@@ -83,6 +83,9 @@ export interface NormalizedJob {
   missing_skills?: string[];
   match_band?: string;
   applicant_count?: number;
+  skill_score?: number;
+  experience_score?: number;
+  education_score?: number;
 }
 
 function str(job: Record<string, unknown>, ...keys: string[]): string {
@@ -160,6 +163,9 @@ export function normalizeJob(job: Record<string, unknown>, matchScore = 0, match
     missing_skills: matchData?.missing_skills,
     match_band: matchData?.band,
     applicant_count: typeof job["applicants"] === "number" ? (job["applicants"] as number) : undefined,
+    skill_score: matchData?.breakdown?.skills,
+    experience_score: matchData?.breakdown?.experience,
+    education_score: matchData?.breakdown?.education,
   };
 }
 
@@ -225,27 +231,76 @@ export default function JobsContents() {
   });
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
 
-  // ── Search autocomplete ──
+  // ── Search autocomplete — the static JOB_SUGGESTIONS list renders
+  //    instantly (zero-latency) so the dropdown never feels empty/laggy on
+  //    the first keystroke, then a debounced /jobs/all lookup (the full job
+  //    corpus, not just this user's ~50 loaded Smart Match jobs) fills in
+  //    real, currently-posted titles on top. This only feeds the dropdown —
+  //    the job results themselves still come exclusively from Smart Match. ──
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
+  const suggestionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Discards a live-suggestion response superseded by a newer keystroke —
+  // same out-of-order-response guard used elsewhere in this file.
+  const suggestionFetchTokenRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (suggestionDebounceRef.current) clearTimeout(suggestionDebounceRef.current);
+    };
+  }, []);
 
   const handleSearchInput = (val: string) => {
     setInputValue(val);
-    if (val.trim().length > 0) {
-      const filtered = JOB_SUGGESTIONS.filter(s =>
-        s.toLowerCase().includes(val.toLowerCase())
-      ).slice(0, 6);
-      setSuggestions(filtered);
-      setShowSuggestions(filtered.length > 0);
-    } else {
+    if (suggestionDebounceRef.current) clearTimeout(suggestionDebounceRef.current);
+    const trimmed = val.trim();
+    if (trimmed.length === 0) {
+      suggestionFetchTokenRef.current++;
       setSuggestions([]);
       setShowSuggestions(false);
+      return;
     }
+
+    const staticMatches = JOB_SUGGESTIONS.filter((s) => s.toLowerCase().includes(trimmed.toLowerCase()));
+    setSuggestions(staticMatches.slice(0, 8));
+    setShowSuggestions(staticMatches.length > 0);
+
+    const token = ++suggestionFetchTokenRef.current;
+    suggestionDebounceRef.current = setTimeout(async () => {
+      try {
+        const liveTitles = await getJobTitleSuggestions(trimmed, 8);
+        if (suggestionFetchTokenRef.current !== token) return;
+        // Real, currently-posted titles first — they're guaranteed to
+        // return results — then fill out with the generic list for extra
+        // coverage the live corpus didn't have.
+        const merged: string[] = [];
+        const seen = new Set<string>();
+        [...liveTitles, ...staticMatches].forEach((s) => {
+          const key = s.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          merged.push(s);
+        });
+        setSuggestions(merged.slice(0, 8));
+        setShowSuggestions(merged.length > 0);
+      } catch {
+        // Network hiccup — keep the static suggestions already shown above.
+      }
+    }, 250);
   };
 
   const commitSearch = (val: string) => {
+    // Cancel any debounced suggestion lookup still pending from the keystrokes
+    // before this. Without it the timer fires ~250ms later, its token still
+    // matches, and it re-opens the dropdown on top of the results the user has
+    // just committed to -- which is the normal typing rhythm, not an edge case.
+    if (suggestionDebounceRef.current) {
+      clearTimeout(suggestionDebounceRef.current);
+      suggestionDebounceRef.current = null;
+    }
+    suggestionFetchTokenRef.current++;
     setSearchQuery(val);
     setInputValue(val);
     setShowSuggestions(false);
@@ -294,14 +349,18 @@ export default function JobsContents() {
   // The subset of active filters that map onto /jobs/scored's own query
   // params — only pushed server-side when unambiguous (the backend takes a
   // single string per field, not a list) and semantically identical to what
-  // the filter means here. Experience/years is deliberately excluded: the
-  // frontend's filter means "jobs requiring this many years," but the
-  // backend's experience_years param means "the candidate's own years —
-  // return jobs they qualify for," a different axis entirely. Salary,
-  // Education, and Source have no server-side equivalent on this endpoint.
-  // Everything here still gets re-applied client-side afterward via
-  // matchesJobFilters, same as before, so this can only narrow the search
-  // further (to the whole pool) — never behave worse than today.
+  // the filter means here. The Experience pill IS the candidate's own years
+  // (matchesExperience narrows on "job's minimum requirement <= this many
+  // years", same semantics as the backend's experience_years) so it maps
+  // straight onto that param — without this, selecting it only ever
+  // filtered whichever ~50-job page happened to be loaded, so paginating
+  // reshuffled the very set the filter was supposed to be narrowing, and the
+  // per-option counts in the dropdown swung wildly page to page even though
+  // nothing about the filter itself had changed. Education and Source have
+  // no server-side equivalent on this endpoint. Everything here still gets
+  // re-applied client-side afterward via matchesJobFilters, same as before,
+  // so this can only narrow the search further (to the whole pool) — never
+  // behave worse than today.
   const matchedServerFiltersMemo = useMemo(() => {
     const workModels = WORK_MODELS.filter((m) => selectedFilters.includes(m));
     const jobTypes = JOB_TYPES.filter((t) => selectedFilters.includes(t));
@@ -310,13 +369,51 @@ export default function JobsContents() {
       .map((f) => f.replace("location:", ""));
     const dateLabel = selectedFilters.find((f) => f.startsWith("date:"))?.replace("date:", "");
     const datePreset = DATE_PRESETS.find((p) => p.label === dateLabel);
+    // The "salary:" chip's label is always "<N> LPA+" (set by the salary
+    // slider in JobsFilterSidebar, both the top pill and the "All Filters"
+    // drawer) — parse the LPA figure straight out of it rather than
+    // threading a second, separate value through onFilterChange.
+    const salaryLabel = selectedFilters.find((f) => f.startsWith("salary:"))?.replace("salary:", "");
+    const salaryLpa = salaryLabel ? parseFloat(salaryLabel.match(/^(\d+(?:\.\d+)?)\s*LPA\+/i)?.[1] ?? "") : NaN;
+    // Match Quality chips ("matchscore:70+", "skillscore:50+", ...) follow
+    // the same "<N>+" label convention as salary — parse the number back out.
+    const parseScoreChip = (prefix: string): number | undefined => {
+      const label = selectedFilters.find((f) => f.startsWith(prefix))?.replace(prefix, "");
+      const n = label ? parseFloat(label.replace(/\+$/, "")) : NaN;
+      return Number.isNaN(n) ? undefined : n;
+    };
+    const minScore = parseScoreChip("matchscore:");
+    const minSkillScore = parseScoreChip("skillscore:");
+    const minExperienceScore = parseScoreChip("expscore:");
+    const minEducationScore = parseScoreChip("eduscore:");
+    // The "years:" chip's label is one of EXP_OPTIONS' labels in
+    // JobsFilterSidebar — "Fresher", "1 yr" .. "10 yrs", or "11+ yrs".
+    const yearsLabel = selectedFilters.find((f) => f.startsWith("years:"))?.replace("years:", "");
+    const experienceYears = yearsLabel === "Fresher" ? 0
+      : yearsLabel === "11+ yrs" ? 11
+      : yearsLabel ? parseInt(yearsLabel, 10)
+      : undefined;
 
-    const params: { mode?: string; job_type?: string; location?: string; posted_within_days?: number; query?: string } = {};
+    const params: {
+      mode?: string; job_type?: string; location?: string; posted_within_days?: number; query?: string;
+      min_salary_lpa?: number; min_score?: number; min_skill_score?: number; min_experience_score?: number; min_education_score?: number;
+      experience_years?: number;
+    } = {};
     if (workModels.length === 1) params.mode = workModels[0].toLowerCase();
     if (jobTypes.length === 1) params.job_type = jobTypes[0].toLowerCase();
     if (locations.length === 1) params.location = locations[0];
     if (datePreset?.days) params.posted_within_days = datePreset.days;
     if (searchQuery.trim()) params.query = searchQuery.trim();
+    if (experienceYears !== undefined && !Number.isNaN(experienceYears)) params.experience_years = experienceYears;
+    // min_salary_lpa is best-effort on the backend (most jobs don't state a
+    // parseable salary) — the existing zero-results fallback below already
+    // retries without any server filters, so a low-signal facet degrades
+    // gracefully instead of showing an empty tab.
+    if (!Number.isNaN(salaryLpa) && salaryLpa > 0) params.min_salary_lpa = salaryLpa;
+    if (minScore !== undefined) params.min_score = minScore;
+    if (minSkillScore !== undefined) params.min_skill_score = minSkillScore;
+    if (minExperienceScore !== undefined) params.min_experience_score = minExperienceScore;
+    if (minEducationScore !== undefined) params.min_education_score = minEducationScore;
     // Serialized here rather than at the use site: this component re-renders
     // on every keystroke in the search box, and the key is only ever read as
     // an effect dependency, so re-stringifying per render is pure waste.
@@ -332,6 +429,24 @@ export default function JobsContents() {
   const [matchedFetched, setMatchedFetched] = useState(false);
   const [matchedNoResume, setMatchedNoResume] = useState(false);
   const [matchedError, setMatchedError] = useState(false);
+  // True when the currently-loaded matchedJobs were already narrowed by the
+  // search box server-side (via /jobs/scored's own `query` param) — see the
+  // filtering effect below, which must NOT re-apply a client-side text match
+  // in that case: the server's matching (title/company/location/description)
+  // is broader than the client's (title/company substring, all words), so
+  // re-filtering would silently drop server-confirmed matches (e.g. a job
+  // titled "React Engineer" whose description mentions "frontend" — the
+  // server matches it, but jobMatchesSearchQuery would not). Only false when
+  // no query was sent, or the zero-results fallback below stripped it.
+  const [matchedQueryAppliedServerSide, setMatchedQueryAppliedServerSide] = useState(false);
+  // True when the search/filter combo returned 0 rows server-side and
+  // fetchSmartMatchedJobs retried with NO filters at all — matchedJobs then
+  // holds an unrelated generic top-N pool, not results for the user's actual
+  // criteria. matchedTotal in that case is just this pool's raw page size
+  // (e.g. exactly MATCHED_PER_PAGE), which would badly mislabel the
+  // "Smart Match" tab count/pager — the count show below deliberately swaps
+  // to the real, client-filtered count whenever this is true.
+  const [matchedFellBackToUnfiltered, setMatchedFellBackToUnfiltered] = useState(false);
   const [matchBandFilter] = useState<"all" | "strong" | "good" | "partial" | "low">("all");
   // Discards superseded Smart Match responses — see fetchSmartMatchedJobs.
   const matchedFetchTokenRef = useRef(0);
@@ -420,6 +535,8 @@ export default function JobsContents() {
       // pager off it would advertise pages that are empty once narrowed.
       // Size it to what's actually on this page instead.
       setMatchedTotal(fellBackToUnfiltered ? normalized.length : (data.total ?? normalized.length));
+      setMatchedQueryAppliedServerSide(!!matchedServerFilters.query && !fellBackToUnfiltered);
+      setMatchedFellBackToUnfiltered(fellBackToUnfiltered);
       setMatchedPage(page);
       setMatchedFetched(true);
       setMatchedNoResume(false);
@@ -818,10 +935,19 @@ export default function JobsContents() {
 
       if (selectedFilters.length > 0) {
         filtered = filtered.filter((job) =>
-          matchesJobFilters(job, selectedFilters, { includeSource: true })
+          matchesJobFilters(job, selectedFilters, { includeSource: true, includeMatchScores: true })
         );
       }
-      filtered = filtered.filter(matchesQuery);
+      // /jobs/scored already narrowed matchedJobs by this exact query
+      // server-side (see matchedQueryAppliedServerSide) — its matching
+      // spans title/company/location/description, broader than this
+      // client-side title+company-only check, so re-applying it here would
+      // drop jobs the server correctly matched. Only needed as a fallback
+      // when no server-side query was applied (e.g. the zero-results retry
+      // stripped it).
+      if (!matchedQueryAppliedServerSide) {
+        filtered = filtered.filter(matchesQuery);
+      }
 
       setFilteredJobs(sortJobs(filtered, filterSort));
       return;
@@ -857,6 +983,7 @@ export default function JobsContents() {
     setFilteredJobs(sortJobs(filtered, filterSort));
   }, [
     matchedJobs,
+    matchedQueryAppliedServerSide,
     savedJobsList,
     appliedJobsList,
     matchBandFilter,
@@ -896,6 +1023,13 @@ export default function JobsContents() {
         const without = prev.filter((f) => !f.startsWith("source:"));
         return prev.includes(filter) ? without : [...without, filter];
       }
+      // Match Quality chips (matchscore:/skillscore:/expscore:/eduscore:) are
+      // radio-style per component, same as date:/source: above.
+      const scorePrefix = ["matchscore:", "skillscore:", "expscore:", "eduscore:"].find((p) => filter.startsWith(p));
+      if (scorePrefix) {
+        const without = prev.filter((f) => !f.startsWith(scorePrefix));
+        return prev.includes(filter) ? without : [...without, filter];
+      }
       return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
     });
   };
@@ -908,8 +1042,12 @@ export default function JobsContents() {
     : isSavedTab
     ? savedJobsListLoading
     : appliedJobsListLoading;
-  const matchedCount = matchedTotal;
-  const matchedTotalPages = Math.max(1, Math.ceil(matchedTotal / MATCHED_PER_PAGE));
+  // After a fallback, matchedTotal is just the raw unfiltered page's size
+  // (see matchedFellBackToUnfiltered) — not how many of those actually match
+  // the user's search/filters. filteredJobs.length is the honest number
+  // there (e.g. 0, matching what's actually rendered below).
+  const matchedCount = matchedFellBackToUnfiltered ? filteredJobs.length : matchedTotal;
+  const matchedTotalPages = Math.max(1, Math.ceil(matchedCount / MATCHED_PER_PAGE));
   // True when Smart Match has real results loaded but the active search/
   // filters narrowed them to zero — as opposed to Smart Match genuinely
   // having no matches. Search only covers the currently-loaded page of
@@ -927,10 +1065,10 @@ export default function JobsContents() {
         <div>
             {/* TOP BAR */}
             <div className="jobs-page-topbar flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2.5">
-                    <h1 className="truncate text-[26px] font-extrabold leading-tight text-slate-950">
+              <div className="flex flex-1 items-center gap-3 min-w-0">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <h1 className="min-w-0 truncate text-[26px] font-extrabold leading-tight text-slate-950">
                       {searchQuery
                         ? `Results for "${searchQuery}"`
                         : isMatchedTab
@@ -955,7 +1093,7 @@ export default function JobsContents() {
               </div>
 
               {/* Search input with autocomplete + button */}
-              <div ref={searchRef} className="relative flex w-full min-w-0 shrink items-center gap-2 lg:w-auto">
+              <div ref={searchRef} className="relative flex w-full items-center gap-2 lg:w-auto lg:shrink-0">
                 <div className="relative min-w-0 flex-1 lg:flex-none">
                   <svg
                     className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
@@ -1150,7 +1288,7 @@ export default function JobsContents() {
                   <Pagination
                     currentPage={matchedPage}
                     totalPages={matchedTotalPages}
-                    totalItems={matchedTotal}
+                    totalItems={matchedCount}
                     itemsPerPage={MATCHED_PER_PAGE}
                     onPageChange={handleMatchedPageChange}
                   />
