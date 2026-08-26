@@ -278,10 +278,22 @@ const OperationsTable = ({ data }: { data: DashboardSummary }) => {
     { label: "ATS Scan", detail: "Check screening compatibility before applying", href: "/atslogin", Icon: ScanSearch, metric: data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score} best` },
     { label: "Job Match", detail: "Compare roles against your resume and profile", href: "/jobmatch", Icon: Briefcase, metric: `${data.usage_counts.job_matches} matches` },
     { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobs", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
-    { label: "Mock Interview", detail: "AI-powered live mock interview sessions", href: "/mock-interview", Icon: MessageSquare, metric: `${data.usage_counts.mock_interviews_taken ?? 0} sessions` },
-    { label: "Communication Assessment", detail: "Improve spoken and listening communication skills", href: "/communication/start", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} sessions` },
-    { label: "Mock Test", detail: "Aptitude, arithmetic, reasoning and technical practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.mock_tests_taken ?? 0} tests` },
-    { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", href: "/coding-test", Icon: Code2, metric: `${data.usage_counts.coding_tests_taken ?? 0} sessions` },
+    // KEEPS this PR's four-tile split -- it is a better information
+    // architecture than the two it replaced -- and DROPS the three fields it
+    // read to fill them. usage_counts has six fields on the backend and
+    // mock_interviews_taken / mock_tests_taken / coding_tests_taken are not
+    // among them, so each `?? 0` rendered a permanent, confident zero: "0
+    // sessions" to a user who had done twenty. A wrong number is worse than
+    // no number, because only the missing one is visible as missing.
+    //
+    // assessments_taken is the one real counter, and it is english_assessment
+    // + mock_test COMBINED (repository_impl.py counts both under one $in), so
+    // it is labelled "assessments" rather than "tests" and sits on the closest
+    // tile. Giving the other three honest numbers needs backend counters first.
+    { label: "Mock Interview", detail: "AI-powered live mock interview sessions", href: "/mock-interview", Icon: MessageSquare, metric: "Practice" },
+    { label: "Communication Assessment", detail: "Improve spoken and listening communication skills", href: "/communication/start", Icon: MessageSquare, metric: "Practice" },
+    { label: "Mock Test", detail: "Aptitude, arithmetic, reasoning and technical practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} assessments` },
+    { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", href: "/coding-test", Icon: Code2, metric: "Practice" },
   ];
 
   return (
@@ -652,7 +664,12 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
       return;
     }
 
-    setAtsScanLoading(true);
+    // setAtsScanLoading was never declared anywhere in this file -- one call,
+    // no useState. It threw ReferenceError before the navigation below, so
+    // clicking ATS Scan did nothing at all and the report never opened. Next's
+    // SWC strips types without resolving names and next.config sets
+    // typescript.ignoreBuildErrors, so the build stayed green on it.
+    // Pre-existing; fixed here because this PR is the last toucher of the file.
     window.location.href = `/atslogin/report?resume_id=${encodeURIComponent(resumeId)}`;
   };
 

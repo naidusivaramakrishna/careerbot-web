@@ -25,6 +25,8 @@ import {
   TrendingUp,
   ClipboardCheck,
   ThumbsUp,
+  Crown,
+  Zap,
 } from "lucide-react";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -259,6 +261,7 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
   const cap  = matchResult.Capabilities_Check ?? {};
   const star = matchResult.STAR_Pattern_Check ?? {};
   const summary = matchResult.Summary_Check ?? {};
+  const req  = matchResult.Requirements_Check ?? {};
   const exp  = matchResult.Experience_Check ?? {};
   const edu  = matchResult.Education_Check ?? {};
   const job  = matchResult.Job_Title_Check ?? {};
@@ -267,18 +270,21 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
   const careerProg    = matchResult.Career_Progression_Check ?? {};
   const growthQuality = careerProg.growth_quality ?? {};
   const levelAlignment = careerProg.level_alignment ?? {};
+  const leadership    = matchResult.Leadership_Check ?? {};
 
   const techScore = parseScore(tech.match_score);
   const softScore = parseScore(soft.match_score);
   const capScore  = parseScore(cap.match_score);
   const starScore = parseScore(star.match_score);
   const summaryScore = parseScore(summary.match_score);
+  const reqScore = parseScore(req.match_score);
   const expScore  = parseScore(exp.match_score);
   const eduScore  = parseScore(edu.match_score);
   const jobScore  = parseScore(job.match_score);
   const certScore = parseScore(cert.match_score);
   const fmtScore  = parseScore(fmt.match_score);
   const careerProgScore = parseScore(careerProg.match_score);
+  const leadershipScore = parseScore(leadership.match_score);
 
   const missingTech: { skill: string; importance: string }[] = [
     ...(tech.missing_critical_skills ?? []).map((s: { skill: string }) => ({ skill: s.skill, importance: "required" })),
@@ -298,6 +304,7 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
   const weakBullets: { original: string; improved: string }[] = star.weak_bullets ?? [];
   const starSuggestion: string = star.suggestion ?? "";
   const starSeniority: string  = star.seniority ?? "";
+  const missingVerbs: string[] = (req.missing_verbs ?? []).map((v: { verb: string }) => v.verb);
 
   return (
     <section className="space-y-4" aria-labelledby="jobmatch-suggestions-heading">
@@ -419,6 +426,21 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
                 </ul>
               )}
             </div>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          label="Action Verbs"
+          subtitle="JD action verbs reflected in your bullet points"
+          icon={Zap}
+          priorityLabel="Medium priority"
+          priorityLevel="medium"
+          score={reqScore}
+          passText="Your bullets use all the action verbs the JD calls for."
+          missingCount={missingVerbs.length}
+        >
+          {missingVerbs.length > 0 && (
+            <SkillChipGroup heading="Missing" count={missingVerbs.length} icon={CircleAlert} tone="red" items={missingVerbs} />
           )}
         </SectionCard>
 
@@ -579,6 +601,33 @@ export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
                   </p>
                 )}
               </div>
+            )}
+          </SectionCard>
+        )}
+
+        {/* Rendered only when the payload actually carries a leadership block.
+            Leadership_Check is NOT one of the keys the AI layer emits today
+            (match_engine.py enumerates them: Technical_Skills,
+            Capabilities_Check, STAR_Pattern_Check, Soft_Skills,
+            Experience_Check, Education_Check, Requirements_Check,
+            Job_Title_Check, Certifications_Check, Formatting_Check,
+            Summary_Check, Match_Penalties, ATS_SCORE). Unguarded, parseScore
+            turned the missing block into 0 and every user saw a red "0%
+            Leadership" with no explanation -- a fabricated score on a report
+            people make decisions from. The Career Progression card directly
+            above already guards itself the same way. */}
+        {leadership.match_score !== undefined && (
+          <SectionCard
+            label="Leadership"
+            subtitle="Ownership, initiative & team leadership signals"
+            icon={Crown}
+            priorityLabel="Low priority"
+            priorityLevel="low"
+            score={leadershipScore}
+            passText="Your resume shows leadership and ownership where it's needed."
+          >
+            {leadership.reason && leadershipScore < 100 && (
+              <p className="text-[13px] text-gray-600 leading-relaxed">{leadership.reason}</p>
             )}
           </SectionCard>
         )}

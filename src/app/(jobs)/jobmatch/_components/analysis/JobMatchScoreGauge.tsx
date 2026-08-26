@@ -1,6 +1,6 @@
 "use client";
 
-import { TbTargetArrow, TbCalendar } from "react-icons/tb";
+import { TbTargetArrow } from "react-icons/tb";
 
 const SEGMENTS = [
   { from: 0, to: 20, color: "#ef4444", label: "Needs improvement" },
@@ -41,9 +41,6 @@ function getScoreLabel(score: number) {
   const segment = SEGMENTS.find((s) => score >= s.from && score < s.to);
   return (segment ?? SEGMENTS[SEGMENTS.length - 1]).label;
 }
-
-const today = () =>
-  new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
 export default function JobMatchScoreGauge({ value, targetRole }: { value: number; targetRole?: string }) {
   const score = Math.min(100, Math.max(0, Math.round(value)));
@@ -106,8 +103,8 @@ export default function JobMatchScoreGauge({ value, targetRole }: { value: numbe
           {label}
         </p>
       </div>
-      <div className="mt-2.5 space-y-2 border-t border-[#eef1f6] pt-2.5">
-        {targetRole && (
+      {targetRole && (
+        <div className="mt-2.5 space-y-2 border-t border-[#eef1f6] pt-2.5">
           <div className="flex items-center gap-2.5">
             <TbTargetArrow className="h-6 w-6 shrink-0 text-[#2557a7]" />
             <div className="min-w-0">
@@ -115,15 +112,8 @@ export default function JobMatchScoreGauge({ value, targetRole }: { value: numbe
               <p className="truncate text-[13px] font-semibold text-[#1f2937]">{targetRole}</p>
             </div>
           </div>
-        )}
-        <div className="flex items-center gap-2.5">
-          <TbCalendar className="h-6 w-6 shrink-0 text-[#2557a7]" />
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.04em] text-[#2557a7]">Match Date</p>
-            <p className="truncate text-[13px] font-semibold text-[#1f2937]">{today()}</p>
-          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
