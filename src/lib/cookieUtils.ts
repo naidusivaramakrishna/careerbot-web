@@ -43,8 +43,15 @@ const isRefreshCookie = (pair: string): boolean =>
  */
 function isLocalDevHost(host: string | null): boolean {
   if (!host) return false;
-  const hostname = host.split(':')[0].toLowerCase();
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+  const trimmed = host.trim().toLowerCase();
+  // A bracketed IPv6 authority ('[::1]:3000') has to be unwrapped BEFORE the
+  // port is stripped. `host.split(':')[0]` yields '[' for it, so the '[::1]'
+  // entry this list used to carry could never match and an IPv6 loopback dev
+  // server was treated as a remote host.
+  const close = trimmed.indexOf(']');
+  const hostname =
+    trimmed.startsWith('[') && close > 1 ? trimmed.slice(1, close) : trimmed.split(':')[0];
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
 }
 
 export function sanitiseCookie(cookie: string, isSecureRequest: boolean, host?: string | null): string {

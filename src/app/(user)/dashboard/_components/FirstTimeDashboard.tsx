@@ -256,8 +256,19 @@ const OperationsTable = ({ data }: { data: DashboardSummary }) => {
     { label: "ATS Scan", detail: "Check screening compatibility before applying", href: "/atslogin", Icon: ScanSearch, metric: data.best_scores.ats_score == null ? "Not scanned" : `${data.best_scores.ats_score} best` },
     { label: "Job Match", detail: "Compare roles against your resume and profile", href: "/jobmatch", Icon: Briefcase, metric: `${data.usage_counts.job_matches} matches` },
     { label: "Browse Jobs", detail: "Find roles and continue your application momentum", href: "/jobs", Icon: Briefcase, metric: `${data.usage_counts.job_applications} applied` },
+    // assessments_taken is english_assessment + mock_test COMBINED (see
+    // dashboard.types.ts). It belongs on the Mock Test tile, which is where it
+    // was before this PR moved it. Pointing it at Interview Prep reported
+    // mock-test runs as interview sessions, and left Mock Test reading a field
+    // -- mock_tests_taken -- that the backend has never returned, so that tile
+    // said "Practice" forever no matter how many tests the user had taken.
+    // Splitting the two needs a backend counter first.
     { label: "Interview Prep", detail: "Mock interviews and communication practice", href: "/mock-interview", Icon: MessageSquare, metric: "Practice" },
-    { label: "Mock Test", detail: "Assessments, aptitude, and screening practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} tests` },
+    // "assessments", not "tests": the counter is english_assessment +
+    // mock_test combined, so calling it tests states a number that is not the
+    // number of tests. This tile is the closest home the dashboard has for it
+    // until the backend splits the counter.
+    { label: "Mock Test", detail: "Assessments, aptitude, and screening practice", href: "/mock-test", Icon: MessageSquare, metric: `${data.usage_counts.assessments_taken ?? 0} assessments` },
     { label: "Coding Practice", detail: "Prepare for coding rounds and technical problems", href: "/coding-test", Icon: Code2, metric: "Practice" },
   ];
 
@@ -619,7 +630,12 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
       return;
     }
 
-    setAtsScanLoading(true);
+    // setAtsScanLoading was never declared anywhere in this file -- one call,
+    // no useState. It threw ReferenceError before the navigation below, so
+    // clicking ATS Scan did nothing at all and the report never opened. Next's
+    // SWC strips types without resolving names and next.config sets
+    // typescript.ignoreBuildErrors, so the build stayed green on it.
+    // Pre-existing; fixed here because this PR is the last toucher of the file.
     window.location.href = `/atslogin/report?resume_id=${encodeURIComponent(resumeId)}`;
   };
 
