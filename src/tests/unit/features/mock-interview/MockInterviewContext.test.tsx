@@ -44,14 +44,12 @@ function Consumer({ useMockInterview }: { useMockInterview: () => any }) {
     stageState,
     userId,
     activeSession,
-    consentGiven,
     progressLoading,
     setNotesGenerated,
     setEnglishRead,
     setPracticeAnswered,
     setPracticeTotal,
     setReadinessPassed,
-    setConsentGiven,
     dismissActiveSession,
   } = useMockInterview();
 
@@ -65,13 +63,11 @@ function Consumer({ useMockInterview }: { useMockInterview: () => any }) {
       <p>Practice: {stageState.practice_answered}/{stageState.practice_total}</p>
       <p>Readiness: {String(stageState.readiness_passed)}</p>
       <p>History: {stageState.history_count}</p>
-      <p>Consent: {String(consentGiven)}</p>
       <button onClick={() => setNotesGenerated(true)}>set notes</button>
       <button onClick={() => setEnglishRead(true)}>set english</button>
       <button onClick={() => setPracticeAnswered(4)}>set answered</button>
       <button onClick={() => setPracticeTotal(6)}>set total</button>
       <button onClick={() => setReadinessPassed(true)}>set readiness</button>
-      <button onClick={() => setConsentGiven(true)}>set consent</button>
       <button onClick={dismissActiveSession}>dismiss</button>
     </div>
   );
@@ -151,7 +147,7 @@ describe("MockInterviewContext", () => {
     expect(screen.getByText("History: 1")).toBeInTheDocument();
   });
 
-  it("exposes setter functions for local stage and consent state", async () => {
+  it("exposes setter functions for local stage state", async () => {
     await renderProvider();
     await waitFor(() => expect(screen.getByText("Loading: false")).toBeInTheDocument());
 
@@ -160,13 +156,11 @@ describe("MockInterviewContext", () => {
     fireEvent.click(screen.getByRole("button", { name: /set answered/i }));
     fireEvent.click(screen.getByRole("button", { name: /set total/i }));
     fireEvent.click(screen.getByRole("button", { name: /set readiness/i }));
-    fireEvent.click(screen.getByRole("button", { name: /set consent/i }));
 
     expect(screen.getByText("Notes: true")).toBeInTheDocument();
     expect(screen.getByText("English: true")).toBeInTheDocument();
     expect(screen.getByText("Practice: 4/6")).toBeInTheDocument();
     expect(screen.getByText("Readiness: true")).toBeInTheDocument();
-    expect(screen.getByText("Consent: true")).toBeInTheDocument();
   });
 
   it("falls back safely when bootstrap APIs fail", async () => {
