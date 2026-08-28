@@ -37,6 +37,8 @@ import type { InstitutionErrorReason } from '@/lib/institutionMessages';
 import { ERROR_MESSAGES } from '@/lib/institutionMessages';
 import type {
   Batch,
+  BulkImportResponse,
+  BulkStudentRow,
   CreateBatchRequest,
   CreateDepartmentRequest,
   CreateFacultyAssignmentRequest,
@@ -596,6 +598,44 @@ export async function createStudent(body: CreateStudentRequest): Promise<Student
     const response = await httpClient.post<Student>(
       `${BASE}/students`,
       body,
+      withInstitutionAuth(),
+    );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * The server's cap on one chunk. Mirrored here so the screen can split the file
+ * before sending rather than discovering the limit as a 422 on row 501.
+ * Changing it in one place only is a contract break; a test asserts the pair.
+ */
+export const BULK_CHUNK_SIZE = 500;
+
+/** Split a roster into chunks the server will accept. */
+export function chunkStudents<T>(rows: T[], size = BULK_CHUNK_SIZE): T[][] {
+  if (size < 1) throw new Error('chunk size must be at least 1');
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+  return out;
+}
+
+/**
+ * POST /institution/students/bulk — one chunk of a roster.
+ *
+ * Returns 200 with a per-row outcome even when some rows failed, so a thrown
+ * error here means the CHUNK was refused (not signed in, not allowed, college
+ * paused, malformed file) rather than that some students were rejected. The
+ * caller must branch on both.
+ */
+export async function bulkOnboardStudents(
+  students: BulkStudentRow[],
+): Promise<BulkImportResponse> {
+  try {
+    const response = await httpClient.post<BulkImportResponse>(
+      `${BASE}/students/bulk`,
+      { students },
       withInstitutionAuth(),
     );
     return response.data;

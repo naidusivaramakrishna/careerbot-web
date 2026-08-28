@@ -251,6 +251,38 @@ export interface CreateStudentRequest {
   batch_year?: number;
 }
 
+/** What the server did with one row of a roster upload. */
+export type BulkRowOutcome = 'created' | 'duplicate' | 'rejected';
+
+export interface BulkImportRowResult {
+  /** Position in the chunk that was SENT, not in the file. The screen maps it
+   *  back to the file's own line before showing it to anyone. */
+  index: number;
+  outcome: BulkRowOutcome;
+  admission_number: string;
+  message: string | null;
+  student_id?: string;
+  faculty_assignment_pending?: boolean;
+}
+
+export interface BulkImportResponse {
+  results: BulkImportRowResult[];
+  submitted: number;
+  created: number;
+  duplicate: number;
+  rejected: number;
+}
+
+/** One student in a roster upload. Same shape as the single-student form. */
+export interface BulkStudentRow {
+  department_id: string;
+  full_name: string;
+  admission_number: string;
+  college_email?: string | null;
+  section_id?: string | null;
+  batch_year?: number | null;
+}
+
 export interface CreateFacultyAssignmentRequest {
   /** The MEMBERSHIP, not the account. Naming the account routed a request
    *  value onto a protected scope key, and answered differently for "no such
