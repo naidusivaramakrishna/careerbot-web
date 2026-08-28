@@ -147,7 +147,7 @@ function ManagerialPracticeContent() {
   const searchParams = useSearchParams();
   const { setPracticeAnswered, setPracticeTotal, userId } = useMockInterview();
 
-  const roundNumber = Math.min(2, Math.max(1, Number(searchParams.get("round")) || 1));
+  const roundNumber = 1;
   const questionsRemaining = Number(searchParams.get("resume")) || 0;
 
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -211,8 +211,9 @@ function ManagerialPracticeContent() {
       setCurrentIndex(0);
       setAnsweredMap({});
 
-      if (userId) {
-        getNotes(userId)
+      const resumeId = localStorage.getItem("current_resume_id");
+      if (resumeId) {
+        getNotes(resumeId)
           .then((record) => {
             const rawNotes = record?.notes as Record<string, unknown> | undefined;
             if (!rawNotes || Object.keys(rawNotes).length === 0) return;
@@ -334,11 +335,7 @@ function ManagerialPracticeContent() {
     if (isLastQuestion) {
       skipSaveRef.current = true;
       clearSession(userId);
-      if (roundNumber < 2) {
-        router.push(`/notes/managerial/practice?round=${roundNumber + 1}`);
-      } else {
-        router.push("/mock-interview/live");
-      }
+      router.push("/mock-interview/live");
     } else {
       setCurrentIndex((i) => i + 1);
     }
@@ -414,17 +411,6 @@ function ManagerialPracticeContent() {
       <section className="mb-4 rounded-xl border border-gray-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-black px-3 py-1.5 bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/15 rounded-full">
-              Round {roundNumber} of 2
-            </span>
-            {roundNumber === 1 && (
-              <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">Notes visible</span>
-            )}
-            {roundNumber === 2 && (
-              <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">Hints only</span>
-            )}
-          </div>
           <h1 className="text-lg font-black text-gray-950">Managerial Practice</h1>
           <p className="mt-0.5 text-[11px] font-medium text-gray-500">Practice leadership answers with less guidance each round.</p>
         </div>
@@ -553,12 +539,15 @@ function ManagerialPracticeContent() {
                 onClick={handleNext}
                 className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#2557a7] py-2.5 text-xs font-black text-white shadow-lg shadow-[#2557a7]/15 transition-all hover:bg-[#1e4a8f]"
               >
-                {isLastQuestion ? (roundNumber < 2 ? "Start Round 2" : "Start Live Interview") : "Next Question"}
+                {isLastQuestion ? "Start Live Interview" : "Next Question"}
                 <ChevronRight size={15} />
               </button>
             </div>
           )}
 
+        </div>
+
+        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           {currentAnswer && (
             <FeedbackCard
               weightedScore={currentAnswer.weightedScore}
@@ -581,9 +570,6 @@ function ManagerialPracticeContent() {
               answerId={currentAnswer.answerId}
             />
           )}
-        </div>
-
-        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
             showNotes
               ? roundNumber === 1
@@ -630,17 +616,15 @@ function ManagerialPracticeContent() {
             )}
           </div>
 
-          {!currentAnswer && (
-            <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-              <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
-                <Mic size={24} className="text-[#2557a7]" />
-              </div>
-              <p className="text-sm font-black text-gray-800">AI Feedback</p>
-              <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
-                Record your answer to unlock score breakdowns, key-point coverage, and a stronger model response.
-              </p>
+          <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+            <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
+              <Mic size={24} className="text-[#2557a7]" />
             </div>
-          )}
+            <p className="text-sm font-black text-gray-800">AI Feedback</p>
+            <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
+              Record your answer to unlock score breakdowns, key-point coverage, and a stronger model response.
+            </p>
+          </div>
         </aside>
 
       </div>

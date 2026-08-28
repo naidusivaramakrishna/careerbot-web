@@ -106,6 +106,33 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     if (zoomLevel > 0.5) setZoomLevel((prev) => +(prev - 0.1).toFixed(1));
   };
 
+  const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" | "Director" | "Vice President" => {
+    try {
+      const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
+      const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
+      const careerLevelStorage = localStorage.getItem(careerLevelKey);
+      const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
+
+      if (careerLevelStorage && appliedTemplateId) {
+        const careerLevels = JSON.parse(careerLevelStorage) as Array<{ id: string; name: string }>;
+        const applied = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
+
+        if (applied) {
+          const name = applied.name.toLowerCase();
+          const detected = detectCareerLevelUtil(name);
+          if (detected) {
+            return detected;
+          }
+          if (name.includes('early') && name.includes('career')) return 'Early Career';
+          if (name.includes('mid')) return 'Mid-Level';
+        }
+      }
+    } catch (err) {
+      logger.warn('Error extracting career level:', err);
+    }
+    return 'Mid-Level';
+  };
+
   const handleExport = async (type: string) => {
     setIsDownloading(true);
     setDownloadError(null);
@@ -138,10 +165,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       // Pass the user's selected font and line spacing so the PDF matches the preview
       const fontFamily = resumeStyle.fontFamily || undefined;
       const lineSpacing = resumeStyle.lineSpacing || undefined;
+      const careerLevel = getCareerLevel();
 
       const blob = isEnhancedResume
         ? await downloadEnhancedResume(resumeId, format)
-        : await downloadResume(resumeId, format, catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing);
+        : await downloadResume(resumeId, format, catalogueTemplateId, domainTemplateId, sectionBgColor, accentColor, sectionOrder, fontFamily, lineSpacing, careerLevel);
 
       // ✅ Generate filename from person's name
       const fullname = resumeData.personalInfo?.fullname || "";
@@ -280,33 +308,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const selectedTemplateKey = userEmail ? `selectedTemplateId_${userEmail}` : 'selectedTemplateId';
     const careerLevelKey = userEmail ? `careerLevelTemplates_${userEmail}` : 'careerLevelTemplates';
 
-    // Extract career level from localStorage appliedTemplateId
-    const getCareerLevel = (): "Fresher" | "Early Career" | "Mid-Level" | "Senior-Level" | "Lead" | "Architect" | "Manager" | "Director" | "Vice President" => {
-      try {
-        const careerLevelStorage = localStorage.getItem(careerLevelKey);
-        const appliedTemplateId = localStorage.getItem(selectedTemplateKey);
-
-        if (careerLevelStorage && appliedTemplateId) {
-          const careerLevels = JSON.parse(careerLevelStorage) as Array<{ id: string; name: string }>;
-          const applied = careerLevels.find((t) => String(t.id) === String(appliedTemplateId));
-
-          if (applied) {
-            const name = applied.name.toLowerCase();
-            const detected = detectCareerLevelUtil(name);
-            if (detected) {
-              return detected;
-            }
-            // Fallback for compound labels not in utility
-            if (name.includes('early') && name.includes('career')) return 'Early Career';
-            if (name.includes('mid'))            return 'Mid-Level';
-          }
-        }
-      } catch (err) {
-        logger.warn('Error extracting career level:', err);
-      }
-      return 'Mid-Level';
-    };
-
     const careerLevel = getCareerLevel();
 
     // Compute layoutVariant — use hovered catalogue key during preview, else the persisted selection
@@ -322,7 +323,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         case 'cybersecurity':
         case 'electronics_and_vlsi':
         case 'sales_business_development':
-        case 'modern_minimal_template':
+        case 'customer_support_service':
+        case 'product_engineering_leadership':
+        case 'marketing_creative':
+        case 'operations_management':
+        case 'human_resources':
         case 'logistics_warehouse_operations':
         case 'research_scholar':
         case 'software_engineering':

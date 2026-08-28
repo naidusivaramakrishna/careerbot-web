@@ -7,6 +7,8 @@ interface Props {
   duration?: number;
   /** Show a smaller "/100" next to the score number. */
   showMax?: boolean;
+  /** Decimal places to show in the center number (default 0). */
+  precision?: number;
 }
 
 const TIER = {
@@ -19,7 +21,7 @@ function getTier(v: number) {
   return v >= 70 ? "good" : v >= 40 ? "mid" : "low";
 }
 
-export default function MultiColorCircularScore({ value, size = 128, duration = 900, showMax = false }: Props) {
+export default function MultiColorCircularScore({ value, size = 128, duration = 900, showMax = false, precision = 0 }: Props) {
   const [anim, setAnim] = useState(0);
   const uid = useId().replace(/:/g, "s");
 
@@ -86,7 +88,7 @@ export default function MultiColorCircularScore({ value, size = 128, duration = 
               className="font-bold tabular-nums"
               style={{ fontSize: Math.round(size * 0.255), color: c.text }}
             >
-              {Math.round(anim)}
+              {precision > 0 ? anim.toFixed(precision) : Math.round(anim)}
             </span>
             <span
               className="font-semibold tabular-nums text-gray-400"
@@ -100,7 +102,7 @@ export default function MultiColorCircularScore({ value, size = 128, duration = 
             className="font-bold tabular-nums leading-none"
             style={{ fontSize: Math.round(size * 0.255), color: c.text }}
           >
-            {Math.round(anim)}
+            {precision > 0 ? anim.toFixed(precision) : Math.round(anim)}
           </span>
         )}
       </div>

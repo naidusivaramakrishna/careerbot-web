@@ -1,17 +1,116 @@
-"use client"
-import React, { Suspense } from "react"
-import { OAuthSuccessPage } from "@/components/auth/OAuthSuccessPage"
+"use client";
+
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getStoredAuthRedirect } from "@/lib/authRedirect";
+import { isAuthenticated } from "@/api/authApi";
+
+function LinkedInOAuthContent() {
+  const router = useRouter();
+  const [status, setStatus] = useState("Completing sign in...");
+  const processedRef = useRef(false);
+
+  useEffect(() => {
+    if (processedRef.current) return;
+    processedRef.current = true;
+
+    // Timers are tracked so a user who navigates away mid-verification is not
+    // yanked back to "/" by a stale redirect, and so no state is set after
+    // unmount.
+    let cancelled = false;
+    let redirectTimer: ReturnType<typeof setTimeout> | undefined;
+    const goHomeAfter = (ms: number) => {
+      redirectTimer = setTimeout(() => {
+        if (!cancelled) router.push("/");
+      }, ms);
+    };
+
+    const processOAuth = async () => {
+      // NO tokens are read from the URL, and none are accepted from it.
+      //
+      // The backend's LinkedIn callback redirects here with the session already
+      // established as httpOnly cookies and NOTHING in the query string —
+      // verified against careerbot-api origin/integration/develop2_072026_pr:
+      // app/api/v1/endpoints/linkedin_oauth.py where the handler builds
+      // RedirectResponse(f"{frontend_url}/auth/linkedin/success") and then
+      // calls set_access_token_cookie / set_refresh_token_cookie.
+      //
+      // Two consequences, both of which this rewrite fixes:
+      //
+      // 1. BROKEN LOGIN. The previous page required access_token and
+      //    refresh_token query params and bounced the user home when they were
+      //    absent. They are ALWAYS absent, so every LinkedIn sign-in failed at
+      //    the last step even though the cookies had already landed.
+      //
+      // 2. LOGIN CSRF / TOKEN INJECTION. Because the legitimate flow never
+      //    supplies those params, the only thing that could was a crafted link.
+      //    The page accepted an arbitrary refresh_token from a public URL and
+      //    exchanged it for session cookies — letting an attacker sign a
+      //    victim's browser into AN ACCOUNT THE ATTACKER CONTROLS. This is the
+      //    same class of defect PR #52 fixed for Google.
+      //
+      // The cookies are the session. Verifying them is the whole job.
+      try {
+        setStatus("Verifying session...");
+        const authed = await isAuthenticated();
+        if (cancelled) return;
+        if (!authed) {
+          setStatus("Session verification failed");
+          goHomeAfter(1500);
+          return;
+        }
+
+        setStatus("Redirecting to dashboard...");
+        sessionStorage.removeItem("__signing_out");
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        if (cancelled) return;
+        // Hard navigation — not router.push — so that:
+        // 1. The Next.js client-side router cache (RSC payloads) is bypassed,
+        //    preventing a previous user's stale cached page from being served.
+        // 2. The server-side auth guard in (user)/layout.tsx re-runs with the
+        //    new session cookies.
+        // 3. Module-scoped JS caches (e.g. cachedUserId) reset to null.
+        // signOut() uses the same pattern for the same reasons.
+        window.location.href = getStoredAuthRedirect();
+      } catch {
+        if (cancelled) return;
+        localStorage.removeItem("token_last_refreshed_at");
+        setStatus("Sign in failed — please try again");
+        goHomeAfter(1500);
+      }
+    };
+
+    processOAuth();
+
+    return () => {
+      cancelled = true;
+      if (redirectTimer) clearTimeout(redirectTimer);
+    };
+  }, [router]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="bg-white rounded-2xl shadow-xl p-10 max-w-md w-full text-center">
+        <div className="relative mb-6">
+          <div className="animate-spin rounded-full h-20 w-20 border-4 border-gray-200 border-t-blue-600 mx-auto" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">LinkedIn Sign-in</h2>
+        <p className="text-gray-500 text-sm">{status}</p>
+      </div>
+    </div>
+  );
+}
 
 const Fallback = () => (
-    <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600" />
-    </div>
-)
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600" />
+  </div>
+);
 
-const LinkedInSuccessPage = () => (
+export default function LinkedInOAuthSuccess() {
+  return (
     <Suspense fallback={<Fallback />}>
-        <OAuthSuccessPage provider="LinkedIn" />
+      <LinkedInOAuthContent />
     </Suspense>
-)
-
-export default LinkedInSuccessPage
+  );
+}

@@ -23,6 +23,7 @@ import {
   JOB_SOURCES,
   type FilterParams,
 } from "./filters/filterConstants";
+import { matchesEducation, matchesLocation } from "./utils/jobFilterUtils";
 
 interface JobsFilterPanelProps {
   selectedFilters: string[];
@@ -34,6 +35,29 @@ interface JobsFilterPanelProps {
 
 type DropdownKey = "workModel" | "jobType" | "experience" | "salary" | "location" | "education" | "datePosted" | "source" | null;
 
+const SCORE_STEPS = [50, 60, 70, 80, 90];
+
+// The four Match Quality chips (matchscore:/skillscore:/expscore:/eduscore:)
+// all carry the same bare "<N>+" label — stripping the prefix like every
+// other chip type would render all four identically as just "70+", making
+// it impossible to tell "Overall 70+" apart from "Skills 70+" and easy to
+// mistake one for the other (a job's overall score can be well under a
+// components's own score). Keep a short, distinct word per dimension instead.
+const SCORE_CHIP_PREFIXES: Record<string, string> = {
+  "matchscore:": "Overall",
+  "skillscore:": "Skills",
+  "expscore:": "Experience",
+  "eduscore:": "Education",
+};
+
+function formatActiveFilterLabel(filter: string): string {
+  const scorePrefix = Object.keys(SCORE_CHIP_PREFIXES).find((p) => filter.startsWith(p));
+  if (scorePrefix) {
+    return `${SCORE_CHIP_PREFIXES[scorePrefix]} ${filter.slice(scorePrefix.length)}`;
+  }
+  return filter.replace(/^(date:|source:|salary:|years:|location:|education:)/, "");
+}
+
 export default function JobsFilterSidebar({
   selectedFilters,
   onFilterToggle,
@@ -42,7 +66,30 @@ export default function JobsFilterSidebar({
 }: JobsFilterPanelProps) {
   const [openDropdown, setOpenDropdown] = useState<DropdownKey>(null);
   const [showMoreFiltersModal, setShowMoreFiltersModal] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  // One ref per pill, not a single ref around the whole row — outside-click
+  // must only compare against the CURRENTLY OPEN pill's own boundary.
+  // Sharing one ref across all 8 pills meant a click on a different pill's
+  // padding, the gap between pills, or the "Active:" chips strip (all still
+  // "inside" that one shared wrapper) never closed the open dropdown — only
+  // a click truly outside the whole row did.
+  const workModelRef = useRef<HTMLDivElement>(null);
+  const jobTypeRef = useRef<HTMLDivElement>(null);
+  const experienceRef = useRef<HTMLDivElement>(null);
+  const salaryRef = useRef<HTMLDivElement>(null);
+  const locationRef = useRef<HTMLDivElement>(null);
+  const educationRef = useRef<HTMLDivElement>(null);
+  const datePostedRef = useRef<HTMLDivElement>(null);
+  const sourceRef = useRef<HTMLDivElement>(null);
+  const dropdownRefs: Record<Exclude<DropdownKey, null>, React.RefObject<HTMLDivElement | null>> = {
+    workModel: workModelRef,
+    jobType: jobTypeRef,
+    experience: experienceRef,
+    salary: salaryRef,
+    location: locationRef,
+    education: educationRef,
+    datePosted: datePostedRef,
+    source: sourceRef,
+  };
 
   // Salary slider state — index into salarySteps
   const [salarySliderIndex, setSalarySliderIndex] = useState(0);
@@ -63,124 +110,108 @@ export default function JobsFilterSidebar({
   const [pendingEducation, setPendingEducation] = useState<string[]>([]);
   const [eduSearch, setEduSearch] = useState("");
 
-  // Fixed salary steps: 2 LPA → 20 LPA in steps of 2, then "Any" at right end
-  const salarySteps = useMemo(() => {
-    const parseSalary = (salaryStr: string): number => {
-      const cleaned = (salaryStr || "").replace(/[\u20b9,]/g, "").toLowerCase();
-      const rangeMatch = cleaned.match(/(\d+\.?\d*)\s*[lk]?\s*-\s*(\d+\.?\d*)\s*[lk]/);
-      if (rangeMatch) {
-        const maxVal = parseFloat(rangeMatch[2]);
-        const unit = cleaned.match(/[lk]/)?.[0];
-        if (unit === "l") return maxVal * 100000;
-        if (unit === "k") return maxVal * 1000;
-        return maxVal;
-      }
-      const lakhMatch = cleaned.match(/(\d+\.?\d*)\s*l/);
-      if (lakhMatch) return parseFloat(lakhMatch[1]) * 100000;
-      const kMatch = cleaned.match(/(\d+\.?\d*)\s*k/);
-      if (kMatch) return parseFloat(kMatch[1]) * 1000;
-      const numMatch = cleaned.match(/(\d+)/);
-      if (numMatch) return parseFloat(numMatch[1]);
-      return 0;
-    };
-    const fixedLPA = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
-    const steps = fixedLPA.map((lpa) => ({
-      label: `${lpa} LPA+`,
-      value: lpa * 100000,
-      count: jobs.filter((job) => {
-        const n = parseSalary(job.salary || "");
-        return n > 0 && n >= lpa * 100000;
-      }).length,
-    }));
-    return [...steps, { label: "Any", value: 0, count: jobs.length }];
-  }, [jobs]);
+  // Fixed salary steps: 2 LPA → 20 LPA in steps of 2, then "Any" at right
+  // end — see the no-counts note above experienceOptions.
+  const salarySteps = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+    .map((lpa) => ({ label: `${lpa} LPA+`, value: lpa * 100000 }))
+    .concat([{ label: "Any", value: 0 }]);
 
-  // Build city options with counts
+  // Build city options — labels are still discovered by grouping the raw
+  // text (need *some* human-readable label per option), but the count next
+  // to each reuses matchesLocation (the same function Apply filters with),
+  // so casing/punctuation differences across postings that normalizeText
+  // treats as the same city are also counted together, not split across
+  // near-duplicate options with an exact-string count each.
   const cityOptions = useMemo(() => {
-    const map = new Map<string, number>();
+    const labels = new Set<string>();
     jobs.forEach((job) => {
       const raw = (job.location || "").split(",")[0].trim();
-      if (!raw || raw === "Location not specified") return;
-      map.set(raw, (map.get(raw) ?? 0) + 1);
+      if (raw && raw !== "Location not specified") labels.add(raw);
     });
-    return Array.from(map.entries())
-      .map(([label, count]) => ({ label, count }))
+    return Array.from(labels)
+      .map((label) => ({ label, count: jobs.filter((job) => matchesLocation(job.location, [label])).length }))
       .sort((a, b) => b.count - a.count);
   }, [jobs]);
 
-  // Build state options with counts
+  // Build state options — same reasoning as cityOptions above.
   const stateOptions = useMemo(() => {
-    const map = new Map<string, number>();
+    const labels = new Set<string>();
     jobs.forEach((job) => {
-      const parts = (job.location || "").split(",");
-      const raw = parts[1]?.trim() || "";
-      if (!raw) return;
-      map.set(raw, (map.get(raw) ?? 0) + 1);
+      const raw = (job.location || "").split(",")[1]?.trim() || "";
+      if (raw) labels.add(raw);
     });
-    return Array.from(map.entries())
-      .map(([label, count]) => ({ label, count }))
+    return Array.from(labels)
+      .map((label) => ({ label, count: jobs.filter((job) => matchesLocation(job.location, [label])).length }))
       .sort((a, b) => b.count - a.count);
   }, [jobs]);
 
-  // Build education options with counts from job education field
+  // Build education options — labels discovered by splitting each job's
+  // education field into tokens, but the count reuses matchesEducation (the
+  // same substring-containment check Apply filters with) rather than a plain
+  // per-token increment, so it can't drift from what selecting that option
+  // actually returns.
   const educationOptions = useMemo(() => {
-    const map = new Map<string, number>();
+    const labels = new Set<string>();
     jobs.forEach((job) => {
       const edu = job.education || "";
       if (!edu) return;
-      // May be comma-separated list, split and count each
       edu.split(/[,;/]/).forEach((e: string) => {
         const trimmed = e.trim();
-        if (trimmed) map.set(trimmed, (map.get(trimmed) ?? 0) + 1);
+        if (trimmed) labels.add(trimmed);
       });
     });
-    return Array.from(map.entries())
-      .map(([label, count]) => ({ label, count }))
+    return Array.from(labels)
+      .map((label) => ({ label, count: jobs.filter((job) => matchesEducation(job.education, [label])).length }))
       .sort((a, b) => b.count - a.count);
   }, [jobs]);
 
-  // Build experience options with job counts
-  const experienceOptions = useMemo(() => {
-    const EXP_OPTIONS = [
-      { label: "Fresher", value: 0 },
-      { label: "1 yr", value: 1 },
-      { label: "2 yrs", value: 2 },
-      { label: "3 yrs", value: 3 },
-      { label: "4 yrs", value: 4 },
-      { label: "5 yrs", value: 5 },
-      { label: "6 yrs", value: 6 },
-      { label: "7 yrs", value: 7 },
-      { label: "8 yrs", value: 8 },
-      { label: "9 yrs", value: 9 },
-      { label: "10 yrs", value: 10 },
-      { label: "11+ yrs", value: 11 },
-    ];
+  // Experience options — a job's count against any of these facets only
+  // ever reflects the currently-loaded ~50-job page, not the full pool
+  // (there's no backend aggregation endpoint for these facets), so showing
+  // a number here was actively misleading: the same option read differently
+  // depending on which page happened to be loaded, or even on itself once
+  // selected. No counts are shown anywhere in this file for that reason.
+  const EXP_OPTIONS = [
+    { label: "Fresher", value: 0 },
+    { label: "1 yr", value: 1 },
+    { label: "2 yrs", value: 2 },
+    { label: "3 yrs", value: 3 },
+    { label: "4 yrs", value: 4 },
+    { label: "5 yrs", value: 5 },
+    { label: "6 yrs", value: 6 },
+    { label: "7 yrs", value: 7 },
+    { label: "8 yrs", value: 8 },
+    { label: "9 yrs", value: 9 },
+    { label: "10 yrs", value: 10 },
+    { label: "11+ yrs", value: 11 },
+  ];
+  const experienceOptions = EXP_OPTIONS;
 
-    return EXP_OPTIONS.map((opt) => {
-      const count = jobs.filter((job) => {
-        const expStr = job.experience || "";
-        const nums = String(expStr).match(/\d+/g);
-        if (!nums) return opt.value === 0;
-        const minExp = parseInt(nums[0], 10);
-        if (opt.value === 0) return minExp === 0;
-        if (opt.value === 11) return minExp >= 11;
-        return minExp === opt.value;
-      }).length;
+  // Match Score options (overall + per-component) — identical steps for all
+  // four dimensions, so one shared list covers them; see the no-counts note above.
+  const SCORE_OPTIONS = SCORE_STEPS.map((value) => ({ label: `${value}+`, value }));
+  const matchScoreOptions = SCORE_OPTIONS;
+  const skillScoreOptions = SCORE_OPTIONS;
+  const expScoreOptions = SCORE_OPTIONS;
+  const eduScoreOptions = SCORE_OPTIONS;
 
-      return { ...opt, count };
-    });
-  }, [jobs]);
-
-  // Close dropdown on outside click
+  // Close dropdown on outside click — checked against the OPEN pill's own
+  // wrapper only (see dropdownRefs above), not the whole filter-bar row.
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (!openDropdown) return;
+      const activeRef = dropdownRefs[openDropdown];
+      if (activeRef.current && !activeRef.current.contains(e.target as Node)) {
         setOpenDropdown(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    // dropdownRefs is a fresh object literal each render, but its values (the
+    // individual useRef objects) are stable — omitting it avoids re-adding
+    // this listener on every render for no behavioral difference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDropdown]);
 
   // Count active filters per category
   const activeWorkModels = WORK_MODELS.filter((w) => selectedFilters.includes(w));
@@ -214,9 +245,6 @@ export default function JobsFilterSidebar({
     ? educationOptions.filter((o) => o.label.toLowerCase().includes(eduSearch.toLowerCase()))
     : educationOptions;
   const visibleEduOptions = showAllEdu ? filteredEduOptions : filteredEduOptions.slice(0, 5);
-
-  const fmtCount = (count: number) =>
-    count >= 1000 ? `${(count / 1000).toFixed(count >= 10000 ? 1 : 2)}k` : String(count);
 
   const handleEduApply = () => {
     activeEduFilters.forEach((e) => onFilterToggle(`education:${e}`));
@@ -288,11 +316,11 @@ export default function JobsFilterSidebar({
 
 
   return (
-    <div className="pt-3 pb-1" ref={containerRef}>
+    <div className="pt-3 pb-1">
       {/* Filter pills — all in one wrapping row */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* ── WORK MODEL PILL ── */}
-        <div className="relative">
+        <div className="relative" ref={workModelRef}>
           <button
             type="button"
             onClick={() => toggleDropdown("workModel")}
@@ -364,7 +392,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── JOB TYPE PILL ── */}
-        <div className="relative">
+        <div className="relative" ref={jobTypeRef}>
           <button
             type="button"
             onClick={() => toggleDropdown("jobType")}
@@ -436,7 +464,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── EXPERIENCE PILL ── */}
-        <div className="relative">
+        <div className="relative" ref={experienceRef}>
           <button
             type="button"
             onClick={() => toggleDropdown("experience")}
@@ -494,10 +522,7 @@ export default function JobsFilterSidebar({
                         className="sr-only"
                       />
                       <span className={`text-[13px] ${isSelected ? "text-[#4F46E5] font-semibold" : "text-gray-700"}`}>
-                        {opt.label}{" "}
-                        <span className={`font-normal ${isSelected ? "text-[#4F46E5]/70" : "text-gray-400"}`}>
-                          ({fmtCount(opt.count)})
-                        </span>
+                        {opt.label}
                       </span>
                     </label>
                   );
@@ -532,7 +557,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── SALARY PILL ── */}
-        <div className="relative">
+        <div className="relative" ref={salaryRef}>
           <button
             type="button"
             onClick={() => toggleDropdown("salary")}
@@ -588,7 +613,7 @@ export default function JobsFilterSidebar({
                       className="absolute -translate-x-1/2 bottom-0 bg-[#4338CA] text-white text-[11px] font-semibold rounded-md px-2 py-0.5 whitespace-nowrap pointer-events-none"
                       style={{ left: tooltipLeft }}
                     >
-                      {step.label} ({step.count} Jobs)
+                      {step.label}
                       <span className="absolute left-1/2 -translate-x-1/2 top-full border-[5px] border-transparent border-t-gray-700" />
                     </div>
                   </div>
@@ -657,7 +682,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── LOCATION PILL ── */}
-        <div className="relative">
+        <div className="relative" ref={locationRef}>
           <button
             type="button"
             onClick={() => toggleDropdown("location")}
@@ -761,10 +786,7 @@ export default function JobsFilterSidebar({
                           className="sr-only"
                         />
                         <span className={`text-[13px] ${isChecked ? "text-[#4F46E5] font-semibold" : "text-gray-700"}`}>
-                          {opt.label}{" "}
-                          <span className={`font-normal ${isChecked ? "text-[#4F46E5]/70" : "text-gray-400"}`}>
-                            ({fmtCount(opt.count)})
-                          </span>
+                          {opt.label}
                         </span>
                       </label>
                     );
@@ -800,7 +822,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── EDUCATION PILL ── */}
-        <div className="relative">
+        <div className="relative" ref={educationRef}>
           <button
             type="button"
             onClick={() => toggleDropdown("education")}
@@ -895,10 +917,7 @@ export default function JobsFilterSidebar({
                           className="sr-only"
                         />
                         <span className={`text-[13px] ${isChecked ? "text-[#4F46E5] font-semibold" : "text-gray-700"}`}>
-                          {opt.label}{" "}
-                          <span className={`font-normal ${isChecked ? "text-[#4F46E5]/70" : "text-gray-400"}`}>
-                            ({fmtCount(opt.count)})
-                          </span>
+                          {opt.label}
                         </span>
                       </label>
                     );
@@ -934,7 +953,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── DATE POSTED PILL ── */}
-        <div className="relative">
+        <div className="relative" ref={datePostedRef}>
           <button
             type="button"
             onClick={() => toggleDropdown("datePosted")}
@@ -1000,7 +1019,7 @@ export default function JobsFilterSidebar({
         </div>
 
         {/* ── SOURCE PILL ── */}
-        <div className="relative">
+        <div className="relative" ref={sourceRef}>
           <button
             type="button"
             onClick={() => toggleDropdown("source")}
@@ -1091,7 +1110,7 @@ export default function JobsFilterSidebar({
         <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pt-2.5 border-t border-gray-200/70">
           <span className="text-[10.5px] text-gray-400 font-bold uppercase tracking-widest shrink-0">Active:</span>
           {selectedFilters.map((f) => {
-            const label = f.replace(/^(date:|source:|salary:|years:|location:|education:)/, "");
+            const label = formatActiveFilterLabel(f);
             return (
               <span
                 key={f}
@@ -1126,6 +1145,7 @@ export default function JobsFilterSidebar({
           { key: "date",         label: "Date & Source",             sub: "Date Posted / Source" },
           { key: "education",    label: "Education",                 sub: "Qualification / Degree" },
           { key: "location",     label: "Location",                  sub: "City / State" },
+          { key: "matchQuality", label: "Match Quality",             sub: "Overall / Skills / Experience / Education score" },
         ] as const;
         type DrawerSection = typeof DRAWER_SECTIONS[number]["key"];
         return (
@@ -1144,7 +1164,10 @@ export default function JobsFilterSidebar({
             filteredLocOptions={filteredLocOptions}
             visibleEduOptions={visibleEduOptions}
             filteredEduOptions={filteredEduOptions}
-            fmtCount={fmtCount}
+            matchScoreOptions={matchScoreOptions}
+            skillScoreOptions={skillScoreOptions}
+            expScoreOptions={expScoreOptions}
+            eduScoreOptions={eduScoreOptions}
             activeLocFilters={activeLocFilters}
             activeEduFilters={activeEduFilters}
             pendingLocations={pendingLocations}
@@ -1243,6 +1266,12 @@ function DrawerContent(props: any) {
       }
       if (filter.startsWith("source:")) {
         const without = prev.filter((f) => !f.startsWith("source:"));
+        return prev.includes(filter) ? without : [...without, filter];
+      }
+      // Match Quality chips are radio-style per component, same as date:/source: above.
+      const scorePrefix = ["matchscore:", "skillscore:", "expscore:", "eduscore:"].find((p) => filter.startsWith(p));
+      if (scorePrefix) {
+        const without = prev.filter((f) => !f.startsWith(scorePrefix));
         return prev.includes(filter) ? without : [...without, filter];
       }
       return prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter];
@@ -1383,7 +1412,7 @@ function DrawerContent(props: any) {
           <div className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 border-b border-gray-100 overflow-x-auto">
             <span className="text-[11px] text-gray-400 font-medium shrink-0">Active:</span>
             {localFilters.map((f: string) => {
-              const label = f.replace(/^(date:|source:|salary:|years:|location:|education:)/, "");
+              const label = formatActiveFilterLabel(f);
               return (
                 <span key={f} className="flex items-center gap-1.5 px-2.5 py-1 bg-[#f0f4ff] text-[#4338CA] text-[11px] font-semibold rounded-full shrink-0 border border-[#4F46E5]/30">
                   {label}
@@ -1538,7 +1567,7 @@ function DrawerContent(props: any) {
                     {(props.showAllExp ? props.experienceOptionsAll : props.experienceOptionsAll.slice(0, 8)).map((opt: { label: string; count: number }) => (
                       <CheckItem
                         key={opt.label}
-                        label={`${opt.label}  (${props.fmtCount(opt.count)})`}
+                        label={opt.label}
                         checked={props.pendingExpLabel === opt.label}
                         onChange={() => props.handleExpSelect(opt.label)}
                         helpText={EXP_HELP[opt.label]}
@@ -1580,7 +1609,7 @@ function DrawerContent(props: any) {
                       <div className="relative h-8 mb-1">
                         <div className="absolute -translate-x-1/2 bottom-0 bg-[#0f172a] text-white text-[11px] font-semibold rounded-lg px-2.5 py-1 whitespace-nowrap pointer-events-none"
                           style={{ left: tooltipLeft }}>
-                          {step.label} · {step.count} Jobs
+                          {step.label}
                           <span className="absolute left-1/2 -translate-x-1/2 top-full border-[5px] border-transparent border-t-[#0f172a]" />
                         </div>
                       </div>
@@ -1668,7 +1697,7 @@ function DrawerContent(props: any) {
                   ) : props.visibleEduOptions.map((opt: { label: string; count: number }) => (
                     <CheckItem
                       key={opt.label}
-                      label={`${opt.label}  (${props.fmtCount(opt.count)})`}
+                      label={opt.label}
                       checked={props.pendingEducation.includes(opt.label)}
                       onChange={() => props.setPendingEducation((prev: string[]) =>
                         prev.includes(opt.label) ? prev.filter((e: string) => e !== opt.label) : [...prev, opt.label]
@@ -1721,7 +1750,7 @@ function DrawerContent(props: any) {
                   ) : props.visibleLocOptions.map((opt: { label: string; count: number }) => (
                     <CheckItem
                       key={opt.label}
-                      label={`${opt.label}  (${props.fmtCount(opt.count)})`}
+                      label={opt.label}
                       checked={props.pendingLocations.includes(opt.label)}
                       onChange={() => props.setPendingLocations((prev: string[]) =>
                         prev.includes(opt.label) ? prev.filter((l: string) => l !== opt.label) : [...prev, opt.label]
@@ -1743,6 +1772,46 @@ function DrawerContent(props: any) {
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* MATCH QUALITY — overall + per-component score thresholds against /jobs/scored */}
+            {activeSection === "matchQuality" && (
+              <div className="space-y-6">
+                <div>
+                  <p className="text-[13px] font-bold text-gray-900 mb-1">Match Quality</p>
+                  <p className="text-[11.5px] text-gray-400">Filter by how well a job scores against your resume</p>
+                </div>
+                {([
+                  { title: "Overall match", prefix: "matchscore:", options: props.matchScoreOptions },
+                  { title: "Skills match", prefix: "skillscore:", options: props.skillScoreOptions },
+                  { title: "Experience match", prefix: "expscore:", options: props.expScoreOptions },
+                  { title: "Education match", prefix: "eduscore:", options: props.eduScoreOptions },
+                ] as const).map((row) => (
+                  <div key={row.prefix}>
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">{row.title}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {row.options.map((opt: { label: string; value: number; count: number }) => {
+                        const chip = `${row.prefix}${opt.label}`;
+                        const isSelected = localFilters.includes(chip);
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            onClick={() => localToggle(chip)}
+                            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all ${
+                              isSelected
+                                ? "bg-[#4F46E5] border-[#4F46E5] text-white"
+                                : "bg-white border-gray-200 text-gray-700 hover:border-[#4F46E5]/40"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

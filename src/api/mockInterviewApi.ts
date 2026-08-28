@@ -3,13 +3,6 @@ import logger from '@/lib/logger';
 
 // ==================== INTERFACES ====================
 
-// ── Consent ────────────────────────────────────────────────────────────────────
-
-export interface ConsentResponse {
-  consent_recorded: boolean;
-  timestamp: string;
-}
-
 // ── Generate Notes ─────────────────────────────────────────────────────────────
 
 export interface GenerateNotesRequest {
@@ -184,18 +177,6 @@ export interface EnglishEssentials {
 // ==================== API FUNCTIONS ====================
 
 /**
- * Record user consent for AI processing (DPDP compliance)
- * POST /api/v1/mock-interview/consent
- */
-export const recordConsent = async (consent_given: boolean): Promise<ConsentResponse> => {
-  const response = await httpClient.post<ConsentResponse>(
-    '/mock-interview/consent',
-    { consent_given } as unknown as Record<string, unknown>
-  );
-  return response.data;
-};
-
-/**
  * Generate AI-powered interview prep notes from user's resume
  * POST /api/v1/mock-interview/generate-notes
  * Credit cost: 10 credits
@@ -217,17 +198,28 @@ export const generateNotes = async (data: GenerateNotesRequest): Promise<Generat
 };
 
 /**
- * Fetch stored interview prep notes for a user
- * GET /api/v1/mock-interview/notes/{user_id}
+ * Fetch stored interview prep notes for a resume
+ * GET /api/v1/mock-interview/notes/{resume_id}
  */
-export const getNotes = async (userId: string): Promise<NotesRecord> => {
-  const response = await httpClient.get<NotesRecord>(`/mock-interview/notes/${userId}`);
+export const getNotes = async (resumeId: string): Promise<NotesRecord> => {
+  const response = await httpClient.get<NotesRecord>(`/mock-interview/notes/${resumeId}`);
   return response.data;
 };
 
 /**
  * Partially update interview prep notes (user edits)
  * PUT /api/v1/mock-interview/notes/{user_id}
+ *
+ * NOTE: this takes a USER id, unlike getNotes above which takes a resume id.
+ * That asymmetry is the backend's, not a mistake here:
+ *   - GET  /notes/{resume_id} resolves resume-scoped, falling back to
+ *     user-scoped when the segment is the caller's own id.
+ *   - PUT  /notes/{user_id}   compares the segment to the authenticated user
+ *     and returns 403 Access denied on any mismatch.
+ * The stored notes document is keyed on user_id alone (see save_notes in
+ * careerbot-api's mock_interview repository), so a user-scoped write and a
+ * resume-filtered read address the SAME record — passing a resume id here
+ * only produces a 403, it does not address a different document.
  */
 export const updateNotes = async (
   userId: string,
@@ -542,6 +534,7 @@ export interface ReportResponse {
     hr?: number;
     communication?: number;
     confidence?: number;
+    technical?: number;
     [key: string]: number | undefined;
   };
   answers: ReportAnswer[];
@@ -552,6 +545,22 @@ export interface ReportResponse {
   strengths?: string[];
   improvement_areas?: string[];
   created_at: string;
+  // Coding round data (live_technical sessions only)
+  coding_performance?: {
+    score: number;
+    // Backend sends nested criterion objects, not bare numbers. See
+    // careerbot-api tests/coding_test/test_interview_coding.py (_STEP_RESPONSE.grade.criteria).
+    criteria?: Record<string, { score: number; weight: number; feedback?: string }>;
+    // Backend field is ai_feedback_summary; `summary` is kept only as a
+    // tolerated legacy alias.
+    ai_feedback_summary?: string;
+    summary?: string;
+    strengths?: string[];
+    improvements?: string[];
+    follow_ups_completed?: number;
+    average_followup_score?: number;
+    [key: string]: unknown;
+  };
   // Computed fields used by UI (may come from backend or derived)
   duration_min?: number;
   question_count?: number;
@@ -630,6 +639,10 @@ export interface LiveCreateRequest {
   target_role?: string;
   enable_streaming_stt?: boolean;
   voice?: string;
+  interviewer_index?: number;
+  interviewer_name?: string;
+  interviewer_gender?: string;
+  interviewer_slug?: string;
   use_orchestrator?: boolean;
 }
 

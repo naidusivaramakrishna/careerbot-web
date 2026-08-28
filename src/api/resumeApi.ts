@@ -63,7 +63,6 @@ export interface ResumeResponse {
     issueDate: string;
     expiryDate?: string;
     credentialId?: string;
-    credentialUrl?: string;
   }>;
   achievements?: Array<{
     id?: string;
@@ -634,14 +633,13 @@ const transformResumeDataForBackend = (resumeData: Partial<ResumeResponse>): Par
     };
   }
 
-  // Ensure personalInfo is sent under both snake_case and camelCase keys so the
-  // backend PDF generator finds it regardless of which convention it uses.
+  // Strip the snake_case alias — backend PATCH accepts personalInfo and normalizes
+  // internally; sending both risks divergence if values ever differ.
   const raw = transformed as Record<string, unknown>;
-  if (raw['personal_info']) {
+  if (raw['personal_info'] && !transformed.personalInfo) {
     raw['personalInfo'] = raw['personal_info'];
-  } else if (transformed.personalInfo) {
-    raw['personal_info'] = transformed.personalInfo;
   }
+  delete raw['personal_info'];
 
   // Transform customSections from fields-based to items-based structure
   if (transformed.customSections && Array.isArray(transformed.customSections) && transformed.customSections.length > 0) {
@@ -768,7 +766,7 @@ export const addSkillToCategory = async (
       `/resumes/${resumeId}/skills/${category}`,
       { name: skillName }
     );
-    const id = response.data?.id ?? response.data?._id;
+    const id = response.data?.id ?? response.data?._id ?? response.data?.skill?.id;
     logger.info("✅ Skill added successfully, id:", id);
     return { id };
   } catch (error) {
@@ -918,10 +916,12 @@ export const deleteResume = async (resumeId: string): Promise<void> => {
 };
 
 // ==================== AUTO-SAVE RESUME ====================
+export type AutoSaveResumeResponse = ResumeResponse & { warnings?: string[] };
+
 export const autoSaveResume = async (
   resumeId: string,
   resumeData: Partial<ResumeResponse>
-): Promise<ResumeResponse | null> => {
+): Promise<AutoSaveResumeResponse | null> => {
 
   try {
     logger.debug("💾 Auto-saving resume:", resumeId);
@@ -929,7 +929,7 @@ export const autoSaveResume = async (
     // ✅ Transform data for backward compatibility
     const transformedData = transformResumeDataForBackend(resumeData);
 
-    const response = await httpClient.patch<ResumeResponse>(
+    const response = await httpClient.patch<AutoSaveResumeResponse>(
       `/resumes/${resumeId}`,
       transformedData,
       {
@@ -945,7 +945,11 @@ export const autoSaveResume = async (
       return null;
     }
 
-    logger.info("✅ Auto-save successful");
+    if (response.data?.warnings?.length) {
+      logger.warn("⚠️ Auto-save completed with warnings:", response.data.warnings);
+    } else {
+      logger.info("✅ Auto-save successful");
+    }
     return response.data;
 
   } catch (error) {
@@ -1014,11 +1018,12 @@ export const downloadResume = async (
   accentColor?: string,
   sectionOrder?: string[],
   fontFamily?: string,
-  lineSpacing?: string
+  lineSpacing?: string,
+  careerLevel?: string
 ): Promise<Blob> => {
 
   try {
-    logger.debug("⬇️ Downloading resume:", resumeId, "Format:", format, "Catalogue:", catalogueTemplateId, "Domain:", domainTemplateId, "SectionBg:", sectionBgColor, "SectionOrder:", sectionOrder, "Font:", fontFamily, "LineSpacing:", lineSpacing);
+    logger.debug("⬇️ Downloading resume:", resumeId, "Format:", format, "Catalogue:", catalogueTemplateId, "Domain:", domainTemplateId, "SectionBg:", sectionBgColor, "SectionOrder:", sectionOrder, "Font:", fontFamily, "LineSpacing:", lineSpacing, "CareerLevel:", careerLevel);
 
     const backendFormat = format === 'doc' ? 'docx' : format;
     const params = new URLSearchParams({ format: backendFormat });
@@ -1029,6 +1034,7 @@ export const downloadResume = async (
     if (sectionOrder && sectionOrder.length > 0) params.append('section_order', JSON.stringify(sectionOrder));
     if (fontFamily) params.append('font_family', fontFamily);
     if (lineSpacing) params.append('line_height', lineSpacing);
+    if (careerLevel) params.append('career_level', careerLevel);
 
     logger.debug("🔍 Download URL:", `${httpClient.defaults.baseURL}/resumes/${resumeId}/download?${params.toString()}`);
 

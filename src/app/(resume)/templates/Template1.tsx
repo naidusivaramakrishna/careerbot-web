@@ -14,6 +14,8 @@ interface Props {
   layoutVariant?: "centered" | "left-right" | "left-stacked" | "classic-formal" | "classic" | "executive" | "slate" | "aether" | "pillar" | "ember";
 }
 
+const CORPORATE_DOMAINS = ['software_engineering', 'cybersecurity', 'finance', 'sales_business_development', 'core_engineering', 'electronics_and_vlsi', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources', 'logistics_warehouse_operations'];
+
 const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", domainFamily = "core_engineering", sectionOrder = [], layoutVariant = "centered" }) => {
   const {
     personalInfo,
@@ -44,7 +46,9 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
       return "PROFESSIONAL SUMMARY";
     }
     if (section === "Skills") {
-      return (careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President") ? "CORE COMPETENCIES" : "SKILLS";
+      const isCorporateDomain = CORPORATE_DOMAINS.includes(domainFamily || '');
+      const isSeniorLevel = careerLevel === "Senior-Level" || careerLevel === "Lead" || careerLevel === "Architect" || careerLevel === "Manager" || careerLevel === "Director" || careerLevel === "Vice President";
+      return isCorporateDomain && isSeniorLevel ? "CORE COMPETENCIES" : "SKILLS";
     }
     if (section === "Projects") {
       return domainFamily === "core_engineering" ? "KEY PROJECTS" : "PROJECTS";
@@ -104,15 +108,6 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
     fontWeight: "bold",
   };
 
-  const headingStyle: React.CSSProperties = {
-    color: style.headingColor,
-    fontSize: style.headingFontSize,
-    fontWeight: "bold",
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-    marginBottom: "0.4rem",
-  };
-
   const sectionHeadingStyle: React.CSSProperties = {
     color: accent,
     fontSize: style.headingFontSize,
@@ -149,7 +144,6 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
 
     // Otherwise, parse as HTML
     const doc = new DOMParser().parseFromString(processedHtml, 'text/html');
-    const elements: React.ReactNode[] = [];
 
     const processNode = (node: Node, key: number): React.ReactNode => {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -223,7 +217,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
             {renderSectionHeading(getSectionTitle("Skills"))}
             <div style={sectionBorderStyle("12px")} />
             <div style={{ ...baseTextStyle }}>
-              {(careerLevel === 'Director' || careerLevel === 'Vice President') && data.categorizedSkills ? (() => {
+              {(careerLevel === 'Senior-Level' || careerLevel === 'Lead' || careerLevel === 'Architect' || careerLevel === 'Manager' || careerLevel === 'Director' || careerLevel === 'Vice President') && ['software_engineering', 'cybersecurity', 'logistics_warehouse_operations', 'sales_business_development', 'customer_support_service', 'product_engineering_leadership', 'marketing_creative', 'operations_management', 'human_resources'].includes(domainFamily || '') && data.categorizedSkills ? (() => {
                 const allSkills: string[] = [];
                 Object.entries(data.categorizedSkills!)
                   .filter(([cat]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(cat))
@@ -233,7 +227,7 @@ const Template1: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               })() : data.categorizedSkills && Object.keys(data.categorizedSkills).length > 0 ? (
                 <>
                   {Object.entries(data.categorizedSkills)
-                    .filter(([category]) => category !== 'custom_categories')
+                    .filter(([category]) => !['custom_categories', 'hidden_predefined_categories', 'skill_id_map'].includes(category))
                     .map(([category, categorySkills]) => {
                       const skillArr = Array.isArray(categorySkills)
                         ? (categorySkills as string[]).filter(s => typeof s === "string")

@@ -282,17 +282,15 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       newFormData["professionalSummary"] = resumeData.professionalSummary.summary || "";
       newFormData["targetRole"] = resumeData.professionalSummary.targetRole || "";
       
-      // Skills
-      if (Array.isArray(resumeData.skills)) {
-        newFormData["skills"] = resumeData.skills.join(", ");
-      }
-      
-      // Multi-entry sections (Education, Work Experience, Projects, etc.) are intentionally
+      // Skills is intentionally excluded from formData — the Skills component writes
+      // directly to resumeData.categorizedSkills via chip inputs and autosave reads
+      // from context, not formData. Including it here created a stale snapshot that
+      // caused validateSectionFields to treat the empty initial value as a missing
+      // required field and block Save with "Please fill in all required fields".
+      //
+      // Multi-entry sections (Education, Work Experience, Projects, etc.) are also
       // excluded from formData. They manage their own state (savedEntries / editingEntries)
       // and write directly to resumeData — they never read from formData.
-      // Including them here caused validateSectionFields to scan stale snapshot values
-      // (including any partial/duplicate entries from the backend) and incorrectly
-      // block the Save button with "Please fill in all required fields".
       
       setFormData(newFormData);
     }
@@ -462,7 +460,6 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
   //   }
   // };
   const handleBlur = (key: string, value: string) => {
-  // Check if this is a required field
   const lowerKey = key.toLowerCase();
   const optionalFields = [
     "linkedin",
@@ -476,23 +473,51 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
     "category",
     "proficiencylevel",
   ];
-  
+
   const isRequired = !optionalFields.some((optional) => lowerKey.includes(optional));
-  
-  // Only set error if field is required AND empty
-  if (isRequired && (!value || value.trim() === "")) {
-    setErrors(prev => ({
-      ...prev,
-      [key]: "This field is required"
-    }));
-  } else {
-    // Clear error if field has value
-    setErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors[key];
-      return newErrors;
-    });
+
+  const trimmed = value?.trim() ?? "";
+
+  // Required-field empty check
+  if (isRequired && !trimmed) {
+    setErrors(prev => ({ ...prev, [key]: "This field is required" }));
+    return;
   }
+
+  // URL domain/prefix validation for LinkedIn, GitHub, Portfolio
+  if (trimmed) {
+    let urlError: string | null = null;
+
+    if (key === "linkedinUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "LinkedIn URL must start with http:// or https://";
+      } else if (!trimmed.includes("linkedin.com")) {
+        urlError = "LinkedIn URL must be a linkedin.com address";
+      }
+    } else if (key === "githubUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "GitHub URL must start with http:// or https://";
+      } else if (!trimmed.includes("github.com")) {
+        urlError = "GitHub URL must be a github.com address";
+      }
+    } else if (key === "portfolioUrl") {
+      if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+        urlError = "Portfolio URL must start with http:// or https://";
+      }
+    }
+
+    if (urlError) {
+      setErrors(prev => ({ ...prev, [key]: urlError as string }));
+      return;
+    }
+  }
+
+  // Clear error
+  setErrors(prev => {
+    const newErrors = { ...prev };
+    delete newErrors[key];
+    return newErrors;
+  });
 };
 
 

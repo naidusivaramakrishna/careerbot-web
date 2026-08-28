@@ -43,14 +43,43 @@ const bodyContains = (data: unknown, str: string): boolean => {
   return false;
 };
 
-// True if the user logged in (or last refreshed) within the past 2 minutes.
+// True if the user logged in (or last refreshed successfully) within the past 35 minutes,
+// or if a refresh attempt is currently in progress (within 3 minutes).
 // A failed refresh within this window is almost certainly a transient backend
 // issue, not real session expiry — so we skip the logout redirect.
+// This window must be larger than the token refresh interval to avoid logging out
+// users during refresh retries when token expires but refresh fails.
 const LAST_REFRESH_KEY = 'token_last_refreshed_at';
+const LAST_ATTEMPT_KEY = 'token_last_refresh_attempt_at';
+const REFRESH_ATTEMPT_WINDOW_MS = 3 * 60 * 1000; // 3 minutes for retry window
 const isSessionFresh = (): boolean => {
   if (typeof window === 'undefined') return false;
-  const ts = parseInt(localStorage.getItem(LAST_REFRESH_KEY) || '0', 10);
-  return ts > 0 && Date.now() - ts < 2 * 60 * 1000;
+  const lastRefreshed = parseInt(localStorage.getItem(LAST_REFRESH_KEY) || '0', 10);
+  const lastAttempted = parseInt(localStorage.getItem(LAST_ATTEMPT_KEY) || '0', 10);
+  const lastRefreshedRecently = lastRefreshed > 0 && Date.now() - lastRefreshed < 35 * 60 * 1000;  // 35 minutes = 30 min token + 5 min buffer
+  const retryInProgress = lastAttempted > 0 && Date.now() - lastAttempted < REFRESH_ATTEMPT_WINDOW_MS;  // 3 min retry window
+  return lastRefreshedRecently || retryInProgress;
+};
+
+/**
+ * True when the backend has definitively rejected the session, as opposed to
+ * failing transiently.
+ *
+ * isSessionFresh() suppresses the logout redirect for 35 minutes so a flaky
+ * backend does not bounce a working session to the login page. But the API
+ * also returns 401 for reasons that will NEVER succeed on retry -- a revoked
+ * or already-used refresh token, a suspended account, a failed rotation
+ * (careerbot-api app/services/user_service/service.py:445-490). Suppressing
+ * those left the user in a half-logged-in state, every request 401ing, for up
+ * to 35 minutes. Definitive rejections must bypass the freshness window.
+ */
+const isDefinitiveAuthRejection = (err: unknown): boolean => {
+  if (!err || typeof err !== 'object') return false;
+  const response = (err as { response?: { status?: number; data?: { detail?: unknown } } }).response;
+  if (response?.status !== 401 && response?.status !== 403) return false;
+  const detail = response?.data?.detail;
+  if (typeof detail !== 'string') return false;
+  return /revoked|already used|suspended|rotation failed|sign in again/i.test(detail);
 };
 
 const clearAllTokens = () => {
@@ -59,6 +88,7 @@ const clearAllTokens = () => {
   // Works for both user and admin requests
   sessionStorage.clear();
   localStorage.removeItem('token_last_refreshed_at');
+  localStorage.removeItem('token_last_refresh_attempt_at');
   clearCorrelationId();
   clearTenantId();
 };
@@ -113,6 +143,19 @@ const processQueue = (
 
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // No Authorization header is set from localStorage.
+    //
+    // This used to read 'access_token_backup' and attach it as a Bearer token
+    // on every request, described as "a backup for httpOnly cookies in case
+    // they don't work across domains". Nothing legitimate ever wrote that key:
+    // both OAuth callbacks establish the session as httpOnly cookies and put
+    // nothing in the query string (verified against careerbot-api
+    // origin/integration/develop2_072026_pr: google_oauth.py and
+    // linkedin_oauth.py). The only writer was a success page copying whatever
+    // happened to be in a public URL — so this line replayed an
+    // attacker-supplied token as the caller's credential on every API call.
+    //
+    // Cookies are sent by withCredentials; that is the auth path.
 
     const correlationId = getCorrelationId();
     if (correlationId && config.headers) {
@@ -171,19 +214,56 @@ function extractBackendMessage(data: unknown): string | null {
    Response Interceptor
 -------------------------------------------------- */
 
+/* --------------------------------------------------
+   Credit sync helper — fires on any response that carries
+   credits_remaining or user_credits_remaining so the
+   DashboardContext can update without a full re-fetch.
+-------------------------------------------------- */
+
+let _creditsBc: BroadcastChannel | null = null;
+const getCreditsBc = (): BroadcastChannel | null => {
+  if (typeof window === 'undefined') return null;
+  if (!_creditsBc) {
+    try { _creditsBc = new BroadcastChannel('careerbot_credits'); } catch { /* unsupported */ }
+  }
+  return _creditsBc;
+};
+
+const maybeSyncCredits = (data: unknown): void => {
+  if (!data || typeof data !== 'object') return;
+  const d = data as Record<string, unknown>;
+  const remaining =
+    typeof d.credits_remaining === 'number' ? d.credits_remaining :
+    typeof d.user_credits_remaining === 'number' ? d.user_credits_remaining :
+    null;
+  if (remaining === null) return;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('credits-updated', { detail: { credits_remaining: remaining } })
+    );
+    getCreditsBc()?.postMessage({ credits_remaining: remaining });
+  }
+};
+
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    maybeSyncCredits(response.data);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     const isAdmin = isAdminRequest(originalRequest?.url);
     const skipAuthRedirect =
       originalRequest?.headers?.get?.('X-Skip-Auth-Redirect') === 'true' ||
-      originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true';
+      originalRequest?.headers?.['X-Skip-Auth-Redirect'] === 'true' ||
+      originalRequest?.headers?.['x-skip-auth-redirect'] === 'true';
     // skipLoginRedirect: still attempts token refresh on 401, but does NOT
     // redirect to login if the refresh also fails (user is unauthenticated).
     const skipLoginRedirect =
       originalRequest?.headers?.get?.('X-Skip-Login-Redirect') === 'true' ||
-      originalRequest?.headers?.['X-Skip-Login-Redirect'] === 'true';
+      originalRequest?.headers?.['X-Skip-Login-Redirect'] === 'true' ||
+      originalRequest?.headers?.['x-skip-login-redirect'] === 'true';
 
     // 403 = tenant mismatch — do NOT attempt token refresh, just reject
     if (error.response?.status === 403) {
@@ -249,7 +329,7 @@ client.interceptors.response.use(
       originalRequest.url?.includes('/auth/refresh') ||
       originalRequest.url?.includes('/admin/auth/refresh')
     ) {
-      if (isSessionFresh() || skipLoginRedirect) {
+      if ((isSessionFresh() && !isDefinitiveAuthRejection(error)) || skipLoginRedirect) {
         return Promise.reject(error);
       }
       const signingOutTimestamp = sessionStorage.getItem('__signing_out');
@@ -284,15 +364,20 @@ client.interceptors.response.use(
     }
 
     try {
+      // Use proxy routes that properly forward Set-Cookie headers
       const endpoint = isAdmin
-        ? '/admin/auth/refresh'
-        : '/auth/refresh';
+        ? '/api/backend/admin/auth/refresh'
+        : '/api/backend/auth/refresh';
       await client.post(
         endpoint,
         {},
-        skipLoginRedirect
-          ? { headers: { 'X-Skip-Login-Redirect': 'true' } }
-          : undefined
+        {
+          baseURL: "",
+          headers: {
+            'X-Skip-Login-Redirect': skipLoginRedirect ? 'true' : undefined,
+            'X-Tenant-Id': getTenantId(),
+          },
+        }
       );
       window.dispatchEvent(
         new Event(isAdmin ? 'adminTokenUpdated' : 'tokenUpdated')
@@ -313,7 +398,11 @@ client.interceptors.response.use(
 
       // Don't redirect if the failure is a transient backend crash OR if the tokens
       // are fresh (user just logged in) — in both cases the session is still valid.
-      if (isRefreshBackendCrash || isSessionFresh() || skipLoginRedirect) {
+      if (
+        (isRefreshBackendCrash || isSessionFresh()) &&
+        !isDefinitiveAuthRejection(refreshError)
+        || skipLoginRedirect
+      ) {
         processQueue(refreshError, null, isAdmin);
         return Promise.reject(refreshError);
       }

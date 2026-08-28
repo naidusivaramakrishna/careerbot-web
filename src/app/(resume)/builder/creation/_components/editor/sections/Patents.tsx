@@ -8,6 +8,8 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
 import SectionTipsPanel from "../SectionTipsPanel";
 import { toast } from "sonner";
 import {
@@ -61,6 +63,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Patents: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const { errors, validateRequired, clearError, clearSectionIndexErrors, reindexErrors } = useValidation();
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [editingOriginalIndex, setEditingOriginalIndex] = useState<number | null>(null);
@@ -73,8 +77,21 @@ const Patents: React.FC = () => {
 
   const hasValidData = (entry: PatentEntry): boolean => !!(entry.title);
 
+  // ResumeData["patents"] declares patentNumber/status/date as OPTIONAL, while
+  // PatentEntry (what this editor renders and writes) requires them. Normalize
+  // at the boundary instead of widening PatentEntry, so the inputs below still
+  // get defined string values to bind to.
+  const toPatentEntry = (p: NonNullable<typeof resumeData.patents>[number]): PatentEntry => ({
+    id: p.id,
+    title: p.title ?? "",
+    patentNumber: p.patentNumber ?? "",
+    status: p.status ?? "",
+    date: p.date ?? "",
+    description: p.description,
+  });
+
   const [savedEntries, setSavedEntries] = useState<PatentEntry[]>(() =>
-    (resumeData.patents || []).filter(hasValidData)
+    (resumeData.patents || []).map(toPatentEntry).filter(hasValidData)
   );
 
   const [editingEntries, setEditingEntries] = useState<PatentEntry[]>(() =>
@@ -126,7 +143,7 @@ const Patents: React.FC = () => {
     setSavedEntries(prev => {
       if (prev.length === 0 && editingEntries.every(e => !hasValidData(e))) {
         setEditingEntries([]);
-        return resumeData.patents!.filter(hasValidData);
+        return resumeData.patents!.map(toPatentEntry).filter(hasValidData);
       }
       if (editingEntries.length > 0) return prev;
       if (prev.length !== resumeData.patents!.length) return prev;
@@ -296,7 +313,13 @@ const Patents: React.FC = () => {
     const resumeId = localStorage.getItem("current_resume_id");
     try {
       setDeletingIndex(index);
-      if (resumeId && entry.id) await deleteResumeSectionItem(resumeId, 'patents', entry.id);
+      if (resumeId && entry.id) {
+        if (isEnhancedResume) {
+          await deleteSectionItemFromEnhancedResume(resumeId, 'patents', entry.id);
+        } else {
+          await deleteResumeSectionItem(resumeId, 'patents', entry.id);
+        }
+      }
       const updated = savedEntries.filter((_, i) => i !== index);
       setSavedEntries(updated);
       clearSectionIndexErrors("patents", index);

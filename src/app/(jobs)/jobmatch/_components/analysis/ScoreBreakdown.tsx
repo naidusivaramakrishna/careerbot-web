@@ -8,7 +8,6 @@ import {
   ChevronUp,
   CircleAlert,
   Info,
-  RefreshCw,
   MessageCircle,
   Sparkles,
   Flame,
@@ -19,12 +18,15 @@ import {
   ListChecks,
   Tag,
   History,
+  FileText,
   GraduationCap,
   Award,
   FileCheck2,
   TrendingUp,
   ClipboardCheck,
   ThumbsUp,
+  Crown,
+  Zap,
 } from "lucide-react";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,11 +57,12 @@ const PRIORITY_STYLES: Record<PriorityLevel, { Icon: LucideIcon; text: string; b
   low:    { Icon: Info,  text: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
 };
 
-type ChipTone = "red" | "blue";
+type ChipTone = "red" | "blue" | "green";
 
 const CHIP_TONE_STYLES: Record<ChipTone, { text: string; chipBg: string; chipBorder: string; dot: string }> = {
-  red:  { text: "text-red-600",  chipBg: "bg-red-50",  chipBorder: "border-red-100",  dot: "bg-red-500" },
-  blue: { text: "text-blue-600", chipBg: "bg-blue-50", chipBorder: "border-blue-100", dot: "bg-blue-500" },
+  red:   { text: "text-[#c2413a]", chipBg: "bg-[#fff5f4]", chipBorder: "border-[#f5d5d2]", dot: "bg-[#df5b54]" },
+  blue:  { text: "text-[#3A4F7A]", chipBg: "bg-[#f3f6fb]", chipBorder: "border-[#dce5f1]", dot: "bg-[#5d759f]" },
+  green: { text: "text-[#16803c]", chipBg: "bg-[#f0fdf4]", chipBorder: "border-[#bbf7d0]", dot: "bg-[#22c55e]" },
 };
 
 // Modern rounded chips for a labeled skill group (Required / Nice to have / Missing).
@@ -85,7 +88,7 @@ function SkillChipGroup({
         {items.map((item, index) => (
           <span
             key={`${item}-${index}`}
-            className={`inline-flex items-center gap-1.5 rounded-full border ${s.chipBorder} ${s.chipBg} px-3 py-1.5 text-[12.5px] font-medium text-slate-800`}
+            className={`inline-flex items-center gap-1.5 rounded-full border ${s.chipBorder} ${s.chipBg} px-3 py-1.5 text-[12.5px] font-medium text-[#2f2f2f]`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
             {item}
@@ -108,12 +111,10 @@ interface SectionCardProps {
   missingCount?: number;
   /** This check crashed server-side — the score is not a real measurement, so render as a recoverable state instead of "0% failed". */
   errorMessage?: string;
-  onRetry?: () => void;
-  isRetrying?: boolean;
 }
 
 function SectionCard({
-  label, subtitle, icon: Icon, priorityLabel, priorityLevel, score, passText, children, missingCount, errorMessage, onRetry, isRetrying,
+  label, subtitle, icon: Icon, priorityLabel, priorityLevel, score, passText, children, missingCount, errorMessage,
 }: SectionCardProps) {
   const [expanded, setExpanded] = useState(true);
   const prio = PRIORITY_STYLES[priorityLevel];
@@ -122,7 +123,7 @@ function SectionCard({
   // calm amber treatment, not a red "error" state.
   if (errorMessage) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/60 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+      <div className="overflow-hidden rounded-[14px] border border-amber-200 bg-[#fffdf7] shadow-[0_2px_8px_rgba(15,23,42,0.035)]">
         <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 sm:px-5">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 sm:h-11 sm:w-11">
@@ -149,24 +150,11 @@ function SectionCard({
           </div>
         </div>
 
-        <div className="mx-4 mb-4 flex flex-col gap-3 rounded-xl border border-dashed border-amber-300 bg-white/70 px-4 py-3.5 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2.5">
-            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100">
-              <MessageCircle className="h-3.5 w-3.5 text-amber-600" />
-            </span>
-            <p className="text-[13px] leading-relaxed text-slate-700">{errorMessage}</p>
-          </div>
-          {onRetry && (
-            <button
-              type="button"
-              onClick={onRetry}
-              disabled={isRetrying}
-              className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-[12.5px] font-bold text-white shadow-sm transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isRetrying ? "animate-spin" : ""}`} />
-              {isRetrying ? "Retrying…" : "Retry"}
-            </button>
-          )}
+        <div className="mx-4 mb-4 flex items-start gap-2.5 rounded-xl border border-dashed border-amber-300 bg-white/70 px-4 py-3.5 sm:mx-5">
+          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100">
+            <MessageCircle className="h-3.5 w-3.5 text-amber-600" />
+          </span>
+          <p className="text-[13px] leading-relaxed text-slate-700">{errorMessage}</p>
         </div>
       </div>
     );
@@ -180,7 +168,7 @@ function SectionCard({
   const iconColor = passed ? "#16a34a" : prio.text;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-shadow hover:shadow-[0_4px_16px_rgba(15,23,42,0.07)]">
+    <div className="overflow-hidden rounded-[14px] border border-[#dfe5ee] bg-white shadow-[0_2px_8px_rgba(15,23,42,0.035)] transition-shadow hover:shadow-[0_5px_18px_rgba(58,79,122,0.07)]">
       <div className="px-4 py-4 sm:px-5">
         {/* Header row */}
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -261,11 +249,10 @@ function SectionCard({
   );
 }
 
-export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMatch }: {
+export default function ScoreBreakdown({ matchResult, currentSummary = "" }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   matchResult: any;
-  onRetryMatch?: () => void;
-  isRetryingMatch?: boolean;
+  currentSummary?: string;
 }) {
   if (!matchResult) return null;
 
@@ -273,6 +260,8 @@ export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMa
   const soft = matchResult.Soft_Skills ?? {};
   const cap  = matchResult.Capabilities_Check ?? {};
   const star = matchResult.STAR_Pattern_Check ?? {};
+  const summary = matchResult.Summary_Check ?? {};
+  const req  = matchResult.Requirements_Check ?? {};
   const exp  = matchResult.Experience_Check ?? {};
   const edu  = matchResult.Education_Check ?? {};
   const job  = matchResult.Job_Title_Check ?? {};
@@ -281,17 +270,21 @@ export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMa
   const careerProg    = matchResult.Career_Progression_Check ?? {};
   const growthQuality = careerProg.growth_quality ?? {};
   const levelAlignment = careerProg.level_alignment ?? {};
+  const leadership    = matchResult.Leadership_Check ?? {};
 
   const techScore = parseScore(tech.match_score);
   const softScore = parseScore(soft.match_score);
   const capScore  = parseScore(cap.match_score);
   const starScore = parseScore(star.match_score);
+  const summaryScore = parseScore(summary.match_score);
+  const reqScore = parseScore(req.match_score);
   const expScore  = parseScore(exp.match_score);
   const eduScore  = parseScore(edu.match_score);
   const jobScore  = parseScore(job.match_score);
   const certScore = parseScore(cert.match_score);
   const fmtScore  = parseScore(fmt.match_score);
   const careerProgScore = parseScore(careerProg.match_score);
+  const leadershipScore = parseScore(leadership.match_score);
 
   const missingTech: { skill: string; importance: string }[] = [
     ...(tech.missing_critical_skills ?? []).map((s: { skill: string }) => ({ skill: s.skill, importance: "required" })),
@@ -305,22 +298,23 @@ export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMa
   // silently reads as 0% — indistinguishable from "genuinely zero soft skills
   // matched" unless we check execution_failed explicitly and say so.
   const softError: string | undefined = soft.execution_failed
-    ? "We couldn't score this section this time. Try running the match again."
+    ? "We couldn't score this section this time. It won't affect your other results."
     : undefined;
   const missingCap: string[] = (cap.missing_capabilities ?? []).map((c: { capability: string }) => c.capability);
   const weakBullets: { original: string; improved: string }[] = star.weak_bullets ?? [];
   const starSuggestion: string = star.suggestion ?? "";
   const starSeniority: string  = star.seniority ?? "";
+  const missingVerbs: string[] = (req.missing_verbs ?? []).map((v: { verb: string }) => v.verb);
 
   return (
-    <div className="space-y-5">
+    <section className="space-y-4" aria-labelledby="jobmatch-suggestions-heading">
       {/* Section header */}
       <div className="flex items-start gap-3 px-1">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-violet-100">
-          <Sparkles className="h-5 w-5 text-violet-600" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eaf0f8]">
+          <Sparkles className="h-5 w-5 text-[#3A4F7A]" />
         </div>
         <div className="pt-0.5">
-          <h3 className="text-[19px] font-extrabold text-slate-900 leading-tight">Suggestions</h3>
+          <h3 id="jobmatch-suggestions-heading" className="text-[19px] font-extrabold text-[#1f2937] leading-tight">Suggestion</h3>
           <p className="mt-0.5 text-[13px] text-slate-500">Improve your match score by addressing these suggestions.</p>
         </div>
       </div>
@@ -352,7 +346,7 @@ export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMa
                 heading="Nice to have"
                 count={optionalTech.length}
                 icon={ThumbsUp}
-                tone="blue"
+                tone="green"
                 items={optionalTech.map((item) => item.skill)}
               />
             </div>
@@ -369,8 +363,6 @@ export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMa
           passText="Your resume includes all of the Soft skills."
           missingCount={softError ? undefined : missingSoft.length}
           errorMessage={softError}
-          onRetry={softError ? onRetryMatch : undefined}
-          isRetrying={isRetryingMatch}
         >
           {missingSoft.length > 0 && (
             <SkillChipGroup heading="Missing" count={missingSoft.length} icon={CircleAlert} tone="red" items={missingSoft} />
@@ -438,6 +430,59 @@ export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMa
         </SectionCard>
 
         <SectionCard
+          label="Action Verbs"
+          subtitle="JD action verbs reflected in your bullet points"
+          icon={Zap}
+          priorityLabel="Medium priority"
+          priorityLevel="medium"
+          score={reqScore}
+          passText="Your bullets use all the action verbs the JD calls for."
+          missingCount={missingVerbs.length}
+        >
+          {missingVerbs.length > 0 && (
+            <SkillChipGroup heading="Missing" count={missingVerbs.length} icon={CircleAlert} tone="red" items={missingVerbs} />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          label="Summary"
+          subtitle="Professional summary alignment with the role"
+          icon={FileText}
+          priorityLabel="Medium priority"
+          priorityLevel="medium"
+          score={summaryScore}
+          passText="Your professional summary aligns well with the role."
+        >
+          {/* Gated on reason OR suggested_summary, not reason alone. The API can
+              return Summary_Check with a suggested_summary and no reason -- its
+              own fixture does exactly that (careerbot-api
+              tests/unit/api/test_job_matcher_fix_apply.py:56-59) -- and gating
+              the whole block on reason rendered an empty card for that shape. */}
+          {(summary.reason || summary.suggested_summary) && (
+            <div className="space-y-3">
+              {summary.reason && (
+                <p className="text-[13px] text-gray-600 leading-relaxed">{summary.reason}</p>
+              )}
+              {summary.suggested_summary && (
+                <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
+                  {currentSummary && (
+                    <div className="rounded-xl border border-[#f3d3d0] bg-[#fff6f5] px-4 py-3">
+                      <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#c2413a]">Before · Current</p>
+                      <p className="text-[12px] leading-relaxed text-[#6d3a37]">{currentSummary}</p>
+                    </div>
+                  )}
+                  {currentSummary && <div className="hidden items-center text-[#90a0b8] md:flex">→</div>}
+                  <div className="rounded-xl border border-[#ccebd8] bg-[#f1fbf5] px-4 py-3">
+                    <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#16803c]">After · Suggested</p>
+                    <p className="text-[12px] font-medium leading-relaxed text-[#245a38]">{summary.suggested_summary}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard
           label="Job Title Match"
           subtitle="Alignment with the target role's title"
           icon={Tag}
@@ -446,9 +491,15 @@ export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMa
           score={jobScore}
           passText="Your job title aligns well with the role."
         >
-          {job.reason && (
+          {/* Same sibling issue as Summary above: the API fixture supplies
+              Job_Title_Check with jd_title/matched_title and no reason
+              (test_job_matcher_fix_apply.py:55), so gating on reason alone hid
+              the titles entirely. */}
+          {(job.reason || job.matched_title || job.jd_title) && (
             <div className="space-y-1.5">
-              <p className="text-[13px] text-gray-600 leading-relaxed">{job.reason}</p>
+              {job.reason && (
+                <p className="text-[13px] text-gray-600 leading-relaxed">{job.reason}</p>
+              )}
               {(job.matched_title || job.jd_title) && (
                 <p className="text-[12px] text-gray-500">
                   Your title <span className="font-bold text-gray-800">{job.matched_title || "—"}</span>
@@ -553,7 +604,34 @@ export default function ScoreBreakdown({ matchResult, onRetryMatch, isRetryingMa
             )}
           </SectionCard>
         )}
+
+        {/* Rendered only when the payload actually carries a leadership block.
+            Leadership_Check is NOT one of the keys the AI layer emits today
+            (match_engine.py enumerates them: Technical_Skills,
+            Capabilities_Check, STAR_Pattern_Check, Soft_Skills,
+            Experience_Check, Education_Check, Requirements_Check,
+            Job_Title_Check, Certifications_Check, Formatting_Check,
+            Summary_Check, Match_Penalties, ATS_SCORE). Unguarded, parseScore
+            turned the missing block into 0 and every user saw a red "0%
+            Leadership" with no explanation -- a fabricated score on a report
+            people make decisions from. The Career Progression card directly
+            above already guards itself the same way. */}
+        {leadership.match_score !== undefined && (
+          <SectionCard
+            label="Leadership"
+            subtitle="Ownership, initiative & team leadership signals"
+            icon={Crown}
+            priorityLabel="Low priority"
+            priorityLevel="low"
+            score={leadershipScore}
+            passText="Your resume shows leadership and ownership where it's needed."
+          >
+            {leadership.reason && leadershipScore < 100 && (
+              <p className="text-[13px] text-gray-600 leading-relaxed">{leadership.reason}</p>
+            )}
+          </SectionCard>
+        )}
       </div>
-    </div>
+    </section>
   );
 }

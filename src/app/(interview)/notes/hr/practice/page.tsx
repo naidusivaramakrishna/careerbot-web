@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -147,7 +147,7 @@ function HRPracticeContent() {
   const searchParams = useSearchParams();
   const { setPracticeAnswered, setPracticeTotal, userId } = useMockInterview();
 
-  const roundNumber = Math.min(2, Math.max(1, Number(searchParams.get("round")) || 1));
+  const roundNumber = 1;
   const questionsRemaining = Number(searchParams.get("resume")) || 0;
 
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -211,8 +211,9 @@ function HRPracticeContent() {
       setCurrentIndex(0);
       setAnsweredMap({});
 
-      if (userId) {
-        getNotes(userId)
+      const resumeId = localStorage.getItem("current_resume_id");
+      if (resumeId) {
+        getNotes(resumeId)
           .then((record) => {
             const rawNotes = record?.notes as Record<string, unknown> | undefined;
             if (!rawNotes || Object.keys(rawNotes).length === 0) return;
@@ -336,11 +337,7 @@ function HRPracticeContent() {
     if (isLastQuestion) {
       skipSaveRef.current = true;
       clearSession(userId);
-      if (roundNumber < 2) {
-        router.push(`/notes/hr/practice?round=${roundNumber + 1}`);
-      } else {
-        router.push("/mock-interview/live");
-      }
+      router.push("/mock-interview/live");
     } else {
       setCurrentIndex((i) => i + 1);
     }
@@ -420,17 +417,6 @@ function HRPracticeContent() {
       <section className="mb-4 rounded-xl border border-gray-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-black px-3 py-1.5 bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/15 rounded-full">
-              Round {roundNumber} of 2
-            </span>
-            {roundNumber === 1 && (
-              <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">Notes visible</span>
-            )}
-            {roundNumber === 2 && (
-              <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">Hints only</span>
-            )}
-          </div>
           <h1 className="text-lg font-black text-gray-950">HR Practice</h1>
           <p className="mt-0.5 text-[11px] font-medium text-gray-500">Practice warm, specific answers for fit and recruiter screens.</p>
         </div>
@@ -567,12 +553,14 @@ function HRPracticeContent() {
                 onClick={handleNext}
                 className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#2557a7] py-2.5 text-xs font-black text-white shadow-lg shadow-[#2557a7]/15 transition-all hover:bg-[#1e4a8f]"
               >
-                {isLastQuestion ? (roundNumber < 2 ? "Start Round 2" : "Start Live Interview") : "Next Question"}
+                {isLastQuestion ? "Start Live Interview" : "Next Question"}
                 <ChevronRight size={15} />
               </button>
             </div>
           )}
 
+        </div>
+        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           {currentAnswer && (
             <FeedbackCard
               weightedScore={currentAnswer.weightedScore}
@@ -595,66 +583,64 @@ function HRPracticeContent() {
               answerId={currentAnswer.answerId}
             />
           )}
-        </div>
-
-        {/* Right column ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â FeedbackCard */}
-        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
-          <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
-            showNotes
-              ? roundNumber === 1
-                ? "border-[#2557a7]/20 bg-[#2557a7]/5"
-                : "border-gray-200 bg-gray-50"
-              : "border-gray-200 bg-gray-50"
-          }`}>
-            <button
-              type="button"
-              aria-expanded={showNotes}
-              onClick={() => setShowNotes((s) => !s)}
-              className="w-full flex items-center justify-between px-3 py-2.5"
-            >
-              <div className={`flex items-center gap-2 text-sm font-semibold ${roundNumber === 1 ? "text-[#2557a7]" : "text-gray-700"}`}>
-                {roundNumber === 1 ? <BookOpen size={14} /> : <Key size={14} />}
-                {roundNumber === 1 ? "Your Notes" : "Keywords only"}
-              </div>
-              {showNotes
-                ? <EyeOff size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />
-                : <Eye size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />}
-            </button>
-            {showNotes && (
-              <div className={`max-h-52 overflow-auto px-3 pb-3 border-t pt-2.5 ${roundNumber === 1 ? "border-[#2557a7]/15" : "border-gray-200"}`}>
-                {roundNumber === 1 ? (
-                  (question.note_script || notesMap[question.question_id]) ? (
-                    <p className="text-xs text-[#2557a7] leading-5 whitespace-pre-wrap">
-                      {question.note_script || notesMap[question.question_id]}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">
-                      No answer script found for this question. Go to the Notes page to generate your prepared scripts.
-                    </p>
-                  )
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(question.keywords.length ? question.keywords : ["motivation", "fit", "example"]).map((kw) => (
-                      <span key={kw} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
-                        {kw}
-                      </span>
-                    ))}
+          {!currentAnswer && (
+            <>
+              <div className={`rounded-xl border overflow-hidden shadow-sm transition-all ${
+                showNotes
+                  ? roundNumber === 1
+                    ? "border-[#2557a7]/20 bg-[#2557a7]/5"
+                    : "border-gray-200 bg-gray-50"
+                  : "border-gray-200 bg-gray-50"
+              }`}>
+                <button
+                  type="button"
+                  aria-expanded={showNotes}
+                  onClick={() => setShowNotes((s) => !s)}
+                  className="w-full flex items-center justify-between px-3 py-2.5"
+                >
+                  <div className={`flex items-center gap-2 text-sm font-semibold ${roundNumber === 1 ? "text-[#2557a7]" : "text-gray-700"}`}>
+                    {roundNumber === 1 ? <BookOpen size={14} /> : <Key size={14} />}
+                    {roundNumber === 1 ? "Your Notes" : "Keywords only"}
+                  </div>
+                  {showNotes
+                    ? <EyeOff size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />
+                    : <Eye size={14} className={roundNumber === 1 ? "text-[#2557a7]" : "text-gray-500"} />}
+                </button>
+                {showNotes && (
+                  <div className={`max-h-52 overflow-auto px-3 pb-3 border-t pt-2.5 ${roundNumber === 1 ? "border-[#2557a7]/15" : "border-gray-200"}`}>
+                    {roundNumber === 1 ? (
+                      (question.note_script || notesMap[question.question_id]) ? (
+                        <p className="text-xs text-[#2557a7] leading-5 whitespace-pre-wrap">
+                          {question.note_script || notesMap[question.question_id]}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">
+                          No answer script found for this question. Go to the Notes page to generate your prepared scripts.
+                        </p>
+                      )
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(question.keywords.length ? question.keywords : ["motivation", "fit", "example"]).map((kw) => (
+                          <span key={kw} className="text-xs font-semibold bg-[#2557a7]/10 text-[#2557a7] border border-[#2557a7]/20 rounded-lg px-2.5 py-1">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {!currentAnswer && (
-            <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-              <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
-                <Mic size={24} className="text-[#2557a7]" />
+              <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white p-5 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+                <div className="w-14 h-14 bg-[#2557a7]/5 rounded-lg flex items-center justify-center">
+                  <Mic size={24} className="text-[#2557a7]" />
+                </div>
+                <p className="text-sm font-black text-gray-800">AI Feedback</p>
+                <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
+                  Record your answer to unlock tone, clarity, structure, and confidence feedback.
+                </p>
               </div>
-              <p className="text-sm font-black text-gray-800">AI Feedback</p>
-              <p className="max-w-56 text-[11px] font-medium leading-5 text-gray-500">
-                Record your answer to unlock tone, clarity, structure, and confidence feedback.
-              </p>
-            </div>
+            </>
           )}
         </aside>
 

@@ -39,6 +39,19 @@ interface DashboardContextValue {
 /*  Context                                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Narrows an unknown thrown value to the { response } shape axios errors carry,
+ * without asserting `any`. Returns undefined for anything else.
+ */
+function axiosLikeResponse(
+  err: unknown,
+): { status?: number; statusText?: string } | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const response = (err as { response?: unknown }).response;
+  if (!response || typeof response !== 'object') return undefined;
+  return response as { status?: number; statusText?: string };
+}
+
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
 /* ------------------------------------------------------------------ */
@@ -69,15 +82,24 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       // don't lose their local state (e.g. optimistic step flags).
       if (!hasDataRef.current) setLoading(true);
       setError(null);
+      logger.info('DashboardContext: fetching dashboard summary...');
       const summary = await getDashboardSummary({ skipAuthRedirect: true });
       if (!mountedRef.current) return;
       hasDataRef.current = true;
       setData(summary);
       setCreditsRemaining(summary.plan.credits_remaining);
-      logger.info('DashboardContext: data loaded');
+      logger.info('DashboardContext: data loaded successfully', {
+        credits: summary.plan.credits_remaining,
+        userId: summary.user?.id
+      });
     } catch (err) {
       if (!mountedRef.current) return;
-      logger.error('DashboardContext: fetch failed', err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logger.error('DashboardContext: fetch failed', {
+        error: errorMessage,
+        status: axiosLikeResponse(err)?.status,
+        statusText: axiosLikeResponse(err)?.statusText
+      });
       setError(err as Error);
     } finally {
       if (mountedRef.current) setLoading(false);

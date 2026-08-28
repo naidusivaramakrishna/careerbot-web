@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { getResumeById } from "@/api/resumeApi";
 import { httpClient } from "@/lib/http";
-import { getEnhancedResume, applyFix } from "@/api/enhancerApi";
+import { getEnhancedResume, applyFix, deleteFix } from "@/api/enhancerApi";
 import type { ATSScore, ATSSectionScore, EnhancedSuggestion } from "@/types/api.types";
 import { mapParserOutputToBuilderData } from "@/utils/resumeMappers";
 import { toast } from "sonner";
@@ -151,6 +151,27 @@ export interface ResumeData {
     languages?: string;
     titlePrefix?: string;
     qualifications?: string;
+    // Government Standard — India-specific
+    fathersName?: string;
+    maritalStatus?: string;
+    gender?: string;
+    permanentAddress?: string;
+    // Healthcare
+    specialisation?: string;
+    medicalRegNo?: string;
+    // Legal
+    barEnrollmentNo?: string;
+    yearOfEnrollment?: string;
+    courtsOfPractise?: string;
+    // Marine
+    rank?: string;
+    cocNumber?: string;
+    stcwCertificates?: string;
+    vesselTypes?: string;
+    // Research Scholar
+    orcidId?: string;
+    googleScholarUrl?: string;
+    hIndex?: string;
   };
   professionalSummary: {
     summary: string;
@@ -194,7 +215,6 @@ export interface ResumeData {
     issueDate: string;
     expiryDate?: string;
     credentialId?: string;
-    credentialUrl?: string;
   }[];
   achievements: {
     id?: string;
@@ -257,7 +277,19 @@ export interface ResumeData {
     publicationName: string;
     date: string;
     url: string;
+    doi?: string;
   }[];
+  patents: {
+    id?: string;
+    title: string;
+    patentNumber?: string;
+    date?: string;
+    description?: string;
+    status?: string;
+  }[];
+  declaration?: string;
+  declarationDate?: string;
+  declarationPlace?: string;
   customSections?: CustomSection[];
 }
 
@@ -306,6 +338,7 @@ interface ResumeContextType {
   deleteCustomField: (sectionId: string, fieldId: string) => void;
   applyAutoFix: (suggestionId: string) => Promise<void>;
   applyManualFix: (suggestionId: string, value: string) => Promise<void>;
+  undoFix: (suggestionId: string) => Promise<void>;
 }
 
 const ResumeContext = createContext<ResumeContextType | undefined>(undefined);
@@ -403,6 +436,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       interests: [],
       languages: [],
       publications: [],
+      patents: [],
+      declaration: "",
+      declarationDate: "",
+      declarationPlace: "",
       customSections: [],
     };
   }
@@ -723,8 +760,14 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         let processedData;
         if (source === "enhanced" && resumeData?.enhanced_data) {
           // Handle enhanced resume data
+          // enhanced_sections holds user-edited arrays (always 1 source of truth).
+          // enhanced_data top-level arrays are appended to by the backend on each
+          // PATCH, causing duplicates. Spreading enhanced_sections last ensures
+          // user-saved data wins over the stale parsed copies.
+          const enhancedSections = resumeData.enhanced_data.enhanced_sections || {};
           const enhancedDataWithFallback = {
             ...resumeData.enhanced_data,
+            ...enhancedSections,
             enhancer_state: resumeData.enhancer_state,
           };
           const mapped = mapParserOutputToBuilderData(enhancedDataWithFallback);
@@ -839,6 +882,12 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         // Split combined phone (e.g. "+911234567890") into countryCode and phone
         const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(data.personalInfo?.phone || "");
 
+        // Backend may return countryCode as ISO2 ("IN") or as a dialing code ("+91").
+        // Only trust the stored value when it's already a dialing code; otherwise use
+        // the dialing code extracted from the E.164 phone string by splitPhone.
+        const storedCodeInitial = data.personalInfo?.countryCode || "";
+        const resolvedCodeInitial = storedCodeInitial.startsWith("+") ? storedCodeInitial : (parsedCode || "+91");
+
         // Normalize MongoDB's _id to id for all section items
         const normalizeId = <T extends Record<string, unknown>>(items: T[]): T[] =>
           items.map(item => (!item.id && item._id) ? { ...item, id: item._id } : item);
@@ -848,7 +897,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           personalInfo: {
             fullname: data.personalInfo?.fullname || data.personalInfo?.name || data.personalInfo?.full_name || "",
             email: data.personalInfo?.email || "",
-            countryCode: data.personalInfo?.countryCode || parsedCode,
+            countryCode: resolvedCodeInitial,
             phone: parsedPhone || "",
             location: data.personalInfo?.location || "",
             linkedinUrl: data.personalInfo?.linkedinUrl || "",
@@ -870,6 +919,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           education: normalizeId((data.education || []) as Record<string, unknown>[]) as ResumeData["education"],
           workExperience: normalizeId((data.workExperience || []) as Record<string, unknown>[]) as ResumeData["workExperience"],
           projects: normalizeId((data.projects || []) as Record<string, unknown>[]) as ResumeData["projects"],
+          // patents is required on ResumeData and defaulted to [] for a new
+          // resume, but was omitted here -- so LOADING a saved resume produced
+          // patents: undefined, which the Patents editor then indexed into.
+          patents: normalizeId((data.patents || []) as Record<string, unknown>[]) as ResumeData["patents"],
           ...(() => {
             let categorizedSkills: CategorizedSkills;
             if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
@@ -898,7 +951,6 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
             year: cert.year || cert.issueDate || "",
             expiryDate: cert.expiryDate || cert.expiry_date || "",
             credentialId: cert.credentialId || cert.credential_id || "",
-            credentialUrl: cert.credentialUrl || "",
           })),
           achievements: normalizeId((data.achievements || []) as Record<string, unknown>[]) as ResumeData["achievements"],
           volunteering: normalizeId((data.volunteering || []) as Record<string, unknown>[]) as ResumeData["volunteering"],
@@ -1100,6 +1152,8 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
       const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(
         (mapped.personalInfo?.phone as string) || ""
       );
+      const storedCodeAuto = (mapped.personalInfo?.countryCode as string) || "";
+      const resolvedCodeAuto = storedCodeAuto.startsWith("+") ? storedCodeAuto : (parsedCode || "+91");
       setResumeData(prev => ({
         ...prev,
         ...mapped,
@@ -1108,7 +1162,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           fullname: mapped.personalInfo?.fullname || prev.personalInfo.fullname,
           email: mapped.personalInfo?.email || prev.personalInfo.email || '',
           location: mapped.personalInfo?.location || prev.personalInfo.location || '',
-          countryCode: mapped.personalInfo?.countryCode || parsedCode,
+          countryCode: resolvedCodeAuto,
           phone: parsedPhone || mapped.personalInfo?.phone || prev.personalInfo.phone,
           linkedinUrl: mapped.personalInfo?.linkedinUrl || prev.personalInfo.linkedinUrl || '',
           githubUrl: mapped.personalInfo?.githubUrl || prev.personalInfo.githubUrl || '',
@@ -1179,6 +1233,63 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
     }
   };
 
+  const undoFix = async (suggestionId: string): Promise<void> => {
+    if (!resumeIdProp) return;
+    const requestId = ++latestFixRequestRef.current;
+    const response = await deleteFix({
+      enhancer_state: resumeIdProp,
+      suggestion_id: suggestionId,
+    });
+    if (requestId !== latestFixRequestRef.current) return;
+    if (response.success && response.enhancer_state) {
+      const mapped = mapParserOutputToBuilderData({
+        ...response.enhancer_state.resume,
+        enhancer_state: response.enhancer_state,
+      });
+      const { countryCode: parsedCode, phoneNumber: parsedPhone } = splitPhone(
+        (mapped.personalInfo?.phone as string) || ""
+      );
+      const storedCodeUndo = (mapped.personalInfo?.countryCode as string) || "";
+      const resolvedCodeUndo = storedCodeUndo.startsWith("+") ? storedCodeUndo : (parsedCode || "+91");
+      setResumeData(prev => ({
+        ...prev,
+        ...mapped,
+        resume_id: prev.resume_id,
+        personalInfo: {
+          fullname: mapped.personalInfo?.fullname || prev.personalInfo.fullname,
+          email: mapped.personalInfo?.email || prev.personalInfo.email || '',
+          location: mapped.personalInfo?.location || prev.personalInfo.location || '',
+          countryCode: resolvedCodeUndo,
+          phone: parsedPhone || mapped.personalInfo?.phone || prev.personalInfo.phone,
+          linkedinUrl: mapped.personalInfo?.linkedinUrl || prev.personalInfo.linkedinUrl || '',
+          githubUrl: mapped.personalInfo?.githubUrl || prev.personalInfo.githubUrl || '',
+          portfolioUrl: mapped.personalInfo?.portfolioUrl || prev.personalInfo.portfolioUrl || '',
+          dateOfBirth: mapped.personalInfo?.dateOfBirth || prev.personalInfo.dateOfBirth || '',
+          nationality: mapped.personalInfo?.nationality || prev.personalInfo.nationality || '',
+          category: mapped.personalInfo?.category || prev.personalInfo.category || '',
+          languages: mapped.personalInfo?.languages || prev.personalInfo.languages || '',
+          titlePrefix: mapped.personalInfo?.titlePrefix || prev.personalInfo.titlePrefix || '',
+          qualifications: mapped.personalInfo?.qualifications || prev.personalInfo.qualifications || '',
+        },
+      }));
+      const atsDisplay = response.ats_display as { score?: number; sections?: unknown[] } | undefined;
+      if (response.enhancer_state.ats_breakdown) {
+        const breakdown = response.enhancer_state.ats_breakdown as unknown as ATSScore;
+        const dispScore: number | undefined = atsDisplay?.score;
+        setEnhancedAtsScore(
+          dispScore != null ? { ...breakdown, final_score: dispScore, Percentage: dispScore } : breakdown
+        );
+      } else if (atsDisplay?.score != null) {
+        setEnhancedAtsScore(prev => buildScoreFromAtsDisplay(atsDisplay, prev));
+      }
+      // Rebuild suggestions — the deleted fix's suggestion should reappear in the fresh list
+      const freshSuggestions = buildSuggestionsFromAtsDisplay(atsDisplay);
+      setTimeout(() => {
+        setEnhancedSuggestions(freshSuggestions.length > 0 ? freshSuggestions : prev => prev);
+      }, 1200);
+    }
+  };
+
   const createResume = async () => {
     try {
       const result = await httpClient.post<{ id: string }>('/resumes/', resumeData);
@@ -1218,6 +1329,7 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
         deleteCustomField,
         applyAutoFix,
         applyManualFix,
+        undoFix,
       }}
     >
       {children}

@@ -13,7 +13,6 @@ import {
   Languages,
   ArrowRight,
   ChevronRight,
-  ChevronLeft,
 } from "lucide-react";
 
 // ─── Static Data ───────────────────────────────────────────────────────────────
@@ -214,14 +213,6 @@ export default function EnglishPage() {
 
       {/* ── Page Header ── */}
       <div className="mb-7">
-        <button
-          onClick={() => router.push("/notes/generate")}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-5"
-        >
-          <ChevronLeft size={14} />
-          Back
-        </button>
-
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 bg-[#2557a7]/8 border border-[#2557a7]/15 rounded-xl flex items-center justify-center shrink-0">
             <BookOpen size={20} className="text-[#2557a7]" />

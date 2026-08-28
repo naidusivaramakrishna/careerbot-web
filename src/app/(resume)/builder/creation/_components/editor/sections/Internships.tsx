@@ -26,7 +26,10 @@ import { RiEdit2Fill } from 'react-icons/ri';
 import { Trash2, ArrowLeft } from 'lucide-react';
 import { LuPlus } from 'react-icons/lu';
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
-import { deleteResumeSectionItem } from "@/api/resumeApi"; // ✅ Import the API
+import { deleteResumeSectionItem } from "@/api/resumeApi";
+import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
+import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface InternshipEntry {
   company: string;
@@ -74,6 +77,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ onClick, title, icon, isA
 
 const Internships: React.FC = () => {
   const { resumeData, setResumeData } = useResume();
+  const searchParams = useSearchParams();
+  const isEnhancedResume = searchParams.get("source") === "enhanced";
   const {
     loadingIndex,
     suggestions,
@@ -260,7 +265,11 @@ const Internships: React.FC = () => {
       // // console.log("🗑️ Deleting internship item:", { resumeId, itemId, index });
 
       // ✅ Call the API to delete the item from backend
-      await deleteResumeSectionItem(resumeId, "internships", itemId);
+      if (isEnhancedResume) {
+        await deleteSectionItemFromEnhancedResume(resumeId, "internships", itemId);
+      } else {
+        await deleteResumeSectionItem(resumeId, "internships", itemId);
+      }
 
       // // console.log("✅ Internship item deleted from backend successfully");
 
@@ -392,9 +401,9 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -407,18 +416,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-    setShowTips(true);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   const toggleSpellCheck = (editIndex: number) => {

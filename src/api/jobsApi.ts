@@ -111,12 +111,17 @@ export interface SmartMatchParams {
   location?: string;
   mode?: string;
   job_type?: string;
-  // NOT experience_years — that param means "the candidate's own years,
-  // return jobs they qualify for," while the frontend's Experience filter
-  // means "jobs requiring this many years." Different axes; do not wire
-  // one to the other.
+  // Candidate's own years (0 = fresher, 11 = 11+) — matches the frontend's
+  // Experience filter, which narrows on "job's stated minimum <= this many
+  // years" (see matchesExperience in jobFilterUtils.ts), the same semantics
+  // the backend uses here.
+  experience_years?: number;
   posted_within_days?: number;
   query?: string;
+  // Best-effort: `salary` is a free-text field most jobs don't populate, so
+  // this only narrows postings that state a parseable LPA figure meeting
+  // the ask — see min_salary_lpa on GET /jobs/scored.
+  min_salary_lpa?: number;
   // Bypasses the backend's own scored-results cache (see cache_hit on
   // SmartMatchResponse) — needed for "Retry Smart Match" to actually get a
   // fresh computation instead of the same cached response.
@@ -206,6 +211,32 @@ export const getAllJobs = async (skip = 0, limit = 20, source?: string): Promise
     ...getRequestConfig(),
   });
   return response.data;
+};
+
+// Search-box typeahead — deliberately hits /jobs/all's free-text `q` (the
+// full job corpus) rather than filtering the ~50 jobs already loaded from
+// /jobs/scored, so a query like "py" surfaces every real posting containing
+// it ("Python Developer", "PySpark Engineer", ...), not just what happened
+// to be on this user's current Smart Match page. Only feeds the search
+// dropdown — the job results themselves still come exclusively from
+// Smart Match, unchanged.
+export const getJobTitleSuggestions = async (query: string, limit = 8): Promise<string[]> => {
+  const response = await httpClient.get<ApiResponse<Job[]>>('/jobs/all', {
+    params: { q: query, limit },
+    ...getRequestConfig(),
+  });
+  const jobs = response.data.data ?? [];
+  const seen = new Set<string>();
+  const titles: string[] = [];
+  for (const job of jobs) {
+    const title = (job.title || "").trim();
+    if (!title) continue;
+    const key = title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    titles.push(title);
+  }
+  return titles;
 };
 
 export const listJobsMinimal = async (skip = 0, limit = 10): Promise<ApiResponse<JobListMinimal[]>> => {
@@ -344,6 +375,7 @@ const jobsApi = {
   createJob,
   listJobsMinimal,
   getAllJobs,
+  getJobTitleSuggestions,
   getMyJobs,
   updateJob,
   deleteJob,

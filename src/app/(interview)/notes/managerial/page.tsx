@@ -12,7 +12,7 @@ const MANAGERIAL_QUESTIONS_KEY = "managerial_generated_questions";
 
 const STATS = [
   { value: "10", label: "questions" },
-  { value: "2", label: "rounds" },
+  { value: "1", label: "round" },
   { value: "AI", label: "feedback" },
   { value: "STAR", label: "structure" },
 ];

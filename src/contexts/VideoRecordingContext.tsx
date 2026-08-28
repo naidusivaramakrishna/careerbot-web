@@ -11,6 +11,7 @@ interface VideoRecordingContextType {
   stopRecording: () => Promise<Blob | null>;
   getRecordedVideo: () => Blob | null;
   clearRecordedVideo: () => void;
+  getStream: () => MediaStream | null;
 }
 
 const VideoRecordingContext = createContext<VideoRecordingContextType | null>(null);
@@ -176,6 +177,7 @@ export const VideoRecordingProvider: React.FC<{ children: React.ReactNode }> = (
       stopRecording,
       getRecordedVideo,
       clearRecordedVideo,
+      getStream: () => streamRef.current,
     }}>
       {children}
     </VideoRecordingContext.Provider>

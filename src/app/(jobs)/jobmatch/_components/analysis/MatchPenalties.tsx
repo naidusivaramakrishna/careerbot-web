@@ -25,10 +25,20 @@ interface MatchPenaltiesProps {
   onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   /** Apply a non-skill fix (job title / summary / bullet rewrite). Returns whether it actually changed anything. */
   onApplyFix?: (suggestion_id: string, category: string) => Promise<boolean>;
+  /** Undo a previously-applied non-skill fix. Returns whether it actually succeeded. */
+  onRemoveFix?: (suggestion_id: string, category: string) => Promise<boolean>;
   /** Open the resume section editor (manual-fix suggestions with no auto-resolver route here). */
   onOpenSection?: (sectionKey: string) => void;
   /** Hide the Add/Fix All/Improve action buttons and show suggestions as plain read-only text. */
   readOnly?: boolean;
+  /** suggestion_ids already applied in a previous session — seeds the "Added" state so it survives navigating away and back instead of resetting to "Apply fix". */
+  appliedSuggestionIds?: string[];
+  /** Reports a suggestion_id's applied state changing (add or Undo) so the caller can persist it. */
+  onSuggestionApplied?: (suggestionId: string, applied: boolean) => void;
+  /** suggestion_ids applied via a BULK parent in a previous session. Undo is not offered for these: the backend recorded only the parent id, so removing by a child id 404s. */
+  bulkAppliedSuggestionIds?: string[];
+  /** Reports suggestion_ids that were just applied via a bulk parent, so the caller can persist their provenance. */
+  onBulkApplied?: (suggestionIds: string[]) => void;
 }
 
 // Resume section ids the manual-editor popup understands — mirrors ALL_SECTIONS
@@ -51,9 +61,13 @@ const CATEGORY_SECTION_ALIASES: Record<string, string> = {
   formatting: "contact",
 };
 
-function categoryToSectionKey(category: string, target?: string): string | undefined {
+export function categoryToSectionKey(category: string, target?: string): string | undefined {
   // "formatting" bundles fields that live in different resume sections — email/phone/
-  // location are contact fields, but a missing "technical_skills" field belongs in Skills.
+  // location are contact fields, but e.g. a missing "experience" field belongs in
+  // Experience. When the target names a real section id directly, prefer that over
+  // the blanket "contact" alias below.
+  if (category === "formatting" && target && KNOWN_SECTION_IDS.has(target)) return target;
+  // "technical_skills" isn't itself a section id (the resume section is "skills").
   if (category === "formatting" && target === "technical_skills") return "skills";
   if (KNOWN_SECTION_IDS.has(category)) return category;
   return CATEGORY_SECTION_ALIASES[category];
@@ -81,7 +95,7 @@ function isPenaltyApplyable(p: Penalty): boolean {
 }
 
 const CATEGORY_META: Record<string, { label: string; color: string; lightBg: string; border: string }> = {
-  technical_skills: { label: "Technical Skills", color: "#2557a7", lightBg: "#eff6ff", border: "#dbeafe" },
+  technical_skills: { label: "Technical Skills Fixes", color: "#2557a7", lightBg: "#eff6ff", border: "#dbeafe" },
   soft_skills:      { label: "Soft Skills",       color: "#0891b2", lightBg: "#ecfeff", border: "#a5f3fc" },
   star_pattern:     { label: "STAR Bullets",      color: "#7c3aed", lightBg: "#f5f3ff", border: "#ede9fe" },
   capabilities:     { label: "Capabilities",      color: "#d97706", lightBg: "#fffbeb", border: "#fde68a" },
@@ -111,18 +125,26 @@ const SUGGESTION_TYPE_META = {
 };
 
 function CategoryGroup({
-  category, items, onAddSkill, onRemoveSkill, onApplyFix, onOpenSection, readOnly,
+  category, items, onAddSkill, onRemoveSkill, onApplyFix, onRemoveFix, onOpenSection, readOnly, appliedSuggestionIds, onSuggestionApplied, bulkAppliedSuggestionIds, onBulkApplied,
 }: {
   category: string;
   items: Penalty[];
   onAddSkill: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   onRemoveSkill?: (skill: string, suggestion_id?: string) => Promise<boolean> | boolean;
   onApplyFix?: (suggestion_id: string, category: string) => Promise<boolean>;
+  onRemoveFix?: (suggestion_id: string, category: string) => Promise<boolean>;
   onOpenSection?: (sectionKey: string) => void;
   readOnly?: boolean;
+  appliedSuggestionIds?: string[];
+  onSuggestionApplied?: (suggestionId: string, applied: boolean) => void;
+  bulkAppliedSuggestionIds?: string[];
+  onBulkApplied?: (suggestionIds: string[]) => void;
 }) {
   const [open, setOpen] = useState(true);
-  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  // Seeded from the persisted appliedSuggestionIds so a suggestion applied in
+  // a previous mount (before navigating away and back) still shows "Added"
+  // instead of resetting to "Apply fix" — see onSuggestionApplied below.
+  const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set(appliedSuggestionIds));
   // A bulk-parent apply rewrites all of a group's bullets server-side from
   // one call, but the frontend can only ever mirror a before/after pair keyed
   // to that SAME parent id into the live preview — it has no way to know
@@ -131,9 +153,13 @@ function CategoryGroup({
   // but tracked separately so their row can say "applied, not yet confirmed
   // in preview" honestly instead of claiming the same verified "Added" state
   // an individually-applied fix gets.
-  const [bulkAppliedIds, setBulkAppliedIds] = useState<Set<string>>(new Set());
+  // Seeded from persisted provenance so a restored draft still knows which
+  // children came from a bulk parent -- otherwise they render an Undo that
+  // sends the child id the backend never recorded, and always 404s.
+  const [bulkAppliedIds, setBulkAppliedIds] = useState<Set<string>>(() => new Set(bulkAppliedSuggestionIds));
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [bulkLoadingKey, setBulkLoadingKey] = useState<string | null>(null);
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
 
   const meta = CATEGORY_META[category] ?? { label: prettifyCategory(category), color: "#475569", lightBg: "#f8fafc", border: "#e2e8f0" };
   // A category can carry MORE THAN ONE bulk parent — e.g. technical_skills
@@ -194,6 +220,7 @@ function CategoryGroup({
       }
       if (applied) {
         setAddedIds(prev => new Set(prev).add(p.suggestion_id));
+        onSuggestionApplied?.(p.suggestion_id, true);
       } else if (isSkillActionable && !opts?.silent) {
         toast.error("Couldn't add this skill. Please try again.");
       }
@@ -201,6 +228,27 @@ function CategoryGroup({
       setLoadingIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
     }
     return applied;
+  };
+
+  // Undo an individually-applied (non-bulk) text fix. Bulk-applied items are
+  // excluded: the backend only recorded the bulk PARENT's suggestion_id in
+  // its apply bookkeeping, so removing by a child's own id would 404 —
+  // reverting a bulk fix would need to target the parent, which isn't wired
+  // up here yet.
+  const handleRemoveFix = async (p: Penalty) => {
+    if (!onRemoveFix || !addedIds.has(p.suggestion_id) || removingIds.has(p.suggestion_id)) return;
+    setRemovingIds(prev => new Set(prev).add(p.suggestion_id));
+    try {
+      const ok = await onRemoveFix(p.suggestion_id, p.category);
+      if (ok) {
+        setAddedIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
+        onSuggestionApplied?.(p.suggestion_id, false);
+      } else {
+        toast.error("Couldn't undo this fix. Please try again.");
+      }
+    } finally {
+      setRemovingIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
+    }
   };
 
   // Applies one subgroup (a bulk parent + the individuals it summarizes), or
@@ -219,11 +267,13 @@ function CategoryGroup({
             groupItems.forEach(p => n.add(p.suggestion_id));
             return n;
           });
+          groupItems.forEach(p => onSuggestionApplied?.(p.suggestion_id, true));
           setBulkAppliedIds(prev => {
             const n = new Set(prev);
             groupItems.forEach(p => n.add(p.suggestion_id));
             return n;
           });
+          onBulkApplied?.(groupItems.map(p => p.suggestion_id));
         } else {
           // onApplyFix already toasts the specific reason (rate limit, needs a
           // number, etc.) when it fails outright — but a cancelled fill-in-the-
@@ -469,14 +519,44 @@ function CategoryGroup({
                             </button>
                             {isSkillActionable && onRemoveSkill && isAdded && (
                               <button
+                                // Guarded like the text Undo below: a fast double
+                                // click otherwise queued two removes, and the
+                                // second's "not applied" rejection restored the
+                                // optimistic local removal -- re-adding a skill
+                                // the server had already dropped.
+                                disabled={removingIds.has(p.suggestion_id)}
                                 onClick={async () => {
-                                  const ok = await onRemoveSkill(p.target!, p.suggestion_id);
-                                  if (ok) setAddedIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
-                                  else toast.error("Couldn't remove this skill. Please try again.");
+                                  if (removingIds.has(p.suggestion_id)) return;
+                                  setRemovingIds(prev => new Set(prev).add(p.suggestion_id));
+                                  try {
+                                    const ok = await onRemoveSkill(p.target!, p.suggestion_id);
+                                    if (ok) {
+                                      setAddedIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
+                                      onSuggestionApplied?.(p.suggestion_id, false);
+                                    } else toast.error("Couldn't remove this skill. Please try again.");
+                                  } finally {
+                                    setRemovingIds(prev => { const n = new Set(prev); n.delete(p.suggestion_id); return n; });
+                                  }
                                 }}
-                                className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                                className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                <RotateCcw className="h-3 w-3" aria-hidden="true" /> Undo
+                                {removingIds.has(p.suggestion_id)
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <RotateCcw className="h-3 w-3" aria-hidden="true" />}
+                                Undo
+                              </button>
+                            )}
+                            {/* Bulk-applied fixes excluded — see handleRemoveFix. */}
+                            {!isSkillActionable && onRemoveFix && isAdded && !isBulkUnverified && (
+                              <button
+                                onClick={() => handleRemoveFix(p)}
+                                disabled={removingIds.has(p.suggestion_id)}
+                                className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {removingIds.has(p.suggestion_id)
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <RotateCcw className="h-3 w-3" aria-hidden="true" />}
+                                Undo
                               </button>
                             )}
                           </div>
@@ -503,7 +583,7 @@ function CategoryGroup({
   );
 }
 
-export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill, onApplyFix, onOpenSection, readOnly }: MatchPenaltiesProps) {
+export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill, onApplyFix, onRemoveFix, onOpenSection, readOnly, appliedSuggestionIds, onSuggestionApplied, bulkAppliedSuggestionIds, onBulkApplied }: MatchPenaltiesProps) {
   const backendPenalties: Penalty[] = matchResult?.Match_Penalties?.penalties ?? [];
 
   // The backend flags a missing "technical_skills" field in Formatting_Check but,
@@ -546,10 +626,14 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill,
   ];
 
   return (
-    <div className="space-y-5">
+    <section className="space-y-4 border-t border-[#e2e7ef] pt-1" aria-label="Actionable resume fixes">
       {/* Header */}
-      <div className="flex items-center justify-end px-1">
-        <span className="text-[12px] font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1 rounded-full">
+      <div className="flex items-center justify-between px-1 pt-3">
+        <div>
+          <h3 className="text-[17px] font-extrabold text-[#1f2937]">Actionable fixes</h3>
+          <p className="mt-0.5 text-[12.5px] text-slate-500">Apply the highest-impact changes directly to your resume.</p>
+        </div>
+        <span className="text-[12px] font-bold text-green-700 bg-[#f1fbf5] border border-[#ccebd8] px-3 py-1 rounded-full">
           Recover up to +{totalPenalty.toFixed(1)} pts
         </span>
       </div>
@@ -562,10 +646,15 @@ export default function MatchPenalties({ matchResult, onAddSkill, onRemoveSkill,
           onAddSkill={onAddSkill}
           onRemoveSkill={onRemoveSkill}
           onApplyFix={onApplyFix}
+          onRemoveFix={onRemoveFix}
           onOpenSection={onOpenSection}
           readOnly={readOnly}
+          appliedSuggestionIds={appliedSuggestionIds}
+          bulkAppliedSuggestionIds={bulkAppliedSuggestionIds}
+          onBulkApplied={onBulkApplied}
+          onSuggestionApplied={onSuggestionApplied}
         />
       ))}
-    </div>
+    </section>
   );
 }
