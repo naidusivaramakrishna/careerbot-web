@@ -24,6 +24,7 @@ import {
   createInstitutionSession,
   InstitutionApiError,
   listMemberships,
+  getInstitutionContext,
   onInstitutionReadOnly,
   onInstitutionSessionStale,
 } from '@/api/institutionApi';
@@ -120,10 +121,50 @@ export function InstitutionProvider({ children }: { children: React.ReactNode })
     void refreshMemberships();
   }, [refreshMemberships]);
 
-  // A paused college is only discoverable from a refused write, so latch the
-  // state the first time any call reports it and keep the whole area read-only
-  // for the rest of the session rather than re-discovering it per screen.
+  // Latch the state the first time any call reports it and keep the whole area
+  // read-only for the rest of the session rather than re-discovering it per
+  // screen.
   useEffect(() => onInstitutionReadOnly((reason) => setReadOnlyReason(reason)), []);
+
+  // ASK, rather than waiting to be refused.
+  //
+  // The listener above only fires when a WRITE is refused. Students have no
+  // write actions at all, so a student at a paused college was never told --
+  // their screens simply had less on them than they expected. GET /context
+  // already returns subscription_status and a plain `writable`, so read it
+  // once when a session is established.
+  //
+  // A failure here is deliberately silent: this is an advisory banner, not a
+  // gate. The server still refuses the write, and the listener above still
+  // catches it. Turning the whole area read-only because one advisory request
+  // failed would be worse than not showing the banner.
+  const activeInstitutionId = session?.institution_id ?? null;
+  useEffect(() => {
+    if (!activeInstitutionId) {
+      setReadOnlyReason(null);
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      try {
+        const ctx = await getInstitutionContext();
+        if (!alive || !mountedRef.current) return;
+        if (ctx.writable) return;
+        setReadOnlyReason(
+          ctx.subscription_status === 'expired'
+            ? 'SUBSCRIPTION_EXPIRED'
+            : 'COLLEGE_PAUSED',
+        );
+      } catch {
+        // see above -- advisory only
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // Keyed by the college id rather than the session object: re-storing an
+    // equal session must not re-ask, and switching colleges must.
+  }, [activeInstitutionId]);
 
   // A stored college token the server will no longer accept must not be kept.
   // Holding it leaves the gate believing a college is selected, so it skips

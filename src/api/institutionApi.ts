@@ -488,8 +488,14 @@ export async function getMyStudentProfile(): Promise<Student | null> {
     return response.data ?? null;
   } catch (err) {
     // 404 is a normal answer: this account has no student record here.
+    //
+    // 403 is NOT, and used to be collapsed into the same null. A student whose
+    // membership was revoked, or whose college is misconfigured, was told their
+    // record does not exist -- so they contact the college about missing data
+    // while the college looks for a record that is sitting right there. A scope
+    // refusal has to say it is a scope refusal.
     const status = (err as { response?: { status?: number } })?.response?.status;
-    if (status === 404 || status === 403) return null;
+    if (status === 404) return null;
     return fail(err);
   }
 }

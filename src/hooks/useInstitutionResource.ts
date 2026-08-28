@@ -11,8 +11,13 @@
  * "still loading" from "loaded and empty" with `data === null` vs `[]`, so an
  * empty result renders its designed empty state instead of a permanent skeleton.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { InstitutionApiError } from '@/api/institutionApi';
+import {
+  getActiveInstitutionId,
+  getActiveInstitutionIdServer,
+  subscribeToInstitutionSession,
+} from '@/lib/institutionSession';
 import {
   listBatches,
   listDepartments,
@@ -56,6 +61,14 @@ function toApiError(err: unknown): InstitutionApiError {
  * @param enabled  false keeps the hook idle — used when a prerequisite (an
  *                 institution session, a selected student) is not there yet
  */
+export function useActiveInstitutionId(): string | null {
+  return useSyncExternalStore(
+    subscribeToInstitutionSession,
+    getActiveInstitutionId,
+    getActiveInstitutionIdServer,
+  );
+}
+
 export function useInstitutionResource<T>(
   fetcher: () => Promise<T>,
   enabled: boolean = true,
@@ -64,6 +77,32 @@ export function useInstitutionResource<T>(
   const [isLoading, setIsLoading] = useState(enabled);
   const [error, setError] = useState<InstitutionApiError | null>(null);
   const seqRef = useRef(0);
+
+  // EVERY institution resource is keyed by the active college.
+  //
+  // Without this, switching colleges refetched nothing: `run` is memoised on
+  // [fetcher, enabled], the fetchers are `useCallback(..., [])`, and selecting
+  // a different membership changes neither. The screen kept college A's rows
+  // under college B's name. The server was never fooled -- the next request
+  // carried the new token and was scoped correctly -- but a screenshot of that
+  // screen is a cross-tenant leak as far as a customer is concerned.
+  const institutionId = useActiveInstitutionId();
+
+  // Cleared DURING RENDER, not in an effect. The rule is "never render
+  // out-of-scope data, even briefly while loading", and an effect runs after
+  // the browser has already painted one frame of the old college's rows under
+  // the new college's name. Adjusting state during render makes React discard
+  // this render and start again with `data` already null, so that frame never
+  // reaches the screen.
+  const [renderedFor, setRenderedFor] = useState(institutionId);
+  if (institutionId !== renderedFor) {
+    setRenderedFor(institutionId);
+    setData(null);
+    setError(null);
+    setIsLoading(enabled);
+    // Any response already in flight belongs to the previous college.
+    seqRef.current += 1;
+  }
 
   const run = useCallback(async () => {
     if (!enabled) {
@@ -83,7 +122,11 @@ export function useInstitutionResource<T>(
     } finally {
       if (mySeq === seqRef.current) setIsLoading(false);
     }
-  }, [fetcher, enabled]);
+    // institutionId is not read in the body -- the token is attached by the
+    // api client -- but it MUST stay in the dependency list: it is what makes
+    // a college switch re-run the fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetcher, enabled, institutionId]);
 
   useEffect(() => {
     void run();

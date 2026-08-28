@@ -79,6 +79,42 @@ export function clearInstitutionSession(): void {
  * rather than falling back to the consumer cookie — a request that silently
  * ran under the wrong identity is worse than a request that failed.
  */
+/**
+ * Subscribe to college switches.
+ *
+ * `setInstitutionSession` and `clearInstitutionSession` have always dispatched
+ * INSTITUTION_SESSION_EVENT, and until now nothing listened to it. That is what
+ * made switching colleges leave the previous college's rows on screen: the new
+ * token went out with the next request, but no React state depended on the
+ * change, so nothing re-rendered and nothing refetched.
+ *
+ * Shaped for `useSyncExternalStore`. The snapshot is the institution id — a
+ * STRING, deliberately: returning the session object would mint a new
+ * reference on every call and spin the store forever.
+ */
+export function subscribeToInstitutionSession(onChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(INSTITUTION_SESSION_EVENT, onChange);
+  // Another TAB signing out clears the same storage. `storage` does not fire
+  // in the tab that made the change, so it complements the custom event
+  // rather than duplicating it.
+  window.addEventListener('storage', onChange);
+  return () => {
+    window.removeEventListener(INSTITUTION_SESSION_EVENT, onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
+/** Active college id, or null. The `useSyncExternalStore` snapshot. */
+export function getActiveInstitutionId(): string | null {
+  return getInstitutionSession()?.institution_id ?? null;
+}
+
+/** Server snapshot: there is no sessionStorage during SSR. */
+export function getActiveInstitutionIdServer(): string | null {
+  return null;
+}
+
 export function institutionAuthHeader(): string | null {
   const session = getInstitutionSession();
   if (!session) return null;
