@@ -21,11 +21,13 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   'dashboard': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'user-management': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'admin-management': ['SUPER_ADMIN'],
-  // Creating a college and appointing its placement officer are gated on the
-  // server by institutions:create and institutions:cpo:appoint, which only a
-  // super admin holds. This mirrors that so the nav does not offer a page
-  // whose every request would be refused.
-  'colleges': ['SUPER_ADMIN'],
+  // Onboarding a college is an ADMIN job, not only a founder's: the technical
+  // team raises it with the super-admin team and whoever takes it creates the
+  // college and appoints its officer. Mirrors the server, where ADMIN holds
+  // institutions:create, :cpo:appoint and :cpo:revoke. Moderator and support
+  // hold none of them, so the nav must not offer them a page whose every
+  // request would be refused.
+  'colleges': ['SUPER_ADMIN', 'ADMIN'],
   'system-monitoring': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'settings': ['SUPER_ADMIN'],
 };
