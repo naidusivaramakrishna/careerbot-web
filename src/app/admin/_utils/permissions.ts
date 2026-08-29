@@ -10,6 +10,7 @@ export type AdminPageKey =
   | 'user-management'
   | 'admin-management'
   | 'system-monitoring'
+  | 'colleges'
   | 'settings';
 
 /**
@@ -20,6 +21,11 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   'dashboard': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'user-management': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'admin-management': ['SUPER_ADMIN'],
+  // Creating a college and appointing its placement officer are gated on the
+  // server by institutions:create and institutions:cpo:appoint, which only a
+  // super admin holds. This mirrors that so the nav does not offer a page
+  // whose every request would be refused.
+  'colleges': ['SUPER_ADMIN'],
   'system-monitoring': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
   'settings': ['SUPER_ADMIN'],
 };
