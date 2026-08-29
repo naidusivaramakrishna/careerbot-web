@@ -128,6 +128,28 @@ export function FacultyOverview() {
               width: 'w-[130px]',
               render: (s) => <StudentStatusPill status={s.status} />,
             },
+            {
+              // Recording progress was a separate page reached from the nav,
+              // where the faculty then had to find the same student again in a
+              // dropdown. The row already knows who it is.
+              key: 'mark',
+              header: '',
+              align: 'right',
+              width: 'w-[86px]',
+              render: (s) => (
+                <Link
+                  href={`/institution/progress?student=${encodeURIComponent(s.id)}`}
+                  // The row itself is a link to the student. Without this the
+                  // click bubbles and the faculty lands on the profile instead
+                  // of the form.
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 rounded-md border border-[#cbd5e1] px-2 py-1 text-[12px] font-medium text-[#334155] hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2557a7]"
+                >
+                  <ClipboardPen className="h-3.5 w-3.5" aria-hidden />
+                  Mark
+                </Link>
+              ),
+            },
           ]}
         />
       ) : null}

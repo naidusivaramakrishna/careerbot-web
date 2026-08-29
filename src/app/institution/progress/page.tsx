@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ClipboardPen, Users } from 'lucide-react';
 import {
   useStudentProgress,
@@ -33,7 +34,18 @@ function RecordProgress() {
   // default page was fifty, so anyone past that was simply not in the list --
   // and an absent student looks exactly like one who was never assigned.
   const students = useStudentsPaged({ limit: ROSTER_LIMIT });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Arriving from [Mark] on a faculty roster row. Read once and used to seed
+  // the form, NOT held as the source of truth -- the faculty can change the
+  // selection, and the URL should not fight them for it.
+  const fromRoster = useSearchParams()?.get('student') ?? null;
+  const [selectedId, setSelectedId] = useState<string | null>(fromRoster);
+
+  // The right-hand panel follows the form. When the page opens with a student
+  // already chosen, that panel has to know without waiting for a change event
+  // that will never fire.
+  useEffect(() => {
+    if (fromRoster) setSelectedId(fromRoster);
+  }, [fromRoster]);
   const progress = useStudentProgress(selectedId, Boolean(selectedId));
 
   const refetchProgress = useCallback(() => {
@@ -75,6 +87,7 @@ function RecordProgress() {
           <div>
             <RecordProgressForm
               students={rows}
+              initialStudentId={fromRoster ?? undefined}
               onStudentChange={setSelectedId}
               onRecorded={refetchProgress}
             />

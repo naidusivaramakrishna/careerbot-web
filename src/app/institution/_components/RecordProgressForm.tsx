@@ -42,6 +42,7 @@ import { CARD } from './tokens';
 export function RecordProgressForm({
   students,
   fixedStudent,
+  initialStudentId,
   onStudentChange,
   onRecorded,
 }: {
@@ -49,6 +50,11 @@ export function RecordProgressForm({
   students?: Student[];
   /** Locks the form to one student (used on a student's own page). */
   fixedStudent?: Student;
+  /** Preselects a student while leaving the picker usable. Distinct from
+   *  `fixedStudent`, which LOCKS it: arriving from [Mark] on a roster row
+   *  should save the faculty a selection, not take one away -- they may have
+   *  clicked the wrong row. */
+  initialStudentId?: string;
   /** Fires when the chosen student changes, so a sibling panel can follow it. */
   onStudentChange?: (studentId: string) => void;
   onRecorded?: () => void;
@@ -56,7 +62,8 @@ export function RecordProgressForm({
   const { readOnlyReason } = useInstitution();
   const readOnly = Boolean(readOnlyReason);
 
-  const [studentId, setStudentId] = useState(fixedStudent?.id ?? '');
+  const [studentId, setStudentId] = useState(
+    fixedStudent?.id ?? initialStudentId ?? '');
   const [activityType, setActivityType] = useState<ActivityType>('mock_test');
   const [status, setStatus] = useState<ProgressStatus>('completed');
   const [score, setScore] = useState('');

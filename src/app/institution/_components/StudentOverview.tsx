@@ -101,6 +101,25 @@ export function StudentOverview() {
               <MicroLabel as="div">Department</MicroLabel>
               <p className="mt-1 text-[13px] font-medium text-[#0f172a]">{student.department_id}</p>
             </div>
+            {/* SECTION. Locked in the wireframe alongside department, batch
+                and admission number, and the only one of the four that was
+                missing -- a student could see their department but not which
+                class group they are in, which is the thing their timetable and
+                their faculty are organised by.
+
+                Rendered even when absent, unlike batch above: "not in a class
+                group yet" is a real state a student should be able to see,
+                because it is why no faculty member has them on a roster. */}
+            <div>
+              <MicroLabel as="div">Section</MicroLabel>
+              <p className="mt-1 text-[13px] font-medium text-[#0f172a]">
+                {student.section_id ?? (
+                  <span className="font-normal text-[#94a3b8]">
+                    Not assigned yet
+                  </span>
+                )}
+              </p>
+            </div>
             {student.batch_year ? (
               <div>
                 <MicroLabel as="div">Batch</MicroLabel>
