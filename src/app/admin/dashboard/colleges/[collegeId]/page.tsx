@@ -7,7 +7,7 @@ import { ArrowLeft, Loader2, ShieldCheck, UserMinus, UserPlus } from 'lucide-rea
 import {
   AdminInstitutionError,
   type CollegeDetail,
-  appointOfficer,
+  appointOfficerByCode,
   getCollege,
   revokeOfficer,
 } from '@/api/adminInstitutionsApi';
@@ -41,7 +41,7 @@ export default function CollegeDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [accountId, setAccountId] = useState('');
+  const [pairingCode, setPairingCode] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [appointError, setAppointError] = useState<string | null>(null);
   const [isAppointing, setIsAppointing] = useState(false);
@@ -71,11 +71,11 @@ export default function CollegeDetailPage() {
     setIsAppointing(true);
     setAppointError(null);
     try {
-      await appointOfficer(collegeId, {
-        account_id: accountId.trim(),
+      await appointOfficerByCode(collegeId, {
+        code: pairingCode.trim(),
         display_name: displayName.trim() || null,
       });
-      setAccountId('');
+      setPairingCode('');
       setDisplayName('');
       await load();
     } catch (err) {
@@ -260,30 +260,37 @@ export default function CollegeDetailPage() {
               Appoint a placement officer
             </h2>
             <p className="mb-4 text-sm text-gray-600">
-              The person must already have a CareerBOT account.
+              Ask them to sign in to CareerBOT, open their profile, and read you
+              their pairing code. Any email works &mdash; a personal one is fine.
             </p>
 
-            {/* THE KNOWN GAP. There is no way to look an account up by email,
-                so this asks for an internal id nobody can find without database
-                access. The email-invite flow replaces this form; it is here
-                because the API works and hiding that helps nobody. */}
-            <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              This needs their internal account id, which cannot be searched for
-              yet. Inviting by email is the next piece of work and will replace
-              this form.
-            </p>
+            {/* The code proves which account is theirs. It grants nothing on
+                its own: this form is the appointment, and the officer list
+                above shows who you just gave the college to. It replaced a
+                field asking for an internal account id that nobody could
+                obtain without database access. */}
+            <ol className="mb-5 space-y-1.5 text-sm text-gray-600">
+              <li><b className="text-gray-900">1.</b> They sign in and generate a code &mdash; it lasts 15 minutes.</li>
+              <li><b className="text-gray-900">2.</b> They read it to you.</li>
+              <li><b className="text-gray-900">3.</b> You enter it below.</li>
+            </ol>
 
             <form onSubmit={appoint} className="grid gap-4 sm:grid-cols-2">
               <label className="text-sm">
                 <span className="mb-1 block font-medium text-gray-700">
-                  Account id
+                  Pairing code
                 </span>
                 <input
-                  value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                  placeholder="e0f3151d-2696-4164-9c42-66eee5f02a97"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs"
+                  value={pairingCode}
+                  onChange={(e) => setPairingCode(e.target.value)}
+                  placeholder="QWAP3-SXHZ2"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm uppercase tracking-wider"
                 />
+                <span className="mt-1 block text-xs text-gray-500">
+                  Case and dashes do not matter &mdash; type it as you hear it.
+                </span>
               </label>
               <label className="text-sm">
                 <span className="mb-1 block font-medium text-gray-700">
@@ -310,7 +317,7 @@ export default function CollegeDetailPage() {
               <div className="sm:col-span-2">
                 <button
                   type="submit"
-                  disabled={isAppointing || !accountId.trim()}
+                  disabled={isAppointing || !pairingCode.trim()}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                 >
                   {isAppointing ? (

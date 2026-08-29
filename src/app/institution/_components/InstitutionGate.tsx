@@ -13,6 +13,7 @@ import { ROLE_LABELS, ROLE_SCOPE_HINT } from '@/lib/institutionMessages';
 import { EmptyState } from './EmptyState';
 import { ErrorNotice } from './ErrorNotice';
 import { InstitutionShell } from './InstitutionShell';
+import { PairingCodeCard } from './PairingCodeCard';
 import { FOCUS_RING } from './tokens';
 
 /**
@@ -213,6 +214,15 @@ export function InstitutionGate({ children }: { children: React.ReactNode }) {
             </div>
           }
         />
+
+        {/* A prospective placement officer lands EXACTLY here: signed up, no
+            college yet, and about to be appointed to one. This is where they
+            get the code to read out. It is below the empty state rather than
+            inside it because an ordinary jobseeker sees this screen too, and
+            for them it is a curiosity rather than an instruction. */}
+        <div className="mt-4">
+          <PairingCodeCard />
+        </div>
       </GateFrame>
     );
   }

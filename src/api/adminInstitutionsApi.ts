@@ -128,12 +128,11 @@ export async function createCollege(
 }
 
 /**
- * Appoint a placement officer.
+ * Appoint a placement officer by their internal account id.
  *
- * account_id is an internal id the console cannot look up -- there is no search
- * by email. That is a known gap, and the email-invite flow replaces this call
- * rather than papering over it. Until then the field is for an id somebody
- * already has.
+ * Kept for the case where somebody genuinely has one, but no human obtains an
+ * id this way -- there is no lookup by email anywhere. appointOfficerByCode is
+ * the path the console uses.
  */
 export async function appointOfficer(
   collegeId: string,
@@ -142,6 +141,27 @@ export async function appointOfficer(
   try {
     const { data } = await httpClient.post<CollegeOfficer>(
       `${BASE}/${encodeURIComponent(collegeId)}/cpo`, body);
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+/**
+ * Appoint the person who read you a pairing code.
+ *
+ * They generated it while signed in, so it proves which account is theirs. It
+ * authorises nothing on its own -- this call is the appointment, and the
+ * response names the account so the console can show who was just given a
+ * college.
+ */
+export async function appointOfficerByCode(
+  collegeId: string,
+  body: { code: string; display_name?: string | null },
+): Promise<CollegeOfficer> {
+  try {
+    const { data } = await httpClient.post<CollegeOfficer>(
+      `${BASE}/${encodeURIComponent(collegeId)}/cpo/pair`, body);
     return data;
   } catch (err) {
     throw toError(err);
