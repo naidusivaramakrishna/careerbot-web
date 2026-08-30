@@ -22,6 +22,7 @@ import {
   listBatches,
   listDepartments,
   listSections,
+  getStudentReadiness,
   listStudentProgress,
   listStudents,
   getMyStudentProfile,
@@ -36,6 +37,7 @@ import type {
   MemberRecord,
   Paged,
   ProgressRecord,
+  Readiness,
   Section,
   Student,
 } from '@/types/institution';
@@ -199,6 +201,20 @@ export function useMembers(
   enabled = true,
 ): ResourceState<MemberRecord[]> {
   return useInstitutionResource(useCallback(() => listMembers(role), [role]), enabled);
+}
+
+/** A student's readiness score with the working behind it.
+ *
+ *  Same permission as their progress -- the number is a sum of rows the caller
+ *  can already read. */
+export function useStudentReadiness(
+  studentId: string | null | undefined,
+  enabled = true,
+): ResourceState<Readiness> {
+  return useInstitutionResource(
+    useCallback(() => getStudentReadiness(studentId as string), [studentId]),
+    enabled && Boolean(studentId),
+  );
 }
 
 export function useStudentProgress(

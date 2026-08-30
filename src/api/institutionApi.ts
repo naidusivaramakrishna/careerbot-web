@@ -54,6 +54,7 @@ import type {
   ListSectionsParams,
   MemberRecord,
   ProgressRecord,
+  Readiness,
   Section,
   Student,
   Paged,
@@ -673,6 +674,25 @@ export async function recordProgress(body: CreateProgressRequest): Promise<Progr
       body,
       withInstitutionAuth(),
     );
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** A student's placement readiness, and the working behind it.
+ *
+ *  Same permission as reading their progress -- readiness is a sum of rows the
+ *  caller can already see, so gating it separately would mean somebody able to
+ *  read every score but not their total.
+ *
+ *  Pass "me" and the server resolves the caller's own record; a student's scope
+ *  reaches nobody else's, so there is no id for them to supply. */
+export async function getStudentReadiness(studentId: string): Promise<Readiness> {
+  try {
+    const response = await httpClient.get<Readiness>(
+      `${BASE}/students/${encodeURIComponent(studentId)}/readiness`,
+      withInstitutionAuth());
     return response.data;
   } catch (err) {
     return fail(err);

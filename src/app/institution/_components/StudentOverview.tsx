@@ -2,7 +2,12 @@
 
 import React, { useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
-import { useMyStudentProfile, useStudentProgress } from '@/hooks/useInstitutionResource';
+import {
+  useInstitutionContext,
+  useMyStudentProfile,
+  useStudentProgress,
+  useStudentReadiness,
+} from '@/hooks/useInstitutionResource';
 import { activityLabel } from '@/lib/institutionMessages';
 import { ACTIVITY_TYPES, type ProgressRecord } from '@/types/institution';
 import { EmptyState } from './EmptyState';
@@ -10,6 +15,8 @@ import { ErrorNotice } from './ErrorNotice';
 import { Caption, MicroLabel, PageHeader, SectionTitle } from './Typography';
 import { CardListSkeleton, LoadingAnnouncement } from './Skeletons';
 import { ProgressStatusPill, ScoreCell } from './StatusPill';
+import { EnabledFeaturesCard } from './EnabledFeaturesCard';
+import { ReadinessCard } from './ReadinessCard';
 import { CARD } from './tokens';
 
 /**
@@ -40,6 +47,11 @@ export function StudentOverview() {
   const self = useMyStudentProfile();
   const student = self.data ?? null;
   const progress = useStudentProgress(student?.id, Boolean(student));
+  // "me", not student.id. A student's scope reaches only their own record, so
+  // the server resolves it -- and passing the id would be a request naming a
+  // subject on a route where the subject is never the caller's to choose.
+  const readiness = useStudentReadiness('me', Boolean(student));
+  const context = useInstitutionContext(Boolean(student));
 
   /**
    * Group by activity so the five activity types each get a place, including
@@ -136,6 +148,27 @@ export function StudentOverview() {
               </p>
             </div>
           </div>
+
+          {/* READINESS FIRST, above the per-activity detail.
+              It is the one number a student is actually looking for, and the
+              breakdown inside it doubles as the to-do list -- the rows with
+              nothing scored are exactly what to do next. Putting the raw
+              activity log first would make them assemble that themselves.
+
+              Its own failure is NOT allowed to take down the progress list
+              below: the two are separate requests, and a readiness call that
+              fails is a missing summary, not a missing record. */}
+          {readiness.data ? (
+            <div className="mb-5">
+              <ReadinessCard readiness={readiness.data} />
+            </div>
+          ) : null}
+
+          {context.data ? (
+            <div className="mb-5">
+              <EnabledFeaturesCard context={context.data} />
+            </div>
+          ) : null}
 
           {progress.error ? (
             <ErrorNotice error={progress.error} onRetry={progress.refetch} className="mb-4" />

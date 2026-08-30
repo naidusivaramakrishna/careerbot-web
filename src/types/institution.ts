@@ -141,7 +141,42 @@ export interface InstitutionContext {
   department_id: string | null;
   subscription_status: string | null;
   writable: boolean;
+  /** A DENY-list. Everything not named here is on -- which is why the student
+   *  screen derives what to show from this rather than from an allow-list: a
+   *  feature added after a college's row was written must arrive switched on,
+   *  not silently missing. */
   disabled_features: string[];
+  /** What the college is BUYING, computed server-side on every read. Separate
+   *  from subscription_status, which is whether their payment works. */
+  tier?: 'trial' | 'paid' | 'free';
+  /** Whole days, rounded up. `null` -- not 0 -- for anyone not on a running
+   *  trial, so a paid college is never shown a countdown. */
+  trial_days_remaining?: number | null;
+}
+
+/** One activity's contribution to a readiness score. */
+export interface ReadinessPart {
+  activity: string;
+  weight: number;
+  /** Whether a usable COMPLETED score exists. A completed attempt with no
+   *  score is still an attempt, which is why this is not called `attempted`. */
+  scored: boolean;
+  best_fraction: number | null;
+  earned: number;
+}
+
+/** A student's placement readiness, and the working behind it.
+ *
+ *  The breakdown comes with the number on purpose: a single figure a student
+ *  cannot take apart is one they will not trust. */
+export interface Readiness {
+  student_id: string;
+  readiness: number;
+  max: number;
+  /** How many of the activities have a usable score. */
+  scored: number;
+  of: number;
+  breakdown: ReadinessPart[];
 }
 
 /** What issuing an invite returns.

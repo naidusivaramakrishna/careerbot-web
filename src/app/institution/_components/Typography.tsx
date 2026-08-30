@@ -24,13 +24,20 @@ export function SectionTitle({
   children,
   className,
   as: Tag = 'h2',
+  id,
 }: {
   children: React.ReactNode;
   className?: string;
   as?: 'h2' | 'h3';
+  /** So a <section> can point at its own heading with aria-labelledby.
+   *  Without it a card has to repeat its title in an aria-label, and the two
+   *  copies drift -- a screen reader then announces a name the sighted user
+   *  cannot see. */
+  id?: string;
 }) {
   return (
-    <Tag className={cn('text-[14px] font-semibold leading-5 text-[#0f172a]', className)}>
+    <Tag id={id}
+         className={cn('text-[14px] font-semibold leading-5 text-[#0f172a]', className)}>
       {children}
     </Tag>
   );
