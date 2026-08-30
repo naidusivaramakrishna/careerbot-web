@@ -17,6 +17,7 @@ import {
   createCollege,
   getCollege,
   listColleges,
+  markCollegePaid,
   revokeOfficer,
   slugProblem,
 } from '@/api/adminInstitutionsApi';
@@ -120,5 +121,58 @@ describe('slugProblem', () => {
     expect(slugProblem('vit chennai')).toBeTruthy();
     expect(slugProblem('vit_chennai')).toBeTruthy();
     expect(slugProblem('x'.repeat(51))).toBeTruthy();
+  });
+});
+
+describe('marking a college paid', () => {
+  it('posts to mark-paid with NO body', async () => {
+    /**
+     * The route accepts none, and that is what stops it being asked for
+     * "trial" -- which would mint a second fourteen-day trial for a college
+     * that has already had one.
+     */
+    vi.mocked(mockHttp.post).mockResolvedValueOnce({
+      data: { id: 'vit', tier: 'paid', changed: true },
+    } as never);
+    await markCollegePaid('vit');
+    const [url, body] = vi.mocked(mockHttp.post).mock.calls[0];
+    expect(url).toBe('/admin/institutions/vit/mark-paid');
+    expect(body).toBeUndefined();
+  });
+
+  it('encodes the college id', async () => {
+    vi.mocked(mockHttp.post).mockResolvedValueOnce({ data: {} } as never);
+    await markCollegePaid('a/b');
+    expect(vi.mocked(mockHttp.post).mock.calls[0][0])
+      .toBe('/admin/institutions/a%2Fb/mark-paid');
+  });
+
+  it('returns changed:false rather than throwing when already paid', async () => {
+    /**
+     * A double click, or a retry after a timeout, gets a 200 on purpose. If
+     * this client turned that into an error the operator would press the
+     * button again -- which is exactly what the idempotence is for.
+     */
+    vi.mocked(mockHttp.post).mockResolvedValueOnce({
+      data: { id: 'vit', tier: 'paid', changed: false },
+    } as never);
+    await expect(markCollegePaid('vit')).resolves.toMatchObject({
+      tier: 'paid', changed: false,
+    });
+  });
+
+  it('still surfaces a real refusal as an AdminInstitutionError', async () => {
+    vi.mocked(mockHttp.post).mockRejectedValueOnce(
+      apiError(403, 'FORBIDDEN', 'You cannot do that.'));
+    await expect(markCollegePaid('vit')).rejects.toBeInstanceOf(AdminInstitutionError);
+  });
+});
+
+describe('creating a college', () => {
+  it('sends the chosen tier', async () => {
+    vi.mocked(mockHttp.post).mockResolvedValueOnce({ data: {} } as never);
+    await createCollege({ id: 'vit', name: 'VIT', tier: 'trial' });
+    expect(vi.mocked(mockHttp.post).mock.calls[0][1])
+      .toMatchObject({ tier: 'trial' });
   });
 });

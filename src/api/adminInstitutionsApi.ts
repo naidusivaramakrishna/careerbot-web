@@ -16,7 +16,25 @@ import { httpClient } from '@/lib/http';
 
 const BASE = '/admin/institutions';
 
+/**
+ * WHETHER THE PAYMENT IS WORKING. Not what the college is buying -- that is
+ * CollegeTier, and the two are deliberately separate fields on the server.
+ * A trial college can also be paused, and a paid college can be expired.
+ * Merging them loses the difference between "they have not bought this yet"
+ * and "their card failed", which need different words and a different person
+ * to chase.
+ */
 export type SubscriptionStatus = 'active' | 'grace' | 'paused' | 'expired';
+
+/**
+ * WHAT THE COLLEGE IS BUYING.
+ *
+ * `free` never appears in a stored row: a college is on the free tier because
+ * its 14-day trial ran out, which the server derives on every read rather
+ * than waiting for a job to rewrite the row. So the value here can say `free`
+ * while the database still says `trial`, and this is the one to render.
+ */
+export type CollegeTier = 'trial' | 'paid' | 'free';
 
 /** One college in the list. An allow-list on the server, not the stored row:
  *  credit balance, feature flags and internal timestamps are not sent. */
@@ -24,6 +42,17 @@ export interface CollegeSummary {
   id: string;
   name: string;
   subscription_status: SubscriptionStatus;
+  /** The EFFECTIVE tier, derived server-side. Render this one. */
+  tier?: CollegeTier;
+  /** What the row literally says. Debugging only -- never the badge. */
+  stored_tier?: 'trial' | 'paid' | null;
+  trial_ends_at?: string | null;
+  /**
+   * Whole days left, rounded up so a trial with four hours on it reads "1
+   * day" rather than "0". `null` -- NOT 0 -- for anyone not on a running
+   * trial, so a paying customer is never shown a countdown.
+   */
+  trial_days_remaining?: number | null;
   created_at?: string;
 }
 
@@ -52,6 +81,17 @@ export interface CreateCollegeRequest {
   id: string;
   name: string;
   subscription_status?: SubscriptionStatus;
+  /** Only trial or paid: `free` is not storable. Defaults to trial server-side. */
+  tier?: 'trial' | 'paid';
+}
+
+export interface MarkPaidResult {
+  id: string;
+  tier: 'paid';
+  /** false when it was already paid. NOT a failure -- see markCollegePaid. */
+  changed: boolean;
+  previous_tier?: string;
+  trial_ended_at?: string | null;
 }
 
 /** What the API refused, in a form a screen can act on. */
@@ -162,6 +202,32 @@ export async function appointOfficerByCode(
   try {
     const { data } = await httpClient.post<CollegeOfficer>(
       `${BASE}/${encodeURIComponent(collegeId)}/cpo/pair`, body);
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+/**
+ * Record that a college has paid, ending its trial.
+ *
+ * The only way out of a trial: nothing else in the product changes a tier, so
+ * without this every college created reaches the free tier after fourteen days
+ * and stays there.
+ *
+ * NO BODY, because the route accepts none -- which is what stops it being
+ * asked for "trial" and minting a second fourteen-day trial for a college that
+ * has already had one.
+ *
+ * SAFE TO CALL TWICE. The second call returns 200 with changed:false rather
+ * than a conflict, so a double click or a retry after a timeout is not an
+ * error a screen has to explain. Treating it as one would have the operator
+ * press the button again.
+ */
+export async function markCollegePaid(collegeId: string): Promise<MarkPaidResult> {
+  try {
+    const { data } = await httpClient.post<MarkPaidResult>(
+      `${BASE}/${encodeURIComponent(collegeId)}/mark-paid`);
     return data;
   } catch (err) {
     throw toError(err);

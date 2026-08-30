@@ -3,16 +3,28 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Loader2, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Loader2, ShieldCheck, UserMinus, UserPlus } from 'lucide-react';
 import {
   AdminInstitutionError,
   type CollegeDetail,
   appointOfficerByCode,
   getCollege,
+  markCollegePaid,
   revokeOfficer,
 } from '@/api/adminInstitutionsApi';
 import { useAdminAccess } from '../../../_hooks/useAdminAccess';
 import { LockedPageOverlay } from '../../../_components/LockedPageOverlay';
+import { TierBadge } from '../_components/TierBadge';
+
+/** A trial end date is only meaningful as a date. */
+const formatDate = (iso?: string | null): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleDateString(undefined,
+        { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
 /**
  * One college, and who holds placement-officer authority in it.
@@ -48,6 +60,9 @@ export default function CollegeDetailPage() {
   const [revoking, setRevoking] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
 
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+  const [paidNotice, setPaidNotice] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -65,6 +80,29 @@ export default function CollegeDetailPage() {
   useEffect(() => {
     if (hasAccess && collegeId) void load();
   }, [hasAccess, collegeId, load]);
+
+  const markPaid = async () => {
+    if (isMarkingPaid) return;
+    setIsMarkingPaid(true);
+    setPaidNotice(null);
+    setError(null);
+    try {
+      const result = await markCollegePaid(collegeId);
+      // changed:false IS a success. A double click, or a retry after a
+      // timeout, lands here -- and calling it a failure would have the
+      // operator press the button again.
+      setPaidNotice(result.changed
+        ? 'Marked as paid. Their trial has ended.'
+        : 'This college was already marked as paid.');
+      await load();
+    } catch (err) {
+      setError(err instanceof AdminInstitutionError
+        ? err.message
+        : 'Could not mark this college as paid.');
+    } finally {
+      setIsMarkingPaid(false);
+    }
+  };
 
   const appoint = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,20 +174,66 @@ export default function CollegeDetailPage() {
         </p>
       ) : college ? (
         <>
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold text-gray-900">
-              {college.name}
-            </h1>
-            <p className="mt-1 font-mono text-xs text-gray-500">{college.id}</p>
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">
+                {college.name}
+              </h1>
+              <p className="mt-1 font-mono text-xs text-gray-500">{college.id}</p>
+              <div className="mt-3">
+                <TierBadge
+                  tier={college.tier}
+                  daysRemaining={college.trial_days_remaining}
+                />
+              </div>
+            </div>
+
+            {/* OFFERED ONLY WHERE IT DOES SOMETHING. On a paid college the
+                call would succeed with changed:false, which is a confusing
+                thing to hand somebody who pressed it deliberately. It is also
+                hidden for a college whose tier the server did not send at
+                all, rather than guessed at. */}
+            {college.tier && college.tier !== 'paid' && (
+              <button
+                type="button"
+                onClick={markPaid}
+                disabled={isMarkingPaid}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600
+                           px-4 py-2 text-sm font-medium text-white
+                           hover:bg-emerald-700 disabled:opacity-40"
+              >
+                {isMarkingPaid
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <BadgeCheck className="h-4 w-4" />}
+                Mark as paid
+              </button>
+            )}
           </div>
 
-          <div className="mb-6 grid gap-3 sm:grid-cols-3">
+          {paidNotice && (
+            <p role="status" className="mb-4 text-sm text-emerald-700">
+              {paidNotice}
+            </p>
+          )}
+
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-gray-500">
                 Subscription
               </p>
               <p className="mt-1 text-lg font-medium text-gray-900">
                 {college.subscription_status}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                {college.tier === 'trial' ? 'Trial ends' : 'Trial ended'}
+              </p>
+              {/* Shown even after they upgrade. Once the countdown is over
+                  this date answers "how long did they evaluate before
+                  buying", which is the useful version of it. */}
+              <p className="mt-1 text-lg font-medium tabular-nums text-gray-900">
+                {formatDate(college.trial_ends_at)}
               </p>
             </div>
             <div className="rounded-xl border border-gray-200 bg-white p-4">

@@ -11,6 +11,7 @@ import {
   listColleges,
   slugProblem,
 } from '@/api/adminInstitutionsApi';
+import { TierBadge } from './_components/TierBadge';
 import { useAdminAccess } from '../../_hooks/useAdminAccess';
 import { LockedPageOverlay } from '../../_components/LockedPageOverlay';
 
@@ -58,6 +59,7 @@ export default function CollegesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     id: '', name: '', subscription_status: 'active' as SubscriptionStatus,
+    tier: 'trial' as 'trial' | 'paid',
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -102,8 +104,9 @@ export default function CollegesPage() {
         id: form.id.trim(),
         name: form.name.trim(),
         subscription_status: form.subscription_status,
+        tier: form.tier,
       });
-      setForm({ id: '', name: '', subscription_status: 'active' });
+      setForm({ id: '', name: '', subscription_status: 'active', tier: 'trial' });
       setShowForm(false);
       await load(0);
     } catch (err) {
@@ -207,6 +210,32 @@ export default function CollegesPage() {
 
             <label className="text-sm">
               <span className="mb-1 block font-medium text-gray-700">
+                Start them on
+              </span>
+              <select
+                value={form.tier}
+                onChange={(e) => setForm({
+                  ...form,
+                  tier: e.target.value as 'trial' | 'paid',
+                })}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="trial">14-day trial</option>
+                <option value="paid">paid, straight away</option>
+              </select>
+              {/* SAID BEFORE THEY SUBMIT, not after. The clock starts the
+              moment this row is created, not at the college's first login, so
+              a college created three weeks before its officer signs in has
+              already spent most of its trial. The person pressing the button
+              is the only one who can decide to wait. */}
+              <span className="mt-1 block text-xs text-gray-500">
+                A trial starts counting now, not at their first login. If they
+                are not ready to start, create the college when they are.
+              </span>
+            </label>
+
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-gray-700">
                 Subscription
               </span>
               <select
@@ -271,6 +300,7 @@ export default function CollegesPage() {
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <th className="px-4 py-3 font-medium">College</th>
               <th className="px-4 py-3 font-medium">Id</th>
+              <th className="px-4 py-3 font-medium">Paying for</th>
               <th className="px-4 py-3 font-medium">Subscription</th>
               <th className="px-4 py-3 font-medium" />
             </tr>
@@ -278,13 +308,13 @@ export default function CollegesPage() {
           <tbody>
             {isLoading && colleges === null ? (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={5} className="px-4 py-10 text-center text-gray-500">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" aria-hidden />
                 </td>
               </tr>
             ) : colleges && colleges.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-12 text-center">
+                <td colSpan={5} className="px-4 py-12 text-center">
                   <Building2 className="mx-auto mb-2 h-7 w-7 text-gray-300" aria-hidden />
                   <p className="text-sm font-medium text-gray-900">
                     No colleges yet
@@ -299,6 +329,9 @@ export default function CollegesPage() {
                 <tr key={c.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-600">{c.id}</td>
+                  <td className="px-4 py-3">
+                    <TierBadge tier={c.tier} daysRemaining={c.trial_days_remaining} />
+                  </td>
                   <td className="px-4 py-3">
                     <StatusPill status={c.subscription_status} />
                   </td>
