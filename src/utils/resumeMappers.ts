@@ -426,10 +426,10 @@ export function mapParserOutputToBuilderData(rawParsedData: unknown): Partial<Re
   /* ── Languages ── */
   const languages = arr<AnyRecord>(llm.languages || p.languages || p.languages_known).map(
     (lang) => {
-      if (typeof lang === "string") return { language: lang, proficiency: "" };
+      if (typeof lang === "string") return { name: lang, proficiency: "" };
       return {
         ...(lang.id ? { id: str(lang.id) } : {}),
-        language: str(lang.language) || str(lang.name),
+        name: str(lang.name) || str(lang.language),
         proficiency: str(lang.proficiency) || str(lang.level),
       };
     }

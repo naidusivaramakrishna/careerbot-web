@@ -422,7 +422,10 @@ const EditorTab: React.FC<Props> = ({
           const autoSaveResponse = await autoSaveResume(resumeId, updatePayload);
 
           if (autoSaveResponse?.warnings?.length) {
-            autoSaveResponse.warnings.forEach(w => toast.warning(w, { duration: 6000 }));
+            autoSaveResponse.warnings.forEach(w => {
+              const msg = typeof w === 'string' ? w : (w as Record<string, unknown>)?.message as string || "Saved with warnings";
+              toast.warning(msg, { duration: 6000 });
+            });
           }
 
           // Sync backend-assigned IDs back into resumeData. Without this, the next
@@ -545,6 +548,9 @@ const EditorTab: React.FC<Props> = ({
     // Custom sections have no required fields — skip validation
     const isCustom = (resumeData.customSections || []).some(cs => cs.sectionName === openModalSection);
     if (isCustom) return { isValid: true, newErrors: {} };
+
+    // Languages validates via resume-validate-section DOM event, not formData
+    if (openModalSection === "Languages") return { isValid: true, newErrors: {} };
 
     // ProfessionalSummary writes directly to resumeData context, not formData
     if (openModalSection === "Professional Summary") {

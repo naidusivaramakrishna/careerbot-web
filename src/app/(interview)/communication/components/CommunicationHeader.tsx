@@ -39,7 +39,6 @@ export default function CommunicationHeader() {
   const faceVideoRef = useRef<HTMLVideoElement>(null);
   const faceCanvasRef = useRef<HTMLCanvasElement>(null);
   const noFaceSecondsRef = useRef(0);
-  const faceViolationFiredRef = useRef(false);
 
   // Initialize MediaPipe face detector once recording starts
   useEffect(() => {
@@ -101,13 +100,13 @@ export default function CommunicationHeader() {
 
         if (faceFound) {
           noFaceSecondsRef.current = 0;
-          faceViolationFiredRef.current = false;
           setIsFaceAbsent(false);
         } else {
           noFaceSecondsRef.current += 2;
           if (noFaceSecondsRef.current >= 5) setIsFaceAbsent(true);
-          if (noFaceSecondsRef.current >= 10 && !faceViolationFiredRef.current) {
-            faceViolationFiredRef.current = true;
+          // Every 10s of continuous absence counts as one violation.
+          // Counter reset prevents double-firing without needing a separate guard ref.
+          if (noFaceSecondsRef.current >= 10) {
             noFaceSecondsRef.current = 0;
             setViolations((v) => v + 1);
           }

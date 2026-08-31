@@ -249,6 +249,18 @@ const maybeSyncCredits = (data: unknown): void => {
 client.interceptors.response.use(
   (response) => {
     maybeSyncCredits(response.data);
+    // For non-GET requests, if the response didn't carry credits_remaining,
+    // signal the hook to re-fetch so the header stays in sync immediately.
+    const method = response.config?.method?.toLowerCase();
+    if (method && method !== 'get') {
+      const d = response.data as Record<string, unknown> | null;
+      const hasCredits =
+        d && typeof d === 'object' &&
+        (typeof d.credits_remaining === 'number' || typeof d.user_credits_remaining === 'number');
+      if (!hasCredits && typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('credits-fetch-required'));
+      }
+    }
     return response;
   },
   async (error) => {

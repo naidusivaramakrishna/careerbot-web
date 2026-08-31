@@ -25,6 +25,7 @@ function FeedbackPageContent() {
   const [hoveredRating, setHoveredRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
 
   const ratingLabels: Record<number, string> = {
     1: 'Poor',
@@ -58,7 +59,7 @@ function FeedbackPageContent() {
   };
 
   const handleSkip = async () => {
-    setIsSubmitting(true);
+    setIsSkipping(true);
     try {
       if (isEarlyTermination) {
         router.push('/dashboard');
@@ -69,7 +70,7 @@ function FeedbackPageContent() {
     } catch (error) {
       logger.error('Error submitting final report:', error);
       alert('Failed to generate report. Please try again.');
-      setIsSubmitting(false);
+      setIsSkipping(false);
     }
   };
 
@@ -199,7 +200,7 @@ function FeedbackPageContent() {
           <div className="flex flex-col sm:flex-row gap-3 mt-5">
             <button
               onClick={handleSubmitFeedback}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isSkipping}
               className="flex-1 py-3.5 bg-[#2557a7] hover:bg-[#1e4a94] disabled:bg-gray-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
@@ -214,10 +215,17 @@ function FeedbackPageContent() {
 
             <button
               onClick={handleSkip}
-              disabled={isSubmitting}
-              className="sm:w-auto px-7 py-3.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 rounded-xl font-bold text-sm transition-colors"
+              disabled={isSubmitting || isSkipping}
+              className="sm:w-auto px-7 py-3.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 rounded-xl font-bold text-sm transition-colors flex items-center gap-2"
             >
-              Skip
+              {isSkipping ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+                  Skipping...
+                </>
+              ) : (
+                'Skip'
+              )}
             </button>
           </div>
 
