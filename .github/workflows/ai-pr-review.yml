@@ -33,7 +33,16 @@ permissions:
 # already had the fix. The feature branches were carrying a stale version.
 concurrency:
   group: ai-pr-review-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: true
+  # NOT unconditional -- see the default-branch copy, which is the one that
+  # actually cancels. Any comment on a PR fires an issue_comment run whose group
+  # resolves to ai-pr-review-<PR#> via github.event.issue.number, landing it in
+  # the SAME group as a review already running for that PR. The job-level `if`
+  # skips the JOB, but the RUN still joins the group and cancel-in-progress kills
+  # the real review first (careerbot-web#61: twice, ~5s after each comment).
+  #
+  # Kept in sync here so a merge down to the default branch does not silently
+  # revert the fix -- this branch is thousands of commits ahead of it.
+  cancel-in-progress: ${{ github.event_name != 'issue_comment' }}
 
 jobs:
   ai-review:
