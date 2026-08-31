@@ -154,6 +154,84 @@ export interface InstitutionContext {
   trial_days_remaining?: number | null;
 }
 
+/** Where one student comes in their cohort.
+ *
+ *  A UNION, not an object with optional fields. Below ten scored students the
+ *  server returns no rank at all -- and a type that made `rank` optional would
+ *  let a screen read `standing.rank` and render `undefined` for exactly the
+ *  small cohorts the suppression exists to protect. */
+export type Standing =
+  | {
+      available: true;
+      rank: number;
+      cohort_size: number;
+      percentile: number;
+      readiness: number;
+      /** How many share this exact place, so a screen can say "joint 3rd"
+       *  rather than implying a clean placing. */
+      tied_with: number;
+    }
+  | {
+      available: false;
+      /** `cohort_too_small` -- fewer than ten in the year group have a score.
+       *  `no_batch_year` -- the college has not recorded which year they
+       *  graduate, so there is no cohort to rank them in.
+       *  `not_scored_yet` -- they have taken nothing. */
+      reason: 'cohort_too_small' | 'no_batch_year' | 'not_scored_yet';
+      cohort_size?: number;
+      min_cohort?: number;
+    };
+
+/** One named entry on a leaderboard. NO RANK, deliberately -- see Leaderboard. */
+export interface LeaderboardEntry {
+  student_id: string;
+  name: string;
+  readiness: number;
+}
+
+/** The top of a cohort.
+ *
+ *  NO cohort_size AND NO RANKS. Both were removed after review: a size lets a
+ *  reader who knows the year group subtract to find who opted out, and ranks
+ *  leave a visible gap that says somebody is missing and brackets their score
+ *  between the two names either side. Number the rows as displayed positions. */
+export type Leaderboard =
+  | { available: true; entries: LeaderboardEntry[] }
+  | { available: false; reason: string; min_cohort?: number;
+      entries: LeaderboardEntry[] };
+
+/** One department's numbers. Never a student. */
+export type CohortComparisonGroup =
+  | { group: string; scored: number; available: true;
+      average: number; median: number }
+  | { group: string; scored: number; available: false; reason: string };
+
+export interface CohortComparison {
+  groups: CohortComparisonGroup[];
+}
+
+/** One row of the placement officer's roster report. */
+export interface RosterReportRow {
+  student_id: string;
+  full_name: string;
+  admission_number: string | null;
+  college_email: string | null;
+  department_id: string;
+  section_id: string | null;
+  batch_year: number | null;
+  status: string;
+  claim_status: string;
+  readiness: number;
+  activities_scored: number;
+  activities_total: number;
+  [activityColumn: string]: unknown;
+}
+
+export interface RosterReport {
+  items: RosterReportRow[];
+  total: number;
+}
+
 /** One activity's contribution to a readiness score. */
 export interface ReadinessPart {
   activity: string;
@@ -191,6 +269,16 @@ export interface IssuedInvite {
   admission_number: string | null;
   expires_at: string;
   code: string;
+  /** Whether the code was emailed to the student.
+   *
+   *  FALSE IS NOT A FAILURE OF THE INVITE. The code exists either way -- it
+   *  is right there in `code` -- so a mail outage costs a delivery, not the
+   *  invitation. The screen must still show the code, or an officer will
+   *  reissue and revoke the one sitting in the student's inbox. */
+  emailed: boolean;
+  /** Why it was not emailed, in words for the officer. Most often: the
+   *  college never recorded an email for this student. */
+  email_error: string | null;
 }
 
 export interface ClaimResult {

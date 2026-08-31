@@ -32,6 +32,12 @@ export function InviteCodeDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<InstitutionApiError | null>(null);
   const [copied, setCopied] = useState(false);
+  // OFF UNLESS THE COLLEGE HAS AN ADDRESS. Offering "email it" for a student
+  // with nowhere to send is a tick box that produces an error -- and many
+  // colleges issue no student email at all, which is exactly why admission
+  // number is the required identifier.
+  const canEmail = Boolean(student.college_email);
+  const [sendEmail, setSendEmail] = useState(false);
 
   const alreadyClaimed = student.claim_status === 'claimed';
 
@@ -39,7 +45,7 @@ export function InviteCodeDialog({
     setBusy(true);
     setError(null);
     try {
-      setIssued(await issueInvite(student.id));
+      setIssued(await issueInvite(student.id, 30, canEmail && sendEmail));
       onIssued?.();
     } catch (err) {
       setError(err instanceof InstitutionApiError ? err : null);
@@ -111,6 +117,25 @@ export function InviteCodeDialog({
               after signing up, and their account is linked to this roster
               record. It works once.
             </Body>
+
+            {/* OPT IN, and only where it can work. Emailing a credential puts
+                it in somebody's inbox -- it should be a choice on this screen,
+                not something that happens because a default was left alone. */}
+            <label className="mt-4 flex items-start gap-2.5 text-[13px]">
+              <input
+                type="checkbox"
+                checked={canEmail && sendEmail}
+                disabled={!canEmail}
+                onChange={(e) => setSendEmail(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span className={canEmail ? 'text-[#334155]' : 'text-[#94a3b8]'}>
+                {canEmail
+                  ? <>Also email it to <span className="font-medium">{student.college_email}</span></>
+                  : 'No email on record for this student, so it cannot be sent.'}
+              </span>
+            </label>
+
             {error ? <ErrorNotice error={error} className="mt-4" /> : null}
           </>
         ) : (
@@ -138,6 +163,21 @@ export function InviteCodeDialog({
             <Caption className="mt-2">
               Valid until {new Date(issued.expires_at).toLocaleDateString()}.
             </Caption>
+
+            {/* THE CODE IS SHOWN EITHER WAY, and that is the point. A failed
+                send costs a delivery, not the invitation -- if this hid the
+                code on "emailed" and the mail bounced, the officer would
+                reissue and revoke a code that had already arrived. */}
+            {issued.emailed ? (
+              <Caption className="mt-1 text-emerald-700">
+                Emailed to {student.college_email}.
+              </Caption>
+            ) : issued.email_error ? (
+              <Caption className="mt-1 text-amber-700">
+                Not emailed: {issued.email_error}. The code above still works —
+                read it out or send it yourself.
+              </Caption>
+            ) : null}
           </>
         )}
 

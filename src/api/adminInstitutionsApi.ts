@@ -234,6 +234,60 @@ export async function markCollegePaid(collegeId: string): Promise<MarkPaidResult
   }
 }
 
+/** Every feature name a college's deny-list may legitimately contain.
+ *
+ *  MIRRORS THE SERVER'S known_features(). Held here so the screen can offer
+ *  checkboxes rather than a free-text field -- the list is matched EXACTLY, so
+ *  a typed "mock-test" with a hyphen would disable nothing while looking like
+ *  it worked. The server refuses unknown names anyway; this stops the operator
+ *  ever being in a position to type one. */
+export const KNOWN_FEATURES = [
+  'mock_test',
+  'coding_test',
+  'mock_interview',
+  'english_assessment',
+  'resume_tools',
+  'job_matching',
+  'rankings',
+] as const;
+
+export interface FeaturesResult {
+  id: string;
+  disabled_features: string[];
+  previous_disabled_features: string[];
+  changed: boolean;
+}
+
+/**
+ * Replace which features are switched OFF for a college.
+ *
+ * THE WHOLE LIST, EVERY TIME -- a PUT, not a patch. A partial update to a
+ * deny-list means the result depends on what was already stored, so two
+ * operators editing the same college produce a list neither of them chose.
+ *
+ * `expected` is what the caller believed was stored, and it is the defence
+ * against a LOST UPDATE -- which on a deny-list is a privilege GRANT, not a
+ * lost edit. Both operators load []; A saves ["rankings"]; B, from a screen
+ * loaded before that, saves ["coding_test"] and silently re-enables rankings
+ * for a college somebody had just switched it off for. With `expected` the
+ * stale write is refused with a 409 instead of winning.
+ */
+export async function setCollegeFeatures(
+  collegeId: string,
+  disabled: string[],
+  expected: string[],
+): Promise<FeaturesResult> {
+  try {
+    const { data } = await httpClient.put<FeaturesResult>(
+      `${BASE}/${encodeURIComponent(collegeId)}/features`,
+      { disabled_features: disabled, expected_disabled_features: expected },
+    );
+    return data;
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
 export async function revokeOfficer(
   collegeId: string,
   membershipId: string,

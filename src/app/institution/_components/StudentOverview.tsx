@@ -3,7 +3,10 @@
 import React, { useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import {
+  useCohortComparison,
   useInstitutionContext,
+  useLeaderboard,
+  useMyStanding,
   useMyStudentProfile,
   useStudentProgress,
   useStudentReadiness,
@@ -15,8 +18,11 @@ import { ErrorNotice } from './ErrorNotice';
 import { Caption, MicroLabel, PageHeader, SectionTitle } from './Typography';
 import { CardListSkeleton, LoadingAnnouncement } from './Skeletons';
 import { ProgressStatusPill, ScoreCell } from './StatusPill';
+import { ComparisonCard } from './ComparisonCard';
 import { EnabledFeaturesCard } from './EnabledFeaturesCard';
+import { LeaderboardCard } from './LeaderboardCard';
 import { ReadinessCard } from './ReadinessCard';
+import { StandingCard } from './StandingCard';
 import { CARD } from './tokens';
 
 /**
@@ -52,6 +58,9 @@ export function StudentOverview() {
   // subject on a route where the subject is never the caller's to choose.
   const readiness = useStudentReadiness('me', Boolean(student));
   const context = useInstitutionContext(Boolean(student));
+  const standing = useMyStanding(Boolean(student));
+  const board = useLeaderboard(10, Boolean(student));
+  const comparison = useCohortComparison(Boolean(student));
 
   /**
    * Group by activity so the five activity types each get a place, including
@@ -161,6 +170,29 @@ export function StudentOverview() {
           {readiness.data ? (
             <div className="mb-5">
               <ReadinessCard readiness={readiness.data} />
+            </div>
+          ) : null}
+
+          {/* POSITION AND BOARD SIDE BY SIDE. "Where am I" and "who is at the
+              top" are the same glance for a student, and separating them onto
+              different screens is how a number becomes discouraging rather
+              than motivating -- the owner's reason for opening the board to
+              students at all.
+
+              Each renders only on success. Four independent requests back
+              this screen, and one failing must not blank the others: a
+              missing position is not a missing progress list. */}
+          <div className="mb-5 grid gap-5 lg:grid-cols-2">
+            {standing.data ? <StandingCard standing={standing.data} /> : null}
+            {board.data ? <LeaderboardCard board={board.data} /> : null}
+          </div>
+
+          {comparison.data ? (
+            <div className="mb-5">
+              <ComparisonCard
+                comparison={comparison.data}
+                highlight={student.department_id}
+              />
             </div>
           ) : null}
 

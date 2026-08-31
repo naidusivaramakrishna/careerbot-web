@@ -55,6 +55,10 @@ import type {
   MemberRecord,
   ProgressRecord,
   Readiness,
+  Standing,
+  Leaderboard,
+  CohortComparison,
+  RosterReport,
   Section,
   Student,
   Paged,
@@ -521,12 +525,12 @@ export async function getInstitutionContext(): Promise<InstitutionContext> {
  *
  *  The response carries the one and only copy of the code. */
 export async function issueInvite(
-  studentId: string, expiresDays = 30,
+  studentId: string, expiresDays = 30, sendEmail = false,
 ): Promise<IssuedInvite> {
   try {
     const response = await httpClient.post<IssuedInvite>(
       `${BASE}/students/${encodeURIComponent(studentId)}/invite`,
-      { expires_days: expiresDays },
+      { expires_days: expiresDays, send_email: sendEmail },
       withInstitutionAuth(),
     );
     return response.data;
@@ -694,6 +698,101 @@ export async function getStudentReadiness(studentId: string): Promise<Readiness>
       `${BASE}/students/${encodeURIComponent(studentId)}/readiness`,
       withInstitutionAuth());
     return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Where the caller comes in their own year group.
+ *
+ *  The cohort is DEPARTMENT + GRADUATION YEAR, decided server-side from the
+ *  student's own record -- a first-year ranked against final-years is a number
+ *  nobody should act on. `available: false` is a normal answer, not an error:
+ *  a cohort under ten scored students is withheld, because "1st of 2" says the
+ *  other student scored lower, exactly, about somebody the reader can name. */
+export async function getMyStanding(): Promise<Standing> {
+  try {
+    const response = await httpClient.get<Standing>(
+      `${BASE}/students/me/standing`, withInstitutionAuth());
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** The top of the caller's cohort.
+ *
+ *  Students who opted out are ABSENT -- not anonymised, not placeholders --
+ *  and the response carries no cohort size, because "ten in the year, nine
+ *  names" identifies the tenth. Entries carry no rank for the same reason: a
+ *  gap in the numbering would say somebody is missing and bracket their score
+ *  between the two names either side. */
+export async function getLeaderboard(limit = 10): Promise<Leaderboard> {
+  try {
+    const response = await httpClient.get<Leaderboard>(
+      `${BASE}/leaderboard?limit=${encodeURIComponent(String(limit))}`,
+      withInstitutionAuth());
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** How each department compares. AGGREGATES ONLY -- never a student.
+ *
+ *  Readable by every role, including a faculty member looking at a department
+ *  they could never list, and safe to be so precisely because no row in it
+ *  belongs to a person. */
+export async function getCohortComparison(): Promise<CohortComparison> {
+  try {
+    const response = await httpClient.get<CohortComparison>(
+      `${BASE}/reports/comparison`, withInstitutionAuth());
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Every student the caller can see, with their readiness. Same scope as the
+ *  roster: faster than opening each student in turn, not wider. */
+export async function getRosterReport(): Promise<RosterReport> {
+  try {
+    const response = await httpClient.get<RosterReport>(
+      `${BASE}/reports/roster`, withInstitutionAuth());
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Download the roster report as a CSV file.
+ *
+ * A BLOB, NOT A PLAIN LINK. The route needs the college session token, which
+ * an <a href> cannot carry -- a bare link would arrive unauthenticated and
+ * download a 403 page named roster.csv, which is the worst possible outcome
+ * because it looks like it worked.
+ *
+ * The FILENAME comes from Content-Disposition when the browser lets us read
+ * it, and falls back to a dated name otherwise. Never "download.csv": every
+ * export otherwise lands in Downloads indistinguishable from the last one.
+ */
+export async function downloadRosterCsv(): Promise<{ blob: Blob; filename: string }> {
+  try {
+    const response = await httpClient.get(`${BASE}/reports/roster.csv`, {
+      ...withInstitutionAuth(),
+      responseType: 'blob',
+    });
+
+    const disposition = String(
+      response.headers?.['content-disposition'] ?? '');
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const today = new Date().toISOString().slice(0, 10);
+
+    return {
+      blob: response.data as Blob,
+      filename: match?.[1] ?? `roster-${today}.csv`,
+    };
   } catch (err) {
     return fail(err);
   }

@@ -14,6 +14,7 @@ import {
 } from '@/api/adminInstitutionsApi';
 import { useAdminAccess } from '../../../_hooks/useAdminAccess';
 import { LockedPageOverlay } from '../../../_components/LockedPageOverlay';
+import { FeatureToggles } from '../_components/FeatureToggles';
 import { TierBadge } from '../_components/TierBadge';
 
 /** A trial end date is only meaningful as a date. */
@@ -254,6 +255,15 @@ export default function CollegeDetailPage() {
                   : college.disabled_features.length}
               </p>
             </div>
+          </div>
+
+          <div className="mb-6">
+            <FeatureToggles
+              collegeId={college.id}
+              disabled={college.disabled_features}
+              onSaved={(next) =>
+                setCollege((c) => (c ? { ...c, disabled_features: next } : c))}
+            />
           </div>
 
           {error ? (

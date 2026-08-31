@@ -22,6 +22,10 @@ import {
   listBatches,
   listDepartments,
   listSections,
+  getCohortComparison,
+  getLeaderboard,
+  getMyStanding,
+  getRosterReport,
   getStudentReadiness,
   listStudentProgress,
   listStudents,
@@ -38,6 +42,10 @@ import type {
   Paged,
   ProgressRecord,
   Readiness,
+  Standing,
+  Leaderboard,
+  CohortComparison,
+  RosterReport,
   Section,
   Student,
 } from '@/types/institution';
@@ -215,6 +223,29 @@ export function useStudentReadiness(
     useCallback(() => getStudentReadiness(studentId as string), [studentId]),
     enabled && Boolean(studentId),
   );
+}
+
+/** Where the caller comes in their own year group. */
+export function useMyStanding(enabled = true): ResourceState<Standing> {
+  return useInstitutionResource(useCallback(() => getMyStanding(), []), enabled);
+}
+
+/** The top of the caller's cohort. */
+export function useLeaderboard(limit = 10, enabled = true): ResourceState<Leaderboard> {
+  return useInstitutionResource(
+    useCallback(() => getLeaderboard(limit), [limit]), enabled);
+}
+
+/** Department-by-department averages. Aggregates only, never a student. */
+export function useCohortComparison(enabled = true): ResourceState<CohortComparison> {
+  return useInstitutionResource(
+    useCallback(() => getCohortComparison(), []), enabled);
+}
+
+/** Every visible student with their readiness, for the officer's report. */
+export function useRosterReport(enabled = true): ResourceState<RosterReport> {
+  return useInstitutionResource(
+    useCallback(() => getRosterReport(), []), enabled);
 }
 
 export function useStudentProgress(
