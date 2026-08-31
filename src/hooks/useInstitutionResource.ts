@@ -26,6 +26,9 @@ import {
   getLeaderboard,
   getMyStanding,
   getRosterReport,
+  getMyPeople,
+  listMyTasks,
+  listStudentTasks,
   getStudentReadiness,
   listStudentProgress,
   listStudents,
@@ -46,6 +49,8 @@ import type {
   Leaderboard,
   CohortComparison,
   RosterReport,
+  MyPeople,
+  StudentTask,
   Section,
   Student,
 } from '@/types/institution';
@@ -246,6 +251,26 @@ export function useCohortComparison(enabled = true): ResourceState<CohortCompari
 export function useRosterReport(enabled = true): ResourceState<RosterReport> {
   return useInstitutionResource(
     useCallback(() => getRosterReport(), []), enabled);
+}
+
+/** The caller's faculty, HOD and placement officers. */
+export function useMyPeople(enabled = true): ResourceState<MyPeople> {
+  return useInstitutionResource(useCallback(() => getMyPeople(), []), enabled);
+}
+
+/** The caller's own tasks. */
+export function useMyTasks(enabled = true): ResourceState<StudentTask[]> {
+  return useInstitutionResource(useCallback(() => listMyTasks(), []), enabled);
+}
+
+/** One student's tasks, for staff. */
+export function useStudentTasks(
+  studentId: string | null | undefined, enabled = true,
+): ResourceState<StudentTask[]> {
+  return useInstitutionResource(
+    useCallback(() => listStudentTasks(studentId as string), [studentId]),
+    enabled && Boolean(studentId),
+  );
 }
 
 export function useStudentProgress(

@@ -1,6 +1,6 @@
 "use client"
 import { adminLogout } from '@/api/adminAuthApi';
-import { Activity, Building2, LayoutDashboard, LogOut, Settings, UserPlus, Users } from 'lucide-react';
+import { Activity, Building2, DollarSign, LayoutDashboard, LogOut, Settings, UserPlus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useState } from 'react'
@@ -11,6 +11,7 @@ const menu = [
     { label: "Admin Management", href: "/admin/dashboard/admin-management", icon: UserPlus },
     { label: "System Monitoring", href: "/admin/dashboard/system-monitoring", icon: Activity },
     { label: "Colleges", href: "/admin/dashboard/colleges", icon: Building2 },
+    { label: "AI spend", href: "/admin/dashboard/ai-spend", icon: DollarSign },
     { label: "Settings", href: "/admin/dashboard/settings", icon: Settings },
 ];
 

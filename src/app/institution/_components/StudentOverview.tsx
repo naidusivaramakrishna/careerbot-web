@@ -6,7 +6,9 @@ import {
   useCohortComparison,
   useInstitutionContext,
   useLeaderboard,
+  useMyPeople,
   useMyStanding,
+  useMyTasks,
   useMyStudentProfile,
   useStudentProgress,
   useStudentReadiness,
@@ -21,6 +23,8 @@ import { ProgressStatusPill, ScoreCell } from './StatusPill';
 import { ComparisonCard } from './ComparisonCard';
 import { EnabledFeaturesCard } from './EnabledFeaturesCard';
 import { LeaderboardCard } from './LeaderboardCard';
+import { MyPeopleCard } from './MyPeopleCard';
+import { MyTasksCard } from './MyTasksCard';
 import { ReadinessCard } from './ReadinessCard';
 import { StandingCard } from './StandingCard';
 import { CARD } from './tokens';
@@ -61,6 +65,8 @@ export function StudentOverview() {
   const standing = useMyStanding(Boolean(student));
   const board = useLeaderboard(10, Boolean(student));
   const comparison = useCohortComparison(Boolean(student));
+  const tasks = useMyTasks(Boolean(student));
+  const people = useMyPeople(Boolean(student));
 
   /**
    * Group by activity so the five activity types each get a place, including
@@ -193,6 +199,22 @@ export function StudentOverview() {
                 comparison={comparison.data}
                 highlight={student.department_id}
               />
+            </div>
+          ) : null}
+
+          {/* TASKS ABOVE THE ACTIVITY LOG and below readiness. A deadline is
+              the most time-sensitive thing on this screen -- a student who
+              scrolls past it to reach their scores has missed the one item
+              that expires. */}
+          {tasks.data && tasks.data.length > 0 ? (
+            <div className="mb-5">
+              <MyTasksCard tasks={tasks.data} onChanged={tasks.refetch} />
+            </div>
+          ) : null}
+
+          {people.data ? (
+            <div className="mb-5">
+              <MyPeopleCard people={people.data} />
             </div>
           ) : null}
 

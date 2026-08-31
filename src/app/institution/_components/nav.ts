@@ -7,6 +7,7 @@ import {
   GraduationCap,
   LayoutGrid,
   Layers,
+  ListTodo,
   UserPlus,
   Users,
 } from 'lucide-react';
@@ -72,6 +73,17 @@ const NAV_GROUPS: InstitutionNavGroup[] = [
         label: 'Record progress',
         href: '/institution/progress',
         icon: ClipboardPen,
+        capability: 'write_progress',
+      },
+      {
+        id: 'tasks',
+        label: 'Tasks',
+        href: '/institution/tasks',
+        icon: ListTodo,
+        // Same capability as recording progress, and the same reason: setting
+        // work is a member of staff asserting something about a student they
+        // are responsible for. A CPO who can read these students still cannot
+        // set them work, so the link is not shown to one.
         capability: 'write_progress',
       },
       {

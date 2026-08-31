@@ -11,6 +11,7 @@ export type AdminPageKey =
   | 'admin-management'
   | 'system-monitoring'
   | 'colleges'
+  | 'ai-spend'
   | 'settings';
 
 /**
@@ -29,6 +30,10 @@ export const PAGE_PERMISSIONS: Record<AdminPageKey, AdminRole[]> = {
   // request would be refused.
   'colleges': ['SUPER_ADMIN', 'ADMIN'],
   'system-monitoring': ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'],
+  // SAME ROLES AS COLLEGES, and for the same reason the backend gates the
+  // route on the billing permission: deciding what a college pays and seeing
+  // what a college costs are the same job. Moderator and support see neither.
+  'ai-spend': ['SUPER_ADMIN', 'ADMIN'],
   'settings': ['SUPER_ADMIN'],
 };
 

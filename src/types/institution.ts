@@ -232,6 +232,67 @@ export interface RosterReport {
   total: number;
 }
 
+/** A member of staff, as a STUDENT may see them.
+ *
+ *  A name and a role, and nothing else. No account id: a student needs to
+ *  know who to speak to, not an internal identifier they could join against
+ *  another response. The name is what the COLLEGE typed at onboarding, never
+ *  read from that person's platform account. */
+export interface CollegePerson {
+  name: string | null;
+  role: 'faculty' | 'hod' | 'cpo';
+}
+
+/** THREE SEPARATE LISTS, not one array with a role field. "Who is my faculty"
+ *  and "who runs placements" are two questions, and a screen that has to
+ *  filter a mixed list to answer either will eventually filter it wrongly. */
+export interface MyPeople {
+  faculty: CollegePerson[];
+  hods: CollegePerson[];
+  placement_officers: CollegePerson[];
+}
+
+/** Something a faculty member asked a student to do, by a date.
+ *
+ *  ONE ROW PER STUDENT even when set for a whole section, because completion
+ *  is per student -- a shared row would need a parallel structure recording
+ *  who had done it, and that structure IS this row. */
+export interface StudentTask {
+  id: string;
+  student_id: string;
+  title: string;
+  details: string | null;
+  /** ISO-8601, and NULLABLE: "read chapter 4" with no deadline is a real
+   *  thing to set, and requiring a date would have staff invent one that then
+   *  shows as overdue. */
+  due_at: string | null;
+  status: 'pending' | 'done';
+  completed_at: string | null;
+  /** The faculty account that set it. */
+  set_by: string;
+  created_at?: string;
+}
+
+export interface StudentTaskList {
+  items: StudentTask[];
+}
+
+export interface SetTasksRequest {
+  student_ids: string[];
+  title: string;
+  details?: string | null;
+  due_at?: string | null;
+}
+
+export interface SetTasksResult {
+  created: number;
+  task_ids: string[];
+  /** PER-STUDENT, not all-or-nothing. A section of forty always contains
+   *  somebody who transferred out last week; the request succeeds for the
+   *  rest and says who it could not reach. */
+  refused: Array<{ student_id: string; reason: string }>;
+}
+
 /** One activity's contribution to a readiness score. */
 export interface ReadinessPart {
   activity: string;

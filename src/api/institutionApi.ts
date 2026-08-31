@@ -59,6 +59,11 @@ import type {
   Leaderboard,
   CohortComparison,
   RosterReport,
+  MyPeople,
+  StudentTask,
+  StudentTaskList,
+  SetTasksRequest,
+  SetTasksResult,
   Section,
   Student,
   Paged,
@@ -793,6 +798,74 @@ export async function downloadRosterCsv(): Promise<{ blob: Blob; filename: strin
       blob: response.data as Blob,
       filename: match?.[1] ?? `roster-${today}.csv`,
     };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Who runs this student's college, and who watches their progress.
+ *
+ *  The one section of the student dashboard they cannot assemble from
+ *  anything else: they know their scores, they do not know who to ask about
+ *  them. */
+export async function getMyPeople(): Promise<MyPeople> {
+  try {
+    const response = await httpClient.get<MyPeople>(
+      `${BASE}/students/me/people`, withInstitutionAuth());
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Set a piece of work for one or many students. Faculty only.
+ *
+ *  Returns per-student results rather than failing wholesale, so a bad id in a
+ *  section of forty does not lose the other thirty-nine. */
+export async function setTasks(body: SetTasksRequest): Promise<SetTasksResult> {
+  try {
+    const response = await httpClient.post<SetTasksResult>(
+      `${BASE}/tasks`, body, withInstitutionAuth());
+    return response.data;
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** The caller's own tasks. Outstanding first, soonest deadline first. */
+export async function listMyTasks(): Promise<StudentTask[]> {
+  try {
+    const response = await httpClient.get<StudentTaskList>(
+      `${BASE}/students/me/tasks`, withInstitutionAuth());
+    return response.data?.items ?? [];
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** One student's tasks, for staff who can already read that student. */
+export async function listStudentTasks(studentId: string): Promise<StudentTask[]> {
+  try {
+    const response = await httpClient.get<StudentTaskList>(
+      `${BASE}/students/${encodeURIComponent(studentId)}/tasks`,
+      withInstitutionAuth());
+    return response.data?.items ?? [];
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Tick a task off.
+ *
+ *  A STUDENT MAY DO THIS, and so may staff -- it is a to-do list, not an
+ *  assessment. Idempotent: a second click returns changed:false and leaves the
+ *  first completion time alone. */
+export async function completeTask(taskId: string): Promise<{ changed: boolean }> {
+  try {
+    const response = await httpClient.post<{ changed: boolean }>(
+      `${BASE}/tasks/${encodeURIComponent(taskId)}/done`, undefined,
+      withInstitutionAuth());
+    return response.data;
   } catch (err) {
     return fail(err);
   }
