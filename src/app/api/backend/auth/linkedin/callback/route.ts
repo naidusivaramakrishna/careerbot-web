@@ -18,7 +18,8 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 //      not set NODE_ENV=production, or one behind a proxy that does not forward
 //      x-forwarded-proto, had its auth cookies downgraded to cleartext HTTP.
 //
-// Both were reintroduced by the copy, so the copy is gone.
+// Both were reintroduced by the copy, so the copy is gone. If this route ever
+// needs different behaviour, change the shared helper -- do not fork it again.
 
 /**
  * Handle LinkedIn OAuth callback by proxying to backend and setting cookies properly.
@@ -86,7 +87,10 @@ export async function GET(request: NextRequest) {
         request.headers.get('x-forwarded-proto') === 'https';
 
       backendResponse.headers.getSetCookie().forEach((cookie) => {
-        response.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest, request.headers.get('host')));
+        response.headers.append(
+          'Set-Cookie',
+          sanitiseCookie(cookie, isSecureRequest, request.headers.get('host')),
+        );
       });
 
       console.log('[LinkedIn OAuth] Cookies set for frontend domain');
