@@ -1,12 +1,11 @@
 import { CircleCheck, Sparkles } from 'lucide-react';
-import Image from 'next/image';
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { updateProfile } from '@/api/userApi';
 import { ProfileData } from '../_types/ProfileData';
 import { useProfileContext } from '../context/ProfileContext';
 import { useDashboard } from '@/contexts/DashboardContext';
-import { useAIGeneration } from '@/hooks/useAIDescriptionGenerator';
+import { useAISuggestions } from '@/app/(resume)/builder/creation/_hooks/useAISuggestions';
 import { logger } from '@/lib/logger';
 import { formatPhoneNumber } from '../_utils/resumeMapper';
 
@@ -35,7 +34,21 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
     const [saving, setSaving] = useState(false);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-    const { generateSummary, isGenerating } = useAIGeneration();
+    const {
+        loadingIndex,
+        suggestions,
+        generateSuggestions,
+    } = useAISuggestions();
+
+    useEffect(() => {
+        if (suggestions[0] && suggestions[0].length > 0) {
+            const generatedSummary = suggestions[0][0];
+            setTempProfile((prev) => ({
+                ...prev,
+                personalInformation: { ...prev.personalInformation, summary: generatedSummary },
+            }));
+        }
+    }, [suggestions, setTempProfile]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -123,25 +136,33 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
         focusGithub: () => githubRef.current?.focus(),
     }));
 
-    const handleGenerateSummary = async () => {
+    const handleGenerateSummary = () => {
         if (!tempProfile.personalInformation?.headline?.trim()) {
             toast.error("Please enter a headline first to generate a summary.");
             return;
         }
-        const description = await generateSummary({
-            fullName: tempProfile.personalInformation.fullName,
-            headline: tempProfile.personalInformation.headline,
-            location: tempProfile.personalInformation.location,
-            skills: tempProfile.skills,
-        });
-        if (description) {
-            setTempProfile((prev) => ({
-                ...prev,
-                personalInformation: { ...prev.personalInformation, summary: description },
-            }));
-        }
-        toast.success("Summary generated!");
+
+        const skillsList = tempProfile.skills?.join(", ") || "";
+
+        const prompt = `Generate a concise and professional summary for a resume based on the following profile information:
+Name: ${tempProfile.personalInformation.fullName || ""}
+Headline: ${tempProfile.personalInformation.headline}
+Location: ${tempProfile.personalInformation.location || ""}
+Skills: ${skillsList}
+
+Requirements:
+- Length: 3-4 lines maximum (approximately 30-50 words)
+- Start directly with a professional identity or key strength
+- Highlight years of experience (if known) and core competencies
+- Include the skills mentioned above where relevant
+- Focus on unique value proposition and impact
+- Avoid generic phrases like "hardworking," "team player," or "seeking opportunities"
+
+Return ONLY the summary text, no numbering or labels.`;
+
+        generateSuggestions(0, prompt, "summary");
     };
+
 
     const inputClass = (name: string, disabled = false) =>
         `w-full text-sm border rounded-lg px-3 py-2.5 outline-none transition
@@ -205,12 +226,17 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
             <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                     <label className="text-xs font-medium text-gray-600">Professional Summary</label>
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                        <Image src="/assets/icons/magic-pencil.svg" className="w-3.5 h-3.5" width={12} height={12} alt="magic-pencil" />
-                        Let AI help you write this summary...
-                    </div>
+                    <button
+                        type="button"
+                        disabled={loadingIndex === 0}
+                        onClick={handleGenerateSummary}
+                        className="flex items-center gap-2 px-4 py-1.5 text-xs font-medium text-white cursor-pointer bg-linear-to-br from-[#194386] to-[#3b6ecb] hover:bg-blue-700 rounded-full disabled:bg-gray-400 transition"
+                    >
+                        <Sparkles className={`w-4 h-4 ${loadingIndex === 0 ? 'animate-pulse' : ''}`} />
+                        {loadingIndex === 0 ? "Generating..." : "AI Writer"}
+                    </button>
                 </div>
-                <div className="relative">
+                <div>
                     <textarea
                         rows={5}
                         value={tempProfile.personalInformation?.summary || ""}
@@ -219,27 +245,13 @@ const PersonalInfoSection = forwardRef(({ tempProfile, setTempProfile, setProfil
                         id="summary"
                         data-testid="summary-textarea"
                         placeholder="Short bio, career goals, highlights..."
-                        className={`w-full text-sm border rounded-lg px-3 py-2.5 pr-10 outline-none transition resize-none
+                        className={`w-full text-sm border rounded-lg px-3 py-2.5 outline-none transition resize-none
                                     focus:ring-2 focus:ring-[#2257a7]/20 focus:border-[#2257a7] focus:bg-white
                                     ${fieldErrors['summary']
                                 ? 'border-red-400 bg-red-50'
                                 : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                             }`}
                     />
-                    <span
-                        role="button"
-                        title={isGenerating ? 'Generating summary…' : 'Generate AI summary'}
-                        aria-label={isGenerating ? 'Generating summary…' : 'Generate AI summary'}
-                        className={`absolute right-3 top-3 ${isGenerating ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                        onClick={isGenerating ? undefined : handleGenerateSummary}
-                    >
-                        <Sparkles
-                            className={`w-4 h-4 transition-colors ${isGenerating
-                                ? 'text-gray-300 animate-pulse'
-                                : 'text-[#2257a7] hover:text-[#1a4590]'
-                            }`}
-                        />
-                    </span>
                     {fieldErrors['summary'] && (
                         <p role="alert" className="text-red-500 text-xs mt-1">{fieldErrors['summary']}</p>
                     )}

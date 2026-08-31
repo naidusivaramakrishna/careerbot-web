@@ -78,6 +78,7 @@ export const ScoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const markScoreStale = useCallback(() => {
     setScoreStaleState(true);
+    setCanonicalStatusState("stale");
   }, []);
 
   const resetCanonicalScore = useCallback(() => {

@@ -854,7 +854,7 @@ export const getResumeScore = async (
 
     await triggerScoreCalculation(resumeId);
 
-    const maxAttempts = 10;
+    const maxAttempts = 30;
     const pollInterval = 2000;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -916,7 +916,7 @@ export const deleteResume = async (resumeId: string): Promise<void> => {
 };
 
 // ==================== AUTO-SAVE RESUME ====================
-export type AutoSaveResumeResponse = ResumeResponse & { warnings?: string[] };
+export type AutoSaveResumeResponse = ResumeResponse & { warnings?: Array<string | { field?: string; message?: string; severity?: string; type?: string }> };
 
 export const autoSaveResume = async (
   resumeId: string,

@@ -250,7 +250,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       newFormData["dateOfBirth"] = resumeData.personalInfo?.dateOfBirth || "";
       newFormData["nationality"] = resumeData.personalInfo?.nationality || "";
       newFormData["category"] = resumeData.personalInfo?.category || "";
-      newFormData["languages"] = resumeData.personalInfo?.languages || "";
+      newFormData["knownLanguages"] = resumeData.personalInfo?.languages || "";
       newFormData["fathersName"] = resumeData.personalInfo?.fathersName || "";
       newFormData["gender"] = resumeData.personalInfo?.gender || "";
       newFormData["maritalStatus"] = resumeData.personalInfo?.maritalStatus || "";
@@ -578,7 +578,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       Interests: resumeData.interests.some(
         (interest) => isFilled(interest.name)),
       Languages: resumeData.languages.some(
-        (lang) => isFilled(lang.language)),
+        (lang) => isFilled(lang.name)),
       Publications: resumeData.publications.some(
         (pub) => isFilled(pub.title)),
       Patents: (resumeData.patents ?? []).some(

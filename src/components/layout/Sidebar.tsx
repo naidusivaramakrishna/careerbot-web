@@ -107,7 +107,7 @@ const NAV_GROUPS: {
     label: "GENERATE",
     items: [
       { id: "cover_letter", label: "Cover Letter",   icon: IcoCoverLetter, path: "/cover-letter/history" },
-      { id: "interview_notes",        label: "Interview Notes",          icon: IcoNotes,       path: "/notes/generate" },
+      { id: "interview_notes", label: "Interview Notes", icon: IcoNotes, path: "/notes/generate" },
     ],
   },
   {
@@ -116,47 +116,12 @@ const NAV_GROUPS: {
       { id: "mock_interview", label: "Mock Interview",  icon: IcoInterview, path: "/mock-interview/live" },
       { id: "comm_assess",   label: "Communication",   icon: IcoCommunication, path: "/communication/start" },
       { id: "mock_test",     label: "Mock Test",       icon: IcoMockTest,  path: "/mock-test" },
-      { id: "coding_test",   label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test", flag: "NEXT_PUBLIC_CODING_TEST_ENABLED" },
+      { id: "coding_test",   label: "Coding Practice", icon: IcoCodingTest, path: "/coding-test" },
     ],
   },
 ];
 
-// Feature-flag pruning for nav items.
-//
-// IMPORTANT (Codex WEB-1.1 P2): Next only statically inlines
-// `process.env.NEXT_PUBLIC_*` when the reference is a LITERAL property
-// access (e.g. `process.env.NEXT_PUBLIC_CODING_TEST_ENABLED`). A
-// dynamic lookup like `process.env[someVarName]` is NOT inlined into
-// the client bundle and evaluates to `undefined` at runtime in the
-// browser - which would silently hide every flagged item even when
-// the env var IS set, AND cause an SSR/CSR hydration mismatch
-// (server reads env fine, client doesn't).
-//
-// Fix: maintain a STATIC map keyed by flag name. Each value is read
-// via a literal property access so Next can inline it. To add a new
-// flag, add a row here AND set `flag: "..."` on the nav item.
-const STATIC_FLAGS: Record<string, boolean> = {
-  NEXT_PUBLIC_CODING_TEST_ENABLED:
-    process.env.NEXT_PUBLIC_CODING_TEST_ENABLED !== "false",
-};
-
-type NavItem = {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  path: string;
-  smartNav?: boolean;
-  showBadge?: boolean;
-  flag?: string;
-};
-const isItemEnabled = (item: NavItem): boolean =>
-  !item.flag || STATIC_FLAGS[item.flag] === true;
-
-// Computed at module scope: NEXT_PUBLIC_* is baked at build time,
-// so the result is stable for the whole client session.
-const VISIBLE_NAV_GROUPS = NAV_GROUPS
-  .map((group) => ({ ...group, items: group.items.filter(isItemEnabled) }))
-  .filter((group) => group.items.length > 0);
+const VISIBLE_NAV_GROUPS = NAV_GROUPS;
 
 const EXPANDED_PATHS = ["/dashboard", "/profile", "/atslogin", "/tracker", "/notes"];
 

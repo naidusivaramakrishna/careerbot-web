@@ -1,4 +1,4 @@
-import { Bold, Italic, List, ListOrdered, Underline, Sparkles } from "lucide-react";
+import { Bold, Italic, List, ListOrdered, Underline } from "lucide-react";
 import { useRef, useEffect } from "react";
 import { setSafeInnerHTML } from "@/lib/setSafeInnerHTML";
 
@@ -9,9 +9,6 @@ interface RichTextEditorProps {
     minHeight?: string;
     disabled?: boolean;
     className?: string;
-    onAIGenerate?: () => void;
-    isGenerating?: boolean;
-    showAIButton?: boolean;
 }
 
 export default function RichTextEditor({
@@ -21,9 +18,6 @@ export default function RichTextEditor({
     minHeight = "150px",
     disabled = false,
     className = "",
-    onAIGenerate,
-    isGenerating = false,
-    showAIButton = true,
 }: RichTextEditorProps) {
     const editorRef = useRef<HTMLDivElement>(null);
 
@@ -123,39 +117,16 @@ export default function RichTextEditor({
                 </button>
             </div>
 
-            {/* Editor Content with AI Button */}
-            <div className="relative">
-                <div
-                    ref={editorRef}
-                    contentEditable={!disabled}
-                    onInput={handleContentChange}
-                    className="border border-t-0 border-neutral-200 rounded-b-lg p-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-neutral-500 editor-content"
-                    style={{ minHeight }}
-                    data-placeholder={placeholder}
-                    suppressContentEditableWarning
-                />
-
-                {/* AI Generate Button - Top Right Corner */}
-                {showAIButton && onAIGenerate && (
-                    <button
-                        type="button"
-                        onClick={onAIGenerate}
-                        disabled={isGenerating || disabled}
-                        className={`absolute top-3 right-3 p-2 rounded-full transition-all ${isGenerating || disabled
-                                ? 'bg-gray-100 cursor-not-allowed'
-                                : 'bg-blue-50 hover:bg-blue-100 cursor-pointer'
-                            }`}
-                        title={isGenerating ? "Generating..." : "Generate with AI"}
-                    >
-                        <Sparkles
-                            className={`w-5 h-5 transition-colors ${isGenerating
-                                    ? 'text-gray-400 animate-pulse'
-                                    : 'text-[#1F00EC]'
-                                }`}
-                        />
-                    </button>
-                )}
-            </div>
+            {/* Editor Content */}
+            <div
+                ref={editorRef}
+                contentEditable={!disabled}
+                onInput={handleContentChange}
+                className="border border-t-0 border-neutral-200 rounded-b-lg p-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-neutral-500 editor-content"
+                style={{ minHeight }}
+                data-placeholder={placeholder}
+                suppressContentEditableWarning
+            />
         </div>
     );
 }

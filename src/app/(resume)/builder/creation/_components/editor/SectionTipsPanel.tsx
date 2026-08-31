@@ -110,7 +110,7 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
       return (resumeData.interests ?? []).map(e => `${e.name} ${e.description ?? ""}`).join(" ");
     }
     if (["languages", "intelligencepenalty"].includes(s)) {
-      return (resumeData.languages ?? []).map(e => `${e.language} ${e.proficiency ?? ""}`).join(", ");
+      return (resumeData.languages ?? []).map(e => `${e.name} ${e.proficiency ?? ""}`).join(", ");
     }
     if (s === "publications") {
       return (resumeData.publications ?? []).map(e => e.title).filter(Boolean).join(", ");
@@ -206,8 +206,21 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
               const isUndoing = undoBtnState === "loading";
 
               return isAuto ? (
-                // ── Auto fix: full clickable button ──
-                <button
+                // ── Auto fix: a clickable CARD, not a <button> ──
+                //
+                // It has to be a div: the Undo control below is itself a
+                // <button>, and the HTML spec forbids interactive content
+                // inside <button>. React renders it, but the parser implicitly
+                // closes the outer button when it meets the inner one, so the
+                // server DOM and the client tree disagree — Next 15 raises a
+                // hydration error and discards the mismatched subtree. The
+                // visible result was an Undo control rendered in the wrong
+                // place and dead to clicks, because a disabled ancestor
+                // suppresses pointer events on its descendants in WebKit.
+                //
+                // The manual-fix branch below already uses a div for exactly
+                // this reason and its Undo button works.
+                <div
                   key={s.id}
                   type="button"
                   disabled={isLoading || isUndoing}
@@ -261,7 +274,7 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
                     </div>
                   </div>
                   <span>{s.message}</span>
-                </button>
+                </div>
               ) : (
                 // ── Manual fix: non-clickable card + mark-as-done icon ──
                 <div

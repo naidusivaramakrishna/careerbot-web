@@ -6,6 +6,7 @@
  * handles both success and error responses.
  *
  * Covers:
+ *   - isAuthenticated: GETs /auth/profile, resolves true/false, optional skip-redirect header
  *   - signIn:   POSTs to /api/backend/auth/signin, returns tokens, stores tenant mapping
  *   - signUp:   POSTs to /api/backend/auth/signup, returns success, stores tenant mapping
  *   - signOut:  POSTs to /api/backend/auth/signout (fire-and-forget)
@@ -29,6 +30,7 @@ import {
   requestPasswordReset,
   confirmPasswordReset,
   refreshAccessToken,
+  isAuthenticated,
 } from '@/api/authApi';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,6 +43,61 @@ const makeResponse = <T>(data: T, status = 200): AxiosResponse<T> =>
     headers: {},
     config: { headers: {} } as never,
   }) as unknown as AxiosResponse<T>;
+
+// ─── isAuthenticated ────────────────────────────────────────────────────────
+
+describe('Auth API — isAuthenticated', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('GETs /auth/profile without a skip header by default', async () => {
+    const spy = vi.spyOn(httpClient, 'get').mockResolvedValueOnce(makeResponse({}));
+
+    await isAuthenticated();
+
+    expect(spy).toHaveBeenCalledWith('/auth/profile', undefined);
+  });
+
+  it('sends X-Skip-Login-Redirect when skipAuthRedirect is requested', async () => {
+    // REGRESSION GUARD, and it used to pin the opposite header.
+    //
+    // A public page's probe must not bounce an anonymous visitor to login --
+    // but it MUST still refresh an expired access token for a visitor who is
+    // signed in. X-Skip-Login-Redirect does exactly that. X-Skip-Auth-Redirect
+    // short-circuits the 401 BEFORE the refresh block (src/lib/http.ts), which
+    // reported a signed-in subscriber as signed out on the pricing page.
+    const spy = vi.spyOn(httpClient, 'get').mockResolvedValueOnce(makeResponse({}));
+
+    await isAuthenticated({ skipAuthRedirect: true });
+
+    expect(spy).toHaveBeenCalledWith('/auth/profile', {
+      headers: { 'X-Skip-Login-Redirect': 'true' },
+    });
+  });
+
+  it('sends X-Skip-Auth-Redirect only when skipRefresh is asked for', async () => {
+    // The no-refresh-at-all case: "am I really logged out?", e.g. straight
+    // after signout, where silently re-minting a token is the wrong answer.
+    const spy = vi.spyOn(httpClient, 'get').mockResolvedValueOnce(makeResponse({}));
+
+    await isAuthenticated({ skipRefresh: true });
+
+    expect(spy).toHaveBeenCalledWith('/auth/profile', {
+      headers: { 'X-Skip-Auth-Redirect': 'true' },
+    });
+  });
+
+  it('resolves to true on a successful profile fetch', async () => {
+    vi.spyOn(httpClient, 'get').mockResolvedValueOnce(makeResponse({}));
+
+    await expect(isAuthenticated()).resolves.toBe(true);
+  });
+
+  it('resolves to false (never rejects) on a failed profile fetch', async () => {
+    vi.spyOn(httpClient, 'get').mockRejectedValueOnce({ response: { status: 401 } });
+
+    await expect(isAuthenticated({ skipAuthRedirect: true })).resolves.toBe(false);
+  });
+});
 
 // ─── signIn ───────────────────────────────────────────────────────────────────
 

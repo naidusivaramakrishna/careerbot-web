@@ -73,7 +73,10 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
 
   // For custom/unknown category keys, populate skill_id_map using both the raw
   // camelCase key AND a display-name form so Skills.tsx lookup always finds the ID.
-  const PREDEFINED = new Set(['programmingLanguages', 'frameworks', 'softSkills', 'projectManagement', 'marketingSales']);
+  const PREDEFINED = new Set([
+    'programmingLanguages', 'frameworks', 'softSkills', 'projectManagement', 'marketingSales',
+    'deletedCategories', 'deleted_categories', 'hiddenCategories', 'hidden_categories', 'customSkills',
+  ]);
   const customCategories: CustomCategory[] = [];
 
   // Convert camelCase or snake_case key to "Human Readable Name"
@@ -267,7 +270,7 @@ export interface ResumeData {
   }[];
   languages: {
     id?: string;
-    language: string;
+    name: string;
     proficiency: string;
   }[];
   publications: {
@@ -959,7 +962,10 @@ export const ResumeProvider = ({ children, resumeId: resumeIdProp, source }: Res
           awards: normalizeId((data.awards || []) as Record<string, unknown>[]) as ResumeData["awards"],
           hobbies: normalizeId((data.hobbies || []) as Record<string, unknown>[]) as ResumeData["hobbies"],
           interests: normalizeId((data.interests || []) as Record<string, unknown>[]) as ResumeData["interests"],
-          languages: normalizeId((data.languages || []) as Record<string, unknown>[]) as ResumeData["languages"],
+          languages: normalizeId((data.languages || []) as Record<string, unknown>[]).map(l => ({
+            ...l,
+            name: (l.name as string) || (l.language as string) || "",
+          })) as ResumeData["languages"],
           publications: normalizeId((data.publications || []) as Record<string, unknown>[]) as ResumeData["publications"],
           customSections: data.customSections || [],
         };

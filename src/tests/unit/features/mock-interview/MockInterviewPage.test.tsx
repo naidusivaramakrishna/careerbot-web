@@ -8,8 +8,6 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   pathname: "/mock-interview/live",
   params: { sessionId: "live-session-123" } as Record<string, string>,
-  consentGiven: true,
-  setConsentGiven: vi.fn(),
   stageState: {
     notes_generated: false,
     english_read: false,
@@ -38,8 +36,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/(interview)/mock-interview/_context/MockInterviewContext", () => ({
   useMockInterview: () => ({
     stageState: mocks.stageState,
-    consentGiven: mocks.consentGiven,
-    setConsentGiven: mocks.setConsentGiven,
     activeSession: null,
     dismissActiveSession: vi.fn(),
     userProgress: null,
@@ -186,7 +182,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.pathname = "/mock-interview/live";
   mocks.params = { sessionId: "live-session-123" };
-  mocks.consentGiven = true;
   mocks.isAuthenticated = false;
   mocks.authLoading = false;
   mocks.stageState = { notes_generated: false, english_read: false, practice_answered: 0, practice_total: 0, readiness_passed: false, history_count: 0 };
@@ -306,7 +301,6 @@ describe("ReadinessGate", () => {
 
 describe("LiveSetupPage", () => {
   it("requires consent before preflight and returns to landing on decline", async () => {
-    mocks.consentGiven = false;
     const LiveSetupPage = await importLiveSetupPage();
     render(<LiveSetupPage />);
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));

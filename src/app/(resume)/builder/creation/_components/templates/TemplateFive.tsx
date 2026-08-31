@@ -392,7 +392,7 @@ const TemplateFive: React.FC<Props> = ({ data, onPageCountChange }) => {
               <div style={baseTextStyle}>
                 {languages.map((lang, idx) => (
                   <span key={idx}>
-                    <span className="font-semibold" style={titleStyle}>{lang.language}</span>
+                    <span className="font-semibold" style={titleStyle}>{lang.name}</span>
                     {lang.proficiency && <span> ({lang.proficiency})</span>}
                     {idx < languages.length - 1 ? " | " : ""}
                   </span>

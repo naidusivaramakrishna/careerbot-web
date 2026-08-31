@@ -14,7 +14,10 @@ export function useAuth(): UseAuthReturn {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const result = await isAuthenticated();
+        // This hook is used from public landing pages an anonymous visitor
+        // can land on (e.g. /jobs, /ats, /mock-interview) — skip the
+        // interceptor's redirect-to-login path on a 401.
+        const result = await isAuthenticated({ skipAuthRedirect: true });
         setAuthenticated(result);
       } catch (error) {
         setAuthenticated(false);

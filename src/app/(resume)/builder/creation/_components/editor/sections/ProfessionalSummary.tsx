@@ -17,6 +17,7 @@ import {
   FaRedoAlt,
 } from "react-icons/fa";
 import NibPenSparkleIcon from "../NibPenSparkleIcon";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 
 // Reusable Toolbar Button Component

@@ -633,7 +633,7 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 <div key={idx} style={{ display: "flex", alignItems: "flex-start", fontSize: "11px", ...baseTextStyle }}>
                   <span style={{ marginRight: "6px" }}>•</span>
                   <span>
-                    <span style={{ ...titleStyle, fontSize: "11px" }}>{lang.language} </span> <span style={{ fontSize: "11px" }}> - {lang.proficiency}</span>
+                    <span style={{ ...titleStyle, fontSize: "11px" }}>{lang.name} </span> <span style={{ fontSize: "11px" }}> - {lang.proficiency}</span>
                   </span>
                 </div>
               ))}
@@ -1277,7 +1277,7 @@ const Template3: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
               <div style={{ marginBottom: "6px", fontSize: "12px" }}>
                 <span style={{ ...titleStyle, fontSize: "12px", fontWeight: "600" }}>Languages Known:</span>
                 <span style={{ marginLeft: "4px" }}>
-                  {personalInfo?.languages || languages?.map((lang: { language: string }) => lang.language).join(", ")}
+                  {personalInfo?.languages || languages?.map((lang: { name: string }) => lang.name).join(", ")}
                 </span>
               </div>
             )}

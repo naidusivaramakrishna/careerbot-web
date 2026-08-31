@@ -1,9 +1,10 @@
 import { Experience } from "@/api/userApi";
 import { ValidationError } from "../../_types/experience-types";
-import { useAIGeneration } from "@/hooks/useAIDescriptionGenerator";
+import { useAISuggestions } from "@/app/(resume)/builder/creation/_hooks/useAISuggestions";
 import RichTextEditor from "@/components/common/Richtexteditor";
-import Image from "next/image";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 interface Props {
     experienceForm: Partial<Experience>;
@@ -30,7 +31,18 @@ export default function ExperienceForm({
     loading,
     validationErrors,
 }: Props) {
-    const { generateDescription, isGenerating } = useAIGeneration();
+    const {
+        loadingIndex,
+        suggestions,
+        generateSuggestions,
+    } = useAISuggestions();
+
+    useEffect(() => {
+        if (suggestions[0] && suggestions[0].length > 0) {
+            const htmlContent = `<ul>${suggestions[0].map((suggestion: string) => `<li>${suggestion}</li>`).join('')}</ul>`;
+            setExperienceForm((prev) => ({ ...prev, description: htmlContent }));
+        }
+    }, [suggestions, setExperienceForm]);
 
     const getFieldError = (field: string) => {
         const error = validationErrors.find(
@@ -56,22 +68,29 @@ export default function ExperienceForm({
         setExperienceForm((prev) => ({ ...prev, description: content }));
     };
 
-    const handleGenerateDescription = async () => {
+    const handleGenerateDescription = () => {
         if (!experienceForm.job_title?.trim()) {
             toast.error("Please enter a position/job title first to generate a description.");
             return;
         }
-        const description = await generateDescription({
-            job_title: experienceForm.job_title,
-            company: experienceForm.company,
-            job_type: experienceForm.job_type,
-            location: experienceForm.location,
-        });
-        if (description) {
-            const lines = description.split('\n').filter(line => line.trim());
-            const htmlContent = `<ul>${lines.map(line => `<li>${line.trim()}</li>`).join('')}</ul>`;
-            setExperienceForm((prev) => ({ ...prev, description: htmlContent }));
-        }
+
+        const prompt = `Generate a concise and professional job description based on the following work experience details:
+Position: ${experienceForm.job_title}
+Company: ${experienceForm.company || ""}
+Job Type: ${experienceForm.job_type || ""}
+Location: ${experienceForm.location || ""}
+
+Requirements:
+- Generate 5-7 bullet points (one per line)
+- Start each point with an action verb
+- Highlight key responsibilities and achievements
+- Include quantifiable metrics where relevant
+- Focus on impact and value delivered
+- Keep each point concise (1-2 lines max)
+
+Return ONLY the bullet points, one per line, without numbering or dashes.`;
+
+        generateSuggestions(0, prompt, "experience");
     };
 
     const inputClass = (field: string) =>
@@ -131,22 +150,23 @@ export default function ExperienceForm({
             <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                     <label className="text-xs font-medium text-gray-600">Description</label>
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                        <Image src="/assets/icons/magic-pencil.svg" className="w-3.5 h-3.5" width={12} height={12} alt="magic-pencil" />
-                        Let AI help you write the description...
-                    </div>
+                    <button
+                        type="button"
+                        disabled={loadingIndex === 0}
+                        onClick={handleGenerateDescription}
+                        className="flex items-center gap-2 px-4 py-1.5 text-xs font-medium text-white cursor-pointer bg-linear-to-br from-[#194386] to-[#3b6ecb] hover:bg-blue-700 rounded-full disabled:bg-gray-400 transition"
+                    >
+                        <Sparkles className={`w-4 h-4 ${loadingIndex === 0 ? 'animate-pulse' : ''}`} />
+                        {loadingIndex === 0 ? "Generating..." : "AI Writer"}
+                    </button>
                 </div>
                 <RichTextEditor
                     value={experienceForm.description || ""}
                     onChange={handleDescriptionChange}
                     placeholder="Describe your role and responsibilities..."
                     minHeight="150px"
-                    disabled={isGenerating}
-                    onAIGenerate={handleGenerateDescription}
-                    isGenerating={isGenerating}
-                    showAIButton={true}
+                    disabled={false}
                 />
-                {isGenerating && <p className="text-xs text-[#2257a7]">Generating description...</p>}
                 {getFieldError("description") && <p role="alert" className="text-red-500 text-xs">{getFieldError("description")}</p>}
             </div>
 
