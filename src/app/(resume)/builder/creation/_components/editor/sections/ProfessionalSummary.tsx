@@ -176,20 +176,7 @@ Innovative UX Designer specializing in user-centered design methodologies, creat
   const handleSuggestionSelect = (suggestion: string) => {
     const el = editorRef.current;
     if (el) {
-      const text = suggestion.replace(/<[^>]*>/g, '').trim();
-      const current = el.innerHTML.trim();
-      if (!current || current === '<br>') {
-        el.innerHTML = `<ul><li>${text}</li></ul>`;
-      } else {
-        const uls = el.getElementsByTagName('ul');
-        if (uls.length > 0) {
-          const li = document.createElement('li');
-          li.textContent = text;
-          uls[uls.length - 1].appendChild(li);
-        } else {
-          el.innerHTML += `<ul><li>${text}</li></ul>`;
-        }
-      }
+      appendSuggestionBullet(el, suggestion);
       handleChange(el.innerHTML);
 
       setTimeout(() => {

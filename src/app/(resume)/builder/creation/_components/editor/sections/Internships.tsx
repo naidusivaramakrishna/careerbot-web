@@ -29,6 +29,7 @@ import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
 import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface InternshipEntry {
   company: string;
@@ -400,20 +401,7 @@ Optimized database queries and API endpoints resulting in 50% faster load times 
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      const text = suggestion.replace(/<[^>]*>/g, '').trim();
-      const current = el.innerHTML.trim();
-      if (!current || current === '<br>') {
-        el.innerHTML = `<ul><li>${text}</li></ul>`;
-      } else {
-        const uls = el.getElementsByTagName('ul');
-        if (uls.length > 0) {
-          const li = document.createElement('li');
-          li.textContent = text;
-          uls[uls.length - 1].appendChild(li);
-        } else {
-          el.innerHTML += `<ul><li>${text}</li></ul>`;
-        }
-      }
+      appendSuggestionBullet(el, suggestion);
       handleChange(editIndex, "description", el.innerHTML);
 
       setTimeout(() => {
