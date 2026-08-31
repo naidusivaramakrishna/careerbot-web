@@ -463,6 +463,23 @@ const buildResultDiagnostics = (
   };
 };
 
+/**
+ * Fetch results from the /submit endpoint which returns full data with explanations
+ */
+export const getParentSessionResultFromSubmit = async (parentSessionId: string): Promise<TestResult> => {
+  try {
+    console.log('[getParentSessionResultFromSubmit] Calling /submit endpoint...');
+    const response = await httpClient.get<any>(`/mock-test/parent/${parentSessionId}/submit`);
+    console.log('[getParentSessionResultFromSubmit] Response received:', response.data);
+    let rawData = response.data?.data || response.data;
+    if (rawData?.tests && Array.isArray(rawData.tests)) rawData = rawData.tests[0];
+    return mapRawResult(rawData);
+  } catch (err: any) {
+    console.error('[getParentSessionResultFromSubmit] Failed:', err?.response?.status, err?.message);
+    throw err;
+  }
+};
+
 export const getParentSessionResult = async (parentSessionId: string): Promise<TestResult> => {
   const MAX_ATTEMPTS = 8;
   const POLL_DELAY_MS = 2500;
@@ -471,11 +488,65 @@ export const getParentSessionResult = async (parentSessionId: string): Promise<T
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const response = await retryWithBackoff(
-        () => httpClient.get<any>(`/mock-test/parent/${parentSessionId}/result`),
-        3,
-        1000
-      );
+      // Try /result endpoint first (has full data with explanations, solution_steps, common_mistakes)
+      let response: any;
+
+      try {
+        console.log(`[getParentSessionResult] Attempt ${attempt}/${MAX_ATTEMPTS}: Fetching from /result endpoint...`);
+        const resultUrl = `/mock-test/parent/${parentSessionId}/result`;
+        console.log(`[getParentSessionResult] URL: ${resultUrl}`);
+
+        response = await retryWithBackoff(
+          () => httpClient.get<any>(resultUrl),
+          3,
+          1000
+        );
+
+        console.log('[getParentSessionResult] ✓ /result succeeded');
+        console.log('[getParentSessionResult] Response data keys:', Object.keys(response.data || {}));
+
+        if (response.data?.questions) {
+          console.log(`[getParentSessionResult] ✓ Found ${response.data.questions.length} questions`);
+          if (response.data.questions[0]) {
+            const q1 = response.data.questions[0];
+            console.log('[getParentSessionResult] Q1 raw keys:', Object.keys(q1));
+            console.log('[getParentSessionResult] Q1 explanation:', q1.explanation ? q1.explanation.substring(0, 150) + '...' : 'NOT FOUND');
+            console.log('[getParentSessionResult] Q1 solution_steps:', q1.solution_steps ? `${q1.solution_steps.length} steps` : 'NOT FOUND');
+            console.log('[getParentSessionResult] Q1 common_mistakes:', q1.common_mistakes ? `${q1.common_mistakes.length} mistakes` : 'NOT FOUND');
+          }
+        } else {
+          console.warn('[getParentSessionResult] ⚠️ No questions in /result response');
+        }
+      } catch (submitErr: any) {
+        const status = submitErr?.response?.status;
+        const message = submitErr?.message;
+        console.error(`[getParentSessionResult] ✗ /result failed: HTTP ${status} - ${message}`);
+        console.log('[getParentSessionResult] Retrying /result endpoint...');
+
+        try {
+          const resultUrl = `/mock-test/parent/${parentSessionId}/result`;
+          console.log(`[getParentSessionResult] URL: ${resultUrl}`);
+
+          response = await retryWithBackoff(
+            () => httpClient.get<any>(resultUrl),
+            3,
+            1000
+          );
+
+          console.log('[getParentSessionResult] ✓ /result succeeded');
+          console.log('[getParentSessionResult] Response data keys:', Object.keys(response.data || {}));
+
+          if (response.data?.questions && response.data.questions[0]) {
+            const q1 = response.data.questions[0];
+            console.log('[getParentSessionResult] Q1 explanation:', q1.explanation ? 'YES' : 'NO');
+            console.log('[getParentSessionResult] Q1 solution_steps:', q1.solution_steps ? 'YES' : 'NO');
+            console.log('[getParentSessionResult] Q1 common_mistakes:', q1.common_mistakes ? 'YES' : 'NO');
+          }
+        } catch (resultErr: any) {
+          console.error(`[getParentSessionResult] ✗ /result also failed: ${resultErr?.message}`);
+          throw resultErr;
+        }
+      }
 
       let rawData = response.data?.data || response.data;
       if (rawData?.tests && Array.isArray(rawData.tests)) rawData = rawData.tests[0];
@@ -628,19 +699,43 @@ const mapRawResult = (rawData: any): TestResult => {
 
   // Map per-question review data
   const mappedQuestions = Array.isArray(rawData.questions)
-    ? rawData.questions.map((q: any) => ({
-        question_id: q.question_id,
-        question_text: q.question_text,
-        options: Array.isArray(q.options) ? q.options : [],
-        user_answer: q.user_answer ?? '',
-        correct_answer: q.correct_answer ?? '',
-        is_correct: q.is_correct ?? false,
-        explanation: q.explanation ?? '',
-        solution_steps: Array.isArray(q.solution_steps) ? q.solution_steps : null,
-        common_mistakes: Array.isArray(q.common_mistakes) ? q.common_mistakes : null,
-        difficulty: q.difficulty,
-        time_taken_seconds: q.time_taken_seconds,
-      }))
+    ? rawData.questions.map((q: any, idx: number) => {
+        // Capture all explanation-related fields from backend
+        const explanation = q.explanation ?? q.detail ?? '';
+        const solutionSteps = Array.isArray(q.solution_steps) ? q.solution_steps :
+                             Array.isArray(q.steps) ? q.steps : null;
+        const commonMistakes = Array.isArray(q.common_mistakes) ? q.common_mistakes :
+                              Array.isArray(q.mistakes) ? q.mistakes : null;
+
+        const mapped = {
+          question_id: q.question_id,
+          question_text: q.question_text,
+          options: Array.isArray(q.options) ? q.options : [],
+          user_answer: q.user_answer ?? '',
+          correct_answer: q.correct_answer ?? '',
+          is_correct: q.is_correct ?? false,
+          explanation: explanation,
+          solution_steps: solutionSteps,
+          common_mistakes: commonMistakes,
+          difficulty: q.difficulty,
+          time_taken_seconds: q.time_taken_seconds,
+        };
+
+        // Detailed logging for all questions
+        if (idx < 3) {
+          console.log(`[getParentSessionResult] Q${idx + 1} raw backend data:`, {
+            raw_q_keys: Object.keys(q),
+            explanation: q.explanation,
+            solution_steps: q.solution_steps,
+            common_mistakes: q.common_mistakes,
+            mapped_explanation: mapped.explanation,
+            mapped_solution_steps: mapped.solution_steps,
+            mapped_common_mistakes: mapped.common_mistakes,
+          });
+        }
+
+        return mapped;
+      })
     : [];
 
   // Derive strengths/improvements from section data when the backend
@@ -960,6 +1055,7 @@ export interface SessionMetadata {
   current_section_index?: number;
   progress?: number;
 }
+
 
 export const getSessionById = async (sessionId: string): Promise<SessionMetadata> => {
   try {
@@ -1316,5 +1412,58 @@ export const getLeaderboard = async (): Promise<Leaderboard> => {
     return leaderboardData;
   } catch (err: any) {
     throw err;
+  }
+};
+
+export interface QuestionExplanationRequest {
+  question_text: string;
+  options: string[];
+  correct_answer: string;
+  user_answer?: string;
+  is_correct?: boolean;
+}
+
+export interface QuestionExplanationResponse {
+  explanation: string;
+  solution_steps: string[];
+  common_mistakes: string[];
+}
+
+
+export const generateQuestionExplanation = async (
+  request: QuestionExplanationRequest
+): Promise<QuestionExplanationResponse> => {
+  try {
+    const prompt = `Briefly explain why "${request.correct_answer}" is correct.
+
+Q: ${request.question_text}
+
+Options: ${request.options.join(', ')}
+
+Why correct: ${request.correct_answer}
+${request.user_answer ? `Student chose: ${request.user_answer}` : 'Not answered'}
+
+Explain: Why this is right and others are wrong.`;
+
+    const aiResponse = await httpClient.post<{ content?: string; description?: string; summary?: string }>(
+      '/ai/generate-description',
+      { type: 'summary', prompt }
+    );
+
+    const explanation = aiResponse.data?.summary || aiResponse.data?.description || aiResponse.data?.content || '';
+
+    return {
+      explanation: explanation || '',
+      solution_steps: [],
+      common_mistakes: [],
+    };
+  } catch (err: any) {
+    console.log('[generateQuestionExplanation] AI unavailable, using fallback');
+    // Return fallback explanation instead of throwing
+    return {
+      explanation: '',
+      solution_steps: [],
+      common_mistakes: [],
+    };
   }
 };
