@@ -2,13 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const completeTask = vi.fn();
+const listStudentTasks = vi.fn();
 vi.mock('@/api/institutionApi', () => ({
   completeTask: (...a: unknown[]) => completeTask(...a),
+  listStudentTasks: (...a: unknown[]) => listStudentTasks(...a),
+  listMyTasks: vi.fn(),
   setTasks: vi.fn(),
 }));
 
 import { MyTasksCard } from '@/app/institution/_components/MyTasksCard';
 import { MyPeopleCard } from '@/app/institution/_components/MyPeopleCard';
+import { StudentTasksPanel } from '@/app/institution/_components/StudentTasksPanel';
 import type { StudentTask } from '@/types/institution';
 
 const DAY = 86_400_000;
@@ -18,7 +22,10 @@ const task = (over: Partial<StudentTask> = {}): StudentTask => ({
   status: 'pending', completed_at: null, set_by: 'f1', ...over,
 });
 
-beforeEach(() => completeTask.mockReset().mockResolvedValue({ changed: true }));
+beforeEach(() => {
+  completeTask.mockReset().mockResolvedValue({ changed: true });
+  listStudentTasks.mockReset().mockResolvedValue([]);
+});
 
 describe('the student task list', () => {
   it('shows what to do and when', () => {
@@ -124,5 +131,53 @@ describe('my people', () => {
       ...people, hods: [{ name: null, role: 'hod' as const }],
     }} />);
     expect(screen.getByText(/name not recorded/i)).toBeInTheDocument();
+  });
+});
+
+describe('the faculty view of one student’s tasks', () => {
+  it('answers "has this student done it", with the count', async () => {
+    /** The question a faculty member actually has, and the one the tasks page
+     *  promises. A roster-wide view would need a request per student; this
+     *  loads one student's tasks when somebody asks about that student. */
+    listStudentTasks.mockResolvedValue([
+      task({ id: 'a', title: 'Mock test', status: 'done',
+             completed_at: new Date().toISOString() }),
+      task({ id: 'b', title: 'Coding test' }),
+    ]);
+    render(<StudentTasksPanel studentId="s1" studentName="Ravi"
+                              onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/1 of 2 done/i))
+      .toBeInTheDocument());
+  });
+
+  it('shows WHEN something was finished, not just that it was', async () => {
+    /** The first question about a late submission is when it actually
+     *  arrived. */
+    listStudentTasks.mockResolvedValue([
+      task({ status: 'done', completed_at: '2026-08-20T10:00:00Z' }),
+    ]);
+    render(<StudentTasksPanel studentId="s1" studentName="Ravi"
+                              onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/^Done /)).toBeInTheDocument());
+  });
+
+  it('does NOT let a faculty member tick a student’s work off from here', async () => {
+    /** They can through the API -- it is a to-do list, not an assessment --
+     *  but from a roster it is one misclick away from marking work somebody
+     *  has not done. */
+    listStudentTasks.mockResolvedValue([task()]);
+    render(<StudentTasksPanel studentId="s1" studentName="Ravi"
+                              onClose={() => {}} />);
+    await waitFor(() => screen.getByText('Finish the mock test'));
+    expect(screen.queryByRole('button', { name: /mark .* as done/i }))
+      .not.toBeInTheDocument();
+  });
+
+  it('says so when nothing has been set', async () => {
+    listStudentTasks.mockResolvedValue([]);
+    render(<StudentTasksPanel studentId="s1" studentName="Ravi"
+                              onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/no tasks set yet/i))
+      .toBeInTheDocument());
   });
 });

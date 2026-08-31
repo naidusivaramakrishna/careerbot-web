@@ -6,6 +6,7 @@ import { GraduationCap } from 'lucide-react';
 import { useStudentsPaged } from '@/hooks/useInstitutionResource';
 import { RoleGuard } from '../_components/RoleGuard';
 import { SetTaskForm } from '../_components/SetTaskForm';
+import { StudentTasksPanel } from '../_components/StudentTasksPanel';
 import { ErrorNotice } from '../_components/ErrorNotice';
 import { EmptyState } from '../_components/EmptyState';
 import { CardListSkeleton } from '../_components/Skeletons';
@@ -29,6 +30,10 @@ import { CARD, INK } from '../_components/tokens';
  */
 export default function TasksPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // WHOSE TASKS ARE BEING LOOKED AT, separate from who is SELECTED. Reusing
+  // the selection would mean opening somebody's task list silently changed who
+  // the next task gets set for.
+  const [viewing, setViewing] = useState<{ id: string; name: string } | null>(null);
   const students = useStudentsPaged({ limit: 200 });
   const rows = useMemo(() => students.data?.items ?? [], [students.data]);
 
@@ -84,9 +89,14 @@ export default function TasksPage() {
 
             <ul className="divide-y divide-[#f0f0f0]">
               {rows.map((student) => (
-                <li key={student.id}>
-                  <label className="flex cursor-pointer items-center gap-3 px-4
-                                    py-2.5 hover:bg-[#f8fafc]">
+                <li key={student.id}
+                    className="flex items-center gap-2 px-4 hover:bg-[#f8fafc]">
+                  {/* The label wraps only the checkbox and the name. The
+                      Tasks button is a SIBLING, not nested inside it -- a
+                      control inside a label steals every click meant for it
+                      and silently toggles the checkbox instead. */}
+                  <label className="flex min-w-0 flex-1 cursor-pointer
+                                    items-center gap-3 py-2.5">
                     <input
                       type="checkbox"
                       checked={selected.has(student.id)}
@@ -102,12 +112,30 @@ export default function TasksPage() {
                       {student.admission_number}
                     </span>
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => setViewing({ id: student.id,
+                                                name: student.full_name })}
+                    className="shrink-0 rounded-md px-2 py-1 text-xs
+                               font-medium text-[#2557a7] hover:underline"
+                  >
+                    Tasks
+                  </button>
                 </li>
               ))}
             </ul>
           </section>
 
-          <div>
+          <div className="flex flex-col gap-5">
+            {viewing ? (
+              <StudentTasksPanel
+                key={viewing.id}
+                studentId={viewing.id}
+                studentName={viewing.name}
+                onClose={() => setViewing(null)}
+              />
+            ) : null}
+
             <SetTaskForm
               studentIds={[...selected]}
               /* CLEARED ON SUCCESS. Leaving the selection ticked after
