@@ -2,6 +2,7 @@ import { useState } from "react";
 import { generateAIDescription } from "@/api/suggestionGenerationApi";
 import type { AIContentType } from "@/api/suggestionGenerationApi";
 import logger from "@/lib/logger";
+import { toast } from "sonner";
 
 export function useAISuggestions() {
   const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
@@ -26,11 +27,7 @@ export function useAISuggestions() {
       setActivePopup(index);
     } catch (err) {
       logger.error("Error generating AI suggestions:", err);
-      setSuggestions((prev) => ({
-        ...prev,
-        [index]: ["⚠️ Error generating suggestions. Try again."],
-      }));
-      setActivePopup(index);
+      toast.error("Error generating suggestions. Please try again.");
     } finally {
       setLoadingIndex(null);
     }

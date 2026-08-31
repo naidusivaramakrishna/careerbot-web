@@ -671,7 +671,7 @@ const EditorTab: React.FC<Props> = ({
         dateOfBirth: formData["dateOfBirth"] || null,
         nationality: formData["nationality"] || null,
         category: formData["category"] || null,
-        languages: formData["knownLanguages"] || null,
+        languages: formData["languages"] || null,
         titlePrefix: formData["titlePrefix"] || null,
         qualifications: formData["qualifications"] || null,
         // Government Standard

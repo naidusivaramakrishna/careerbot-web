@@ -646,14 +646,6 @@ const DashboardContent = ({ data }: { data: DashboardSummary }) => {
       setAtsScanRunning(false);
     }
 
-    if (!resumeId) {
-      toast.info("Upload or parse a resume first, then your ATS report will be ready.");
-      window.location.href = "/atslogin";
-      return;
-    }
-
-    setAtsScanLoading(true);
-    window.location.href = `/atslogin/report?resume_id=${encodeURIComponent(resumeId)}`;
   };
 
   const handleAtsScan = () => {

@@ -75,7 +75,7 @@ export function mapBackendSkillsToCategorized(backendSkills: unknown): Categoriz
   // camelCase key AND a display-name form so Skills.tsx lookup always finds the ID.
   const PREDEFINED = new Set([
     'programmingLanguages', 'frameworks', 'softSkills', 'projectManagement', 'marketingSales',
-    'deletedCategories', 'deleted_categories', 'hiddenCategories', 'hidden_categories', 'customSkills',
+    'deletedCategories', 'deleted_categories', 'hiddenCategories', 'hidden_categories',
   ]);
   const customCategories: CustomCategory[] = [];
 
