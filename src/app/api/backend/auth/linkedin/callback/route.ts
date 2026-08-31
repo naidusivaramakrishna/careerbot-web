@@ -1,33 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sanitiseCookie } from '@/lib/cookieUtils';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
-/**
- * Sanitize Set-Cookie headers so the browser accepts them for the frontend domain.
- * See signin/route.ts for detailed explanation.
- */
-function sanitiseCookie(cookie: string, isSecureRequest: boolean): string {
-  const parts = cookie.split(';').map((p) => p.trim()).filter(Boolean);
-  if (parts.length === 0) return cookie;
-
-  const [pair, ...attrs] = parts;
-  let hasSameSite = false;
-  const kept: string[] = [];
-
-  for (const attr of attrs) {
-    const name = attr.split('=')[0].trim().toLowerCase();
-    if (name === 'domain') continue;
-    if (name === 'secure' && !isSecureRequest && process.env.NODE_ENV !== 'production') continue;
-    if (name === 'path') continue;
-    if (name === 'samesite') hasSameSite = true;
-    kept.push(attr);
-  }
-
-  kept.push('Path=/');
-  if (!hasSameSite) kept.push('SameSite=Lax');
-
-  return [pair, ...kept].join('; ');
-}
+// Set-Cookie rewriting comes from the shared helper in @/lib/cookieUtils, the
+// same one signin, login, refresh and the Google callback use. This route
+// briefly carried a private copy of it, which had drifted behind the shared
+// version on two points that matter:
+//
+//   1. It forced Path=/ on every cookie, including refresh_token. The shared
+//      helper scopes refresh_token to REFRESH_COOKIE_PATH ('/api') on purpose,
+//      and middleware.ts is written around that scope -- its comment notes the
+//      browser never sends the refresh cookie on a page navigation. Path=/ put
+//      the long-lived token back on every same-origin request.
+//   2. It dropped Secure whenever NODE_ENV !== 'production', without the
+//      isLocalDevHost() guard the shared helper added. A staging box that does
+//      not set NODE_ENV=production, or one behind a proxy that does not forward
+//      x-forwarded-proto, had its auth cookies downgraded to cleartext HTTP.
+//
+// Both were reintroduced by the copy, so the copy is gone. If this route ever
+// needs different behaviour, change the shared helper -- do not fork it again.
 
 /**
  * Handle LinkedIn OAuth callback by proxying to backend and setting cookies properly.
@@ -95,7 +87,10 @@ export async function GET(request: NextRequest) {
         request.headers.get('x-forwarded-proto') === 'https';
 
       backendResponse.headers.getSetCookie().forEach((cookie) => {
-        response.headers.append('Set-Cookie', sanitiseCookie(cookie, isSecureRequest));
+        response.headers.append(
+          'Set-Cookie',
+          sanitiseCookie(cookie, isSecureRequest, request.headers.get('host')),
+        );
       });
 
       console.log('[LinkedIn OAuth] Cookies set for frontend domain');
