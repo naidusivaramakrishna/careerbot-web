@@ -1075,44 +1075,6 @@ export default function MockTestPage() {
             })}
           </div>
 
-          {/* Review Questions — click to see explanations */}
-          <div className="mt-8 pt-6 border-t" style={{ borderColor: '#e5e7eb' }}>
-            <h3 className="text-lg font-bold mb-4" style={{ color: '#0F172A' }}>Review Your Answers</h3>
-            <div className="grid gap-2">
-              {questions.map((q, i) => {
-                const isSelected = i === currentQ;
-                const qFeedback = feedbackByQ[q.id];
-                const isCorrect = qFeedback?.is_correct;
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => setCurrentQ(i)}
-                    className="text-left p-3 rounded-lg border transition hover:bg-slate-50 w-full"
-                    style={{
-                      background: isSelected ? '#f0fdf4' : '#ffffff',
-                      borderColor: isCorrect ? '#bbf7d0' : isSelected ? '#a7f3d0' : '#e5e7eb',
-                      borderWidth: isSelected ? '2px' : '1px',
-                    }}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-xs font-bold tracking-wider uppercase" style={{ color: '#9ca3af' }}>Q{i + 1}</span>
-                        <span className="text-xs line-clamp-1" style={{ color: '#2d2d2d' }}>{q.text.substring(0, 50)}...</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {qFeedback?.is_correct ? (
-                          <CheckCircle size={16} style={{ color: '#22c55e' }} />
-                        ) : (
-                          <span style={{ color: '#dc2626', fontWeight: 'bold' }}>✗</span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Submission failure. Kept on screen (not just a toast) so the user
               can see the report was NOT submitted and act on it. */}
           {finalSubmitError && (
@@ -1379,9 +1341,9 @@ export default function MockTestPage() {
     const isFlagged = !!q?.markedForReview;
     const isCurrent = i === currentQ;
     return {
-      background: isCurrent ? '#22c55e' : isFlagged ? '#fbbf24' : isAns ? '#3b82f6' : '#e0f2fe',
+      background: isCurrent ? '#22c55e' : isFlagged ? '#fbbf24' : isAns ? '#1e3a8a' : '#e0f2fe',
       color:      isCurrent ? '#ffffff' : isFlagged ? '#78350f' : isAns ? '#ffffff' : '#0369a1',
-      border:     isCurrent ? '2px solid #16a34a' : isFlagged ? '1px solid #f59e0b' : isAns ? '1px solid #2563eb' : '1px solid #06b6d4',
+      border:     isCurrent ? '2px solid #16a34a' : isFlagged ? '1px solid #f59e0b' : isAns ? '1px solid #1e3a8a' : '1px solid #06b6d4',
       boxShadow:  isCurrent ? '0 0 0 2px #dcfce7' : 'none',
     };
   };
@@ -1906,12 +1868,12 @@ export default function MockTestPage() {
 
         {/* Right: question grid panel (3 columns) - replaces feedback panel */}
         <nav
-          className="hidden lg:flex lg:w-80 shrink-0 flex-col border-l overflow-y-auto p-3"
+          className="hidden lg:flex lg:w-96 shrink-0 flex-col border-l overflow-y-auto p-6 ml-auto"
           style={{ background: '#ffffff', borderColor: '#f3f4f6' }}
           aria-label="Question grid navigation"
         >
           <p className="text-[10px] font-bold tracking-widest mb-2" style={{ color: '#9ca3af' }}>QUESTIONS</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 36px)', gap: '3px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 60px)', gap: '3px' }}>
             {questions.map((_, i) => (
               <button
                 key={i}
@@ -1922,8 +1884,8 @@ export default function MockTestPage() {
                 title={paletteLabel(i)}
                 style={{
                   ...paletteStyle(i),
-                  width: '36px',
-                  height: '36px',
+                  width: '60px',
+                  height: '60px',
                   padding: '0px',
                   lineHeight: '1',
                   borderRadius: '3px',
@@ -1952,7 +1914,7 @@ export default function MockTestPage() {
                 <span style={{ color: '#6b7280' }}>Current</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded" style={{ background: '#3b82f6' }}></div>
+                <div className="w-4 h-4 rounded" style={{ background: '#1e3a8a' }}></div>
                 <span style={{ color: '#6b7280' }}>Answered</span>
               </div>
               <div className="flex items-center gap-2">

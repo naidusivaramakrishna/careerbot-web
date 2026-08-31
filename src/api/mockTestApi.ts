@@ -488,64 +488,21 @@ export const getParentSessionResult = async (parentSessionId: string): Promise<T
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      // Try /result endpoint first (has full data with explanations, solution_steps, common_mistakes)
-      let response: any;
+      console.log(`[getParentSessionResult] Attempt ${attempt}/${MAX_ATTEMPTS}: Fetching from /submit endpoint...`);
+      const submitUrl = `/mock-test/parent/${parentSessionId}/submit`;
+      console.log(`[getParentSessionResult] URL: ${submitUrl}`);
 
-      try {
-        console.log(`[getParentSessionResult] Attempt ${attempt}/${MAX_ATTEMPTS}: Fetching from /result endpoint...`);
-        const resultUrl = `/mock-test/parent/${parentSessionId}/result`;
-        console.log(`[getParentSessionResult] URL: ${resultUrl}`);
+      const response = await retryWithBackoff(
+        () => httpClient.post<any>(submitUrl, {}),
+        3,
+        1000
+      );
 
-        response = await retryWithBackoff(
-          () => httpClient.get<any>(resultUrl),
-          3,
-          1000
-        );
+      console.log('[getParentSessionResult] ✓ /submit succeeded');
+      console.log('[getParentSessionResult] Response data keys:', Object.keys(response.data || {}));
 
-        console.log('[getParentSessionResult] ✓ /result succeeded');
-        console.log('[getParentSessionResult] Response data keys:', Object.keys(response.data || {}));
-
-        if (response.data?.questions) {
-          console.log(`[getParentSessionResult] ✓ Found ${response.data.questions.length} questions`);
-          if (response.data.questions[0]) {
-            const q1 = response.data.questions[0];
-            console.log('[getParentSessionResult] Q1 raw keys:', Object.keys(q1));
-            console.log('[getParentSessionResult] Q1 explanation:', q1.explanation ? q1.explanation.substring(0, 150) + '...' : 'NOT FOUND');
-            console.log('[getParentSessionResult] Q1 solution_steps:', q1.solution_steps ? `${q1.solution_steps.length} steps` : 'NOT FOUND');
-            console.log('[getParentSessionResult] Q1 common_mistakes:', q1.common_mistakes ? `${q1.common_mistakes.length} mistakes` : 'NOT FOUND');
-          }
-        } else {
-          console.warn('[getParentSessionResult] ⚠️ No questions in /result response');
-        }
-      } catch (submitErr: any) {
-        const status = submitErr?.response?.status;
-        const message = submitErr?.message;
-        console.error(`[getParentSessionResult] ✗ /result failed: HTTP ${status} - ${message}`);
-        console.log('[getParentSessionResult] Retrying /result endpoint...');
-
-        try {
-          const resultUrl = `/mock-test/parent/${parentSessionId}/result`;
-          console.log(`[getParentSessionResult] URL: ${resultUrl}`);
-
-          response = await retryWithBackoff(
-            () => httpClient.get<any>(resultUrl),
-            3,
-            1000
-          );
-
-          console.log('[getParentSessionResult] ✓ /result succeeded');
-          console.log('[getParentSessionResult] Response data keys:', Object.keys(response.data || {}));
-
-          if (response.data?.questions && response.data.questions[0]) {
-            const q1 = response.data.questions[0];
-            console.log('[getParentSessionResult] Q1 explanation:', q1.explanation ? 'YES' : 'NO');
-            console.log('[getParentSessionResult] Q1 solution_steps:', q1.solution_steps ? 'YES' : 'NO');
-            console.log('[getParentSessionResult] Q1 common_mistakes:', q1.common_mistakes ? 'YES' : 'NO');
-          }
-        } catch (resultErr: any) {
-          console.error(`[getParentSessionResult] ✗ /result also failed: ${resultErr?.message}`);
-          throw resultErr;
-        }
+      if (response.data?.questions) {
+        console.log(`[getParentSessionResult] ✓ Found ${response.data.questions.length} questions with explanations`);
       }
 
       let rawData = response.data?.data || response.data;
