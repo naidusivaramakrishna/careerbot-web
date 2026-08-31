@@ -110,7 +110,7 @@ const SectionTipsPanel: React.FC<SectionTipsPanelProps> = ({
       return (resumeData.interests ?? []).map(e => `${e.name} ${e.description ?? ""}`).join(" ");
     }
     if (["languages", "intelligencepenalty"].includes(s)) {
-      return (resumeData.languages ?? []).map(e => `${e.language} ${e.proficiency ?? ""}`).join(", ");
+      return (resumeData.languages ?? []).map(e => `${e.name} ${e.proficiency ?? ""}`).join(", ");
     }
     if (s === "publications") {
       return (resumeData.publications ?? []).map(e => e.title).filter(Boolean).join(", ");

@@ -39,7 +39,7 @@ type AchievementEntry = { title: string; date: string; description: string };
 type PublicationsEntry = { title: string; authors: string; publicationName: string; date: string; url: string; };
 type HobbiesEntry = { name: string; description: string; proficiencyLevel?: string; achievement?: string; };
 type InterestEntry = { name: string; description: string; category?: string; };
-type LanguageEntry = { language: string; proficiency: string; };
+type LanguageEntry = { name: string; proficiency: string; };
 type SectionName = | "Professional Summary" | "Education" | "Work Experience" | "Projects" | "Certifications" | "Volunteering" | "References" | "Internships" | "Awards" | "Skills" | "Achievements" | "Languages" | "Hobbies" | "Interests" | "Publications";
 interface Message { sender: "bot" | "user"; text?: string; form?: ReactElement; }
 

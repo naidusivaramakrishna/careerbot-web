@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 interface Language {
-  language: string;
+  name: string;
   proficiency: string;
 }
 
@@ -11,7 +11,7 @@ interface Props {
 
 export default function LanguagesForm({ onSave }: Props) {
   const [entries, setEntries] = useState<Language[]>([
-    { language: "", proficiency: "" },
+    { name: "", proficiency: "" },
   ]);
 
   const handleChange = (
@@ -31,7 +31,7 @@ export default function LanguagesForm({ onSave }: Props) {
   const handleSave = () => {
     onSave(
       entries.filter(
-        (e) => e.language || e.proficiency
+        (e) => e.name || e.proficiency
       )
     );
   };
@@ -51,9 +51,9 @@ export default function LanguagesForm({ onSave }: Props) {
             type="text"
             placeholder="e.g. English, Hindi"
             className="w-full p-1 mb-3 text-[15px] border border-gray-300 text-gray-700 rounded"
-            value={entry.language}
+            value={entry.name}
             onChange={(e) =>
-              handleChange(i, "language", e.target.value)
+              handleChange(i, "name", e.target.value)
             }
           />
 

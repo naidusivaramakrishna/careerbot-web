@@ -514,14 +514,12 @@ function PreInterviewScreen({
   onStart,
   onTypeChange,
   starting,
-  codingRoundEnabled,
 }: {
   sessionType: SessionType;
   isMobile: boolean;
   onStart: () => void;
   onTypeChange: (t: SessionType) => void;
   starting: boolean;
-  codingRoundEnabled: boolean;
 }) {
   const preview = useMemo(() => QUESTION_PREVIEWS[sessionType], [sessionType]);
 
@@ -546,8 +544,8 @@ function PreInterviewScreen({
 
       <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Interview type</p>
-        <div className={`grid gap-2 ${codingRoundEnabled ? "grid-cols-4" : "grid-cols-3"}`}>
-          {(["HR", "Technical", "Managerial", ...(codingRoundEnabled ? ["Technical + Coding"] : [])] as const).map((t) => (
+        <div className="grid gap-2 grid-cols-4">
+          {(["HR", "Technical", "Managerial", "Technical + Coding"] as const).map((t) => (
             <button
               key={t}
               onClick={() => onTypeChange(t as SessionType)}
@@ -603,7 +601,6 @@ export default function LiveSetupPage() {
   const [sessionType, setSessionType] = useState<SessionType>("HR");
   const [isMobile, setIsMobile] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const codingRoundEnabled = process.env.NEXT_PUBLIC_MOCK_INTERVIEW_CODING_ROUND_ENABLED === "true";
 
   useEffect(() => {
     setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
@@ -673,7 +670,6 @@ export default function LiveSetupPage() {
             onStart={handleStart}
             onTypeChange={setSessionType}
             starting={false}
-            codingRoundEnabled={codingRoundEnabled}
           />
         </>
       )}

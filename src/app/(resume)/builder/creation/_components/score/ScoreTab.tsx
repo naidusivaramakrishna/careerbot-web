@@ -171,7 +171,7 @@ export default function ATSScorePanel({ onFixNow }: { onFixNow?: (section: strin
       setCanonicalStatus("calculating");
       await triggerScoreCalculation(resumeId);
 
-      for (let attempt = 1; attempt <= 10; attempt++) {
+      for (let attempt = 1; attempt <= 30; attempt++) {
         await new Promise((r) => setTimeout(r, 2000));
         if (!isMountedRef.current) return;
         try {

@@ -578,7 +578,7 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       Interests: resumeData.interests.some(
         (interest) => isFilled(interest.name)),
       Languages: resumeData.languages.some(
-        (lang) => isFilled(lang.language)),
+        (lang) => isFilled(lang.name)),
       Publications: resumeData.publications.some(
         (pub) => isFilled(pub.title)),
       Patents: (resumeData.patents ?? []).some(

@@ -606,7 +606,7 @@ const Template4: React.FC<Props> = ({ data, style, careerLevel = "Mid-Level", do
                 <div key={idx} style={{ display: "flex", alignItems: "flex-start", fontSize: "11px", ...baseTextStyle }}>
                   <span style={{ marginRight: "6px" }}>•</span>
                   <span>
-                    <span style={{ ...titleStyle, fontSize: "11px" }}>{lang.language} </span> <span style={{ fontSize: "11px" }}> - {lang.proficiency}</span>
+                    <span style={{ ...titleStyle, fontSize: "11px" }}>{lang.name} </span> <span style={{ fontSize: "11px" }}> - {lang.proficiency}</span>
                   </span>
                 </div>
               ))}

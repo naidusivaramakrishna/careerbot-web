@@ -1,9 +1,10 @@
 import { Projects } from "@/api/userApi";
 import { ValidationError } from "../../_types/education-types";
-import Image from "next/image";
-import { useAIGeneration } from "@/hooks/useAIDescriptionGenerator";
+import { useAISuggestions } from "@/app/(resume)/builder/creation/_hooks/useAISuggestions";
+import { Sparkles } from "lucide-react";
 import RichTextEditor from "@/components/common/Richtexteditor";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 interface Props {
     projectsForm: Partial<Projects>;
@@ -22,7 +23,18 @@ export default function ProjectsForm({
     loading,
     validationErrors,
 }: Props) {
-    const { generateProjectDescription, isGenerating } = useAIGeneration();
+    const {
+        loadingIndex,
+        suggestions,
+        generateSuggestions,
+    } = useAISuggestions();
+
+    useEffect(() => {
+        if (suggestions[0] && suggestions[0].length > 0) {
+            const htmlContent = `<ul>${suggestions[0].map((suggestion: string) => `<li>${suggestion}</li>`).join('')}</ul>`;
+            setProjectsForm((prev) => ({ ...prev, description: htmlContent }));
+        }
+    }, [suggestions, setProjectsForm]);
 
     const getFieldError = (field: string) => {
         const error = validationErrors.find(
@@ -48,21 +60,28 @@ export default function ProjectsForm({
         setProjectsForm((prev) => ({ ...prev, description: content }));
     };
 
-    const handleGenerateDescription = async () => {
+    const handleGenerateDescription = () => {
         if (!projectsForm.project_name?.trim()) {
             toast.error("Please enter a project name first to generate a description.");
             return;
         }
-        const description = await generateProjectDescription({
-            project_name: projectsForm.project_name,
-            role: projectsForm.role,
-            technologies: projectsForm.technologies,
-        });
-        if (description) {
-            const lines = description.split('\n').filter(line => line.trim());
-            const htmlContent = `<ul>${lines.map(line => `<li>${line.trim()}</li>`).join('')}</ul>`;
-            setProjectsForm((prev) => ({ ...prev, description: htmlContent }));
-        }
+
+        const prompt = `Generate a concise and professional project description based on the following project details:
+Project Name: ${projectsForm.project_name}
+Role: ${projectsForm.role || ""}
+Technologies: ${projectsForm.technologies || ""}
+
+Requirements:
+- Generate 5-7 bullet points (one per line)
+- Start each point with an action verb
+- Highlight key features, achievements, and contributions
+- Include technical impact and results
+- Focus on your specific role and responsibilities
+- Keep each point concise (1-2 lines max)
+
+Return ONLY the bullet points, one per line, without numbering or dashes.`;
+
+        generateSuggestions(0, prompt, "project");
     };
 
     const inputClass = (field: string) =>
@@ -117,22 +136,23 @@ export default function ProjectsForm({
             <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                     <label className="text-xs font-medium text-gray-600">Description</label>
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                        <Image src="/assets/icons/magic-pencil.svg" className="w-3.5 h-3.5" width={12} height={12} alt="magic-pencil" />
-                        Let AI help you write the description...
-                    </div>
+                    <button
+                        type="button"
+                        disabled={loadingIndex === 0}
+                        onClick={handleGenerateDescription}
+                        className="flex items-center gap-2 px-4 py-1.5 text-xs font-medium text-white cursor-pointer bg-linear-to-br from-[#194386] to-[#3b6ecb] hover:bg-blue-700 rounded-full disabled:bg-gray-400 transition"
+                    >
+                        <Sparkles className={`w-4 h-4 ${loadingIndex === 0 ? 'animate-pulse' : ''}`} />
+                        {loadingIndex === 0 ? "Generating..." : "AI Writer"}
+                    </button>
                 </div>
                 <RichTextEditor
                     value={projectsForm.description || ""}
                     onChange={handleDescriptionChange}
                     placeholder="Describe your project and contributions..."
                     minHeight="150px"
-                    disabled={isGenerating}
-                    onAIGenerate={handleGenerateDescription}
-                    isGenerating={isGenerating}
-                    showAIButton={true}
+                    disabled={false}
                 />
-                {isGenerating && <p className="text-xs text-[#2257a7]">Generating description...</p>}
                 {getFieldError("description") && <p role="alert" className="text-red-500 text-xs">{getFieldError("description")}</p>}
             </div>
 

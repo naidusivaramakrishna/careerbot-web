@@ -224,8 +224,13 @@ const Skills: React.FC = () => {
                               ? await addSkillToEnhancedResume(resumeData.resume_id!, apiCategory, skill)
                               : await addSkillToCategory(resumeData.resume_id!, apiCategory, skill);
                             if (id) {
-                              const updatedMap = { ...(categorizedSkills.skill_id_map ?? {}), [`${cat.key}:${skill}`]: id };
-                              setResumeData({ ...resumeData, categorizedSkills: { ...categorizedSkills, skill_id_map: updatedMap } });
+                              setResumeData(prev => ({
+                                ...prev,
+                                categorizedSkills: {
+                                  ...prev.categorizedSkills,
+                                  skill_id_map: { ...(prev.categorizedSkills?.skill_id_map ?? {}), [`${cat.key}:${skill}`]: id },
+                                },
+                              }));
                             }
                             toast.success("Skill added successfully.");
                           } catch (err) {
@@ -243,6 +248,11 @@ const Skills: React.FC = () => {
                             } else {
                               await deleteSkillById(resumeData.resume_id!, apiCategory, skillId);
                             }
+                            setResumeData(prev => {
+                              const newMap = { ...(prev.categorizedSkills?.skill_id_map ?? {}) };
+                              delete newMap[`${cat.key}:${skill}`];
+                              return { ...prev, categorizedSkills: { ...prev.categorizedSkills, skill_id_map: newMap } };
+                            });
                             toast.success("Skill removed successfully.");
                           } catch (err) {
                             const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";
@@ -300,8 +310,13 @@ const Skills: React.FC = () => {
                             ? await addSkillToEnhancedResume(resumeData.resume_id!, custom.name, skill)
                             : await addSkillToCategory(resumeData.resume_id!, custom.name, skill);
                           if (id) {
-                            const updatedMap = { ...(categorizedSkills.skill_id_map ?? {}), [`${custom.name}:${skill}`]: id };
-                            setResumeData({ ...resumeData, categorizedSkills: { ...categorizedSkills, skill_id_map: updatedMap } });
+                            setResumeData(prev => ({
+                              ...prev,
+                              categorizedSkills: {
+                                ...prev.categorizedSkills,
+                                skill_id_map: { ...(prev.categorizedSkills?.skill_id_map ?? {}), [`${custom.name}:${skill}`]: id },
+                              },
+                            }));
                           }
                           toast.success("Skill added successfully.");
                         } catch (err) {
@@ -318,6 +333,11 @@ const Skills: React.FC = () => {
                           } else {
                             await deleteSkillById(resumeData.resume_id!, custom.name, skillId);
                           }
+                          setResumeData(prev => {
+                            const newMap = { ...(prev.categorizedSkills?.skill_id_map ?? {}) };
+                            delete newMap[`${custom.name}:${skill}`];
+                            return { ...prev, categorizedSkills: { ...prev.categorizedSkills, skill_id_map: newMap } };
+                          });
                           toast.success("Skill removed successfully.");
                         } catch (err) {
                           const errorMsg = err instanceof Error ? err.message : "Failed to remove skill. Please try again.";

@@ -575,7 +575,7 @@ const TemplateOne: React.FC<Props> = ({ data, onPageCountChange  }) => {
                   <div key={idx} className="flex items-start" style={baseTextStyle}>
                     <span className="mr-2">•</span>
                     <span>
-                      <span className="font-medium">{lang.language}</span>
+                      <span className="font-medium">{lang.name}</span>
                       {lang.proficiency && <span style={baseTextStyle}> — {lang.proficiency}</span>}
                     </span>
                   </div>
