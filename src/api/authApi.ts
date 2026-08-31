@@ -31,9 +31,33 @@ export interface SignUpResponse {
 // ✅ Tokens are now httpOnly cookies - never accessible to JavaScript
 // ❌ Removed getAccessToken() - browser manages cookies automatically
 
-export const isAuthenticated = async (): Promise<boolean> => {
+export const isAuthenticated = async (options?: {
+  skipAuthRedirect?: boolean;
+  skipRefresh?: boolean;
+}): Promise<boolean> => {
   try {
-    await httpClient.get("/auth/profile");
+    // TWO DIFFERENT HEADERS, and they are not interchangeable. This function
+    // mapped skipAuthRedirect onto X-Skip-Auth-Redirect, which short-circuits a
+    // 401 BEFORE the refresh block runs (src/lib/http.ts) -- so a signed-in
+    // user whose 30-minute access token had expired was reported as signed
+    // OUT, even with a perfectly valid refresh cookie. On the pricing page that
+    // showed a paying subscriber the "Get Started Free" signup CTA.
+    //
+    // skipAuthRedirect -> X-Skip-Login-Redirect: still refreshes an expired
+    //   token; only suppresses the redirect to login when the refresh ALSO
+    //   fails. This is what a public page an anonymous visitor can land on
+    //   actually needs.
+    // skipRefresh      -> X-Skip-Auth-Redirect: no refresh attempt at all.
+    //   Only for "am I really logged out?" checks, e.g. straight after signout.
+    //
+    // Same mapping as getProfile() in src/api/userApi.ts. The two must agree:
+    // one option name meaning opposite things in two files is what caused this.
+    const headers = options?.skipRefresh
+      ? { "X-Skip-Auth-Redirect": "true" }
+      : options?.skipAuthRedirect
+      ? { "X-Skip-Login-Redirect": "true" }
+      : undefined;
+    await httpClient.get("/auth/profile", headers ? { headers } : undefined);
     return true;
   } catch {
     return false;

@@ -19,19 +19,41 @@ export async function POST(request: NextRequest) {
     },
   }).catch(() => {});
 
-  // Clear all auth cookies from the Next.js origin.
-  // refresh_token must be cleared at ALL three paths it could have been written to:
-  //   - Path=/   : set by old signin flows before cookieUtils was introduced
-  //   - Path=/api : set by sanitiseCookie (cookieUtils.ts REFRESH_COOKIE_PATH)
-  //                 for signin, OAuth callbacks, and token refresh responses
-  //   - Path=/api/v1/auth/refresh : set by backend directly when the rewrite
-  //                                 proxy forwards the response unsanitized
-  // Missing any of these leaves a stale refresh_token that survives sign-out,
-  // which allows a previous session's token to contaminate the next sign-in.
+  // Clear EVERY (name, path) pair this origin can have written.
+  //
+  // A cookie's identity is (name, domain, path), so one Set-Cookie per pair is
+  // required and missing one leaves a live session. The full writer set is
+  // sanitiseCookie (src/lib/cookieUtils.ts), whose isRefreshCookie matches ANY
+  // name ending in "refresh_token" -- so it scopes admin_refresh_token exactly
+  // like refresh_token, and admin_access_token exactly like access_token.
+  //
+  // THE ADMIN PAIR MATTERS ON USER ROUTES. src/middleware.ts falls back to
+  // admin_access_token / admin_refresh_token on non-admin paths, and will even
+  // mint a fresh access token from a surviving admin refresh cookie. So a user
+  // who had ever signed in at /admin/login stayed authenticated everywhere
+  // after clicking Sign out -- the session did not end.
+  //
+  // The paths, per name:
+  //   Path=/                       access tokens (sanitiseCookie forces it),
+  //                                and refresh tokens from pre-cookieUtils flows
+  //   Path=/api                    refresh tokens today (REFRESH_COOKIE_PATH)
+  //   Path=/api/v1/auth/refresh    backend-set, when a rewrite forwards the
+  //   Path=/api/v1/admin/auth/refresh   response without sanitising it
   const res = NextResponse.json({ success: true });
-  res.headers.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
-  res.headers.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
-  res.headers.append('Set-Cookie', 'refresh_token=; Path=/api; HttpOnly; SameSite=Lax; Max-Age=0');
-  res.headers.append('Set-Cookie', 'refresh_token=; Path=/api/v1/auth/refresh; HttpOnly; SameSite=Lax; Max-Age=0');
+  const expire = (name: string, path: string) =>
+    res.headers.append(
+      'Set-Cookie',
+      `${name}=; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=0`,
+    );
+
+  for (const name of ['access_token', 'admin_access_token']) {
+    expire(name, '/');
+  }
+  for (const name of ['refresh_token', 'admin_refresh_token']) {
+    expire(name, '/');
+    expire(name, '/api');
+    expire(name, '/api/v1/auth/refresh');
+    expire(name, '/api/v1/admin/auth/refresh');
+  }
   return res;
 }

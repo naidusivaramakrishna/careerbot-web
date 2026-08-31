@@ -35,6 +35,16 @@ export interface NormalizedResumeData {
   };
   achievements: {
     count: number;
+    awardsCount: number;
+  };
+  languages: {
+    count: number;
+  };
+  extras: {
+    volunteeringCount: number;
+    hobbiesCount: number;
+    interestsCount: number;
+    publicationsCount: number;
   };
   isFresher: boolean;
 }
@@ -46,14 +56,20 @@ export const normalizeResumeData = (resume: ResumeResponse): NormalizedResumeDat
     ? { summary, targetRole: "" }
     : summary || { summary: "", targetRole: "" };
 
-  const workExperience = resume.workExperience || [];
-  const internships = resume.internships || [];
-  const projects = resume.projects || [];
-  const education = resume.education || [];
+  const workExperience = (resume.workExperience || []).filter(e => Boolean(e.company?.trim() || e.role?.trim()));
+  const internships = (resume.internships || []).filter(e => Boolean(e.company?.trim() || e.role?.trim()));
+  const projects = (resume.projects || []).filter(e => Boolean(e.title?.trim()));
+  const education = (resume.education || []).filter(e => Boolean(e.school?.trim() || e.degree?.trim()));
   const skills = resume.skills || [];
   const categorizedSkills = resume.categorizedSkills;
-  const certifications = resume.certifications || [];
-  const achievements = resume.achievements || [];
+  const certifications = (resume.certifications || []).filter(e => Boolean(e.name?.trim()));
+  const achievements = (resume.achievements || []).filter(e => Boolean(e.title?.trim()));
+  const awards = (resume.awards || []).filter(e => Boolean(e.title?.trim()));
+  const languages = (resume.languages || []).filter(e => Boolean(e.name?.trim()));
+  const volunteering = (resume.volunteering || []).filter(e => Boolean(e.organization?.trim() || e.role?.trim()));
+  const hobbies = (resume.hobbies || []).filter(e => Boolean(e.name?.trim()));
+  const interests = (resume.interests || []).filter(e => Boolean(e.name?.trim()));
+  const publications = (resume.publications || []).filter(e => Boolean(e.title?.trim()));
 
   const isFresher = workExperience.length === 0 && education.length > 0;
 
@@ -100,6 +116,16 @@ export const normalizeResumeData = (resume: ResumeResponse): NormalizedResumeDat
     },
     achievements: {
       count: achievements.length,
+      awardsCount: awards.length,
+    },
+    languages: {
+      count: languages.length,
+    },
+    extras: {
+      volunteeringCount: volunteering.length,
+      hobbiesCount: hobbies.length,
+      interestsCount: interests.length,
+      publicationsCount: publications.length,
     },
     isFresher,
   };

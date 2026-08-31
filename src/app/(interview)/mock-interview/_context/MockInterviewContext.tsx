@@ -29,8 +29,6 @@ interface MockInterviewContextValue {
   activeSession: ActiveSession | null;
   dismissActiveSession: () => void;
   // Consent (DPDP compliance)
-  consentGiven: boolean;
-  setConsentGiven: (v: boolean) => void;
   // Progress summary
   userProgress: UserProgress | null;
   progressLoading: boolean;
@@ -57,7 +55,6 @@ export function MockInterviewProvider({ children }: { children: ReactNode }) {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [userProgress, setUserProgress] = useState<UserProgress | null>(null);
   const [progressLoading, setProgressLoading] = useState(true);
-  const [consentGiven, setConsentGiven] = useState(false);
 
   // ── Bootstrap: fetch user id + session recovery + progress ──
   useEffect(() => {
@@ -82,9 +79,10 @@ export function MockInterviewProvider({ children }: { children: ReactNode }) {
           logger.debug("🔑 Mock interview user id:", resolvedUserId);
         }
 
-        // Check if notes already exist for this user so sidebar unlocks Practice/Technical
-        if (resolvedUserId) {
-          getNotes(resolvedUserId)
+        // Check if notes already exist for this resume so sidebar unlocks Practice/Technical
+        const resumeId = localStorage.getItem("current_resume_id");
+        if (resumeId) {
+          getNotes(resumeId)
             .then((record) => {
               if (!cancelled && record?.notes) {
                 setStageState((s) => ({ ...s, notes_generated: true }));
@@ -159,8 +157,6 @@ export function MockInterviewProvider({ children }: { children: ReactNode }) {
         userId,
         activeSession,
         dismissActiveSession,
-        consentGiven,
-        setConsentGiven,
         userProgress,
         progressLoading,
       }}

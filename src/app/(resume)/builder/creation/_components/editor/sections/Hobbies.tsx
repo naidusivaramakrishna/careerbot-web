@@ -23,6 +23,7 @@ import NibPenSparkleIcon from "../NibPenSparkleIcon";
 import { deleteResumeSectionItem } from "@/api/resumeApi";
 import { deleteSectionItemFromEnhancedResume } from "@/api/enhancerApi";
 import { useSearchParams } from "next/navigation";
+import { appendSuggestionBullet } from '../../../_lib/appendSuggestionBullet';
 
 interface HobbyEntry {
   name: string;
@@ -370,9 +371,9 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
   const handleSuggestionSelect = (editIndex: number, suggestion: string) => {
     const el = editorRefs.current[editIndex];
     if (el) {
-      el.innerHTML = suggestion;
-      handleChange(editIndex, "description", suggestion);
-      
+      appendSuggestionBullet(el, suggestion);
+      handleChange(editIndex, "description", el.innerHTML);
+
       setTimeout(() => {
         el.focus();
         const range = document.createRange();
@@ -385,17 +386,7 @@ Create intricate digital art designs using Adobe Creative Suite, combining techn
         }
       }, 0);
     }
-    
-    setActivePopup(null);
-
-    setTimeout(() => {
-      if (formScrollRef.current) {
-        formScrollRef.current.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      }
-    }, 100);
+    // Popup stays open — closed only by X button
   };
 
   useEffect(() => {

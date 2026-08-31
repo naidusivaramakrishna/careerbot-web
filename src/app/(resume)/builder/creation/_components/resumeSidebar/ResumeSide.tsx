@@ -282,17 +282,15 @@ const ResumeSide: React.FC<ResumeSideProps> = ({
       newFormData["professionalSummary"] = resumeData.professionalSummary.summary || "";
       newFormData["targetRole"] = resumeData.professionalSummary.targetRole || "";
       
-      // Skills
-      if (Array.isArray(resumeData.skills)) {
-        newFormData["skills"] = resumeData.skills.join(", ");
-      }
-      
-      // Multi-entry sections (Education, Work Experience, Projects, etc.) are intentionally
+      // Skills is intentionally excluded from formData — the Skills component writes
+      // directly to resumeData.categorizedSkills via chip inputs and autosave reads
+      // from context, not formData. Including it here created a stale snapshot that
+      // caused validateSectionFields to treat the empty initial value as a missing
+      // required field and block Save with "Please fill in all required fields".
+      //
+      // Multi-entry sections (Education, Work Experience, Projects, etc.) are also
       // excluded from formData. They manage their own state (savedEntries / editingEntries)
       // and write directly to resumeData — they never read from formData.
-      // Including them here caused validateSectionFields to scan stale snapshot values
-      // (including any partial/duplicate entries from the backend) and incorrectly
-      // block the Save button with "Please fill in all required fields".
       
       setFormData(newFormData);
     }

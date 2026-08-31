@@ -7,6 +7,14 @@ export interface InterviewerMouthAnchor {
   rotationDeg?: number;
 }
 
+export type InterviewerGender = "male" | "female";
+export type InterviewerVoice = "alloy" | "onyx" | "nova" | "fable";
+
+export const INTERVIEWER_VOICES_BY_GENDER: Record<InterviewerGender, InterviewerVoice[]> = {
+  male: ["alloy", "onyx"],
+  female: ["nova", "fable"],
+};
+
 export const MOCK_INTERVIEWERS = [
   {
     slug: "arjun",
@@ -16,7 +24,7 @@ export const MOCK_INTERVIEWERS = [
     gender: "male",
     voice: "alloy",
     mouthSpriteBasePath: "/images/interviewers/arjun",
-    mouthAnchor: { xPercent: 50.1, yPercent: 42.8, widthPercent: 7.8, minWidthPx: 42, maxWidthPx: 74 },
+    mouthAnchor: { xPercent: 50.1, yPercent: 33.3, widthPercent: 6.1, minWidthPx: 36, maxWidthPx: 62 },
   },
   {
     slug: "rahul",
@@ -26,7 +34,7 @@ export const MOCK_INTERVIEWERS = [
     gender: "male",
     voice: "onyx",
     mouthSpriteBasePath: "/images/interviewers/rahul",
-    mouthAnchor: { xPercent: 50, yPercent: 41.6, widthPercent: 8.1, minWidthPx: 44, maxWidthPx: 78 },
+    mouthAnchor: { xPercent: 50, yPercent: 35.2, widthPercent: 6.4, minWidthPx: 38, maxWidthPx: 66 },
   },
   {
     slug: "meera",
@@ -36,7 +44,7 @@ export const MOCK_INTERVIEWERS = [
     gender: "female",
     voice: "nova",
     mouthSpriteBasePath: "/images/interviewers/meera",
-    mouthAnchor: { xPercent: 50.2, yPercent: 42.7, widthPercent: 7.3, minWidthPx: 40, maxWidthPx: 70 },
+    mouthAnchor: { xPercent: 50.1, yPercent: 35.7, widthPercent: 5.8, minWidthPx: 34, maxWidthPx: 58 },
   },
   {
     slug: "nisha",
@@ -46,7 +54,7 @@ export const MOCK_INTERVIEWERS = [
     gender: "female",
     voice: "fable",
     mouthSpriteBasePath: "/images/interviewers/nisha",
-    mouthAnchor: { xPercent: 50.1, yPercent: 42.9, widthPercent: 7.1, minWidthPx: 38, maxWidthPx: 68 },
+    mouthAnchor: { xPercent: 50, yPercent: 35.9, widthPercent: 5.7, minWidthPx: 34, maxWidthPx: 58 },
   },
 ] as const;
 
@@ -64,6 +72,15 @@ export const MOCK_INTERVIEWERS = [
 export type MockInterviewer = Omit<(typeof MOCK_INTERVIEWERS)[number], "mouthAnchor"> & {
   mouthAnchor: InterviewerMouthAnchor;
 };
+
+export function getInterviewerByIndex(index: unknown): MockInterviewer | null {
+  return isValidInterviewerIndex(index) ? MOCK_INTERVIEWERS[index] : null;
+}
+
+export function isVoiceMatchedToGender(voice: unknown, gender: unknown): voice is InterviewerVoice {
+  if (gender !== "male" && gender !== "female") return false;
+  return INTERVIEWER_VOICES_BY_GENDER[gender].includes(voice as InterviewerVoice);
+}
 
 export function isValidInterviewerIndex(index: unknown): index is number {
   return (
